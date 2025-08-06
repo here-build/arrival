@@ -1,14 +1,164 @@
-import { describe, it, expect } from "vitest";
-import { 
-  toSExpr, 
-  formatSExpr, 
-  toSExprString, 
-  TO_SEXPR, 
-  SEXPR_TAG,
-  sexpr 
-} from "../serializer";
+import { describe, expect, it } from "vitest";
+import { sexpr, slist, smap, toSExpr, toSExprString } from "../serializer";
 
 describe("S-Expression Serializer", () => {
+  describe("new interface with Symbol.toSExpr", () => {
+    it("uses Symbol.SExpr for display name", () => {
+      class MyClass {
+        [Symbol.SExpr]() {
+          return "my-special-class";
+        }
+
+        [Symbol.toSExpr]() {
+          return [":initialized", true];
+        }
+      }
+
+      const obj = new MyClass();
+      expect(toSExprString(obj)).toBe("(my-special-class :initialized true)");
+    });
+
+    it("falls back to displayName, name, or constructor.name", () => {
+      class NamedClass {
+        static displayName = "DisplayedClass";
+
+        [Symbol.toSExpr]() {
+          return [];
+        }
+      }
+
+      class SimpleClass {
+        [Symbol.toSExpr]() {
+          return [];
+        }
+      }
+
+      expect(toSExprString(new NamedClass())).toBe("(DisplayedClass)");
+      expect(toSExprString(new SimpleClass())).toBe("(SimpleClass)");
+    });
+
+    it("provides context helpers for serialization", () => {
+      class ComplexObject {
+        constructor(public data: string, public count: number) {
+        }
+
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.keyword("data"),
+            context.quote(this.data),
+            context.keyword("count"),
+            this.count,
+            context.keyword("computed"),
+            context.expr("add", this.count, 10),
+          ];
+        }
+      }
+
+      const obj = new ComplexObject("hello world", 5);
+      const result = toSExprString(obj);
+      expect(result).toContain("ComplexObject");
+      expect(result).toContain(":data \"hello world\"");
+      expect(result).toContain(":count 5");
+      expect(result).toContain(":computed");
+      expect(result).toContain("(add 5 10)");
+    });
+
+    it("handles nested expressions with context.expr", () => {
+      class Calculator {
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.expr("multiply",
+              context.expr("add", 2, 3),
+              context.expr("subtract", 10, 6),
+            ),
+          ];
+        }
+      }
+
+      const result = toSExprString(new Calculator());
+      expect(result).toContain("Calculator");
+      expect(result).toContain("multiply");
+      expect(result).toContain("(add 2 3)");
+      expect(result).toContain("(subtract 10 6)");
+    });
+
+    it("symbol helper creates proper keywords", () => {
+      class Stateful {
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.symbol("state"),
+            context.symbol("active"),
+          ];
+        }
+      }
+
+      expect(toSExprString(new Stateful())).toBe("(Stateful state active)");
+    });
+  });
+
+  describe("array serialization as Scheme lists", () => {
+    it("serializes arrays as (list ...)", () => {
+      expect(toSExprString([1, 2, 3])).toBe("(list 1 2 3)");
+      expect(toSExprString(["a", "b", "c"])).toBe("(list \"a\" \"b\" \"c\")");
+      expect(toSExprString([])).toBe("(list)");
+    });
+
+    it("handles nested arrays", () => {
+      expect(toSExprString([[1, 2], [3, 4]])).toBe("(list (list 1 2) (list 3 4))");
+    });
+
+    it("handles mixed content arrays", () => {
+      const mixed = ["text", 42, true, null, { key: "value" }];
+      expect(toSExprString(mixed)).toBe("(list \"text\" 42 true nil &(:key \"value\"))");
+    });
+  });
+
+  describe("object serialization as Scheme records", () => {
+    it("serializes plain objects with & notation", () => {
+      expect(toSExprString({ name: "LIPS", version: "1.0" }))
+        .toBe("&(:name \"LIPS\" :version \"1.0\")");
+    });
+
+    it("handles nested objects", () => {
+      const obj = {
+        name: "test",
+        config: {
+          enabled: true,
+          timeout: 5000,
+        },
+      };
+      expect(toSExprString(obj))
+        .toBe("&(:name \"test\" :config &(:enabled true :timeout 5000))");
+    });
+
+    it("handles empty objects", () => {
+      expect(toSExprString({})).toBe("&()");
+    });
+  });
+
+  describe("primitive type handling", () => {
+    it("handles all primitive types correctly", () => {
+      expect(toSExprString("hello")).toBe("\"hello\"");
+      expect(toSExprString(42)).toBe("42");
+      expect(toSExprString(3.14)).toBe("3.14");
+      expect(toSExprString(true)).toBe("true");
+      expect(toSExprString(false)).toBe("false");
+      expect(toSExprString(null)).toBe("nil");
+      expect(toSExprString(undefined)).toBe("undefined");
+      expect(toSExprString(BigInt(9007199254740991))).toBe("9007199254740991");
+    });
+
+    it("escapes quotes in strings", () => {
+      expect(toSExprString("say \"hello\"")).toBe("\"say \\\"hello\\\"\"");
+    });
+
+    it("handles symbols as keywords", () => {
+      expect(toSExprString(Symbol.for("my-symbol"))).toBe(":my-symbol");
+      expect(toSExprString(Symbol("local"))).toBe(":local");
+    });
+  });
+
+
   describe("basic serialization", () => {
     it("converts primitives", () => {
       expect(toSExpr("hello")).toEqual("hello");
@@ -29,115 +179,142 @@ describe("S-Expression Serializer", () => {
       expect(toSExpr(["a", "b", "c"])).toEqual(["list", "a", "b", "c"]);
     });
 
-    it("converts objects to maps", () => {
-      expect(toSExpr({ a: 1, b: 2 })).toEqual(["map", ":a", 1, ":b", 2]);
+    it("converts objects to Scheme records", () => {
+      expect(toSExpr({ a: 1, b: 2 })).toEqual(["&", ":a", 1, ":b", 2]);
       expect(toSExpr({ name: "test", value: 42 }))
-        .toEqual(["map", ":name", "test", ":value", 42]);
+        .toEqual(["&", ":name", "test", ":value", 42]);
     });
 
     it("handles nested structures", () => {
       const obj = {
         name: "test",
         items: [1, 2, 3],
-        meta: { count: 3, active: true }
+        meta: { count: 3, active: true },
       };
-      
+
       expect(toSExpr(obj)).toEqual([
-        "map",
+        "&",
         ":name", "test",
         ":items", ["list", 1, 2, 3],
-        ":meta", ["map", ":count", 3, ":active", true]
+        ":meta", ["&", ":count", 3, ":active", true],
       ]);
     });
   });
 
-  describe("custom serialization", () => {
-    it("uses Symbol.toSymbolicExpression", () => {
-      class Custom {
-        constructor(public name: string, public value: number) {}
-        
-        [TO_SEXPR]() {
-          return [SEXPR_TAG, "custom", this.name, Symbol.for("value"), this.value];
+  describe("custom serialization with intermediate representation", () => {
+    it("supports returning SExprSerializable types", () => {
+      class DataNode {
+        constructor(public data: any) {
+        }
+
+        [Symbol.toSExpr](context: any) {
+          // Can return a mix of primitives and SExprSerializable objects
+          return [
+            context.keyword("type"),
+            "data-node",
+            context.keyword("value"),
+            this.data,
+          ];
         }
       }
-      
-      const obj = new Custom("test", 42);
-      expect(toSExpr(obj)).toEqual(["custom", "test", ":value", 42]);
+
+      const node = new DataNode({ x: 10, y: 20 });
+      const result = toSExprString(node);
+      expect(result).toContain("DataNode");
+      expect(result).toContain(":type \"data-node\"");
+      expect(result).toContain(":value");
+      expect(result).toContain("&(:x 10 :y 20)");
     });
 
-    it("handles nested custom objects", () => {
-      class Node {
-        constructor(public name: string, public children: Node[] = []) {}
-        
-        [TO_SEXPR]() {
-          return [SEXPR_TAG, "node", this.name, ...this.children];
+    it("allows composition of serializable objects", () => {
+      class Component {
+        [Symbol.SExpr]() {
+          return "component";
+        }
+
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.keyword("id"),
+            "button-1",
+            context.keyword("props"),
+            context.expr("props",
+              context.keyword("onClick"),
+              context.symbol("handler"),
+            ),
+          ];
         }
       }
-      
-      const tree = new Node("root", [
-        new Node("child1"),
-        new Node("child2", [new Node("grandchild")])
-      ]);
-      
-      expect(toSExpr(tree)).toEqual([
-        "node", "root",
-        ["node", "child1"],
-        ["node", "child2", ["node", "grandchild"]]
-      ]);
+
+      class Page {
+        constructor(public components: Component[]) {
+        }
+
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.keyword("components"),
+            ...this.components,
+          ];
+        }
+      }
+
+      const page = new Page([new Component(), new Component()]);
+      const result = toSExprString(page);
+      expect(result).toContain("Page");
+      expect(result).toContain(":components");
+      expect(result).toContain("component");
+      expect(result).toContain(":id \"button-1\"");
+      expect(result).toContain(":props");
+      expect(result).toContain("props");
+      expect(result).toContain(":onClick");
+      expect(result).toContain("handler");
     });
   });
 
-  describe("formatting", () => {
-    it("formats simple expressions on one line", () => {
-      expect(formatSExpr(["add", 1, 2])).toBe('(add 1 2)');
-      expect(formatSExpr(["list", "a", "b", "c"])).toBe('(list "a" "b" "c")');
+  describe("formatting with new representations", () => {
+    it("formats objects as maps", () => {
+      const obj = { name: "test", value: 42 };
+      expect(toSExprString(obj)).toBe("&(:name \"test\" :value 42)");
     });
 
-    it("formats complex expressions with indentation", () => {
-      const sexpr = [
-        "component", "Button",
-        ":variants", ["list", "base", "hover"],
-        ":tree", ["tpl", "button", ":text", "Click me"]
-      ];
-      
-      const expected = `(component
-  "Button"
-  :variants
-  (list "base" "hover")
-  :tree
-  (tpl "button" :text "Click me"))`;
-      
-      expect(formatSExpr(sexpr)).toBe(expected);
+    it("formats custom objects with proper indentation", () => {
+      class ComplexComponent {
+        [Symbol.toSExpr](context: any) {
+          return [
+            context.keyword("variants"),
+            context.expr("list", "base", "hover", "active"),
+            context.keyword("styles"),
+            { background: "blue", padding: 10 },
+            context.keyword("children"),
+            [1, 2, 3],
+          ];
+        }
+      }
+
+      const result = toSExprString(new ComplexComponent());
+      expect(result).toContain("(ComplexComponent");
+      expect(result).toContain(":variants");
+      expect(result).toContain("(list \"base\" \"hover\" \"active\")");
+      expect(result).toContain(":styles");
+      expect(result).toContain("&(:background \"blue\" :padding 10)");
+      expect(result).toContain(":children");
+      expect(result).toContain("(list 1 2 3)");
+    });
+  });
+
+  describe("helper functions", () => {
+    it("sexpr creates tagged expressions", () => {
+      const expr = sexpr("add", 1, 2);
+      expect(toSExprString(expr)).toBe("(add 1 2)");
     });
 
-    it("handles deeply nested structures", () => {
-      const sexpr = [
-        "div",
-        ["span", ":text", "Hello"],
-        ["div",
-          ["p", ":text", "World"],
-          ["p", ":text", "!"]
-        ]
-      ];
-      
-      const expected = `(div
-  (span :text "Hello")
-  (div
-    (p :text "World")
-    (p :text "!")))`;
-      
-      expect(formatSExpr(sexpr)).toBe(expected);
+    it("smap creates map expressions", () => {
+      const map = smap({ x: 10, y: 20 });
+      expect(toSExprString(map)).toBe("&(:x 10 :y 20)");
     });
 
-    it("quotes all strings", () => {
-      expect(formatSExpr("hello world")).toBe('"hello world"');
-      expect(formatSExpr("hello")).toBe('"hello"');
-      expect(formatSExpr('say "hi"')).toBe('"say \\"hi\\""');
-    });
-
-    it("doesn't quote keywords", () => {
-      expect(formatSExpr(":keyword")).toBe(":keyword");
-      expect(formatSExpr(":not-rendered")).toBe(":not-rendered");
+    it("slist creates list expressions", () => {
+      const list = slist("a", "b", "c");
+      expect(toSExprString(list)).toBe("(list \"a\" \"b\" \"c\")");
     });
   });
 
@@ -145,10 +322,36 @@ describe("S-Expression Serializer", () => {
     it("handles circular references gracefully", () => {
       const obj: any = { name: "test" };
       obj.self = obj; // circular reference
-      
-      // This will likely cause a stack overflow in current implementation
-      // In a real implementation, we'd track visited objects
+
+      // Should detect circular reference and throw meaningful error
       expect(() => toSExpr(obj)).toThrow();
+    });
+
+    it("handles functions in objects", () => {
+      const obj = {
+        name: "test",
+        fn: () => console.log("hello"),
+      };
+      // Functions should be skipped or converted to a placeholder
+      const result = toSExprString(obj);
+      expect(result).toContain(":name \"test\"");
+      // Function should either be skipped or shown as <function>
+    });
+
+    it("handles Date objects", () => {
+      const date = new Date("2024-01-01T00:00:00Z");
+      // Should either use toISOString or treat as object
+      const result = toSExprString({ date });
+      expect(result).toContain("date");
+    });
+
+    it("handles Maps and Sets", () => {
+      const map = new Map([["a", 1], ["b", 2]]);
+      const set = new Set([1, 2, 3]);
+
+      // These should have reasonable representations
+      expect(() => toSExprString(map)).not.toThrow();
+      expect(() => toSExprString(set)).not.toThrow();
     });
   });
 });

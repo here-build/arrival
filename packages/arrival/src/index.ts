@@ -34,6 +34,7 @@ export {
   toSExprString,
 
   SEXPR_TAG,
+  TO_SEXPR,
 
   // Helpers
   sexpr,
