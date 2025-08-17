@@ -1,5 +1,5 @@
 /**
- * @dappsnap/s-expressions
+ * @dappsnap/arrival
  *
  * A clean, abstract S-expression serialization library with custom protocol support.
  *
@@ -11,7 +11,7 @@
  *
  * Basic usage:
  * ```typescript
- * import { toSExpr, formatSExpr, TO_SEXPR, SEXPR_TAG, sexpr } from '@dappsnap/s-expressions';
+ * import { toSExpr, formatSExpr, TO_SEXPR, SEXPR_TAG, sexpr } from '@dappsnap/arrival';
  *
  * // Simple conversion
  * const expr = toSExpr({ name: "test", value: 42 });
@@ -44,7 +44,28 @@ export {
   // Types
   type SExpr,
   type SExprDefinition,
-} from './serializer';
+} from "./serializer";
+
+// LIPS engine
+export { env as lipsGlobalEnv, Environment, exec } from "./lips/lips";
+
+// Sandboxed environment with Fantasy Land and Ramda
+export { sandboxedEnv, createSandboxedEnvironment } from "./enhanced-environment";
+export { RAMDA_FUNCTIONS } from "./ramda-functions";
+
+// Fantasy Land LIPS integration
+export { applyFantasyLandPatches } from "./fantasy-land-lips";
+
+// Rosetta Environment (seamless LIPS ↔ JS interop)
+export { 
+  lipsToJs, 
+  jsToLips, 
+  createRosettaWrapper,
+  type RosettaFunction 
+} from "./rosetta-environment";
+
+// Serialized execution wrapper
+export { execSerialized } from "./execSerialized";
 
 // Re-export everything for convenience
-export * from './serializer';
+export * from "./serializer";

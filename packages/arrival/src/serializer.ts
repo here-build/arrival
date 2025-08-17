@@ -83,6 +83,83 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
     }
   }
 
+  // Handle LIPS-specific types before generic Symbol.toSExpr
+  if (obj && typeof obj === "object") {
+    // LIPS LBigInteger
+    if (obj.constructor?.name === "LBigInteger" && "__value__" in obj) {
+      const value = obj.__value__;
+      // Only use 'n' suffix for numbers that actually need BigInt precision
+      // (larger than MAX_SAFE_INTEGER or negative beyond MIN_SAFE_INTEGER)
+      if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
+        return `${value.toString()}n`;
+      }
+      // For small integers, return as regular number
+      return Number(value);
+    }
+    
+    // LIPS LNumber and LFloat (regular numbers, including floats)  
+    if ((obj.constructor?.name === "LNumber" || obj.constructor?.name === "LFloat") && "__value__" in obj) {
+      return obj.__value__; // Return numeric value directly
+    }
+    
+    // LIPS LSymbol 
+    if (obj.constructor?.name === "LSymbol" && "__name__" in obj) {
+      return obj.__name__; // Return symbol name as-is (includes : for keywords)
+    }
+    
+    // LIPS LString
+    if (obj.constructor?.name === "LString" && "__string__" in obj) {
+      const str = obj.__string__;
+      // Use template strings for complex strings (multi-line, quotes, etc.)
+      if (str.includes('\\n') || str.includes('\\t') || str.includes('"') || str.includes("'")) {
+        return `\`${str}\``;
+      }
+      // Use single quotes for simple strings
+      return `'${str}'`;
+    }
+    
+    // LIPS LCharacter  
+    if (obj.constructor?.name === "LCharacter" && "__char__" in obj) {
+      return `#\\${obj.__char__}`; // Return character with #\ prefix
+    }
+    
+    // LIPS Values (multiple return values)
+    if (obj.constructor?.name === "Values" && "__values__" in obj) {
+      // Convert to array of values
+      return ["values", ...obj.__values__.map((v: any) => toSExpr(v, visited))];
+    }
+    
+    // LIPS Pair (linked list structure)
+    if (obj.constructor?.name === "Pair" && "car" in obj && "cdr" in obj) {
+      return convertLipsPairToArray(obj, visited);
+    }
+    
+    // LIPS Nil (empty list) - be more specific to avoid catching plain objects
+    if (obj.constructor?.name === "Nil") {
+      return []; // Return empty list
+    }
+    
+    // LIPS EOF (end of file marker)
+    if (obj.constructor?.name === "EOF") {
+      return "#<eof>";
+    }
+    
+    // LIPS Macro (macro objects)
+    if (obj.constructor?.name === "Macro") {
+      return ["macro", obj.name || "<anonymous>"];
+    }
+    
+    // LIPS Syntax (special syntax objects)
+    if (obj.constructor?.name === "Syntax") {
+      return ["syntax", obj.name || "<syntax>"];
+    }
+    
+    // LIPS Input/Output Ports
+    if (obj.constructor?.name === "InputPort" || obj.constructor?.name === "OutputPort") {
+      return `#<${obj.constructor.name.toLowerCase()}>`;
+    }
+  }
+
   // Has custom serialization with Symbol.toSExpr
   if (obj && typeof obj === "object" && Symbol.toSExpr in obj) {
     const displayName = obj[Symbol.SExpr]?.() ??
@@ -317,6 +394,16 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     if (sexpr === "nil" || sexpr === "undefined") return sexpr;
     // Special values
     if (sexpr === "<function>") return sexpr;
+    // BigInt notation (ends with n) - don't quote
+    if (sexpr.endsWith("n") && /^\d+n$/.test(sexpr)) return sexpr;
+    // Template strings (wrapped in backticks) - don't quote
+    if (sexpr.startsWith("`") && sexpr.endsWith("`")) return sexpr;
+    // Single-quoted strings - don't quote (already quoted)
+    if (sexpr.startsWith("'") && sexpr.endsWith("'")) return sexpr;
+    // Character literals (start with #\) - don't quote
+    if (sexpr.startsWith("#\\")) return sexpr;
+    // Bare symbols (no quotes, no special chars) - don't quote
+    if (/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(sexpr)) return sexpr;
     // All other strings are quoted
     return `"${sexpr.replace(/"/g, "\\\"")}"`;
   }
@@ -334,6 +421,33 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   }
 
   throw new Error(`Unknown s-expression type: ${typeof sexpr}`);
+}
+
+// Convert LIPS Pair linked list to JavaScript array
+function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
+  const result: any[] = [];
+  let current = pair;
+  
+  while (current && current.constructor?.name === "Pair") {
+    // Add car (current element) to result
+    result.push(toSExpr(current.car, visited));
+    
+    // Move to cdr (next element)
+    current = current.cdr;
+    
+    // Handle circular references
+    if (current && typeof current === "object" && visited.has(current)) {
+      throw new Error("Circular reference in LIPS Pair");
+    }
+  }
+  
+  // If cdr is not null/empty, it's an improper list (rare in practice)
+  if (current && current.constructor?.name !== "Nil" && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
+    // This would be a dotted pair notation in Scheme, but we'll just add it to the array
+    result.push(toSExpr(current, visited));
+  }
+  
+  return result;
 }
 
 // Helper to process items from Symbol.toSExpr

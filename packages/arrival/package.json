@@ -1,7 +1,7 @@
 {
-  "name": "@dappsnap/s-expressions",
+  "name": "@dappsnap/arrival",
   "version": "0.1.0",
-  "description": "S-expression serializer with Symbol.toSymbolicExpression protocol",
+  "description": "Ted Chiang was right",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/ramda": "^0.31.0",
     "tsup": "^8.0.0",
     "typescript": "5.9",
     "vitest": "^1.6.0"
@@ -28,5 +29,10 @@
     "dist",
     "src"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "fantasy-land": "^5.0.1",
+    "ramda": "^0.31.3",
+    "ramda-adjunct": "^5.1.0"
+  }
 }
