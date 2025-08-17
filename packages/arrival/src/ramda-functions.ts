@@ -80,6 +80,23 @@ export const RAMDA_FUNCTIONS = {
   last: R.last,
   "safe-last": (list: any[]) => R.last(list || []),
 
+  // Length function with LIPS compatibility
+  length: (collection: any) => {
+    // LIPS lists have their own length calculation
+    if (collection && typeof collection === 'object' && 'car' in collection) {
+      // Count LIPS list elements manually
+      let count = 0;
+      let current = collection;
+      while (current && current.constructor && current.constructor.name !== 'Nil') {
+        count++;
+        current = current.cdr;
+      }
+      return count;
+    }
+    // JS arrays and other collections
+    return R.length(collection || []);
+  },
+
   take: R.take,
   drop: R.drop,
   slice: R.slice,
