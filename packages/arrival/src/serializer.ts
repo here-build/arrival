@@ -1,7 +1,7 @@
 /**
  * S-Expression Serializer
  *
- * Provides a systematic way to convert JavaScript objects to s-expressions
+ * Provides a systematic way to convert JavaScript objects to arrival
  * using Symbol.toSExpr for custom representations
  */
 
@@ -96,17 +96,17 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
       // For small integers, return as regular number
       return Number(value);
     }
-    
-    // LIPS LNumber and LFloat (regular numbers, including floats)  
+
+    // LIPS LNumber and LFloat (regular numbers, including floats)
     if ((obj.constructor?.name === "LNumber" || obj.constructor?.name === "LFloat") && "__value__" in obj) {
       return obj.__value__; // Return numeric value directly
     }
-    
-    // LIPS LSymbol 
+
+    // LIPS LSymbol
     if (obj.constructor?.name === "LSymbol" && "__name__" in obj) {
       return obj.__name__; // Return symbol name as-is (includes : for keywords)
     }
-    
+
     // LIPS LString
     if (obj.constructor?.name === "LString" && "__string__" in obj) {
       const str = obj.__string__;
@@ -117,43 +117,43 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
       // Use single quotes for simple strings
       return `'${str}'`;
     }
-    
-    // LIPS LCharacter  
+
+    // LIPS LCharacter
     if (obj.constructor?.name === "LCharacter" && "__char__" in obj) {
       return `#\\${obj.__char__}`; // Return character with #\ prefix
     }
-    
+
     // LIPS Values (multiple return values)
     if (obj.constructor?.name === "Values" && "__values__" in obj) {
       // Convert to array of values
       return ["values", ...obj.__values__.map((v: any) => toSExpr(v, visited))];
     }
-    
+
     // LIPS Pair (linked list structure)
     if (obj.constructor?.name === "Pair" && "car" in obj && "cdr" in obj) {
       return convertLipsPairToArray(obj, visited);
     }
-    
+
     // LIPS Nil (empty list) - be more specific to avoid catching plain objects
     if (obj.constructor?.name === "Nil") {
       return []; // Return empty list
     }
-    
+
     // LIPS EOF (end of file marker)
     if (obj.constructor?.name === "EOF") {
       return "#<eof>";
     }
-    
+
     // LIPS Macro (macro objects)
     if (obj.constructor?.name === "Macro") {
       return ["macro", obj.name || "<anonymous>"];
     }
-    
+
     // LIPS Syntax (special syntax objects)
     if (obj.constructor?.name === "Syntax") {
       return ["syntax", obj.name || "<syntax>"];
     }
-    
+
     // LIPS Input/Output Ports
     if (obj.constructor?.name === "InputPort" || obj.constructor?.name === "OutputPort") {
       return `#<${obj.constructor.name.toLowerCase()}>`;
@@ -169,7 +169,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
       obj.constructor.name;
     const contents = obj[Symbol.toSExpr](serializationContext);
 
-    // Convert contents to s-expressions
+    // Convert contents to arrival
     const processedContents = contents.map((item: any) => processItem(item, visited));
 
     return [displayName, ...processedContents];
@@ -427,26 +427,26 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
   const result: any[] = [];
   let current = pair;
-  
+
   while (current && current.constructor?.name === "Pair") {
     // Add car (current element) to result
     result.push(toSExpr(current.car, visited));
-    
+
     // Move to cdr (next element)
     current = current.cdr;
-    
+
     // Handle circular references
     if (current && typeof current === "object" && visited.has(current)) {
       throw new Error("Circular reference in LIPS Pair");
     }
   }
-  
+
   // If cdr is not null/empty, it's an improper list (rare in practice)
   if (current && current.constructor?.name !== "Nil" && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
     // This would be a dotted pair notation in Scheme, but we'll just add it to the array
     result.push(toSExpr(current, visited));
   }
-  
+
   return result;
 }
 
