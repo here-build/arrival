@@ -1,5 +1,5 @@
 {
-  "name": "@dappsnap/arrival",
+  "name": "@here.build/arrival",
   "version": "0.1.0",
   "description": "Ted Chiang was right",
   "main": "./dist/index.js",

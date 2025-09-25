@@ -1,4 +1,4 @@
-# @dappsnap/arrival
+# @here.build/arrival
 
 A powerful S-expression serialization library with custom protocol support via `Symbol.toSExpr` and `Symbol.SExpr`.
 
@@ -16,13 +16,13 @@ A powerful S-expression serialization library with custom protocol support via `
 ## Installation
 
 ```bash
-npm install @dappsnap/arrival
+npm install @here.build/arrival
 ```
 
 ## Basic Usage
 
 ```typescript
-import { toSExpr, formatSExpr, toSExprString } from '@dappsnap/arrival';
+import { toSExpr, formatSExpr, toSExprString } from '@here.build/arrival';
 
 // Convert primitives
 toSExprString("hello")           // => "hello"

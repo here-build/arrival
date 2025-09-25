@@ -1,5 +1,5 @@
 /**
- * @dappsnap/arrival
+ * @here.build/arrival
  *
  * A clean, abstract S-expression serialization library with custom protocol support.
  *
@@ -11,7 +11,7 @@
  *
  * Basic usage:
  * ```typescript
- * import { toSExpr, formatSExpr, TO_SEXPR, SEXPR_TAG, sexpr } from '@dappsnap/arrival';
+ * import { toSExpr, formatSExpr, TO_SEXPR, SEXPR_TAG, sexpr } from '@here.build/arrival';
  *
  * // Simple conversion
  * const expr = toSExpr({ name: "test", value: 42 });
