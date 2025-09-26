@@ -2,8 +2,7 @@
   "name": "@here.build/arrival",
   "version": "0.1.0",
   "description": "Ted Chiang was right",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "license": "MIT",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -11,6 +10,12 @@
       "require": "./dist/index.js"
     }
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -18,21 +23,16 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "fantasy-land": "^5.0.1",
+    "ramda": "^0.31.3",
+    "ramda-adjunct": "^5.1.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ramda": "^0.31.0",
     "tsup": "^8.0.0",
     "typescript": "5.9",
     "vitest": "^1.6.0"
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "license": "MIT",
-  "dependencies": {
-    "fantasy-land": "^5.0.1",
-    "ramda": "^0.31.3",
-    "ramda-adjunct": "^5.1.0"
   }
 }
