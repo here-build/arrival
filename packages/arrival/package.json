@@ -29,10 +29,10 @@
     "ramda-adjunct": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/ramda": "^0.31.0",
+    "@types/node": "24",
+    "@types/ramda": "^0.31.1",
     "tsup": "^8.0.0",
     "typescript": "5.9",
-    "vitest": "^1.6.0"
+    "vitest": "^3.2.4"
   }
 }
