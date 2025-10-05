@@ -1,0 +1,42 @@
+{
+  "name": "@here.build/mcp-framework",
+  "version": "0.1.0",
+  "description": "MCP server framework for building Model Context Protocol servers",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dedent": "^1.7.0",
+    "hono": "^4.9.9",
+    "lodash-es": "^4.17.21",
+    "tiny-invariant": "^1.3.3",
+    "type-fest": "^5.0.1",
+    "zod": "^4.1.11",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "24",
+    "tsup": "^8.0.0",
+    "typescript": "5.9",
+    "vitest": "^3.0.0"
+  }
+}
