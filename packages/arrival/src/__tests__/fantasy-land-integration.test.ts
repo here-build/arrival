@@ -1,14 +1,14 @@
 /**
  * Fantasy Land + LIPS Integration Tests
- * 
+ *
  * Tests that LIPS classes work correctly with Ramda functions after
  * Fantasy Land monkey-patching is applied.
  */
 
-import { describe, expect, it, beforeAll } from "vitest";
-import { createSandboxedEnvironment, sandboxedEnv } from "../enhanced-environment";
+import { beforeAll, describe, expect, it } from "vitest";
+import { sandboxedEnv } from "../enhanced-environment";
 import { applyFantasyLandPatches } from "../fantasy-land-lips";
-import { exec, env as lipsGlobalEnv } from "../lips/lips";
+import { exec, nil } from "../lips/lips";
 import { RAMDA_FUNCTIONS } from "../ramda-functions";
 import "./custom-matchers";
 
@@ -22,8 +22,7 @@ async function execOne(expr: string): Promise<any> {
 function lipsListToArray(lipsList: any): any[] {
   const result = [];
   let current = lipsList;
-  const nil = sandboxedEnv.get('nil', { throwError: false }); // Use sandboxed nil
-  
+
   while (current && current !== nil && current.car !== undefined) {
     result.push(current.car);
     current = current.cdr;
@@ -56,10 +55,10 @@ describe("Fantasy Land + LIPS Integration", () => {
       const result = await execOne(`
         (map inc (list 1 2 3))
       `);
-      
+
       console.log("Ramda map on LIPS list result:", result);
       console.log("Result type:", result?.constructor?.name);
-      
+
       // Should work seamlessly
       expect(result).toBeDefined();
       // Convert to array to check values - need to handle LIPS numbers
@@ -68,14 +67,14 @@ describe("Fantasy Land + LIPS Integration", () => {
     });
 
     it("should work with Ramda filter on LIPS lists", async () => {
-      // Create a LIPS list and filter it with Ramda  
+      // Create a LIPS list and filter it with Ramda
       const result = await execOne(`
         (filter (lambda (x) (> x 3)) (list 1 2 3 4 5))
       `);
-      
+
       console.log("Ramda filter on LIPS list result:", result);
       console.log("Result type:", result?.constructor?.name);
-      
+
       // Should filter correctly (elements > 3)
       expect(result).toBeDefined();
       const values = lipsListToArray(result).map(extractLipsValue);
@@ -87,9 +86,9 @@ describe("Fantasy Land + LIPS Integration", () => {
       const result = await execOne(`
         (reduce add 0 (list 1 2 3 4))
       `);
-      
+
       console.log("Ramda reduce on LIPS list result:", result);
-      
+
       // Should sum correctly: 0 + 1 + 2 + 3 + 4 = 10
       // Handle LIPS number types
       const value = extractLipsValue(result);
@@ -101,14 +100,14 @@ describe("Fantasy Land + LIPS Integration", () => {
       const lipsResult = await execOne(`
         (car (list 1 2 3))
       `);
-      
+
       console.log("car on LIPS list:", lipsResult);
       expect(extractLipsValue(lipsResult)).toBe(1);
 
       const cdrResult = await execOne(`
         (cdr (list 1 2 3))
       `);
-      
+
       console.log("cdr on LIPS list:", cdrResult);
       expect(cdrResult).toBeDefined();
       // First element of cdr should be 2
@@ -124,9 +123,9 @@ describe("Fantasy Land + LIPS Integration", () => {
           (reduce add 0))
         (list 1 2 3 4 5)
       `, { env: sandboxedEnv });
-      
+
       console.log("Chained operations result:", result);
-      
+
       // Pipeline: [1,2,3,4,5] -> map(+1) -> [2,3,4,5,6] -> filter(>3) -> [4,5,6] -> sum -> 15
       expect(result).toBe(15);
     });
@@ -135,15 +134,15 @@ describe("Fantasy Land + LIPS Integration", () => {
   describe("Fantasy Land Protocol Implementation", () => {
     it("should have Fantasy Land methods on LIPS Pair instances", async () => {
       const pairResult = await execOne(`(list 1 2 3)`);
-      
+
       console.log("Pair result from exec:", pairResult);
       console.log("Pair constructor:", pairResult?.constructor?.name);
-      
+
       // Check that Fantasy Land methods exist
       expect(pairResult['fantasy-land/map']).toBeTypeOf('function');
       expect(pairResult['fantasy-land/filter']).toBeTypeOf('function');
       expect(pairResult['fantasy-land/reduce']).toBeTypeOf('function');
-      
+
       console.log("Fantasy Land methods on Pair:", {
         map: typeof pairResult['fantasy-land/map'],
         filter: typeof pairResult['fantasy-land/filter'],
@@ -153,11 +152,11 @@ describe("Fantasy Land + LIPS Integration", () => {
 
     it("should call Fantasy Land methods directly", async () => {
       const pairResult = await exec(`(list 1 2 3)`, { env: sandboxedEnv });
-      
+
       // Call Fantasy Land map directly
       const mapResult = pairResult['fantasy-land/map']((x: number) => x * 2);
       console.log("Direct FL map result:", mapResult);
-      
+
       // Convert to array for easier assertion
       const values = [];
       let current = mapResult;
@@ -170,11 +169,11 @@ describe("Fantasy Land + LIPS Integration", () => {
 
     it("should call Fantasy Land filter directly", async () => {
       const pairResult = await exec(`(list 1 2 3 4 5)`, { env: sandboxedEnv });
-      
+
       // Call Fantasy Land filter directly
       const filterResult = pairResult['fantasy-land/filter']((x: number) => x > 3);
       console.log("Direct FL filter result:", filterResult);
-      
+
       // Convert to array for easier assertion
       const values = [];
       let current = filterResult;
@@ -187,11 +186,11 @@ describe("Fantasy Land + LIPS Integration", () => {
 
     it("should call Fantasy Land reduce directly", async () => {
       const pairResult = await exec(`(list 1 2 3 4)`, { env: sandboxedEnv });
-      
+
       // Call Fantasy Land reduce directly
       const reduceResult = pairResult['fantasy-land/reduce']((acc: number, x: number) => acc + x, 0);
       console.log("Direct FL reduce result:", reduceResult);
-      
+
       expect(reduceResult).toBe(10);
     });
   });
@@ -200,7 +199,7 @@ describe("Fantasy Land + LIPS Integration", () => {
     it("should have all expected Ramda functions available", async () => {
       // Test that key Ramda functions are available in the environment
       const testFunctions = ['map', 'filter', 'reduce', 'car', 'cdr', 'pipe', 'compose', 'inc', 'add'];
-      
+
       for (const fnName of testFunctions) {
         const fn = sandboxedEnv.get(fnName, { throwError: false });
         expect(fn).toBeTypeOf('function', `${fnName} should be available as a function`);
@@ -212,17 +211,17 @@ describe("Fantasy Land + LIPS Integration", () => {
       // Test that our car/cdr functions work with both data types
       const carFn = RAMDA_FUNCTIONS.car;
       const cdrFn = RAMDA_FUNCTIONS.cdr;
-      
+
       // Test with JS array
       expect(carFn([1, 2, 3])).toBe(1);
       expect(cdrFn([1, 2, 3])).toEqual([2, 3]);
-      
+
       // Test with LIPS list
       const lipsList = await exec(`(list 1 2 3)`, { env: sandboxedEnv });
       expect(carFn(lipsList)).toBe(1);
       expect(cdrFn(lipsList)).toBeDefined();
       expect(cdrFn(lipsList).car).toBe(2); // First element of cdr should be 2
-      
+
       console.log("✓ car/cdr work with both JS arrays and LIPS lists");
     });
   });
@@ -232,11 +231,10 @@ describe("Fantasy Land + LIPS Integration", () => {
       const result = await exec(`
         (map inc (list))
       `, { env: sandboxedEnv });
-      
+
       console.log("Map on empty list:", result);
-      
+
       // Should return empty list (nil)
-      const nil = lipsGlobalEnv.get('nil');
       expect(result).toBe(nil);
     });
 
@@ -244,11 +242,10 @@ describe("Fantasy Land + LIPS Integration", () => {
       const result = await exec(`
         (filter (gt 10) (list 1 2 3))
       `, { env: sandboxedEnv });
-      
+
       console.log("Filter with no matches:", result);
-      
+
       // Should return empty list (nil)
-      const nil = lipsGlobalEnv.get('nil');
       expect(result).toBe(nil);
     });
 
@@ -256,9 +253,9 @@ describe("Fantasy Land + LIPS Integration", () => {
       const result = await exec(`
         (reduce add 42 (list))
       `, { env: sandboxedEnv });
-      
+
       console.log("Reduce on empty list:", result);
-      
+
       // Should return initial value
       expect(result).toBe(42);
     });
@@ -281,9 +278,9 @@ describe("Fantasy Land + LIPS Integration", () => {
           {:style {:overflow "hidden"}}
           {:style {}}))
       `, { env: sandboxedEnv });
-      
+
       console.log("Complex CSS filtering result:", result);
-      
+
       // Should filter down to just the "hidden" values
       const values = [];
       let current = result;
@@ -305,9 +302,9 @@ describe("Fantasy Land + LIPS Integration", () => {
             {:style {:overflow "visible"}}
             {:style {:overflow "hidden"}}))
       `, { env: sandboxedEnv });
-      
+
       console.log("MCP-style filtering result:", result);
-      
+
       // Should return the 2 nodes with overflow: hidden
       const values = [];
       let current = result;

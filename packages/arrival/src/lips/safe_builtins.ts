@@ -7,10 +7,10 @@ export const SAFE_BUILTINS = [
   "empty?",
   "list?",
   "pair?",
-  
+
   // Remove these - handled by Ramda with FL compatibility:
   // "car", "cdr"
-  
+
   // Remove these - handled by Ramda+FL:
   // "append", "reverse", "nth", "length", "flatten"
   // "map", "filter", "fold", "reduce", "for-each", "apply", "compose", "pipe", "curry", "find", "pluck"

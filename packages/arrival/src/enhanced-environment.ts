@@ -5,7 +5,7 @@
  * and curated Ramda functions for safe expression evaluation.
  */
 
-import { env as lipsGlobalEnv, Environment } from "./lips/lips";
+import { env as lipsGlobalEnv, Environment, nil } from "./lips/lips";
 import { SAFE_BUILTINS } from "./lips/safe_builtins";
 import { RAMDA_FUNCTIONS } from "./ramda-functions";
 import { applyFantasyLandPatches } from "./fantasy-land-lips";
@@ -38,10 +38,8 @@ export function createSandboxedEnvironment(): any {
   });
 
   // Add the Nil constructor/value (empty list)
-  const nilValue = lipsGlobalEnv.get("list", { throwError: false })?.(); // list() returns Nil
-  if (nilValue) {
-    env.set("nil", nilValue);
-  }
+  env.set("nil", nil);
+
 
   // Add minimal debugging helpers (safe)
   env.set("tap", (fn: Function) => (x: any) => {

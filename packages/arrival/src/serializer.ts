@@ -1,4 +1,5 @@
-import "@here.build/arrival-env"
+import "@here.build/arrival-env";
+
 /**
  * S-Expression Serializer
  *
@@ -8,23 +9,44 @@ import "@here.build/arrival-env"
 
 export const SEXPR_TAG = Symbol.for("expression");
 
-export type SExprSerializable = string | number | bigint | boolean | null | symbol | SExprSerializable[] | {
-  [key: string]: any
-};
-export type SExpr = string | number | bigint | boolean | null | SExpr[];
+// Unique symbols for serialization markers
+const QUOTED_MARKER = Symbol.for("arrival:quoted");
+const EXPR_MARKER = Symbol.for("arrival:expr");
+
+export type SExprSerializable =
+  | string
+  | number
+  | bigint
+  | boolean
+  | null
+  | symbol
+  | SExprSerializable[]
+  | { [key: string | symbol]: any };
+
+export type SExpr =
+  | string
+  | number
+  | bigint
+  | boolean
+  | null
+  | SExpr[]
+  | { [key: symbol]: any };
 export type SExprDefinition = [typeof SEXPR_TAG, string, ...any[]];
 
 // Context object for Symbol.toSExpr implementations
 const serializationContext = {
   symbol: (value: string): SExprSerializable => {
     // Return a special marker that won't be quoted
-    return { __symbol: value };
+    return Symbol(value);
   },
   keyword: (value: string): string => `:${value}`,
-  quote: (value: string): string => value,
+  quote: (value: string): SExprSerializable => {
+    // Return a special marker that will always be quoted
+    return { [QUOTED_MARKER]: value };
+  },
   expr: (head: string | SExprSerializable, ...args: SExprSerializable[]): SExprSerializable => {
     // Return a structure that will be serialized as an expression
-    return { __expr: true, head, args };
+    return { [EXPR_MARKER]: true, head, args };
   },
 };
 
@@ -46,14 +68,14 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
   // Handle special marker objects from context helpers
   if (obj && typeof obj === "object") {
-    if ("__expr" in obj) {
+    if (EXPR_MARKER in obj) {
       // Expression created by context.expr
       const expr = obj as any;
       return [toSExpr(expr.head, visited), ...expr.args.map((arg: any) => toSExpr(arg, visited))];
     }
-    if ("__symbol" in obj) {
-      // Symbol created by context.symbol - return as unquoted string
-      return (obj as any).__symbol;
+    if (QUOTED_MARKER in obj) {
+      // Quoted string created by context.quote - wrap to force quoting
+      return { [QUOTED_MARKER]: obj[QUOTED_MARKER] };
     }
   }
 
@@ -137,8 +159,8 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
   // Has custom serialization with Symbol.toSExpr
   if (obj && typeof obj === "object" && Symbol.toSExpr in obj) {
     const displayName = obj[Symbol.SExpr]?.() ??
-      obj.constructor.displayName ??
       obj.displayName ??
+      obj.constructor.displayName ??
       obj.name ??
       obj.constructor.name;
     const contents = obj[Symbol.toSExpr](serializationContext);
@@ -360,6 +382,12 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     }
   }
 
+  // Handle force-quoted marker (must be checked before typeof === "string")
+  if (sexpr && typeof sexpr === "object" && QUOTED_MARKER in sexpr) {
+    const value = (sexpr as any)[QUOTED_MARKER];
+    return `"${value.replace(/"/g, "\\\"")}"`;
+  }
+
   // Format primitives
   if (typeof sexpr === "string") {
     // Keywords (starting with :) don't need quotes
@@ -427,14 +455,14 @@ function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
 // Helper to process items from Symbol.toSExpr
 function processItem(item: any, visited: WeakSet<object>): SExpr {
   // Handle special serializable values from context helpers
-  if (item && typeof item === "object" && "__expr" in item) {
+  if (item && typeof item === "object" && EXPR_MARKER in item) {
     // Expression created by context.expr
     const expr = item as any;
     return [toSExpr(expr.head, visited), ...expr.args.map((arg: any) => toSExpr(arg, visited))];
   }
-  if (item && typeof item === "object" && "__symbol" in item) {
-    // Symbol created by context.symbol - return as unquoted string
-    return (item as any).__symbol;
+  if (item && typeof item === "object" && QUOTED_MARKER in item) {
+    // Quoted string created by context.quote - wrap to force quoting
+    return { [QUOTED_MARKER]: (item as any)[QUOTED_MARKER] };
   }
   if (Array.isArray(item) && item[0] === SEXPR_TAG) {
     const [_, head, ...args] = item;
@@ -448,6 +476,7 @@ function processItem(item: any, visited: WeakSet<object>): SExpr {
  */
 export function toSExprString(obj: any, indent = 0): string {
   const sexpr = toSExpr(obj);
+  debugger;
   return formatSExpr(sexpr, indent);
 }
 

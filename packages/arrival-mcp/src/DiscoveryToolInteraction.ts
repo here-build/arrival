@@ -152,7 +152,6 @@ export abstract class DiscoveryToolInteraction<TT extends Record<string, any>> e
       env.defineRosetta(name, {
         fn: async (...args: any[]) => {
           invariant(!timeoutRef.current, "Timeout");
-          console.log(`🌉 ${name}(`, ...args, ")");
           try {
             return params.length > 0
               ? handler(...z.tuple(params as [z.ZodType, ...z.ZodType[]]).parse(args))

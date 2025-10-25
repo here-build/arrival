@@ -122,11 +122,6 @@ export function createRosettaWrapper(config: RosettaFunction): Function {
     // Convert LIPS arguments to JS
     const jsArgs = args.map(arg => lipsToJs(arg));
 
-    console.log('Rosetta call:', {
-      originalArgs: args.length,
-      convertedArgs: jsArgs.length
-    });
-
     // Execute the JS function
     let result;
     try {
