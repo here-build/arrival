@@ -76,10 +76,7 @@ export abstract class DiscoveryToolInteraction<TT extends Record<string, any>> e
     return execSerialized(expr, { env });
   }
 
-  protected abstract registerFunctions(context: Omit<TT, "expr">): Promise<() => Promise<void>>;
-
-  // Kept for backward compat but deprecated - tools should use register callback
-  protected registerFunctionLegacy = this.registerFunction.bind(this);
+  protected abstract registerFunctions(context: Omit<TT, "expr">): Promise<void>;
 
   protected registerFunction<T extends [] | NonEmptyTuple<z.ZodType>>(
     name: string,

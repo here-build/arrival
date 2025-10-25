@@ -1,9 +1,7 @@
-import { Environment, execSerialized, sandboxedEnv } from "@here.build/arrival";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import dedent from "dedent";
 import type { Context } from "hono";
 import { zip } from "lodash-es";
-import invariant from "tiny-invariant";
 import type { NonEmptyTuple } from "type-fest";
 import * as z from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -37,7 +35,6 @@ interface RegisteredFunction {
 export abstract class ActionToolInteraction<T extends Record<string, any>> extends ToolInteraction<
   T & { actions: [string, ...any] }
 > {
-  private readonly MAX_EXECUTION_TIME = 5000; // 5 seconds
   readonly contextSchema!: {
     [key in keyof T]: z.ZodType<T[key]>;
   };
@@ -136,14 +133,21 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
     };
   }
 
-  async executeActions({ actions, ...context }: T & { actions: [string, ...any][] }) {
-    // First, validate all actions before executing any
+  protected registerFunction<TT extends [] | NonEmptyTuple<z.ZodType>>(
+    name: string,
+    description: string,
+    params: TT,
+    handler: (...args: any[]) => any,
+  ) {
+    this.functions.set(name, { description, params, handler });
+  }
+
+
+  async executeTool({ actions, ...context }: T & { actions: [string, ...any][] }) {
     const validationErrors: Array<{ index: number; action: string; error: string }> = [];
 
     for (const [i, [actionName, ...actionArgs]] of actions.entries()) {
       const action = this.actions[actionName];
-
-      // Check if action exists
       if (!action) {
         validationErrors.push({
           index: i,
@@ -153,7 +157,6 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
         continue;
       }
 
-      // Validate arguments
       if (action.args.length > 0) {
         try {
           z.tuple(action.args as any).parse(actionArgs);
@@ -170,7 +173,6 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
       }
     }
 
-    // If there are validation errors, return them without executing anything
     if (validationErrors.length > 0) {
       return {
         success: false,
@@ -180,7 +182,6 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
       };
     }
 
-    // All actions validated, now execute them
     const results: any[] = [];
 
     for (let i = 0; i < actions.length; i++) {
@@ -192,7 +193,6 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
           await action.handler(context as Omit<T, "actions">, Object.fromEntries(zip(action.argNames, actionArgs)) as any),
         );
       } catch (error) {
-        // Runtime error during execution
         return {
           partial: true,
           executed: i,
@@ -209,95 +209,5 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
     }
 
     return results;
-  }
-
-  protected abstract registerFunctions(context: Omit<T, "actions">): Promise<() => Promise<void>>;
-
-  protected registerFunction<TT extends [] | NonEmptyTuple<z.ZodType>>(
-    name: string,
-    description: string,
-    params: TT,
-    handler: (...args: any[]) => any,
-  ) {
-    this.functions.set(name, { description, params, handler });
-  }
-
-  protected getAvailableFunctions(): string[] {
-    return [...this.functions.entries()].map(([name, { description, params }]) => {
-      const signature = params
-        .map((item: any) => {
-          let postfix = "";
-          if (item.safeParse(undefined).success) {
-            postfix += "?";
-          }
-          if (item.description) {
-            postfix += ` (${item.description})`;
-          }
-          if (item instanceof z.ZodString) return `string${postfix}`;
-          if (item instanceof z.ZodNumber) return `number${postfix}`;
-          if (item instanceof z.ZodBoolean) return `boolean${postfix}`;
-          if (item instanceof z.ZodArray) return `list${postfix}`;
-          if (item instanceof z.ZodEnum) {
-            return item.options.map((v) => `"${v}"`).join("|");
-          }
-          if (item instanceof z.ZodAny) {
-            return `any`;
-          }
-          return `value${postfix}`;
-        })
-        .join(" ");
-
-      return `(${name}${signature ? ` ${signature}` : ""}) - ${description}`;
-    });
-  }
-
-  async executeTool(args: T & { actions: [string, ...any][] }): Promise<object | object[]> {
-    const { actions, ...context } = args;
-    const timeoutRef = { current: false };
-    const env = await this.createEnvironment(context as Omit<T, "actions">, timeoutRef);
-
-    setTimeout(() => {
-      timeoutRef.current = true;
-    }, this.MAX_EXECUTION_TIME);
-
-    // Execute actions - returns results array or error object
-    return await this.executeActions(args);
-  }
-
-  private async createEnvironment(context: Omit<T, "actions">, timeoutRef: { current: boolean }): Promise<any> {
-    const env = new Environment({}, sandboxedEnv, "Sandbox");
-
-    env.set("length", (collection: any) => {
-      if (collection && typeof collection === "object" && "car" in collection) {
-        let count = 0;
-        let current = collection;
-        while (current?.constructor && current.constructor.name !== "Nil") {
-          count++;
-          current = current.cdr;
-        }
-        return count;
-      }
-      return Array.isArray(collection) ? collection.length : 0;
-    });
-
-    await this.registerFunctions(context);
-
-    for (const [name, { handler, params }] of this.functions.entries()) {
-      env.defineRosetta(name, {
-        fn: async (...args: any[]) => {
-          invariant(!timeoutRef.current, "Timeout");
-          console.log(`🌉 ${name}(`, ...args, ")");
-          try {
-            return params.length > 0
-              ? handler(...z.tuple(params as [z.ZodType, ...z.ZodType[]]).parse(args))
-              : handler();
-          } catch (error: any) {
-            throw new Error(`${name}: ${error.message}`);
-          }
-        },
-      });
-    }
-
-    return env;
   }
 }

@@ -16,7 +16,10 @@ export abstract class ToolInteraction<T extends Record<string, any>> {
   static readonly name: string;
   readonly description!: string | Promise<string>;
 
-  constructor(public readonly context: Context) {}
+  constructor(
+    public readonly context: Context,
+    public readonly state: Record<string, any> = {}
+  ) {}
 
   async getToolDescription(): Promise<Tool> {
     return {

@@ -34,7 +34,6 @@ export {
   toSExprString,
 
   SEXPR_TAG,
-  TO_SEXPR,
 
   // Helpers
   sexpr,
@@ -57,11 +56,11 @@ export { RAMDA_FUNCTIONS } from "./ramda-functions";
 export { applyFantasyLandPatches } from "./fantasy-land-lips";
 
 // Rosetta Environment (seamless LIPS ↔ JS interop)
-export { 
-  lipsToJs, 
-  jsToLips, 
+export {
+  lipsToJs,
+  jsToLips,
   createRosettaWrapper,
-  type RosettaFunction 
+  type RosettaFunction
 } from "./rosetta-environment";
 
 // Serialized execution wrapper

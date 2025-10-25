@@ -1,3 +1,4 @@
+import "@here.build/arrival-env"
 /**
  * S-Expression Serializer
  *
@@ -5,34 +6,7 @@
  * using Symbol.toSExpr for custom representations
  */
 
-// @ts-expect-error
-// noinspection JSConstantReassignment
-Symbol.toSExpr = Symbol.for("toSymbolicExpression");
-// @ts-expect-error
-// noinspection JSConstantReassignment
-Symbol.SExpr = Symbol.for("symbolicExpressionSymbol");
-
-declare global {
-  interface SymbolConstructor {
-    readonly toSExpr: unique symbol;
-    readonly SExpr: unique symbol;
-  }
-
-  type SExpr = any;
-
-  interface Object {
-    [Symbol.SExpr]?: () => string;
-    [Symbol.toSExpr]?: (context: {
-      symbol: (value: string) => string | SExprSerializable
-      keyword: (value: string) => string | SExprSerializable
-      quote: (value: string) => string | SExprSerializable
-      expr: (head: string | SExprSerializable, ...args: SExprSerializable[]) => SExprSerializable;
-    }) => Array<string | SExprSerializable>;
-  }
-}
-
 export const SEXPR_TAG = Symbol.for("expression");
-export const TO_SEXPR = Symbol.toSExpr;
 
 export type SExprSerializable = string | number | bigint | boolean | null | symbol | SExprSerializable[] | {
   [key: string]: any

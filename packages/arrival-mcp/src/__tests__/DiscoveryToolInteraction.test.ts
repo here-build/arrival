@@ -12,7 +12,7 @@ class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }
     testContext: z.string().describe("Test context value"),
   };
 
-  protected async registerFunctions(context: { testContext: string }): Promise<() => Promise<void>> {
+  protected async registerFunctions(context: { testContext: string }): Promise<void> {
     // Register a simple function that echoes the context
     this.registerFunction(
       "echo-context",
@@ -28,8 +28,6 @@ class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }
       [z.number().describe("first number"), z.number().describe("second number")],
       (a: number, b: number) => a + b
     );
-
-    return async () => {};
   }
 }
 
@@ -141,7 +139,6 @@ describe("DiscoveryToolInteraction", () => {
               }
             }
           );
-          return async () => {};
         }
       })(mockContext);
 
