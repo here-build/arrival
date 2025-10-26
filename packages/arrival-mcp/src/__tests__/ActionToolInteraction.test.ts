@@ -12,9 +12,7 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
     projectId: z.string().describe("Project ID"),
   };
 
-  constructor(context: Context) {
-    super(context);
-
+  setup () {
     // Register some test actions
     this.registerAction({
       name: "create-item",
@@ -58,18 +56,6 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
       },
     });
   }
-
-  protected async registerFunctions(context: { projectId: string }): Promise<() => Promise<void>> {
-    // Register helper functions for LIPS expressions
-    this.registerFunction(
-      "get-project-id",
-      "Returns the project ID from context",
-      [],
-      () => context.projectId
-    );
-
-    return async () => {};
-  }
 }
 
 function createMockContext(): Context {
@@ -83,16 +69,15 @@ function createMockContext(): Context {
 }
 
 describe("ActionToolInteraction", () => {
-  let tool: TestActionTool;
   let mockContext: Context;
 
   beforeEach(() => {
     mockContext = createMockContext();
-    tool = new TestActionTool(mockContext);
   });
 
   describe("Tool Schema", () => {
     it("should generate valid tool schema with actions", async () => {
+      const tool = new TestActionTool(mockContext);
       const schema = await tool.getToolSchema();
 
       expect(schema).toBeDefined();
@@ -104,6 +89,7 @@ describe("ActionToolInteraction", () => {
     });
 
     it("should include all registered actions in schema", async () => {
+      const tool = new TestActionTool(mockContext);
       const schema = await tool.getToolSchema();
       // @ts-expect-error
       const actionsSchema = schema.properties.actions;
@@ -117,10 +103,12 @@ describe("ActionToolInteraction", () => {
 
   describe("Single Action Execution", () => {
     it("should execute single action successfully", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [["create-item", "Test Item", 42]],
       });
+
+      const result = await tool.executeTool();
 
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(1);
@@ -133,10 +121,12 @@ describe("ActionToolInteraction", () => {
     });
 
     it("should handle optional parameters", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [["create-item", "Test Item"]],
       });
+
+      const result = await tool.executeTool();
 
       expect(result[0].item).toMatchObject({
         name: "Test Item",
@@ -147,7 +137,7 @@ describe("ActionToolInteraction", () => {
 
   describe("Batch Action Execution", () => {
     it("should execute multiple actions in sequence", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [
           ["create-item", "Item 1", 10],
@@ -155,6 +145,8 @@ describe("ActionToolInteraction", () => {
           ["delete-item", "item-to-delete"],
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(3);
@@ -164,13 +156,15 @@ describe("ActionToolInteraction", () => {
     });
 
     it("should share context across all actions", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "shared-project-id",
         actions: [
           ["create-item", "Item A"],
           ["create-item", "Item B"],
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(result[0].projectId).toBe("shared-project-id");
       expect(result[1].projectId).toBe("shared-project-id");
@@ -179,7 +173,7 @@ describe("ActionToolInteraction", () => {
 
   describe("Validation", () => {
     it("should validate all actions before executing", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [
           ["create-item", "Valid Item"],
@@ -187,6 +181,8 @@ describe("ActionToolInteraction", () => {
           ["create-item", "Another Item"],
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(result).toMatchObject({
         success: false,
@@ -200,13 +196,15 @@ describe("ActionToolInteraction", () => {
     });
 
     it("should not execute any actions if validation fails", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [
           ["create-item", "Item 1"],
           ["invalid-action"],
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(result).toHaveProperty("validation", "failed");
       expect(result).toHaveProperty("message");
@@ -215,12 +213,14 @@ describe("ActionToolInteraction", () => {
     });
 
     it("should validate parameter types", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [
           ["create-item", "Item", "not-a-number"], // Should be number
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(result).toMatchObject({
         success: false,
@@ -231,7 +231,7 @@ describe("ActionToolInteraction", () => {
 
   describe("Error Handling", () => {
     it("should handle runtime errors during execution", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
         actions: [
           ["create-item", "Item 1"],
@@ -239,6 +239,8 @@ describe("ActionToolInteraction", () => {
           ["create-item", "Item 3"], // Should not execute
         ],
       });
+
+      const result = await tool.executeTool();
 
       expect(result).toMatchObject({
         partial: true,
@@ -257,11 +259,12 @@ describe("ActionToolInteraction", () => {
 
   describe("Function Registration", () => {
     it("should allow registering helper functions", async () => {
-      // Function registration happens during executeTool
-      const result = await tool.executeTool({
+      const tool = new TestActionTool(mockContext, undefined, {
         projectId: "test-proj-456",
         actions: [["create-item", "Test"]],
       });
+
+      const result = await tool.executeTool();
 
       // Verify the action executed successfully (indirectly confirms functions registered)
       expect(result[0]).toMatchObject({
@@ -274,6 +277,7 @@ describe("ActionToolInteraction", () => {
 
   describe("Context Constraints", () => {
     it("should require context properties that all actions need", async () => {
+      const tool = new TestActionTool(mockContext);
       const schema = await tool.getToolSchema();
 
       // projectId is required by all actions, so it should be in required

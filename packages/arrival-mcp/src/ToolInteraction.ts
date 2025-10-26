@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Context } from "hono";
+import { MCPClientInfo } from "./hono/HonoMCPServer";
 
 export type UserlandCallToolResult = File | string | object;
 
@@ -12,24 +13,29 @@ export type UserlandCallToolResult = File | string | object;
  Execution is returning just blobs, texts and objects, not mcp representations of those
  */
 
-export abstract class ToolInteraction<T extends Record<string, any>> {
+export abstract class ToolInteraction<ExecutionContext extends Record<string, any>, State extends Record<string, any> = Record<string, any>> {
   static readonly name: string;
   readonly description!: string | Promise<string>;
 
   constructor(
     public readonly context: Context,
-    public readonly state: Record<string, any> = {}
-  ) {}
+    public readonly state: Record<string, any> = {},
+    public readonly executionContext?: ExecutionContext
+  ) {
+    this.setup();
+  }
 
-  async getToolDescription(): Promise<Tool> {
+  protected setup(): void {}
+
+  async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
       name: this.constructor.name,
       description: await this.description,
-      inputSchema: await this.getToolSchema(),
+      inputSchema: await this.getToolSchema(clientInfo),
     };
   }
 
-  abstract getToolSchema(): Tool["inputSchema"] | Promise<Tool["inputSchema"]>;
+  abstract getToolSchema(clientInfo?: MCPClientInfo): Tool["inputSchema"] | Promise<Tool["inputSchema"]>;
 
-  abstract executeTool(args: T): Promise<UserlandCallToolResult | UserlandCallToolResult[]>;
+  abstract executeTool(): Promise<UserlandCallToolResult | UserlandCallToolResult[]>;
 }

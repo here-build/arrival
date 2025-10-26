@@ -1,247 +1,184 @@
-import type { Context } from "hono";
-import { streamSSE } from "hono/streaming";
+import { SSEStreamingApi, streamSSE } from "hono/streaming";
 import { MCPServer } from "../MCPServer";
+import { JSONRPCRequest, ServerResult } from "@modelcontextprotocol/sdk/types.js";
 
+export type MCPClientInfo = Record<string, any>;
 /**
  * Hono HTTP/SSE handler for MCPServer
  * Bridges HTTP requests to MCPServer protocol methods
  */
 export class HonoMCPServer extends MCPServer {
-  /**
-   * Main request handler - supports both POST (JSON-RPC) and GET (SSE)
-   */
-  handler = async (c: Context) => {
-    // Handle GET requests (persistent SSE for old clients)
-    if (c.req.method === "GET") {
-      const acceptHeader = c.req.header("accept");
+  public serverInfo: ServerResult = {
+    protocolVersion: "2025-06-18",
+    serverInfo: {
+      name: "",
+      version: "0.0.0",
+    },
+    capabilities: {
+      tools: { list: true },
+    },
+  }
 
-      // Persistent SSE stream for server-initiated notifications
-      if (acceptHeader?.includes("text/event-stream")) {
-        console.log("[HonoMCPServer] Opening persistent SSE stream");
+  clientInfo = new Map<string, MCPClientInfo>();
 
-        return streamSSE(c, async (stream) => {
-          console.log("[HonoMCPServer] Persistent SSE stream opened");
+  // todo narrow down types
+  protected async processJsonRpcRequest<Request extends JSONRPCRequest>(context: import("hono").Context, method: Request['method'], params: Request["params"], sessionId: string) {
+    switch (method) {
+      case "initialize":
+        if (params?.clientInfo) {
+          this.clientInfo.set(sessionId, params.clientInfo)
+        }
+        return this.serverInfo;
 
-          // Send initial connection confirmation
-          await stream.writeSSE({
-            data: "",
-            event: "endpoint",
-            id: String(Date.now()),
-          });
+      case "tools/list":
+        return {
+          tools: await this.getToolDefinitions(context, this.clientInfo.get(sessionId)),
+        };
 
-          // Keepalive ping every 30 seconds
-          const keepaliveInterval = setInterval(async () => {
-            try {
-              await stream.writeln(": keepalive");
-            } catch (error) {
-              console.log("[HonoMCPServer] SSE keepalive failed:", error);
-              clearInterval(keepaliveInterval);
+      case "tools/call":
+        try {
+          return await this.callTool(context, params as any);
+        } catch (error) {
+          console.error("[HonoMCPServer] Tool execution error:", error);
+          throw {
+            code: -32_603,
+            message: (error as any).publicMessage ?? "Tool execution failed",
+            data: {
+              errorMessage: error instanceof Error ? (error as any).publicMessage ?? error.message : error?.toString(),
             }
-          }, 30_000);
-
-          // Cleanup on abort
-          stream.onAbort(() => {
-            console.log("[HonoMCPServer] Persistent SSE stream closed");
-            clearInterval(keepaliveInterval);
-          });
-
-          // Stream stays open until client closes or session deleted
-        });
-      }
-
-      // Return basic server info for non-SSE GET
-      return c.json({
-        mcp: "1.0",
-        name: "mcp-server",
-        version: "0.1.0",
-        capabilities: {
-          tools: { list: true },
-        },
-      });
-    }
-
-    // Handle POST requests with JSON-RPC body
-    const request = await c.req.json();
-    console.log("[HonoMCPServer] Processing request:", request);
-
-    const acceptHeader = c.req.header("accept");
-    const wantsSSE = acceptHeader?.includes("text/event-stream");
-
-    // Helper to process JSON-RPC request and get response
-    const processRequest = async (): Promise<any> => {
-      switch (request.method) {
-        case "initialize": {
-          const sessionId = crypto.randomUUID();
-          c.header("Mcp-Session-Id", sessionId);
-          console.log(`[HonoMCPServer] Created session: ${sessionId}`);
-
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-              protocolVersion: "2025-03-26",
-              serverInfo: {
-                name: "mcp-server",
-                version: "0.1.0",
-              },
-              capabilities: {
-                tools: { list: true },
-              },
-            },
           };
         }
 
-        case "tools/list":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-              tools: await this.getToolDefinitions(c),
-            },
-          };
+      case "resources/list":
+      case "resources/read":
+        throw {
+          code: -32_601,
+          message: "Resources not implemented yet",
+        }
 
-        case "tools/call":
-          try {
-            return {
-              jsonrpc: "2.0",
-              id: request.id,
-              result: await this.callTool(c, request.params),
-            };
-          } catch (error) {
-            console.error("[HonoMCPServer] Tool execution error:", error);
-            return {
-              jsonrpc: "2.0",
-              id: request.id,
-              error: {
-                code: -32_603,
-                message: "Tool execution failed",
-                data: error instanceof Error ? error.message : error,
-              },
-            };
-          }
+      case "prompts/list":
+      case "prompts/get":
+        throw {
+          code: -32_601,
+          message: "Prompts not implemented yet",
+        };
 
-        case "resources/list":
-        case "resources/read":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32_601,
-              message: "Resources not implemented yet",
-            },
-          };
+      case "logging/setLevel":
+        console.log(`[HonoMCPServer] Logging level set to: ${params?.level}`);
+        return;
 
-        case "prompts/list":
-        case "prompts/get":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32_601,
-              message: "Prompts not implemented yet",
-            },
-          };
+      case "completion/complete":
+        throw {
+          code: -32_601,
+          message: "Completion not implemented",
+        };
 
-        case "logging/setLevel":
-          const { level } = request.params;
-          console.log(`[HonoMCPServer] Logging level set to: ${level}`);
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {},
-          };
+      case "sampling/createMessage":
+        throw {
+          code: -32_601,
+          message: "Sampling not implemented",
+        }
 
-        case "completion/complete":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32_601,
-              message: "Completion not implemented",
-            },
-          };
+      case "ping":
+        return {};
 
-        case "sampling/createMessage":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32_601,
-              message: "Sampling not implemented",
-            },
-          };
+      case "notifications/initialized":
+      case "notifications/cancelled":
+        return null;
 
-        case "ping":
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {},
-          };
+      default:
+        throw {
+          code: -32_601,
+          message: `Method not found: ${method}`,
+        }
+    }
+  }
 
-        default:
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32_601,
-              message: `Method not found: ${request.method}`,
-            },
-          };
+  protected async processRequest(context: import("hono").Context, {id, method, params}: JSONRPCRequest, sessionId: string) {
+    try {
+      const result = await this.processJsonRpcRequest(context, method, params, sessionId);
+      return result === null ? null : {
+        jsonrpc: "2.0",
+        id,
+        result,
       }
-    };
+    } catch (error) {
+      if (error instanceof Error) {
+       return {
+         jsonrpc: "2.0",
+         id,
+         error: {
+           code: (error as any).code ?? -1,
+           message: (error as any).publicMessage ?? error.message
+         },
+       }
+      } else {
+        return {
+          jsonrpc: "2.0",
+          id,
+          error,
+        }
+      }
+    }
+  }
 
+  outputSSE = new Map<string, SSEStreamingApi>();
+
+  get = async (context: import("hono").Context): Promise<Response> => {
+    const sessionId = context.req.header("Mcp-Session-Id") ?? crypto.randomUUID();
+    context.res.headers.set("Mcp-Session-Id", sessionId);
+    const wantsSSE = context.req.header("accept")?.includes("text/event-stream");
+    if (!wantsSSE) {
+      console.warn("GET request do not want SSE")
+    }
+
+    return streamSSE(context, async (stream) => {
+      console.log("[HonoMCPServer] notifications channel opened, session id", sessionId);
+      this.outputSSE.set(sessionId, stream);
+      await stream.sleep(60_000);
+    });
+  }
+
+  post = async (context: import("hono").Context): Promise<Response> => {
+    const sessionId = context.req.header("Mcp-Session-Id") ?? crypto.randomUUID();
+    context.res.headers.set("Mcp-Session-Id", sessionId);
+
+    const request = await context.req.json<JSONRPCRequest>();
+
+    const wantsSSE = context.req.header("accept")?.includes("text/event-stream");
+
+
+    const {inspect} = await import("node:util");
     // If client wants SSE for this POST request
     if (wantsSSE) {
-      console.log("[HonoMCPServer] POST with SSE response requested");
-
-      return streamSSE(c, async (stream) => {
-        try {
-          // Process request
-          const response = await processRequest();
-
-          // Send response as SSE event
+      console.log(`[HonoMCPServer] SSE: ${request.method}`, request.params)
+      return streamSSE(context, async (stream) => {
+        const response = await this.processRequest(context, request, sessionId);
+        console.log(`[HonoMCPServer] SSE response:`, inspect(response, false, 10, true))
+        if (response) {
           await stream.writeSSE({
             data: JSON.stringify(response),
-            event: "message",
-            id: String(request.id),
-          });
-
-          console.log("[HonoMCPServer] SSE response sent, closing stream");
-        } catch (error) {
-          console.error("[HonoMCPServer] Error in SSE response:", error);
-          await stream.writeSSE({
-            data: JSON.stringify({
-              jsonrpc: "2.0",
-              id: request.id,
-              error: {
-                code: -32_603,
-                message: "Internal error",
-                data: error instanceof Error ? error.message : String(error),
-              },
-            }),
-            event: "message",
           });
         }
-        // Stream closes automatically after sending
+        await stream.close();
       });
+    } else {
+      console.log(`[HonoMCPServer] HTTP: ${request.method}`, request.params)
+      const response = await this.processRequest(context, request, sessionId);
+      console.log(`[HonoMCPServer] HTTP response:`, inspect(response, false, 10, true))
+      return context.json(response)
     }
-
-    // Default: return JSON response
-    const response = await processRequest();
-    return c.json(response);
   };
 
-  /**
-   * DELETE handler for session cleanup
-   */
-  deleteHandler = async (c: Context): Promise<Response> => {
-    const sessionId = c.req.header("mcp-session-id");
+  delete = async (context: import("hono").Context): Promise<Response> => {
+    const sessionId = context.req.header("Mcp-Session-Id");
 
     if (sessionId) {
+      this.outputSSE.get(sessionId)?.abort();
       console.log(`[HonoMCPServer] Deleting session: ${sessionId}`);
-      await this.deleteSession(c, sessionId);
+      await this.deleteSession(context, sessionId);
     }
 
-    return c.json({ success: true });
+    return context.json({ success: true });
   };
 }

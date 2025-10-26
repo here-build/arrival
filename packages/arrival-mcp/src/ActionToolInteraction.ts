@@ -1,16 +1,16 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import dedent from "dedent";
-import type { Context } from "hono";
-import { zip } from "lodash-es";
-import type { NonEmptyTuple } from "type-fest";
+import { omit, zip } from "lodash-es";
 import * as z from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { ToolInteraction } from "./ToolInteraction";
+import invariant from "tiny-invariant";
 
 type ActionDeclaration<T, TT> = {
   name: string;
-  description: string | ((context: Context) => Promise<string>);
+  description: string | (() => Promise<string>);
+  context?: Array<keyof T>
   props: {
     [key in keyof TT]: z.ZodType<TT[key]>;
   };
@@ -18,7 +18,7 @@ type ActionDeclaration<T, TT> = {
 };
 
 type ActionDefinition<T, TT> = {
-  description: string | ((context: Context) => Promise<string>);
+  description: string | (() => Promise<string>);
   requiredContext: Set<keyof T>;
   optionalContext: Set<keyof T>;
   args: z.ZodType[];
@@ -26,20 +26,15 @@ type ActionDefinition<T, TT> = {
   handler: (context: Omit<T, "actions">, props: Omit<TT, keyof T>) => any;
 };
 
-interface RegisteredFunction {
-  description: string;
-  params: [] | NonEmptyTuple<z.ZodType>;
-  handler: (...args: any[]) => any;
-}
+type ActionCall = [string, ...any]
 
 export abstract class ActionToolInteraction<T extends Record<string, any>> extends ToolInteraction<
-  T & { actions: [string, ...any] }
+  T & { actions: ActionCall[] }
 > {
-  readonly contextSchema!: {
-    [key in keyof T]: z.ZodType<T[key]>;
-  };
+  declare readonly contextSchema: {
+    [key in keyof T]: z.ZodType<T[key], any, any>;
+  } | undefined;
   readonly actions: Record<string, ActionDefinition<T, any>> = {};
-  private readonly functions = new Map<string, RegisteredFunction>();
 
   registerAction<TT extends Record<string, any>>({ name, description, props, handler }: ActionDeclaration<T, TT>) {
     const requiredContext = new Set<string>();
@@ -50,15 +45,17 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
     const propEntries = Object.entries(props);
 
     for (const [key, value] of propEntries) {
-      if (key in this.contextSchema) {
-        if (value.safeParse(undefined).success) {
-          optionalContext.add(key);
+      if (this.contextSchema) {
+        if (key in this.contextSchema) {
+          if (value.safeParse(undefined).success) {
+            optionalContext.add(key);
+          } else {
+            requiredContext.add(key);
+          }
         } else {
-          requiredContext.add(key);
+          args.push(value);
+          argNames.push(key);
         }
-      } else {
-        args.push(value);
-        argNames.push(key);
       }
     }
     this.actions[name] = {
@@ -74,7 +71,7 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
   async getToolSchema(): Promise<Tool["inputSchema"]> {
     const universallyRequiredProps = Object.values(this.actions).reduce(
       (acc, { requiredContext }) => acc.intersection(requiredContext),
-      new Set(Object.keys(this.contextSchema)),
+      new Set(this.contextSchema ? Object.keys(this.contextSchema) : []),
     );
     return {
       type: "object",
@@ -83,7 +80,7 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
           type: "array",
           description: dedent`
             List of actions to execute within current tool invocation context.
-            Actions are invoked in [actionName, ...arguments] tuples and executed sequentially.
+            Actions are invoked in ["actionName", ...arguments] tuples and executed sequentially.
 
             Context constraint: All actions in a batch share the exactly same context scope.
             Every field in context must be consumable by EVERY action.
@@ -100,14 +97,14 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
                     return {
                       type: "array",
                       description: dedent`
-                        ${typeof description === "string" ? description : await description(this.context)}.
+                        ${typeof description === "string" ? description : await description()}.
                         Works in ${[...requiredContext].join(", ")} context ${optionalContext.size > 0 ? `(optionally ${[...optionalContext].join(", ")})` : ""}
                       `,
                       items: [
                         {
                           const: action,
                         },
-                        ...args.map((arg) => zodToJsonSchema(arg)),
+                        ...args.map((arg) => omit(zodToJsonSchema(arg), "$schema")),
                       ],
                     };
                   },
@@ -117,33 +114,29 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
           },
         },
         ...Object.fromEntries(
-          Object.entries(this.contextSchema).map(([key, value]) => {
-            const schema = zodToJsonSchema(value) as any;
-            return [
-              key,
-              {
-                ...schema,
-                description: `Context property${schema.description ? `. ${schema.description}` : ""}`,
-              },
-            ];
-          }),
+          this.contextSchema
+            ? Object.entries(this.contextSchema).map(([key, value]) => {
+              const {$schema, ...schema} = zodToJsonSchema(value) as any;
+              return [
+                key,
+                {
+                  ...schema,
+                  description: `Context property${schema.description ? `. ${schema.description}` : ""}`,
+                },
+              ];
+            })
+            : [],
         ),
       },
       required: ["actions", ...universallyRequiredProps],
     };
   }
 
-  protected registerFunction<TT extends [] | NonEmptyTuple<z.ZodType>>(
-    name: string,
-    description: string,
-    params: TT,
-    handler: (...args: any[]) => any,
-  ) {
-    this.functions.set(name, { description, params, handler });
-  }
 
+  async executeTool() {
+    invariant(this.executionContext, "execution context should be provided for tool execution");
+    const {actions, ...context} = this.executionContext;
 
-  async executeTool({ actions, ...context }: T & { actions: [string, ...any][] }) {
     const validationErrors: Array<{ index: number; action: string; error: string }> = [];
 
     for (const [i, [actionName, ...actionArgs]] of actions.entries()) {
@@ -190,7 +183,7 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
 
       try {
         results.push(
-          await action.handler(context as Omit<T, "actions">, Object.fromEntries(zip(action.argNames, actionArgs)) as any),
+          await action.handler(context, Object.fromEntries(zip(action.argNames, actionArgs)) as any),
         );
       } catch (error) {
         return {

@@ -34,10 +34,6 @@ function initializeLipsClasses() {
       Nil = testNil.constructor;
     }
 
-    console.log('🔧 LIPS classes initialized:', {
-      Pair: Pair?.name,
-      Nil: Nil?.name
-    });
   } catch (error) {
     console.warn('⚠️ Could not initialize LIPS classes:', error);
   }
@@ -59,20 +55,10 @@ const FL = {
  * Apply Fantasy Land monkey-patches to LIPS classes
  */
 export function applyFantasyLandPatches(): void {
-  console.log("🧙‍♂️ Applying Fantasy Land monkey-patches to LIPS classes...");
-
-  // Initialize LIPS classes first
   initializeLipsClasses();
-
   if (Pair) {
     patchPairClass(Pair);
-    console.log("✨ Pair class patched with Fantasy Land protocols");
   }
-
-  if (Nil) {
-    console.log("✨ Nil class available for instanceof checks");
-  }
-
   // TODO: Add LString support later if needed
 }
 

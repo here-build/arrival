@@ -476,7 +476,6 @@ function processItem(item: any, visited: WeakSet<object>): SExpr {
  */
 export function toSExprString(obj: any, indent = 0): string {
   const sexpr = toSExpr(obj);
-  debugger;
   return formatSExpr(sexpr, indent);
 }
 

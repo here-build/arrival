@@ -27,8 +27,9 @@ class SessionStateTool extends ToolInteraction<{ operation: string; value?: any 
     };
   }
 
-  async executeTool(args: { operation: string; value?: any }) {
-    switch (args.operation) {
+  async executeTool() {
+    const args = this.executionContext;
+    switch (args?.operation) {
       case "read":
         return { data: this.state };
 
@@ -68,8 +69,9 @@ class StatelessTool extends ToolInteraction<{ input: string }> {
     };
   }
 
-  async executeTool(args: { input: string }) {
-    return { echo: args.input };
+  async executeTool() {
+    const args = this.executionContext;
+    return { echo: args?.input };
   }
 }
 

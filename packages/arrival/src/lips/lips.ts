@@ -286,7 +286,7 @@ function parse_character(arg) {
   if (char) {
     return LCharacter(char);
   }
-  throw new Error("Parse: invalid character");
+  throw new Error(`Parse: invalid character in ${arg}`);
 }
 
 // ----------------------------------------------------------------------
@@ -319,7 +319,7 @@ function parse_complex(arg, radix = 10) {
       }
       return LNumber(Number.POSITIVE_INFINITY);
     } else {
-      throw new Error("Internal Parser Error");
+      throw new Error(`Internal Parser Error at: ${n}`);
     }
     if (parse.inexact) {
       return LFloat(value.valueOf(), true);
@@ -427,7 +427,7 @@ function parse_string(string) {
     .replaceAll("\n", String.raw`\n`); // in LIPS strings can be multiline
   const m = string.match(/(\\*)(\\x[0-9A-F])/i);
   if (m && m[1].length % 2 === 0) {
-    throw new Error(`Invalid string literal, unclosed ${m[2]}`);
+    throw new Error(`Invalid string literal, unclosed: ${m[2]}`);
   }
   try {
     const str = LString(JSON.parse(string));
@@ -8854,7 +8854,9 @@ Environment.prototype.get = function (symbol, options = {}) {
     return value;
   }
   if (throwError) {
-    throw new Error(`Unbound variable \`${name.toString()}'`);
+    throw Object.assign(new Error(`Unbound variable \`${name.toString()}'`), {
+      publicMessage: `symbol ${name.toString()} does not exist - look at list of available functions at tool description`
+    });
   }
 };
 // -------------------------------------------------------------------------

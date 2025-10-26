@@ -12,13 +12,13 @@ class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }
     testContext: z.string().describe("Test context value"),
   };
 
-  protected async registerFunctions(context: { testContext: string }): Promise<void> {
+  protected async registerFunctions(): Promise<void> {
     // Register a simple function that echoes the context
     this.registerFunction(
       "echo-context",
       "Returns the test context value",
       [],
-      () => context.testContext
+      () => this.executionContext?.testContext
     );
 
     // Register a function with parameters
@@ -42,16 +42,15 @@ function createMockContext(): Context {
 }
 
 describe("DiscoveryToolInteraction", () => {
-  let tool: TestDiscoveryTool;
   let mockContext: Context;
 
   beforeEach(() => {
     mockContext = createMockContext();
-    tool = new TestDiscoveryTool(mockContext);
   });
 
   describe("Tool Schema", () => {
     it("should generate valid tool schema", async () => {
+      const tool = new TestDiscoveryTool(mockContext);
       const schema = await tool.getToolSchema();
 
       expect(schema).toBeDefined();
@@ -65,70 +64,73 @@ describe("DiscoveryToolInteraction", () => {
 
   describe("Function Registration", () => {
     it("should execute registered function without parameters", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
         expr: "(echo-context)",
         testContext: "test-value-123",
       });
 
+      const result = await tool.executeTool();
       expect(result).toBe("test-value-123");
     });
 
     it("should execute registered function with parameters", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
         expr: "(add-numbers 5 3)",
         testContext: "test",
       });
 
+      const result = await tool.executeTool();
       expect(result).toBe("8");
     });
 
     it("should handle LIPS expressions with multiple function calls", async () => {
-      const result = await tool.executeTool({
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
         expr: "(+ (add-numbers 5 3) (add-numbers 10 2))",
         testContext: "test",
       });
 
+      const result = await tool.executeTool();
       expect(result).toBe("20");
     });
   });
 
   describe("Available Functions", () => {
     it("should execute successfully with registered functions", async () => {
-      // Trigger function registration and verify it works
-      const result = await tool.executeTool({
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
         expr: "(add-numbers 1 1)",
         testContext: "test",
       });
 
-      // Verify the function executed correctly
+      const result = await tool.executeTool();
       expect(result).toBe("2");
     });
   });
 
   describe("Error Handling", () => {
     it("should handle invalid function calls", async () => {
-      await expect(
-        tool.executeTool({
-          expr: "(non-existent-function)",
-          testContext: "test",
-        })
-      ).rejects.toThrow();
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
+        expr: "(non-existent-function)",
+        testContext: "test",
+      });
+
+      await expect(tool.executeTool()).rejects.toThrow();
     });
 
     it("should handle invalid parameter types", async () => {
-      await expect(
-        tool.executeTool({
-          expr: '(add-numbers "not-a-number" 5)',
-          testContext: "test",
-        })
-      ).rejects.toThrow();
+      const tool = new TestDiscoveryTool(mockContext, undefined, {
+        expr: '(add-numbers "not-a-number" 5)',
+        testContext: "test",
+      });
+
+      await expect(tool.executeTool()).rejects.toThrow();
     });
   });
 
   describe("Timeout Handling", () => {
     it("should timeout long-running expressions", async () => {
       const tool = new (class extends TestDiscoveryTool {
-        protected async registerFunctions(context: { testContext: string }) {
+        protected async registerFunctions() {
+          await super.registerFunctions();
           this.registerFunction(
             "infinite-loop",
             "Never returns",
@@ -140,14 +142,12 @@ describe("DiscoveryToolInteraction", () => {
             }
           );
         }
-      })(mockContext);
+      })(mockContext, undefined, {
+        expr: "(infinite-loop)",
+        testContext: "test",
+      });
 
-      await expect(
-        tool.executeTool({
-          expr: "(infinite-loop)",
-          testContext: "test",
-        })
-      ).rejects.toThrow(/timeout/i);
+      await expect(tool.executeTool()).rejects.toThrow(/timeout/i);
     }, 10000); // 10s test timeout
   });
 });

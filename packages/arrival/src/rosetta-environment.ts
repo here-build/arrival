@@ -5,8 +5,8 @@
  * Provides Environment.defineRosetta() for declarative function wrapping.
  */
 
-import { Environment, env as lipsGlobalEnv } from './lips/lips';
-import { sandboxedEnv } from './enhanced-environment';
+import { Environment } from "./lips/lips";
+import { sandboxedEnv } from "./enhanced-environment";
 
 export interface RosettaFunction {
   fn: Function;
@@ -132,14 +132,7 @@ export function createRosettaWrapper(config: RosettaFunction): Function {
     }
 
     // Convert result back to LIPS
-    const lipsResult = jsToLips(result);
-
-    console.log('Rosetta result:', {
-      jsResult: typeof result,
-      lipsResult: lipsResult?.constructor?.name || typeof lipsResult
-    });
-
-    return lipsResult;
+    return jsToLips(result);
   };
 }
 
@@ -156,8 +149,6 @@ declare module './lips/lips' {
 (Environment.prototype as any).defineRosetta = function(name: string, config: RosettaFunction): void {
   const wrapper = createRosettaWrapper(config);
   this.set(name, wrapper);
-
-  console.log(`Rosetta function '${name}' defined in environment`);
 };
 
 export { Environment };

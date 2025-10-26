@@ -4,6 +4,7 @@ import invariant from "tiny-invariant";
 import type { Constructor } from "type-fest";
 
 import type { ToolInteraction } from "./ToolInteraction";
+import { MCPClientInfo } from "./hono/HonoMCPServer";
 
 function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
@@ -65,9 +66,9 @@ export class MCPServer {
     const sessionId = context.req.header("mcp-session-id");
     const state = sessionId ? await this.getSessionState(context, sessionId) : {};
 
-    const toolInteraction = new ToolInteraction(context, state);
+    const toolInteraction = new ToolInteraction(context, state, request.arguments);
     console.log("calling MCP", request.name, request.arguments);
-    const callToolResult = await toolInteraction.executeTool(request.arguments);
+    const callToolResult = await toolInteraction.executeTool();
 
     // Save state after execution (tool may have mutated it)
     if (sessionId) {
@@ -108,9 +109,9 @@ export class MCPServer {
     };
   }
 
-  async getToolDefinitions(context: Context): Promise<ListToolsResult["tools"]> {
+  async getToolDefinitions(context: import("hono").Context, clientInfo?: MCPClientInfo): Promise<ListToolsResult["tools"]> {
     const definitions: ListToolsResult["tools"] = [];
-
+    const {inspect} = await import("node:util")
     // Load session state for tools that need it for schema generation
     const sessionId = context.req.header("mcp-session-id");
     const state = sessionId ? await this.getSessionState(context, sessionId) : {};
@@ -119,7 +120,12 @@ export class MCPServer {
       try {
         // Instantiate each tool to get its definition
         const tool = new ToolClass(context, state);
-        const definition = await tool.getToolDescription();
+        const definition = await tool.getToolDescription(clientInfo);
+        console.log("definition for", ToolClass.name);
+        console.log("description", definition.description);
+        for (const [key, value] of Object.entries(definition.inputSchema.properties!)) {
+          console.log(key, inspect(value, false, 9, true))
+        }
         definitions.push(definition);
       } catch (error) {
         console.warn(`[MCPServer] Failed to get definition for tool ${ToolClass.name}:`, error);

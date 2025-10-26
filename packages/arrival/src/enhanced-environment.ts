@@ -46,11 +46,21 @@ export function createSandboxedEnvironment(): any {
     fn(x);
     return x;
   });
-  env.set("trace", (label: string) => (x: any) => {
-    console.log(label, x);
-    return x;
+  env.set("length", (collection: any) => {
+    // LIPS lists have their own length calculation
+    if (collection && typeof collection === "object" && "car" in collection) {
+      // Count LIPS list elements manually
+      let count = 0;
+      let current = collection;
+      while (current?.constructor && current.constructor.name !== "Nil") {
+        count++;
+        current = current.cdr;
+      }
+      return count;
+    }
+    // JS arrays and other collections
+    return Array.isArray(collection) ? collection.length : 0;
   });
-
 /*
   // Add length function explicitly (seems to be missing from Ramda functions)
   env.set("length", (collection: any) => {
