@@ -12,13 +12,15 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
     projectId: z.string().describe("Project ID"),
   };
 
-  setup () {
+  constructor (...args) {
+    // @ts-expect-error
+    super(...args);
     // Register some test actions
     this.registerAction({
       name: "create-item",
       description: "Create a test item",
+      context: ["projectId"],
       props: {
-        projectId: z.string().describe("Project ID (from context)"),
         name: z.string().describe("Item name"),
         value: z.number().optional().describe("Optional value"),
       },
@@ -33,8 +35,8 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
     this.registerAction({
       name: "delete-item",
       description: "Delete a test item",
+      context: ["projectId"],
       props: {
-        projectId: z.string().describe("Project ID (from context)"),
         itemId: z.string().describe("Item ID to delete"),
       },
       handler: async (context, { itemId }) => ({
@@ -48,9 +50,8 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
     this.registerAction({
       name: "failing-action",
       description: "Action that always fails",
-      props: {
-        projectId: z.string().describe("Project ID"),
-      },
+      context: ["projectId"],
+      props: {},
       handler: async () => {
         throw new Error("Intentional failure");
       },
@@ -189,6 +190,7 @@ describe("ActionToolInteraction", () => {
         validation: "failed",
         errors: expect.arrayContaining([
           expect.objectContaining({
+            actionIndex: 1,
             action: "non-existent-action",
           }),
         ]),
@@ -243,11 +245,12 @@ describe("ActionToolInteraction", () => {
       const result = await tool.executeTool();
 
       expect(result).toMatchObject({
+        success: false,
         partial: true,
         executed: 1,
         total: 3,
         failedAction: {
-          index: 1,
+          actionIndex: 1,
           action: "failing-action",
           error: "Intentional failure",
         },

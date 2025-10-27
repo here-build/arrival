@@ -37,7 +37,7 @@ export class HonoMCPServer extends MCPServer {
 
       case "tools/call":
         try {
-          return await this.callTool(context, params as any);
+          return await this.callTool(context, params as any, this.clientInfo.get(sessionId));
         } catch (error) {
           console.error("[HonoMCPServer] Tool execution error:", error);
           throw {

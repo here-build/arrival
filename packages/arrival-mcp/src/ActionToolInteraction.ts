@@ -6,72 +6,61 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { ToolInteraction } from "./ToolInteraction";
 import invariant from "tiny-invariant";
+import { MCPClientInfo } from "./hono/HonoMCPServer";
 
-type ActionDeclaration<T, TT> = {
+type Dezod<T extends Record<string, z.ZodType>> = {
+  [key in keyof T]: Awaited<z.infer<T[key]>>
+}
+
+type ActionDeclaration<T, TT extends Record<string, z.ZodType>> = {
   name: string;
   description: string | (() => Promise<string>);
-  context?: Array<keyof T>
-  props: {
-    [key in keyof TT]: z.ZodType<TT[key]>;
-  };
-  handler: (context: Omit<T, "actions">, props: Omit<TT, keyof T>) => any;
+  context?: Array<keyof T>,
+  optionalContext?: Array<keyof T>
+  props: TT;
+  handler: (context: T, props: Dezod<TT>) => any;
 };
 
-type ActionDefinition<T, TT> = {
+type ActionDefinition<T, TT extends Record<string, z.ZodType>> = {
   description: string | (() => Promise<string>);
-  requiredContext: Set<keyof T>;
-  optionalContext: Set<keyof T>;
+  context: Array<keyof T>;
+  optionalContext: Array<keyof T>;
   args: z.ZodType[];
   argNames: string[];
-  handler: (context: Omit<T, "actions">, props: Omit<TT, keyof T>) => any;
+  handler: (context: T, props: Dezod<TT>) => any;
 };
 
-type ActionCall = [string, ...any]
+export type ActionCall = [string, ...any]
 
-export abstract class ActionToolInteraction<T extends Record<string, any>> extends ToolInteraction<
-  T & { actions: ActionCall[] }
-> {
+// we may transform values inside context schema, so it's fair to assume that types may change
+export abstract class ActionToolInteraction<ExecutionContext extends Record<string, any>, CallContext extends Record<keyof ExecutionContext, any> = ExecutionContext> extends ToolInteraction<Record<keyof CallContext, any> & { actions: ActionCall[] }> {
   declare readonly contextSchema: {
-    [key in keyof T]: z.ZodType<T[key], any, any>;
-  } | undefined;
-  readonly actions: Record<string, ActionDefinition<T, any>> = {};
+    [key in keyof ExecutionContext]: z.ZodType<ExecutionContext[key], CallContext[key], any>;
+  };
 
-  registerAction<TT extends Record<string, any>>({ name, description, props, handler }: ActionDeclaration<T, TT>) {
-    const requiredContext = new Set<string>();
-    const optionalContext = new Set<string>();
-    const args: z.ZodType[] = [];
-    const argNames: string[] = [];
+  actions: Record<string, ActionDefinition<ExecutionContext, any>> = {};
+
+  registerAction<TT extends Record<string, z.ZodType>>({ name, description, context = [], optionalContext = [], props, handler }: ActionDeclaration<ExecutionContext, TT>) {
+    // we have some inheritance issues here
+    this.actions ??= {};
     // Process props in a predictable order
     const propEntries = Object.entries(props);
 
-    for (const [key, value] of propEntries) {
-      if (this.contextSchema) {
-        if (key in this.contextSchema) {
-          if (value.safeParse(undefined).success) {
-            optionalContext.add(key);
-          } else {
-            requiredContext.add(key);
-          }
-        } else {
-          args.push(value);
-          argNames.push(key);
-        }
-      }
-    }
     this.actions[name] = {
       description,
-      requiredContext,
+      context,
       optionalContext,
-      args,
-      argNames,
+      args: propEntries.map(([key, arg]) => arg),
+      argNames: propEntries.map(([key]) => key),
       handler,
     };
   }
 
   async getToolSchema(): Promise<Tool["inputSchema"]> {
+    // bare minimum of props that should be in each call
     const universallyRequiredProps = Object.values(this.actions).reduce(
-      (acc, { requiredContext }) => acc.intersection(requiredContext),
-      new Set(this.contextSchema ? Object.keys(this.contextSchema) : []),
+      (acc, { context }) => acc.intersection(new Set(context)),
+      new Set(Object.keys(this.contextSchema)),
     );
     return {
       type: "object",
@@ -85,29 +74,28 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
             Context constraint: All actions in a batch share the exactly same context scope.
             Every field in context must be consumable by EVERY action.
             Examples:
-            ✓ Valid: {componentId, actions: [action<componentId>, action<componentId>]} - same required context
-            ✗ Invalid: {componentId, itemId, actions: [action<componentId, itemId>, action<componentId>] - mismatched required context
-            ✓ Valid: {componentId, itemId, actions: [action<componentId, itemId, elementId?>, action<componentId, itemId?>] - since all actions are valid with current context, it will be executed.
+            ✓ Valid: {component, actions: [action<component>, action<component>]} - same required context
+            ✗ Invalid: {component, item, actions: [action<component, item>, action<component>] - mismatched required context
+            ✓ Valid: {component, item, actions: [action<component, item, elementId?>, action<component, item?>] - since all actions are valid with current context, it will be executed.
           `,
           items: {
             type: {
               oneOf: await Promise.all(
                 Object.entries(this.actions).map(
-                  async ([action, { description, requiredContext, optionalContext, args }]) => {
-                    return {
-                      type: "array",
-                      description: dedent`
-                        ${typeof description === "string" ? description : await description()}.
-                        Works in ${[...requiredContext].join(", ")} context ${optionalContext.size > 0 ? `(optionally ${[...optionalContext].join(", ")})` : ""}
-                      `,
-                      items: [
-                        {
-                          const: action,
-                        },
-                        ...args.map((arg) => omit(zodToJsonSchema(arg), "$schema")),
-                      ],
-                    };
-                  },
+                  async ([action, { description, context, optionalContext, args }]) => ({
+                    type: "array",
+                    description: dedent`
+                      ${typeof description === "string" ? description : await description()}.
+                      ${context.length > 0 ? `Required context: ${context.join(", ")}` : ''}
+                      ${optionalContext.length > 0 ? `Optional context: ${[...optionalContext].join(", ")})` : ""}
+                    `,
+                    items: [
+                      {
+                        const: action,
+                      },
+                      ...args.map((arg) => omit(zodToJsonSchema(arg), "$schema")),
+                    ],
+                  }),
                 ),
               ),
             },
@@ -121,7 +109,7 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
                 key,
                 {
                   ...schema,
-                  description: `Context property${schema.description ? `. ${schema.description}` : ""}`,
+                  description: schema.description ? `Context property. ${schema.description}` : 'Context property',
                 },
               ];
             })
@@ -132,37 +120,69 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
     };
   }
 
+  // this may be incorrect in parallel computations, but here each interaction gets its own place
+  loadingExecutionContext: Partial<ExecutionContext> = {};
 
-  async executeTool() {
+  // hook for inherited elements
+  protected async beforeAct(context: ExecutionContext) {}
+
+  async executeTool(clientInfo?: MCPClientInfo) {
     invariant(this.executionContext, "execution context should be provided for tool execution");
-    const {actions, ...context} = this.executionContext;
+    const {actions, ...contextInput} = this.executionContext;
+    this.loadingExecutionContext = {};
 
-    const validationErrors: Array<{ index: number; action: string; error: string }> = [];
+    // Ensure actions are initialized (defensive)
+    this.actions ??= {};
+
+    const validationErrors: Array<{ actionIndex: number; action: string; error: string } | { property: keyof ExecutionContext; error: string }> = [];
+
+    for (const [key, validator] of Object.entries(this.contextSchema) as [keyof ExecutionContext, z.ZodType<ExecutionContext[keyof ExecutionContext], CallContext[keyof ExecutionContext], any>][]) {
+      try {
+        this.loadingExecutionContext[key] = await validator.parseAsync((contextInput as any)[key]); // use parseAsync for async transforms
+      } catch (error) {
+        validationErrors.push({
+          property: key,
+          error:
+            error instanceof z.ZodError
+              ? `Invalid contextual property: ${error.issues.map((e) => e.message).join(", ")}`
+              : String(error),
+        });
+      }
+    }
+
+    // Validate and transform all action arguments
+    const transformedActionArgs: any[][] = [];
 
     for (const [i, [actionName, ...actionArgs]] of actions.entries()) {
       const action = this.actions[actionName];
       if (!action) {
         validationErrors.push({
-          index: i,
+          actionIndex: i,
           action: actionName,
           error: `Unknown action "${actionName}". Available actions: ${Object.keys(this.actions).join(", ")}`,
         });
+        transformedActionArgs.push(actionArgs); // Store even if unknown action
         continue;
       }
 
       if (action.args.length > 0) {
         try {
-          z.tuple(action.args as any).parse(actionArgs);
+          // Use parseAsync to handle async transforms, store transformed values
+          const transformed = await z.tuple(action.args as any).parseAsync(actionArgs);
+          transformedActionArgs.push(transformed);
         } catch (error) {
           validationErrors.push({
-            index: i,
+            actionIndex: i,
             action: actionName,
             error:
               error instanceof z.ZodError
                 ? `Invalid arguments: ${error.issues.map((e) => e.message).join(", ")}`
                 : String(error),
           });
+          transformedActionArgs.push(actionArgs); // Store untransformed on error
         }
+      } else {
+        transformedActionArgs.push([]);
       }
     }
 
@@ -172,32 +192,36 @@ export abstract class ActionToolInteraction<T extends Record<string, any>> exten
         validation: "failed",
         errors: validationErrors,
         message: `Validation failed for ${validationErrors.length} action(s). No actions were executed.`,
-      };
+      } as const;
     }
 
     const results: any[] = [];
 
+    await this.beforeAct(this.loadingExecutionContext as ExecutionContext);
+
     for (let i = 0; i < actions.length; i++) {
-      const [actionName, ...actionArgs] = actions[i];
+      const [actionName] = actions[i];
+      const actionArgs = transformedActionArgs[i]; // Use transformed args
       const action = this.actions[actionName]!; // We know it exists from validation
 
       try {
         results.push(
-          await action.handler(context, Object.fromEntries(zip(action.argNames, actionArgs)) as any),
+          await action.handler(this.loadingExecutionContext as ExecutionContext, Object.fromEntries(zip(action.argNames, actionArgs)) as any),
         );
       } catch (error) {
         return {
+          success: false,
           partial: true,
           executed: i,
           total: actions.length,
           results,
           failedAction: {
-            index: i,
+            actionIndex: i,
             action: actionName,
             error: error instanceof Error ? error.message : String(error),
           },
           message: `Executed ${i} of ${actions.length} actions before runtime failure`,
-        };
+        } as const;
       }
     }
 

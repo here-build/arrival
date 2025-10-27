@@ -13,7 +13,7 @@ export type UserlandCallToolResult = File | string | object;
  Execution is returning just blobs, texts and objects, not mcp representations of those
  */
 
-export abstract class ToolInteraction<ExecutionContext extends Record<string, any>, State extends Record<string, any> = Record<string, any>> {
+export abstract class ToolInteraction<ExecutionContext extends Record<string, any>> {
   static readonly name: string;
   readonly description!: string | Promise<string>;
 
@@ -22,10 +22,7 @@ export abstract class ToolInteraction<ExecutionContext extends Record<string, an
     public readonly state: Record<string, any> = {},
     public readonly executionContext?: ExecutionContext
   ) {
-    this.setup();
   }
-
-  protected setup(): void {}
 
   async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
@@ -37,5 +34,5 @@ export abstract class ToolInteraction<ExecutionContext extends Record<string, an
 
   abstract getToolSchema(clientInfo?: MCPClientInfo): Tool["inputSchema"] | Promise<Tool["inputSchema"]>;
 
-  abstract executeTool(): Promise<UserlandCallToolResult | UserlandCallToolResult[]>;
+  abstract executeTool(clientInfo?: MCPClientInfo): Promise<UserlandCallToolResult | UserlandCallToolResult[]>;
 }

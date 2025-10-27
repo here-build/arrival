@@ -58,7 +58,7 @@ export class MCPServer {
     await this.deleteSessionState(context, sessionId);
   }
 
-  async callTool(context: Context, request: CallToolRequest["params"]): Promise<CallToolResult> {
+  async callTool(context: Context, request: CallToolRequest["params"], clientInfo?: MCPClientInfo): Promise<CallToolResult> {
     const ToolInteraction = this.tools.find(({ name }) => name === request.name);
     invariant(ToolInteraction !== undefined, "unknown tool");
 
@@ -68,7 +68,7 @@ export class MCPServer {
 
     const toolInteraction = new ToolInteraction(context, state, request.arguments);
     console.log("calling MCP", request.name, request.arguments);
-    const callToolResult = await toolInteraction.executeTool();
+    const callToolResult = await toolInteraction.executeTool(clientInfo);
 
     // Save state after execution (tool may have mutated it)
     if (sessionId) {
