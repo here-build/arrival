@@ -6,13 +6,13 @@ export const RAMDA_FUNCTIONS = {
   // Core list operations (Fantasy Land Functor/Traversable)
   map: (fn: Function, collection: any) => {
     // If collection looks like a LIPS list (has car/cdr), use Fantasy Land map
-    if (collection && typeof collection === 'object' && 'car' in collection) {
+    if (collection && typeof collection === "object" && "car" in collection) {
       // Use Fantasy Land map method if available
-      if (collection['fantasy-land/map']) {
-        return collection['fantasy-land/map'](fn);
+      if (collection["fantasy-land/map"]) {
+        return collection["fantasy-land/map"](fn);
       }
       // Fallback: use regular Ramda map
-      console.warn('Fantasy Land map not available on LIPS object, using Ramda fallback');
+      console.warn("Fantasy Land map not available on LIPS object, using Ramda fallback");
     }
     // Use Ramda map for JS arrays and fallback
     return R.map(fn as any, collection);
@@ -56,7 +56,7 @@ export const RAMDA_FUNCTIONS = {
   // LIPS compatibility - car/cdr that work with both LIPS lists and JS arrays
   car: (collection: any) => {
     // LIPS Pair
-    if (collection && typeof collection === 'object' && 'car' in collection) {
+    if (collection && typeof collection === "object" && "car" in collection) {
       return collection.car;
     }
     // JS Array or other iterable
@@ -65,7 +65,7 @@ export const RAMDA_FUNCTIONS = {
 
   cdr: (collection: any) => {
     // LIPS Pair
-    if (collection && typeof collection === 'object' && 'cdr' in collection) {
+    if (collection && typeof collection === "object" && "cdr" in collection) {
       return collection.cdr;
     }
     // JS Array
@@ -83,11 +83,11 @@ export const RAMDA_FUNCTIONS = {
   // Length function with LIPS compatibility
   length: (collection: any) => {
     // LIPS lists have their own length calculation
-    if (collection && typeof collection === 'object' && 'car' in collection) {
+    if (collection && typeof collection === "object" && "car" in collection) {
       // Count LIPS list elements manually
       let count = 0;
       let current = collection;
-      while (current && current.constructor && current.constructor.name !== 'Nil') {
+      while (current?.constructor && current.constructor.name !== "Nil") {
         count++;
         current = current.cdr;
       }
@@ -121,13 +121,13 @@ export const RAMDA_FUNCTIONS = {
   // Intelligent filter that chooses the right implementation
   filter: (predicate: Function, collection: any) => {
     // If collection looks like a LIPS list (has car/cdr), use Fantasy Land filter
-    if (collection && typeof collection === 'object' && 'car' in collection) {
+    if (collection && typeof collection === "object" && "car" in collection) {
       // Use Fantasy Land filter method if available
-      if (collection['fantasy-land/filter']) {
-        return collection['fantasy-land/filter'](predicate);
+      if (collection["fantasy-land/filter"]) {
+        return collection["fantasy-land/filter"](predicate);
       }
       // Fallback: return original collection if FL not available
-      console.warn('Fantasy Land filter not available on LIPS object, returning original');
+      console.warn("Fantasy Land filter not available on LIPS object, returning original");
       return collection;
     }
     // Otherwise use Ramda filter for JS arrays
@@ -330,5 +330,5 @@ export const RAMDA_FUNCTIONS = {
     } catch {
       return null;
     }
-  },
+  }
 };

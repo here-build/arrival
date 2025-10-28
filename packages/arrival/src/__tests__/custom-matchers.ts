@@ -12,33 +12,30 @@ declare module "vitest" {
 
 expect.extend({
   async toExecuteInto(received: string, ...expectedResults: string[]) {
-    const { isNot } = this;
-    
     try {
       const actualResults = await execSerialized(received);
-      
-      const pass = actualResults.length === expectedResults.length &&
+
+      const pass =
+        actualResults.length === expectedResults.length &&
         actualResults.every((result, index) => result === expectedResults[index]);
-      
+
       if (pass) {
         return {
-          message: () =>
-            `expected ${received} not to execute into [${expectedResults.join(", ")}], but it did`,
-          pass: true,
+          message: () => `expected ${received} not to execute into [${expectedResults.join(", ")}], but it did`,
+          pass: true
         };
       } else {
         return {
           message: () =>
             `expected ${received} to execute into [${expectedResults.join(", ")}], but got [${actualResults.join(", ")}]`,
-          pass: false,
+          pass: false
         };
       }
     } catch (error) {
       return {
-        message: () =>
-          `expected ${received} to execute successfully, but got error: ${error.message}`,
-        pass: false,
+        message: () => `expected ${received} to execute successfully, but got error: ${error.message}`,
+        pass: false
       };
     }
-  },
+  }
 });

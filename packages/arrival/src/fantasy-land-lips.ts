@@ -11,7 +11,7 @@
  * - Traversable (traverse)
  */
 
-import { env as lipsGlobalEnv } from './lips/lips';
+import { env as lipsGlobalEnv } from "./lips/lips";
 
 // Import LIPS classes for instanceof checks
 // Note: These are constructor functions defined in lips.ts
@@ -21,8 +21,8 @@ let Pair: any, Nil: any, LString: any;
 function initializeLipsClasses() {
   try {
     // Get constructors by creating instances and checking their constructors
-    const cons = lipsGlobalEnv.get('cons', { throwError: false });
-    const listFn = lipsGlobalEnv.get('list', { throwError: false });
+    const cons = lipsGlobalEnv.get("cons", { throwError: false });
+    const listFn = lipsGlobalEnv.get("list", { throwError: false });
 
     if (cons) {
       const testPair = cons(1, null);
@@ -33,22 +33,21 @@ function initializeLipsClasses() {
       const testNil = listFn();
       Nil = testNil.constructor;
     }
-
   } catch (error) {
-    console.warn('⚠️ Could not initialize LIPS classes:', error);
+    console.warn("⚠️ Could not initialize LIPS classes:", error);
   }
 }
 
 // Fantasy Land method names
 const FL = {
-  map: 'fantasy-land/map',
-  filter: 'fantasy-land/filter',
-  reduce: 'fantasy-land/reduce',
-  traverse: 'fantasy-land/traverse',
-  of: 'fantasy-land/of',
-  ap: 'fantasy-land/ap',
-  chain: 'fantasy-land/chain',
-  concat: 'fantasy-land/concat'
+  map: "fantasy-land/map",
+  filter: "fantasy-land/filter",
+  reduce: "fantasy-land/reduce",
+  traverse: "fantasy-land/traverse",
+  of: "fantasy-land/of",
+  ap: "fantasy-land/ap",
+  chain: "fantasy-land/chain",
+  concat: "fantasy-land/concat"
 };
 
 /**
@@ -71,35 +70,35 @@ function patchPairClass(PairClass: any): void {
   const proto = PairClass.prototype;
 
   // Functor: map
-  proto[FL.map] = function(f: Function) {
+  proto[FL.map] = function (f: Function) {
     return mapPair(f, this);
   };
 
   // Filterable: filter
-  proto[FL.filter] = function(predicate: Function) {
+  proto[FL.filter] = function (predicate: Function) {
     return filterPair(predicate, this);
   };
 
   // Foldable: reduce
-  proto[FL.reduce] = function(f: Function, initial: any) {
+  proto[FL.reduce] = function (f: Function, initial: any) {
     return reducePair(f, initial, this);
   };
 
   // Traversable: traverse
-  proto[FL.traverse] = function(of: Function, f: Function) {
+  proto[FL.traverse] = function (of: Function, f: Function) {
     return traversePair(of, f, this);
   };
 
   // Add static of method (Applicative)
-  PairClass[FL.of] = function(value: any) {
-    const cons = lipsGlobalEnv.get('cons', { throwError: false });
-    const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  PairClass[FL.of] = function (value: any) {
+    const cons = lipsGlobalEnv.get("cons", { throwError: false });
+    const listFn = lipsGlobalEnv.get("list", { throwError: false });
     const nil = listFn ? listFn() : null; // Get Nil by calling list()
     return cons ? cons(value, nil) : null;
   };
 
   // Chain (Monad)
-  proto[FL.chain] = function(f: Function) {
+  proto[FL.chain] = function (f: Function) {
     return chainPair(f, this);
   };
 }
@@ -111,14 +110,14 @@ function patchLStringClass(LStringClass: any): void {
   const proto = LStringClass.prototype;
 
   // Functor: map over characters
-  proto[FL.map] = function(f: Function) {
+  proto[FL.map] = function (f: Function) {
     const str = this.valueOf();
-    const chars = str.split('').map(f).join('');
+    const chars = str.split("").map(f).join("");
     return new LStringClass(chars);
   };
 
   // Add static of method
-  LStringClass[FL.of] = function(value: any) {
+  LStringClass[FL.of] = function (value: any) {
     return new LStringClass(String(value));
   };
 }
@@ -127,8 +126,8 @@ function patchLStringClass(LStringClass: any): void {
  * Map over a LIPS Pair (list)
  */
 function mapPair(f: Function, pair: any): any {
-  const cons = lipsGlobalEnv.get('cons', { throwError: false });
-  const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  const cons = lipsGlobalEnv.get("cons", { throwError: false });
+  const listFn = lipsGlobalEnv.get("list", { throwError: false });
   const nil = listFn ? listFn() : null;
 
   // Use instanceof for reliable type checking
@@ -144,8 +143,8 @@ function mapPair(f: Function, pair: any): any {
  * Filter a LIPS Pair (list)
  */
 function filterPair(predicate: Function, pair: any): any {
-  const cons = lipsGlobalEnv.get('cons', { throwError: false });
-  const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  const cons = lipsGlobalEnv.get("cons", { throwError: false });
+  const listFn = lipsGlobalEnv.get("list", { throwError: false });
   const nil = listFn ? listFn() : null;
 
   // Use instanceof for reliable type checking
@@ -164,7 +163,7 @@ function filterPair(predicate: Function, pair: any): any {
  * Reduce a LIPS Pair (list)
  */
 function reducePair(f: Function, initial: any, pair: any): any {
-  const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  const listFn = lipsGlobalEnv.get("list", { throwError: false });
   const nil = listFn ? listFn() : null;
 
   // Use instanceof for reliable type checking
@@ -178,8 +177,8 @@ function reducePair(f: Function, initial: any, pair: any): any {
  * Traverse a LIPS Pair (list)
  */
 function traversePair(of: Function, f: Function, pair: any): any {
-  const cons = lipsGlobalEnv.get('cons', { throwError: false });
-  const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  const cons = lipsGlobalEnv.get("cons", { throwError: false });
+  const listFn = lipsGlobalEnv.get("list", { throwError: false });
   const nil = listFn ? listFn() : null;
 
   // Use instanceof for reliable type checking
@@ -201,8 +200,8 @@ function traversePair(of: Function, f: Function, pair: any): any {
  * Chain (flatMap) for LIPS Pair
  */
 function chainPair(f: Function, pair: any): any {
-  const concat = lipsGlobalEnv.get('append', { throwError: false });
-  const listFn = lipsGlobalEnv.get('list', { throwError: false });
+  const concat = lipsGlobalEnv.get("append", { throwError: false });
+  const listFn = lipsGlobalEnv.get("list", { throwError: false });
   const nil = listFn ? listFn() : null;
 
   // Use instanceof for reliable type checking

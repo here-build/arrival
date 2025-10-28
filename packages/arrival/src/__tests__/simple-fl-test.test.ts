@@ -14,11 +14,11 @@ describe("Simple Fantasy Land Test", () => {
     console.log("nil in sandboxedEnv:", nil, typeof nil);
 
     // Test if nil is available in global env
-    const globalNil = lipsGlobalEnv.get('nil', { throwError: false });
+    const globalNil = lipsGlobalEnv.get("nil", { throwError: false });
     console.log("nil in globalEnv:", globalNil, typeof globalNil);
 
     // Test cons
-    const cons = sandboxedEnv.get('cons', { throwError: false });
+    const cons = sandboxedEnv.get("cons", { throwError: false });
     console.log("cons in sandboxedEnv:", cons, typeof cons);
 
     if (cons && nil) {
@@ -28,14 +28,14 @@ describe("Simple Fantasy Land Test", () => {
       console.log("Pair constructor:", pair.constructor.name);
 
       // Check Fantasy Land methods
-      console.log("FL map method:", typeof pair['fantasy-land/map']);
-      console.log("FL filter method:", typeof pair['fantasy-land/filter']);
-      console.log("FL reduce method:", typeof pair['fantasy-land/reduce']);
+      console.log("FL map method:", typeof pair["fantasy-land/map"]);
+      console.log("FL filter method:", typeof pair["fantasy-land/filter"]);
+      console.log("FL reduce method:", typeof pair["fantasy-land/reduce"]);
 
       // Test calling FL method directly
-      if (pair['fantasy-land/map']) {
+      if (pair["fantasy-land/map"]) {
         try {
-          const mapped = pair['fantasy-land/map']((x: any) => x * 2);
+          const mapped = pair["fantasy-land/map"]((x: any) => x * 2);
           console.log("FL map result:", mapped);
         } catch (error) {
           console.log("FL map error:", error.message);
@@ -50,11 +50,11 @@ describe("Simple Fantasy Land Test", () => {
     console.log("=== TESTING INTELLIGENT FILTER ===");
 
     // Get the filter function
-    const filter = sandboxedEnv.get('filter', { throwError: false });
+    const filter = sandboxedEnv.get("filter", { throwError: false });
     console.log("Filter function:", typeof filter);
 
     // Create a test list
-    const cons = sandboxedEnv.get('cons', { throwError: false });
+    const cons = sandboxedEnv.get("cons", { throwError: false });
 
     if (cons && nil && filter) {
       const list = cons(1, cons(2, cons(3, cons(4, cons(5, nil)))));
@@ -83,9 +83,9 @@ describe("Simple Fantasy Land Test", () => {
     console.log("=== TESTING MAP INTERACTION ===");
 
     // Get functions
-    const map = sandboxedEnv.get('map', { throwError: false });
-    const inc = sandboxedEnv.get('inc', { throwError: false });
-    const cons = sandboxedEnv.get('cons', { throwError: false });
+    const map = sandboxedEnv.get("map", { throwError: false });
+    const inc = sandboxedEnv.get("inc", { throwError: false });
+    const cons = sandboxedEnv.get("cons", { throwError: false });
 
     if (map && inc && cons && nil) {
       // Create test list: (1 2 3)

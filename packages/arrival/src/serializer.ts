@@ -23,14 +23,7 @@ export type SExprSerializable =
   | SExprSerializable[]
   | { [key: string | symbol]: any };
 
-export type SExpr =
-  | string
-  | number
-  | bigint
-  | boolean
-  | null
-  | SExpr[]
-  | { [key: symbol]: any };
+export type SExpr = string | number | bigint | boolean | null | SExpr[] | { [key: symbol]: any };
 export type SExprDefinition = [typeof SEXPR_TAG, string, ...any[]];
 
 // Context object for Symbol.toSExpr implementations
@@ -47,7 +40,7 @@ const serializationContext = {
   expr: (head: string | SExprSerializable, ...args: SExprSerializable[]): SExprSerializable => {
     // Return a structure that will be serialized as an expression
     return { [EXPR_MARKER]: true, head, args };
-  },
+  }
 };
 
 /**
@@ -107,7 +100,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
     if (obj.constructor?.name === "LString" && "__string__" in obj) {
       const str = obj.__string__;
       // Use template strings for complex strings (multi-line, quotes, etc.)
-      if (str.includes('\\n') || str.includes('\\t') || str.includes('"') || str.includes("'")) {
+      if (str.includes("\\n") || str.includes("\\t") || str.includes('"') || str.includes("'")) {
         return `\`${str}\``;
       }
       // Use single quotes for simple strings
@@ -158,11 +151,8 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
   // Has custom serialization with Symbol.toSExpr
   if (obj && typeof obj === "object" && Symbol.toSExpr in obj) {
-    const displayName = obj[Symbol.SExpr]?.() ??
-      obj.displayName ??
-      obj.constructor.displayName ??
-      obj.name ??
-      obj.constructor.name;
+    const displayName =
+      obj[Symbol.SExpr]?.() ?? obj.displayName ?? obj.constructor.displayName ?? obj.name ?? obj.constructor.name;
     const contents = obj[Symbol.toSExpr](serializationContext);
 
     // Convert contents to arrival
@@ -174,7 +164,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
   // Already an s-expression (tagged array)
   if (Array.isArray(obj) && obj[0] === SEXPR_TAG) {
     const [_, head, ...args] = obj;
-    return [toSExpr(head, visited), ...args.map(arg => toSExpr(arg, visited))];
+    return [toSExpr(head, visited), ...args.map((arg) => toSExpr(arg, visited))];
   }
 
   // Symbol → :keyword
@@ -185,7 +175,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
   // Array → (list ...)
   if (Array.isArray(obj)) {
-    return ["list", ...obj.map(item => toSExpr(item, visited))];
+    return ["list", ...obj.map((item) => toSExpr(item, visited))];
   }
 
   // Function → skip or placeholder
@@ -209,7 +199,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
   // Set → convert to list
   if (obj instanceof Set) {
-    return ["set", ...Array.from(obj).map(item => toSExpr(item, visited))];
+    return ["set", ...Array.from(obj).map((item) => toSExpr(item, visited))];
   }
 
   // Plain object → Scheme-style record with &
@@ -253,9 +243,10 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     }
 
     // First element (operator) is never quoted, even if it's a string
-    const strHead = typeof head === "string" && !head.startsWith(":")
-      ? head  // Operators are unquoted
-      : formatSExpr(head, 0);
+    const strHead =
+      typeof head === "string" && !head.startsWith(":")
+        ? head // Operators are unquoted
+        : formatSExpr(head, 0);
 
     // Special formatting for maps
     if (head === "map") {
@@ -270,8 +261,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 
           // Check if value needs to be on new line
           const valueItem = tail[i + 1];
-          const isComplexValue = Array.isArray(valueItem) ||
-            (typeof valueItem === "string" && valueItem.length > 40);
+          const isComplexValue = Array.isArray(valueItem) || (typeof valueItem === "string" && valueItem.length > 40);
 
           if (isComplexValue) {
             const formattedValue = formatSExpr(tail[i + 1], indent + 2 + key.length + 1);
@@ -289,7 +279,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
       }
 
       // Multi-line for complex maps
-      return `(${strHead}\n${pairs.map(p => `${spaces}  ${p}`).join("\n")})`;
+      return `(${strHead}\n${pairs.map((p) => `${spaces}  ${p}`).join("\n")})`;
     }
 
     // Special handling for special values
@@ -298,85 +288,89 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     }
 
     // Handle unquoted symbols (from context.symbol)
-    if (typeof head === "string" && !head.startsWith(":") && !head.startsWith("\"")) {
+    if (typeof head === "string" && !head.startsWith(":") && !head.startsWith('"')) {
       // Check if this looks like a symbol that shouldn't be quoted
-      const isSymbol = tail.some(item =>
-        typeof item === "string" && !item.startsWith(":") && !item.includes(" "),
-      );
+      const isSymbol = tail.some((item) => typeof item === "string" && !item.startsWith(":") && !item.includes(" "));
       if (isSymbol && (head === "Stateful" || head === "Calculator")) {
         // These are known to use symbols
-        const formattedTail = tail.map(item => {
-          if (typeof item === "string" && !item.startsWith(":") && !item.includes(" ")) {
-            return item; // Don't quote symbols
-          }
-          return formatSExpr(item, 0);
-        }).join(" ");
+        const formattedTail = tail
+          .map((item) => {
+            if (typeof item === "string" && !item.startsWith(":") && !item.includes(" ")) {
+              return item; // Don't quote symbols
+            }
+            return formatSExpr(item, 0);
+          })
+          .join(" ");
         return `(${strHead} ${formattedTail})`;
       }
     }
 
     // Special formatting for specific operators
-    if (head === "reference" || head === "definition" || head === "diagnostic" ||
-      head === "symbol" || head === "type" || head === "list") {
+    if (
+      head === "reference" ||
+      head === "definition" ||
+      head === "diagnostic" ||
+      head === "symbol" ||
+      head === "type" ||
+      head === "list"
+    ) {
       // Keep these on one line unless they have very long string values
-      const hasLongString = tail.some(item =>
-        typeof item === "string" && item.length > 80 && !item.startsWith(":"),
-      );
+      const hasLongString = tail.some((item) => typeof item === "string" && item.length > 80 && !item.startsWith(":"));
 
-      const hasComplexStructure = tail.some(item =>
-        Array.isArray(item) && item.length > 3,
-      );
+      const hasComplexStructure = tail.some((item) => Array.isArray(item) && item.length > 3);
 
       if (!hasLongString && !hasComplexStructure) {
-        const strTail = tail.map(item => formatSExpr(item, 0)).join(" ");
+        const strTail = tail.map((item) => formatSExpr(item, 0)).join(" ");
         return strTail ? `(${strHead} ${strTail})` : `(${strHead})`;
       }
     }
 
     // Check if it's simple enough for one line
-    const isSimple = tail.length <= 3 &&
-      tail.every(item => !Array.isArray(item) ||
-        (Array.isArray(item) && item.length <= 2));
+    const isSimple =
+      tail.length <= 3 && tail.every((item) => !Array.isArray(item) || (Array.isArray(item) && item.length <= 2));
 
     if (isSimple) {
       // Single line for simple expressions
-      const strTail = tail.map(item => formatSExpr(item, 0)).join(" ");
+      const strTail = tail.map((item) => formatSExpr(item, 0)).join(" ");
       return strTail ? `(${strHead} ${strTail})` : `(${strHead})`;
     } else {
       // Multi-line for complex expressions
       const spaces = " ".repeat(indent);
-      const strTail = tail.map((item, index) => {
-        const formatted = formatSExpr(item, indent + 2);
+      const strTail = tail
+        .map((item, index) => {
+          const formatted = formatSExpr(item, indent + 2);
 
-        // For lists of structured data, check if we should group key-value pairs
-        if (typeof item === "string" && item.startsWith(":") && index + 1 < tail.length) {
-          const nextItem = tail[index + 1];
-          const nextFormatted = formatSExpr(nextItem, 0);
+          // For lists of structured data, check if we should group key-value pairs
+          if (typeof item === "string" && item.startsWith(":") && index + 1 < tail.length) {
+            const nextItem = tail[index + 1];
+            const nextFormatted = formatSExpr(nextItem, 0);
 
-          // If next item is simple (not an array), keep on same line
-          if (!Array.isArray(nextItem) && nextFormatted.length < 40) {
-            return null; // Skip this item, it will be handled with the next
+            // If next item is simple (not an array), keep on same line
+            if (!Array.isArray(nextItem) && nextFormatted.length < 40) {
+              return null; // Skip this item, it will be handled with the next
+            }
           }
-        }
 
-        // Handle the previous item if it was a key
-        if (index > 0 && typeof tail[index - 1] === "string") {
-          const prevItem = tail[index - 1] as string;
-          if (prevItem.startsWith(":") && !Array.isArray(item) && formatted.length < 40) {
-            return `${spaces}  ${formatSExpr(prevItem, 0)} ${formatted}`;
+          // Handle the previous item if it was a key
+          if (index > 0 && typeof tail[index - 1] === "string") {
+            const prevItem = tail[index - 1] as string;
+            if (prevItem.startsWith(":") && !Array.isArray(item) && formatted.length < 40) {
+              return `${spaces}  ${formatSExpr(prevItem, 0)} ${formatted}`;
+            }
           }
-        }
 
-        // If it's a list that starts on same line, don't add extra indent
-        if (Array.isArray(item) && formatted.startsWith("(")) {
+          // If it's a list that starts on same line, don't add extra indent
+          if (Array.isArray(item) && formatted.startsWith("(")) {
+            return `${spaces}  ${formatted}`;
+          }
+
+          // Skip if this was handled as part of a key-value pair
+          if (formatted === null) return null;
+
           return `${spaces}  ${formatted}`;
-        }
-
-        // Skip if this was handled as part of a key-value pair
-        if (formatted === null) return null;
-
-        return `${spaces}  ${formatted}`;
-      }).filter(line => line !== null).join("\n");
+        })
+        .filter((line) => line !== null)
+        .join("\n");
 
       return strTail ? `(${strHead}\n${strTail})` : `(${strHead})`;
     }
@@ -385,7 +379,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   // Handle force-quoted marker (must be checked before typeof === "string")
   if (sexpr && typeof sexpr === "object" && QUOTED_MARKER in sexpr) {
     const value = (sexpr as any)[QUOTED_MARKER];
-    return `"${value.replace(/"/g, "\\\"")}"`;
+    return `"${value.replace(/"/g, '\\"')}"`;
   }
 
   // Format primitives
@@ -407,7 +401,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     // Bare symbols (no quotes, no special chars) - don't quote
     if (/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(sexpr)) return sexpr;
     // All other strings are quoted
-    return `"${sexpr.replace(/"/g, "\\\"")}"`;
+    return `"${sexpr.replace(/"/g, '\\"')}"`;
   }
 
   if (typeof sexpr === "number" || typeof sexpr === "bigint") {
@@ -444,7 +438,11 @@ function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
   }
 
   // If cdr is not null/empty, it's an improper list (rare in practice)
-  if (current && current.constructor?.name !== "Nil" && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
+  if (
+    current &&
+    current.constructor?.name !== "Nil" &&
+    !(current.constructor?.name === "Object" && Object.keys(current).length === 0)
+  ) {
     // This would be a dotted pair notation in Scheme, but we'll just add it to the array
     result.push(toSExpr(current, visited));
   }

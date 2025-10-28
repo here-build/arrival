@@ -12,10 +12,10 @@ describe("Debug Environment", () => {
     console.log("=== SANDBOXED ENVIRONMENT DEBUG ===");
 
     // Check if Ramda functions are available
-    const testFunctions = ['map', 'filter', 'reduce', 'car', 'cdr', 'inc', 'add'];
+    const testFunctions = ["map", "filter", "reduce", "car", "cdr", "inc", "add"];
     for (const fn of testFunctions) {
       const value = sandboxedEnv.get(fn, { throwError: false });
-      console.log(`${fn}:`, typeof value, value ? '✓' : '✗');
+      console.log(`${fn}:`, typeof value, value ? "✓" : "✗");
     }
   });
 
@@ -23,12 +23,12 @@ describe("Debug Environment", () => {
     console.log("=== LIPS ENVIRONMENT DEBUG ===");
 
     // Check global environment
-    const globalMap = lipsGlobalEnv.get('map', { throwError: false });
+    const globalMap = lipsGlobalEnv.get("map", { throwError: false });
     console.log("Global map:", typeof globalMap);
 
     // Check cons function
-    const cons = lipsGlobalEnv.get('cons', { throwError: false });
-    console.log("Global cons:", typeof cons, cons ? '✓' : '✗');
+    const cons = lipsGlobalEnv.get("cons", { throwError: false });
+    console.log("Global cons:", typeof cons, cons ? "✓" : "✗");
 
     // Test creating a pair
     if (cons) {
@@ -71,20 +71,20 @@ describe("Debug Environment", () => {
     applyFantasyLandPatches();
 
     // Try to get Pair class
-    const cons = lipsGlobalEnv.get('cons', { throwError: false });
+    const cons = lipsGlobalEnv.get("cons", { throwError: false });
     if (cons) {
       const testPair = cons(1, nil);
       console.log("Test pair created:", testPair);
       console.log("Test pair constructor:", testPair.constructor.name);
 
       // Check for Fantasy Land methods
-      const flMap = testPair['fantasy-land/map'];
-      const flFilter = testPair['fantasy-land/filter'];
-      const flReduce = testPair['fantasy-land/reduce'];
+      const flMap = testPair["fantasy-land/map"];
+      const flFilter = testPair["fantasy-land/filter"];
+      const flReduce = testPair["fantasy-land/reduce"];
 
-      console.log("fantasy-land/map:", typeof flMap, flMap ? '✓' : '✗');
-      console.log("fantasy-land/filter:", typeof flFilter, flFilter ? '✓' : '✗');
-      console.log("fantasy-land/reduce:", typeof flReduce, flReduce ? '✓' : '✗');
+      console.log("fantasy-land/map:", typeof flMap, flMap ? "✓" : "✗");
+      console.log("fantasy-land/filter:", typeof flFilter, flFilter ? "✓" : "✗");
+      console.log("fantasy-land/reduce:", typeof flReduce, flReduce ? "✓" : "✗");
 
       // List all properties
       console.log("All properties:", Object.getOwnPropertyNames(testPair));
@@ -99,7 +99,7 @@ describe("Debug Environment", () => {
     console.log("=== SIMPLE RAMDA TEST ===");
 
     // Try to use inc directly
-    const inc = sandboxedEnv.get('inc', { throwError: false });
+    const inc = sandboxedEnv.get("inc", { throwError: false });
     if (inc) {
       console.log("inc function:", typeof inc);
       const result = inc(5);

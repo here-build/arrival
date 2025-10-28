@@ -39,8 +39,10 @@ describe("S-Expression Serializer", () => {
 
     it("provides context helpers for serialization", () => {
       class ComplexObject {
-        constructor(public data: string, public count: number) {
-        }
+        constructor(
+          public data: string,
+          public count: number
+        ) {}
 
         [Symbol.toSExpr](context: any) {
           return [
@@ -49,7 +51,7 @@ describe("S-Expression Serializer", () => {
             context.keyword("count"),
             this.count,
             context.keyword("computed"),
-            context.expr("add", this.count, 10),
+            context.expr("add", this.count, 10)
           ];
         }
       }
@@ -57,7 +59,7 @@ describe("S-Expression Serializer", () => {
       const obj = new ComplexObject("hello world", 5);
       const result = toSExprString(obj);
       expect(result).toContain("ComplexObject");
-      expect(result).toContain(":data \"hello world\"");
+      expect(result).toContain(':data "hello world"');
       expect(result).toContain(":count 5");
       expect(result).toContain(":computed");
       expect(result).toContain("(add 5 10)");
@@ -66,12 +68,7 @@ describe("S-Expression Serializer", () => {
     it("handles nested expressions with context.expr", () => {
       class Calculator {
         [Symbol.toSExpr](context: any) {
-          return [
-            context.expr("multiply",
-              context.expr("add", 2, 3),
-              context.expr("subtract", 10, 6),
-            ),
-          ];
+          return [context.expr("multiply", context.expr("add", 2, 3), context.expr("subtract", 10, 6))];
         }
       }
 
@@ -85,10 +82,7 @@ describe("S-Expression Serializer", () => {
     it("symbol helper creates proper keywords", () => {
       class Stateful {
         [Symbol.toSExpr](context: any) {
-          return [
-            context.symbol("state"),
-            context.symbol("active"),
-          ];
+          return [context.symbol("state"), context.symbol("active")];
         }
       }
 
@@ -104,7 +98,12 @@ describe("S-Expression Serializer", () => {
     });
 
     it("handles nested arrays", () => {
-      expect(toSExprString([[1, 2], [3, 4]])).toBe("(list (list 1 2) (list 3 4))");
+      expect(
+        toSExprString([
+          [1, 2],
+          [3, 4]
+        ])
+      ).toBe("(list (list 1 2) (list 3 4))");
     });
 
     it("handles mixed content arrays", () => {
@@ -115,8 +114,7 @@ describe("S-Expression Serializer", () => {
 
   describe("object serialization as Scheme records", () => {
     it("serializes plain objects with & notation", () => {
-      expect(toSExprString({ name: "LIPS", version: "1.0" }))
-        .toBe("&(:name LIPS :version \"1.0\")"); // AI-readable: symbols not quoted unless needed
+      expect(toSExprString({ name: "LIPS", version: "1.0" })).toBe('&(:name LIPS :version "1.0")'); // AI-readable: symbols not quoted unless needed
     });
 
     it("handles nested objects", () => {
@@ -124,11 +122,10 @@ describe("S-Expression Serializer", () => {
         name: "test",
         config: {
           enabled: true,
-          timeout: 5000,
-        },
+          timeout: 5000
+        }
       };
-      expect(toSExprString(obj))
-        .toBe("&(:name test :config &(:enabled true :timeout 5000))"); // AI-readable format
+      expect(toSExprString(obj)).toBe("&(:name test :config &(:enabled true :timeout 5000))"); // AI-readable format
     });
 
     it("handles empty objects", () => {
@@ -154,7 +151,6 @@ describe("S-Expression Serializer", () => {
     });
   });
 
-
   describe("basic serialization", () => {
     it("converts primitives", () => {
       expect(toSExpr("hello")).toEqual("hello");
@@ -177,22 +173,24 @@ describe("S-Expression Serializer", () => {
 
     it("converts objects to Scheme records", () => {
       expect(toSExpr({ a: 1, b: 2 })).toEqual(["&", ":a", 1, ":b", 2]);
-      expect(toSExpr({ name: "test", value: 42 }))
-        .toEqual(["&", ":name", "test", ":value", 42]);
+      expect(toSExpr({ name: "test", value: 42 })).toEqual(["&", ":name", "test", ":value", 42]);
     });
 
     it("handles nested structures", () => {
       const obj = {
         name: "test",
         items: [1, 2, 3],
-        meta: { count: 3, active: true },
+        meta: { count: 3, active: true }
       };
 
       expect(toSExpr(obj)).toEqual([
         "&",
-        ":name", "test",
-        ":items", ["list", 1, 2, 3],
-        ":meta", ["&", ":count", 3, ":active", true],
+        ":name",
+        "test",
+        ":items",
+        ["list", 1, 2, 3],
+        ":meta",
+        ["&", ":count", 3, ":active", true]
       ]);
     });
   });
@@ -200,16 +198,10 @@ describe("S-Expression Serializer", () => {
   describe("custom serialization with intermediate representation", () => {
     it("supports returning SExprSerializable types", () => {
       class DataNode {
-        constructor(public data: any) {
-        }
+        constructor(public data: any) {}
 
         [Symbol.toSExpr](context: any) {
-          return [
-            context.keyword("type"),
-            "data-node",
-            context.keyword("value"),
-            this.data,
-          ];
+          return [context.keyword("type"), "data-node", context.keyword("value"), this.data];
         }
       }
 
@@ -237,7 +229,7 @@ describe("S-Expression Serializer", () => {
             context.keyword("styles"),
             { background: "blue", padding: 10 },
             context.keyword("children"),
-            [1, 2, 3],
+            [1, 2, 3]
           ];
         }
       }
@@ -282,7 +274,7 @@ describe("S-Expression Serializer", () => {
     it("handles functions in objects", () => {
       const obj = {
         name: "test",
-        fn: () => console.log("hello"),
+        fn: () => console.log("hello")
       };
       // Functions should be skipped or converted to a placeholder
       const result = toSExprString(obj);

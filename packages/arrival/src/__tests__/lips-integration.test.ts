@@ -99,7 +99,7 @@ describe("LIPS Integration", () => {
       { expr: "(quote :hello)", desc: "quoted colon syntax" },
       { expr: "123456789012345678901234567890", desc: "very large number (bigint?)" },
       { expr: '"simple string"', desc: "simple string" },
-      { expr: '"string with \\"quotes\\""', desc: "string with quotes" },
+      { expr: '"string with \\"quotes\\""', desc: "string with quotes" }
     ];
 
     for (const { expr, desc } of tests) {
@@ -123,7 +123,7 @@ describe("LIPS Integration", () => {
     // Test special LIPS types
     const specialTests = [
       { expr: "#\\a", desc: "character" }, // LCharacter
-      { expr: "(values 1 2 3)", desc: "multiple values" }, // Values
+      { expr: "(values 1 2 3)", desc: "multiple values" } // Values
     ];
 
     for (const { expr, desc } of specialTests) {
@@ -172,7 +172,7 @@ describe("execSerialized", () => {
   });
 
   it("should handle strings", async () => {
-    await expect('"hello world" 3').toExecuteInto("'hello world'", '3'); // single quotes for simple strings
+    await expect('"hello world" 3').toExecuteInto("'hello world'", "3"); // single quotes for simple strings
   });
 
   it("should handle booleans", async () => {
@@ -203,16 +203,13 @@ describe("execSerialized", () => {
     it("should handle complex strings", async () => {
       await expect('"simple" "with\\"quotes\\"" "multi\\nline"').toExecuteInto(
         "'simple'",
-        "`with\"quotes\"`",  
-        "'multi\nline'"  // actual newline character in result
+        '`with"quotes"`',
+        "'multi\nline'" // actual newline character in result
       );
     });
 
     it("should handle lists and nested structures", async () => {
-      await expect("(list 1 2 3) (list (list 'a 'b) (list 'c 'd))").toExecuteInto(
-        "(1 2 3)",
-        "((a b) (c d))"
-      );
+      await expect("(list 1 2 3) (list (list 'a 'b) (list 'c 'd))").toExecuteInto("(1 2 3)", "((a b) (c d))");
     });
 
     it("should handle booleans and special values", async () => {
@@ -248,4 +245,3 @@ describe("execSerialized", () => {
     });
   });
 });
-

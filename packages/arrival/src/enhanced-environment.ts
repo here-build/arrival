@@ -40,9 +40,8 @@ export function createSandboxedEnvironment(): any {
   // Add the Nil constructor/value (empty list)
   env.set("nil", nil);
 
-
   // Add minimal debugging helpers (safe)
-  env.set("tap", (fn: Function) => (x: any) => {
+  env.set("tap", (fn: (x: any) => void) => (x: any) => {
     fn(x);
     return x;
   });
@@ -61,7 +60,7 @@ export function createSandboxedEnvironment(): any {
     // JS arrays and other collections
     return Array.isArray(collection) ? collection.length : 0;
   });
-/*
+  /*
   // Add length function explicitly (seems to be missing from Ramda functions)
   env.set("length", (collection: any) => {
     // LIPS lists have their own length calculation
