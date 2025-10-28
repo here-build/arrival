@@ -11,8 +11,6 @@ const type_mapping = {
   nil: Nil,
   character: LCharacter,
   values: Values,
-  "input-port": InputPort,
-  "output-port": OutputPort,
   regex: RegExp,
   syntax: Syntax,
   eof: EOF,
@@ -26,11 +24,6 @@ const type_constants = new Map([
 ]);
 // -------------------------------------------------------------------------
 
-let fs, path, nodeRequire;
-
-const BN = globalThis.BN;
-
-// -------------------------------------------------------------------------
 /* c8 ignore next 13 */
 function log(x, ...args) {
   if (is_plain_object(x) && is_debug(args[0])) {
@@ -254,9 +247,9 @@ function num_pre_parse(arg) {
 function parse_rational(arg, radix = 10) {
   const parse = num_pre_parse(arg);
   const parts = parse.number.split("/");
-  const num = LRational({
-    num: LNumber([parts[0], parse.radix || radix]),
-    denom: LNumber([parts[1], parse.radix || radix])
+  const num = new LRational({
+    num: new LNumber([parts[0], parse.radix || radix]),
+    denom: new LNumber([parts[1], parse.radix || radix])
   });
   return parse.inexact ? num.valueOf() : num;
 }
@@ -265,9 +258,9 @@ function parse_rational(arg, radix = 10) {
 function parse_integer(arg, radix = 10) {
   const parse = num_pre_parse(arg);
   if (parse.inexact) {
-    return LFloat(Number.parseInt(parse.number, parse.radix || radix), true);
+    return new LFloat(Number.parseInt(parse.number, parse.radix || radix), true);
   }
-  return LNumber([parse.number, parse.radix || radix]);
+  return new LNumber([parse.number, parse.radix || radix]);
 }
 
 // ----------------------------------------------------------------------
@@ -284,7 +277,7 @@ function parse_character(arg) {
     }
   }
   if (char) {
-    return LCharacter(char);
+    return new LCharacter(char);
   }
   throw new Error(`Parse: invalid character in ${arg}`);
 }
@@ -294,16 +287,16 @@ function parse_complex(arg, radix = 10) {
   function parse_num(n) {
     let value;
     if (n === "+") {
-      value = LNumber(1);
+      value = new LNumber(1);
     } else if (n === "-") {
-      value = LNumber(-1);
+      value = new LNumber(-1);
     } else if (n.match(int_bare_re)) {
-      value = LNumber([n, radix]);
+      value = new LNumber([n, radix]);
     } else if (n.match(rational_bare_re)) {
       const parts = n.split("/");
-      value = LRational({
-        num: LNumber([parts[0], radix]),
-        denom: LNumber([parts[1], radix])
+      value = new LRational({
+        num: new LNumber([parts[0], radix]),
+        denom: new LNumber([parts[1], radix])
       });
     } else if (float_re.test(n)) {
       const float = parse_float(n);
@@ -312,17 +305,17 @@ function parse_complex(arg, radix = 10) {
       }
       return float;
     } else if (/nan.0$/.test(n)) {
-      return LNumber(Number.NaN);
+      return new LNumber(Number.NaN);
     } else if (/inf.0$/.test(n)) {
       if (n[0] === "-") {
-        return LNumber(Number.NEGATIVE_INFINITY);
+        return new LNumber(Number.NEGATIVE_INFINITY);
       }
-      return LNumber(Number.POSITIVE_INFINITY);
+      return new LNumber(Number.POSITIVE_INFINITY);
     } else {
       throw new Error(`Internal Parser Error at: ${n}`);
     }
     if (parse.inexact) {
-      return LFloat(value.valueOf(), true);
+      return new LFloat(value.valueOf(), true);
     }
     return value;
   }
@@ -337,14 +330,14 @@ function parse_complex(arg, radix = 10) {
   if (parts[1]) {
     re = parse_num(parts[1]);
   } else if (im instanceof LFloat) {
-    re = LFloat(0);
+    re = new LFloat(0);
   } else {
-    re = LNumber(0);
+    re = new LNumber(0);
   }
   if (im.cmp(0) === 0 && im.__type__ === "bigint") {
     return re;
   }
-  return LComplex({ im, re });
+  return new LComplex({ im, re });
 }
 
 // ----------------------------------------------------------------------
@@ -355,13 +348,14 @@ function is_int(value) {
 // ----------------------------------------------------------------------
 function parse_big_int(str) {
   const num_match = str.match(/^(([-+]?\d*)(?:\.(\d+))?)e([-+]?\d+)/i);
+  let exponent;
+  let mantisa; // = parseFloat(num_match[1]);
   if (num_match) {
-    var exponent = Number.parseInt(num_match[4], 10);
-    var mantisa; // = parseFloat(num_match[1]);
+    exponent = Number.parseInt(num_match[4], 10);
     const digits = num_match[1].replace(/[-+]?(\d*)\..+$/, "$1").length;
     const decimal_points = num_match[3]?.length;
     if (digits < Math.abs(exponent)) {
-      mantisa = LNumber([num_match[1].replace(/\./, ""), 10]);
+      mantisa = new LNumber([num_match[1].replace(/\./, ""), 10]);
       if (decimal_points) {
         exponent -= decimal_points;
       }
@@ -393,24 +387,24 @@ function parse_float(arg) {
   const simple_number = (parse.number.match(/\.0$/) || !/\./.test(parse.number)) && !/e/i.test(parse.number);
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return LNumber(value);
+      return new LNumber(value);
     }
     // positive big num that eval to int e.g.: 1.2e+20
     if (is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(parse.number)) {
-      return LNumber(value);
+      return new LNumber(value);
     }
     // calculate big int and big fraction by hand - it don't fit into JS float
     const { mantisa, exponent } = parse_big_int(parse.number);
     if (mantisa !== undefined && exponent !== undefined) {
-      const factor = LNumber(10).pow(LNumber(Math.abs(exponent)));
+      const factor = new LNumber(10).pow(new LNumber(Math.abs(exponent)));
       if (parse.exact && exponent < 0) {
-        return LRational({ num: mantisa, denom: factor });
+        return new LRational({ num: mantisa, denom: factor });
       } else if (exponent > 0 && (parse.exact || !/\./.test(parse.number))) {
-        return LNumber(mantisa).mul(factor);
+        return new LNumber(mantisa).mul(factor);
       }
     }
   }
-  value = LFloat(value, true);
+  value = new LFloat(value, true);
   if (parse.exact) {
     return value.toRational();
   }
@@ -430,7 +424,7 @@ function parse_string(string) {
     throw new Error(`Invalid string literal, unclosed: ${m[2]}`);
   }
   try {
-    const str = LString(JSON.parse(string));
+    const str = new LString(JSON.parse(string));
     str.freeze();
     return str;
   } catch (error) {
@@ -440,44 +434,39 @@ function parse_string(string) {
 }
 
 // ----------------------------------------------------------------------
-function parse_symbol(arg) {
-  const debug = arg.match(/^name/);
-  const re = /(^|.)\|/g;
-  if (arg.match(re)) {
-    // handle escaped bar and escaped slash
-    arg = arg
-      .split("|")
-      .filter(Boolean)
-      .reduce((acc, str) => {
-        let result = "";
-        if (/^\\+$/.test(str)) {
-          if (str.length > 1) {
-            const count = Math.floor(str.length / 2);
-            result = "\\".repeat(count);
-          }
-          if (str.length % 2 !== 0) {
-            result += "|";
-          }
-        } else {
-          result = str;
-        }
-        return acc + result;
-      });
-    const chars = {
-      t: "\t",
-      r: "\r",
-      n: "\n"
-    };
-    arg = arg
-      .replaceAll(/\\(x[^;]+);/g, function (_, chr) {
-        return String.fromCharCode(Number.parseInt(`0${chr}`, 16));
-      })
-      .replaceAll(/\\([trn])/g, function (_, chr) {
-        return chars[chr];
-      });
-  }
-  return new LSymbol(arg);
-}
+const parse_symbol = (arg) =>
+  new LSymbol(
+    /(?:^|.)\|/g.test(arg)
+      ? arg
+          .split("|")
+          .filter(Boolean)
+          .reduce((acc, str) => {
+            let result = "";
+            if (/^\\+$/.test(str)) {
+              if (str.length > 1) {
+                const count = Math.floor(str.length / 2);
+                result = "\\".repeat(count);
+              }
+              if (str.length % 2 !== 0) {
+                result += "|";
+              }
+            } else {
+              result = str;
+            }
+            return acc + result;
+          })
+          .replaceAll(/\\(x[^;]+);/g, (_, chr) => String.fromCharCode(Number.parseInt(`0${chr}`, 16)))
+          .replaceAll(
+            /\\([trn])/g,
+            (_, chr) =>
+              ({
+                t: "\t",
+                r: "\r",
+                n: "\n"
+              })[chr]
+          )
+      : arg
+  );
 
 // ----------------------------------------------------------------------
 function parse_argument(arg) {
@@ -633,7 +622,7 @@ function unwind(result) {
 }
 
 // ----------------------------------------------------------------------
-function tokenize(str, meta = false) {
+export function tokenize(str, meta = false) {
   if (str instanceof LString) {
     str = str.toString();
   }
@@ -702,7 +691,7 @@ function isSymbol(x) {
 // ----------------------------------------------------------------------
 // :: LSymbol constructor
 // ----------------------------------------------------------------------
-function LSymbol(name) {
+export function LSymbol(name) {
   if (name instanceof LString) {
     name = name.valueOf();
   }
@@ -795,7 +784,7 @@ const gensym = (function () {
     }
     if (is_gensym(name)) {
       // don't do double gynsyms in nested syntax-rules
-      return LSymbol(name);
+      return new LSymbol(name);
     }
     // use ES6 symbol as name for lips symbol (they are unique)
     if (name !== null) {
@@ -820,7 +809,7 @@ function hygienic_begin(envs, expr) {
 // ----------------------------------------------------------------------
 // Class used to escape promises: feature #54
 // ----------------------------------------------------------------------
-function QuotedPromise(promise) {
+export function QuotedPromise(promise) {
   const internal = {
     pending: true,
     rejected: false,
@@ -922,7 +911,7 @@ function unescape_quoted_promises(array) {
 // ----------------------------------------------------------------------
 // :: Parser macros transformers
 // ----------------------------------------------------------------------
-var specials = {
+export const specials = {
   LITERAL: Symbol.for("literal"),
   SPLICE: Symbol.for("splice"),
   SYMBOL: Symbol.for("symbol"),
@@ -1027,7 +1016,7 @@ for (const [seq, symbol, type] of defined_specials) {
    }
    }
 */
-class Lexer {
+export class Lexer {
   constructor(input, { whitespace = false } = {}) {
     read_only(this, "__input__", input.replaceAll("\r", ""));
     const internals = {};
@@ -1147,7 +1136,7 @@ class Lexer {
     if (this._i >= this.__input__.length) {
       return eof;
     }
-    return LCharacter(this.__input__[this._i]);
+    return new LCharacter(this.__input__[this._i]);
   }
 
   read_char() {
@@ -1434,11 +1423,11 @@ Object.defineProperty(Lexer, "rules", {
       } else {
         symbol = Symbol.for(token);
       }
-      const rules = Lexer.literal_rule(token, symbol, null, after);
-      return acc.concat(rules);
+
+      return [...acc, ...Lexer.literal_rule(token, symbol, null, after)];
     }, []);
 
-    Lexer._cache.rules = Lexer._rules.concat(Lexer._brackets, special_rules, Lexer._symbol_rules);
+    Lexer._cache.rules = [...Lexer._rules, ...Lexer._brackets, ...special_rules, ...Lexer._symbol_rules];
 
     Lexer._cache.valid = true;
     return Lexer._cache.rules;
@@ -1454,7 +1443,7 @@ function match_or_null(re, char) {
 // :: Parser inspired by BiwaScheme
 // :: ref: https://github.com/biwascheme/biwascheme/blob/master/src/system/parser.js
 // ----------------------------------------------------------------------
-class Parser {
+export class Parser {
   constructor({ env, meta = false, formatter = multiline_formatter } = {}) {
     read_only(this, "_formatter", formatter, { hidden: true });
     read_only(this, "__env__", env);
@@ -1475,13 +1464,9 @@ class Parser {
   _with_syntax_scope(fn) {
     // expose parser and change stdin so parser extension can use current-input
     // to read data from the parser stream #150
-    const internal = get_internal(this.__env__);
-    const stdin = internal.get("stdin");
     global_env.set("lips", { ...lips, __parser__: this });
-    internal.set("stdin", new ParserInputPort(this, this.__env__));
     const cleanup = () => {
       global_env.set("lips", lips);
-      internal.set("stdin", stdin);
     };
     return unpromise(
       fn(),
@@ -1769,7 +1754,7 @@ class Parser {
         // because after the parser returns the value it will be evaluated again
         // by the interpreter, so we create quoted expressions.
         if (is_pair(result) || result instanceof LSymbol) {
-          return Pair.fromArray([LSymbol("quote"), result]);
+          return Pair.fromArray([new LSymbol("quote"), result]);
         }
         return result;
       } else {
@@ -1873,21 +1858,19 @@ function unpromise(value, fn = (x) => x, error = null) {
 }
 
 // ----------------------------------------------------------------------
-function unpromise_array(array, fn, error) {
-  if (array.find(is_promise)) {
-    return unpromise(
-      promise_all(array),
-      (arr) => {
-        if (Object.isFrozen(array)) {
-          Object.freeze(arr);
-        }
-        return fn(arr);
-      },
-      error
-    );
-  }
-  return fn(array);
-}
+const unpromise_array = (array, fn, error) =>
+  array.some(is_promise)
+    ? unpromise(
+        promise_all(array),
+        (arr) => {
+          if (Object.isFrozen(array)) {
+            Object.freeze(arr);
+          }
+          return fn(arr);
+        },
+        error
+      )
+    : fn(array);
 
 // ----------------------------------------------------------------------
 function unpromise_object(object, fn, error) {
@@ -2125,7 +2108,7 @@ function match(pattern, input) {
         if (!input[i].match(pattern[p])) {
           return -1;
         }
-      } else if (lips.LString.isString(pattern[p])) {
+      } else if (LString.isString(pattern[p])) {
         if (pattern[p].valueOf() !== input[i]) {
           return -1;
         }
@@ -2173,7 +2156,7 @@ function match(pattern, input) {
 // :: and GNU Emacs scheme mode
 // :: it rely on meta data from tokenizer function
 // ----------------------------------------------------------------------
-function Formatter(code) {
+export function Formatter(code) {
   this.__code__ = code.replaceAll("\r", "");
 }
 
@@ -2183,7 +2166,7 @@ Formatter.defaults = {
   indent: 2,
   exceptions: {
     specials: [
-      /^(?:#:)?(?:define(?:-values|-syntax|-macro|-class|-record-type)?|call-with-(?:input-file|output-file|port)|lambda|let-env|try|catch|when|unless|while|syntax-rules|(let|letrec)(-syntax|\*?-values|\*)?)$/
+      /^(?:#:)?(?:define(?:-values|-syntax|-macro|-class|-record-type)?|lambda|let-env|try|catch|when|unless|while|syntax-rules|(let|letrec)(-syntax|\*?-values|\*)?)$/
     ],
     shift: {
       1: ["&", "#"]
@@ -2488,15 +2471,9 @@ Formatter.prototype.format = function format(options) {
   return tokens
     .map((token) => {
       if (token.token.match(string_re) && /\n/.test(token.token)) {
-        var spaces = " ".repeat(token.col);
-        let lines = token.token.split("\n");
-        token.token = [lines[0]]
-          .concat(
-            lines.slice(1).map((line) => {
-              return spaces + line;
-            })
-          )
-          .join("\n");
+        const spaces = " ".repeat(token.col);
+        let [head, ...tail] = token.token.split("\n");
+        token.token = [head, ...tail.map((line) => spaces + line)].join("\n");
       }
       return token.token;
     })
@@ -4004,7 +3981,7 @@ function shuffle(array, random) {
 // ----------------------------------------------------------------------
 // :: Nil constructor with only once instance
 // ----------------------------------------------------------------------
-function Nil() {}
+export function Nil() {}
 
 Nil.prototype.toString = function () {
   return "()";
@@ -4024,11 +4001,11 @@ Nil.prototype.append = function (x) {
 Nil.prototype.to_array = function () {
   return [];
 };
-var nil = new Nil();
+export var nil = new Nil();
 // ----------------------------------------------------------------------
 // :: Pair constructor
 // ----------------------------------------------------------------------
-function Pair(car, cdr) {
+export function Pair(car, cdr) {
   if ((this !== undefined && this.constructor !== Pair) || this === undefined) {
     return new Pair(car, cdr);
   }
@@ -4154,7 +4131,7 @@ Pair.prototype.to_array = function (deep = true) {
     result.push(this.car.valueOf());
   }
   if (is_pair(this.cdr)) {
-    result = result.concat(this.cdr.to_array(deep));
+    result = [...result, ...this.cdr.to_array(deep)];
   }
   return result;
 };
@@ -4183,9 +4160,9 @@ Pair.fromArray = function (array, deep = true, quote = false) {
     if (Array.isArray(car)) {
       car = Pair.fromArray(car, deep, quote);
     } else if (typeof car === "string") {
-      car = LString(car);
+      car = new LString(car);
     } else if (typeof car === "number" && !Number.isNaN(car)) {
-      car = LNumber(car);
+      car = new LNumber(car);
     }
     result = new Pair(car, result);
   }
@@ -4302,7 +4279,7 @@ Pair.prototype.transform = function (fn) {
 Pair.prototype.map = function (fn) {
   return this.car !== undefined ? new Pair(fn(this.car), is_nil(this.cdr) ? nil : this.cdr.map(fn)) : nil;
 };
-const repr = new Map();
+export const repr = new Map();
 
 // ----------------------------------------------------------------------
 function is_plain_object(object) {
@@ -4474,7 +4451,7 @@ for (const [cls, fn] of [
   instances.set(cls, fn);
 }
 // ----------------------------------------------------------------------
-const native_types = [LSymbol, Macro, Values, InputPort, OutputPort, Environment, QuotedPromise];
+const native_types = [LSymbol, Macro, Values, Environment, QuotedPromise];
 
 // ----------------------------------------------------------------------
 function toString(obj, quote, skip_cycles, ...pair_args) {
@@ -4873,7 +4850,7 @@ function equal(x, y) {
     if (x === Number.POSITIVE_INFINITY) {
       return y === Number.POSITIVE_INFINITY;
     }
-    return equal(LNumber(x), LNumber(y));
+    return equal(new LNumber(x), new LNumber(y));
   } else if (x instanceof LCharacter) {
     if (!(y instanceof LCharacter)) {
       return false;
@@ -4932,7 +4909,7 @@ const truncate = (function () {
 // ----------------------------------------------------------------------
 // :: Macro constructor
 // ----------------------------------------------------------------------
-function Macro(name, fn, doc, dump) {
+export function Macro(name, fn, doc, dump) {
   if ((this !== undefined && this.constructor !== Macro) || this === undefined) {
     return new Macro(name, fn);
   }
@@ -5115,7 +5092,7 @@ function macro_expand(single) {
 // ----------------------------------------------------------------------
 // TODO: Don't put Syntax as Macro they are not runtime
 // ----------------------------------------------------------------------
-function Syntax(fn, env) {
+export function Syntax(fn, env) {
   this.__env__ = env;
   this.__fn__ = fn;
   // allow macroexpand
@@ -5542,7 +5519,7 @@ function clear_gensyms(node, gensyms) {
         return gensym.gensym === node;
       });
       if (replacement) {
-        return LSymbol(replacement.name);
+        return new LSymbol(replacement.name);
       }
       return node;
     } else {
@@ -5584,7 +5561,11 @@ function transform_syntax(options = {}) {
         const parts = name.split(".");
         const first = parts[0];
         if (first in bindings.symbols) {
-          return Pair.fromArray([LSymbol("."), bindings.symbols[first]].concat(parts.slice(1).map((x) => LString(x))));
+          return Pair.fromArray([
+            new LSymbol("."),
+            bindings.symbols[first],
+            ...parts.slice(1).map((x) => new LString(x))
+          ]);
         }
       }
     }
@@ -5742,7 +5723,7 @@ function transform_syntax(options = {}) {
       const rest = transform_ellipsis_expr(rest_expr, bindings, state, next);
       log({ head, rest });
       if (is_array) {
-        return [head].concat(rest);
+        return [head, ...rest];
       }
       return new Pair(head, rest);
     }
@@ -5756,18 +5737,18 @@ function transform_syntax(options = {}) {
       values.push(...symbols.map((x) => binding[x]));
     }
     return (
-      values.length &&
+      values.length > 0 &&
       values.every((x) => {
         if (x === null) {
           return !skip_nulls;
         }
-        return is_pair(x) || is_nil(x) || (Array.isArray(x) && x.length);
+        return is_pair(x) || is_nil(x) || (Array.isArray(x) && x.length > 0);
       })
     );
   }
 
   function get_names(object) {
-    return Object.keys(object).concat(Object.getOwnPropertySymbols(object));
+    return [...Object.keys(object), ...Object.getOwnPropertySymbols(object)];
   }
 
   function traverse(expr, { disabled } = {}) {
@@ -6146,17 +6127,10 @@ function self_evaluated(obj) {
 }
 
 // -------------------------------------------------------------------------
-function is_native(obj) {
-  return obj instanceof LNumber || obj instanceof LString || obj instanceof LCharacter;
-}
+const is_native = (obj) => obj instanceof LNumber || obj instanceof LString || obj instanceof LCharacter;
 
 // -------------------------------------------------------------------------
-function has_own_symbol(obj, symbol) {
-  if (obj === null) {
-    return false;
-  }
-  return typeof obj === "object" && symbol in Object.getOwnPropertySymbols(obj);
-}
+const has_own_symbol = (obj, symbol) => obj !== null && typeof obj === "object" ? Object.hasOwn(obj, symbol) : false;
 
 // ----------------------------------------------------------------------
 // :: Function utilities
@@ -6166,11 +6140,11 @@ function box(object) {
   // to be boxed, but values from objects will be boxed when accessed.
   switch (typeof object) {
     case "string":
-      return LString(object);
+      return new LString(object);
     case "bigint":
-      return LNumber(object);
+      return new LNumber(object);
     case "number":
-      return Number.isNaN(object) ? nan : LNumber(object);
+      return Number.isNaN(object) ? nan : new LNumber(object);
   }
   return object;
 }
@@ -6180,9 +6154,8 @@ function map_object(object, fn) {
   const props = Object.getOwnPropertyNames(object);
   const symbols = Object.getOwnPropertySymbols(object);
   const result = {};
-  for (const key of props.concat(symbols)) {
-    const value = fn(object[key]);
-    result[key] = value;
+  for (const key of [...props, ...symbols]) {
+    result[key] = fn(object[key]);
   }
   return result;
 }
@@ -6291,19 +6264,6 @@ function lips_context(obj) {
 }
 
 // ----------------------------------------------------------------------
-function is_port(obj) {
-  return obj instanceof InputPort || obj instanceof OutputPort;
-}
-
-// ----------------------------------------------------------------------
-function is_port_method(obj) {
-  if (is_function(obj) && is_port(obj[__context__])) {
-    return true;
-  }
-  return false;
-}
-
-// ----------------------------------------------------------------------
 // Hidden props
 // ----------------------------------------------------------------------
 const __context__ = Symbol.for("__context__");
@@ -6367,7 +6327,7 @@ function is_method(obj) {
 
 // ----------------------------------------------------------------------
 function is_raw_lambda(fn) {
-  return is_lambda(fn) && !fn[__prototype__] && !is_method(fn) && !is_port_method(fn);
+  return is_lambda(fn) && !fn[__prototype__] && !is_method(fn);
 }
 
 // ----------------------------------------------------------------------
@@ -6418,8 +6378,8 @@ function let_macro(symbol) {
       }
       return new Pair(
         Pair.fromArray([
-          LSymbol("letrec"),
-          [[code.car, Pair(LSymbol("lambda"), Pair(params, code.cdr.cdr))]],
+          new LSymbol("letrec"),
+          [[code.car, new Pair(new LSymbol("lambda"), new Pair(params, code.cdr.cdr))]],
           code.car
         ]),
         args
@@ -6563,7 +6523,7 @@ function fold(name, fold) {
     typecheck(name, fn, "function");
     if (lists.some(is_null)) {
       if (typeof init === "number") {
-        return LNumber(init);
+        return new LNumber(init);
       }
       return init;
     } else {
@@ -6598,19 +6558,19 @@ function reduce_math_op(fn, init = null) {
 function curry(fn, ...init_args) {
   typecheck("curry", fn, "function");
   const len = fn.length;
-  return function () {
-    let args = [...init_args];
+  return function (...call_args) {
+    const args = [...init_args];
     // HACK: we use IIFE here to get rid of the name of the function.
     // The JavaScript is smart and add name property to a function
     // if it's assigned to a variable, with IIFE we can get rid of it.
     // we need this so the curried function display as #<procedure>
     const curried = (() => {
       return (...more_args) => {
-        args = args.concat(more_args);
-        return args.length >= len ? fn.apply(this, args) : curried;
+        const fullArgs = [...args, ...more_args];
+        return fullArgs.length >= len ? fn(...fullArgs) : curried;
       };
     })();
-    return curried(...arguments);
+    return curried(...call_args);
   };
 }
 
@@ -6626,7 +6586,7 @@ function limit(n, fn) {
 // -------------------------------------------------------------------------
 // :: Character object representation
 // -------------------------------------------------------------------------
-function LCharacter(char) {
+export function LCharacter(char) {
   if ((this !== undefined && !(this instanceof LCharacter)) || this === undefined) {
     return new LCharacter(char);
   }
@@ -6667,10 +6627,10 @@ for (const key of Object.keys(LCharacter.__names__)) {
   LCharacter.__rev_names__[value] = key;
 }
 LCharacter.prototype.toUpperCase = function () {
-  return LCharacter(this.__char__.toUpperCase());
+  return new LCharacter(this.__char__.toUpperCase());
 };
 LCharacter.prototype.toLowerCase = function () {
-  return LCharacter(this.__char__.toLowerCase());
+  return new LCharacter(this.__char__.toLowerCase());
 };
 LCharacter.prototype.toString = function () {
   return `#\\${this.__name__ || this.__char__}`;
@@ -6681,7 +6641,7 @@ LCharacter.prototype.valueOf = LCharacter.prototype.serialize = function () {
 // -------------------------------------------------------------------------
 // :: String wrapper that handle copy and in place change
 // -------------------------------------------------------------------------
-function LString(string) {
+export function LString(string) {
   if ((this !== undefined && !(this instanceof LString)) || this === undefined) {
     return new LString(string);
   }
@@ -6712,7 +6672,7 @@ function LString(string) {
 LString.prototype[Symbol.iterator] = function* () {
   const chars = [...this.__string__];
   for (const char of chars) {
-    yield LCharacter(char);
+    yield new LCharacter(char);
   }
 };
 LString.prototype.serialize = function () {
@@ -6743,10 +6703,10 @@ LString.prototype.cmp = function (string) {
   }
 };
 LString.prototype.lower = function () {
-  return LString(this.__string__.toLowerCase());
+  return new LString(this.__string__.toLowerCase());
 };
 LString.prototype.upper = function () {
-  return LString(this.__string__.toUpperCase());
+  return new LString(this.__string__.toUpperCase());
 };
 LString.prototype.set = function (n, char) {
   typecheck("LString::set", n, "number");
@@ -6771,7 +6731,7 @@ Object.defineProperty(LString.prototype, "length", {
   }
 });
 LString.prototype.clone = function () {
-  return LString(this.valueOf());
+  return new LString(this.valueOf());
 };
 LString.prototype.fill = function (char) {
   typecheck("LString::fill", char, ["string", "character"]);
@@ -6784,7 +6744,7 @@ LString.prototype.fill = function (char) {
 // -------------------------------------------------------------------------
 // :: Number wrapper that handle BigNumbers
 // -------------------------------------------------------------------------
-function LNumber(n, force = false) {
+export function LNumber(n, force = false) {
   if (n instanceof LNumber) {
     return n;
   }
@@ -6800,7 +6760,7 @@ function LNumber(n, force = false) {
   }
   const parsable = Array.isArray(n) && LString.isString(n[0]) && LNumber.isNumber(n[1]);
   if (n instanceof LNumber) {
-    return LNumber(n.value);
+    return new LNumber(n.value);
   }
   if (!LNumber.isNumber(n) && !parsable) {
     throw new Error(`You can't create LNumber from ${type(n)}`);
@@ -6828,7 +6788,7 @@ function LNumber(n, force = false) {
     }
   }
   if (Number.isNaN(n)) {
-    return LFloat(n);
+    return new LFloat(n);
   } else if (parsable && Number.isNaN(Number.parseInt(str, radix))) {
     return nan;
   } else if (typeof BigInt !== "undefined") {
@@ -6870,12 +6830,7 @@ function LNumber(n, force = false) {
         value *= BigInt(-1);
       }
     }
-    return LBigInteger(value, true);
-  } else if (BN !== undefined && !(n instanceof BN)) {
-    if (Array.isArray(n)) {
-      return LBigInteger(new BN(...n));
-    }
-    return LBigInteger(new BN(n));
+    return new LBigInteger(value, true);
   } else if (parsable) {
     this.constant(Number.parseInt(str, radix), "integer");
   } else {
@@ -6947,18 +6902,18 @@ LNumber.isFloat = function isFloat(n) {
 };
 // -------------------------------------------------------------------------
 LNumber.isNumber = function (n) {
-  return n instanceof LNumber || LNumber.isNative(n) || LNumber.isBN(n);
+  return n instanceof LNumber || LNumber.isNative(n);
 };
 // -------------------------------------------------------------------------
 LNumber.isComplex = function (n) {
   if (!n) {
     return false;
   }
-  const ret =
+  return (
     n instanceof LComplex ||
     ((LNumber.isNumber(n.im) || LNumber.isRational(n.im) || Number.isNaN(n.im)) &&
-      (LNumber.isNumber(n.re) || LNumber.isRational(n.re) || Number.isNaN(n.re)));
-  return ret;
+      (LNumber.isNumber(n.re) || LNumber.isRational(n.re) || Number.isNaN(n.re)))
+  );
 };
 // -------------------------------------------------------------------------
 LNumber.isRational = function (n) {
@@ -6989,11 +6944,7 @@ LNumber.isNative = function (n) {
 };
 // -------------------------------------------------------------------------
 LNumber.isBigInteger = function (n) {
-  return n instanceof LBigInteger || typeof n === "bigint" || LNumber.isBN(n);
-};
-// -------------------------------------------------------------------------
-LNumber.isBN = function (n) {
-  return BN !== undefined && n instanceof BN;
+  return n instanceof LBigInteger || typeof n === "bigint";
 };
 // -------------------------------------------------------------------------
 LNumber.getArgsType = function (a, b) {
@@ -7018,26 +6969,24 @@ LNumber.prototype.toString = function (radix) {
 // -------------------------------------------------------------------------
 LNumber.prototype.asType = function (n) {
   const _type = LNumber.getType(this);
-  return LNumber.types[_type] ? LNumber.types[_type](n) : LNumber(n);
+  return LNumber.types[_type] ? LNumber.types[_type](n) : new LNumber(n);
 };
 // -------------------------------------------------------------------------
 LNumber.prototype.isBigNumber = function () {
-  return typeof this.__value__ === "bigint" || (BN !== undefined && !(this.value instanceof BN));
+  return typeof this.__value__ === "bigint";
 };
 // -------------------------------------------------------------------------
 for (const fn of ["floor", "ceil", "round"]) {
   LNumber.prototype[fn] = function () {
     return this.float || LNumber.isFloat(this.__value__)
-      ? LNumber(Math[fn](this.__value__))
-      : LNumber(Math[fn](this.valueOf()));
+      ? new LNumber(Math[fn](this.__value__))
+      : new LNumber(Math[fn](this.valueOf()));
   };
 }
 // -------------------------------------------------------------------------
 LNumber.prototype.valueOf = function () {
   if (LNumber.isNative(this.__value__)) {
     return Number(this.__value__);
-  } else if (LNumber.isBN(this.__value__)) {
-    return this.__value__.toNumber();
   }
 };
 // -------------------------------------------------------------------------
@@ -7048,22 +6997,22 @@ const matrix = (function () {
   return {
     bigint: {
       bigint: i,
-      float: (a, b) => [LFloat(a.valueOf(), true), b],
+      float: (a, b) => [new LFloat(a.valueOf(), true), b],
       rational: (a, b) => [{ num: a, denom: 1 }, b],
       complex: (a, b) => [{ im: 0, re: a }, b]
     },
     integer: {
       integer: i,
-      float: (a, b) => [LFloat(a.valueOf(), true), b],
+      float: (a, b) => [new LFloat(a.valueOf(), true), b],
       rational: (a, b) => [{ num: a, denom: 1 }, b],
       complex: (a, b) => [{ im: 0, re: a }, b]
     },
     float: {
-      bigint: (a, b) => [a, b && LFloat(b.valueOf(), true)],
-      integer: (a, b) => [a, b && LFloat(b.valueOf(), true)],
+      bigint: (a, b) => [a, b && new LFloat(b.valueOf(), true)],
+      integer: (a, b) => [a, b && new LFloat(b.valueOf(), true)],
       float: i,
-      rational: (a, b) => [a, b && LFloat(b.valueOf(), true)],
-      complex: (a, b) => [{ re: a, im: LFloat(0, true) }, b]
+      rational: (a, b) => [a, b && new LFloat(b.valueOf(), true)],
+      complex: (a, b) => [{ re: a, im: new LFloat(0, true) }, b]
     },
     complex: {
       bigint: complex("bigint"),
@@ -7082,7 +7031,7 @@ const matrix = (function () {
     rational: {
       bigint: (a, b) => [a, b && { num: b, denom: 1 }],
       integer: (a, b) => [a, b && { num: b, denom: 1 }],
-      float: (a, b) => [LFloat(a.valueOf()), b],
+      float: (a, b) => [new LFloat(a.valueOf()), b],
       rational: i,
       complex: (a, b) => {
         return [
@@ -7159,7 +7108,7 @@ LNumber.getType = function (n) {
   if (typeof n === "number") {
     return "integer";
   }
-  if ((typeof BigInt !== "undefined" && typeof n !== "bigint") || (BN !== undefined && !(n instanceof BN))) {
+  if (typeof BigInt !== "undefined" && typeof n !== "bigint") {
     return "bigint";
   }
 };
@@ -7248,14 +7197,12 @@ LNumber.prototype.sqrt = function () {
   const value = this.valueOf();
   if (this.cmp(0) < 0) {
     const im = Math.sqrt(-value);
-    return LComplex({ re: 0, im });
+    return new LComplex({ re: 0, im });
   }
-  return LNumber(Math.sqrt(value));
+  return new LNumber(Math.sqrt(value));
 };
 // -------------------------------------------------------------------------
-var pow = function (a, b) {
-  return Math.pow(a, b);
-};
+const pow = (a, b) => Math.pow(a, b);
 // -------------------------------------------------------------------------
 // use native exponential operator if possible (it's way faster)
 // -------------------------------------------------------------------------
@@ -7266,8 +7213,6 @@ LNumber.prototype.pow = function (n) {
   const [a, b] = this.coerce(n);
   if (LNumber.isNative(a.__value__) && LNumber.isNative(b.__value__)) {
     value = pow(a.__value__, b.__value__);
-  } else if (LNumber.isBN(a.__value__) && LNumber.isBN(b.__value__)) {
-    value = this.__value__.pow(n.__value__);
   } else if (a.pow) {
     return a.pow(b);
   }
@@ -7280,8 +7225,6 @@ LNumber.prototype.abs = function () {
     if (value < 0) {
       value = -value;
     }
-  } else if (LNumber.isBN(value)) {
-    value.iabs();
   }
   return new LNumber(value);
 };
@@ -7295,8 +7238,6 @@ LNumber.prototype.isOdd = function () {
       throw new Error("Invalid number float");
     }
     return this.__value__ % 2 === 1;
-  } else if (LNumber.isBN(this.__value__)) {
-    return this.__value__.isOdd();
   }
   throw new Error(`Invalid number ${this.__type__}`);
 };
@@ -7321,8 +7262,6 @@ LNumber.prototype.cmp = function (n) {
   if (a.__type__ === "bigint") {
     if (LNumber.isNative(a.__value__)) {
       return cmp(a, b);
-    } else if (LNumber.isBN(a.__value__)) {
-      return this.__value__.cmp(b.__value__);
     }
   } else if (a instanceof LFloat) {
     return cmp(a, b);
@@ -7331,12 +7270,12 @@ LNumber.prototype.cmp = function (n) {
 // -------------------------------------------------------------------------
 // :: COMPLEX TYPE
 // -------------------------------------------------------------------------
-function LComplex(n, force = false) {
+export function LComplex(n, force = false) {
   if ((this !== undefined && !(this instanceof LComplex)) || this === undefined) {
     return new LComplex(n, force);
   }
   if (n instanceof LComplex) {
-    return LComplex({ im: n.__im__, re: n.__re__ });
+    return new LComplex({ im: n.__im__, re: n.__re__ });
   }
   if (LNumber.isNumber(n) && force) {
     if (!force) {
@@ -7382,12 +7321,12 @@ LComplex.prototype.toRational = function (n) {
   let im = this.__im__,
     re = this.__re__;
   if (LNumber.isFloat(this.__im__)) {
-    im = LFloat(this.__im__).toRational(n);
+    im = new LFloat(this.__im__).toRational(n);
   }
   if (LNumber.isFloat(this.__re__)) {
-    re = LFloat(this.__re__).toRational(n);
+    re = new LFloat(this.__re__).toRational(n);
   }
-  return LComplex({ im, re });
+  return new LComplex({ im, re });
 };
 // -------------------------------------------------------------------------
 LComplex.prototype.pow = function (n) {
@@ -7405,7 +7344,7 @@ LComplex.prototype.pow = function (n) {
       return LFloat(Math.E).pow(p);
     }
     const e = LFloat(Math.E).pow(p.__re__.valueOf());
-    return LComplex({
+    return new LComplex({
       re: e.mul(Math.cos(p.__im__.valueOf())),
       im: e.mul(Math.sin(p.__im__.valueOf()))
     });
@@ -7423,7 +7362,7 @@ LComplex.prototype.pow = function (n) {
   // https://w.wiki/97V3#Integer_and_fractional_exponents
   const r = magnitude.pow(n);
   const a = angle.mul(n);
-  return LComplex({ re: r.mul(Math.cos(a)), im: r.mul(Math.sin(a)) });
+  return new LComplex({ re: r.mul(Math.cos(a)), im: r.mul(Math.sin(a)) });
 };
 // -------------------------------------------------------------------------
 LComplex.prototype.add = function (n) {
@@ -7439,11 +7378,10 @@ LComplex.prototype.add = function (n) {
 // -------------------------------------------------------------------------
 LComplex.prototype.factor = function () {
   // fix rounding when calculating (/ 1.0 1/10+1/10i)
-  if (this.__im__ instanceof LFloat || this.__im__ instanceof LFloat) {
+  if (this.__re__ instanceof LFloat || this.__im__ instanceof LFloat) {
     const { __re__: re, __im__: im } = this;
-    let x, y;
-    x = re instanceof LFloat ? re.toRational().mul(re.toRational()) : re.mul(re);
-    y = im instanceof LFloat ? im.toRational().mul(im.toRational()) : im.mul(im);
+    const x = re instanceof LFloat ? re.toRational().mul(re.toRational()) : re.mul(re);
+    const y = im instanceof LFloat ? im.toRational().mul(im.toRational()) : im.mul(im);
     return x.add(y);
   } else {
     return this.__re__.mul(this.__re__).add(this.__im__.mul(this.__im__));
@@ -7604,7 +7542,7 @@ LComplex.prototype.toString = function () {
 // -------------------------------------------------------------------------
 // :: FLOAT TYPE
 // -------------------------------------------------------------------------
-function LFloat(n) {
+export function LFloat(n) {
   if ((this !== undefined && !(this instanceof LFloat)) || this === undefined) {
     return new LFloat(n);
   }
@@ -7720,7 +7658,7 @@ function approxRatio(eps) {
         return _gcd(Math.abs(x), Math.abs(y));
       },
       c = gcde(eps ? eps : 1 / 10_000, 1, n);
-    return LRational({ num: Math.floor(n / c), denom: Math.floor(1 / c) });
+    return new LRational({ num: Math.floor(n / c), denom: Math.floor(1 / c) });
   };
 }
 
@@ -7730,7 +7668,7 @@ function approxRatio(eps) {
 // :: with permission from Kawa copyright M.A. Bothner.
 // :: which was transcribed from from C-Gambit, copyright Marc Feeley.
 // -------------------------------------------------------------------------
-function rationalize(x, y) {
+export function rationalize(x, y) {
   const a = x.sub(y);
   const b = x.add(y);
   let result;
@@ -7767,7 +7705,7 @@ function simplest_rational2(x, y) {
 }
 
 // -------------------------------------------------------------------------
-function LRational(n, force = false) {
+export function LRational(n, force = false) {
   if ((this !== undefined && !(this instanceof LRational)) || this === undefined) {
     return new LRational(n, force);
   }
@@ -7830,7 +7768,7 @@ LRational.prototype.pow = function (n) {
     n = n.sub();
     const num = this.__denom__.pow(n);
     const denom = this.__num__.pow(n);
-    return LRational({ num, denom });
+    return new LRational({ num, denom });
   }
   let result = this;
   n = n.valueOf();
@@ -7847,7 +7785,7 @@ LRational.prototype.sqrt = function () {
   if (num instanceof LFloat || denom instanceof LFloat) {
     return num.div(denom);
   }
-  return LRational({ num, denom });
+  return new LRational({ num, denom });
 };
 // -------------------------------------------------------------------------
 LRational.prototype.abs = function () {
@@ -7859,7 +7797,7 @@ LRational.prototype.abs = function () {
   if (denom.cmp(0) !== 1) {
     denom = denom.sub();
   }
-  return LRational({ num, denom });
+  return new LRational({ num, denom });
 };
 // -------------------------------------------------------------------------
 LRational.prototype.cmp = function (n) {
@@ -7913,7 +7851,7 @@ LRational.prototype.mul = function (n) {
   if (LNumber.isRational(n)) {
     const num = this.__num__.mul(n.__num__);
     const denom = this.__denom__.mul(n.__denom__);
-    return LRational({ num, denom });
+    return new LRational({ num, denom });
   }
   const [a, b] = LNumber.coerce(this, n);
   return a.mul(b);
@@ -7926,7 +7864,7 @@ LRational.prototype.div = function (n) {
   if (LNumber.isRational(n)) {
     const num = this.__num__.mul(n.__denom__);
     const denom = this.__denom__.mul(n.__num__);
-    return LRational({ num, denom });
+    return new LRational({ num, denom });
   }
   const [a, b] = LNumber.coerce(this, n);
   const ret = a.div(b);
@@ -7947,7 +7885,7 @@ LRational.prototype.sub = function (n) {
   if (LNumber.isRational(n)) {
     const num = n.__num__.sub();
     const denom = n.__denom__;
-    return this.add(LRational({ num, denom }));
+    return this.add(new LRational({ num, denom }));
   }
   n = n instanceof LNumber ? n.sub() : LNumber(n).sub();
   const [a, b] = LNumber.coerce(this, n);
@@ -7971,22 +7909,22 @@ LRational.prototype.add = function (n) {
       num = b_denom.mul(a_num).add(b_num.mul(a_denom));
       denom = a_denom.mul(b_denom);
     }
-    return LRational({ num, denom });
+    return new LRational({ num, denom });
   }
   if (LNumber.isFloat(n)) {
-    return LFloat(this.valueOf()).add(n);
+    return new LFloat(this.valueOf()).add(n);
   }
   const [a, b] = LNumber.coerce(this, n);
   return a.add(b);
 };
 
 // -------------------------------------------------------------------------
-function LBigInteger(n, native) {
+export function LBigInteger(n, native) {
   if ((this !== undefined && !(this instanceof LBigInteger)) || this === undefined) {
     return new LBigInteger(n, native);
   }
   if (n instanceof LBigInteger) {
-    return LBigInteger(n.__value__, n._native);
+    return new LBigInteger(n.__value__, n._native);
   }
   if (!LNumber.isBigInteger(n)) {
     throw new Error("Invalid constructor call for LBigInteger");
@@ -8000,45 +7938,24 @@ function LBigInteger(n, native) {
 // -------------------------------------------------------------------------
 LBigInteger.prototype = Object.create(LNumber.prototype);
 LBigInteger.prototype.constructor = LBigInteger;
-// -------------------------------------------------------------------------
-LBigInteger.bn_op = {
-  "+": "iadd",
-  "-": "isub",
-  "*": "imul",
-  "/": "idiv",
-  "%": "imod",
-  "|": "ior",
-  "&": "iand",
-  "~": "inot",
-  "<<": "ishrn",
-  ">>": "ishln"
-};
 LBigInteger.prototype.serialize = function () {
   return this.__value__.toString();
 };
 // -------------------------------------------------------------------------
 LBigInteger.prototype._op = function (op, n) {
   if (n === undefined) {
-    if (LNumber.isBN(this.__value__)) {
-      op = LBigInteger.bn_op[op];
-      return LBigInteger(this.__value__.clone()[op](), false);
-    }
-    return LBigInteger(LNumber._ops[op](this.__value__), true);
-  }
-  if (LNumber.isBN(this.__value__) && LNumber.isBN(n.__value__)) {
-    op = LBigInteger.bn_op[op];
-    return LBigInteger(this.__value__.clone()[op](n), false);
+    return new LBigInteger(LNumber._ops[op](this.__value__), true);
   }
   const ret = LNumber._ops[op](this.__value__, n.__value__);
   if (op === "/") {
     const is_integer = this.op("%", n).cmp(0) === 0;
     if (is_integer) {
-      return LNumber(ret);
+      return new LNumber(ret);
     }
-    return LRational({ num: this, denom: n });
+    return new LRational({ num: this, denom: n });
   }
   // use native calculation because it's real bigint value
-  return LBigInteger(ret, true);
+  return new LBigInteger(ret, true);
 };
 // -------------------------------------------------------------------------
 LBigInteger.prototype.sqrt = function () {
@@ -8046,8 +7963,6 @@ LBigInteger.prototype.sqrt = function () {
   const minus = this.cmp(0) < 0;
   if (LNumber.isNative(this.__value__)) {
     value = LNumber(Math.sqrt(minus ? -this.valueOf() : this.valueOf()));
-  } else if (LNumber.isBN(this.__value__)) {
-    value = minus ? this.__value__.neg().sqrt() : this.__value__.sqrt();
   }
   if (minus) {
     return LComplex({ re: 0, im: value });
@@ -8058,470 +7973,7 @@ LBigInteger.prototype.sqrt = function () {
 LNumber.NaN = LNumber(Number.NaN);
 LComplex.i = LComplex({ im: 1, re: 0 });
 // -------------------------------------------------------------------------
-// :: Port abstraction - read should be a function that return next line
-// -------------------------------------------------------------------------
-function InputPort(read, env = global_env) {
-  if ((this !== undefined && !(this instanceof InputPort)) || this === undefined) {
-    return new InputPort(read);
-  }
-  typecheck("InputPort", read, "function");
-  read_only(this, "__type__", text_port);
-  let parser;
-  Object.defineProperty(this, "__parser__", {
-    enumerable: true,
-    get() {
-      return parser;
-    },
-    set(value) {
-      typecheck("InputPort::__parser__", value, "parser");
-      parser = value;
-    }
-  });
-  this._read = read;
-  this._with_parser = this._with_init_parser.bind(this, async () => {
-    if (!this.char_ready()) {
-      const line = await this._read();
-      parser = new Parser({ env });
-      parser.parse(line);
-    }
-    return this.__parser__;
-  });
-  this.char_ready = function () {
-    return !!this.__parser__ && this.__parser__.__lexer__.peek() !== eof;
-  };
-  this._make_defaults();
-}
-
-InputPort.prototype._make_defaults = function () {
-  this.read = this._with_parser((parser) => {
-    return parser.read_object();
-  });
-  this.read_line = this._with_parser((parser) => {
-    return parser.__lexer__.read_line();
-  });
-  this.read_char = this._with_parser((parser) => {
-    return parser.__lexer__.read_char();
-  });
-  this.read_string = this._with_parser((parser, number) => {
-    if (!LNumber.isInteger(number)) {
-      const type = LNumber.getType(number);
-      typeErrorMessage("read-string", type, "integer");
-    }
-    return parser.__lexer__.read_string(number.valueOf());
-  });
-  this.peek_char = this._with_parser((parser) => {
-    return parser.__lexer__.peek_char();
-  });
-};
-InputPort.prototype._with_init_parser = function (make_parser, fn) {
-  const self = this;
-  return async function (...args) {
-    const parser = await make_parser.call(self);
-    return fn(parser, ...args);
-  };
-};
-InputPort.prototype.is_open = function () {
-  return this._with_parser !== null;
-};
-InputPort.prototype.close = function () {
-  this.__parser__ = null;
-  // make content garbage collected, we assign null,
-  // because the value is in prototype
-  this._with_parser = null;
-  for (const name of ["read", "close", "read_char", "peek-char", "read_line"]) {
-    this[name] = function () {
-      throw new Error("input-port: port is closed");
-    };
-  }
-  this.char_ready = function () {
-    return false;
-  };
-};
-InputPort.prototype.toString = function () {
-  return "#<input-port>";
-};
-
-// -------------------------------------------------------------------------
-function OutputPort(write) {
-  if ((this !== undefined && !(this instanceof OutputPort)) || this === undefined) {
-    return new OutputPort(write);
-  }
-  typecheck("OutputPort", write, "function");
-  read_only(this, "__type__", text_port);
-  this.write = write;
-}
-
-OutputPort.prototype.is_open = function () {
-  return this._closed !== true;
-};
-OutputPort.prototype.close = function () {
-  Object.defineProperty(this, "_closed", {
-    get: () => true,
-    set: () => {},
-    configurable: false,
-    enumerable: false
-  });
-  this.write = function () {
-    throw new Error("output-port: port is closed");
-  };
-};
-OutputPort.prototype.flush = function () {
-  // do nothing
-};
-OutputPort.prototype.toString = function () {
-  return "#<output-port>";
-};
-
-// -------------------------------------------------------------------------
-class BufferedOutputPort extends OutputPort {
-  constructor(fn) {
-    super((...args) => this._write(...args));
-    typecheck("BufferedOutputPort", fn, "function");
-    read_only(this, "_fn", fn, { hidden: true });
-    read_only(this, "_buffer", [], { hidden: true });
-  }
-
-  flush() {
-    if (this._buffer.length > 0) {
-      this._fn(this._buffer.join(""));
-      this._buffer.length = 0;
-    }
-  }
-
-  _write(...args) {
-    if (args.length > 0) {
-      for (const arg of args) {
-        this._buffer.push(arg);
-      }
-      const last_value = this._buffer.at(-1);
-      if (/\n$/.test(last_value)) {
-        this._buffer[this._buffer.length - 1] = last_value.replace(/\n$/, "");
-        this.flush();
-      }
-    }
-  }
-}
-
-// -------------------------------------------------------------------------
-function OutputStringPort(toString) {
-  if ((this !== undefined && !(this instanceof OutputStringPort)) || this === undefined) {
-    return new OutputStringPort(toString);
-  }
-  typecheck("OutputStringPort", toString, "function");
-  read_only(this, "__type__", text_port);
-  read_only(this, "__buffer__", []);
-  this.write = (x) => {
-    x = LString.isString(x) ? x.valueOf() : toString(x);
-    this.__buffer__.push(x);
-  };
-}
-
-OutputStringPort.prototype = Object.create(OutputPort.prototype);
-OutputStringPort.prototype.constructor = OutputStringPort;
-OutputStringPort.prototype.toString = function () {
-  return "#<output-port (string)>";
-};
-OutputStringPort.prototype.valueOf = function () {
-  return this.__buffer__.map((x) => x.valueOf()).join("");
-};
-
-// -------------------------------------------------------------------------
-function OutputFilePort(filename, fd) {
-  if ((this !== undefined && !(this instanceof OutputFilePort)) || this === undefined) {
-    return new OutputFilePort(filename, fd);
-  }
-  typecheck("OutputFilePort", filename, "string");
-  read_only(this, "__filename__", filename);
-  read_only(this, "_fd", fd.valueOf(), { hidden: true });
-  read_only(this, "__type__", text_port);
-  this.write = (x) => {
-    x = LString.isString(x) ? x.valueOf() : toString(x);
-    this.fs().write(this._fd, x, function (err) {
-      if (err) {
-        throw err;
-      }
-    });
-  };
-}
-
-OutputFilePort.prototype = Object.create(OutputPort.prototype);
-OutputFilePort.prototype.constructor = OutputFilePort;
-OutputFilePort.prototype.fs = function () {
-  if (!this._fs) {
-    this._fs = this.internal("fs");
-  }
-  return this._fs;
-};
-OutputFilePort.prototype.internal = function (name) {
-  return user_env.get("**internal-env**").get(name);
-};
-OutputFilePort.prototype.close = function () {
-  return new Promise((resolve, reject) => {
-    this.fs().close(this._fd, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        read_only(this, "_fd", null, { hidden: true });
-        OutputPort.prototype.close.call(this);
-        resolve();
-      }
-    });
-  });
-};
-OutputFilePort.prototype.toString = function () {
-  return `#<output-port ${this.__filename__}>`;
-};
-
-// -------------------------------------------------------------------------
-function InputStringPort(string, env = global_env) {
-  if ((this !== undefined && !(this instanceof InputStringPort)) || this === undefined) {
-    return new InputStringPort(string);
-  }
-  typecheck("InputStringPort", string, "string");
-  string = string.valueOf();
-  this._with_parser = this._with_init_parser.bind(this, () => {
-    if (!this.__parser__) {
-      this.__parser__ = new Parser({ env });
-      this.__parser__.parse(string);
-    }
-    return this.__parser__;
-  });
-  read_only(this, "__type__", text_port);
-  this._make_defaults();
-}
-
-InputStringPort.prototype.char_ready = function () {
-  return true;
-};
-InputStringPort.prototype = Object.create(InputPort.prototype);
-InputStringPort.prototype.constructor = InputStringPort;
-InputStringPort.prototype.toString = function () {
-  return `#<input-port (string)>`;
-};
-
-// -------------------------------------------------------------------------
-function ParserInputPort(parser, env = global_env) {
-  if ((this !== undefined && !(this instanceof ParserInputPort)) || this === undefined) {
-    return new ParserInputPort(parser, env);
-  }
-  this._with_parser = this._with_init_parser.bind(this, () => {
-    return parser;
-  });
-  read_only(this, "__type__", text_port);
-  this._make_defaults();
-}
-
-ParserInputPort.prototype.char_ready = function () {
-  return true;
-};
-ParserInputPort.prototype = Object.create(InputPort.prototype);
-ParserInputPort.prototype.constructor = ParserInputPort;
-ParserInputPort.prototype.toString = function () {
-  return `#<input-port (parser)>`;
-};
-
-// -------------------------------------------------------------------------
-function InputByteVectorPort(bytevectors) {
-  if ((this !== undefined && !(this instanceof InputByteVectorPort)) || this === undefined) {
-    return new InputByteVectorPort(bytevectors);
-  }
-  typecheck("InputByteVectorPort", bytevectors, "uint8array");
-  read_only(this, "__vector__", bytevectors);
-  read_only(this, "__type__", binary_port);
-  let index = 0;
-  Object.defineProperty(this, "__index__", {
-    enumerable: true,
-    get() {
-      return index;
-    },
-    set(value) {
-      typecheck("InputByteVectorPort::__index__", value, "number");
-      if (value instanceof LNumber) {
-        value = value.valueOf();
-      }
-      if (typeof value === "bigint") {
-        value = Number(value);
-      }
-      if (Math.floor(value) !== value) {
-        throw new Error("InputByteVectorPort::__index__ value is " + "not integer");
-      }
-      index = value;
-    }
-  });
-}
-
-InputByteVectorPort.prototype = Object.create(InputPort.prototype);
-InputByteVectorPort.prototype.constructor = InputByteVectorPort;
-InputByteVectorPort.prototype.toString = function () {
-  return `#<input-port (bytevector)>`;
-};
-InputByteVectorPort.prototype.close = function () {
-  read_only(this, "__vector__", nil);
-  const err = function () {
-    throw new Error("Input-binary-port: port is closed");
-  };
-  for (const name of ["read_u8", "close", "peek_u8", "read_u8_vector"]) {
-    this[name] = err;
-  }
-  this.u8_ready = this.char_ready = function () {
-    return false;
-  };
-};
-InputByteVectorPort.prototype.u8_ready = function () {
-  return true;
-};
-InputByteVectorPort.prototype.peek_u8 = function () {
-  if (this.__index__ >= this.__vector__.length) {
-    return eof;
-  }
-  return this.__vector__[this.__index__];
-};
-InputByteVectorPort.prototype.skip = function () {
-  if (this.__index__ <= this.__vector__.length) {
-    ++this.__index__;
-  }
-};
-InputByteVectorPort.prototype.read_u8 = function () {
-  const byte = this.peek_u8();
-  this.skip();
-  return byte;
-};
-InputByteVectorPort.prototype.read_u8_vector = function (len) {
-  if (len === undefined) {
-    len = this.__vector__.length;
-  } else if (len > this.__index__ + this.__vector__.length) {
-    len = this.__index__ + this.__vector__.length;
-  }
-  if (this.peek_u8() === eof) {
-    return eof;
-  }
-  return this.__vector__.slice(this.__index__, len);
-};
-
-// -------------------------------------------------------------------------
-function OutputByteVectorPort() {
-  if ((this !== undefined && !(this instanceof OutputByteVectorPort)) || this === undefined) {
-    return new OutputByteVectorPort();
-  }
-  read_only(this, "__type__", binary_port);
-  read_only(this, "_buffer", [], { hidden: true });
-  this.write = function (x) {
-    typecheck("write", x, ["number", "uint8array"]);
-    if (LNumber.isNumber(x)) {
-      this._buffer.push(x.valueOf());
-    } else {
-      this._buffer.push(...x);
-    }
-  };
-  Object.defineProperty(this, "__buffer__", {
-    enumerable: true,
-    get() {
-      return Uint8Array.from(this._buffer);
-    }
-  });
-}
-
-OutputByteVectorPort.prototype = Object.create(OutputPort.prototype);
-OutputByteVectorPort.prototype.constructor = OutputByteVectorPort;
-OutputByteVectorPort.prototype.close = function () {
-  OutputPort.prototype.close.call(this);
-  read_only(this, "_buffer", null, { hidden: true });
-};
-OutputByteVectorPort.prototype._close_guard = function () {
-  if (this._closed) {
-    throw new Error("output-port: binary port is closed");
-  }
-};
-OutputByteVectorPort.prototype.write_u8 = function (byte) {
-  typecheck("OutputByteVectorPort::write_u8", byte, "number");
-  this.write(byte);
-};
-OutputByteVectorPort.prototype.write_u8_vector = function (vector) {
-  typecheck("OutputByteVectorPort::write_u8_vector", vector, "uint8array");
-  this.write(vector);
-};
-OutputByteVectorPort.prototype.toString = function () {
-  return "#<output-port (bytevector)>";
-};
-OutputByteVectorPort.prototype.valueOf = function () {
-  return this.__buffer__;
-};
-
-// -------------------------------------------------------------------------
-function InputFilePort(content, filename) {
-  if ((this !== undefined && !(this instanceof InputFilePort)) || this === undefined) {
-    return new InputFilePort(content, filename);
-  }
-  InputStringPort.call(this, content);
-  typecheck("InputFilePort", filename, "string");
-  read_only(this, "__filename__", filename);
-}
-
-InputFilePort.prototype = Object.create(InputStringPort.prototype);
-InputFilePort.prototype.constructor = InputFilePort;
-InputFilePort.prototype.toString = function () {
-  return `#<input-port (${this.__filename__})>`;
-};
-
-// -------------------------------------------------------------------------
-function InputBinaryFilePort(content, filename) {
-  if ((this !== undefined && !(this instanceof InputBinaryFilePort)) || this === undefined) {
-    return new InputBinaryFilePort(content, filename);
-  }
-  InputByteVectorPort.call(this, content);
-  typecheck("InputBinaryFilePort", filename, "string");
-  read_only(this, "__filename__", filename);
-}
-
-InputBinaryFilePort.prototype = Object.create(InputByteVectorPort.prototype);
-InputBinaryFilePort.prototype.constructor = InputBinaryFilePort;
-InputBinaryFilePort.prototype.toString = function () {
-  return `#<input-binary-port (${this.__filename__})>`;
-};
-
-// -------------------------------------------------------------------------
-function OutputBinaryFilePort(filename, fd) {
-  if ((this !== undefined && !(this instanceof OutputBinaryFilePort)) || this === undefined) {
-    return new OutputBinaryFilePort(filename, fd);
-  }
-  typecheck("OutputBinaryFilePort", filename, "string");
-  read_only(this, "__filename__", filename);
-  read_only(this, "_fd", fd.valueOf(), { hidden: true });
-  read_only(this, "__type__", binary_port);
-  let fs;
-  this.write = (x) => {
-    typecheck("write", x, ["number", "uint8array"]);
-    let buffer;
-    if (!fs) {
-      fs = this.internal("fs");
-    }
-    buffer = LNumber.isNumber(x) ? new Uint8Array([x.valueOf()]) : new Uint8Array([...x]);
-    return new Promise((resolve, reject) => {
-      fs.write(this._fd, buffer, function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  };
-}
-
-OutputBinaryFilePort.prototype = Object.create(OutputFilePort.prototype);
-OutputBinaryFilePort.prototype.constructor = OutputBinaryFilePort;
-OutputBinaryFilePort.prototype.write_u8 = function (byte) {
-  typecheck("OutputByteVectorPort::write_u8", byte, "number");
-  this.write(byte);
-};
-OutputBinaryFilePort.prototype.write_u8_vector = function (vector) {
-  typecheck("OutputByteVectorPort::write_u8_vector", vector, "uint8array");
-  this.write(vector);
-};
-// -------------------------------------------------------------------------
-const binary_port = Symbol.for("binary");
-const text_port = Symbol.for("text");
-var eof = new EOF();
+export const eof = new EOF();
 
 function EOF() {}
 
@@ -8531,9 +7983,9 @@ EOF.prototype.toString = function () {
 // -------------------------------------------------------------------------
 // Simpler way to create interpreter with interaction-environment
 // -------------------------------------------------------------------------
-function Interpreter(name, { stderr, stdin, stdout, command_line = null, ...obj } = {}) {
+export function Interpreter(name, { ...obj } = {}) {
   if ((this !== undefined && !(this instanceof Interpreter)) || this === undefined) {
-    return new Interpreter(name, { stdin, stdout, stderr, command_line, ...obj });
+    return new Interpreter(name, { ...obj });
   }
   if (name === undefined) {
     name = "anonymous";
@@ -8542,28 +7994,11 @@ function Interpreter(name, { stderr, stdin, stdout, command_line = null, ...obj 
   this.__parser__ = new Parser({ env: this.__env__ });
   this.__env__.set(
     "parent.frame",
-    doc(
-      "parent.frame",
-      () => {
-        return this.__env__;
-      },
-      global_env.__env__["parent.frame"].__doc__
-    )
+    doc("parent.frame", () => this.__env__, global_env.__env__["parent.frame"].__doc__)
   );
   const defaults_name = "**interaction-environment-defaults**";
   this.set(defaults_name, [...get_props(obj), defaults_name]);
-  const inter = internal_env.inherit(`internal-${name}`);
-  if (is_port(stdin)) {
-    inter.set("stdin", stdin);
-  }
-  if (is_port(stderr)) {
-    inter.set("stderr", stderr);
-  }
-  if (is_port(stdout)) {
-    inter.set("stdout", stdout);
-  }
-  inter.set("command-line", command_line);
-  set_interaction_env(this.__env__, inter);
+  set_interaction_env(this.__env__, internal_env.inherit(`internal-${name}`));
 }
 
 // -------------------------------------------------------------------------
@@ -8609,7 +8044,7 @@ Interpreter.prototype.constant = function (name, value) {
 // -------------------------------------------------------------------------
 // Lips Exception used in error function
 // -------------------------------------------------------------------------
-function LipsError(message, args) {
+export function LipsError(message, args) {
   this.name = "LipsError";
   this.message = message;
   this.args = args;
@@ -8627,7 +8062,7 @@ class IgnoreException extends Error {}
 // -------------------------------------------------------------------------
 // :: Environment constructor (parent and name arguments are optional)
 // -------------------------------------------------------------------------
-function Environment(obj, parent, name) {
+export function Environment(obj, parent, name) {
   if (arguments.length === 1) {
     if (typeof arguments[0] === "object") {
       obj = arguments[0];
@@ -8735,7 +8170,7 @@ Environment.prototype._lookup = function (symbol) {
     symbol = symbol.valueOf();
   }
   if (this.__env__.hasOwnProperty(symbol)) {
-    return Value(this.__env__[symbol]);
+    return new Value(this.__env__[symbol]);
   }
   if (this.__parent__) {
     return this.__parent__._lookup(symbol);
@@ -8781,7 +8216,7 @@ Value.prototype.valueOf = function () {
 // -------------------------------------------------------------------------
 // :: Different object than value used as object for (values)
 // -------------------------------------------------------------------------
-function Values(values) {
+export function Values(values) {
   if (values.length === 0) {
     return;
   }
@@ -8927,7 +8362,7 @@ Environment.prototype.parents = function () {
 // -------------------------------------------------------------------------
 // :: Quote function used to pause evaluation from Macro
 // -------------------------------------------------------------------------
-function quote(value) {
+export function quote(value) {
   if (is_promise(value)) {
     return value.then(quote);
   }
@@ -9027,20 +8462,8 @@ function interaction(env, name) {
 }
 
 // -------------------------------------------------------------------------
-var internal_env = new Environment(
+const internal_env = new Environment(
   {
-    stdout: new BufferedOutputPort(function (...args) {
-      console.log(...args);
-    }),
-    // ------------------------------------------------------------------
-    stderr: new BufferedOutputPort(function (...args) {
-      console.error(...args);
-    }),
-    "command-line": [],
-    // ------------------------------------------------------------------
-    stdin: InputPort(function () {
-      return Promise.resolve(prompt(""));
-    }),
     // those will be compiled by babel regex plugin
     "letter-unicode-regex": /\p{L}/u,
     "numeral-unicode-regex": /\p{N}/u,
@@ -9050,8 +8473,8 @@ var internal_env = new Environment(
   "internal"
 );
 // ----------------------------------------------------------------------
-var nan = LNumber(Number.NaN);
-var constants = {
+const nan = new LNumber(Number.NaN);
+const constants = {
   "#t": true,
   "#f": false,
   "#true": true,
@@ -9063,203 +8486,10 @@ var constants = {
   ...parsable_contants
 };
 // -------------------------------------------------------------------------
-var global_env = new Environment(
+const global_env = new Environment(
   {
     eof,
     undefined, // undefined as parser constant breaks most of the unit tests
-    // ---------------------------------------------------------------------
-    "peek-char": doc(
-      "peek-char",
-      function (port = null) {
-        if (port === null) {
-          port = internal(this, "stdin");
-        }
-        typecheck_text_port("peek-char", port, "input-port");
-        return port.peek_char();
-      },
-      `(peek-char port)
-
-        This function reads and returns a character from the string
-        port, or, if there is no more data in the string port, it
-        returns an EOF.`
-    ),
-    // ------------------------------------------------------------------
-    "read-line": doc(
-      "read-line",
-      function (port = null) {
-        if (port === null) {
-          port = internal(this, "stdin");
-        }
-        typecheck_text_port("read-line", port, "input-port");
-        return port.read_line();
-      },
-      `(read-line port)
-
-        This function reads and returns the next line from the input
-        port.`
-    ),
-    // ------------------------------------------------------------------
-    "read-char": doc(
-      "read-char",
-      function (port = null) {
-        if (port === null) {
-          port = internal(this, "stdin");
-        }
-        typecheck_text_port("read-char", port, "input-port");
-        return port.read_char();
-      },
-      `(read-char port)
-
-        This function reads and returns the next character from the
-        input port.`
-    ),
-    // ------------------------------------------------------------------
-    read: doc(
-      "read",
-      async function read(arg = null) {
-        const { env } = this;
-        let port;
-        port = arg === null ? internal(env, "stdin") : arg;
-        typecheck_text_port("read", port, "input-port");
-        return port.read.call(env);
-      },
-      `(read [port])
-
-        This function, if called with a port, it will parse the next
-        item from the port. If called without an input, it will read
-        a string from standard input (using the browser's prompt or
-        a user defined input method) and parse it. This function can be
-        used together with \`eval\` to evaluate code from port.`
-    ),
-    // ------------------------------------------------------------------
-    pprint: doc(
-      "pprint",
-      function pprint(arg) {
-        if (is_pair(arg)) {
-          arg = new lips.Formatter(arg.toString(true)).break().format();
-          global_env.get("display").call(global_env, arg);
-        } else {
-          global_env.get("write").call(global_env, arg);
-        }
-        global_env.get("newline").call(global_env);
-      },
-      `(pprint expression)
-
-        This function will pretty print its input to stdout. If it is called
-        with a non-list, it will just call the print function on its
-        input.`
-    ),
-    // ------------------------------------------------------------------
-    print: doc(
-      "print",
-      function print(...args) {
-        const display = global_env.get("display");
-        const newline = global_env.get("newline");
-        const { use_dynamic } = this;
-        const env = global_env;
-        const dynamic_env = global_env;
-        for (const arg of args) {
-          call_function(display, [arg], { env, dynamic_env, use_dynamic });
-          call_function(newline, [], { env, dynamic_env, use_dynamic });
-        }
-      },
-      `(print . args)
-
-        This function converts each input into a string and prints
-        the result to the standard output (by default it's the
-        console but it can be defined in user code). This function
-        calls \`(newline)\` after printing each input.`
-    ),
-    // ------------------------------------------------------------------
-    format: doc(
-      "format",
-      function format(str, ...args) {
-        typecheck("format", str, "string");
-        const re = /(~[as%~])/g;
-        let m = str.match(/(~[as])/g);
-        if (m && m.length > args.length) {
-          throw new Error("Not enough arguments");
-        }
-        let i = 0;
-        const repr = global_env.get("repr");
-        str = str.replaceAll(re, (x) => {
-          const chr = x[1];
-          if (chr === "~") {
-            return "~";
-          } else if (chr === "%") {
-            return "\n";
-          } else {
-            const arg = args[i++];
-            return chr === "a" ? repr(arg) : repr(arg, true);
-          }
-        });
-        m = str.match(/~(\S)/);
-        if (m) {
-          throw new Error(`format: Unrecognized escape sequence ${m[1]}`);
-        }
-        return str;
-      },
-      `(format string n1 n2 ...)
-
-        This function accepts a string template and replaces any
-        escape sequences in its inputs:
-
-        * ~a value as if printed with \`display\`
-        * ~s value as if printed with \`write\`
-        * ~% newline character
-        * ~~ literal tilde '~'
-
-        If there are missing inputs or other escape characters it
-        will error.`
-    ),
-    // ------------------------------------------------------------------
-    newline: doc(
-      "newline",
-      function newline(port = null) {
-        const display = global_env.get("display");
-        const { use_dynamic } = this;
-        const env = global_env;
-        const dynamic_env = global_env;
-        call_function(display, ["\n", port], { env, dynamic_env, use_dynamic });
-      },
-      `(newline [port])
-
-        Write newline character to standard output or given port`
-    ),
-    // ------------------------------------------------------------------
-    display: doc(
-      "display",
-      function display(arg, port = null) {
-        if (port === null) {
-          port = internal(this, "stdout");
-        } else {
-          typecheck("display", port, "output-port");
-        }
-        let value = arg;
-        if (!(port instanceof OutputBinaryFilePort)) {
-          value = global_env.get("repr")(arg);
-        }
-        port.write.call(global_env, value);
-      },
-      `(display string [port])
-
-        This function outputs the string to the standard output or
-        the port if given. No newline.`
-    ),
-    // ------------------------------------------------------------------
-    "display-error": doc(
-      "display-error",
-      function error(...args) {
-        const port = internal(this, "stderr");
-        const repr = global_env.get("repr");
-        const value = args.map(repr).join(" ");
-        port.write.call(global_env, value);
-        global_env.get("newline").call(this, port);
-      },
-      `(display-error . args)
-
-        Display an error message on stderr.`
-    ),
     // ------------------------------------------------------------------
     "%foldcase-string": doc(
       "%foldcase-string",
@@ -9284,44 +8514,6 @@ var global_env = new Environment(
 
         A helper function that checks if the two input functions are
         the same.`
-    ),
-    // ------------------------------------------------------------------
-    help: doc(
-      new Macro("help", function (code, { dynamic_env, use_dynamic, error }) {
-        let symbol;
-        if (code.car instanceof LSymbol) {
-          symbol = code.car;
-        } else if (is_pair(code.car) && code.car.car instanceof LSymbol) {
-          symbol = code.car.car;
-        } else {
-          const env = this;
-          dynamic_env = this;
-          const ret = evaluate(code.car, { env, error, dynamic_env, use_dynamic });
-          if (ret?.__doc__) {
-            return ret.__doc__;
-          }
-          return;
-        }
-        let __doc__;
-        const value = this.get(symbol);
-        __doc__ = value?.__doc__;
-        if (__doc__) {
-          return __doc__;
-        }
-        const ref = this.ref(symbol);
-        if (ref) {
-          __doc__ = ref.doc(symbol);
-          if (__doc__) {
-            return __doc__;
-          }
-        }
-      }),
-      `(help object)
-
-         This macro returns documentation for a function or macro.
-         You can save the function or macro in a variable and use it
-         here. But getting help for a variable requires passing the
-         variable in a \`quote\`.`
     ),
     // ------------------------------------------------------------------
     cons: doc(
@@ -9509,7 +8701,7 @@ var global_env = new Environment(
         const test = code.cdr.car;
         let body = code.cdr.cdr;
         if (!is_nil(body)) {
-          body = new Pair(LSymbol("begin"), body);
+          body = new Pair(new LSymbol("begin"), body);
         }
         let eval_args = { env: self, dynamic_env, use_dynamic, error };
         let node = vars;
@@ -9522,7 +8714,7 @@ var global_env = new Environment(
         eval_args = { env: scope, dynamic_env, error };
         while ((await evaluate(test.car, eval_args)) === false) {
           if (!is_nil(body)) {
-            await lips.evaluate(body, eval_args);
+            await evaluate(body, eval_args);
           }
           let node = vars;
           const next = {};
@@ -9584,7 +8776,7 @@ var global_env = new Environment(
         const ret = evaluate(code.car, { env: this, dynamic_env, error, use_dynamic });
         return unpromise(ret, function (value) {
           typecheck("let-env", value, "environment");
-          return evaluate(Pair(LSymbol("begin"), code.cdr), {
+          return evaluate(new Pair(new LSymbol("begin"), code.cdr), {
             env: value,
             dynamic_env,
             error
@@ -9707,25 +8899,6 @@ var global_env = new Environment(
         be created. It will discard any value that may be returned by the last body
         expression. The code should have side effects and/or when it's promise
         it should resolve to undefined.`
-    ),
-    // ------------------------------------------------------------------
-    "call/cc": doc(
-      Macro.defmacro("call/cc", function (code, eval_args = {}) {
-        const args = {
-          env: this,
-          ...eval_args
-        };
-        return unpromise(evaluate(code.car, args), (result) => {
-          if (is_function(result)) {
-            return result(new Continuation(null));
-          }
-        });
-      }),
-      `(call/cc proc)
-
-         Call-with-current-continuation.
-
-         NOT SUPPORTED BY LIPS RIGHT NOW`
     ),
     // ------------------------------------------------------------------
     parameterize: doc(
@@ -9953,7 +9126,7 @@ var global_env = new Environment(
     values: doc(
       "values",
       function values(...args) {
-        return Values(args);
+        return new Values(args);
       },
       `(values a1 a2 ...)
 
@@ -10932,36 +10105,6 @@ var global_env = new Environment(
         to match a literal string.`
     ),
     // ------------------------------------------------------------------
-    env: doc(
-      "env",
-      function env(env) {
-        env = env || this.env;
-        const names = Object.keys(env.__env__).map(LSymbol);
-        let result;
-        result = names.length > 0 ? Pair.fromArray(names) : nil;
-        if (env.__parent__ instanceof Environment) {
-          return global_env.get("env").call(this, env.__parent__).append(result);
-        }
-        return result;
-      },
-      `(env)
-        (env obj)
-
-        Function that returns a list of names (functions, macros and variables)
-        that are bound in the current environment or one of its parents.`
-    ),
-    // ------------------------------------------------------------------
-    new: doc(
-      "new",
-      function (obj, ...args) {
-        const instance = new (unbind(obj))(...args.map((x) => unbox(x)));
-        return instance;
-      },
-      `(new obj . args)
-
-        Function that creates new JavaScript instance of an object.`
-    ),
-    // ------------------------------------------------------------------
     typecheck: doc(
       typecheck,
       `(typecheck label value type [position])
@@ -11012,57 +10155,6 @@ var global_env = new Environment(
     // ------------------------------------------------------------------
     get,
     ".": get,
-    // ------------------------------------------------------------------
-    unbind: doc(
-      unbind,
-      `(unbind fn)
-
-         Function that removes the weak 'this' binding from a function so you
-         can get properties from the actual function object.`
-    ),
-    // ------------------------------------------------------------------
-    type: doc(
-      type,
-      `(type object)
-
-         Function that returns the type of an object as string.`
-    ),
-    // ------------------------------------------------------------------
-    debugger: doc(
-      "debugger",
-      function () {
-        debugger;
-      },
-      `(debugger)
-
-        Function that triggers the JavaScript debugger (e.g. the browser devtools)
-        using the "debugger;" statement. If a debugger is not running this
-        function does nothing.`
-    ),
-    // ------------------------------------------------------------------
-    in: doc(
-      "in",
-      function (a, b) {
-        if (a instanceof LSymbol || a instanceof LString || a instanceof LNumber) {
-          a = a.valueOf();
-        }
-        return a in unbox(b);
-      },
-      `(in key value)
-
-        Function that uses the Javascript "in" operator to check if key is
-        a valid property in the value.`
-    ),
-    // ------------------------------------------------------------------
-    "instance?": doc(
-      "instance?",
-      function (obj) {
-        return is_instance(obj);
-      },
-      `(instance? obj)
-
-        Checks if object is an instance, created with a new operator`
-    ),
     // ------------------------------------------------------------------
     instanceof: doc(
       "instanceof",
@@ -11431,25 +10523,6 @@ var global_env = new Environment(
          Macro that executes expr and catches any exceptions thrown. If catch is provided
          it's executed when an error is thrown. If finally is provided it's always
          executed at the end.`
-    ),
-    // ------------------------------------------------------------------
-    raise: doc(
-      "raise",
-      function (obj) {
-        throw obj;
-      },
-      `(raise obj)
-
-        Throws the object verbatim (no wrapping an a new Error).`
-    ),
-    throw: doc(
-      "throw",
-      function (message) {
-        throw new Error(message);
-      },
-      `(throw string)
-
-        Throws a new exception.`
     ),
     // ------------------------------------------------------------------
     find: doc(
@@ -11867,7 +10940,7 @@ var global_env = new Environment(
         a = LNumber(a);
         b = LNumber(b);
         if (b.cmp(0) === -1 && LNumber.isInteger(b)) {
-          return LRational({ num: 1, denom: a.pow(b.sub()) });
+          return new LRational({ num: 1, denom: a.pow(b.sub()) });
         }
         [a, b] = a.coerce(b);
         return a.pow(b);
@@ -12096,7 +11169,10 @@ var global_env = new Environment(
   undefined,
   "global"
 );
-var user_env = global_env.inherit("user-env");
+const user_env = global_env.inherit("user-env");
+export {
+  user_env as env
+}
 
 // -------------------------------------------------------------------------
 function set_interaction_env(interaction, internal) {
@@ -12124,7 +11200,7 @@ global_env.doc(
     that contains the references to stdin, stdout and stderr.`
 );
 
-function set_fs(fs) {
+export function set_fs(fs) {
   user_env.get("**internal-env**").set("fs", fs);
 }
 
@@ -12205,47 +11281,8 @@ for (const spec of combinations(["d", "a"], 2, 5)) {
   );
 }
 
-// -----------------------------------------------------------------------------
-function reversseFind(dir, fn) {
-  const parts = dir.split(path.sep).filter(Boolean);
-  for (let i = parts.length; i--; ) {
-    const p = path.join("/", ...parts.slice(0, i + 1));
-    if (fn(p)) {
-      return p;
-    }
-  }
-}
-
-// -----------------------------------------------------------------------------
-function nodeModuleFind(dir) {
-  return reversseFind(dir, function (dir) {
-    return fs.existsSync(path.join(dir, "node_modules"));
-  });
-}
-
-// -------------------------------------------------------------------------
-function is_node() {
-  return typeof global !== "undefined" && global.global === global;
-}
-
 // -------------------------------------------------------------------------
 const noop = () => {};
-
-// -------------------------------------------------------------------------
-/* c8 ignore next 15 */
-let node_ready; // Scheme load function need to wait for node_specific
-if (!is_node()) {
-  node_ready = Promise.resolve();
-  if (typeof window !== "undefined" && window === globalThis) {
-    global_env.set("window", window);
-    global_env.set("global", undefined);
-    global_env.set("self", window);
-  } else if (typeof self !== "undefined" && typeof WorkerGlobalScope !== "undefined") {
-    global_env.set("self", self);
-    global_env.set("window", undefined);
-    global_env.set("global", undefined);
-  }
-}
 
 // -------------------------------------------------------------------------
 function typeErrorMessage(fn, got, expected, position = null) {
@@ -12305,14 +11342,6 @@ function typecheck_numbers(fn, args, expected) {
 function typecheck_args(fn, args, expected) {
   for (const [i, arg] of args.entries()) {
     typecheck(fn, arg, expected, i + 1);
-  }
-}
-
-// -------------------------------------------------------------------------
-function typecheck_text_port(fn, arg, type) {
-  typecheck(fn, arg, type);
-  if (arg.__type__ === binary_port) {
-    throw new Error(typeErrorMessage(fn, "binary-port", "textual-port"));
   }
 }
 
@@ -12527,7 +11556,7 @@ function evaluate_macro(macro, code, eval_args) {
 
 // -------------------------------------------------------------------------
 function prepare_fn_args(fn, args) {
-  if (is_bound(fn) && !is_object_bound(fn) && (!lips_context(fn) || is_port_method(fn))) {
+  if (is_bound(fn) && !is_object_bound(fn) && !lips_context(fn)) {
     args = args.map(unbox);
   }
   if (!is_raw_lambda(fn) && args.some(is_lips_function) && !is_lips_function(fn) && !is_array_method(fn)) {
@@ -12600,7 +11629,7 @@ function apply(fn, args, { env, dynamic_env, use_dynamic, error = () => {} } = {
 // -------------------------------------------------------------------------
 // :: Parameters for make-parameter and parametrize
 // -------------------------------------------------------------------------
-class Parameter {
+export class Parameter {
   __value__;
   __fn__;
   #__p_name__;
@@ -12705,7 +11734,7 @@ class Continuation {
 }
 
 // -------------------------------------------------------------------------
-function evaluate(code, { env, dynamic_env, use_dynamic, error = noop, ...rest } = {}) {
+export function evaluate(code, { env, dynamic_env, use_dynamic, error = noop, ...rest } = {}) {
   try {
     if (!is_env(dynamic_env)) {
       dynamic_env = env === true ? user_env : env || user_env;
@@ -12848,10 +11877,10 @@ const exec_collect =
     return results;
   };
 
-const compile = exec_collect((code) => code);
-const exec = exec_collect((code, value) => value);
+export const compile = exec_collect((code) => code);
+export const exec = exec_collect((code, value) => value);
 // -------------------------------------------------------------------------
-function balanced(code) {
+export function balanced(code) {
   const maching_pairs = {
     "[": "]",
     "(": ")"
@@ -12897,54 +11926,10 @@ function balanced(code) {
 }
 
 // -------------------------------------------------------------------------
-function is_dev() {
-  return lips.version.match(/^(\{\{VER\}\}|DEV)$/);
-}
-
-// -------------------------------------------------------------------------
-function get_current_script() {
-  if (is_node()) {
-    return;
-  }
-  let script;
-  if (document.currentScript) {
-    script = document.currentScript;
-  } else {
-    const scripts = document.querySelectorAll("script");
-    if (scripts.length === 0) {
-      return;
-    }
-    script = scripts.at(-1);
-  }
-  const url = script.getAttribute("src");
-  return url;
-}
-
-// -------------------------------------------------------------------------
-const current_script = get_current_script();
-
-// -------------------------------------------------------------------------
-function bootstrap(url = "") {
-  const std = "dist/std.xcb";
-  if (url === "") {
-    if (current_script) {
-      url = current_script.replace(/[^/]*$/, "std.xcb");
-    } else if (is_dev()) {
-      url = `https://cdn.jsdelivr.net/gh/jcubic/lips@devel/${std}`;
-    } else {
-      url = `https://cdn.jsdelivr.net/npm/lips@${lips.version}/${std}`;
-    }
-  }
-  global_env.set("__dirname", url.replace(/[^/]+$/, ""));
-  const load = global_env.get("load");
-  return load.call(user_env, url, global_env);
-}
-
-// -------------------------------------------------------------------------
 // :: Serialization
 // -------------------------------------------------------------------------
 const serialization_map = {
-  pair: ([car, cdr]) => Pair(car, cdr),
+  pair: ([car, cdr]) => new Pair(car, cdr),
   number(value) {
     if (LString.isString(value)) {
       return LNumber([value, 10]);
@@ -12984,7 +11969,7 @@ function resolve_name(i) {
 }
 
 // -------------------------------------------------------------------------
-function serialize(data) {
+export function serialize(data) {
   return JSON.stringify(data, function (key, value) {
     const v0 = this[key];
     if (v0) {
@@ -13007,7 +11992,7 @@ function serialize(data) {
 }
 
 // -------------------------------------------------------------------------
-function unserialize(string) {
+export function unserialize(string) {
   return JSON.parse(string, (_, object) => {
     if (object && typeof object === "object" && !is_undef(object["@"])) {
       var cls = resolve_name(object["@"]);
@@ -13076,13 +12061,6 @@ read_only(Macro, "__class__", "macro");
 read_only(Syntax, "__class__", "syntax");
 read_only(Syntax.Parameter, "__class__", "syntax-parameter");
 read_only(Environment, "__class__", "environment");
-read_only(InputPort, "__class__", "input-port");
-read_only(OutputPort, "__class__", "output-port");
-read_only(BufferedOutputPort, "__class__", "output-port");
-read_only(OutputStringPort, "__class__", "output-string-port");
-read_only(InputStringPort, "__class__", "input-string-port");
-read_only(InputFilePort, "__class__", "input-file-port");
-read_only(OutputFilePort, "__class__", "output-file-port");
 read_only(LipsError, "__class__", "lips-error");
 for (const cls of [LNumber, LComplex, LRational, LFloat, LBigInteger]) {
   read_only(cls, "__class__", "number");
@@ -13093,70 +12071,11 @@ read_only(LString, "__class__", "string");
 read_only(QuotedPromise, "__class__", "promise");
 read_only(Parameter, "__class__", "parameter");
 // -------------------------------------------------------------------------
-const version = "{{VER}}";
-const date = "{{DATE}}";
 
 // unwrap async generator into Promise<Array>
-const parse = compose(uniterate_async, _parse);
+export const parse = compose(uniterate_async, _parse);
 
-export {
-  version,
-  date,
-  exec,
-  parse,
-  tokenize,
-  evaluate,
-  compile,
-  serialize,
-  unserialize,
-  bootstrap,
-  Environment,
-  user_env as env,
-  Interpreter,
-  balanced as balanced_parenthesis,
-  balanced as balancedParenthesis,
-  balanced,
-  Macro,
-  Syntax,
-  Pair,
-  Values,
-  QuotedPromise,
-  LipsError as Error,
-  is_directive as _is_directive,
-  quote,
-  InputPort,
-  OutputPort,
-  BufferedOutputPort,
-  InputFilePort,
-  OutputFilePort,
-  InputStringPort,
-  OutputStringPort,
-  InputByteVectorPort,
-  OutputByteVectorPort,
-  InputBinaryFilePort,
-  OutputBinaryFilePort,
-  set_fs,
-  Formatter,
-  Parser,
-  Lexer,
-  specials,
-  repr,
-  nil,
-  eof,
-  LSymbol,
-  LNumber,
-  LFloat,
-  LComplex,
-  LRational,
-  LBigInteger,
-  LCharacter,
-  LString,
-  Parameter,
-  rationalize
-};
 const lips = {
-  version,
-  date,
   exec,
   parse,
   tokenize,
@@ -13164,7 +12083,6 @@ const lips = {
   compile,
   serialize,
   unserialize,
-  bootstrap,
   Environment,
   user_env: env,
   Interpreter,
@@ -13179,18 +12097,6 @@ const lips = {
   LipsError: Error,
   _is_directive: is_directive,
   quote,
-  InputPort,
-  OutputPort,
-  BufferedOutputPort,
-  InputFilePort,
-  OutputFilePort,
-  InputStringPort,
-  OutputStringPort,
-  InputByteVectorPort,
-  OutputByteVectorPort,
-  InputBinaryFilePort,
-  OutputBinaryFilePort,
-  set_fs,
   Formatter,
   Parser,
   Lexer,
