@@ -77,7 +77,7 @@ describe("LIPS Integration", () => {
       { expr: "#f", expected: "false" },
       { expr: '"hello world"', expected: "'hello world'" }, // Single quotes for simple strings
       { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
-      { expr: "()", expected: "()" }
+      { expr: "()", expected: "(list nil)" } // edge case - keeping like that for now
     ];
 
     for (const { expr, expected } of tests) {

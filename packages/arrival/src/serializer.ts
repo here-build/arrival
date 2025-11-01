@@ -1,4 +1,5 @@
 import "@here.build/arrival-env";
+import { nil } from "@here.build/arrival-scheme";
 
 /**
  * S-Expression Serializer
@@ -51,14 +52,16 @@ const serializationContext = {
 /**
  * Convert any value to an s-expression representation
  */
-export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
+export function toSExpr(obj: any, visited_ = new Set()): SExpr {
   // null/undefined
-  if (obj === null) return "nil";
+  if (obj === null || obj === nil) return "nil";
   if (obj === undefined) return "undefined";
 
+  const visited = new Set(visited_);
   // Check for circular references
-  if (typeof obj === "object" && obj !== null) {
+  if (typeof obj === "object" && obj !== null && obj !== nil) {
     if (visited.has(obj)) {
+      console.error("circular reference found while serializing", obj);
       throw new Error("Circular reference detected");
     }
     visited.add(obj);
@@ -129,7 +132,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
     // LIPS Pair (linked list structure)
     if (obj.constructor?.name === "Pair" && "car" in obj && "cdr" in obj) {
-      return convertLipsPairToArray(obj, visited);
+      return ["list", ...convertLipsPairToArray(obj, visited)];
     }
 
     // LIPS Nil (empty list) - be more specific to avoid catching plain objects
@@ -159,7 +162,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
   }
 
   // Has custom serialization with Symbol.toSExpr
-  if (obj && typeof obj === "object" && Symbol.toSExpr in obj) {
+  if (obj && typeof obj === "object" && (obj as any)[Symbol.toSExpr]) {
     const displayName =
       obj[Symbol.SExpr]?.() ?? obj.displayName ?? obj.constructor.displayName ?? obj.name ?? obj.constructor.name;
     const contents = obj[Symbol.toSExpr](serializationContext);
@@ -435,8 +438,8 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 }
 
 // Convert LIPS Pair linked list to JavaScript array
-function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
-  const result: any[] = [];
+function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
+  const result: SExpr[] = [];
   let current = pair;
 
   while (current && current.constructor?.name === "Pair") {
@@ -453,11 +456,7 @@ function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
   }
 
   // If cdr is not null/empty, it's an improper list (rare in practice)
-  if (
-    current &&
-    current.constructor?.name !== "Nil" &&
-    !(current.constructor?.name === "Object" && Object.keys(current).length === 0)
-  ) {
+  if (current && current !== nil && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
     // This would be a dotted pair notation in Scheme, but we'll just add it to the array
     result.push(toSExpr(current, visited));
   }
@@ -466,7 +465,7 @@ function convertLipsPairToArray(pair: any, visited: WeakSet<object>): SExpr {
 }
 
 // Helper to process items from Symbol.toSExpr
-function processItem(item: any, visited: WeakSet<object>): SExpr {
+function processItem(item: any, visited: Set<any>): SExpr {
   // Handle special serializable values from context helpers
   if (item && typeof item === "object" && EXPR_MARKER in item) {
     // Expression created by context.expr
