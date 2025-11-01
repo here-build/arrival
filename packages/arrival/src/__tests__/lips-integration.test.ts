@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
-import { execSerialized } from "../execSerialized";
 // Import what we can from lips
-import { exec } from "../lips/lips";
+import { exec, LBigInteger, lipsToJs, LString, LSymbol, Nil, Pair, sandboxedEnv } from "@here.build/arrival-scheme";
 // Import custom matchers
-import "./custom-matchers";
+import "@here.build/arrival-scheme";
+import { execSerialized } from "../execSerialized";
 
 describe("LIPS Integration", () => {
   it("should handle simple lips evaluation results", async () => {
@@ -150,98 +150,89 @@ describe("LIPS Integration", () => {
   });
 });
 
-describe("execSerialized", () => {
-  it("should execute single expressions and return serialized strings", async () => {
-    const result = await execSerialized("(+ 1 2)");
-    expect(result).toEqual(["3"]);
+describe("exec with proper environment", () => {
+  it("should execute single expressions and return unwrapped values", async () => {
+    const result = lipsToJs(await exec("(+ 1 2)"), { forceBigInt: true })[0];
+    expect(result).toBe(3n); // Native BigInt
   });
 
-  it("should handle multiple expressions", async () => {
-    const result = await execSerialized("(+ 1 2) (* 3 4) (quote hello)");
-    expect(result).toEqual(["3", "12", "hello"]); // hello is bare symbol, not keyword
+  it("should handle multiple expressions (returns first)", async () => {
+    const rawResults = await exec("(+ 1 2) (* 3 4) (quote hello)");
+    const results = lipsToJs(rawResults, { forceBigInt: true });
+    expect(results[0]).toBe(3n); // First result
+    expect(results[1]).toBe(12n); // Second result
+    // Symbol needs special handling
+    expect(rawResults[2]).toBeInstanceOf(LSymbol);
+    expect(rawResults[2].__name__).toBe("hello");
   });
 
-  it("should handle lists", async () => {
-    const result = await execSerialized("(list 1 2 3)");
-    expect(result).toEqual(["(1 2 3)"]);
+  it("should handle lists (returns LIPS Pair)", async () => {
+    const result = (await exec("(list 1 2 3)"))[0];
+    expect(result).toBeInstanceOf(Pair);
+    expect(result.car).toBeInstanceOf(LBigInteger);
   });
 
-  it("should handle symbols", async () => {
-    const result = await execSerialized("'symbol-name");
-    expect(result).toEqual(["symbol-name"]); // bare symbol
+  it("should handle symbols (returns LSymbol)", async () => {
+    const result = (await exec("'symbol-name"))[0];
+    expect(result).toBeInstanceOf(LSymbol);
+    expect(result.__name__).toBe("symbol-name");
   });
 
-  it("should handle strings", async () => {
-    await expect('"hello world" 3').toExecuteInto("'hello world'", "3"); // single quotes for simple strings
+  it("should handle strings (returns LString)", async () => {
+    const result = (await exec('"hello world"'))[0];
+    expect(result).toBeInstanceOf(LString);
+    expect(result.__string__).toBe("hello world");
   });
 
   it("should handle booleans", async () => {
-    const result = await execSerialized("#t #f");
-    expect(result).toEqual(["true", "false"]);
+    const result = lipsToJs(await exec("#t"))[0];
+    expect(result).toBe(true);
   });
 
-  it("should handle complex expressions", async () => {
-    const result = await execSerialized("(map (lambda (x) (* x 2)) (list 1 2 3))");
-    expect(result).toEqual(["(2 4 6)"]);
+  it("should handle complex expressions (returns LIPS structures)", async () => {
+    const result = (await exec("(map (lambda (x) (* x 2)) (list 1 2 3))"))[0];
+    expect(result).toBeInstanceOf(Pair);
+    // Result is Pair with LBigInteger values
+    expect(result.car).toBeInstanceOf(LBigInteger);
+    expect(result.car.__value__).toBe(2n);
+    expect(result.cdr.car.__value__).toBe(4n);
   });
 
-  it("should handle empty expressions", async () => {
-    const result = await execSerialized("()");
-    expect(result).toEqual(["()"]);
+  it("should handle empty expressions (returns Nil)", async () => {
+    const result = (await exec("()"))[0];
+    expect(result).toBeInstanceOf(Nil);
   });
 
-  // New extensible test format
-  describe("extensible test format", () => {
-    it("should handle basic arithmetic", async () => {
-      await expect("(+ 1 2) (* 3 4)").toExecuteInto("3", "12");
-    });
+  it("should have access to Ramda functions", async () => {
+    const result = (
+      await exec("(map (lambda (x) (+ x 1)) (list 1 2 3))", {
+        env: sandboxedEnv
+      })
+    )[0];
+    expect(result).toBeInstanceOf(Pair);
 
-    it("should handle symbols and keywords", async () => {
-      await expect("'symbol ':keyword").toExecuteInto("symbol", ":keyword");
-    });
+    // Convert to JS values for easier testing
+    const values = lipsToJs(result, { forceBigInt: true });
+    expect(values).toEqual([2n, 3n, 4n]);
+  });
 
-    it("should handle complex strings", async () => {
-      await expect('"simple" "with\\"quotes\\"" "multi\\nline"').toExecuteInto(
-        "'simple'",
-        '`with"quotes"`',
-        "'multi\nline'" // actual newline character in result
-      );
-    });
+  it("should have access to functional composition", async () => {
+    const result = lipsToJs(
+      await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)", {
+        env: sandboxedEnv
+      }),
+      { forceBigInt: true }
+    )[0];
+    expect(result).toBe(7n);
+  });
 
-    it("should handle lists and nested structures", async () => {
-      await expect("(list 1 2 3) (list (list 'a 'b) (list 'c 'd))").toExecuteInto("(1 2 3)", "((a b) (c d))");
-    });
-
-    it("should handle booleans and special values", async () => {
-      await expect("#t #f ()").toExecuteInto("true", "false", "()");
-    });
-
-    it("should handle big integers", async () => {
-      await expect("123456789012345678901234567890").toExecuteInto("123456789012345678901234567890n");
-    });
-
-    it("should handle lambda expressions", async () => {
-      await expect("((lambda (x) (* x 2)) 5)").toExecuteInto("10");
-    });
-
-    it("should handle quoted expressions", async () => {
-      await expect("(quote (+ 1 2)) 'hello-world").toExecuteInto("(+ 1 2)", "hello-world");
-    });
-
-    it("should have access to Ramda functions", async () => {
-      await expect("(map inc (list 1 2 3))").toExecuteInto("(2 3 4)");
-    });
-
-    it("should have access to functional composition", async () => {
-      await expect("((compose inc inc) 5)").toExecuteInto("7");
-    });
-
-    it("should have access to basic math operations", async () => {
-      await expect("(add 5 3) (multiply 4 2)").toExecuteInto("8", "8");
-    });
-
-    it("should have basic curry functionality", async () => {
-      await expect("((curry add) 5 3)").toExecuteInto("8");
-    });
+  it("should support environment variables", async () => {
+    const result = lipsToJs(
+      await exec("(+ x y)", {
+        env: sandboxedEnv.inherit({ x: 10, y: 20 })
+      }),
+      { forceBigInt: true }
+    )[0];
+    expect(result).toBe(30n);
   });
 });

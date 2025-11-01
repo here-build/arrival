@@ -11,6 +11,7 @@ export const SEXPR_TAG = Symbol.for("expression");
 
 // Unique symbols for serialization markers
 const QUOTED_MARKER = Symbol.for("arrival:quoted");
+const FORCE_QUOTED_STRING_MARKER = Symbol.for("arrival:force_quoted_string");
 const EXPR_MARKER = Symbol.for("arrival:expr");
 
 export type SExprSerializable =
@@ -36,6 +37,10 @@ const serializationContext = {
   quote: (value: string): SExprSerializable => {
     // Return a special marker that will always be quoted
     return { [QUOTED_MARKER]: value };
+  },
+  string: (value: string): SExprSerializable => {
+    // Return a special marker that will always be quoted
+    return { [FORCE_QUOTED_STRING_MARKER]: value };
   },
   expr: (head: string | SExprSerializable, ...args: SExprSerializable[]): SExprSerializable => {
     // Return a structure that will be serialized as an expression
@@ -69,6 +74,10 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
     if (QUOTED_MARKER in obj) {
       // Quoted string created by context.quote - wrap to force quoting
       return { [QUOTED_MARKER]: obj[QUOTED_MARKER] };
+    }
+    if (FORCE_QUOTED_STRING_MARKER in obj) {
+      // Quoted string created by context.quote - wrap to force quoting
+      return { [FORCE_QUOTED_STRING_MARKER]: obj[FORCE_QUOTED_STRING_MARKER] };
     }
   }
 
@@ -199,7 +208,7 @@ export function toSExpr(obj: any, visited = new WeakSet()): SExpr {
 
   // Set → convert to list
   if (obj instanceof Set) {
-    return ["set", ...Array.from(obj).map((item) => toSExpr(item, visited))];
+    return ["set", ...[...obj].map((item) => toSExpr(item, visited))];
   }
 
   // Plain object → Scheme-style record with &
@@ -379,7 +388,13 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   // Handle force-quoted marker (must be checked before typeof === "string")
   if (sexpr && typeof sexpr === "object" && QUOTED_MARKER in sexpr) {
     const value = (sexpr as any)[QUOTED_MARKER];
-    return `"${value.replace(/"/g, '\\"')}"`;
+    return /^[a-z->?!][a-z0-9->?!]*$/i.test(value) ? `'${value}` : `'|${value}|`;
+  }
+
+  // Handle force-quoted marker (must be checked before typeof === "string")
+  if (sexpr && typeof sexpr === "object" && FORCE_QUOTED_STRING_MARKER in sexpr) {
+    const value = (sexpr as any)[FORCE_QUOTED_STRING_MARKER];
+    return `"${value.replaceAll('"', String.raw`\"`)}"`;
   }
 
   // Format primitives

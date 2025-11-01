@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "tiny-invariant": "^1.3.3",
+    "@here.build/arrival-scheme": "workspace:^",
     "@here.build/arrival-env": "workspace:^",
     "fantasy-land": "^5.0.1",
     "ramda": "^0.31.3",

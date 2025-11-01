@@ -26,6 +26,7 @@ export abstract class ToolInteraction<ExecutionContext extends Record<string, an
 
   async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
       name: this.constructor.name,
       description: await this.description,
       inputSchema: await this.getToolSchema(clientInfo),

@@ -2,10 +2,8 @@
  * Debug the sandboxed environment to understand what's happening
  */
 
-import { describe, expect, it } from "vitest";
-import { createSandboxedEnvironment, sandboxedEnv } from "../enhanced-environment";
-import { applyFantasyLandPatches } from "../fantasy-land-lips";
-import { exec, env as lipsGlobalEnv, nil } from "../lips/lips";
+import { describe, it } from "vitest";
+import { env as lipsGlobalEnv, exec, nil, sandboxedEnv } from "@here.build/arrival-scheme";
 
 describe("Debug Environment", () => {
   it("should debug sandboxed environment contents", () => {
@@ -66,9 +64,6 @@ describe("Debug Environment", () => {
 
   it("should test Fantasy Land patching", () => {
     console.log("=== FANTASY LAND PATCHING DEBUG ===");
-
-    // Apply patches
-    applyFantasyLandPatches();
 
     // Try to get Pair class
     const cons = lipsGlobalEnv.get("cons", { throwError: false });

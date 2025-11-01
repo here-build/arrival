@@ -2,8 +2,8 @@
  * Debug nil availability in LIPS
  */
 
-import { describe, expect, it } from "vitest";
-import { exec, env as lipsGlobalEnv } from "../lips/lips";
+import { describe, it } from "vitest";
+import { env as lipsGlobalEnv, exec } from "@here.build/arrival-scheme";
 
 describe("Nil Debug", () => {
   it("should find nil in LIPS environment", async () => {

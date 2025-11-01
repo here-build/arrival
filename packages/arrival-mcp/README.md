@@ -36,7 +36,7 @@ Framework for building Model Context Protocol (MCP) servers with clean separatio
 ### Define a Tool
 
 ```typescript
-import { ToolInteraction } from "@here.build/mcp-framework";
+import { ToolInteraction } from "@here.build/arrival-mcp";
 import * as z from "zod";
 
 class MyTool extends ToolInteraction<{ input: string }> {
@@ -69,7 +69,7 @@ class MyTool extends ToolInteraction<{ input: string }> {
 
 ```typescript
 import { Hono } from "hono";
-import { MCPServer, HonoMCPServer } from "@here.build/mcp-framework";
+import { MCPServer, HonoMCPServer } from "@here.build/arrival-mcp";
 
 const mcpServer = new MCPServer(MyTool, OtherTool);
 const honoServer = new HonoMCPServer(mcpServer);

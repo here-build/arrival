@@ -47,7 +47,7 @@ describe("S-Expression Serializer", () => {
         [Symbol.toSExpr](context: any) {
           return [
             context.keyword("data"),
-            context.quote(this.data),
+            context.string(this.data),
             context.keyword("count"),
             this.count,
             context.keyword("computed"),
@@ -81,12 +81,12 @@ describe("S-Expression Serializer", () => {
 
     it("symbol helper creates proper keywords", () => {
       class Stateful {
-        [Symbol.toSExpr](context: any) {
+        [Symbol.toSExpr](context: SExprSerializationContext) {
           return [context.symbol("state"), context.symbol("active")];
         }
       }
 
-      expect(toSExprString(new Stateful())).toBe("(Stateful state active)");
+      expect(toSExprString(new Stateful())).toBe("(Stateful :state :active)");
     });
   });
 
@@ -200,7 +200,7 @@ describe("S-Expression Serializer", () => {
       class DataNode {
         constructor(public data: any) {}
 
-        [Symbol.toSExpr](context: any) {
+        [Symbol.toSExpr](context: SExprSerializationContext) {
           return [context.keyword("type"), "data-node", context.keyword("value"), this.data];
         }
       }

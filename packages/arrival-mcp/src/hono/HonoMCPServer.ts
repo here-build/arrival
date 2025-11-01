@@ -128,8 +128,13 @@ export class HonoMCPServer extends MCPServer {
     const sessionId = context.req.header("Mcp-Session-Id") ?? crypto.randomUUID();
     context.res.headers.set("Mcp-Session-Id", sessionId);
     const wantsSSE = context.req.header("accept")?.includes("text/event-stream");
+    console.log(`client connected, wants ${context.req.header("accept")}`)
     if (!wantsSSE) {
       console.warn("GET request do not want SSE")
+      return context.json({
+        jsonrpc: "2.0",
+        result: this.serverInfo
+      })
     }
 
     return streamSSE(context, async (stream) => {

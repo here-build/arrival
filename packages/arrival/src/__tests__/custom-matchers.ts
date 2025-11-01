@@ -1,8 +1,9 @@
 import { expect } from "vitest";
+
 import { execSerialized } from "../execSerialized";
 
 declare module "vitest" {
-  interface Assertion<T = any> {
+  interface Assertion {
     toExecuteInto(...expectedResults: string[]): Promise<void>;
   }
   interface AsymmetricMatchersContaining {
@@ -19,19 +20,17 @@ expect.extend({
         actualResults.length === expectedResults.length &&
         actualResults.every((result, index) => result === expectedResults[index]);
 
-      if (pass) {
-        return {
-          message: () => `expected ${received} not to execute into [${expectedResults.join(", ")}], but it did`,
-          pass: true
-        };
-      } else {
-        return {
-          message: () =>
-            `expected ${received} to execute into [${expectedResults.join(", ")}], but got [${actualResults.join(", ")}]`,
-          pass: false
-        };
-      }
-    } catch (error) {
+      return pass
+        ? {
+            message: () => `expected ${received} not to execute into [${expectedResults.join(", ")}], but it did`,
+            pass: true
+          }
+        : {
+            message: () =>
+              `expected ${received} to execute into [${expectedResults.join(", ")}], but got [${actualResults.join(", ")}]`,
+            pass: false
+          };
+    } catch (error: any) {
       return {
         message: () => `expected ${received} to execute successfully, but got error: ${error.message}`,
         pass: false

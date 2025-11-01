@@ -91,7 +91,8 @@ The context object provides these helpers:
 
 - `context.keyword(str)` - Creates a keyword (e.g., `:name`)
 - `context.symbol(str)` - Creates an unquoted symbol
-- `context.quote(str)` - Creates a quoted string (default for strings)
+- `context.quote(str)` - Creates a scheme quoted literal. useful for pointers
+- `context.string(str)` - Creates a quoted string (default for strings)
 - `context.expr(head, ...args)` - Creates a nested S-expression
 
 ```typescript

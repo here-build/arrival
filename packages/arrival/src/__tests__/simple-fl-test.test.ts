@@ -3,8 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { sandboxedEnv } from "../enhanced-environment";
-import { env as lipsGlobalEnv, nil } from "../lips/lips";
+import { env as lipsGlobalEnv, nil, sandboxedEnv } from "@here.build/arrival-scheme";
 
 describe("Simple Fantasy Land Test", () => {
   it("should test basic Pair creation and Fantasy Land methods", async () => {

@@ -1,10 +1,9 @@
-import { Environment, execSerialized, sandboxedEnv } from "@here.build/arrival";
+import { Environment, execSerialized, SAFE_BUILTINS, sandboxedEnv } from "@here.build/arrival";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import dedent from "dedent";
 import invariant from "tiny-invariant";
 import type { NonEmptyTuple } from "type-fest";
 import * as z from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { format } from "date-fns";
 
 import { ToolInteraction } from "./ToolInteraction";
@@ -61,9 +60,20 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
           type: "string",
           description: [
               dedent`
-            S-expressions to evaluate in sandboxed Scheme environment.
-            Batching is supported, so there can be multiple root function calls - each result will be returned.
-            LIPS/Scheme environment and Ramda/Ramda-applicative implementing Fantasy-land specification are available.
+            Expr is an input for Scheme (Lisp dialect) REPL that will be executed in sandboxed environment.
+            This sandbox is providing access to the actual system state snapshot at the moment of request.
+            This snapshot is stored locally and can be traversed in full.
+            You can do anything you want, do any data transformations, lenses, views of any complexity.
+            Sandbox provides following standard symbols to use in any way you need:
+            ${SAFE_BUILTINS}
+
+            This REPL supports batch queries. You can express your curiosity like this in single \`expr\` request (e.g.):
+            \`\`\`
+            (user)
+            (all-projects)
+            \`\`\`
+            and this server will provide response in two messages per each top-level expression.
+            You can use any lisp features to obtain data you need: filter, map 
 
             Use Fantasy Land combinators for compositional queries:
             - (fmap fn structure) - map over Functors
@@ -76,7 +86,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
               ...availableFunctionStrings
             ].join("\n")
           + (dynamic
-            ? dedent` 
+            ? dedent`
               NOTE${aiName ? ` FOR ${aiName.toUpperCase()}` : ''} ON LIVE DESCRIPTION:
               The data provided above IS NOT STATIC.
               It is dynamically generated at every MCP session start. <timestamp>${format(now, "MMM do, HH:MM X")}</timestamp>
@@ -89,7 +99,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
         },
         ...Object.fromEntries(
           Object.entries(this.contextSchema).map(([key, value]) => {
-            const {$schema, ...schema} = zodToJsonSchema(value) as any;
+            const {$schema, ...schema} = z.toJSONSchema(value) as any;
             return [
               key,
               {
@@ -108,7 +118,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
     invariant(this.executionContext, "execution context should be provided for tool execution");
     const timeoutRef = { current: false };
     this.registerFunctions();
-    const env = this.createEnvironment(timeoutRef);
+    const env = await this.createEnvironment(timeoutRef);
     setTimeout(() => {
       timeoutRef.current = true;
     }, this.MAX_EXECUTION_TIME);
@@ -175,7 +185,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
   }
 
   private createEnvironment(timeoutRef: { current: boolean }): Promise<any> {
-    const env = new Environment({}, sandboxedEnv, "Sandbox");
+    const env = sandboxedEnv.inherit("Discovery sandbox",{});
 
     // Register functions using arrival's Rosetta Environment for seamless LIPS ↔ JS interop
     for (const [name, { handler, params }] of this.functions.entries()) {

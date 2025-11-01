@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/mcp-framework",
+  "name": "@here.build/arrival-mcp",
   "version": "0.1.0",
   "description": "MCP server framework for building Model Context Protocol servers",
   "license": "MIT",

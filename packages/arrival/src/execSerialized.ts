@@ -1,5 +1,5 @@
-import { sandboxedEnv } from "./enhanced-environment";
-import { exec } from "./lips/lips";
+import { Environment, exec, sandboxedEnv } from "@here.build/arrival-scheme";
+
 import { toSExprString } from "./serializer";
 
 /**
@@ -17,8 +17,7 @@ import { toSExprString } from "./serializer";
  */
 export async function execSerialized(expr: string, options?: any): Promise<string[]> {
   const result = await exec(`(list ${expr})`, {
-    env: sandboxedEnv,
-    ...options
+    env: options?.env?.__env__ ? options?.env : sandboxedEnv.inherit("sandbox", options?.env)
   });
 
   // The result should be an array with one element (the list)
