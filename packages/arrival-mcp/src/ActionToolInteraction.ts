@@ -264,7 +264,11 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
             parts.push(`"${err.path}"`);
           }
           const received = 'received' in err ? err.received : undefined;
-          parts.push(`(error "${err.error}"${received ? ` (received "${received}")` : ''})`);
+          if ("property" in err) {
+            parts.push(`(context-error ${err.property.toString()} "${err.error}"${received ? ` (received "${received}")` : ''})`);
+          } else {
+            parts.push(`(error "${err.error}"${received ? ` (received "${received}")` : ''})`);
+          }
           return `(${parts.join(' ')})`;
         }
       };
