@@ -137,7 +137,13 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
     // Ensure actions are initialized (defensive)
     this.actions ??= {};
 
-    const validationErrors: Array<{ actionIndex: number; action: string; error: string } | { property: keyof ExecutionContext; error: string }> = [];
+    type ValidationError =
+      | { actionIndex: number; action: string; argument: string; path?: string; error: string; received?: string }
+      | { actionIndex: number; action: string; error: string }
+      | { property: keyof ExecutionContext; path?: string; error: string; received?: string }
+      | { property: keyof ExecutionContext; error: string };
+
+    const validationErrors: ValidationError[] = [];
 
     for (const [key, validator] of Object.entries(this.contextSchema) as [keyof ExecutionContext, z.ZodType<ExecutionContext[keyof ExecutionContext], CallContext[keyof ExecutionContext], any>][]) {
       try {
@@ -151,13 +157,30 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
           this.loadingExecutionContext[key] ??= await validator.parseAsync(input);
         }
       } catch (error) {
-        validationErrors.push({
-          property: key,
-          error:
-            error instanceof z.ZodError
-              ? `Invalid contextual property: ${error.issues.map((e) => e.message).join(", ")}`
-              : String(error),
-        });
+        if (error instanceof z.ZodError) {
+          // Detailed per-issue errors for context properties
+          for (const issue of error.issues) {
+            const pathStr = issue.path.length > 0 ? `.${issue.path.join('.')}` : '';
+
+            // Extract received value from different issue types
+            let received: string | undefined;
+            if ('received' in issue) {
+              received = String((issue as any).received);
+            }
+
+            validationErrors.push({
+              property: key,
+              path: pathStr || undefined,
+              error: issue.message,
+              received,
+            });
+          }
+        } else {
+          validationErrors.push({
+            property: key,
+            error: String(error),
+          });
+        }
       }
     }
 
@@ -182,14 +205,36 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
           const transformed = await z.tuple(action.args as any).parseAsync(actionArgs);
           transformedActionArgs.push(transformed);
         } catch (error) {
-          validationErrors.push({
-            actionIndex: i,
-            action: actionName,
-            error:
-              error instanceof z.ZodError
-                ? `Invalid arguments: ${error.issues.map((e) => e.message).join(", ")}`
-                : String(error),
-          });
+          if (error instanceof z.ZodError) {
+            // Detailed per-issue errors with arg names and paths
+            for (const issue of error.issues) {
+              const argIndex = typeof issue.path[0] === 'number' ? issue.path[0] : null;
+              const argName = argIndex !== null ? action.argNames[argIndex] : null;
+              const subPath = argIndex !== null ? issue.path.slice(1) : issue.path;
+              const pathStr = subPath.length > 0 ? `.${subPath.join('.')}` : '';
+
+              // Extract received value from different issue types
+              let received: string | undefined;
+              if ('received' in issue) {
+                received = String((issue as any).received);
+              }
+
+              validationErrors.push({
+                actionIndex: i,
+                action: actionName,
+                argument: argName ?? `arg[${argIndex}]`,
+                path: pathStr || undefined,
+                error: issue.message,
+                received,
+              });
+            }
+          } else {
+            validationErrors.push({
+              actionIndex: i,
+              action: actionName,
+              error: String(error),
+            });
+          }
           transformedActionArgs.push(actionArgs); // Store untransformed on error
         }
       } else {
@@ -199,11 +244,39 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
 
     if (validationErrors.length > 0) {
       console.log(validationErrors)
+
+      // Format errors as S-expression for better Claude readability
+      const formatError = (err: ValidationError): string => {
+        if ('actionIndex' in err) {
+          const parts: string[] = [`action ${err.actionIndex} "${err.action}"`];
+          if ('argument' in err) {
+            const argParts: string[] = [`"${err.argument}"`];
+            if (err.path) argParts.push(`"${err.path}"`);
+            argParts.push(`(error "${err.error}"${err.received ? ` (received "${err.received}")` : ''})`);
+            parts.push(`(argument ${argParts.join(' ')})`);
+          } else {
+            parts.push(`(error "${err.error}")`);
+          }
+          return `(${parts.join(' ')})`;
+        } else {
+          const parts: string[] = [`context "${String(err.property)}"`];
+          if ('path' in err && err.path) {
+            parts.push(`"${err.path}"`);
+          }
+          const received = 'received' in err ? err.received : undefined;
+          parts.push(`(error "${err.error}"${received ? ` (received "${received}")` : ''})`);
+          return `(${parts.join(' ')})`;
+        }
+      };
+
+      const sexpr = `(validation-error\n  ${validationErrors.map(formatError).join('\n  ')})`;
+
       return {
         success: false,
         validation: "failed",
         errors: validationErrors,
-        message: `Validation failed for ${validationErrors.length} action(s). No actions were executed.`,
+        sexpr,
+        message: `Validation failed for ${validationErrors.length} issue(s). No actions were executed. See 'sexpr' field for structured error details.`,
       } as const;
     }
 

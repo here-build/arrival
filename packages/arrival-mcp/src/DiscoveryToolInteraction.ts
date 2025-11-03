@@ -17,6 +17,7 @@ interface RegisteredFunction {
   description: DiscoveryFunctionDescription | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>);
   params: [] | NonEmptyTuple<z.ZodType>;
   handler: (...args: any[]) => any;
+  aliases?: string[];
 }
 
 type DiscoveryFunctionDescription = string | {dynamic: true, value: string}
@@ -134,20 +135,43 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
     description: DiscoveryFunctionDescription | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>),
     params: T,
     handler: (...args: any[]) => any,
+    aliases?: string[]
   ) {
-    this.functions.set(name, { description, params, handler });
+    const funcDef = { description, params, handler, aliases };
+
+    // Register primary name
+    this.functions.set(name, funcDef);
+
+    // Register all aliases pointing to the same definition
+    if (aliases) {
+      for (const alias of aliases) {
+        this.functions.set(alias, funcDef);
+      }
+    }
   }
 
   // Note: Manual conversion methods removed - now handled by arrival's Rosetta Environment
   protected getAvailableFunctions(): Promise<DiscoveryFunctionDescription[]> {
     this.registerFunctions();
-    return Promise.all([...this.functions.entries()].map(async ([name, { description, params }]) => {
+    // Deduplicate: only show primary name in docs, aliases work silently
+    const seen = new Set<RegisteredFunction>();
+    const uniqueFunctions = [...this.functions.entries()].filter(([name, func]) => {
+      if (seen.has(func)) return false;
+      seen.add(func);
+      return true;
+    });
+
+    return Promise.all(uniqueFunctions.map(async ([name, { description, params }]) => {
       // Generate signature from Zod schema
       const signature = params
         .map((item: any) => {
           let postfix = "";
-          if (item.safeParse(undefined).success) {
-            postfix += "?";
+          try {
+            if (item.safeParse(undefined).success) {
+              postfix += "?";
+            }
+          } catch {
+            // this sometimes throws when we are doing complex transforms
           }
           if (item.description) {
             postfix += ` (${item.description})`;
@@ -184,7 +208,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
     }));
   }
 
-  private createEnvironment(timeoutRef: { current: boolean }): Promise<any> {
+  protected createEnvironment(timeoutRef: { current: boolean }): Promise<any> {
     const env = sandboxedEnv.inherit("Discovery sandbox",{});
 
     // Register functions using arrival's Rosetta Environment for seamless LIPS ↔ JS interop
