@@ -267,6 +267,7 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
           if ("property" in err) {
             parts.push(`(context-error ${err.property.toString()} "${err.error}"${received ? ` (received "${received}")` : ''})`);
           } else {
+            // @ts-expect-error
             parts.push(`(error "${err.error}"${received ? ` (received "${received}")` : ''})`);
           }
           return `(${parts.join(' ')})`;

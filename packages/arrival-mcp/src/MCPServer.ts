@@ -121,8 +121,6 @@ export class MCPServer {
         // Instantiate each tool to get its definition
         const tool = new ToolClass(context, state);
         const definition = await tool.getToolDescription(clientInfo);
-        console.log("definition for", ToolClass.name);
-        console.log(JSON.stringify(definition, null, 4))
         definitions.push(definition);
       } catch (error) {
         console.warn(`[MCPServer] Failed to get definition for tool ${ToolClass.name}:`, error);
