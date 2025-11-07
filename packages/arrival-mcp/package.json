@@ -17,14 +17,14 @@
   ],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "date-fns": "^4.1.0",
     "@here.build/arrival": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "date-fns": "^4.1.0",
     "dedent": "^1.7.0",
     "hono": "^4.9.9",
     "lodash-es": "^4.17.21",
