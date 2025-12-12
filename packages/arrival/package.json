@@ -7,7 +7,9 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
     "@types/node": "24",
     "@types/ramda": "^0.31.1",
     "eslint": "^9.35.0",

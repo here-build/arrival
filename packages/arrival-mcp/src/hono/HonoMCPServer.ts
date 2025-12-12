@@ -17,6 +17,7 @@ export class HonoMCPServer extends MCPServer {
     capabilities: {
       tools: { list: true },
     },
+    tasks: [],
   }
 
   clientInfo = new Map<string, MCPClientInfo>();

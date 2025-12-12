@@ -29,7 +29,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
   public readonly contextSchema: Record<string, z.ZodType> = {};
   private readonly functions = new Map<string, RegisteredFunction>();
 
-  async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
+  async getToolDescription(clientInfo?: MCPClientInfo) {
     return {
       ...await super.getToolDescription(clientInfo),
       annotations: {

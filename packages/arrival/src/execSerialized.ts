@@ -1,6 +1,6 @@
 import { Environment, exec, sandboxedEnv } from "@here.build/arrival-scheme";
 
-import { toSExprString } from "./serializer";
+import { toSExprString } from "./serializer.js";
 
 /**
  * Execute LIPS expressions and return serialized string results.
