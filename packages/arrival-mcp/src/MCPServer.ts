@@ -6,6 +6,8 @@ import type { Constructor } from "type-fest";
 import type { ToolInteraction } from "./ToolInteraction";
 import { MCPClientInfo } from "./hono/HonoMCPServer";
 
+export const MCP_SESSION_HEADER = "mcp-session-id";
+
 function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
 }
@@ -63,7 +65,7 @@ export class MCPServer {
     invariant(ToolInteraction !== undefined, "unknown tool");
 
     // Load session state if session exists
-    const sessionId = context.req.header("mcp-session-id");
+    const sessionId = context.req.header(MCP_SESSION_HEADER);
     const state = sessionId ? await this.getSessionState(context, sessionId) : {};
 
     const toolInteraction = new ToolInteraction(context, state, request.arguments);
@@ -74,6 +76,14 @@ export class MCPServer {
     if (sessionId) {
       await this.setSessionState(context, sessionId, state);
     }
+
+    // Detect error results (objects with success: false)
+    const isError =
+      callToolResult != null &&
+      typeof callToolResult === "object" &&
+      !Array.isArray(callToolResult) &&
+      "success" in callToolResult &&
+      callToolResult.success === false;
 
     return {
       content: await Promise.all(
@@ -106,14 +116,14 @@ export class MCPServer {
           }
         }),
       ),
+      isError,
     };
   }
 
   async getToolDefinitions(context: import("hono").Context, clientInfo?: MCPClientInfo): Promise<ListToolsResult["tools"]> {
     const definitions: ListToolsResult["tools"] = [];
-    const {inspect} = await import("node:util")
     // Load session state for tools that need it for schema generation
-    const sessionId = context.req.header("mcp-session-id");
+    const sessionId = context.req.header(MCP_SESSION_HEADER);
     const state = sessionId ? await this.getSessionState(context, sessionId) : {};
 
     for (const ToolClass of this.tools) {

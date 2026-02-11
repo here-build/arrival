@@ -1,9 +1,13 @@
 /**
  * @here.build/arrival
+ *
+ * Umbrella package exposing the complete Arrival ecosystem
  */
 
-// LIPS engine
+// Core packages
+export * from "@here.build/arrival-env";
 export * from "@here.build/arrival-scheme";
-// Re-export everything for convenience
-export * from "./serializer.js";
-export * from "./execSerialized.js";
+export * from "@here.build/arrival-serializer";
+
+// Utilities built on top
+export * from "./execSerialized";

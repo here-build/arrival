@@ -20,13 +20,12 @@ export abstract class ToolInteraction<ExecutionContext extends Record<string, an
   constructor(
     public readonly context: Context,
     public readonly state: Record<string, any> = {},
-    public readonly executionContext?: ExecutionContext,
+    public readonly executionContext?: ExecutionContext
   ) {
   }
 
-  async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool & { $schema: string }> {
+  async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
       name: this.constructor.name,
       description: await this.description,
       inputSchema: await this.getToolSchema(clientInfo),

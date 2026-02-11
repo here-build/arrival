@@ -16,17 +16,18 @@ Framework for building Model Context Protocol (MCP) servers with clean separatio
 - Supports both JSON-RPC and SSE response modes
 - Handles session creation/cleanup
 
-**`ToolInteraction`** - Base class for tools
+**`ToolInteraction`** - Base class for tools (generally internal)
 - Access to Hono context: `this.context`
 - Access to session state: `this.state`
 - Define schema and execution logic
 
 **`DiscoveryToolInteraction`** - Tools that execute Scheme expressions
-- Sandboxed LIPS environment
+
+- Sandboxed, readonly LIPS environment
 - Register functions for domain-specific operations
 - Returns serialized results
 
-**`ActionToolInteraction`** - Tools with batched actions
+**`ActionToolInteraction`** - Tools with batched, focused action bursts
 - Define actions with context constraints
 - Batch execution with validation
 - Shared context across all actions in batch
@@ -36,31 +37,50 @@ Framework for building Model Context Protocol (MCP) servers with clean separatio
 ### Define a Tool
 
 ```typescript
-import { ToolInteraction } from "@here.build/arrival-mcp";
-import * as z from "zod";
+import { DiscoveryToolInteraction, ActionToolInteraction } from "@here.build/arrival-mcp";
+import * as z from 'zod';
 
-class MyTool extends ToolInteraction<{ input: string }> {
-  static readonly name = "my-tool";
-  readonly description = "Does something useful";
+class TasksDiscovery extends DiscoveryToolInteraction {
+  static readonly name = 'tasks-discovery';
+  readonly description = 'Explore tasks';
 
-  async getToolSchema() {
-    return {
-      type: "object",
-      properties: {
-        input: { type: "string" }
-      },
-      required: ["input"]
-    };
+  async registerFunctions() {
+    // Register domain functions - automatic JS ↔ Scheme translation
+    this.registerFunction('get-tasks',
+      "get all user tasks",
+      () => this.context.get('database').tasks.getAll()
+    );
   }
+}
 
-  async executeTool(args: { input: string }) {
-    // Access user from context (set by middleware)
-    const user = this.context.get("user");
+class UpdateTasks extends ActionToolInteraction<{ projectId: string }> {
+  static readonly name = 'update-tasks';
+  readonly description = 'Edit tasks';
 
-    // Access session state
-    this.state.lastInput = args.input;
+  readonly contextSchema = {
+    projectId: z.string().describe('Project ID')
+  };
 
-    return { result: `Processed: ${args.input}` };
+  constructor(...args) {
+    super(...args);
+
+    this.registerAction({
+      name: 'create-task',
+      description: 'Create a new task',
+      context: ['projectId'],
+      props: {
+        title: z.string(),
+        priority: z.number().optional()
+      },
+      handler: async (context, { title, priority }) => {
+        const task = await database.tasks.create({
+          projectId: context.projectId,
+          title,
+          priority: priority ?? 0
+        });
+        return { created: task.id };
+      }
+    });
   }
 }
 ```
@@ -69,17 +89,16 @@ class MyTool extends ToolInteraction<{ input: string }> {
 
 ```typescript
 import { Hono } from "hono";
-import { MCPServer, HonoMCPServer } from "@here.build/arrival-mcp";
+import { HonoMCPServer } from "@here.build/arrival-mcp";
 
-const mcpServer = new MCPServer(MyTool, OtherTool);
-const honoServer = new HonoMCPServer(mcpServer);
+const honoServer = new HonoMCPServer(MyTool, OtherTool);
 
 const app = new Hono();
 
 app
-  .get("/", honoServer.handler)
-  .post("/", honoServer.handler)
-  .delete("/", honoServer.deleteHandler);
+  .get("/", honoServer.get)
+  .post("/", honoServer.post)
+  .delete("/", honoServer.delete);
 
 export default app;
 ```
@@ -158,7 +177,3 @@ Tests cover:
 - Tool definitions with state
 - Session cleanup
 - Custom storage overrides
-
-## Examples
-
-See `platform/mcp-server` for a complete implementation with OAuth authentication.

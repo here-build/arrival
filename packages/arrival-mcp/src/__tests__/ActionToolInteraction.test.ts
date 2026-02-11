@@ -98,7 +98,7 @@ describe("ActionToolInteraction", () => {
       // @ts-expect-error
       expect(actionsSchema.type).toBe("array");
       // @ts-expect-error
-      expect(actionsSchema.items.type.oneOf).toHaveLength(3); // create-item, delete-item, failing-action
+      expect(actionsSchema.items.oneOf).toHaveLength(3); // create-item, delete-item, failing-action
     });
   });
 

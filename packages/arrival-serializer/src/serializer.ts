@@ -1,5 +1,6 @@
 import "@here.build/arrival-env";
-import { nil } from "@here.build/arrival-scheme";
+
+const isNil = (element: any) => element?.constructor?.name === "Nil";
 
 /**
  * S-Expression Serializer
@@ -54,15 +55,19 @@ const serializationContext = {
  */
 export function toSExpr(obj: any, visited_ = new Set()): SExpr {
   // null/undefined
-  if (obj === null || obj === nil) return "nil";
+  if (obj === null || isNil(obj)) return "nil";
   if (obj === undefined) return "undefined";
 
   const visited = new Set(visited_);
   // Check for circular references
-  if (typeof obj === "object" && obj !== null && obj !== nil) {
+  if (typeof obj === "object" && obj !== null && !isNil(obj)) {
     if (visited.has(obj)) {
-      console.error("circular reference found while serializing", obj);
-      throw new Error("Circular reference detected");
+      if (typeof obj[Symbol.SExpr] === "function" && "uuid" in obj) {
+        return ["circular-reference-to", [obj[Symbol.SExpr], toSExpr(obj.uuid)]];
+      } else {
+        console.error("circular reference found while serializing", obj);
+        throw new Error("Circular reference detected");
+      }
     }
     visited.add(obj);
   }
@@ -92,7 +97,7 @@ export function toSExpr(obj: any, visited_ = new Set()): SExpr {
       // Only use 'n' suffix for numbers that actually need BigInt precision
       // (larger than MAX_SAFE_INTEGER or negative beyond MIN_SAFE_INTEGER)
       if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
-        return `${value.toString()}n`;
+        return `${value.toString()}`;
       }
       // For small integers, return as regular number
       return Number(value);
@@ -456,7 +461,7 @@ function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
   }
 
   // If cdr is not null/empty, it's an improper list (rare in practice)
-  if (current && current !== nil && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
+  if (current && !isNil(current) && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
     // This would be a dotted pair notation in Scheme, but we'll just add it to the array
     result.push(toSExpr(current, visited));
   }

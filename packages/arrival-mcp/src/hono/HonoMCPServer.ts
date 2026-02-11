@@ -1,6 +1,6 @@
 import { SSEStreamingApi, streamSSE } from "hono/streaming";
-import { MCPServer } from "../MCPServer";
-import { JSONRPCRequest, ServerResult } from "@modelcontextprotocol/sdk/types.js";
+import { MCPServer, MCP_SESSION_HEADER } from "../MCPServer";
+import { JSONRPCRequest, ServerResult, InitializeResult } from "@modelcontextprotocol/sdk/types.js";
 
 export type MCPClientInfo = Record<string, any>;
 /**
@@ -8,17 +8,16 @@ export type MCPClientInfo = Record<string, any>;
  * Bridges HTTP requests to MCPServer protocol methods
  */
 export class HonoMCPServer extends MCPServer {
-  public serverInfo: ServerResult = {
+  public serverInfo = {
     protocolVersion: "2025-06-18",
     serverInfo: {
       name: "",
       version: "0.0.0",
     },
     capabilities: {
-      tools: { list: true },
+      tools: {},
     },
-    tasks: [],
-  }
+  } satisfies InitializeResult;
 
   clientInfo = new Map<string, MCPClientInfo>();
 
@@ -126,8 +125,8 @@ export class HonoMCPServer extends MCPServer {
   outputSSE = new Map<string, SSEStreamingApi>();
 
   get = async (context: import("hono").Context): Promise<Response> => {
-    const sessionId = context.req.header("Mcp-Session-Id") ?? crypto.randomUUID();
-    context.res.headers.set("Mcp-Session-Id", sessionId);
+    const sessionId = context.req.header(MCP_SESSION_HEADER) ?? crypto.randomUUID();
+    context.res.headers.set(MCP_SESSION_HEADER, sessionId);
     const wantsSSE = context.req.header("accept")?.includes("text/event-stream");
     console.log(`client connected, wants ${context.req.header("accept")}`)
     if (!wantsSSE) {
@@ -146,38 +145,37 @@ export class HonoMCPServer extends MCPServer {
   }
 
   post = async (context: import("hono").Context): Promise<Response> => {
-    const sessionId = context.req.header("Mcp-Session-Id") ?? crypto.randomUUID();
-    context.res.headers.set("Mcp-Session-Id", sessionId);
+    const sessionId = context.req.header(MCP_SESSION_HEADER) ?? crypto.randomUUID();
+    context.res.headers.set(MCP_SESSION_HEADER, sessionId);
 
-    const request = await context.req.json<JSONRPCRequest>();
+    const body = await context.req.json<JSONRPCRequest | JSONRPCRequest[]>();
+    const isBatch = Array.isArray(body);
+    const requests = isBatch ? body : [body];
 
     const wantsSSE = context.req.header("accept")?.includes("text/event-stream");
 
+    const responses = (
+      await Promise.all(requests.map(req => this.processRequest(context, req, sessionId)))
+    ).filter(r => r !== null);
 
-    const {inspect} = await import("node:util");
-    // If client wants SSE for this POST request
+    const result = isBatch ? responses : responses[0];
+
     if (wantsSSE) {
-      console.log(`[HonoMCPServer] SSE: ${request.method}`, request.params)
       return streamSSE(context, async (stream) => {
-        const response = await this.processRequest(context, request, sessionId);
-        console.log(`[HonoMCPServer] SSE response:`, inspect(response, false, 10, true))
-        if (response) {
+        if (result) {
           await stream.writeSSE({
-            data: JSON.stringify(response),
+            data: JSON.stringify(result),
           });
         }
         await stream.close();
       });
     } else {
-      console.log(`[HonoMCPServer] HTTP: ${request.method}`, request.params)
-      const response = await this.processRequest(context, request, sessionId);
-      console.log(`[HonoMCPServer] HTTP response:`, inspect(response, false, 10, true))
-      return context.json(response)
+      return context.json(result);
     }
   };
 
   delete = async (context: import("hono").Context): Promise<Response> => {
-    const sessionId = context.req.header("Mcp-Session-Id");
+    const sessionId = context.req.header(MCP_SESSION_HEADER);
 
     if (sessionId) {
       this.outputSSE.get(sessionId)?.abort();

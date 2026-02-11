@@ -29,7 +29,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
   public readonly contextSchema: Record<string, z.ZodType> = {};
   private readonly functions = new Map<string, RegisteredFunction>();
 
-  async getToolDescription(clientInfo?: MCPClientInfo) {
+  async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
       ...await super.getToolDescription(clientInfo),
       annotations: {
@@ -208,7 +208,7 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
     }));
   }
 
-  protected createEnvironment(timeoutRef: { current: boolean }): Promise<any> {
+  protected createEnvironment(timeoutRef: { current: boolean }): any {
     const env = sandboxedEnv.inherit("Discovery sandbox",{});
 
     // Register functions using arrival's Rosetta Environment for seamless LIPS ↔ JS interop

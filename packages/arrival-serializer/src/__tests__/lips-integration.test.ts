@@ -4,7 +4,6 @@ import { toSExprString } from "../serializer";
 import { exec, LBigInteger, lipsToJs, LString, LSymbol, Nil, Pair, sandboxedEnv } from "@here.build/arrival-scheme";
 // Import custom matchers
 import "@here.build/arrival-scheme";
-import { execSerialized } from "../execSerialized";
 
 describe("LIPS Integration", () => {
   it("should handle simple lips evaluation results", async () => {

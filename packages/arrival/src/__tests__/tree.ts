@@ -6,6 +6,14 @@
  * with FL-compatible entities from the JS world.
  */
 
+// Fantasy Land method names
+const FL = {
+  map: "fantasy-land/map",
+  filter: "fantasy-land/filter",
+  reduce: "fantasy-land/reduce",
+  of: "fantasy-land/of"
+};
+
 /**
  * Rose Tree - a tree where each node can have any number of children
  */
