@@ -54,9 +54,9 @@
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24",
     "@types/ramda": "^0.31.1",
-    "eslint": "^9.35.0",
-    "globals": "^16.3.0",
-    "prettier": "^3.6.2",
+    "eslint": "^9.39.2",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   }
