@@ -5,9 +5,10 @@
  */
 
 // Core packages
-export * from "@here.build/arrival-env";
+import "@here.build/arrival-env";
+
 export * from "@here.build/arrival-scheme";
 export * from "@here.build/arrival-serializer";
 
 // Utilities built on top
-export * from "./execSerialized";
+export * from "./execSerialized.js";

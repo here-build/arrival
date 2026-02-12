@@ -11,24 +11,24 @@
     "agent-architecture",
     "lisp"
   ],
-  "license": "SEE LICENSE IN LICENSE.md",
-  "author": "here.build",
+  "homepage": "https://github.com/here-build/foundation#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/foundation/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/here-build/foundation.git",
     "directory": "arrival/arrival"
   },
-  "homepage": "https://github.com/here-build/foundation#readme",
-  "bugs": {
-    "url": "https://github.com/here-build/foundation/issues"
-  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "author": "here.build",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
-  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
@@ -38,11 +38,11 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@here.build/arrival-env": "workspace:^",
@@ -51,12 +51,13 @@
   },
   "devDependencies": {
     "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
     "@types/node": "24",
     "@types/ramda": "^0.31.1",
     "eslint": "^9.35.0",
-    "prettier": "^3.6.2",
     "globals": "^16.3.0",
-    "typescript": "5.9",
-    "vitest": "^3.2.4"
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
   }
 }

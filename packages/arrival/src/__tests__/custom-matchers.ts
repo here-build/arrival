@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 
-import { execSerialized } from "../execSerialized";
+import { execSerialized } from "../execSerialized.js";
 
 declare module "vitest" {
   interface Assertion {
