@@ -126,6 +126,11 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
   // hook for inherited elements
   protected async beforeAct(context: ExecutionContext) {}
 
+  /** Override to include context state in action responses. Called after successful act(). */
+  protected reflectContext(): Record<string, any> | null {
+    return null;
+  }
+
   async executeTool(clientInfo?: MCPClientInfo) {
     invariant(this.executionContext, "execution context should be provided for tool execution");
     const {actions, ...contextInput} = this.executionContext;
