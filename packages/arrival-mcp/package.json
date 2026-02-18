@@ -36,6 +36,8 @@
   ],
   "scripts": {
     "build": "tsc",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -56,6 +58,7 @@
     "@here.build/tsconfig": "workspace:^",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "24",
+    "eslint": "^9.39.2",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   }
