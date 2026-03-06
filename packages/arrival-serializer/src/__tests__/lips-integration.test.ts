@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, LBigInteger, lipsToJs, LString, LSymbol, Nil, Pair, sandboxedEnv } from "@here.build/arrival-scheme";
+import { exec, SchemeExact, lipsToJs, SchemeString, SchemeSymbol, Nil, Pair, sandboxedEnv } from "@here.build/arrival-scheme";
 // Import custom matchers
 import "@here.build/arrival-scheme";
 
@@ -74,7 +74,7 @@ describe("LIPS Integration", () => {
       { expr: "3.14", expected: "3.14" }, // LNumber float
       { expr: "#t", expected: "true" },
       { expr: "#f", expected: "false" },
-      { expr: '"hello world"', expected: "'hello world'" }, // Single quotes for simple strings
+      { expr: '"hello world"', expected: `'hello world'` }, // Single quotes for simple strings
       { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
       { expr: "()", expected: "(list nil)" } // edge case - keeping like that for now
     ];
@@ -161,25 +161,25 @@ describe("exec with proper environment", () => {
     expect(results[0]).toBe(3n); // First result
     expect(results[1]).toBe(12n); // Second result
     // Symbol needs special handling
-    expect(rawResults[2]).toBeInstanceOf(LSymbol);
+    expect(rawResults[2]).toBeInstanceOf(SchemeSymbol);
     expect(rawResults[2].__name__).toBe("hello");
   });
 
   it("should handle lists (returns LIPS Pair)", async () => {
     const result = (await exec("(list 1 2 3)"))[0];
     expect(result).toBeInstanceOf(Pair);
-    expect(result.car).toBeInstanceOf(LBigInteger);
+    expect(result.car).toBeInstanceOf(SchemeExact);
   });
 
-  it("should handle symbols (returns LSymbol)", async () => {
+  it("should handle symbols (returns SchemeSymbol)", async () => {
     const result = (await exec("'symbol-name"))[0];
-    expect(result).toBeInstanceOf(LSymbol);
+    expect(result).toBeInstanceOf(SchemeSymbol);
     expect(result.__name__).toBe("symbol-name");
   });
 
-  it("should handle strings (returns LString)", async () => {
+  it("should handle strings (returns SchemeString)", async () => {
     const result = (await exec('"hello world"'))[0];
-    expect(result).toBeInstanceOf(LString);
+    expect(result).toBeInstanceOf(SchemeString);
     expect(result.__string__).toBe("hello world");
   });
 
@@ -191,10 +191,10 @@ describe("exec with proper environment", () => {
   it("should handle complex expressions (returns LIPS structures)", async () => {
     const result = (await exec("(map (lambda (x) (* x 2)) (list 1 2 3))"))[0];
     expect(result).toBeInstanceOf(Pair);
-    // Result is Pair with LBigInteger values
-    expect(result.car).toBeInstanceOf(LBigInteger);
-    expect(result.car.__value__).toBe(2n);
-    expect(result.cdr.car.__value__).toBe(4n);
+    // Result is Pair with SchemeExact values
+    expect(result.car).toBeInstanceOf(SchemeExact);
+    expect(result.car.num).toBe(2n);
+    expect(result.cdr.car.num).toBe(4n);
   });
 
   it("should handle empty expressions (returns Nil)", async () => {
@@ -228,7 +228,7 @@ describe("exec with proper environment", () => {
   it("should support environment variables", async () => {
     const result = lipsToJs(
       await exec("(+ x y)", {
-        env: sandboxedEnv.inherit({ x: 10, y: 20 })
+        env: sandboxedEnv.inherit("test", { x: 10, y: 20 })
       }),
       { forceBigInt: true }
     )[0];

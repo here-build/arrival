@@ -117,7 +117,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Use LIPS map via exec - full lifecycle test
       const mapped = lipsToJs(
         await exec("(map (lambda (x) (* x 10)) my-tree)", {
-          env: sandboxedEnv.inherit({ "my-tree": t })
+          env: sandboxedEnv.inherit("test", { "my-tree": t })
         }),
         {}
       );
@@ -141,7 +141,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Use LIPS filter via exec - full lifecycle test
       const filtered = lipsToJs(
         await exec("(filter (lambda (x) (>= x 10)) my-tree)", {
-          env: sandboxedEnv.inherit({ "my-tree": t })
+          env: sandboxedEnv.inherit("test", { "my-tree": t })
         }),
         {}
       )[0];
@@ -160,7 +160,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Use LIPS reduce via exec - full lifecycle test
       const sum = lipsToJs(
         await exec("(reduce add 0 my-tree)", {
-          env: sandboxedEnv.inherit({ "my-tree": t })
+          env: sandboxedEnv.inherit("test", { "my-tree": t })
         }),
         { forceBigInt: true }
       )[0];
@@ -191,7 +191,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Map: extract just the names via LIPS
       const names = lipsToJs(
         await exec('(map (lambda (f) (prop "name" f)) fs-tree)', {
-          env: sandboxedEnv.inherit({ "fs-tree": fs })
+          env: sandboxedEnv.inherit("test", { "fs-tree": fs })
         }),
         {}
       )[0];
@@ -209,7 +209,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Filter: keep only actual files (size > 0) via LIPS
       const files = lipsToJs(
         await exec('(filter (lambda (f) (> (prop "size" f) 0)) fs-tree)', {
-          env: sandboxedEnv.inherit({ "fs-tree": fs })
+          env: sandboxedEnv.inherit("test", { "fs-tree": fs })
         }),
         {}
       )[0];
@@ -223,7 +223,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Reduce: calculate total size of all files via LIPS
       const totalSize = lipsToJs(
         await exec('(reduce (lambda (acc f) (add acc (prop "size" f))) 0 fs-tree)', {
-          env: sandboxedEnv.inherit({ "fs-tree": fs })
+          env: sandboxedEnv.inherit("test", { "fs-tree": fs })
         }),
         { forceBigInt: true }
       )[0];
@@ -244,7 +244,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // LIPS map via enhanced wrapper automatically uses FL method
       const uppercased = lipsToJs(
         await exec("(map to-upper ast-tree)", {
-          env: sandboxedEnv.inherit({ "ast-tree": ast })
+          env: sandboxedEnv.inherit("test", { "ast-tree": ast })
         }),
         {}
       )[0];
@@ -257,7 +257,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Count nodes via LIPS reduce
       const nodeCount = lipsToJs(
         await exec("(reduce (lambda (acc _) (add acc 1)) 0 ast-tree)", {
-          env: sandboxedEnv.inherit({ "ast-tree": ast })
+          env: sandboxedEnv.inherit("test", { "ast-tree": ast })
         }),
         { forceBigInt: true }
       )[0];
@@ -271,7 +271,7 @@ describe("Tree + Fantasy Land Integration", () => {
       // Use LIPS to map over it
       const result = lipsToJs(
         await exec(`(map (lambda (x) (add x 1)) my-tree)`, {
-          env: sandboxedEnv.inherit({
+          env: sandboxedEnv.inherit("test", {
             "my-tree": tree(1, tree(2), tree(3))
           })
         }),
@@ -286,7 +286,7 @@ describe("Tree + Fantasy Land Integration", () => {
     });
 
     it("should compose LIPS and Tree operations", async () => {
-      const env = sandboxedEnv.inherit({ "my-tree": tree(1, tree(2), tree(3)) });
+      const env = sandboxedEnv.inherit("test", { "my-tree": tree(1, tree(2), tree(3)) });
       const value = lipsToJs(
         await exec(`(reduce add 0 my-tree)`, {
           env

@@ -91,30 +91,34 @@ export function toSExpr(obj: any, visited_ = new Set()): SExpr {
 
   // Handle LIPS-specific types before generic Symbol.toSExpr
   if (obj && typeof obj === "object") {
-    // LIPS LBigInteger
-    if (obj.constructor?.name === "LBigInteger" && "__value__" in obj) {
-      const value = obj.__value__;
-      // Only use 'n' suffix for numbers that actually need BigInt precision
-      // (larger than MAX_SAFE_INTEGER or negative beyond MIN_SAFE_INTEGER)
-      if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
-        return `${value.toString()}`;
+    // SchemeExact (exact integers/rationals)
+    if (obj.constructor?.name === "SchemeExact" && "num" in obj && "denom" in obj) {
+      if (obj.denom === 1n) {
+        const value = obj.num as bigint;
+        if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
+          return `${value.toString()}`;
+        }
+        return Number(value);
       }
-      // For small integers, return as regular number
-      return Number(value);
+      // Rational: num/denom
+      return `${obj.num}/${obj.denom}`;
     }
 
-    // LIPS LNumber and LFloat (regular numbers, including floats)
-    if ((obj.constructor?.name === "LNumber" || obj.constructor?.name === "LFloat") && "__value__" in obj) {
-      return obj.__value__; // Return numeric value directly
+    // SchemeInexact (floats/complex)
+    if (obj.constructor?.name === "SchemeInexact" && "real" in obj) {
+      if ("imag" in obj && obj.imag !== 0) {
+        return `${obj.real}+${obj.imag}i`;
+      }
+      return obj.real;
     }
 
-    // LIPS LSymbol
-    if (obj.constructor?.name === "LSymbol" && "__name__" in obj) {
+    // SchemeSymbol
+    if (obj.constructor?.name === "SchemeSymbol" && "__name__" in obj) {
       return obj.__name__; // Return symbol name as-is (includes : for keywords)
     }
 
-    // LIPS LString
-    if (obj.constructor?.name === "LString" && "__string__" in obj) {
+    // SchemeString
+    if (obj.constructor?.name === "SchemeString" && "__string__" in obj) {
       const str = obj.__string__;
       // Use template strings for complex strings (multi-line, quotes, etc.)
       if (str.includes("\\n") || str.includes("\\t") || str.includes('"') || str.includes("'")) {
@@ -124,8 +128,8 @@ export function toSExpr(obj: any, visited_ = new Set()): SExpr {
       return `'${str}'`;
     }
 
-    // LIPS LCharacter
-    if (obj.constructor?.name === "LCharacter" && "__char__" in obj) {
+    // SchemeCharacter
+    if (obj.constructor?.name === "SchemeCharacter" && "__char__" in obj) {
       return `#\\${obj.__char__}`; // Return character with #\ prefix
     }
 
