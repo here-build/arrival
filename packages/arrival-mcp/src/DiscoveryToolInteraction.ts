@@ -56,6 +56,10 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
     return {
       type: "object",
       properties: {
+        intent: {
+          type: "string",
+          description: "What you're exploring and why. Shown to collaborating users in the studio UI.",
+        },
         expr: {
           type: "string",
           description: [

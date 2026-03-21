@@ -400,7 +400,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   // Handle force-quoted marker (must be checked before typeof === "string")
   if (sexpr && typeof sexpr === "object" && QUOTED_MARKER in sexpr) {
     const value = (sexpr as any)[QUOTED_MARKER];
-    return /^[a-z->?!][a-z0-9->?!]*$/i.test(value) ? `'${value}` : `'|${value}|`;
+    return /^[a-z_>?!][a-z0-9_>?!-]*$/i.test(value) ? `'${value}` : `'|${value}|`;
   }
 
   // Handle force-quoted marker (must be checked before typeof === "string")

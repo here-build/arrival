@@ -11,6 +11,7 @@ import type { Constructor } from "type-fest";
 
 import type { ToolInteraction, MCPClientInfo } from "./ToolInteraction";
 import { dispatchTool, getToolDefinitions } from "./dispatch";
+import type { ArrivalSessionStore } from "./store";
 
 /**
  * Pluggable session state storage.
@@ -43,6 +44,8 @@ export interface ArrivalServerOptions {
   tools: Constructor<ToolInteraction<any>>[];
   instructions?: string;
   sessionStore?: SessionStore;
+  /** Pluggable interaction store for recording all tool calls, intents, and errors. */
+  arrivalStore?: ArrivalSessionStore;
 }
 
 /**
@@ -109,6 +112,7 @@ export class ArrivalServer {
   }
 
   private async createSession(initialContext: Context): Promise<Session> {
+    const sessionId = crypto.randomUUID();
     const session: Session = {
       id: undefined,
       server: undefined as any,
@@ -116,6 +120,12 @@ export class ArrivalServer {
       currentContext: initialContext,
       state: {},
     };
+
+    // Record session start
+    this.options.arrivalStore?.startSession({
+      id: sessionId,
+      startedAt: Date.now(),
+    });
 
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
@@ -173,6 +183,8 @@ export class ArrivalServer {
         session.state,
         request.params,
         clientInfo,
+        this.options.arrivalStore,
+        session.id,
       );
     });
   }

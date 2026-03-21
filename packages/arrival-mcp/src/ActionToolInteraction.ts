@@ -32,7 +32,7 @@ type ActionDefinition<T, TT extends Record<string, z.ZodType>, Context extends [
 export type ActionCall = [string, ...any]
 
 // we may transform values inside context schema, so it's fair to assume that types may change
-export abstract class ActionToolInteraction<ExecutionContext extends Record<string, any>, CallContext extends Record<keyof ExecutionContext, any> = ExecutionContext> extends ToolInteraction<Record<keyof CallContext, any> & { actions: ActionCall[] }> {
+export abstract class ActionToolInteraction<ExecutionContext extends Record<string, any>, CallContext extends Record<keyof ExecutionContext, any> = ExecutionContext> extends ToolInteraction<Record<keyof CallContext, any> & { actions: ActionCall[]; intent?: string }> {
   declare readonly contextSchema: {
     [key in keyof ExecutionContext]: z.ZodType<ExecutionContext[key], CallContext[key], any>;
   };
@@ -66,6 +66,10 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
     return {
       type: "object",
       properties: {
+        intent: {
+          type: "string",
+          description: "What you're trying to accomplish with this action. Shown to collaborating users in the studio UI to explain what's happening.",
+        },
         actions: {
           type: "array",
           description: dedent`
@@ -131,9 +135,29 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
     return null;
   }
 
+  /** Coerce array-like values. Handles JSON-encoded containers, objects with numeric keys. */
+  private coerceToArray(value: unknown, label: string): unknown[] {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed;
+        value = parsed;
+      } catch { /* not valid JSON */ }
+    }
+    if (value && typeof value === "object") {
+      const keys = Object.keys(value);
+      if (keys.length > 0 && keys.every((k) => /^\d+$/.test(k))) {
+        return keys.sort((a, b) => Number(a) - Number(b)).map((k) => (value as any)[k]);
+      }
+    }
+    invariant(false, `${label}: expected array, got ${typeof value}: ${JSON.stringify(value)?.slice(0, 200)}`);
+  }
+
   async executeTool(clientInfo?: MCPClientInfo) {
     invariant(this.executionContext, "execution context should be provided for tool execution");
-    const {actions, ...contextInput} = this.executionContext;
+    const {actions: rawActions, intent, ...contextInput} = this.executionContext;
+    const actions = this.coerceToArray(rawActions, "actions") as ActionCall[];
     this.loadingExecutionContext = {};
 
     // Ensure actions are initialized (defensive)
@@ -149,15 +173,12 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
 
     for (const [key, validator] of Object.entries(this.contextSchema) as [keyof ExecutionContext, z.ZodType<ExecutionContext[keyof ExecutionContext], CallContext[keyof ExecutionContext], any>][]) {
       try {
-        const input = (contextInput as any)[key];
-        if (typeof input === "string" && input.trim().startsWith("{")){
-          try {
-            // some
-            this.loadingExecutionContext[key] = await validator.parseAsync(JSON.parse(input));
-          } catch {}
-        } else {
-          this.loadingExecutionContext[key] ??= await validator.parseAsync(input);
+        let input = (contextInput as any)[key];
+        // Some models double-serialize nested values as JSON strings
+        if (typeof input === "string" && (input.startsWith("{") || input.startsWith("["))) {
+          try { input = JSON.parse(input); } catch { /* not valid JSON, use as-is */ }
         }
+        this.loadingExecutionContext[key] ??= await validator.parseAsync(input);
       } catch (error) {
         if (error instanceof z.ZodError) {
           // Detailed per-issue errors for context properties
@@ -189,7 +210,9 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
     // Validate and transform all action arguments
     const transformedActionArgs: any[][] = [];
 
-    for (const [i, [actionName, ...actionArgs]] of actions.entries()) {
+    for (const [i, rawAction] of actions.entries()) {
+      const coerced = this.coerceToArray(rawAction, `actions[${i}]`);
+      const [actionName, ...actionArgs] = coerced as [string, ...any];
       const action = this.actions[actionName];
       if (!action) {
         validationErrors.push({
@@ -280,6 +303,7 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
       return {
         success: false,
         validation: "failed",
+        ...(intent ? { intent } : {}),
         errors: validationErrors,
         sexpr,
         message: `Validation failed for ${validationErrors.length} issue(s). No actions were executed. See 'sexpr' field for structured error details.`,
