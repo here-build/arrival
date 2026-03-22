@@ -15,6 +15,7 @@ export const SEXPR_TAG = Symbol.for("expression");
 const QUOTED_MARKER = Symbol.for("arrival:quoted");
 const FORCE_QUOTED_STRING_MARKER = Symbol.for("arrival:force_quoted_string");
 const EXPR_MARKER = Symbol.for("arrival:expr");
+const TAGGED_MARKER = Symbol.for("arrival:tagged");
 
 export type SExprSerializable =
   | string
@@ -47,6 +48,10 @@ const serializationContext = {
   expr: (head: string | SExprSerializable, ...args: SExprSerializable[]): SExprSerializable => {
     // Return a structure that will be serialized as an expression
     return { [EXPR_MARKER]: true, head, args };
+  },
+  tagged: (tag: string, value: string): SExprSerializable => {
+    // Clojure-style tagged literal: #tag "value"
+    return { [TAGGED_MARKER]: tag, value };
   }
 };
 
@@ -86,6 +91,10 @@ export function toSExpr(obj: any, visited_ = new Set()): SExpr {
     if (FORCE_QUOTED_STRING_MARKER in obj) {
       // Quoted string created by context.quote - wrap to force quoting
       return { [FORCE_QUOTED_STRING_MARKER]: obj[FORCE_QUOTED_STRING_MARKER] };
+    }
+    if (TAGGED_MARKER in obj) {
+      // Tagged literal — pass through
+      return obj;
     }
   }
 
@@ -409,6 +418,13 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     return `"${value.replaceAll('"', String.raw`\"`)}"`;
   }
 
+  // Handle tagged literal: #tag "value" (Clojure-style)
+  if (sexpr && typeof sexpr === "object" && TAGGED_MARKER in sexpr) {
+    const { value } = sexpr as any;
+    const tag = (sexpr as any)[TAGGED_MARKER];
+    return `#${tag} "${value.replaceAll('"', String.raw`\"`)}"`;
+  }
+
   // Format primitives
   if (typeof sexpr === "string") {
     // Keywords (starting with :) don't need quotes
@@ -484,6 +500,9 @@ function processItem(item: any, visited: Set<any>): SExpr {
   if (item && typeof item === "object" && QUOTED_MARKER in item) {
     // Quoted string created by context.quote - wrap to force quoting
     return { [QUOTED_MARKER]: (item as any)[QUOTED_MARKER] };
+  }
+  if (item && typeof item === "object" && TAGGED_MARKER in item) {
+    return item; // Tagged literal — pass through
   }
   if (Array.isArray(item) && item[0] === SEXPR_TAG) {
     const [_, head, ...args] = item;

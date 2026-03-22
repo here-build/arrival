@@ -127,8 +127,25 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
       timeoutRef.current = true;
     }, this.MAX_EXECUTION_TIME);
 
-    // Use the new separate expressions executor that properly handles multiple expressions
-    return execSerialized(this.executionContext.expr, { env });
+    const expr = this.executionContext.expr;
+
+    // Replay all previous REPL inputs — honest re-evaluation against current CRDT state.
+    // Queries re-evaluate (results ignored), defines re-establish bindings. Pure.
+    const history: string[] = this.state.__repl__ ?? [];
+
+    if (history.length > 0) {
+      // Replay history (results discarded) to re-establish bindings
+      await execSerialized(history.join("\n"), { env });
+    }
+
+    // Evaluate the new expression and return its result
+    const result = await execSerialized(expr, { env });
+
+    // Record this input for future replay
+    history.push(expr);
+    this.state.__repl__ = history;
+
+    return result;
   }
 
   protected abstract registerFunctions(): void;

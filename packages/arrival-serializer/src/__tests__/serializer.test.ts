@@ -282,4 +282,51 @@ describe("S-Expression Serializer", () => {
       // Function should either be skipped or shown as <function>
     });
   });
+
+  describe("tagged literals (#tag)", () => {
+    it("renders #tag \"value\" format", () => {
+      class CodeExpr {
+        constructor(public code: string) {}
+
+        [Symbol.SExpr]() { return "expr"; }
+        [Symbol.toSExpr](ctx: any) {
+          return [ctx.tagged("ts", this.code)];
+        }
+      }
+
+      expect(toSExprString(new CodeExpr("props.url"))).toBe('(expr #ts "props.url")');
+    });
+
+    it("escapes quotes in tagged values", () => {
+      class CodeExpr {
+        constructor(public code: string) {}
+        [Symbol.SExpr]() { return "expr"; }
+        [Symbol.toSExpr](ctx: any) {
+          return [ctx.tagged("ts", this.code)];
+        }
+      }
+
+      expect(toSExprString(new CodeExpr('items.filter(i => i.name === "active")'))).toBe(
+        '(expr #ts "items.filter(i => i.name === \\"active\\")")',
+      );
+    });
+
+    it("works inline in larger structures", () => {
+      class PropView {
+        [Symbol.SExpr]() { return "args"; }
+        [Symbol.toSExpr](ctx: any) {
+          return [
+            ctx.keyword("href"), ctx.tagged("ts", "props.url"),
+            ctx.keyword("title"), ctx.string("Hello"),
+            ctx.keyword("count"), ctx.tagged("ts", "state.items.length"),
+          ];
+        }
+      }
+
+      const result = toSExprString(new PropView());
+      expect(result).toContain('#ts "props.url"');
+      expect(result).toContain(':title "Hello"');
+      expect(result).toContain('#ts "state.items.length"');
+    });
+  });
 });
