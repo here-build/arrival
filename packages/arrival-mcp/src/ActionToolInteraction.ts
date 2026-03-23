@@ -157,7 +157,23 @@ export abstract class ActionToolInteraction<ExecutionContext extends Record<stri
   async executeTool(clientInfo?: MCPClientInfo) {
     invariant(this.executionContext, "execution context should be provided for tool execution");
     const {actions: rawActions, intent, ...contextInput} = this.executionContext;
-    const actions = this.coerceToArray(rawActions, "actions") as ActionCall[];
+    let actions = this.coerceToArray(rawActions, "actions") as ActionCall[];
+    // Auto-wrap flat tuple: ["set-styles", {...}] → [["set-styles", {...}]]
+    if (actions.length > 0 && typeof actions[0] === "string") {
+      console.log(`[actions] auto-wrap flat tuple: first element was string "${actions[0]}"`);
+      actions = [actions] as unknown as ActionCall[];
+    }
+    // Flatten nested batches: [[["a",...],["b",...]],["c",...]] → [["a",...],["b",...],["c",...]]
+    // Some models (Claude-distilled) nest groups of related actions inside extra arrays
+    const beforeFlatten = actions.length;
+    actions = actions.flatMap((a) =>
+      Array.isArray(a) && Array.isArray(a[0]) ? a : [a],
+    ) as ActionCall[];
+    if (actions.length !== beforeFlatten) {
+      console.log(`[actions] flattened nested batches: ${beforeFlatten} → ${actions.length} actions`);
+    }
+    // Log final shape for debugging
+    console.log(`[actions] ${actions.length} actions: [${actions.map((a) => Array.isArray(a) ? a[0] : typeof a).join(", ")}]`);
     this.loadingExecutionContext = {};
 
     // Ensure actions are initialized (defensive)
