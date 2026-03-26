@@ -1,10 +1,10 @@
 import { Environment, execSerialized, SAFE_BUILTINS, sandboxedEnv } from "@here.build/arrival";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { format } from "date-fns";
 import dedent from "dedent";
 import invariant from "tiny-invariant";
 import type { NonEmptyTuple } from "type-fest";
 import * as z from "zod";
-import { format } from "date-fns";
 
 import { ToolInteraction, type MCPClientInfo } from "./ToolInteraction";
 
@@ -13,13 +13,15 @@ export interface DiscoveryQuery {
 }
 
 interface RegisteredFunction {
-  description: DiscoveryFunctionDescription | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>);
+  description:
+    | DiscoveryFunctionDescription
+    | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>);
   params: [] | NonEmptyTuple<z.ZodType>;
   handler: (...args: any[]) => any;
   aliases?: string[];
 }
 
-type DiscoveryFunctionDescription = string | {dynamic: true, value: string}
+type DiscoveryFunctionDescription = string | { dynamic: true; value: string };
 
 export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<string, any>> extends ToolInteraction<
   DiscoveryQuery & ExecutionContext
@@ -30,28 +32,30 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
 
   async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {
-      ...await super.getToolDescription(clientInfo),
+      ...(await super.getToolDescription(clientInfo)),
       annotations: {
-        readOnlyHint: true
-      }
-    }
+        readOnlyHint: true,
+      },
+    };
   }
 
   protected getAIPersonalizedName(clientInfo?: MCPClientInfo) {
     switch (clientInfo?.name) {
       case "claude-ai":
-        return `Claude`
+        return `Claude`;
       default:
-        return '';
+        return "";
     }
   }
 
   async getToolSchema(clientInfo?: MCPClientInfo): Promise<Tool["inputSchema"]> {
     this.registerFunctions();
     const availableFunctions = await this.getAvailableFunctions();
-    const availableFunctionStrings = availableFunctions.map(description => typeof description === "object" ? description.value : description);
-    const dynamic = availableFunctions.some(description => typeof description === "object" && description.dynamic);
-    const now = new Date()
+    const availableFunctionStrings = availableFunctions.map((description) =>
+      typeof description === "object" ? description.value : description,
+    );
+    const dynamic = availableFunctions.some((description) => typeof description === "object" && description.dynamic);
+    const now = new Date();
     const aiName = this.getAIPersonalizedName(clientInfo);
     return {
       type: "object",
@@ -62,7 +66,8 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
         },
         expr: {
           type: "string",
-          description: [
+          description:
+            [
               dedent`
             Expr is an input for Scheme (Lisp dialect) REPL that will be executed in sandboxed environment.
             This sandbox is providing access to the actual system state snapshot at the moment of request.
@@ -87,23 +92,23 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
 
             Domain-specific functions available in sandbox:
             `,
-              ...availableFunctionStrings
-            ].join("\n")
-          + (dynamic
-            ? dedent`
-              NOTE${aiName ? ` FOR ${aiName.toUpperCase()}` : ''} ON LIVE DESCRIPTION:
+              ...availableFunctionStrings,
+            ].join("\n") +
+            (dynamic
+              ? dedent`
+              NOTE${aiName ? ` FOR ${aiName.toUpperCase()}` : ""} ON LIVE DESCRIPTION:
               The data provided above IS NOT STATIC.
               It is dynamically generated at every MCP session start. <timestamp>${format(now, "MMM do, HH:MM X")}</timestamp>
 
               Some descriptions have user- and session-personalized, actual state at session start directly in description.
-              That data is generated dynamically${aiName ? ` (yes, ${aiName}, this tool description is not static and was generated personally for you right now)` : ''} on description fetch to provide instant basic awareness even before session starts.
+              That data is generated dynamically${aiName ? ` (yes, ${aiName}, this tool description is not static and was generated personally for you right now)` : ""} on description fetch to provide instant basic awareness even before session starts.
               Consider it as a dashboard or welcome screen for this MCP application.
             `
-            : ''),
+              : ""),
         },
         ...Object.fromEntries(
           Object.entries(this.contextSchema).map(([key, value]) => {
-            const {$schema, ...schema} = z.toJSONSchema(value) as any;
+            const { $schema, ...schema } = z.toJSONSchema(value) as any;
             return [
               key,
               {
@@ -152,10 +157,12 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
 
   protected registerFunction<T extends [] | NonEmptyTuple<z.ZodType>>(
     name: string,
-    description: DiscoveryFunctionDescription | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>),
+    description:
+      | DiscoveryFunctionDescription
+      | (() => DiscoveryFunctionDescription | Promise<DiscoveryFunctionDescription>),
     params: T,
     handler: (...args: any[]) => any,
-    aliases?: string[]
+    aliases?: string[],
   ) {
     const funcDef = { description, params, handler, aliases };
 
@@ -181,55 +188,60 @@ export abstract class DiscoveryToolInteraction<ExecutionContext extends Record<s
       return true;
     });
 
-    return Promise.all(uniqueFunctions.map(async ([name, { description, params }]) => {
-      // Generate signature from Zod schema
-      const signature = params
-        .map((item: any) => {
-          let postfix = "";
-          try {
-            if (item.safeParse(undefined).success) {
-              postfix += "?";
+    return Promise.all(
+      uniqueFunctions.map(async ([name, { description, params }]) => {
+        // Generate signature from Zod schema
+        const signature = params
+          .map((item: any) => {
+            let postfix = "";
+            try {
+              if (item.safeParse().success) {
+                postfix += "?";
+              }
+            } catch {
+              // this sometimes throws when we are doing complex transforms
             }
-          } catch {
-            // this sometimes throws when we are doing complex transforms
-          }
-          if (item.description) {
-            postfix += ` (${item.description})`;
-          }
-          // Basic type checks
-          if (item instanceof z.ZodString) return `string${postfix}`;
-          if (item instanceof z.ZodNumber) return `number${postfix}`;
-          if (item instanceof z.ZodBoolean) return `boolean${postfix}`;
-          if (item instanceof z.ZodArray) return `list${postfix}`;
+            if (item.description) {
+              postfix += ` (${item.description})`;
+            }
+            // Basic type checks
+            if (item instanceof z.ZodString) return `string${postfix}`;
+            if (item instanceof z.ZodNumber) return `number${postfix}`;
+            if (item instanceof z.ZodBoolean) return `boolean${postfix}`;
+            if (item instanceof z.ZodArray) return `list${postfix}`;
 
-          // Enum shows possible values
-          if (item instanceof z.ZodEnum) {
-            return item.options.map((v) => `"${v}"`).join("|");
-          }
+            // Enum shows possible values
+            if (item instanceof z.ZodEnum) {
+              return item.options.map((v) => `"${v}"`).join("|");
+            }
 
-          // For z.any() or complex types, use generic names
-          if (item instanceof z.ZodAny) {
-            return `any`;
-          }
+            // For z.any() or complex types, use generic names
+            if (item instanceof z.ZodAny) {
+              return `any`;
+            }
 
-          return `value${postfix}`;
-        })
-        .join(" ");
+            return `value${postfix}`;
+          })
+          .join(" ");
 
-      const resolvedDescription = typeof description === "function" ? await description() : description;
-      const dynamic = typeof resolvedDescription === "object" ? resolvedDescription.dynamic : false;
-      const descriptionText = typeof resolvedDescription === "object" ? resolvedDescription.value : resolvedDescription;
-      const fullDescription = `(${name}${signature ? ` ${signature}` : ""}) - ${descriptionText}`
+        const resolvedDescription = typeof description === "function" ? await description() : description;
+        const dynamic = typeof resolvedDescription === "object" ? resolvedDescription.dynamic : false;
+        const descriptionText =
+          typeof resolvedDescription === "object" ? resolvedDescription.value : resolvedDescription;
+        const fullDescription = `(${name}${signature ? ` ${signature}` : ""}) - ${descriptionText}`;
 
-      return dynamic ? {
-        dynamic: true,
-        value: fullDescription
-      } : fullDescription;
-    }));
+        return dynamic
+          ? {
+              dynamic: true,
+              value: fullDescription,
+            }
+          : fullDescription;
+      }),
+    );
   }
 
   protected createEnvironment(timeoutRef: { current: boolean }): any {
-    const env = sandboxedEnv.inherit("Discovery sandbox",{});
+    const env = sandboxedEnv.inherit("Discovery sandbox", {});
 
     // Register functions using arrival's Rosetta Environment for seamless LIPS ↔ JS interop
     for (const [name, { handler, params }] of this.functions.entries()) {

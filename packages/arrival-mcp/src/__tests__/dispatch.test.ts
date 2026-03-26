@@ -1,8 +1,9 @@
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Context } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
+
 import { dispatchTool, getToolDefinitions } from "../dispatch";
 import { ToolInteraction } from "../ToolInteraction";
-import type { Context } from "hono";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 // Test tool that uses session state
 class SessionStateTool extends ToolInteraction<{ operation: string; value?: any }> {
@@ -79,14 +80,12 @@ const tools = [SessionStateTool, StatelessTool];
 function createMockContext(): Context {
   return {
     req: {
-      header: () => undefined,
+      header: () => {},
       json: async () => ({}),
     },
-    get: () => undefined,
-    set: () => {
-    },
-    header: () => {
-    },
+    get: () => {},
+    set: () => {},
+    header: () => {},
   } as any;
 }
 
@@ -221,10 +220,15 @@ describe("Tool Dispatch", () => {
 
   describe("Stateless dispatch", () => {
     it("should work with empty state", async () => {
-      const result = await dispatchTool(tools, context, {}, {
-        name: "stateless-tool",
-        arguments: { input: "test" },
-      });
+      const result = await dispatchTool(
+        tools,
+        context,
+        {},
+        {
+          name: "stateless-tool",
+          arguments: { input: "test" },
+        },
+      );
 
       const data = JSON.parse((result.content[0] as any).text);
       expect(data.echo).toBe("test");
@@ -232,16 +236,26 @@ describe("Tool Dispatch", () => {
 
     it("should not persist state when using fresh objects", async () => {
       // Write value with one state object
-      await dispatchTool(tools, context, {}, {
-        name: "session-state-tool",
-        arguments: { operation: "write", value: "test" },
-      });
+      await dispatchTool(
+        tools,
+        context,
+        {},
+        {
+          name: "session-state-tool",
+          arguments: { operation: "write", value: "test" },
+        },
+      );
 
       // Read with a fresh state object — should be empty
-      const result = await dispatchTool(tools, context, {}, {
-        name: "session-state-tool",
-        arguments: { operation: "read" },
-      });
+      const result = await dispatchTool(
+        tools,
+        context,
+        {},
+        {
+          name: "session-state-tool",
+          arguments: { operation: "read" },
+        },
+      );
 
       const data = JSON.parse((result.content[0] as any).text);
       expect(data.data).toEqual({});
@@ -261,10 +275,15 @@ describe("Tool Dispatch", () => {
   describe("Error Result Detection", () => {
     it("should mark results with success: false as errors", async () => {
       // The increment tool returns {counter: N} which is not an error
-      const goodResult = await dispatchTool(tools, context, {}, {
-        name: "session-state-tool",
-        arguments: { operation: "increment" },
-      });
+      const goodResult = await dispatchTool(
+        tools,
+        context,
+        {},
+        {
+          name: "session-state-tool",
+          arguments: { operation: "increment" },
+        },
+      );
       expect(goodResult.isError).toBe(false);
     });
   });

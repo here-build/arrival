@@ -52,7 +52,7 @@ const serializationContext = {
   tagged: (tag: string, value: string): SExprSerializable => {
     // Clojure-style tagged literal: #tag "value"
     return { [TAGGED_MARKER]: tag, value };
-  }
+  },
 };
 
 /**
@@ -130,7 +130,7 @@ export function toSExpr(obj: any, visited_ = new Set()): SExpr {
     if (obj.constructor?.name === "SchemeString" && "__string__" in obj) {
       const str = obj.__string__;
       // Use template strings for complex strings (multi-line, quotes, etc.)
-      if (str.includes("\\n") || str.includes("\\t") || str.includes('"') || str.includes("'")) {
+      if (str.includes(String.raw`\n`) || str.includes(String.raw`\t`) || str.includes('"') || str.includes("'")) {
         return `\`${str}\``;
       }
       // Use single quotes for simple strings
@@ -409,7 +409,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   // Handle force-quoted marker (must be checked before typeof === "string")
   if (sexpr && typeof sexpr === "object" && QUOTED_MARKER in sexpr) {
     const value = (sexpr as any)[QUOTED_MARKER];
-    return /^[a-z_>?!][a-z0-9_>?!-]*$/i.test(value) ? `'${value}` : `'|${value}|`;
+    return /^[a-z_>?!][\w>?!-]*$/i.test(value) ? `'${value}` : `'|${value}|`;
   }
 
   // Handle force-quoted marker (must be checked before typeof === "string")
@@ -442,9 +442,9 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     // Character literals (start with #\) - don't quote
     if (sexpr.startsWith("#\\")) return sexpr;
     // Bare symbols (no quotes, no special chars) - don't quote
-    if (/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(sexpr)) return sexpr;
+    if (/^[a-z][\w-]*$/i.test(sexpr)) return sexpr;
     // All other strings are quoted
-    return `"${sexpr.replace(/"/g, '\\"')}"`;
+    return `"${sexpr.replaceAll('"', String.raw`\"`)}"`;
   }
 
   if (typeof sexpr === "number" || typeof sexpr === "bigint") {

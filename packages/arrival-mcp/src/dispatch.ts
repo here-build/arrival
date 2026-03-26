@@ -3,8 +3,8 @@ import type { Context } from "hono";
 import invariant from "tiny-invariant";
 import type { Constructor } from "type-fest";
 
-import type { ToolInteraction, MCPClientInfo, UserlandCallToolResult } from "./ToolInteraction";
 import type { ArrivalSessionStore, ErrorType } from "./store";
+import type { ToolInteraction, MCPClientInfo, UserlandCallToolResult } from "./ToolInteraction";
 
 function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
@@ -25,30 +25,28 @@ export async function serializeResult(
 
   return {
     content: await Promise.all(
-      asArray(callToolResult).map(
-        async (result): Promise<CallToolResult["content"][number]> => {
-          switch (true) {
-            case typeof result === "string":
-              return { type: "text", text: result };
-            case result instanceof Blob && result.type.startsWith("image/"):
-            case result instanceof Blob && result.type.startsWith("audio/"): {
-              let binary = "";
-              const bytes = new Uint8Array(await result.arrayBuffer());
-              const length_ = bytes.byteLength;
-              for (let index = 0; index < length_; index++) {
-                binary += String.fromCodePoint(bytes[index]);
-              }
-              return {
-                type: result.type.split("/")[0] as "image" | "audio",
-                data: btoa(binary),
-                mimeType: result.type,
-              };
+      asArray(callToolResult).map(async (result): Promise<CallToolResult["content"][number]> => {
+        switch (true) {
+          case typeof result === "string":
+            return { type: "text", text: result };
+          case result instanceof Blob && result.type.startsWith("image/"):
+          case result instanceof Blob && result.type.startsWith("audio/"): {
+            let binary = "";
+            const bytes = new Uint8Array(await result.arrayBuffer());
+            const length_ = bytes.byteLength;
+            for (let index = 0; index < length_; index++) {
+              binary += String.fromCodePoint(bytes[index]);
             }
-            default:
-              return { type: "text", text: JSON.stringify(result) };
+            return {
+              type: result.type.split("/")[0] as "image" | "audio",
+              data: btoa(binary),
+              mimeType: result.type,
+            };
           }
-        },
-      ),
+          default:
+            return { type: "text", text: JSON.stringify(result) };
+        }
+      }),
     ),
     isError,
   };
@@ -60,10 +58,12 @@ export async function serializeResult(
 function classifyError(error: unknown, toolName?: string): { errorType: ErrorType; errorMessage: string } {
   if (error instanceof Error) {
     const msg = error.message;
-    if (msg.includes("Unknown tool") || msg.includes("Unknown action")) return { errorType: "unknown_action", errorMessage: msg };
+    if (msg.includes("Unknown tool") || msg.includes("Unknown action"))
+      return { errorType: "unknown_action", errorMessage: msg };
     if (msg.includes("validation") || msg.includes("Validation")) return { errorType: "validation", errorMessage: msg };
     if (msg.includes("Parse Error")) return { errorType: "parse", errorMessage: msg };
-    if (msg.includes("Unbound variable") || msg.includes("is not defined")) return { errorType: "eval", errorMessage: msg };
+    if (msg.includes("Unbound variable") || msg.includes("is not defined"))
+      return { errorType: "eval", errorMessage: msg };
     if (msg.includes("timeout") || msg.includes("Timeout")) return { errorType: "timeout", errorMessage: msg };
     return { errorType: "runtime", errorMessage: msg };
   }

@@ -5,8 +5,8 @@ import type { ArrivalSessionStore, ErrorType, InteractionRecord, SessionRecord }
  * For tests and local development. Not persistent.
  */
 export class InMemorySessionStore implements ArrivalSessionStore {
-  private sessions = new Map<string, SessionRecord>();
-  private interactions: InteractionRecord[] = [];
+  private readonly sessions = new Map<string, SessionRecord>();
+  private readonly interactions: InteractionRecord[] = [];
 
   async startSession(session: Omit<SessionRecord, "interactionCount" | "phantomCount">): Promise<void> {
     this.sessions.set(session.id, { ...session, interactionCount: 0, phantomCount: 0 });

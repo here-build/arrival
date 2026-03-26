@@ -1,17 +1,12 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import {
-  WebStandardStreamableHTTPServerTransport,
-} from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Context } from "hono";
 import type { Constructor } from "type-fest";
 
-import type { ToolInteraction, MCPClientInfo } from "./ToolInteraction";
 import { dispatchTool, getToolDefinitions } from "./dispatch";
 import type { ArrivalSessionStore } from "./store";
+import type { ToolInteraction, MCPClientInfo } from "./ToolInteraction";
 
 /**
  * Pluggable session state storage.
@@ -21,11 +16,7 @@ import type { ArrivalSessionStore } from "./store";
 export interface SessionStore {
   get(context: Context, sessionId: string): Promise<Record<string, any>>;
 
-  set(
-    context: Context,
-    sessionId: string,
-    state: Record<string, any>,
-  ): Promise<void>;
+  set(context: Context, sessionId: string, state: Record<string, any>): Promise<void>;
 
   delete(context: Context, sessionId: string): Promise<void>;
 }
@@ -67,10 +58,9 @@ export interface ArrivalServerOptions {
  * ```
  */
 export class ArrivalServer {
-  private sessions = new Map<string, Session>();
+  private readonly sessions = new Map<string, Session>();
 
-  constructor(private options: ArrivalServerOptions) {
-  }
+  constructor(private readonly options: ArrivalServerOptions) {}
 
   /**
    * Handle an incoming Hono request. Routes to the correct session
@@ -160,23 +150,14 @@ export class ArrivalServer {
 
   private setupHandlers(server: Server, session: Session) {
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      const clientInfo = server.getClientVersion() as
-        | MCPClientInfo
-        | undefined;
+      const clientInfo = server.getClientVersion() as MCPClientInfo | undefined;
       return {
-        tools: await getToolDefinitions(
-          this.options.tools,
-          session.currentContext!,
-          session.state,
-          clientInfo,
-        ),
+        tools: await getToolDefinitions(this.options.tools, session.currentContext!, session.state, clientInfo),
       };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const clientInfo = server.getClientVersion() as
-        | MCPClientInfo
-        | undefined;
+      const clientInfo = server.getClientVersion() as MCPClientInfo | undefined;
       return dispatchTool(
         this.options.tools,
         session.currentContext!,

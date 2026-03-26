@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { DiscoveryToolInteraction } from "../DiscoveryToolInteraction";
 import type { Context } from "hono";
+import { describe, it, expect, beforeEach } from "vitest";
 import * as z from "zod";
+
+import { DiscoveryToolInteraction } from "../DiscoveryToolInteraction";
 
 // Simple test implementation
 class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }> {
@@ -18,15 +19,18 @@ class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }
       "echo-context",
       "Returns the test context value",
       [],
-      () => this.executionContext?.testContext
+      () => this.executionContext?.testContext,
     );
 
     // Register a function with parameters
     this.registerFunction(
       "add-numbers",
       "Adds two numbers",
-      [z.union([z.number(), z.string().regex(/^-?\d*\.?\d*$/), z.bigint()]), z.union([z.number(), z.string().regex(/^-?\d*\.?\d*$/), z.bigint()])],
-      (a: number, b: number) => Number(a) + Number(b)
+      [
+        z.union([z.number(), z.string().regex(/^-?\d*(?:\.\d*)?$/), z.bigint()]),
+        z.union([z.number(), z.string().regex(/^-?\d*(?:\.\d*)?$/), z.bigint()]),
+      ],
+      (a: number, b: number) => Number(a) + Number(b),
     );
   }
 }
@@ -34,9 +38,9 @@ class TestDiscoveryTool extends DiscoveryToolInteraction<{ testContext: string }
 function createMockContext(): Context {
   return {
     req: {
-      header: () => undefined,
+      header: () => {},
     },
-    get: () => undefined,
+    get: () => {},
     set: () => {},
   } as any;
 }

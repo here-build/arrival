@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { ActionToolInteraction } from "../ActionToolInteraction";
 import type { Context } from "hono";
+import { beforeEach, describe, expect, it } from "vitest";
 import * as z from "zod";
+
+import { ActionToolInteraction } from "../ActionToolInteraction";
 
 // Simple test implementation
 class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
@@ -12,7 +13,7 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
     projectId: z.string().describe("Project ID"),
   };
 
-  constructor (...args) {
+  constructor(...args) {
     // @ts-expect-error
     super(...args);
     // Register some test actions
@@ -62,9 +63,9 @@ class TestActionTool extends ActionToolInteraction<{ projectId: string }> {
 function createMockContext(): Context {
   return {
     req: {
-      header: () => undefined,
+      header: () => {},
     },
-    get: () => undefined,
+    get: () => {},
     set: () => {},
   } as any;
 }
@@ -176,11 +177,7 @@ describe("ActionToolInteraction", () => {
     it("should validate all actions before executing", async () => {
       const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
-        actions: [
-          ["create-item", "Valid Item"],
-          ["non-existent-action"],
-          ["create-item", "Another Item"],
-        ],
+        actions: [["create-item", "Valid Item"], ["non-existent-action"], ["create-item", "Another Item"]],
       });
 
       const result = await tool.executeTool();
@@ -200,10 +197,7 @@ describe("ActionToolInteraction", () => {
     it("should not execute any actions if validation fails", async () => {
       const tool = new TestActionTool(mockContext, undefined, {
         projectId: "proj-123",
-        actions: [
-          ["create-item", "Item 1"],
-          ["invalid-action"],
-        ],
+        actions: [["create-item", "Item 1"], ["invalid-action"]],
       });
 
       const result = await tool.executeTool();

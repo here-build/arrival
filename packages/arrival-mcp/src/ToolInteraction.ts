@@ -20,9 +20,8 @@ export abstract class ToolInteraction<ExecutionContext extends Record<string, an
   constructor(
     public readonly context: Context,
     public readonly state: Record<string, any> = {},
-    public readonly executionContext?: ExecutionContext
-  ) {
-  }
+    public readonly executionContext?: ExecutionContext,
+  ) {}
 
   async getToolDescription(clientInfo?: MCPClientInfo): Promise<Tool> {
     return {

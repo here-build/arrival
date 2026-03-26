@@ -1,8 +1,10 @@
 // @ts-nocheck
-import { describe, it, expect } from "vitest";
-import { ActionToolInteraction, ActionCall } from "../ActionToolInteraction";
-import * as z from "zod";
 import type { Context } from "hono";
+import { describe, it, expect } from "vitest";
+import * as z from "zod";
+
+import type { ActionCall } from "../ActionToolInteraction";
+import { ActionToolInteraction } from "../ActionToolInteraction";
 
 // Test action tool with various validation scenarios
 class TestActionTool extends ActionToolInteraction<{
@@ -18,7 +20,7 @@ class TestActionTool extends ActionToolInteraction<{
   };
 
   constructor(context: Context) {
-    super(context, {}, undefined);
+    super(context, {});
     this.registerTestActions();
   }
 
@@ -39,16 +41,18 @@ class TestActionTool extends ActionToolInteraction<{
       context: ["projectId"],
       props: {
         type: z.enum(["a", "b", "c"]),
-        options: z.object({
-          required: z.boolean(),
-          default: z.string().optional(),
-          choices: z.array(z.string()).optional(),
-        }).optional(),
+        options: z
+          .object({
+            required: z.boolean(),
+            default: z.string().optional(),
+            choices: z.array(z.string()).optional(),
+          })
+          .optional(),
       },
       handler: async (ctx, { type, options }) => ({
         success: true,
         type,
-        options
+        options,
       }),
     });
 
@@ -62,16 +66,17 @@ class TestActionTool extends ActionToolInteraction<{
       handler: async (ctx, { value }) => ({
         success: true,
         component: ctx.component!.name,
-        value
+        value,
       }),
     });
   }
 }
 
 // Mock Hono context
-const createMockContext = () => ({
-  req: { header: () => undefined },
-} as any as Context);
+const createMockContext = () =>
+  ({
+    req: { header: () => {} },
+  }) as any as Context;
 
 describe("ActionToolInteraction - Error Handling", () => {
   it("should collect all validation errors, not just first one", async () => {
@@ -97,42 +102,30 @@ describe("ActionToolInteraction - Error Handling", () => {
     expect(errors.length).toBeGreaterThanOrEqual(3);
 
     // Error from action 0 - wrong type for 'name'
-    expect(errors.some((e: any) =>
-      e.actionIndex === 0 && e.argument === "name"
-    )).toBe(true);
+    expect(errors.some((e: any) => e.actionIndex === 0 && e.argument === "name")).toBe(true);
 
     // Error from action 1 - invalid enum
-    expect(errors.some((e: any) =>
-      e.actionIndex === 1 && e.argument === "type"
-    )).toBe(true);
+    expect(errors.some((e: any) => e.actionIndex === 1 && e.argument === "type")).toBe(true);
 
     // Error from action 1 - nested validation
-    expect(errors.some((e: any) =>
-      e.actionIndex === 1 && e.argument === "options" && e.path
-    )).toBe(true);
+    expect(errors.some((e: any) => e.actionIndex === 1 && e.argument === "options" && e.path)).toBe(true);
 
     // Error from action 2 - unknown action
-    expect(errors.some((e: any) =>
-      e.actionIndex === 2 && e.action === "unknown-action"
-    )).toBe(true);
+    expect(errors.some((e: any) => e.actionIndex === 2 && e.action === "unknown-action")).toBe(true);
   });
 
   it("should include field paths for nested validation errors", async () => {
     const tool = new TestActionTool(createMockContext());
     tool.executionContext = {
       projectId: "test-123",
-      actions: [
-        ["complex-action", "a", { required: "not-a-boolean", choices: [123, 456] }],
-      ] as ActionCall[],
+      actions: [["complex-action", "a", { required: "not-a-boolean", choices: [123, 456] }]] as ActionCall[],
     };
 
     const result = await tool.executeTool();
     const errors = (result as any).errors;
 
     // Should have error with path indicating nested field
-    const nestedError = errors.find((e: any) =>
-      e.argument === "options" && e.path && e.path.includes("required")
-    );
+    const nestedError = errors.find((e: any) => e.argument === "options" && e.path?.includes("required"));
     expect(nestedError).toBeDefined();
     expect(nestedError.path).toContain("required");
   });
@@ -186,9 +179,7 @@ describe("ActionToolInteraction - Error Handling", () => {
     tool.executionContext = {
       projectId: 123 as any, // Wrong type
       component: { name: 456 } as any, // Nested wrong type
-      actions: [
-        ["simple-action", "test"],
-      ] as ActionCall[],
+      actions: [["simple-action", "test"]] as ActionCall[],
     };
 
     const result = await tool.executeTool();
@@ -200,9 +191,7 @@ describe("ActionToolInteraction - Error Handling", () => {
     expect(projectIdError.error).toContain("expected string");
     expect(projectIdError.error).toContain("received number");
 
-    const componentError = errors.find((e: any) =>
-      e.property === "component" && e.path
-    );
+    const componentError = errors.find((e: any) => e.property === "component" && e.path);
     expect(componentError).toBeDefined();
     expect(componentError.path).toContain("name");
   });
@@ -231,9 +220,7 @@ describe("ActionToolInteraction - Error Handling", () => {
     tool.executionContext = {
       projectId: "test-123",
       // Missing 'component' which is required for 'needs-component' action
-      actions: [
-        ["needs-component", 42],
-      ] as ActionCall[],
+      actions: [["needs-component", 42]] as ActionCall[],
     };
 
     // This should work - component is optional in context schema
@@ -250,9 +237,7 @@ describe("ActionToolInteraction - Error Handling", () => {
     const tool = new TestActionTool(createMockContext());
     tool.executionContext = {
       projectId: "test-123",
-      actions: [
-        ["nonexistent-action", "arg1", "arg2"],
-      ] as ActionCall[],
+      actions: [["nonexistent-action", "arg1", "arg2"]] as ActionCall[],
     };
 
     const result = await tool.executeTool();
