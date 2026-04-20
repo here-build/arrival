@@ -18,7 +18,7 @@
     "url": "https://github.com/here-build/foundation.git",
     "directory": "arrival/arrival-serializer"
   },
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
   "exports": {
@@ -49,11 +49,11 @@
     "@here.build/arrival-scheme": "workspace:^",
     "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
-    "@types/node": "24",
-    "eslint": "^9.39.2",
-    "globals": "^17.3.0",
-    "prettier": "^3.8.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.0.14"
+    "@types/node": "24.0.0",
+    "eslint": "9.39.2",
+    "globals": "17.3.0",
+    "prettier": "3.8.1",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
   }
 }
