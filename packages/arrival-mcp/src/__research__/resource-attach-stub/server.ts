@@ -17,6 +17,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListResourcesRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import invariant from "tiny-invariant";
 
 const FAKE_ENTITY_URI = "https://arrival.here.build/project/test/entity/card";
 
@@ -52,9 +53,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
-  if (req.params.uri !== FAKE_ENTITY_URI) {
-    throw new Error(`Unknown resource URI: ${req.params.uri}`);
-  }
+  invariant(req.params.uri === FAKE_ENTITY_URI, `Unknown resource URI: ${req.params.uri}`);
   return {
     contents: [
       {
