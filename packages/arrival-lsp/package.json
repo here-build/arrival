@@ -27,6 +27,7 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
+    "@here.build/arrival-chain-view": "workspace:^",
     "typescript": "6.0.2"
   },
   "devDependencies": {

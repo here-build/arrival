@@ -24,3 +24,20 @@ export const preludeTypesPath: string = path.join(preludeDir, "types.d.ts");
 
 /** Absolute path to the `builtins/` directory of merge-leaves. */
 export const builtinsDir: string = path.join(preludeDir, "builtins");
+
+// ── Language service surface ──────────────────────────────────────────────────
+// The "Scheme LSP with the TS LSP API" — the keystone consumable a CodeMirror
+// extension, an MCP typecheck tool, or a Volar plugin builds on. The prelude
+// assembler + the bidirectional position `Mapper` are exported too so a consumer
+// can build its own compilation or remap coordinates directly.
+export {
+  createSchemeLanguageService,
+  type SchemeLanguageService,
+  type SchemeLanguageServiceOptions,
+  type SchemeDiagnostic,
+  type SchemeQuickInfo,
+  type SchemeCompletionEntry,
+  type SchemeDefinition,
+} from "./language-service.js";
+export { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "./prelude.js";
+export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
