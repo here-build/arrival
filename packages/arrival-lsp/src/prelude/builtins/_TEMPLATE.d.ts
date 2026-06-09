@@ -1,0 +1,29 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type, @typescript-eslint/no-empty-interface, unicorn/filename-case --
+   This is the copy-paste STUB, not a real leaf: its interface body is an empty
+   placeholder (you fill the member slot), and the `_TEMPLATE` filename is
+   intentional so the stub sorts first and is never mistaken for a builtin. */
+// ─────────────────────────────────────────────────────────────────────────────
+// L<xx> — `<scheme-name>` — COPY THIS STUB to author one leaf.
+//
+//   1. Rename this file to `<slug>.d.ts` (e.g. `cdr.d.ts`, `string-append.d.ts`).
+//      The slug is the scheme name; operator names get a readable slug
+//      (`+`→`plus`, `<`→`compares` for the chained-compare family) — the FILE
+//      name is cosmetic, only the interface MEMBER key must be the scheme name.
+//   2. Replace the citation below with the real runtime-truth `file:line`
+//      (from `stdlib.ts` / `sandbox-env.ts`) — the `any` impl you SHARPEN.
+//      Do NOT import that impl; you are authoring a precise *signature* for it.
+//   3. Write the signature using ONLY PRE's base types
+//      (`List<T>`, `Pair<H,T>`, `Nil`, `Unit`, `SNum`, `SStr`, `SBool`,
+//      `Dict<P>`, `Field<O,K>`, `sexpr`). Never inline `number`/`string` — use
+//      `SNum`/`SStr` so the deferred numeric tower (NUM) re-points for free.
+//   4. Operator / TS-illegal names → bracketed string key: `"+"`, `"<"`,
+//      `"string-append"`, `"null?"`. Multi-name families (compares, math) →
+//      ONE file, several keys in the same interface block.
+//
+// Scheme semantics: (<scheme-name> <args>) → <result>.
+// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
+//   <file>:<line>
+// ─────────────────────────────────────────────────────────────────────────────
+interface ArrShape {
+  // "<scheme-name>": <signature using only PRE base types>;
+}
