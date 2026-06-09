@@ -120,6 +120,25 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
     // Today: global set, NOT the `__arr` builtin members.
     expect(names.has("car")).toBe(false);
   });
+
+  // INCOMPLETE-PREFIX support: the sampler queries an UNBALANCED prefix mid-generation.
+  // `emitTypes` parses complete programs only (parseSexprs throws on an unclosed paren →
+  // the whole emit degrades to an empty module → no span at the cursor → empty completions).
+  // The cursor-position queries balance the prefix first (closers append at the END, so the
+  // cursor offset is unchanged), making them work mid-edit. Before this, all four returned [].
+  it("returns completions on an UNBALANCED prefix (the sampler's mid-generation case)", () => {
+    for (const prefix of ["(car ", "(filter (lambda (x) (> x ", "(list (ca", '(+ 1 ']) {
+      const names = ls.getCompletionsAtPosition(prefix, prefix.length).map((e) => e.name);
+      expect(names.length).toBeGreaterThan(0); // was [] (empty emit) before balancing
+    }
+  });
+
+  it("diagnostics + quick-info don't crash on an unbalanced prefix", () => {
+    // (diagnostics path is unbalanced-tolerant via emitTypes' empty-module fallback; the
+    // cursor-position paths now balance — neither throws.)
+    expect(() => ls.getSemanticDiagnostics("(car ")).not.toThrow();
+    expect(() => ls.getQuickInfoAtPosition("(car x", 5)).not.toThrow();
+  });
 });
 
 describe("getDefinitionAtPosition — go-to-def lifts back to Scheme", () => {
