@@ -34,6 +34,11 @@ import { Mapper } from "./span-map.js";
  * interchangeable on close, so a single `)` per open level suffices). The diagnostics path does
  * NOT balance — a genuinely malformed complete program should report its errors, not be repaired.
  */
+/** Completion-cursor sentinel for the type-mask probe. Plain letters only: `emitTypes`'
+ *  `cleanName` strips leading/trailing `_`, so an underscore-wrapped marker would not survive to
+ *  be found in the emitted TS. Unlikely to collide with a real scheme symbol. */
+const SENTINEL = "qzcursorzq";
+
 function balancePrefix(scheme: string): string {
   let depth = 0;
   let inStr = false;
@@ -150,6 +155,17 @@ export interface SchemeLanguageService {
   getQuickInfoAtPosition(scheme: string, schemeOffset: number): SchemeQuickInfo | null;
   getCompletionsAtPosition(scheme: string, schemeOffset: number): SchemeCompletionEntry[];
   getDefinitionAtPosition(scheme: string, schemeOffset: number): SchemeDefinition[];
+  /**
+   * Layer T — the type-narrowed mask. Given the bound-symbol `candidates` valid at `schemeOffset`
+   * (the sampler's Σ set), return the subset that is TYPE-VALID as the next token of the enclosing
+   * call's current argument slot — i.e. a symbol whose value, or whose call's RETURN value, is
+   * assignable to that parameter's type. The Σ∩T mask. When the cursor is NOT an argument of a
+   * typed call (operator slot / top level / unknown callee), every candidate is returned (no
+   * narrowing — Σ already constrains operators; T never *adds* a wrong restriction). A candidate
+   * the type system can't resolve (a local binding, an injected tool without a declaration) is
+   * kept — conservative: T only ever DROPS a provably ill-typed candidate, never a valid one.
+   */
+  getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): string[];
 }
 
 /**
@@ -273,5 +289,86 @@ export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions)
       }
       return out;
     },
+
+    getTypeValidCandidates(scheme, schemeOffset, candidates): string[] {
+      const cands = [...candidates];
+      if (cands.length === 0) return cands;
+      // 1. Locate the enclosing call's argument slot at the cursor. Insert the clean-name-proof
+      //    sentinel at the cursor, balance, emit.
+      const sentinelScheme = balancePrefix(scheme.slice(0, schemeOffset) + ` ${SENTINEL} ` + scheme.slice(schemeOffset));
+      const slot = findCallSlot(sentinelScheme);
+      if (slot === null) return cands; // not a typed-call argument slot → no T narrowing
+      // 2. Batched conditional-type probe → per-candidate verdict in one checker read.
+      const verdict = probeTypes(slot.calleeText, slot.argIndex, cands);
+      // 3. Keep iff PROVEN valid (true) OR unresolved (null) — never drop on uncertainty.
+      return cands.filter((_, i) => verdict[i] !== false);
+    },
   };
+
+  /** Emit the sentinel'd scheme, then walk the TS AST to the CallExpression whose ARGUMENTS
+   *  contain the sentinel → its callee text + the argument index the sentinel occupies. Null when
+   *  the sentinel is not an argument of a call (operator slot / top level / not found). */
+  function findCallSlot(sentinelScheme: string): { calleeText: string; argIndex: number } | null {
+    loadSource(sentinelScheme);
+    const program = service.getProgram();
+    const sf = program?.getSourceFile(PROGRAM_FILE);
+    if (!sf) return null;
+    let found: { calleeText: string; argIndex: number } | null = null;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (ts.isIdentifier(node) && node.text === SENTINEL) {
+        const s = node.getStart(sf);
+        const e = node.getEnd();
+        for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
+          if (ts.isCallExpression(p)) {
+            const argIndex = p.arguments.findIndex((a) => a.getStart(sf) <= s && e <= a.end);
+            if (argIndex >= 0) { found = { calleeText: p.expression.getText(sf), argIndex }; return; }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+  }
+
+  /** Load a probe module and read, per candidate, whether it is type-valid in the given call slot.
+   *  `true` = proven assignable, `false` = proven not, `null` = unresolved (kept by the caller).
+   *  ONE program load + ONE checker read for the whole candidate list. */
+  function probeTypes(calleeText: string, argIndex: number, candidates: string[]): (boolean | null)[] {
+    // `__ok<T>`: T fits the slot iff it IS the param type, OR it is a function whose RETURN type is
+    // (the next token at an arg slot is usually a sub-call's operator). `[x]`-tuple wrapping defeats
+    // union distribution. An unresolvable `typeof __arr[name]` is `any` ⇒ both branches `true` ⇒ kept.
+    const okT =
+      `type __ok<T> = (([T] extends [(...a: any[]) => infer R] ? ([R] extends [__E] ? true : false) : false) extends true ? true ` +
+      `: ([T] extends [__E] ? true : false));`;
+    const entry = (name: string) => `__ok<typeof __arr[${JSON.stringify(name)}]>`;
+    programText = [
+      "__arr;", // force the ambient `__arr` into scope
+      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
+      okT,
+      `declare const __probe: [${candidates.map(entry).join(", ")}];`,
+      "export {};",
+    ].join("\n");
+    programVersion += 1;
+    const program = service.getProgram();
+    const sf = program?.getSourceFile(PROGRAM_FILE);
+    if (!sf || !program) return candidates.map(() => null);
+    const checker = program.getTypeChecker();
+    let probeNode: ts.Node | null = null;
+    const find = (n: ts.Node): void => {
+      if (probeNode) return;
+      if (ts.isIdentifier(n) && n.text === "__probe" && ts.isVariableDeclaration(n.parent)) probeNode = n;
+      else ts.forEachChild(n, find);
+    };
+    find(sf);
+    if (!probeNode) return candidates.map(() => null);
+    // Resolved tuple text, e.g. "[true, false, true, …]". A malformed probe → the alias name (no
+    // brackets) → all null. `__E` unresolved (any) → all true.
+    const text = checker.typeToString(checker.getTypeAtLocation(probeNode), undefined, ts.TypeFormatFlags.InTypeAlias);
+    const m = text.match(/^\[(.*)\]$/s);
+    if (!m) return candidates.map(() => null);
+    const flags = m[1]!.split(",").map((s) => s.trim());
+    return candidates.map((_, i) => (flags[i] === "true" ? true : flags[i] === "false" ? false : null));
+  }
 }

@@ -141,6 +141,50 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
   });
 });
 
+describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
+  // The candidate pool the sampler's Σ would offer at the cursor; T narrows it to the type-valid.
+  const POOL = ["car", "cdr", "filter", "map", "list", "cons", "not", "length"];
+
+  it("an argument slot keeps only candidates whose value/return type fits the parameter", () => {
+    // (car ⟨cur⟩) wants a List → list-PRODUCERS survive; element/number/bool ones are dropped.
+    const carArg = new Set(ls.getTypeValidCandidates("(car ", 5, POOL));
+    expect(carArg.has("list")).toBe(true);
+    expect(carArg.has("filter")).toBe(true); // filter returns a list
+    expect(carArg.has("car")).toBe(false); // car returns an element, not a list
+    expect(carArg.has("length")).toBe(false); // returns a number
+    expect(carArg.has("not")).toBe(false); // returns a bool
+
+    // (+ 1 ⟨cur⟩) wants a number → only the number-producer.
+    const plusArg = new Set(ls.getTypeValidCandidates("(+ 1 ", 5, POOL));
+    expect(plusArg.has("length")).toBe(true);
+    expect(plusArg.has("list")).toBe(false);
+    expect(plusArg.has("car")).toBe(false);
+
+    // (filter ⟨cur⟩ …) arg0 wants a predicate (x)=>bool → only the predicate-shaped builtin.
+    const predArg = new Set(ls.getTypeValidCandidates("(filter ", 8, POOL));
+    expect(predArg.has("not")).toBe(true);
+    expect(predArg.has("list")).toBe(false);
+  });
+
+  it("does NOT narrow at a non-argument position (operator slot / top) — Σ owns operators", () => {
+    expect(new Set(ls.getTypeValidCandidates("(", 1, POOL)).size).toBe(POOL.length);
+    expect(new Set(ls.getTypeValidCandidates("", 0, POOL)).size).toBe(POOL.length);
+  });
+
+  it("conservatively KEEPS an unresolved candidate (a local / un-declared tool) — never a false drop", () => {
+    // `netscan` is not in the bare prelude's ArrShape ⇒ unresolved ⇒ kept at every slot.
+    const valid = ls.getTypeValidCandidates("(+ 1 ", 5, ["netscan", "length", "list"]);
+    expect(valid).toContain("netscan"); // unresolved → kept
+    expect(valid).toContain("length"); // number-producer → kept
+    expect(valid).not.toContain("list"); // proven non-number → dropped
+  });
+
+  it("empty candidate set + unbalanced prefix don't crash", () => {
+    expect(ls.getTypeValidCandidates("(car ", 5, [])).toEqual([]);
+    expect(() => ls.getTypeValidCandidates("(filter (lambda (x) (> x ", 25, POOL)).not.toThrow();
+  });
+});
+
 describe("getDefinitionAtPosition — go-to-def lifts back to Scheme", () => {
   it("a reference to a defined var resolves to its definition span in Scheme", () => {
     const scheme = `(define xs (list 1 2 3))\n(car xs)`;
