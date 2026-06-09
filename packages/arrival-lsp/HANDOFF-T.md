@@ -17,29 +17,29 @@ are type-valid for *this* parameter. Sequence accordingly.
 - **L1 — balance incomplete prefixes** (`7c3bae958`). Cursor queries balance the mid-edit prefix
   so `emitTypes` parses it (was: unbalanced → empty module → `[]` completions). The plumbing now
   works end-to-end on incomplete input — the precondition for everything below.
+- **T1+T2 — `getTypeValidCandidates` + `narrowByType`** (`435dc18e0`, `78be98619`). The
+  type-narrowed mask, built NOT via completions (which are scope+sorted, not a hard filter) but via
+  a **batched conditional-type probe**: sentinel-emit → AST find the enclosing call (callee +
+  argIndex) → one `__ok<T>` tuple per candidate → checker-read `[true,false,…]` in one pass.
+  `narrowByType(base, ls)` wraps a Σ scanner so `validSymbols()` = Σ∩T at an argument slot,
+  memoized per slot (one TS round-trip per decode step). **Proven end-to-end through the sampler's
+  real `isCandidateLive`:** at `(car ` (arg wants a List) Σ∩T masks `length`/`not`/`car` while Σ
+  alone kept them. Conservative — drops only PROVEN-ill-typed; unresolved (locals, un-declared
+  tools) kept. Sharpens automatically as sift injects tool types into `ArrShape`.
+  - **The composition is: node-runner does `narrowByType(makeOracle(env), createSchemeLanguageService())`**
+    → hand the result to the sampler. The sampler + browser path are unchanged (T is node-only).
 
-## The critical path (toward a type-narrowed sampler mask)
+## Remaining
 
-### T1 — argument-slot cursor precision *(the real blocker)*
-The trailing-arg cursor collapses onto the operator's TS start: `(car |`@5 → `__arr⟨CUR⟩.car`,
-not inside the call's args. The one case that "worked" (`(filter |`) was an accident — the cursor
-landed *mid-member-name* `__arr.fi⟨CUR⟩lter`, firing member completion. **Fix:** position the
-completion cursor in the real argument slot. Cleanest is a **completion sentinel**: insert a marker
-atom at the cursor in the (balanced) scheme, emit, find the marker in the TS, query there — it lands
-inside `__arr.car(⟨marker⟩)` with the parameter's contextual type. Lives in `language-service.ts`
-(query path) ± a span hook in `types-emit.ts`.
-
-### T2 — the hard type-mask (the design decision)
-`getCompletionsAtPosition` returns **everything in scope, type-*sorted*** (via `sortText`), not a
-hard type filter — so it's not yet a mask. Two ways to a hard narrow:
-  - **(a) contextual-type + `produces`** — read the expected type at the arg slot (TS contextual
-    type / a quick-info-style probe), intersect the Σ candidate set by "does this symbol's return
-    type satisfy it." Matches the `expectedType()`/`produces()` contract in `oracle-contract.ts`.
-  - **(b) per-candidate diagnostic** — for each Σ candidate, emit it in the slot and check
-    assignability (no error). Exact, but N type-checks per cursor (N = Σ size after structural).
-  Pick (a) for the per-token mask (cheap, one query); keep (b) as the segment-level verifier.
-  **This is the piece that makes the sampler type-aware** — wire the result into
-  `arrival-sampler`'s mask so it's Σ∩T, not just Σ.
+### T-inject — sift tool types into `ArrShape` *(the next high-value piece)*
+T narrows only `__arr` members (builtins). Sift's evidence tools (`memory/netscan`, `ip/*`, …) emit
+as bare/undefined → unresolved → conservatively KEPT (no narrowing). To make the *forensic* mask
+type-aware, sift must declare its tool signatures into the merged `ArrShape` (the "custom type
+declarations to injected symbols" V described): `interface ArrShape { "memory/netscan"(): Connection[];
+"ip/external-c2-candidate?"(ip: SchemeIP): SBool; … }`. Then `(ip/external-c2-candidate? ⟨cur⟩)`
+masks to SchemeIP-producers and `(:Field ⟨cur⟩)`/`(@ Field ⟨cur⟩)` masks to the row's `keyof`. This
+is the seam where the entity types (SchemeIP, the rows) become the constraint — sift-side, builds on
+the prelude's leaf-merge contract. **The single biggest remaining lever for the forensic sampler.**
 
 ## Supporting (lower priority)
 
