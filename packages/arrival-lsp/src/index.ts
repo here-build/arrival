@@ -41,3 +41,6 @@ export {
 } from "./language-service.js";
 export { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "./prelude.js";
 export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
+// The Σ∩T bridge — wrap a structural+Σ OracleScanner so its validSymbols() is type-narrowed by
+// the lens. The node-side runner composes `narrowByType(sigmaScanner, ls)`; the sampler is unchanged.
+export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
