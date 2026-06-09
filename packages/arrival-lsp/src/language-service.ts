@@ -123,6 +123,19 @@ export interface SchemeDefinition {
 export interface SchemeLanguageServiceOptions {
   /** Override the tsc compiler options used for the virtual compilation. */
   compilerOptions?: ts.CompilerOptions;
+  /**
+   * Host-injected rosetta tools (sift's evidence tools), the seam that makes the type
+   * mask narrow on injected symbols — not just the builtins. Two coupled parts, both
+   * derived from ONE source (the env's `defineRosetta(name, { type })` registry, via
+   * `assembleHostPrelude`):
+   *   • `prelude` — ambient `.d.ts` text re-opening `interface ArrShape { "<name>": … }`
+   *     (+ the host's entity types), merged into the same global scope as the builtin
+   *     leaves. Makes `typeof __arr["<name>"]` resolve → the CANDIDATE side narrows.
+   *   • `members` — the host member names. The emitter lowers a head in this set via
+   *     `__arr["<name>"](…)` (like a builtin) so `Parameters<typeof head>` resolves →
+   *     the SLOT side narrows (a host tool as the enclosing call head).
+   */
+  host?: { prelude: string; members: readonly string[] };
 }
 
 const DEFAULT_OPTIONS: ts.CompilerOptions = {
@@ -178,6 +191,10 @@ export interface SchemeLanguageService {
 export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions): SchemeLanguageService {
   const options: ts.CompilerOptions = { ...DEFAULT_OPTIONS, ...opts?.compilerOptions };
   const preludeFiles = getPreludeFiles();
+  // Host-injected leaf (sift's tool declarations) — merged into the same global ArrShape.
+  if (opts?.host !== undefined) preludeFiles.set("__host.d.ts", opts.host.prelude);
+  // The host member roster — heads in this set lower to `__arr[...]` so their slots narrow.
+  const hostMembers: ReadonlySet<string> = new Set(opts?.host?.members ?? []);
 
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
@@ -214,7 +231,7 @@ export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions)
   /** Emit `scheme`, install it as the program module, and return a Mapper over the
    *  resulting span lens (the bidirectional coordinate bridge for this source). */
   function loadSource(scheme: string): Mapper {
-    const { ts: emitted, mappings } = emitTypes(scheme);
+    const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers });
     programText = emitted;
     programVersion += 1;
     return new Mapper(mappings, scheme, emitted);

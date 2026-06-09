@@ -29,17 +29,27 @@ are type-valid for *this* parameter. Sequence accordingly.
   - **The composition is: node-runner does `narrowByType(makeOracle(env), createSchemeLanguageService())`**
     → hand the result to the sampler. The sampler + browser path are unchanged (T is node-only).
 
-## Remaining
+## Done (cont.)
 
-### T-inject — sift tool types into `ArrShape` *(the next high-value piece)*
-T narrows only `__arr` members (builtins). Sift's evidence tools (`memory/netscan`, `ip/*`, …) emit
-as bare/undefined → unresolved → conservatively KEPT (no narrowing). To make the *forensic* mask
-type-aware, sift must declare its tool signatures into the merged `ArrShape` (the "custom type
-declarations to injected symbols" V described): `interface ArrShape { "memory/netscan"(): Connection[];
-"ip/external-c2-candidate?"(ip: SchemeIP): SBool; … }`. Then `(ip/external-c2-candidate? ⟨cur⟩)`
-masks to SchemeIP-producers and `(:Field ⟨cur⟩)`/`(@ Field ⟨cur⟩)` masks to the row's `keyof`. This
-is the seam where the entity types (SchemeIP, the rows) become the constraint — sift-side, builds on
-the prelude's leaf-merge contract. **The single biggest remaining lever for the forensic sampler.**
+- **T-inject — sift tool types into `ArrShape`** (the single-source `type:` seam). The forensic
+  mask is now type-aware end to end. The asymmetry that fell out of building it:
+  - **Candidate side was already free.** `probeTypes` looks every candidate up as `typeof
+    __arr[name]`, so declaration-merge injection alone makes an injected tool maskable.
+  - **Slot side needed an emitter roster.** A non-builtin head lowered to a bare cleaned
+    identifier (`any`) → no constraint. Fix: `emitTypes(scheme, { hostMembers })` lowers a head in
+    the roster via `__arr["<name>"](…)` like a builtin (the third head case — host tools ARE
+    ambient `__arr` members), so `Parameters<typeof head>` resolves. Runtime emit unaffected.
+  - **The single source is the rosetta registry.** `defineRosetta(name, { fn, type })` carries the
+    TS signature as an inert string (arrival-scheme has no TS); `Environment.__rosettaTypes__`
+    records it; `assembleHostPrelude([...env.__rosettaTypes__], { preamble })` derives BOTH the
+    `ArrShape` leaf (candidate side) and the `members` roster (slot side). One registration, no
+    parallel `.d.ts` to drift — the builtin two-source split, collapsed for host tools.
+  - **Sift coverage:** every tool in `tools/*` + the `defineEntity` factory + all entity specs now
+    carry `type:`; `sift/src/discovery-types.ts` is the shared row/entity preamble. Proven:
+    `sift/src/__smoke__/type-lens-coverage.test.ts` (SchemeIP / entity / List slots narrow, prelude
+    compiles clean, every roster tool typed) + `src/__tests__/host-prelude.test.ts` (the seam).
+
+## Remaining
 
 ## Supporting (lower priority)
 
