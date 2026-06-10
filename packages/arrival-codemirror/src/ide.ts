@@ -24,6 +24,8 @@ import { linter, type Diagnostic } from "@codemirror/lint";
 import type { Extension } from "@codemirror/state";
 import { EditorView, hoverTooltip, type Tooltip } from "@codemirror/view";
 
+import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sweet.js";
+
 // ── the backend seam ───────────────────────────────────────────────────────
 // Structural twins of arrival-type-lens's Scheme* types (a devDep typecheck in
 // __tests__ pins assignability so drift is caught at `pnpm typecheck`). Widened
@@ -187,14 +189,28 @@ const quickInfoTheme = EditorView.baseTheme({
 // eslint-disable-next-line sonarjs/slow-regex
 const SYMBOL_BEFORE = /[\w\-!$%&*+./<=>?@^~]*$/;
 
+// The SPECIAL FORMS are syntax, not bindings — no language service knows them
+// (they never reach the type lens; the emitter consumes them). The language
+// package owns them, so the completion source merges them under the backend's
+// answers. Reuses the highlighter's classification sets.
+const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWORDS].map((name) => ({
+  label: name,
+  type: "keyword",
+}));
+
 /** The completion source alone — compose into your own `autocompletion()`. */
 export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const word = ctx.matchBefore(SYMBOL_BEFORE);
     if (word === null || (word.from === word.to && !ctx.explicit)) return null;
     const entries = await backend.getCompletionsAtPosition(ctx.state.doc.toString(), ctx.pos);
-    if (entries.length === 0) return null;
-    return { from: word.from, options: toCmCompletions(entries), validFor: SYMBOL_BEFORE };
+    const options = toCmCompletions(entries);
+    const seen = new Set(entries.map((e) => e.name));
+    for (const form of FORM_COMPLETIONS) {
+      if (!seen.has(form.label)) options.push(form);
+    }
+    if (options.length === 0) return null;
+    return { from: word.from, options, validFor: SYMBOL_BEFORE };
   };
 }
 

@@ -22,14 +22,14 @@ import { tags as t } from "@lezer/highlight";
 // keywords, matching how the sweet lens treats `define`/`lambda`/`if`).
 const set = (str: string): Set<string> => new Set(str.split(/\s+/).filter(Boolean));
 
-const DEFINITION_KEYWORDS = set(`
+export const DEFINITION_KEYWORDS = set(`
   define define-values define-syntax define-macro defmacro define-class define-record-type
   lambda λ case-lambda opt-lambda
   let let* letrec letrec-syntax let-syntax let-values let*-values let/ec let/cc
   syntax-rules syntax-case
 `);
 
-const CONTROL_KEYWORDS = set(`
+export const CONTROL_KEYWORDS = set(`
   if cond when unless case else
   and or not
   begin do for-each map
