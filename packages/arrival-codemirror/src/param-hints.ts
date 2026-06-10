@@ -41,7 +41,7 @@ function buildDecorations(view: EditorView, resolve: (src: string) => ParamHint[
   }
   const builder = new RangeSetBuilder<Decoration>();
   // RangeSetBuilder wants ascending `from`; the resolver emits in walk order.
-  for (const h of [...hints].sort((a, b) => a.pos - b.pos)) {
+  for (const h of hints.toSorted((a, b) => a.pos - b.pos)) {
     builder.add(h.pos, h.pos, Decoration.widget({ widget: new HintWidget(h.name), side: -1 }));
   }
   return builder.finish();
@@ -57,7 +57,7 @@ const hintTheme = EditorView.theme({
     pointerEvents: "none",
     margin: "0 0.5ch 0 0",
     translate: "0 0",
-    display: "inline-block"
+    display: "inline-block",
   },
   ".cm-param-hint::before": { content: '""' },
   ".cm-param-hint::after": { content: '":"' },

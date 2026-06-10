@@ -134,15 +134,16 @@ const parser: StreamParser<SchemeSweetState> = {
         return "blockComment";
       }
       if (stream.eat(/[tf]/i)) return "atom"; // #t / #f
+      // NB: `stream.match(re)` CONSUMES the matched run — `re.test(...)` is not
+      // equivalent (unicorn/prefer-regexp-test autofix breaks this; rule off in
+      // eslint.config.mjs for this file).
       if (stream.eat(/b/i)) {
         if (stream.match(binaryMatcher)) return "number";
       } else if (stream.eat(/o/i)) {
         if (stream.match(octalMatcher)) return "number";
       } else if (stream.eat(/x/i)) {
         if (stream.match(hexMatcher)) return "number";
-      } else if (stream.eat(/d/i)) {
-        if (stream.match(decimalMatcher)) return "number";
-      }
+      } else if (stream.eat(/d/i) && stream.match(decimalMatcher)) return "number";
       stream.eatWhile(SYMBOL_BODY);
       return "atom";
     }
@@ -163,7 +164,7 @@ const parser: StreamParser<SchemeSweetState> = {
       // tokenized on the next pass — we only set a flag if the head is a def form.
       const rest = stream.string.slice(stream.pos);
       const head = /^\s*([\w\-!$%&*+./<=>?@^~λ]+)/.exec(rest)?.[1];
-      state.afterDefineHead = head != null && DEFINITION_KEYWORDS.has(head) && /^def/.test(head);
+      state.afterDefineHead = head != null && DEFINITION_KEYWORDS.has(head) && head.startsWith("def");
       return ch === "(" ? "paren" : "squareBracket";
     }
     if (ch === ")" || ch === "]") {
