@@ -1,7 +1,7 @@
 {
   "name": "@here.build/arrival-type-lens",
   "version": "0.1.0",
-  "description": "Scheme→TS type lens — the shared PRE prelude (branded base types + Dict mapped type + __arr declaration-merge contract) the 34 builtin .d.ts leaves merge into, so arrival programs bite under tsc.",
+  "description": "Scheme\u2192TS type lens \u2014 the shared PRE prelude (branded base types + Dict mapped type + __arr declaration-merge contract) the 34 builtin .d.ts leaves merge into, so arrival programs bite under tsc.",
   "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
@@ -13,6 +13,18 @@
     "./browser": {
       "types": "./dist/browser.d.ts",
       "import": "./dist/browser.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    },
+    "./ls-protocol": {
+      "types": "./dist/ls-protocol.d.ts",
+      "import": "./dist/ls-protocol.js"
+    },
+    "./ls-client": {
+      "types": "./dist/ls-client.d.ts",
+      "import": "./dist/ls-client.js"
     }
   },
   "main": "./dist/index.js",
