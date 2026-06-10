@@ -76,6 +76,9 @@ export interface SchemeIdeDefinition {
   name: string;
   kind: string;
   span: { start: number; length: number } | null;
+  /** Present when the definition lives in a REQUIRED file (the span is in
+   *  THAT file's coordinates) — the cross-file jump target. */
+  file?: string;
 }
 
 /** A semantically-classified token span (mirrors `SchemeClassifiedSpan`):
@@ -534,9 +537,17 @@ export function schemeSemanticHighlight(
   return [marksField, plugin, semanticTheme];
 }
 
-/** Cmd/Ctrl-click on a symbol jumps to its definition (in-buffer spans only —
- *  a builtin's definition lives in the prelude and has no buffer span). */
-export function schemeGotoDefinition(backend: SchemeIdeBackend): Extension {
+export interface SchemeGotoDefinitionOptions {
+  /** Cross-file jump: called when the definition lives in a REQUIRED file —
+   *  `(path, span-in-that-file)`. Absent → cross-file definitions are ignored
+   *  (the editor can't open files on its own). */
+  openFile?: (path: string, span: { start: number; length: number }) => void;
+}
+
+/** Cmd/Ctrl-click on a symbol jumps to its definition — in-buffer, or through
+ *  `openFile` when it lives in a required file. (A builtin's definition lives
+ *  in the prelude and has no jump target.) */
+export function schemeGotoDefinition(backend: SchemeIdeBackend, options?: SchemeGotoDefinitionOptions): Extension {
   return EditorView.domEventHandlers({
     mousedown: (event, view) => {
       if (!(event.metaKey || event.ctrlKey) || event.button !== 0) return false;
@@ -544,10 +555,14 @@ export function schemeGotoDefinition(backend: SchemeIdeBackend): Extension {
       if (pos === null) return false;
       void (async () => {
         const defs = await backend.getDefinitionAtPosition(view.state.doc.toString(), pos);
-        const span = defs.find((d) => d.span !== null)?.span;
-        if (span === undefined || span === null) return;
+        const hit = defs.find((d) => d.span !== null);
+        if (hit?.span == null) return;
+        if (hit.file !== undefined) {
+          options?.openFile?.(hit.file, hit.span);
+          return;
+        }
         view.dispatch({
-          selection: { anchor: span.start, head: span.start + span.length },
+          selection: { anchor: hit.span.start, head: hit.span.start + hit.span.length },
           scrollIntoView: true,
           userEvent: "select.definition",
         });
@@ -570,6 +585,9 @@ export interface SchemeIdeOptions {
   ranker?: SchemeNeuralRanker;
   /** The frame floor (probability ≥ → 'likely'). Default 0.05. */
   minProb?: number;
+  /** Cross-file goto-def: open a REQUIRED file at a span (the studio's file
+   *  switcher). Absent → cross-file definitions are ignored. */
+  openFile?: (path: string, span: { start: number; length: number }) => void;
 }
 
 /** The IDE bundle: lint + hover + completion + go-to-definition + semantic
@@ -582,7 +600,8 @@ export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions)
     ext.push(schemeLinter(backend, typeof options?.lint === "object" ? options.lint : undefined));
   if (options?.hover !== false) ext.push(schemeHover(backend));
   if (options?.completion !== false) ext.push(schemeCompletion(backend, neural));
-  if (options?.gotoDefinition !== false) ext.push(schemeGotoDefinition(backend));
+  if (options?.gotoDefinition !== false)
+    ext.push(schemeGotoDefinition(backend, options?.openFile === undefined ? undefined : { openFile: options.openFile }));
   if (options?.semanticHighlight !== false)
     ext.push(
       schemeSemanticHighlight(

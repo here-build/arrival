@@ -29,6 +29,7 @@ export {
   schemeCompletion,
   schemeCompletionSource,
   schemeGotoDefinition,
+  type SchemeGotoDefinitionOptions,
   schemeSemanticHighlight,
   classificationsToDecorations,
   toCmDiagnostics,
