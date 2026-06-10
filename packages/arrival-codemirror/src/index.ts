@@ -34,6 +34,8 @@ export {
   toCmDiagnostics,
   toCmCompletions,
   type SchemeIdeBackend,
+  type SchemeNeuralRanker,
+  type SchemeCompletionOptions,
   type SchemeIdeRichCompletion,
   type SchemeIdeCompletionContext,
   type SchemeIdeDiagnostic,

@@ -26,7 +26,7 @@ import { acceptCompletion, completionStatus } from "@codemirror/autocomplete";
 import { EditorState, Prec, StateEffect, StateField, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 
-import type { SchemeIdeBackend, SchemeIdeRichCompletion } from "./ide.js";
+import type { SchemeIdeBackend, SchemeIdeRichCompletion, SchemeNeuralRanker } from "./ide.js";
 
 // Same atom-character class as the completion source's SYMBOL_BEFORE. A single
 // character class under `*` cannot backtrack — the slow-regex flag is a false
@@ -149,6 +149,12 @@ const dismissGhost = (view: EditorView): boolean => {
 export interface SchemeGhostOptions {
   /** Debounce after the last edit before computing a ghost (ms). Default 250. */
   delay?: number;
+  /** The on-device neural ranker: when present, the ghost is the MODEL'S pick
+   *  within the proven set — the highest-probability nucleus member among the
+   *  type-fitting candidates. Provable ∩ probable, one symbol at a time. */
+  ranker?: SchemeNeuralRanker;
+  /** Nucleus size (cumulative top-p mass). Default 0.05. */
+  topP?: number;
 }
 
 /** The ghost extension: inline Σ∩T-best preview + the Tab ladder. */
@@ -183,7 +189,27 @@ export function schemeGhost(backend: SchemeIdeBackend, options?: SchemeGhostOpti
         let ghostName: string | null = null;
         try {
           const context = await rich(state.doc.toString(), head);
-          ghostName = pickGhost(context.entries, prefix, context.position);
+          if (options?.ranker !== undefined) {
+            // Neural ghost: the model's nucleus pick WITHIN the proven set.
+            const names = context.entries.map((e) => e.name);
+            const ranks = await options.ranker.rank(
+              state.doc.toString().slice(0, head - prefix.length),
+              names,
+              options.topP ?? 0.05,
+            );
+            let bestProb = 0;
+            for (const [i, e] of context.entries.entries()) {
+              const r = ranks[i];
+              if (r === undefined || !r.inNucleus || r.prob <= bestProb) continue;
+              if (prefix === "" ? !(e.fits === true && context.position === "argument") : !e.name.startsWith(prefix) || e.name === prefix || e.fits === false) continue;
+              bestProb = r.prob;
+              ghostName = e.name;
+            }
+            // Model silent (nothing proven is in its nucleus) → structural pick.
+            ghostName ??= pickGhost(context.entries, prefix, context.position);
+          } else {
+            ghostName = pickGhost(context.entries, prefix, context.position);
+          }
         } catch {
           return; // mid-edit parse trouble — no ghost
         }

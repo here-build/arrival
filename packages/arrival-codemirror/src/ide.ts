@@ -106,6 +106,20 @@ export interface SchemeIdeCompletionContext {
   entries: SchemeIdeRichCompletion[];
 }
 
+/** A neural candidate ranker — the SAMPLER pointed at autocomplete: scores
+ *  each candidate's first-continuation-token probability under a small
+ *  on-device model and reports top-p nucleus membership. The ranker only
+ *  orders WITHIN the Σ∩T proof — it can never make the list wrong, only
+ *  more (or less) prescient. */
+export interface SchemeNeuralRanker {
+  /** `prefix` is the buffer up to the ATOM START (partial atom stripped). */
+  rank(
+    prefix: string,
+    candidates: readonly string[],
+    topP: number,
+  ): MaybePromise<readonly { prob: number; inNucleus: boolean }[]>;
+}
+
 /** What the IDE extensions need from a language service, in Scheme coordinates. */
 export interface SchemeIdeBackend {
   getSemanticDiagnostics(scheme: string): MaybePromise<SchemeIdeDiagnostic[]>;
@@ -255,30 +269,43 @@ const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWO
 //   • Signature in the info panel (the most-praised lisp completion behavior).
 //   • Commit on space / `)` — scheme's natural commit keys.
 
-const SECTION_FITS = { name: "fits this slot", rank: 0 };
-const SECTION_SCOPE = { name: "in scope", rank: 1 };
-const SECTION_BUILTINS = { name: "builtins", rank: 2 };
-const SECTION_FORMS = { name: "forms", rank: 3 };
+const SECTION_LIKELY = { name: "likely here", rank: 0 };
+const SECTION_FITS = { name: "fits this slot", rank: 1 };
+const SECTION_SCOPE = { name: "in scope", rank: 2 };
+const SECTION_BUILTINS = { name: "builtins", rank: 3 };
+const SECTION_FORMS = { name: "forms", rank: 4 };
 
 /** Boost tiers (CM range −99..99; boost only orders EQUAL-quality matches, so
- *  fuzzy match quality still wins — which is correct). */
-function boostOf(e: SchemeIdeRichCompletion, isLocal: boolean): number {
-  if (e.fits === true) return isLocal ? 80 : 60;
-  if (e.fits === false) return -40;
-  return isLocal ? 20 : 0;
+ *  fuzzy match quality still wins — which is correct). A nucleus member rises
+ *  WITHIN its tier by probability — never across a proof tier: the model
+ *  prefers, the types decide. */
+function boostOf(e: SchemeIdeRichCompletion, isLocal: boolean, rank?: { prob: number; inNucleus: boolean }): number {
+  const neural = rank?.inNucleus === true ? Math.min(9, 1 + Math.round(rank.prob * 8)) : 0;
+  if (e.fits === true) return (isLocal ? 80 : 60) + neural;
+  if (e.fits === false) return -40 + neural;
+  return (isLocal ? 20 : 0) + neural;
 }
 
 /** One rich entry → a CM completion: section by semantic truth, boost by tier,
  *  signature as inline detail + info panel. Builtins arrive kind:"method";
- *  anything else came from the program itself (a local). */
-function toRichCmCompletion(e: SchemeIdeRichCompletion): Completion {
+ *  anything else came from the program itself (a local). A candidate BOTH
+ *  proven (fits) and probable (nucleus) earns the top section — the two
+ *  oracles agreeing is the strongest signal the editor can show. */
+function toRichCmCompletion(e: SchemeIdeRichCompletion, rank?: { prob: number; inNucleus: boolean }): Completion {
   const isLocal = e.kind !== "method";
-  const section = e.fits === true ? SECTION_FITS : isLocal ? SECTION_SCOPE : SECTION_BUILTINS;
+  const section =
+    e.fits === true && rank?.inNucleus === true
+      ? SECTION_LIKELY
+      : e.fits === true
+        ? SECTION_FITS
+        : isLocal
+          ? SECTION_SCOPE
+          : SECTION_BUILTINS;
   return {
     label: e.name,
     type: COMPLETION_TYPE[e.kind] ?? "variable",
     section,
-    boost: boostOf(e, isLocal),
+    boost: boostOf(e, isLocal, rank),
     ...(e.detail === undefined ? {} : { detail: e.detail, info: () => infoDom(e) }),
     ...(e.insertText === undefined ? {} : { apply: e.insertText }),
   };
@@ -321,10 +348,19 @@ const FORM_SNIPPETS: readonly Completion[] = [
  *  means "that symbol, done". Resolves Tab-vs-Enter the lisp-native way. */
 const COMMIT_CHARS = [" ", ")"];
 
+export interface SchemeCompletionOptions {
+  /** The on-device neural ranker (the sampler's distribution): nucleus members
+   *  earn the "likely here" section when they ALSO fit, and rise within their
+   *  proof tier by probability. Absent → pure Σ∩T ranking. */
+  ranker?: SchemeNeuralRanker;
+  /** Nucleus size for the ranker (cumulative top-p mass). Default 0.05. */
+  topP?: number;
+}
+
 /** The completion source alone — compose into your own `autocompletion()`.
  *  With a `getCompletionContext`-capable backend this is the full Σ∩T-ranked
  *  pipeline; otherwise it degrades to the flat (name/kind) list. */
-export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSource {
+export function schemeCompletionSource(backend: SchemeIdeBackend, options?: SchemeCompletionOptions): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const word = ctx.matchBefore(SYMBOL_BEFORE);
     if (word === null) return null;
@@ -339,26 +375,41 @@ export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSou
     if (emptyPrefix && !ctx.explicit) return null;
 
     if (rich !== undefined) {
-      const context = await rich(ctx.state.doc.toString(), ctx.pos);
-      const options = context.entries.map(toRichCmCompletion);
+      const doc = ctx.state.doc.toString();
+      // Proof first (the candidate set), then preference (the ranker scores
+      // exactly those candidates — one forward pass over the atom-start prefix).
+      const context = await rich(doc, ctx.pos);
+      let ranks: readonly { prob: number; inNucleus: boolean }[] | null = null;
+      if (options?.ranker !== undefined) {
+        try {
+          ranks = await options.ranker.rank(
+            doc.slice(0, word.from),
+            context.entries.map((e) => e.name),
+            options.topP ?? 0.05,
+          );
+        } catch {
+          ranks = null; // model trouble never blocks the proof-ranked list
+        }
+      }
+      const options_ = context.entries.map((e, i) => toRichCmCompletion(e, ranks?.[i]));
       const seen = new Set(context.entries.map((e) => e.name));
       // Special forms: snippets right after `(`, bare keywords elsewhere.
       for (const form of afterOpenParen ? FORM_SNIPPETS : FORM_COMPLETIONS) {
-        if (!seen.has(form.label)) options.push(form);
+        if (!seen.has(form.label)) options_.push(form);
       }
-      if (options.length === 0) return null;
-      return { from: word.from, options, validFor: SYMBOL_BEFORE, commitCharacters: COMMIT_CHARS };
+      if (options_.length === 0) return null;
+      return { from: word.from, options: options_, validFor: SYMBOL_BEFORE, commitCharacters: COMMIT_CHARS };
     }
 
     // Flat fallback (a backend without getCompletionContext).
     const entries = await backend.getCompletionsAtPosition(ctx.state.doc.toString(), ctx.pos);
-    const options = toCmCompletions(entries);
+    const flat = toCmCompletions(entries);
     const seen = new Set(entries.map((e) => e.name));
     for (const form of FORM_COMPLETIONS) {
-      if (!seen.has(form.label)) options.push(form);
+      if (!seen.has(form.label)) flat.push(form);
     }
-    if (options.length === 0) return null;
-    return { from: word.from, options, validFor: SYMBOL_BEFORE };
+    if (flat.length === 0) return null;
+    return { from: word.from, options: flat, validFor: SYMBOL_BEFORE };
   };
 }
 
@@ -367,9 +418,9 @@ export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSou
 const byCodepoint = (a: Completion, b: Completion): number => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0);
 
 /** Completion wired as the editor's autocompletion (overrides other sources). */
-export function schemeCompletion(backend: SchemeIdeBackend): Extension {
+export function schemeCompletion(backend: SchemeIdeBackend, options?: SchemeCompletionOptions): Extension {
   return autocompletion({
-    override: [schemeCompletionSource(backend)],
+    override: [schemeCompletionSource(backend, options)],
     compareCompletions: byCodepoint,
   });
 }
@@ -502,6 +553,12 @@ export interface SchemeIdeOptions {
   gotoDefinition?: boolean;
   semanticHighlight?: boolean | SchemeSemanticHighlightOptions;
   ghost?: boolean | SchemeGhostOptions;
+  /** The on-device neural ranker — wired into BOTH the popup (nucleus members
+   *  rise; proof+probability agreement earns "likely here") and the ghost
+   *  (the model's pick within the proven set). */
+  ranker?: SchemeNeuralRanker;
+  /** Nucleus size (cumulative top-p mass) for the ranker. Default 0.05. */
+  topP?: number;
 }
 
 /** The IDE bundle: lint + hover + completion + go-to-definition + semantic
@@ -509,10 +566,11 @@ export interface SchemeIdeOptions {
  *  ghost also require the backend's optional methods). */
 export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions): Extension {
   const ext: Extension[] = [];
+  const neural = options?.ranker === undefined ? undefined : { ranker: options.ranker, topP: options.topP };
   if (options?.lint !== false)
     ext.push(schemeLinter(backend, typeof options?.lint === "object" ? options.lint : undefined));
   if (options?.hover !== false) ext.push(schemeHover(backend));
-  if (options?.completion !== false) ext.push(schemeCompletion(backend));
+  if (options?.completion !== false) ext.push(schemeCompletion(backend, neural));
   if (options?.gotoDefinition !== false) ext.push(schemeGotoDefinition(backend));
   if (options?.semanticHighlight !== false)
     ext.push(
@@ -522,6 +580,6 @@ export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions)
       ),
     );
   if (options?.ghost !== false)
-    ext.push(schemeGhost(backend, typeof options?.ghost === "object" ? options.ghost : undefined));
+    ext.push(schemeGhost(backend, { ...(typeof options?.ghost === "object" ? options.ghost : {}), ...neural }));
   return ext;
 }
