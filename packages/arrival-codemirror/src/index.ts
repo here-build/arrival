@@ -22,6 +22,7 @@ export {
   type SchemeStructuralOptions,
 } from "./structural.js";
 export { schemeGhost, pickGhost, lineTailIsSafe, type SchemeGhostOptions } from "./ghost.js";
+export { sweetIdeBackend } from "./sweet-ide.js";
 export {
   schemeIde,
   schemeLinter,
