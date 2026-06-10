@@ -33,6 +33,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
+import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sweet.js";
 
 // ── the backend seam ───────────────────────────────────────────────────────
@@ -331,22 +332,11 @@ export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSou
     const afterOpenParen = ctx.state.doc.sliceString(Math.max(0, word.from - 1), word.from) === "(";
     const rich = backend.getCompletionContext?.bind(backend);
 
-    // Empty prefix: explicit invocation always works; otherwise the ONE place
-    // an unprompted popup is signal rather than noise is an ARGUMENT SLOT the
-    // Σ∩T mask has narrowed to a handful — the "discussion with the compiler".
-    if (emptyPrefix && !ctx.explicit) {
-      if (rich === undefined || ctx.state.doc.sliceString(Math.max(0, ctx.pos - 1), ctx.pos) !== " ") return null;
-      const context = await rich(ctx.state.doc.toString(), ctx.pos);
-      if (context.position !== "argument") return null;
-      const fitting = context.entries.filter((e) => e.fits === true);
-      if (fitting.length === 0 || fitting.length > 12) return null;
-      return {
-        from: ctx.pos,
-        options: fitting.map(toRichCmCompletion),
-        validFor: SYMBOL_BEFORE,
-        commitCharacters: COMMIT_CHARS,
-      };
-    }
+    // Empty prefix: explicit invocation only. The unprompted moment at a
+    // narrowed argument slot belongs to the GHOST (ghost.ts) — an inline
+    // preview is the gentler shape of the same Σ∩T answer, and the two must
+    // not race (the popup hides the ghost). Ctrl-Space always brings the list.
+    if (emptyPrefix && !ctx.explicit) return null;
 
     if (rich !== undefined) {
       const context = await rich(ctx.state.doc.toString(), ctx.pos);
@@ -511,11 +501,12 @@ export interface SchemeIdeOptions {
   completion?: boolean;
   gotoDefinition?: boolean;
   semanticHighlight?: boolean | SchemeSemanticHighlightOptions;
+  ghost?: boolean | SchemeGhostOptions;
 }
 
 /** The IDE bundle: lint + hover + completion + go-to-definition + semantic
- *  highlighting (each opt-out; semantic highlighting also requires the backend
- *  to implement `getSemanticClassifications`). */
+ *  highlighting + ghost preview (each opt-out; semantic highlighting and the
+ *  ghost also require the backend's optional methods). */
 export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions): Extension {
   const ext: Extension[] = [];
   if (options?.lint !== false)
@@ -530,5 +521,7 @@ export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions)
         typeof options?.semanticHighlight === "object" ? options.semanticHighlight : undefined,
       ),
     );
+  if (options?.ghost !== false)
+    ext.push(schemeGhost(backend, typeof options?.ghost === "object" ? options.ghost : undefined));
   return ext;
 }

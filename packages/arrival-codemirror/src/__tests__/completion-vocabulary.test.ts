@@ -74,18 +74,17 @@ describe("the Σ∩T-ranked pipeline (rich backend)", () => {
     expect(topDefine.apply).toBeUndefined(); // bare keyword inserts its label
   });
 
-  it("UNPROMPTED at a narrowed argument slot: only the fitting set surfaces", async () => {
-    const doc = `${PROG}(car `;
-    const result = await resultAt(doc, doc.length, false); // NOT explicit
-    expect(result).not.toBeNull();
-    const labels = result!.options.map((o) => o.label);
-    expect(labels).toContain("names");
-    expect(labels).not.toContain("odd?"); // proven-unfit stays out of the unprompted popup
-    expect(labels.length).toBeLessThanOrEqual(12);
+  it("empty prefix is the GHOST's moment — the unprompted popup stays quiet", async () => {
+    // (the inline ghost serves the narrowed-slot preview; see ghost.test.ts)
+    expect(await resultAt(`${PROG}(car `, `${PROG}(car `.length, false)).toBeNull();
+    expect(await resultAt(`${PROG}`, PROG.length, false)).toBeNull();
   });
 
-  it("unprompted popup stays QUIET outside narrowed slots (no noise at top level)", async () => {
-    const doc = `${PROG}`;
-    expect(await resultAt(doc, doc.length, false)).toBeNull();
+  it("explicit invocation at an empty prefix still brings the full sectioned list", async () => {
+    const doc = `${PROG}(car `;
+    const result = await resultAt(doc, doc.length, true);
+    expect(result).not.toBeNull();
+    const names = result!.options.find((o) => o.label === "names")!;
+    expect((names.section as { name: string }).name).toBe("fits this slot");
   });
 });

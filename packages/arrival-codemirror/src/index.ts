@@ -21,6 +21,7 @@ export {
   schemeIndentAt,
   type SchemeStructuralOptions,
 } from "./structural.js";
+export { schemeGhost, pickGhost, lineTailIsSafe, type SchemeGhostOptions } from "./ghost.js";
 export {
   schemeIde,
   schemeLinter,
