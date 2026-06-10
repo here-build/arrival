@@ -56,12 +56,17 @@ describe("the Σ∩T-ranked pipeline (rich backend)", () => {
     expect(byLabel.get("filter")!.boost).toBe(60); // type-valid builtin
   });
 
-  it("signatures ride as detail + info; commit chars are scheme's space/paren", async () => {
+  it("signatures ride INLINE as detail; the info panel only carries the unfit note", async () => {
     const doc = `${PROG}(car na`;
     const result = await resultAt(doc, doc.length);
     const names = result!.options.find((o) => o.label === "names")!;
     expect(names.detail).toBe("List<string>");
-    expect(typeof names.info).toBe("function");
+    // The signature is already inline — a signature-only side panel would be a
+    // duplicate tooltip (V, 2026-06-10). Fitting entries carry NO info…
+    expect(names.info).toBeUndefined();
+    // …demoted entries keep it for the "doesn't fit this slot" note.
+    const greet = result!.options.find((o) => o.label === "greet")!;
+    expect(typeof greet.info).toBe("function");
     expect(result!.commitCharacters).toEqual([" ", ")"]);
   });
 

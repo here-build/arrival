@@ -280,7 +280,6 @@ const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWO
 //   • Signature in the info panel (the most-praised lisp completion behavior).
 //   • Commit on space / `)` — scheme's natural commit keys.
 
-
 /** Boost tiers (CM range −99..99; boost only orders EQUAL-quality matches, so
  *  fuzzy match quality still wins — which is correct). A nucleus member rises
  *  WITHIN its tier by probability — never across a proof tier: the model
@@ -312,7 +311,12 @@ function toRichCmCompletion(e: SchemeIdeRichCompletion, rank?: { prob: number; i
     type: COMPLETION_TYPE[e.kind] ?? "variable",
     section,
     boost: boostOf(e, isLocal, rank),
-    ...(e.detail === undefined ? {} : { detail: e.detail, info: () => infoDom(e) }),
+    ...(e.detail === undefined ? {} : { detail: e.detail }),
+    // The info SIDE PANEL only when it says something the row doesn't: the
+    // signature is already INLINE as `detail`, so a signature-only panel is a
+    // duplicate tooltip (V, 2026-06-10). Demoted entries keep it for the
+    // unfit note.
+    ...(e.fits === false ? { info: () => infoDom(e) } : {}),
     ...(e.insertText === undefined ? {} : { apply: e.insertText }),
   };
 }
@@ -320,16 +324,10 @@ function toRichCmCompletion(e: SchemeIdeRichCompletion, rank?: { prob: number; i
 function infoDom(e: SchemeIdeRichCompletion): HTMLElement {
   const dom = document.createElement("div");
   dom.className = "cm-scheme-quickinfo";
-  const sig = document.createElement("code");
-  sig.className = "cm-scheme-quickinfo-signature";
-  sig.textContent = `${e.name}: ${e.detail ?? ""}`;
-  dom.append(sig);
-  if (e.fits === false) {
-    const note = document.createElement("div");
-    note.className = "cm-scheme-quickinfo-docs";
-    note.textContent = "type does not fit this argument slot";
-    dom.append(note);
-  }
+  const note = document.createElement("div");
+  note.className = "cm-scheme-quickinfo-docs";
+  note.textContent = "type does not fit this argument slot";
+  dom.append(note);
   return dom;
 }
 

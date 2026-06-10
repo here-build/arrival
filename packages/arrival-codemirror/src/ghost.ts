@@ -189,7 +189,9 @@ export function schemeGhost(backend: SchemeIdeBackend, options?: SchemeGhostOpti
         let ghostName: string | null = null;
         try {
           const context = await rich(state.doc.toString(), head);
-          if (options?.ranker !== undefined) {
+          if (options?.ranker === undefined) {
+            ghostName = pickGhost(context.entries, prefix, context.position);
+          } else {
             // Neural ghost: the model's nucleus pick WITHIN the proven set.
             const names = context.entries.map((e) => e.name);
             const ranks = await options.ranker.rank(
@@ -201,14 +203,17 @@ export function schemeGhost(backend: SchemeIdeBackend, options?: SchemeGhostOpti
             for (const [i, e] of context.entries.entries()) {
               const r = ranks[i];
               if (r === undefined || !r.inNucleus || r.prob <= bestProb) continue;
-              if (prefix === "" ? !(e.fits === true && context.position === "argument") : !e.name.startsWith(prefix) || e.name === prefix || e.fits === false) continue;
+              if (
+                prefix === ""
+                  ? !(e.fits === true && context.position === "argument")
+                  : !e.name.startsWith(prefix) || e.name === prefix || e.fits === false
+              )
+                continue;
               bestProb = r.prob;
               ghostName = e.name;
             }
             // Model silent (nothing proven is in its nucleus) → structural pick.
             ghostName ??= pickGhost(context.entries, prefix, context.position);
-          } else {
-            ghostName = pickGhost(context.entries, prefix, context.position);
           }
         } catch {
           return; // mid-edit parse trouble — no ghost
