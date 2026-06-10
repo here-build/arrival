@@ -38,6 +38,7 @@ export {
   type SchemeLanguageServiceOptions,
   type SchemeDiagnostic,
   type SchemeQuickInfo,
+  type SchemeClassifiedSpan,
   type SchemeCompletionEntry,
   type SchemeDefinition,
 } from "./language-service.js";

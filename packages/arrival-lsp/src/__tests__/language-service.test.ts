@@ -161,6 +161,24 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
   });
 });
 
+describe("getSemanticClassifications — the checker's knowledge, atom-faithful", () => {
+  it("classifies use-sites: parameters, locals, functions — single atoms only", () => {
+    const scheme = `(define (greet name)\n  (string-append "hello, " name))\n\n(define names (list "a"))\n(define g (greet (car names)))`;
+    const spans = ls.getSemanticClassifications(scheme);
+    const byText = new Map(spans.map((s) => [scheme.slice(s.start, s.start + s.length), s.kind]));
+    expect(byText.get("name")).toBe("parameter"); // the body USE of the lambda param
+    expect(byText.get("names")).toBe("variable"); // a local's use-site
+    expect(byText.get("greet")).toBe("function"); // a local function at its call
+    for (const s of spans) {
+      const text = scheme.slice(s.start, s.start + s.length);
+      // Every span is a single atom (the whole-form binder lifts are dropped)
+      // and never the emission infrastructure.
+      expect(text).toMatch(/^[\w\-!$%&*+./<=>?@^~:]+$/);
+      expect(text.startsWith("__")).toBe(false);
+    }
+  });
+});
+
 describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
   // The candidate pool the sampler's Σ would offer at the cursor; T narrows it to the type-valid.
   const POOL = ["car", "cdr", "filter", "map", "list", "cons", "not", "length"];

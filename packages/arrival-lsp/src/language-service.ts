@@ -20,6 +20,7 @@ import { TS_DEFAULT_LIB, TS_LIB_FILES } from "./ts-libs.generated.js";
 export type {
   SchemeDiagnostic,
   SchemeQuickInfo,
+  SchemeClassifiedSpan,
   SchemeCompletionEntry,
   SchemeDefinition,
   SchemeLanguageService,

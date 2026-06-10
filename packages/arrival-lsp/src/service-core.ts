@@ -131,6 +131,16 @@ export interface SchemeCompletionEntry {
   insertText?: string;
 }
 
+/** A semantically-classified token span in Scheme coordinates — what an
+ *  identifier IS (its role per the type checker), for semantic highlighting. */
+export interface SchemeClassifiedSpan {
+  start: number;
+  length: number;
+  /** The tsc 2020-format token type: `"parameter"`, `"variable"`, `"function"`,
+   *  `"property"`, `"class"`, `"interface"`, `"type"`, `"typeParameter"`, … */
+  kind: string;
+}
+
 /** A go-to-definition result in Scheme coordinates. */
 export interface SchemeDefinition {
   /** The defined symbol's name. */
@@ -179,6 +189,27 @@ export interface ServiceEnvironment {
   sys?: Pick<ts.System, "readFile" | "fileExists" | "readDirectory" | "directoryExists" | "getDirectories">;
 }
 
+// tsc's 2020-format semantic token types, by index (the encoding packs
+// `(tokenType + 1) << 8`, so decode with `(classification >> 8) - 1`).
+const TOKEN_TYPES = [
+  "class",
+  "enum",
+  "interface",
+  "namespace",
+  "typeParameter",
+  "type",
+  "parameter",
+  "variable",
+  "enumMember",
+  "property",
+  "function",
+  "member",
+] as const;
+
+// A single scheme atom (one symbol token) — the lift-faithfulness gate for
+// semantic classifications. Same character class as the sweet reader's atoms.
+const SCHEME_ATOM = /^[\w\-!$%&*+./<=>?@^~:]+$/;
+
 const DEFAULT_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
   strict: true,
@@ -209,6 +240,16 @@ export interface SchemeLanguageService {
   getQuickInfoAtPosition(scheme: string, schemeOffset: number): SchemeQuickInfo | null;
   getCompletionsAtPosition(scheme: string, schemeOffset: number): SchemeCompletionEntry[];
   getDefinitionAtPosition(scheme: string, schemeOffset: number): SchemeDefinition[];
+  /**
+   * Semantic token classifications in Scheme coordinates — the merge layer over
+   * lexical highlighting: an editor keeps the grammar's keyword/string/paren
+   * colors and lays the checker's KNOWLEDGE (this is a parameter / a local / a
+   * function) on top. Only token-faithful lifts are returned: a TS token whose
+   * span lifts to a single scheme ATOM (use-sites). Binder occurrences lift to
+   * whole forms under the current emitter mappings and are dropped — the
+   * lexical layer already paints binders (definitionKeyword/DEFNAME).
+   */
+  getSemanticClassifications(scheme: string): SchemeClassifiedSpan[];
   /**
    * Layer T — the type-narrowed mask. Given the bound-symbol `candidates` valid at `schemeOffset`
    * (the sampler's Σ set), return the subset that is TYPE-VALID as the next token of the enclosing
@@ -380,6 +421,33 @@ export function createSchemeLanguageServiceCore(
         // builtin's `.d.ts` definition lifts to `null` (no Scheme source).
         const span = d.fileName === PROGRAM_FILE ? mapper.toScheme(d.textSpan.start) : null;
         out.push({ name: d.name, kind: d.kind, span });
+      }
+      return out;
+    },
+
+    getSemanticClassifications(scheme): SchemeClassifiedSpan[] {
+      const mapper = loadSource(scheme);
+      const encoded = service.getEncodedSemanticClassifications(
+        PROGRAM_FILE,
+        { start: 0, length: programText.length },
+        ts.SemanticClassificationFormat.TwentyTwenty,
+      );
+      const out: SchemeClassifiedSpan[] = [];
+      for (let i = 0; i < encoded.spans.length; i += 3) {
+        const tsStart = encoded.spans[i]!;
+        const classification = encoded.spans[i + 2]!;
+        // 2020 format packs (tokenType + 1) << 8 | modifierSet.
+        const kind = TOKEN_TYPES[(classification >> 8) - 1];
+        if (kind === undefined) continue;
+        const span = mapper.toScheme(tsStart);
+        if (span === null) continue;
+        // Token-faithful lifts only: the lifted text must be a single atom.
+        // Binder positions and `__arr` infrastructure lift to their WHOLE form
+        // (no token mapping yet) — painting `(define names …)` as "variable"
+        // would be wrong+noisy, so they are dropped, not approximated.
+        const text = scheme.slice(span.start, span.start + span.length);
+        if (!SCHEME_ATOM.test(text)) continue;
+        out.push({ start: span.start, length: span.length, kind });
       }
       return out;
     },
