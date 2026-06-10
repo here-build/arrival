@@ -362,6 +362,11 @@ export interface SchemeCompletionOptions {
   /** The frame floor: a candidate is 'likely' iff the model gives it ≥ this
    *  probability (V's “5% frame”). Default 0.05. */
   minProb?: number;
+  /** DEBUG: keep the popup open when the editor loses focus — without this,
+   *  clicking into devtools closes the tooltip and the popup DOM cannot be
+   *  inspected at all. Never enable in production (a blurred editor holding a
+   *  popup over other UI is wrong everywhere except a debugging bench). */
+  keepOpenOnBlur?: boolean;
 }
 
 /** The completion source alone — compose into your own `autocompletion()`.
@@ -429,6 +434,7 @@ export function schemeCompletion(backend: SchemeIdeBackend, options?: SchemeComp
   return autocompletion({
     override: [schemeCompletionSource(backend, options)],
     compareCompletions: byCodepoint,
+    ...(options?.keepOpenOnBlur === true ? { closeOnBlur: false } : {}),
   });
 }
 
