@@ -53,3 +53,5 @@ export function createBrowserSchemeLanguageService(opts?: SchemeLanguageServiceO
     },
   );
 }
+
+export { scanRequires, type RequireRef } from "./service-core.js";

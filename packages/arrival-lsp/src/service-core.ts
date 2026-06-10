@@ -23,6 +23,8 @@
 // the `__program.ts` snapshot + its version bump per source. An incremental host
 // that diffs the program file is a later optimization (noted inline).
 
+// The runtime-free reader (spans on every node) — the require scanner's truth.
+import { parseSexprs, type Node } from "@here.build/arrival-chain/sweet";
 // The deep subpath (not the package index): the index re-exports `formatJs`,
 // whose `eslint` import would drag the whole linter into any browser bundle of
 // this service. `types-emit`'s closure is the pure front-end only.
@@ -175,11 +177,24 @@ export interface SchemeDefinition {
   /** The Scheme span of the definition (lifted), or `null` if it lands in the
    *  prelude/infrastructure (a builtin's `.d.ts` has no Scheme source). */
   span: { start: number; length: number } | null;
+  /** Present when the definition lives in a REQUIRED file: the require-path of
+   *  that file (the span is in THAT file's coordinates). Absent = this buffer. */
+  file?: string;
 }
 
 export interface SchemeLanguageServiceOptions {
   /** Override the tsc compiler options used for the virtual compilation. */
   compilerOptions?: ts.CompilerOptions;
+  /**
+   * `(require "path")` resolution — THE seam that keeps the lens filesystem-
+   * blind (it runs in workers, browsers, tests): given the require string
+   * verbatim, return that file's SOURCE, or null when unknown. When present,
+   * the whole require closure (recursively, cycle-safe) is emitted AHEAD of
+   * the program in the same virtual module — scheme's load-into-scope
+   * semantics — so required defines resolve, type-flow, complete, and
+   * goto-def across files. Absent → requires stay no-ops (soft suggestions).
+   */
+  resolveModule?: (path: string) => string | null;
   /**
    * Host-injected rosetta tools (sift's evidence tools), the seam that makes the type
    * mask narrow on injected symbols — not just the builtins. Two coupled parts, both
@@ -234,6 +249,38 @@ const TOKEN_TYPES = [
 // A single scheme atom (one symbol token) — the lift-faithfulness gate for
 // semantic classifications. Same character class as the sweet reader's atoms.
 const SCHEME_ATOM = /^[\w\-!$%&*+./<=>?@^~:]+$/;
+
+/** One `(require "path")` occurrence: the path + the form's span (the anchor
+ *  for per-file summary diagnostics). */
+export interface RequireRef {
+  path: string;
+  span: { start: number; length: number };
+}
+
+/** Scan a source's top-level forms for `(require "…")` — via the real reader
+ *  (string/comment-safe), spans included. Unparseable source → []. */
+export function scanRequires(scheme: string): RequireRef[] {
+  let forest: Node[];
+  try {
+    forest = parseSexprs(scheme);
+  } catch {
+    return [];
+  }
+  const out: RequireRef[] = [];
+  for (const form of forest) {
+    if (!("list" in form) || form.span === undefined) continue;
+    const [head, arg] = form.list;
+    if (head === undefined || !("atom" in head) || head.atom !== "require") continue;
+    if (arg === undefined || !("atom" in arg) || arg.str !== true) continue;
+    out.push({ path: arg.atom, span: { start: form.span[0], length: form.span[1] - form.span[0] } });
+  }
+  return out;
+}
+
+/** Scheme-legal forms tsc rejects: redefinition is allowed in scheme — both
+ *  `(define x 1) (define x 2)` in one file AND a program define shadowing a
+ *  required one — but the flat `const` emit makes tsc cry 2451/2300. */
+const SCHEME_LEGAL_TS_CODES = new Set([2451 /* Cannot redeclare */, 2300 /* Duplicate identifier */]);
 
 // An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
 // the same class the sampler's typed-scanner uses for partial-atom stripping.
@@ -382,21 +429,88 @@ export function createSchemeLanguageServiceCore(
   let builtinEntries: SchemeCompletionEntry[] | null = null;
   let builtinSigs: Map<string, string> | null = null;
 
-  /** Emit `scheme`, install it as the program module, and return a Mapper over the
-   *  resulting span lens (the bidirectional coordinate bridge for this source). */
+  /** One emitted unit of the require closure: a required file's TS segment in
+   *  the concatenated module, with its OWN mapper (its scheme coordinates). */
+  interface DepUnit {
+    path: string;
+    /** [base, base+length) — the unit's TS segment in the program module. */
+    base: number;
+    length: number;
+    mapper: Mapper;
+  }
+
+  /** The most recent loadSource's require closure (parallel to the program
+   *  mapper the caller got back) — consumed by diagnostics (per-file error
+   *  summaries) and definitions (cross-file lifts). */
+  let depUnits: DepUnit[] = [];
+  let programRequires: RequireRef[] = [];
+
+  /**
+   * Emit `scheme` — WITH its require closure when `resolveModule` is present —
+   * install the concatenation as the program module, and return a Mapper over
+   * the PROGRAM's segment (offset-shifted; required files keep their own
+   * mappers in `depUnits`). Closure order is dependencies-first (post-order
+   * DFS, visited-set cycle-safe), matching scheme's load semantics; a dep's
+   * trailing `export {};` is stripped (one module, one export statement).
+   */
   function loadSource(scheme: string): Mapper {
+    const resolve = opts?.resolveModule;
+    depUnits = [];
+    programRequires = resolve === undefined ? [] : scanRequires(scheme);
+    let prefix = "";
+    if (resolve !== undefined && programRequires.length > 0) {
+      const visited = new Set<string>();
+      const emitDep = (path: string): void => {
+        if (visited.has(path)) return;
+        visited.add(path);
+        const source = resolve(path);
+        if (source === null) return;
+        for (const nested of scanRequires(source)) emitDep(nested.path);
+        const dep = emitTypes(source, { hostMembers: emitterMembers() });
+        const text = dep.ts.replace(/export \{\};\n$/, "");
+        const base = prefix.length;
+        depUnits.push({
+          path,
+          base,
+          length: text.length,
+          mapper: new Mapper(dep.mappings, source, dep.ts),
+        });
+        prefix += text;
+      };
+      for (const r of programRequires) emitDep(r.path);
+    }
     const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers: emitterMembers() });
-    programText = emitted;
+    const shifted =
+      prefix.length === 0 ? mappings : mappings.map((m) => ({ ...m, tsStart: m.tsStart + prefix.length }));
+    programText = prefix + emitted;
     programVersion += 1;
-    return new Mapper(mappings, scheme, emitted);
+    return new Mapper(shifted, scheme, programText);
+  }
+
+  /** The dep unit containing a TS offset of the concatenated module, if any. */
+  function depAt(tsOffset: number): DepUnit | null {
+    for (const u of depUnits) if (tsOffset >= u.base && tsOffset < u.base + u.length) return u;
+    return null;
   }
 
   return {
     getSemanticDiagnostics(scheme): SchemeDiagnostic[] {
       const mapper = loadSource(scheme);
       const out: SchemeDiagnostic[] = [];
+      // Problems INSIDE required files don't belong on this buffer's spans —
+      // they roll up into one summary per require form (provenance, not noise).
+      const depProblems = new Map<string, number>();
       for (const d of service.getSemanticDiagnostics(PROGRAM_FILE)) {
         if (d.start === undefined) continue;
+        // Scheme-legal redefinition (in-file or program-shadows-required) —
+        // never an error in scheme, only in the flat const emit.
+        if (SCHEME_LEGAL_TS_CODES.has(d.code)) continue;
+        const dep = depAt(d.start);
+        if (dep !== null) {
+          if (d.category === ts.DiagnosticCategory.Error)
+            depProblems.set(dep.path, (depProblems.get(dep.path) ?? 0) + 1);
+          continue;
+        }
         // Lift the TS diagnostic span OUT to Scheme. Drop diagnostics that don't
         // lift (unmapped prelude/infrastructure spans) — never surface a
         // wrong-positioned error.
@@ -407,14 +521,17 @@ export function createSchemeLanguageServiceCore(
         let severity = severityOf(d.category);
         let messageText = ts.flattenDiagnosticMessageText(d.messageText, "\n");
         // ── speak SCHEME, and never cry wolf on what the lens can't know ──
-        // 2304/2552 "Cannot find name": until requires/imports resolve across
-        // files, an unknown free name is at least as likely an imported binding
-        // as a typo → SUGGESTION, named by the SCHEME atom (the TS message
-        // carries the cleanName'd twin, e.g. `numberToString`).
+        // 2304/2552 "Cannot find name": an unknown free name may live outside
+        // the lens's sight (no resolveModule → any required file; with it →
+        // an unresolvable path / runtime-injected binding) → SUGGESTION, named
+        // by the SCHEME atom (the TS message carries the cleanName'd twin).
         if (d.code === 2304 || d.code === 2552) {
           const atom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
           severity = "suggestion";
-          messageText = `Cannot find name '${atom ?? lifted}' in this file (\`require\`d names aren't resolved yet).`;
+          messageText =
+            opts?.resolveModule === undefined
+              ? `Cannot find name '${atom ?? lifted}' in this file (\`require\`d names aren't resolved yet).`
+              : `Cannot find name '${atom ?? lifted}' in this file or its \`require\`s.`;
         }
         // 2339 on ArrShape: the emitter lowered a head it believes is a builtin,
         // but the prelude has no leaf — OUR roster gap, not the user's bug.
@@ -431,6 +548,21 @@ export function createSchemeLanguageServiceCore(
           severity,
           code: d.code,
           messageText,
+        });
+      }
+      // Roll dep problems up onto their require forms (first occurrence wins).
+      for (const [path, count] of depProblems) {
+        const ref = programRequires.find((r) => r.path === path);
+        if (ref === undefined) continue; // transitively required — surfaces in ITS requirer
+        const { line, character } = mapper.schemeOffsetToLineCol(ref.span.start);
+        out.push({
+          start: ref.span.start,
+          length: ref.span.length,
+          line,
+          character,
+          severity: "warning",
+          code: 0,
+          messageText: `required file "${path}" has ${count} type error${count === 1 ? "" : "s"} — open it for details.`,
         });
       }
       return out;
@@ -461,9 +593,7 @@ export function createSchemeLanguageServiceCore(
       // slot, not a completed earlier argument — the typed-scanner strips it
       // the same way before narrowing).
       const [atomStart, atomEnd] = atomBoundsAt(scheme, schemeOffset);
-      const sentinelScheme = balancePrefix(
-        `${scheme.slice(0, atomStart)} ${SENTINEL} ${scheme.slice(atomEnd)}`,
-      );
+      const sentinelScheme = balancePrefix(`${scheme.slice(0, atomStart)} ${SENTINEL} ${scheme.slice(atomEnd)}`);
       const role = findCursorRole(sentinelScheme);
       const builtinSigs = builtinSignatures();
       // Locals' signatures resolve against the program's own emitted consts.
@@ -474,7 +604,12 @@ export function createSchemeLanguageServiceCore(
       let verdicts: (boolean | null)[] | null = null;
       let paramType: string | undefined;
       if (role.kind === "argument") {
-        const probed = probeTypes(scheme, role.calleeText, role.argIndex, entries.map((e) => e.name));
+        const probed = probeTypes(
+          scheme,
+          role.calleeText,
+          role.argIndex,
+          entries.map((e) => e.name),
+        );
         verdicts = probed.verdicts;
         paramType = probed.paramType;
       }
@@ -491,7 +626,13 @@ export function createSchemeLanguageServiceCore(
       return {
         position: role.kind,
         ...(role.kind === "argument"
-          ? { slot: { callee: role.calleeText, argIndex: role.argIndex, ...(paramType === undefined ? {} : { paramType }) } }
+          ? {
+              slot: {
+                callee: role.calleeText,
+                argIndex: role.argIndex,
+                ...(paramType === undefined ? {} : { paramType }),
+              },
+            }
           : {}),
         entries: rich,
       };
@@ -505,10 +646,21 @@ export function createSchemeLanguageServiceCore(
       if (defs === undefined) return [];
       const out: SchemeDefinition[] = [];
       for (const d of defs) {
-        // Only definitions that land in the PROGRAM file have a Scheme span; a
-        // builtin's `.d.ts` definition lifts to `null` (no Scheme source).
-        const span = d.fileName === PROGRAM_FILE ? mapper.toScheme(d.textSpan.start) : null;
-        out.push({ name: d.name, kind: d.kind, span });
+        if (d.fileName !== PROGRAM_FILE) {
+          // A builtin's `.d.ts` definition — no scheme source anywhere.
+          out.push({ name: d.name, kind: d.kind, span: null });
+          continue;
+        }
+        // Inside the concatenated module: a REQUIRED file's segment lifts via
+        // THAT file's mapper (own coordinates + its require-path); the
+        // program's segment lifts via the shifted program mapper.
+        const dep = depAt(d.textSpan.start);
+        if (dep !== null) {
+          const span = dep.mapper.toScheme(d.textSpan.start - dep.base);
+          out.push({ name: d.name, kind: d.kind, span, ...(span === null ? {} : { file: dep.path }) });
+          continue;
+        }
+        out.push({ name: d.name, kind: d.kind, span: mapper.toScheme(d.textSpan.start) });
       }
       return out;
     },
@@ -714,7 +866,7 @@ export function createSchemeLanguageServiceCore(
    *  name) through the ambient `__arr`; identifier-shaped locals by name —
    *  resolved against the EMITTED PROGRAM the probe rides on. */
   function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
-    if (!builtinNames.has(name) && /^[A-Za-z_$][\w$]*$/.test(name)) return `typeof ${name}`;
+    if (!builtinNames.has(name) && /^[A-Z_$][\w$]*$/i.test(name)) return `typeof ${name}`;
     return `typeof __arr[${JSON.stringify(name)}]`;
   }
 
@@ -736,7 +888,10 @@ export function createSchemeLanguageServiceCore(
       `type __ok<T> = (([T] extends [(...a: any[]) => infer R] ? ([R] extends [__E] ? true : false) : false) extends true ? true ` +
       `: ([T] extends [__E] ? true : false));`;
     const builtinNames = new Set(builtinSignatures().keys());
-    const { ts: emitted } = emitTypes(balancePrefix(scheme), { hostMembers: emitterMembers() });
+    // Ride the FULL require closure (loadSource concatenates it), so required
+    // names resolve in the probe instead of degrading to `any`.
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
     const probeProgram = [
       emitted,
       `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
@@ -789,10 +944,10 @@ export function createSchemeLanguageServiceCore(
       const checker = checkerNow();
       builtinSigs = new Map();
       if (elements !== null && checker !== null) {
-        names.forEach((n, i) => {
+        for (const [i, n] of names.entries()) {
           const el = elements[i];
           if (el !== undefined) builtinSigs!.set(n, checker.typeToString(el));
-        });
+        }
       }
     }
     return builtinSigs;
@@ -803,19 +958,24 @@ export function createSchemeLanguageServiceCore(
    *  and are omitted. */
   function probeLocalSignatures(scheme: string, names: readonly string[]): Map<string, string> {
     const out = new Map<string, string>();
-    const idNames = names.filter((n) => /^[A-Za-z_$][\w$]*$/.test(n));
+    const idNames = names.filter((n) => /^[A-Z_$][\w$]*$/i.test(n));
     if (idNames.length === 0) return out;
-    const { ts: emitted } = emitTypes(balancePrefix(scheme), { hostMembers: emitterMembers() });
-    const probeProgram = [emitted, `declare const __sigs: [${idNames.map((n) => `typeof ${n}`).join(", ")}];`].join("\n");
+    // Ride the FULL require closure (loadSource concatenates it), so required
+    // names resolve in the probe instead of degrading to `any`.
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
+    const probeProgram = [emitted, `declare const __sigs: [${idNames.map((n) => `typeof ${n}`).join(", ")}];`].join(
+      "\n",
+    );
     const elements = readProbeTuple(probeProgram, "__sigs");
     const checker = checkerNow();
     if (elements === null || checker === null) return out;
-    idNames.forEach((n, i) => {
+    for (const [i, n] of idNames.entries()) {
       const el = elements[i];
-      if (el === undefined) return;
+      if (el === undefined) continue;
       const text = checker.typeToString(el);
       if (text !== "any") out.set(n, text);
-    });
+    }
     return out;
   }
 }

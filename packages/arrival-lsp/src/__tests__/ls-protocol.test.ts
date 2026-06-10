@@ -64,6 +64,21 @@ describe("scheme-ls over a message port", () => {
     expect(await ls.getSemanticDiagnostics(`(define x 1)`)).toHaveLength(0);
   });
 
+  it("setProjectFiles enables (require …) resolution over the wire", async () => {
+    const { server, client } = pair();
+    serveSchemeLs(server);
+    const ls = await connectSchemeLs(client, { compilerOptions: { noImplicitAny: false } });
+    await ls.setProjectFiles({ "lib/util.scm": `(define greeting "hello")` });
+    const scheme = `(require "lib/util.scm")\n(define loud (car greeting))`;
+    const diags = await ls.getSemanticDiagnostics(scheme);
+    expect(diags).toHaveLength(1); // greeting RESOLVED (string) → real bite at car
+    expect(scheme.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("greeting");
+    // without files, the same program degrades to the soft suggestion
+    await ls.setProjectFiles({});
+    const soft = await ls.getSemanticDiagnostics(scheme);
+    expect(soft.every((d) => d.severity === "suggestion")).toBe(true);
+  });
+
   it("two connections with the same options share one service (memoized)", async () => {
     const a = pair();
     const b = pair();

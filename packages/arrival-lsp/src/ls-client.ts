@@ -33,11 +33,16 @@ export interface LsPort {
 }
 
 /** The service's async twin: same methods, promise-returning — structurally a
- *  `SchemeIdeBackend` for the CodeMirror extensions. */
+ *  `SchemeIdeBackend` for the CodeMirror extensions. Plus the transport-level
+ *  `setProjectFiles`: `(require …)` resolution can't ship a callback over
+ *  postMessage, so the host pushes a files snapshot instead (re-push whenever
+ *  the project changes; replace-wholesale). */
 export type AsyncSchemeLanguageService = {
   [M in keyof SchemeLanguageService]: (
     ...args: Parameters<SchemeLanguageService[M]>
   ) => Promise<Awaited<ReturnType<SchemeLanguageService[M]>>>;
+} & {
+  setProjectFiles(files: Record<string, string>): Promise<void>;
 };
 
 export const LS_METHODS = [
@@ -76,9 +81,13 @@ export function connectSchemeLs(
       port.postMessage({ ...message, id });
     });
 
-  const client = Object.fromEntries(
-    LS_METHODS.map((method) => [method, (...args: unknown[]) => call({ kind: "call", method, args })]),
-  ) as AsyncSchemeLanguageService;
+  const client = {
+    ...Object.fromEntries(
+      LS_METHODS.map((method) => [method, (...args: unknown[]) => call({ kind: "call", method, args })]),
+    ),
+    setProjectFiles: (files: Record<string, string>) =>
+      (call as (m: Record<string, unknown>) => Promise<unknown>)({ kind: "files", files }) as Promise<void>,
+  } as AsyncSchemeLanguageService;
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("scheme-ls: worker init timed out")), timeoutMs);

@@ -28,13 +28,25 @@ import type { SchemeLanguageService, SchemeLanguageServiceOptions } from "./serv
 
 type MethodName = (typeof LS_METHODS)[number];
 
+/** `(require …)` resolution over the wire: a CALLBACK can't cross postMessage,
+ *  so each CONNECTION pushes its project-files table ({kind:"files"}) and the
+ *  shared service resolves through this swap slot. Sound because the worker
+ *  dispatches messages one at a time and the service's methods are fully
+ *  synchronous — the slot is set for exactly one call's duration. */
+let activeFiles: Readonly<Record<string, string>> | null = null;
+const resolveThroughActiveFiles = (path: string): string | null =>
+  activeFiles?.[path] ?? activeFiles?.[path.replace(/^\.\//, "")] ?? null;
+
 /** Service per options-profile — THE sharing point. */
 const sharedServices = new Map<string, SchemeLanguageService>();
 function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
   const key = JSON.stringify(options);
   let svc = sharedServices.get(key);
   if (svc === undefined) {
-    svc = createBrowserSchemeLanguageService(options as SchemeLanguageServiceOptions);
+    svc = createBrowserSchemeLanguageService({
+      ...(options as SchemeLanguageServiceOptions),
+      resolveModule: resolveThroughActiveFiles,
+    });
     sharedServices.set(key, svc);
     // Warm the first compilation off ANY caller's request path.
     const warm = svc;
@@ -52,18 +64,32 @@ function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
 /** Host the language service on a port. One call per connection. */
 export function serveSchemeLs(port: LsPort): void {
   let service: SchemeLanguageService | null = null;
+  let files: Readonly<Record<string, string>> | null = null;
   port.onmessage = (ev) => {
-    const msg = ev.data as LsInit | LsCall;
+    const msg = ev.data as LsInit | LsCall | { kind: "files"; id: number; files: Record<string, string> };
     try {
       if (msg.kind === "init") {
         service = serviceFor(msg.options);
         port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
         return;
       }
+      if (msg.kind === "files") {
+        // The connection's require-resolution table (replace-wholesale; the
+        // host pushes a fresh snapshot whenever the project changes).
+        files = msg.files;
+        port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
+        return;
+      }
       if (service === null) throw new Error("scheme-ls: call before init");
       if (!(LS_METHODS as readonly string[]).includes(msg.method))
         throw new Error(`scheme-ls: unknown method ${msg.method}`);
-      const value = (service[msg.method as MethodName] as (...a: unknown[]) => unknown)(...msg.args);
+      activeFiles = files;
+      let value: unknown;
+      try {
+        value = (service[msg.method as MethodName] as (...a: unknown[]) => unknown)(...msg.args);
+      } finally {
+        activeFiles = null;
+      }
       port.postMessage({ kind: "reply", id: msg.id, ok: true, value } satisfies LsReply);
     } catch (error) {
       port.postMessage({

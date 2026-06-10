@@ -54,3 +54,6 @@ export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./
 // The single-source seam — assemble the `host` option from a rosetta type registry
 // (`[...env.__rosettaTypes__]`) so injected tools narrow both the candidate and slot sides.
 export { assembleHostPrelude, type HostPrelude, type AssembleHostPreludeOptions } from "./host-prelude.js";
+// The require scanner (reader-true, spans included) — for hosts building
+// resolveModule plumbing or dependency graphs.
+export { scanRequires, type RequireRef } from "./service-core.js";
