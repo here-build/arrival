@@ -11,6 +11,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The virtual file-name constants moved to `virtual-files.ts` (node-free) so the
+// service core / browser entry can import them; re-exported here for back-compat.
+import { PRELUDE_FILE } from "./virtual-files.js";
+
 // Resolve the on-disk prelude under the shipped `src/` tree (tsc does not copy
 // hand-written `.d.ts` into `dist/`). From `dist/prelude.js` that is `../src/
 // prelude`; from `src/prelude.ts` (vitest/tsx) it is `./prelude`. Mirrors the
@@ -21,11 +25,7 @@ const srcRoot = isDist ? path.join(here, "..", "src") : here;
 const preludeDir = path.join(srcRoot, "prelude");
 const builtinsDir = path.join(preludeDir, "builtins");
 
-/** The virtual file name of the shared PRE prelude inside the lens file map. */
-export const PRELUDE_FILE = "__pre.d.ts";
-
-/** The virtual file name of the emitted program module inside the lens file map. */
-export const PROGRAM_FILE = "__program.ts";
+export { PRELUDE_FILE, PROGRAM_FILE } from "./virtual-files.js";
 
 /**
  * Build the virtual `.d.ts` file map the lens compilation needs: the shared PRE

@@ -1,4 +1,4 @@
-// language-service — "Scheme LSP with the TS LSP API".
+// service-core — "Scheme LSP with the TS LSP API", environment-agnostic.
 //
 // A language service that MIRRORS `ts.LanguageService` but operates on Scheme
 // source and Scheme positions. Internally it:
@@ -12,6 +12,12 @@
 // `autocompletion` consume, so a CodeMirror extension wires straight onto them
 // (see `language-service.test.ts` for the 5-line `@codemirror/lint` adapter).
 //
+// This module is the ENVIRONMENT-AGNOSTIC core: it touches neither `node:fs`
+// nor `ts.sys`, so it bundles for the browser. Where the prelude and the TS
+// default lib come from is the `ServiceEnvironment` parameter — the Node entry
+// (`language-service.ts`) reads them from disk; the browser entry (`browser.ts`)
+// uses the build-time-generated bundles.
+//
 // v1 recreates the compilation per source (the program text changes every call,
 // the prelude is constant). The prelude file map is built ONCE and reused; only
 // the `__program.ts` snapshot + its version bump per source. An incremental host
@@ -20,8 +26,8 @@
 import { emitTypes } from "@here.build/arrival-chain-view";
 import ts from "typescript";
 
-import { getPreludeFiles, PROGRAM_FILE } from "./prelude.js";
 import { Mapper } from "./span-map.js";
+import { PROGRAM_FILE } from "./virtual-files.js";
 
 /**
  * Balance an INCOMPLETE scheme prefix so it parses — for the cursor-position queries
@@ -47,10 +53,18 @@ function balancePrefix(scheme: string): string {
   let block = 0;
   for (let i = 0; i < scheme.length; i++) {
     const c = scheme[i]!;
-    if (inLine) { if (c === "\n") inLine = false; continue; }
+    if (inLine) {
+      if (c === "\n") inLine = false;
+      continue;
+    }
     if (block > 0) {
-      if (c === "#" && scheme[i + 1] === "|") { block++; i++; }
-      else if (c === "|" && scheme[i + 1] === "#") { block--; i++; }
+      if (c === "#" && scheme[i + 1] === "|") {
+        block++;
+        i++;
+      } else if (c === "|" && scheme[i + 1] === "#") {
+        block--;
+        i++;
+      }
       continue;
     }
     if (inStr) {
@@ -59,11 +73,16 @@ function balancePrefix(scheme: string): string {
       else if (c === '"') inStr = false;
       continue;
     }
-    if (c === "#" && scheme[i + 1] === "\\") { i += 2; continue; } // char literal `#\(` — skip the next char
+    if (c === "#" && scheme[i + 1] === "\\") {
+      i += 2;
+      continue;
+    } // char literal `#\(` — skip the next char
     if (c === '"') inStr = true;
     else if (c === ";") inLine = true;
-    else if (c === "#" && scheme[i + 1] === "|") { block = 1; i++; }
-    else if (c === "(" || c === "[") depth++;
+    else if (c === "#" && scheme[i + 1] === "|") {
+      block = 1;
+      i++;
+    } else if (c === "(" || c === "[") depth++;
     else if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
   }
   // An unterminated string can't be balanced into a valid token — close it too, then the parens.
@@ -138,6 +157,25 @@ export interface SchemeLanguageServiceOptions {
   host?: { prelude: string; members: readonly string[] };
 }
 
+/**
+ * Where the virtual compilation's NON-PROGRAM files come from — the seam between
+ * the environment-agnostic core and the entry that knows the platform.
+ */
+export interface ServiceEnvironment {
+  /** The prelude file map (PRE + builtin leaves) — the compilation's root files
+   *  besides the program. The core adds `__host.d.ts` / `__program.ts` on top. */
+  rootFiles: Map<string, string>;
+  /** Lookup-only virtual files (the TS default-lib chain in the browser) — served
+   *  to the compiler when it asks, but never offered as root files. */
+  supportFiles?: ReadonlyMap<string, string>;
+  /** Resolve the default-lib file name for the merged compiler options. Node:
+   *  `ts.getDefaultLibFilePath`; browser: the bundled lib's virtual file name. */
+  getDefaultLibFileName: (options: ts.CompilerOptions) => string;
+  /** Optional real-fs fallback (Node: `ts.sys`) for files outside the maps —
+   *  the on-disk default-lib chain. Absent in the browser: maps are everything. */
+  sys?: Pick<ts.System, "readFile" | "fileExists" | "readDirectory" | "directoryExists" | "getDirectories">;
+}
+
 const DEFAULT_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
   strict: true,
@@ -182,48 +220,57 @@ export interface SchemeLanguageService {
 }
 
 /**
- * Create a Scheme language service. Reuses ONE prelude file map + ONE
- * `LanguageServiceHost` whose only mutable cell is the emitted `__program.ts`
- * snapshot; each query emits fresh TS for its `scheme` argument and bumps the
- * program version so tsc re-checks it. (Recreate-per-source is fine for v1; an
- * incremental host that diffs the program text is a later optimization.)
+ * Create a Scheme language service over an explicit {@link ServiceEnvironment}.
+ * Reuses ONE prelude file map + ONE `LanguageServiceHost` whose only mutable cell
+ * is the emitted `__program.ts` snapshot; each query emits fresh TS for its
+ * `scheme` argument and bumps the program version so tsc re-checks it.
+ * (Recreate-per-source is fine for v1; an incremental host that diffs the
+ * program text is a later optimization.)
  */
-export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions): SchemeLanguageService {
+export function createSchemeLanguageServiceCore(
+  env: ServiceEnvironment,
+  opts?: SchemeLanguageServiceOptions,
+): SchemeLanguageService {
   const options: ts.CompilerOptions = { ...DEFAULT_OPTIONS, ...opts?.compilerOptions };
-  const preludeFiles = getPreludeFiles();
+  const preludeFiles = env.rootFiles;
+  const supportFiles = env.supportFiles ?? new Map<string, string>();
   // Host-injected leaf (sift's tool declarations) — merged into the same global ArrShape.
   if (opts?.host !== undefined) preludeFiles.set("__host.d.ts", opts.host.prelude);
   // The host member roster — heads in this set lower to `__arr[...]` so their slots narrow.
-  const hostMembers: ReadonlySet<string> = new Set(opts?.host?.members ?? []);
+  const hostMembers: ReadonlySet<string> = new Set(opts?.host?.members);
 
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
   let programVersion = 0;
+
+  const inMemory = (fn: string): string | undefined => preludeFiles.get(fn) ?? supportFiles.get(fn);
 
   const host: ts.LanguageServiceHost = {
     getScriptFileNames: () => [...preludeFiles.keys(), PROGRAM_FILE],
     getScriptVersion: (fn) => (fn === PROGRAM_FILE ? String(programVersion) : "1"),
     getScriptSnapshot: (fn) => {
       if (fn === PROGRAM_FILE) return ts.ScriptSnapshot.fromString(programText);
-      const inMem = preludeFiles.get(fn);
+      const inMem = inMemory(fn);
       if (inMem !== undefined) return ts.ScriptSnapshot.fromString(inMem);
       try {
-        return ts.ScriptSnapshot.fromString(ts.sys.readFile(fn) ?? "");
+        const onDisk = env.sys?.readFile(fn);
+        return onDisk === undefined ? undefined : ts.ScriptSnapshot.fromString(onDisk);
       } catch {
         return undefined;
       }
     },
     getCurrentDirectory: () => "/",
     getCompilationSettings: () => options,
-    getDefaultLibFileName: (o) => ts.getDefaultLibFilePath(o),
-    fileExists: (fn) => fn === PROGRAM_FILE || preludeFiles.has(fn) || ts.sys.fileExists(fn),
+    getDefaultLibFileName: (o) => env.getDefaultLibFileName(o),
+    fileExists: (fn) => fn === PROGRAM_FILE || inMemory(fn) !== undefined || (env.sys?.fileExists(fn) ?? false),
     readFile: (fn) => {
       if (fn === PROGRAM_FILE) return programText;
-      return preludeFiles.has(fn) ? preludeFiles.get(fn) : ts.sys.readFile(fn);
+      return inMemory(fn) ?? env.sys?.readFile(fn);
     },
-    readDirectory: ts.sys.readDirectory,
-    directoryExists: ts.sys.directoryExists,
-    getDirectories: ts.sys.getDirectories,
+    readDirectory: (path, extensions, exclude, include, depth) =>
+      env.sys?.readDirectory(path, extensions, exclude, include, depth) ?? [],
+    directoryExists: (dir) => env.sys?.directoryExists(dir) ?? false,
+    getDirectories: (dir) => env.sys?.getDirectories(dir) ?? [],
   };
 
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
@@ -312,7 +359,9 @@ export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions)
       if (cands.length === 0) return cands;
       // 1. Locate the enclosing call's argument slot at the cursor. Insert the clean-name-proof
       //    sentinel at the cursor, balance, emit.
-      const sentinelScheme = balancePrefix(scheme.slice(0, schemeOffset) + ` ${SENTINEL} ` + scheme.slice(schemeOffset));
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
+      );
       const slot = findCallSlot(sentinelScheme);
       if (slot === null) return cands; // not a typed-call argument slot → no T narrowing
       // 2. Batched conditional-type probe → per-candidate verdict in one checker read.
@@ -339,7 +388,10 @@ export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions)
         for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
           if (ts.isCallExpression(p)) {
             const argIndex = p.arguments.findIndex((a) => a.getStart(sf) <= s && e <= a.end);
-            if (argIndex >= 0) { found = { calleeText: p.expression.getText(sf), argIndex }; return; }
+            if (argIndex !== -1) {
+              found = { calleeText: p.expression.getText(sf), argIndex };
+              return;
+            }
           }
         }
       }

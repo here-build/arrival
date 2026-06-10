@@ -32,6 +32,8 @@ export const builtinsDir: string = path.join(preludeDir, "builtins");
 // can build its own compilation or remap coordinates directly.
 export {
   createSchemeLanguageService,
+  createSchemeLanguageServiceCore,
+  type ServiceEnvironment,
   type SchemeLanguageService,
   type SchemeLanguageServiceOptions,
   type SchemeDiagnostic,
@@ -39,6 +41,8 @@ export {
   type SchemeCompletionEntry,
   type SchemeDefinition,
 } from "./language-service.js";
+// Browser/fs-less runtimes: import `@here.build/arrival-type-lens/browser` —
+// same service over build-time-generated bundles (prelude + TS default libs).
 export { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "./prelude.js";
 export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 // The Σ∩T bridge — wrap a structural+Σ OracleScanner so its validSymbols() is type-narrowed by
@@ -46,8 +50,4 @@ export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
 // The single-source seam — assemble the `host` option from a rosetta type registry
 // (`[...env.__rosettaTypes__]`) so injected tools narrow both the candidate and slot sides.
-export {
-  assembleHostPrelude,
-  type HostPrelude,
-  type AssembleHostPreludeOptions,
-} from "./host-prelude.js";
+export { assembleHostPrelude, type HostPrelude, type AssembleHostPreludeOptions } from "./host-prelude.js";
