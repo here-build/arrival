@@ -9,6 +9,19 @@
 export { schemeSweet } from "./scheme-sweet.js";
 export { paramHintsExtension } from "./param-hints.js";
 export {
+  schemeStructural,
+  schemeStructuralKeymap,
+  expandSelection,
+  contractSelection,
+  slurpForward,
+  barfForward,
+  spliceForm,
+  killSexp,
+  forceDeleteBackward,
+  schemeIndentAt,
+  type SchemeStructuralOptions,
+} from "./structural.js";
+export {
   schemeIde,
   schemeLinter,
   schemeHover,
