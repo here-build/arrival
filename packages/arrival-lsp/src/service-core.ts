@@ -280,8 +280,18 @@ export function createSchemeLanguageServiceCore(
   const supportFiles = env.supportFiles ?? new Map<string, string>();
   // Host-injected leaf (sift's tool declarations) — merged into the same global ArrShape.
   if (opts?.host !== undefined) preludeFiles.set("__host.d.ts", opts.host.prelude);
-  // The host member roster — heads in this set lower to `__arr[...]` so their slots narrow.
-  const hostMembers: ReadonlySet<string> = new Set(opts?.host?.members);
+  // The emitter's member roster — a head in this set lowers to `__arr[…]` so its
+  // signature bites and its slots narrow. DERIVED, not listed: the merged
+  // ArrShape itself (prelude leaves + host leaf, read back off the checker via
+  // the `__arr[""]` probe) is the single source of truth. Authoring a new
+  // builtins/ leaf is the ONLY step to teach both the emitter and completions a
+  // name; a hand-kept roster here would be a third list drifting against the
+  // leaves and chain-view's projection stdlib. Lazy: the probe needs `service`.
+  let memberRoster: ReadonlySet<string> | null = null;
+  const emitterMembers = (): ReadonlySet<string> => {
+    memberRoster ??= new Set([...builtinCompletions().map((e) => e.name), ...(opts?.host?.members ?? [])]);
+    return memberRoster;
+  };
 
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
@@ -327,7 +337,7 @@ export function createSchemeLanguageServiceCore(
   /** Emit `scheme`, install it as the program module, and return a Mapper over the
    *  resulting span lens (the bidirectional coordinate bridge for this source). */
   function loadSource(scheme: string): Mapper {
-    const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers });
+    const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers: emitterMembers() });
     programText = emitted;
     programVersion += 1;
     return new Mapper(mappings, scheme, emitted);
@@ -345,14 +355,34 @@ export function createSchemeLanguageServiceCore(
         const span = mapper.toScheme(d.start);
         if (span === null) continue;
         const { line, character } = mapper.schemeOffsetToLineCol(span.start);
+        const lifted = scheme.slice(span.start, span.start + span.length);
+        let severity = severityOf(d.category);
+        let messageText = ts.flattenDiagnosticMessageText(d.messageText, "\n");
+        // ── speak SCHEME, and never cry wolf on what the lens can't know ──
+        // 2304/2552 "Cannot find name": until requires/imports resolve across
+        // files, an unknown free name is at least as likely an imported binding
+        // as a typo → SUGGESTION, named by the SCHEME atom (the TS message
+        // carries the cleanName'd twin, e.g. `numberToString`).
+        if (d.code === 2304 || d.code === 2552) {
+          const atom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
+          severity = "suggestion";
+          messageText = `Cannot find name '${atom ?? lifted}' in this file (\`require\`d names aren't resolved yet).`;
+        }
+        // 2339 on ArrShape: the emitter lowered a head it believes is a builtin,
+        // but the prelude has no leaf — OUR roster gap, not the user's bug.
+        else if (d.code === 2339 && messageText.includes("'ArrShape'")) {
+          const prop = /Property '([^']+)'/.exec(messageText)?.[1];
+          severity = "suggestion";
+          messageText = `'${prop ?? lifted}' has no builtin type signature yet — the call is unchecked.`;
+        }
         out.push({
           start: span.start,
           length: span.length,
           line,
           character,
-          severity: severityOf(d.category),
+          severity,
           code: d.code,
-          messageText: ts.flattenDiagnosticMessageText(d.messageText, "\n"),
+          messageText,
         });
       }
       return out;

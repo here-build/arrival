@@ -40,12 +40,48 @@ describe("getSemanticDiagnostics — bites in Scheme coordinates", () => {
 
   // THE EMPTY BARREL: the compilation's globals are types-only (the lib bundle
   // strips every ambient JS value at generation). A JS global used as a scheme
-  // symbol is a Cannot-find-name bite AT THE COMPILATION LEVEL — scheme has no
-  // JS environment, and this is what keeps it out of completions at the source.
-  it("the JS environment does not exist — (parseInt …) bites", () => {
+  // symbol is unresolvable AT THE COMPILATION LEVEL — scheme has no JS
+  // environment — and surfaces under the unknown-name policy below.
+  it("the JS environment does not exist — (parseInt …) is unresolvable", () => {
     const diags = ls.getSemanticDiagnostics(`(define n (parseInt "3"))`);
     expect(diags.length).toBeGreaterThan(0);
     expect(diags.some((d) => d.messageText.includes("parseInt"))).toBe(true);
+  });
+
+  // UNKNOWN-NAME POLICY: until requires resolve across files, an unknown free
+  // name is at least as likely an imported binding as a typo → a SUGGESTION
+  // (soft mark), named by the SCHEME atom — never the cleanName'd TS twin
+  // (`getenvNum`), and never an error-severity cry-wolf on correct code.
+  it("unknown free names are scheme-named suggestions, not errors", () => {
+    const scheme = `(define x (getenv-num "PORT"))`;
+    const diags = ls.getSemanticDiagnostics(scheme);
+    expect(diags).toHaveLength(1);
+    expect(diags[0]!.severity).toBe("suggestion");
+    expect(diags[0]!.messageText).toContain("'getenv-num'");
+    expect(diags[0]!.messageText).not.toContain("getenvNum");
+  });
+
+  // `(require …)` is an environment directive — nothing to check in-buffer.
+  // It used to emit a bare `require(...)` call → a bogus @types/node upsell.
+  it("(require …) is a no-op, not an error", () => {
+    expect(ls.getSemanticDiagnostics(`(require "lib/util.scm")\n(define x 1)`)).toHaveLength(0);
+  });
+
+  // `and`/`or` have leaves (logic.d.ts) — a predicate chain is clean, and the
+  // old "Property 'and' does not exist on type 'ArrShape'" leak is gone.
+  it("(and …)/(or …) predicate chains type-check clean", () => {
+    const scheme = `(define xs (list 1 2 3))\n(define ok (and (not (null? xs)) (or (odd? (car xs)) (even? (car xs)))))`;
+    expect(ls.getSemanticDiagnostics(scheme)).toHaveLength(0);
+  });
+
+  // The member roster is DERIVED from the merged ArrShape (leaves are the one
+  // authored source): a leaf-only name like number->string lowers via __arr
+  // and its signature bites — no hand-kept emitter list.
+  it("a leaf-only builtin (number->string) is known to the emitter and bites", () => {
+    expect(ls.getSemanticDiagnostics(`(define s (number->string 42))`)).toHaveLength(0);
+    const bad = ls.getSemanticDiagnostics(`(define s (number->string "x"))`);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.severity).toBe("error");
   });
 
   it("never surfaces a wrong-positioned (unliftable) diagnostic", () => {
@@ -147,7 +183,7 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
   // The cursor-position queries balance the prefix first (closers append at the END, so the
   // cursor offset is unchanged), making them work mid-edit. Before this, all four returned [].
   it("returns completions on an UNBALANCED prefix (the sampler's mid-generation case)", () => {
-    for (const prefix of ["(car ", "(filter (lambda (x) (> x ", "(list (ca", '(+ 1 ']) {
+    for (const prefix of ["(car ", "(filter (lambda (x) (> x ", "(list (ca", "(+ 1 "]) {
       const names = ls.getCompletionsAtPosition(prefix, prefix.length).map((e) => e.name);
       expect(names.length).toBeGreaterThan(0); // was [] (empty emit) before balancing
     }
