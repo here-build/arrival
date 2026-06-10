@@ -252,9 +252,20 @@ const SYMBOL_BEFORE = /[\w\-!$%&*+./<=>?@^~]*$/;
 // (they never reach the type lens; the emitter consumes them). The language
 // package owns them, so the completion source merges them under the backend's
 // answers. Reuses the highlighter's classification sets.
+const SECTION_LIKELY = { name: "likely here", rank: 0 };
+const SECTION_FITS = { name: "fits this slot", rank: 1 };
+const SECTION_SCOPE = { name: "in scope", rank: 2 };
+const SECTION_BUILTINS = { name: "builtins", rank: 3 };
+const SECTION_FORMS = { name: "forms", rank: 4 };
+
+// NB the section is load-bearing for ORDER, not just the header: CM sorts
+// UNSECTIONED options before all sections — without it, ~40 keywords pile up
+// ABOVE "likely here"/"fits this slot" (caught by the AutocompleteDebug
+// visual states, 2026-06-10). Forms rank LAST by design.
 const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWORDS].map((name) => ({
   label: name,
   type: "keyword",
+  section: SECTION_FORMS,
 }));
 
 // ── the rich (Σ∩T-ranked) completion pipeline ───────────────────────────────
@@ -269,11 +280,6 @@ const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWO
 //   • Signature in the info panel (the most-praised lisp completion behavior).
 //   • Commit on space / `)` — scheme's natural commit keys.
 
-const SECTION_LIKELY = { name: "likely here", rank: 0 };
-const SECTION_FITS = { name: "fits this slot", rank: 1 };
-const SECTION_SCOPE = { name: "in scope", rank: 2 };
-const SECTION_BUILTINS = { name: "builtins", rank: 3 };
-const SECTION_FORMS = { name: "forms", rank: 4 };
 
 /** Boost tiers (CM range −99..99; boost only orders EQUAL-quality matches, so
  *  fuzzy match quality still wins — which is correct). A nucleus member rises
