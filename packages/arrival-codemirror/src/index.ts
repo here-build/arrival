@@ -15,6 +15,8 @@ export {
   schemeCompletion,
   schemeCompletionSource,
   schemeGotoDefinition,
+  schemeSemanticHighlight,
+  classificationsToDecorations,
   toCmDiagnostics,
   toCmCompletions,
   type SchemeIdeBackend,
@@ -22,6 +24,8 @@ export {
   type SchemeIdeQuickInfo,
   type SchemeIdeCompletionEntry,
   type SchemeIdeDefinition,
+  type SchemeIdeClassifiedSpan,
   type SchemeIdeOptions,
   type SchemeLinterOptions,
+  type SchemeSemanticHighlightOptions,
 } from "./ide.js";

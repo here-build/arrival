@@ -21,8 +21,16 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import { linter, type Diagnostic } from "@codemirror/lint";
-import type { Extension } from "@codemirror/state";
-import { EditorView, hoverTooltip, type Tooltip } from "@codemirror/view";
+import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  hoverTooltip,
+  type Tooltip,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sweet.js";
 
@@ -68,12 +76,23 @@ export interface SchemeIdeDefinition {
   span: { start: number; length: number } | null;
 }
 
+/** A semantically-classified token span (mirrors `SchemeClassifiedSpan`):
+ *  what an identifier IS per the type checker — `"parameter"`, `"variable"`,
+ *  `"function"`, `"property"`, `"type"`, … */
+export interface SchemeIdeClassifiedSpan {
+  start: number;
+  length: number;
+  kind: string;
+}
+
 /** What the IDE extensions need from a language service, in Scheme coordinates. */
 export interface SchemeIdeBackend {
   getSemanticDiagnostics(scheme: string): MaybePromise<SchemeIdeDiagnostic[]>;
   getQuickInfoAtPosition(scheme: string, schemeOffset: number): MaybePromise<SchemeIdeQuickInfo | null>;
   getCompletionsAtPosition(scheme: string, schemeOffset: number): MaybePromise<SchemeIdeCompletionEntry[]>;
   getDefinitionAtPosition(scheme: string, schemeOffset: number): MaybePromise<SchemeIdeDefinition[]>;
+  /** Optional — when present, `schemeIde` mounts the semantic-highlight layer. */
+  getSemanticClassifications?(scheme: string): MaybePromise<SchemeIdeClassifiedSpan[]>;
 }
 
 // ── pure mappers (exported for tests) ──────────────────────────────────────
@@ -219,6 +238,104 @@ export function schemeCompletion(backend: SchemeIdeBackend): Extension {
   return autocompletion({ override: [schemeCompletionSource(backend)] });
 }
 
+// ── semantic highlighting — the checker's knowledge over the lexical layer ──
+// The grammar keeps painting keywords/strings/parens (scheme-sweet tags); this
+// layer adds what only the type lens knows: THIS atom is a parameter, THAT one
+// a local, THAT one a function. Marks carry classes, not colors — the base
+// theme italicizes parameters (typographic, theme-agnostic); themes may color
+// `.cm-scheme-sem-<kind>` (parameter/variable/function/property/type/…).
+
+const semanticMarks = new Map<string, Decoration>();
+const semanticMark = (kind: string): Decoration => {
+  let mark = semanticMarks.get(kind);
+  if (mark === undefined) {
+    mark = Decoration.mark({ class: `cm-scheme-sem cm-scheme-sem-${kind}` });
+    semanticMarks.set(kind, mark);
+  }
+  return mark;
+};
+
+/** Lift classified spans into a decoration set, clamped + sorted (exported for tests). */
+export function classificationsToDecorations(
+  spans: readonly SchemeIdeClassifiedSpan[],
+  docLength: number,
+): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const s of spans.toSorted((a, b) => a.start - b.start || a.length - b.length)) {
+    const from = Math.max(0, Math.min(s.start, docLength));
+    const to = Math.max(from, Math.min(s.start + s.length, docLength));
+    if (to === from) continue;
+    builder.add(from, to, semanticMark(s.kind));
+  }
+  return builder.finish();
+}
+
+const semanticTheme = EditorView.baseTheme({
+  ".cm-scheme-sem-parameter": { fontStyle: "italic" },
+});
+
+export interface SchemeSemanticHighlightOptions {
+  /** Debounce after the last edit before re-classifying (ms). Default 400. */
+  delay?: number;
+}
+
+/** Semantic token highlighting over the backend's classifications. No-op when
+ *  the backend doesn't implement `getSemanticClassifications`. */
+export function schemeSemanticHighlight(
+  backend: SchemeIdeBackend,
+  options?: SchemeSemanticHighlightOptions,
+): Extension {
+  const classify = backend.getSemanticClassifications?.bind(backend);
+  if (classify === undefined) return [];
+
+  const setMarks = StateEffect.define<DecorationSet>();
+  const marksField = StateField.define<DecorationSet>({
+    create: () => Decoration.none,
+    update: (deco, tr) => {
+      let next = deco.map(tr.changes);
+      for (const e of tr.effects) if (e.is(setMarks)) next = e.value;
+      return next;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+
+  const plugin = ViewPlugin.fromClass(
+    class {
+      private timer: ReturnType<typeof setTimeout> | null = null;
+      private generation = 0;
+      constructor(private readonly view: EditorView) {
+        this.schedule();
+      }
+      update(u: ViewUpdate): void {
+        if (u.docChanged) this.schedule();
+      }
+      destroy(): void {
+        this.generation += 1; // orphan any in-flight run
+        if (this.timer !== null) clearTimeout(this.timer);
+      }
+      private schedule(): void {
+        const gen = ++this.generation;
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = setTimeout(() => void this.run(gen), options?.delay ?? 400);
+      }
+      private async run(gen: number): Promise<void> {
+        let spans: SchemeIdeClassifiedSpan[];
+        try {
+          spans = await classify(this.view.state.doc.toString());
+        } catch {
+          return; // a mid-edit parse failure keeps the previous marks
+        }
+        if (gen !== this.generation) return; // superseded by a newer edit
+        this.view.dispatch({
+          effects: setMarks.of(classificationsToDecorations(spans, this.view.state.doc.length)),
+        });
+      }
+    },
+  );
+
+  return [marksField, plugin, semanticTheme];
+}
+
 /** Cmd/Ctrl-click on a symbol jumps to its definition (in-buffer spans only —
  *  a builtin's definition lives in the prelude and has no buffer span). */
 export function schemeGotoDefinition(backend: SchemeIdeBackend): Extension {
@@ -247,9 +364,12 @@ export interface SchemeIdeOptions {
   hover?: boolean;
   completion?: boolean;
   gotoDefinition?: boolean;
+  semanticHighlight?: boolean | SchemeSemanticHighlightOptions;
 }
 
-/** The IDE bundle: lint + hover + completion + go-to-definition (each opt-out). */
+/** The IDE bundle: lint + hover + completion + go-to-definition + semantic
+ *  highlighting (each opt-out; semantic highlighting also requires the backend
+ *  to implement `getSemanticClassifications`). */
 export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions): Extension {
   const ext: Extension[] = [];
   if (options?.lint !== false)
@@ -257,5 +377,12 @@ export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions)
   if (options?.hover !== false) ext.push(schemeHover(backend));
   if (options?.completion !== false) ext.push(schemeCompletion(backend));
   if (options?.gotoDefinition !== false) ext.push(schemeGotoDefinition(backend));
+  if (options?.semanticHighlight !== false)
+    ext.push(
+      schemeSemanticHighlight(
+        backend,
+        typeof options?.semanticHighlight === "object" ? options.semanticHighlight : undefined,
+      ),
+    );
   return ext;
 }

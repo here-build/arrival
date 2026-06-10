@@ -14,7 +14,13 @@ import { EditorState } from "@codemirror/state";
 import { createSchemeLanguageService } from "@here.build/arrival-type-lens";
 import { describe, expect, it } from "vitest";
 
-import { schemeCompletionSource, toCmCompletions, toCmDiagnostics, type SchemeIdeBackend } from "../ide.js";
+import {
+  classificationsToDecorations,
+  schemeCompletionSource,
+  toCmCompletions,
+  toCmDiagnostics,
+  type SchemeIdeBackend,
+} from "../ide.js";
 
 // THE drift guard: arrival-type-lens's service must satisfy the seam as-is.
 const backend: SchemeIdeBackend = createSchemeLanguageService();
@@ -69,6 +75,29 @@ describe("schemeCompletionSource — completions through the seam, headless", ()
   it("stays quiet at a non-symbol position unless explicitly invoked", async () => {
     const scheme = `(car xs) `;
     expect(await complete(scheme, scheme.length)).toBeNull();
+  });
+});
+
+describe("semantic highlighting — classifications lift into mark decorations", () => {
+  it("marks parameter/variable/function use-sites from the real backend", async () => {
+    const scheme = `(define (greet name)\n  (string-append "hello, " name))\n(define g (greet "ada"))`;
+    const spans = await backend.getSemanticClassifications!(scheme);
+    const deco = classificationsToDecorations(spans, scheme.length);
+    const marks: { text: string; cls: string }[] = [];
+    const cursor = deco.iter();
+    while (cursor.value !== null) {
+      marks.push({ text: scheme.slice(cursor.from, cursor.to), cls: (cursor.value.spec as { class: string }).class });
+      cursor.next();
+    }
+    expect(marks.some((m) => m.text === "name" && m.cls.includes("cm-scheme-sem-parameter"))).toBe(true);
+    expect(marks.some((m) => m.text === "greet" && m.cls.includes("cm-scheme-sem-function"))).toBe(true);
+  });
+
+  it("clamps out-of-doc spans instead of throwing", () => {
+    const deco = classificationsToDecorations([{ start: 5, length: 100, kind: "variable" }], 8);
+    const cursor = deco.iter();
+    expect(cursor.from).toBe(5);
+    expect(cursor.to).toBe(8);
   });
 });
 
