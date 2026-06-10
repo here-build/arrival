@@ -282,6 +282,40 @@ export function scanRequires(scheme: string): RequireRef[] {
  *  required one — but the flat `const` emit makes tsc cry 2451/2300. */
 const SCHEME_LEGAL_TS_CODES = new Set([2451 /* Cannot redeclare */, 2300 /* Duplicate identifier */]);
 
+/** Collect the rendered types a parameter's USE SITES expect inside `body`
+ *  (checker.getContextualType per occurrence). Inner arrows re-binding the
+ *  name shadow it (skipped). `null` = blocked: a site demanded a type the
+ *  annotation gate rejects — conflicting/unprintable evidence, do not annotate. */
+function expectedTypesOf(name: string, body: ts.Node, checker: ts.TypeChecker): Set<string> | null {
+  const expected = new Set<string>();
+  let blocked = false;
+  const walk = (n: ts.Node): void => {
+    if (blocked) return;
+    // An inner arrow re-binding the name shadows it — stop descending.
+    if (ts.isArrowFunction(n) && n.parameters.some((p) => ts.isIdentifier(p.name) && p.name.text === name)) return;
+    if (ts.isIdentifier(n) && n.text === name) {
+      const t = checker.getContextualType(n);
+      if (t !== undefined) {
+        const rendered = checker.typeToString(t);
+        if (annotatableType(rendered)) expected.add(rendered);
+        else if (rendered !== "any" && rendered !== "unknown") blocked = true;
+      }
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(body);
+  return blocked ? null : expected;
+}
+
+/** The rendered-type gate for inferred annotations: reject the unknowable and
+ *  the unprintable (an annotation must round-trip through the ambient
+ *  prelude's vocabulary). */
+function annotatableType(rendered: string): boolean {
+  if (rendered === "any" || rendered === "unknown" || rendered === "never") return false;
+  if (rendered.length > 60 || rendered.includes("qzcursorzq") || rendered.includes("__")) return false;
+  return true;
+}
+
 // An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
 // the same class the sampler's typed-scanner uses for partial-atom stripping.
 const ATOM_CHAR = /[^\s()[\]{}"';]/;
@@ -447,16 +481,25 @@ export function createSchemeLanguageServiceCore(
 
   /**
    * Emit `scheme` — WITH its require closure when `resolveModule` is present —
-   * install the concatenation as the program module, and return a Mapper over
-   * the PROGRAM's segment (offset-shifted; required files keep their own
-   * mappers in `depUnits`). Closure order is dependencies-first (post-order
+   * install the concatenation as the program module, run USAGE-BASED PARAMETER
+   * INFERENCE over it (inferParamInsertions: V's "infer from consumers"), and
+   * return a Mapper over the PROGRAM's segment. Required files keep their own
+   * mappers in `depUnits`. Closure order is dependencies-first (post-order
    * DFS, visited-set cycle-safe), matching scheme's load semantics; a dep's
    * trailing `export {};` is stripped (one module, one export statement).
    */
   function loadSource(scheme: string): Mapper {
     const resolve = opts?.resolveModule;
-    depUnits = [];
     programRequires = resolve === undefined ? [] : scanRequires(scheme);
+    // 1. Emit every unit (deps first), tracking raw segments + LOCAL mappings.
+    interface RawUnit {
+      path: string;
+      base: number;
+      length: number;
+      source: string;
+      localMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[];
+    }
+    const rawDeps: RawUnit[] = [];
     let prefix = "";
     if (resolve !== undefined && programRequires.length > 0) {
       const visited = new Set<string>();
@@ -468,23 +511,92 @@ export function createSchemeLanguageServiceCore(
         for (const nested of scanRequires(source)) emitDep(nested.path);
         const dep = emitTypes(source, { hostMembers: emitterMembers() });
         const text = dep.ts.replace(/export \{\};\n$/, "");
-        const base = prefix.length;
-        depUnits.push({
-          path,
-          base,
-          length: text.length,
-          mapper: new Mapper(dep.mappings, source, dep.ts),
-        });
+        rawDeps.push({ path, base: prefix.length, length: text.length, source, localMappings: dep.mappings });
         prefix += text;
       };
       for (const r of programRequires) emitDep(r.path);
     }
     const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers: emitterMembers() });
-    const shifted =
-      prefix.length === 0 ? mappings : mappings.map((m) => ({ ...m, tsStart: m.tsStart + prefix.length }));
+    const programBase = prefix.length;
     programText = prefix + emitted;
     programVersion += 1;
-    return new Mapper(shifted, scheme, programText);
+
+    // 2. Parameter inference: each unannotated arrow param's USE SITES are
+    //    asked (checker.getContextualType) what they expect; unanimous →
+    //    `: T` injected at the param. Then every coordinate system shifts:
+    //    an insertion at p moves positions ≥ p and widens spans containing p.
+    const insertions = inferParamInsertions();
+    let programMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[];
+    if (insertions.length > 0) {
+      let next = "";
+      let at = 0;
+      for (const ins of insertions) {
+        next += programText.slice(at, ins.pos) + ins.text;
+        at = ins.pos;
+      }
+      programText = next + programText.slice(at);
+      programVersion += 1;
+      const shiftAt = (p: number): number =>
+        p + insertions.reduce((s, ins) => s + (ins.pos <= p ? ins.text.length : 0), 0);
+      const widen = (start: number, len: number): number =>
+        len + insertions.reduce((s, ins) => s + (ins.pos > start && ins.pos < start + len ? ins.text.length : 0), 0);
+      for (const u of rawDeps) {
+        const newBase = shiftAt(u.base);
+        u.localMappings = u.localMappings.map((m) => ({
+          ...m,
+          tsLength: widen(u.base + m.tsStart, m.tsLength),
+          tsStart: shiftAt(u.base + m.tsStart) - newBase,
+        }));
+        u.length = shiftAt(u.base + u.length) - newBase;
+        u.base = newBase;
+      }
+      programMappings = mappings.map((m) => ({
+        ...m,
+        tsLength: widen(programBase + m.tsStart, m.tsLength),
+        tsStart: shiftAt(programBase + m.tsStart),
+      }));
+    } else {
+      programMappings = mappings.map((m) => ({ ...m, tsStart: m.tsStart + programBase }));
+    }
+
+    // 3. Mappers over the FINAL text.
+    depUnits = rawDeps.map((u) => ({
+      path: u.path,
+      base: u.base,
+      length: u.length,
+      mapper: new Mapper(u.localMappings, u.source, programText.slice(u.base, u.base + u.length)),
+    }));
+    return new Mapper(programMappings, scheme, programText);
+  }
+
+  /** V's "infer from consumers": for every UNANNOTATED arrow parameter in the
+   *  current program module, collect what its use sites EXPECT
+   *  (checker.getContextualType — `(string-append str1 …)` expects SStr at
+   *  str1's slot) and, when all sites agree on one rendered type, produce a
+   *  `: T` insertion at the parameter. Shadowed inner re-bindings are skipped;
+   *  conflicting or unknowable sites leave the param unannotated (the
+   *  conservative degrade — never a wrong annotation, TS generics can't do
+   *  this at all: they infer at call sites, never from bodies). */
+  function inferParamInsertions(): { pos: number; text: string }[] {
+    const program = service.getProgram();
+    const sf = program?.getSourceFile(PROGRAM_FILE);
+    if (!sf || !program) return [];
+    const checker = program.getTypeChecker();
+    const insertions: { pos: number; text: string }[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isArrowFunction(node)) {
+        for (const param of node.parameters) {
+          if (param.type !== undefined || !ts.isIdentifier(param.name)) continue;
+          const expected = expectedTypesOf(param.name.text, node.body, checker);
+          if (expected !== null && expected.size === 1) {
+            insertions.push({ pos: param.name.end, text: `: ${[...expected][0]!}` });
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return insertions.toSorted((a, b) => a.pos - b.pos);
   }
 
   /** The dep unit containing a TS offset of the concatenated module, if any. */

@@ -244,12 +244,18 @@ describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)
     expect(ctx.entries.every((e) => e.fits === undefined)).toBe(true);
   });
 
-  it("a LOCAL callee's slot is found; any-typed params keep everything (honest degrade)", () => {
+  it("a LOCAL callee's slot narrows through INFERRED params (usage-based inference)", () => {
+    // greet's param used to be `any` (everything kept, the honest degrade);
+    // usage-based inference now reads its body — name flows into
+    // string-append's SStr slot — so the param is `string` and the slot
+    // gets REAL verdicts. The limitation test flipped into the feature test.
     const doc = `${PROG}(greet `;
     const ctx = ls.getCompletionContext(doc, doc.length);
     expect(ctx.position).toBe("argument");
-    expect(ctx.slot).toMatchObject({ callee: "greet", argIndex: 0 });
-    expect(ctx.entries.every((e) => e.fits !== false)).toBe(true); // conservative: nothing proven out
+    expect(ctx.slot).toMatchObject({ callee: "greet", argIndex: 0, paramType: "string" });
+    const byName = new Map(ctx.entries.map((e) => [e.name, e]));
+    expect(byName.get("names")!.fits).toBe(false); // a List is proven out now
+    expect(byName.get("string-append")!.fits).toBe(true); // a string-producer fits
   });
 });
 

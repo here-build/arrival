@@ -146,3 +146,47 @@ describe("the loop stays closed through requires", () => {
     expect(byName.get("greeting")?.fits).toBe(false);
   });
 });
+
+describe("usage-based parameter inference (V's infer-from-consumers)", () => {
+  it("the canonical example: (concat str1 str2) infers both params from string-append", () => {
+    const prog = `(define (concat str1 str2) (string-append str1 "/" str2))\n`;
+    const info = ls.getQuickInfoAtPosition(`${prog}(concat `, prog.length + 4);
+    expect(info?.displayText).toBe("const concat: (str1: string, str2: string) => string");
+    const bad = `${prog}(define x (concat 5 "b"))`;
+    const diags = ls.getSemanticDiagnostics(bad);
+    expect(diags).toHaveLength(1);
+    expect(bad.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("5");
+  });
+
+  it("numeric flows infer too: (double n) via (* n 2)", () => {
+    const prog = `(define (double n) (* n 2))\n(define y (double "x"))`;
+    const diags = ls.getSemanticDiagnostics(prog);
+    expect(diags).toHaveLength(1);
+    expect(prog.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe(`"x"`);
+  });
+
+  it("inference works through REQUIRES (a required fn's call-site bites)", () => {
+    const scheme = `(require "lib/util.scm")\n(define x (shout 42))`;
+    const diags = ls.getSemanticDiagnostics(scheme);
+    expect(diags).toHaveLength(1);
+    expect(scheme.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("42");
+  });
+
+  it("conflicting use sites stay unannotated — never a wrong annotation", () => {
+    // p flows into BOTH a number slot (* p 2) and a string slot (string-append … p):
+    // contradictory evidence → conservative any, no false bite on either call.
+    const prog = `(define (weird p) (string-append (number->string (* p 2)) p))\n(define a (weird 1))\n(define b (weird "x"))`;
+    expect(ls.getSemanticDiagnostics(prog)).toHaveLength(0);
+  });
+
+  it("require-closure spans stay exact after annotation shifting", () => {
+    // The annotation inserts text into DEP segments too — cross-file goto-def
+    // must still lift onto the right atoms of the required file.
+    const scheme = `(require "lib/util.scm")\n(define loud (shout greeting))`;
+    const defs = ls.getDefinitionAtPosition(scheme, scheme.lastIndexOf("greeting") + 1);
+    const cross = defs.find((d) => d.file !== undefined);
+    expect(cross?.file).toBe("lib/util.scm");
+    const target = FILES["lib/util.scm"]!;
+    expect(target.slice(cross!.span!.start, cross!.span!.start + cross!.span!.length)).toContain("greeting");
+  });
+});
