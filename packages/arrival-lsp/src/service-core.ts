@@ -740,7 +740,11 @@ export function createSchemeLanguageServiceCore(
         ...(role.kind === "argument"
           ? {
               slot: {
-                callee: role.calleeText,
+                // role.calleeText is TS-side currency (probeTypes embeds it in
+                // probe source, so a builtin MUST stay `__arr["…"]` there); the
+                // user-facing slot surfaces the SCHEME name — same glass rule
+                // as the 2304/2552 message rewrite.
+                callee: /^__arr\["(.+)"\]$/.exec(role.calleeText)?.[1] ?? role.calleeText,
                 argIndex: role.argIndex,
                 ...(paramType === undefined ? {} : { paramType }),
               },
