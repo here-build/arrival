@@ -38,6 +38,16 @@ describe("getSemanticDiagnostics — bites in Scheme coordinates", () => {
     expect(diags).toHaveLength(0);
   });
 
+  // THE EMPTY BARREL: the compilation's globals are types-only (the lib bundle
+  // strips every ambient JS value at generation). A JS global used as a scheme
+  // symbol is a Cannot-find-name bite AT THE COMPILATION LEVEL — scheme has no
+  // JS environment, and this is what keeps it out of completions at the source.
+  it("the JS environment does not exist — (parseInt …) bites", () => {
+    const diags = ls.getSemanticDiagnostics(`(define n (parseInt "3"))`);
+    expect(diags.length).toBeGreaterThan(0);
+    expect(diags.some((d) => d.messageText.includes("parseInt"))).toBe(true);
+  });
+
   it("never surfaces a wrong-positioned (unliftable) diagnostic", () => {
     // Every returned diagnostic must have lifted to a real Scheme span inside the
     // source (the unmapped-prelude drop rule).
@@ -105,20 +115,30 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
     expect(names.has("xs")).toBe(true);
   });
 
-  // KNOWN GAP (emitter coordination): surfacing the BUILTIN names (`car`, `map`,
-  // `+`…) as completions requires a Scheme position that maps to the `.member`
-  // access offset of `__arr.car`. The TS service DOES return the full builtin set
-  // at that offset (verified: `getCompletionsAtPosition` at the TS `__arr.|car`
-  // dot yields `abs, append, apply, car, cdr, cons, dict, every, filter, find,
-  // map, …`). But `emitTypes` emits no head-token mapping, so no Scheme cursor
-  // projects there. Same upstream fix as the hover gap. Pinned here so it flips
-  // when the emitter adds head mappings.
-  it("KNOWN GAP — builtin-member completion needs an emitter head mapping", () => {
+  // The builtin roster merges into EVERY answer (the `__arr[""]` element-access
+  // probe — see builtinCompletions). This closed the old "builtin-member
+  // completion needs an emitter head mapping" gap from the completion side; the
+  // HOVER head gap above still awaits the emitter mapping.
+  it("surfaces the builtin roster under real scheme names at any position", () => {
     const scheme = `(car xs)`;
     const carAt = scheme.indexOf("car") + 1;
     const names = new Set(ls.getCompletionsAtPosition(scheme, carAt).map((e) => e.name));
-    // Today: global set, NOT the `__arr` builtin members.
-    expect(names.has("car")).toBe(false);
+    for (const builtin of ["car", "map", "+", "odd?", "string-append", "max-by"]) {
+      expect(names.has(builtin), builtin).toBe(true);
+    }
+  });
+
+  // Answers are SCHEME vocabulary, not virtual-TS vocabulary: the JS global
+  // scope and the lens's own infrastructure are emission substrate (a
+  // materialization leak if surfaced) — subtracted via the empty-program
+  // baseline. Program-local bindings survive the subtraction.
+  it("never leaks the JS environment or lens infrastructure", () => {
+    const scheme = `(define xs (list 1 2 3))\n(car xs)`;
+    const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.lastIndexOf("car") + 1).map((e) => e.name));
+    expect(names.has("xs")).toBe(true); // the program's own binding survives
+    for (const leak of ["console", "Array", "Math", "window", "__arr", "sexpr", "Dict", "typeof"]) {
+      expect(names.has(leak), leak).toBe(false);
+    }
   });
 
   // INCOMPLETE-PREFIX support: the sampler queries an UNBALANCED prefix mid-generation.

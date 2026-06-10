@@ -278,6 +278,11 @@ export function createSchemeLanguageServiceCore(
 
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
+  // Completion-vocabulary caches (lazy, constant for the service's lifetime —
+  // both depend only on the prelude + host, never on the program).
+  let baselineNames: Set<string> | null = null;
+  let builtinEntries: SchemeCompletionEntry[] | null = null;
+
   /** Emit `scheme`, install it as the program module, and return a Mapper over the
    *  resulting span lens (the bidirectional coordinate bridge for this source). */
   function loadSource(scheme: string): Mapper {
@@ -332,13 +337,35 @@ export function createSchemeLanguageServiceCore(
       const tsOffset = mapper.toTs(schemeOffset);
       if (tsOffset === null) return [];
       const completions = service.getCompletionsAtPosition(PROGRAM_FILE, tsOffset, undefined);
-      if (completions === undefined) return [];
-      return completions.entries.map((e) => ({
-        name: e.name,
-        kind: e.kind,
-        sortText: e.sortText,
-        ...(e.insertText === undefined ? {} : { insertText: e.insertText }),
-      }));
+      // Answer in SCHEME terms, not virtual-TS terms (the raw tsc list is the
+      // whole JS global scope — console, Array, the lens's own __arr/sexpr —
+      // none of which is a scheme symbol; pure emission substrate):
+      //   1. SUBTRACT the JS-global baseline (what an EMPTY program completes to);
+      //      what survives is program-local bindings + context-specific members.
+      //   2. MERGE the builtin roster (ArrShape members — real scheme names like
+      //      `string-append`, plus host-injected rosetta tools) — tsc only offers
+      //      them at `__arr.` member positions, which no scheme cursor reaches
+      //      until the emitter maps head tokens; scheme-wise they are in scope
+      //      at every position.
+      const baseline = jsGlobalBaseline();
+      const out: SchemeCompletionEntry[] = [];
+      const seen = new Set<string>();
+      for (const e of completions?.entries ?? []) {
+        if (baseline.has(e.name) || e.name.startsWith("__") || seen.has(e.name)) continue;
+        seen.add(e.name);
+        out.push({
+          name: e.name,
+          kind: e.kind,
+          sortText: e.sortText,
+          ...(e.insertText === undefined ? {} : { insertText: e.insertText }),
+        });
+      }
+      for (const b of builtinCompletions()) {
+        if (seen.has(b.name)) continue; // a local shadowing a builtin wins
+        seen.add(b.name);
+        out.push(b);
+      }
+      return out;
     },
 
     getDefinitionAtPosition(scheme, schemeOffset): SchemeDefinition[] {
@@ -373,6 +400,40 @@ export function createSchemeLanguageServiceCore(
       return cands.filter((_, i) => verdict[i] !== false);
     },
   };
+
+  /** What an EMPTY program completes to at offset 0: the JS/lib global scope, TS
+   *  keywords, and the lens's own infrastructure (`__arr`, `sexpr`, `List`, `Dict`…).
+   *  None of it is a scheme symbol — it is the SUBTRACTION set for real queries
+   *  (what survives subtraction is exactly what the PROGRAM brought into scope). */
+  function jsGlobalBaseline(): Set<string> {
+    if (baselineNames === null) {
+      loadSource("");
+      const c = service.getCompletionsAtPosition(PROGRAM_FILE, 0, undefined);
+      baselineNames = new Set((c?.entries ?? []).map((e) => e.name));
+    }
+    return baselineNames;
+  }
+
+  /** The builtin roster under its REAL scheme names (`car`, `string-append`, `+`,
+   *  `odd?`, …, plus host-injected rosetta tools): string-literal completions at
+   *  a raw `__arr[""]` ELEMENT-ACCESS position — exactly ArrShape's merged
+   *  members. Element access, not `__arr.` member access: after a dot tsc omits
+   *  every non-identifier name (un-typeable there), which silently drops the
+   *  kebab/operator/`?` builtins — most of the roster. Bypasses the emitter
+   *  (like `probeTypes`); scheme-wise these are in scope everywhere. */
+  function builtinCompletions(): SchemeCompletionEntry[] {
+    if (builtinEntries === null) {
+      programText = '__arr[""];\nexport {};\n';
+      programVersion += 1;
+      const c = service.getCompletionsAtPosition(PROGRAM_FILE, '__arr["'.length, undefined);
+      builtinEntries = (c?.entries ?? [])
+        .filter((e) => !e.name.startsWith("__"))
+        // tsc tags string-literal completions kind:"string"; semantically these
+        // are the callable builtins — present them as methods.
+        .map((e) => ({ name: e.name, kind: "method", sortText: e.sortText }));
+    }
+    return builtinEntries;
+  }
 
   /** Emit the sentinel'd scheme, then walk the TS AST to the CallExpression whose ARGUMENTS
    *  contain the sentinel → its callee text + the argument index the sentinel occupies. Null when

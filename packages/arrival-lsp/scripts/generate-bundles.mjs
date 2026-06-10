@@ -41,24 +41,49 @@ writeFileSync(
     `export const PRELUDE_BUNDLE: readonly (readonly [string, string])[] = [\n${entryLines(preludeEntries)}\n];\n`,
 );
 
-// ── TS default-lib bundle: lib.es2022.d.ts + its /// <reference lib/> closure ──
+// ── TS default-lib bundle: lib.es2022.d.ts + its /// <reference lib/> closure,
+//    with every GLOBAL VALUE declaration stripped ("the env is an empty barrel").
+//    The checker structurally needs the lib TYPES (interface Array<T>, Promise…)
+//    for literals and the prelude's signatures to work — but the ambient VALUES
+//    (declare var console/Math…, declare function parseInt…) are the JS
+//    environment, which does not exist in scheme. Stripping them makes
+//    `(parseInt "3")` a "Cannot find name" bite at the compilation level (not a
+//    post-hoc filter) and keeps JS globals out of completions at the source.
 const require = createRequire(import.meta.url);
+const ts = require("typescript");
 const tsLibDir = path.dirname(require.resolve("typescript"));
 const ROOT_LIB = "lib.es2022.d.ts";
+
+/** Drop top-level ambient value declarations (vars + functions); keep types.
+ *  Text-splicing on AST ranges — comments/references outside them survive. */
+function stripGlobalValues(name, text) {
+  const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, false);
+  let out = "";
+  let pos = 0;
+  for (const s of sf.statements) {
+    if (!ts.isVariableStatement(s) && !ts.isFunctionDeclaration(s)) continue;
+    out += text.slice(pos, s.getFullStart());
+    pos = s.getEnd();
+  }
+  return out + text.slice(pos);
+}
+
 const libFiles = new Map();
 const queue = [ROOT_LIB];
 while (queue.length > 0) {
   const name = queue.shift();
   if (libFiles.has(name)) continue;
   const text = readFileSync(path.join(tsLibDir, name), "utf8");
-  libFiles.set(name, text);
+  libFiles.set(name, stripGlobalValues(name, text));
   for (const m of text.matchAll(/\/\/\/\s*<reference\s+lib="([^"]+)"\s*\/>/g)) {
     queue.push(`lib.${m[1]}.d.ts`);
   }
 }
 writeFileSync(
   path.join(srcDir, "ts-libs.generated.ts"),
-  HEADER(`The ${ROOT_LIB} reference-chain closure of the workspace's pinned typescript (${require("typescript").version}).`) +
+  HEADER(
+    `The ${ROOT_LIB} reference-chain closure of the workspace's pinned typescript (${require("typescript").version}), global VALUES stripped (types only — scheme has no JS environment).`,
+  ) +
     `export const TS_DEFAULT_LIB = ${JSON.stringify(ROOT_LIB)};\n\n` +
     `export const TS_LIB_FILES: readonly (readonly [string, string])[] = [\n${entryLines([...libFiles])}\n];\n`,
 );
