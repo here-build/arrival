@@ -54,14 +54,27 @@ const ts = require("typescript");
 const tsLibDir = path.dirname(require.resolve("typescript"));
 const ROOT_LIB = "lib.es2022.d.ts";
 
-/** Drop top-level ambient value declarations (vars + functions); keep types.
- *  Text-splicing on AST ranges — comments/references outside them survive. */
+/** Value declarations the lib TYPES themselves structurally need: computed
+ *  properties like `[Symbol.iterator]()` resolve through the VALUE `Symbol` —
+ *  dropping it left 93 internal lib errors (audited 2026-06-10: every one a
+ *  Symbol cascade; keeping it alone → 0). The completion baseline subtracts
+ *  these names anyway, so nothing leaks to the editor surface. */
+const KEEP_VALUES = new Set(["Symbol"]);
+
+/** Drop top-level ambient value declarations (vars + functions); keep types
+ *  and the KEEP_VALUES the type side needs. Text-splicing on AST ranges —
+ *  comments/references outside them survive. */
 function stripGlobalValues(name, text) {
   const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, false);
   let out = "";
   let pos = 0;
   for (const s of sf.statements) {
     if (!ts.isVariableStatement(s) && !ts.isFunctionDeclaration(s)) continue;
+    if (
+      ts.isVariableStatement(s) &&
+      s.declarationList.declarations.some((d) => KEEP_VALUES.has(d.name.getText(sf)))
+    )
+      continue;
     out += text.slice(pos, s.getFullStart());
     pos = s.getEnd();
   }

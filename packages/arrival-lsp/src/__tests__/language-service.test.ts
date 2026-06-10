@@ -197,6 +197,16 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
   });
 });
 
+describe("completion subtraction — exact, not name-greedy", () => {
+  // Audited 2026-06-10: name-only subtraction ate a program local that collides
+  // with a substrate (type-only) name. Keys are `name kind` pairs now.
+  it("a local shadowing a substrate type name (Array) still completes", () => {
+    const scheme = `(define Array (list 1 2))\n(Arr`;
+    const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.length).map((e) => e.name));
+    expect(names.has("Array")).toBe(true);
+  });
+});
+
 describe("getSemanticClassifications — the checker's knowledge, atom-faithful", () => {
   it("classifies use-sites: parameters, locals, functions — single atoms only", () => {
     const scheme = `(define (greet name)\n  (string-append "hello, " name))\n\n(define names (list "a"))\n(define g (greet (car names)))`;
@@ -238,6 +248,19 @@ describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
     const predArg = new Set(ls.getTypeValidCandidates("(filter ", 8, POOL));
     expect(predArg.has("not")).toBe(true);
     expect(predArg.has("list")).toBe(false);
+  });
+
+  it("narrows a FULL-ROSTER pool without truncation loss (the typeToString cutoff bug)", () => {
+    // Audited 2026-06-10: reading the probe tuple via typeToString truncated
+    // past ~160 chars, silently keeping every candidate beyond the cutoff.
+    // Element-wise checker reads narrow the whole pool — the tail included.
+    const pool = ls.getCompletionsAtPosition("(car ", 5).map((e) => e.name);
+    expect(pool.length).toBeGreaterThan(50); // the full roster reaches the probe
+    const narrowed = new Set(ls.getTypeValidCandidates("(car ", 5, pool));
+    expect(narrowed.size).toBeLessThan(pool.length / 2); // real narrowing happened
+    expect(narrowed.has("list")).toBe(true); // a list-producer survives
+    expect(narrowed.has("odd?")).toBe(false); // a bool-producer in the TAIL is dropped
+    expect(narrowed.has("string-append")).toBe(false); // a string-producer is dropped
   });
 
   it("does NOT narrow at a non-argument position (operator slot / top) — Σ owns operators", () => {

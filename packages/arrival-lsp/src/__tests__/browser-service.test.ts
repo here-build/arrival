@@ -9,14 +9,59 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { createBrowserSchemeLanguageService, getBundledPreludeFiles } from "../browser.js";
-import { getPreludeFiles } from "../prelude.js";
+import { getPreludeFiles, PROGRAM_FILE } from "../prelude.js";
+import { TS_DEFAULT_LIB, TS_LIB_FILES } from "../ts-libs.generated.js";
 
 describe("prelude bundle — drift guard", () => {
   it("matches the on-disk prelude byte-for-byte (fix: pnpm generate:bundles)", () => {
     expect(Object.fromEntries(getBundledPreludeFiles())).toEqual(Object.fromEntries(getPreludeFiles()));
+  });
+});
+
+describe("stripped-lib world — internal coherence guard", () => {
+  // The value-strip must leave the lib chain SELF-CONSISTENT. The audit
+  // (2026-06-10) found 93 internal errors when `Symbol`'s value was dropped
+  // (computed properties like `[Symbol.iterator]()` resolve through it) — all
+  // invisible through the program-file-only public API while silently degrading
+  // type relations. This walks EVERY file of the world and demands zero.
+  it("the prelude + stripped libs compile with zero internal diagnostics", () => {
+    const files = getPreludeFiles();
+    const libs = new Map(TS_LIB_FILES);
+    files.set(PROGRAM_FILE, "export {};\n");
+    const host: ts.LanguageServiceHost = {
+      getScriptFileNames: () => [...files.keys()],
+      getScriptVersion: () => "1",
+      getScriptSnapshot: (fn) => {
+        const t = files.get(fn) ?? libs.get(fn);
+        return t === undefined ? undefined : ts.ScriptSnapshot.fromString(t);
+      },
+      getCurrentDirectory: () => "/",
+      getCompilationSettings: () => ({
+        noEmit: true,
+        strict: true,
+        target: ts.ScriptTarget.ES2022,
+        lib: ["lib.es2022.d.ts"],
+        types: [],
+        skipLibCheck: false,
+      }),
+      getDefaultLibFileName: () => TS_DEFAULT_LIB,
+      fileExists: (fn) => files.has(fn) || libs.has(fn),
+      readFile: (fn) => files.get(fn) ?? libs.get(fn),
+    };
+    const svc = ts.createLanguageService(host, ts.createDocumentRegistry());
+    const program = svc.getProgram()!;
+    const offenders: string[] = [];
+    for (const sf of program.getSourceFiles()) {
+      const ds = [...program.getSemanticDiagnostics(sf), ...program.getSyntacticDiagnostics(sf)];
+      if (ds.length > 0)
+        offenders.push(`${sf.fileName}: ${ts.flattenDiagnosticMessageText(ds[0]!.messageText, " ").slice(0, 80)}`);
+    }
+    expect(offenders).toEqual([]);
+    expect(program.getGlobalDiagnostics()).toEqual([]);
   });
 });
 

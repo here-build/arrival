@@ -422,7 +422,11 @@ export function createSchemeLanguageServiceCore(
       const out: SchemeCompletionEntry[] = [];
       const seen = new Set<string>();
       for (const e of completions?.entries ?? []) {
-        if (baseline.has(e.name) || e.name.startsWith("__") || seen.has(e.name)) continue;
+        // Subtraction matches name AND kind: a program LOCAL that happens to
+        // collide with a substrate name (`(define Array …)` — a const, vs the
+        // baseline's type-only `Array` interface) must survive. Audited
+        // 2026-06-10: name-only matching ate such locals.
+        if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
         seen.add(e.name);
         out.push({
           name: e.name,
@@ -507,7 +511,9 @@ export function createSchemeLanguageServiceCore(
     if (baselineNames === null) {
       loadSource("");
       const c = service.getCompletionsAtPosition(PROGRAM_FILE, 0, undefined);
-      baselineNames = new Set((c?.entries ?? []).map((e) => e.name));
+      // Keyed `name kind` so the subtraction is exact: a program VALUE binding
+      // may legally share a name with a substrate TYPE (see the caller).
+      baselineNames = new Set((c?.entries ?? []).map((e) => `${e.name} ${e.kind}`));
     }
     return baselineNames;
   }
@@ -594,12 +600,19 @@ export function createSchemeLanguageServiceCore(
     };
     find(sf);
     if (!probeNode) return candidates.map(() => null);
-    // Resolved tuple text, e.g. "[true, false, true, …]". A malformed probe → the alias name (no
-    // brackets) → all null. `__E` unresolved (any) → all true.
-    const text = checker.typeToString(checker.getTypeAtLocation(probeNode), undefined, ts.TypeFormatFlags.InTypeAlias);
-    const m = text.match(/^\[(.*)\]$/s);
-    if (!m) return candidates.map(() => null);
-    const flags = m[1]!.split(",").map((s) => s.trim());
-    return candidates.map((_, i) => (flags[i] === "true" ? true : flags[i] === "false" ? false : null));
+    // Read the resolved tuple ELEMENT BY ELEMENT off the checker — never through
+    // `typeToString` (its output truncates past ~160 chars, which silently
+    // un-narrowed every candidate beyond the cutoff in large pools; audited
+    // 2026-06-10). A malformed probe → not a tuple reference → all null.
+    // `__E` unresolved (any) → both __ok branches true → literal `true` → kept.
+    const tupleType = checker.getTypeAtLocation(probeNode);
+    if (!(tupleType.flags & ts.TypeFlags.Object)) return candidates.map(() => null);
+    const elements = checker.getTypeArguments(tupleType as ts.TypeReference);
+    return candidates.map((_, i) => {
+      const el = elements[i];
+      if (el === undefined) return null;
+      const text = checker.typeToString(el); // a single literal: "true" / "false" / other
+      return text === "true" ? true : text === "false" ? false : null;
+    });
   }
 }
