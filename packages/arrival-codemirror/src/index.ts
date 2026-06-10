@@ -33,6 +33,8 @@ export {
   toCmDiagnostics,
   toCmCompletions,
   type SchemeIdeBackend,
+  type SchemeIdeRichCompletion,
+  type SchemeIdeCompletionContext,
   type SchemeIdeDiagnostic,
   type SchemeIdeQuickInfo,
   type SchemeIdeCompletionEntry,

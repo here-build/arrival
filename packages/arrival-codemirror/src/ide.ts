@@ -15,6 +15,7 @@
 
 import {
   autocompletion,
+  snippetCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -85,6 +86,25 @@ export interface SchemeIdeClassifiedSpan {
   kind: string;
 }
 
+/** A rich completion entry (mirrors `SchemeRichCompletion`): the base entry
+ *  plus what the type system knows about the candidate AT THIS CURSOR. */
+export interface SchemeIdeRichCompletion extends SchemeIdeCompletionEntry {
+  /** Rendered type signature (`(xs: List<T>) => T`), when the checker can name it. */
+  detail?: string;
+  /** Slot verdict at an argument position — the sampler's Σ∩T mask, surfaced:
+   *  `true` = proven fits, `false` = proven NOT, `undefined` = unknown. */
+  fits?: boolean;
+  /** True iff the candidate is a callable value (operator-position ranking). */
+  callable?: boolean;
+}
+
+/** The full completion answer (mirrors `SchemeCompletionContext`). */
+export interface SchemeIdeCompletionContext {
+  position: "operator" | "argument" | "top";
+  slot?: { callee: string; argIndex: number; paramType?: string };
+  entries: SchemeIdeRichCompletion[];
+}
+
 /** What the IDE extensions need from a language service, in Scheme coordinates. */
 export interface SchemeIdeBackend {
   getSemanticDiagnostics(scheme: string): MaybePromise<SchemeIdeDiagnostic[]>;
@@ -93,6 +113,8 @@ export interface SchemeIdeBackend {
   getDefinitionAtPosition(scheme: string, schemeOffset: number): MaybePromise<SchemeIdeDefinition[]>;
   /** Optional — when present, `schemeIde` mounts the semantic-highlight layer. */
   getSemanticClassifications?(scheme: string): MaybePromise<SchemeIdeClassifiedSpan[]>;
+  /** Optional — when present, completion upgrades to the Σ∩T-ranked rich UI. */
+  getCompletionContext?(scheme: string, schemeOffset: number): MaybePromise<SchemeIdeCompletionContext>;
 }
 
 // ── pure mappers (exported for tests) ──────────────────────────────────────
@@ -136,11 +158,14 @@ const COMPLETION_TYPE: Record<string, string> = {
   alias: "variable",
 };
 
-/** Map backend completion entries into CodeMirror `Completion`s. */
+/** Map backend completion entries into CodeMirror `Completion`s. The backend's
+ *  sortText carries through (CM ≥6.20 honors it as the tie-break key —
+ *  dropping it silently discarded the service's own ranking). */
 export function toCmCompletions(entries: readonly SchemeIdeCompletionEntry[]): Completion[] {
   return entries.map((e) => ({
     label: e.name,
     type: COMPLETION_TYPE[e.kind] ?? "variable",
+    sortText: e.sortText,
     ...(e.insertText === undefined ? {} : { apply: e.insertText }),
   }));
 }
@@ -217,11 +242,125 @@ const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWO
   type: "keyword",
 }));
 
-/** The completion source alone — compose into your own `autocompletion()`. */
+// ── the rich (Σ∩T-ranked) completion pipeline ───────────────────────────────
+// Research-grounded craft rules (2026-06-10 sweep — see commit message):
+//   • TIERED BOOST, never filtering: type-valid candidates rise, proven-unfit
+//     DEMOTE but stay visible (IntelliJ's hidden "smart completion" keystroke
+//     is the documented anti-pattern; demotion is the discoverable version).
+//   • Fixed-rank SECTIONS make the invisible smartness visible: "fits" /
+//     "in scope" / "builtins" / "forms". Stable order is a hard constraint —
+//     ranking churn between keystrokes is the most-hated completion behavior.
+//   • Locals above globals (the universal locality ladder).
+//   • Signature in the info panel (the most-praised lisp completion behavior).
+//   • Commit on space / `)` — scheme's natural commit keys.
+
+const SECTION_FITS = { name: "fits this slot", rank: 0 };
+const SECTION_SCOPE = { name: "in scope", rank: 1 };
+const SECTION_BUILTINS = { name: "builtins", rank: 2 };
+const SECTION_FORMS = { name: "forms", rank: 3 };
+
+/** Boost tiers (CM range −99..99; boost only orders EQUAL-quality matches, so
+ *  fuzzy match quality still wins — which is correct). */
+function boostOf(e: SchemeIdeRichCompletion, isLocal: boolean): number {
+  if (e.fits === true) return isLocal ? 80 : 60;
+  if (e.fits === false) return -40;
+  return isLocal ? 20 : 0;
+}
+
+/** One rich entry → a CM completion: section by semantic truth, boost by tier,
+ *  signature as inline detail + info panel. Builtins arrive kind:"method";
+ *  anything else came from the program itself (a local). */
+function toRichCmCompletion(e: SchemeIdeRichCompletion): Completion {
+  const isLocal = e.kind !== "method";
+  const section = e.fits === true ? SECTION_FITS : isLocal ? SECTION_SCOPE : SECTION_BUILTINS;
+  return {
+    label: e.name,
+    type: COMPLETION_TYPE[e.kind] ?? "variable",
+    section,
+    boost: boostOf(e, isLocal),
+    ...(e.detail === undefined ? {} : { detail: e.detail, info: () => infoDom(e) }),
+    ...(e.insertText === undefined ? {} : { apply: e.insertText }),
+  };
+}
+
+function infoDom(e: SchemeIdeRichCompletion): HTMLElement {
+  const dom = document.createElement("div");
+  dom.className = "cm-scheme-quickinfo";
+  const sig = document.createElement("code");
+  sig.className = "cm-scheme-quickinfo-signature";
+  sig.textContent = `${e.name}: ${e.detail ?? ""}`;
+  dom.append(sig);
+  if (e.fits === false) {
+    const note = document.createElement("div");
+    note.className = "cm-scheme-quickinfo-docs";
+    note.textContent = "type does not fit this argument slot";
+    dom.append(note);
+  }
+  return dom;
+}
+
+/** Special-form templates — structure, not just names. Offered as SNIPPETS
+ *  only right after `(` (the head position; the buffer already owns the outer
+ *  pair — closeBrackets inserted the `)` when the user typed `(`). Elsewhere
+ *  the bare keyword completes. Terminal `${}` exits the field cycle cleanly. */
+const FORM_SNIPPETS: readonly Completion[] = [
+  ["define", "define (${name} ${params})\n  ${body}${}"],
+  ["lambda", "lambda (${params}) ${body}${}"],
+  ["let", "let ((${name} ${value}))\n  ${body}${}"],
+  ["let*", "let* ((${name} ${value}))\n  ${body}${}"],
+  ["cond", "cond\n  ((${test}) ${result})${}"],
+  ["if", "if ${test} ${then} ${else}${}"],
+  ["when", "when ${test}\n  ${body}${}"],
+  ["unless", "unless ${test}\n  ${body}${}"],
+].map(([label, template]) =>
+  snippetCompletion(template!, { label: label!, type: "keyword", section: SECTION_FORMS, boost: 30 }),
+);
+
+/** Scheme's natural commit keys: a space or close-paren after a symbol always
+ *  means "that symbol, done". Resolves Tab-vs-Enter the lisp-native way. */
+const COMMIT_CHARS = [" ", ")"];
+
+/** The completion source alone — compose into your own `autocompletion()`.
+ *  With a `getCompletionContext`-capable backend this is the full Σ∩T-ranked
+ *  pipeline; otherwise it degrades to the flat (name/kind) list. */
 export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const word = ctx.matchBefore(SYMBOL_BEFORE);
-    if (word === null || (word.from === word.to && !ctx.explicit)) return null;
+    if (word === null) return null;
+    const emptyPrefix = word.from === word.to;
+    const afterOpenParen = ctx.state.doc.sliceString(Math.max(0, word.from - 1), word.from) === "(";
+    const rich = backend.getCompletionContext?.bind(backend);
+
+    // Empty prefix: explicit invocation always works; otherwise the ONE place
+    // an unprompted popup is signal rather than noise is an ARGUMENT SLOT the
+    // Σ∩T mask has narrowed to a handful — the "discussion with the compiler".
+    if (emptyPrefix && !ctx.explicit) {
+      if (rich === undefined || ctx.state.doc.sliceString(Math.max(0, ctx.pos - 1), ctx.pos) !== " ") return null;
+      const context = await rich(ctx.state.doc.toString(), ctx.pos);
+      if (context.position !== "argument") return null;
+      const fitting = context.entries.filter((e) => e.fits === true);
+      if (fitting.length === 0 || fitting.length > 12) return null;
+      return {
+        from: ctx.pos,
+        options: fitting.map(toRichCmCompletion),
+        validFor: SYMBOL_BEFORE,
+        commitCharacters: COMMIT_CHARS,
+      };
+    }
+
+    if (rich !== undefined) {
+      const context = await rich(ctx.state.doc.toString(), ctx.pos);
+      const options = context.entries.map(toRichCmCompletion);
+      const seen = new Set(context.entries.map((e) => e.name));
+      // Special forms: snippets right after `(`, bare keywords elsewhere.
+      for (const form of afterOpenParen ? FORM_SNIPPETS : FORM_COMPLETIONS) {
+        if (!seen.has(form.label)) options.push(form);
+      }
+      if (options.length === 0) return null;
+      return { from: word.from, options, validFor: SYMBOL_BEFORE, commitCharacters: COMMIT_CHARS };
+    }
+
+    // Flat fallback (a backend without getCompletionContext).
     const entries = await backend.getCompletionsAtPosition(ctx.state.doc.toString(), ctx.pos);
     const options = toCmCompletions(entries);
     const seen = new Set(entries.map((e) => e.name));
@@ -233,9 +372,16 @@ export function schemeCompletionSource(backend: SchemeIdeBackend): CompletionSou
   };
 }
 
+/** Codepoint comparator — CM's default tie-break is localeCompare, which is
+ *  environment-dependent; stable, deterministic order is a hard constraint. */
+const byCodepoint = (a: Completion, b: Completion): number => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0);
+
 /** Completion wired as the editor's autocompletion (overrides other sources). */
 export function schemeCompletion(backend: SchemeIdeBackend): Extension {
-  return autocompletion({ override: [schemeCompletionSource(backend)] });
+  return autocompletion({
+    override: [schemeCompletionSource(backend)],
+    compareCompletions: byCodepoint,
+  });
 }
 
 // ── semantic highlighting — the checker's knowledge over the lexical layer ──

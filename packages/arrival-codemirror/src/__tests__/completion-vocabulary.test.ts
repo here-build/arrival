@@ -6,7 +6,7 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { CompletionContext } from "@codemirror/autocomplete";
+import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
 import { createSchemeLanguageService } from "@here.build/arrival-type-lens";
 import { describe, expect, it } from "vitest";
@@ -35,5 +35,57 @@ describe("completion vocabulary — scheme, not the JS substrate", () => {
     for (const leak of ["console", "Array", "Math", "__arr", "sexpr", "typeof", "Dict"]) {
       expect(labels.has(leak), leak).toBe(false);
     }
+  });
+});
+
+const resultAt = async (doc: string, pos: number, explicit = true): Promise<CompletionResult | null> =>
+  (await source(new CompletionContext(EditorState.create({ doc }), pos, explicit))) as CompletionResult | null;
+
+describe("the Σ∩T-ranked pipeline (rich backend)", () => {
+  const PROG = `(define (greet name) (string-append "hi " name))\n(define names (list "ada" "grace"))\n`;
+
+  it("argument slot: fitting candidates carry the top section + positive boost; proven-unfit demote", async () => {
+    const doc = `${PROG}(car na`;
+    const result = await resultAt(doc, doc.length);
+    const byLabel = new Map(result!.options.map((o) => [o.label, o]));
+    const names = byLabel.get("names")!;
+    const greet = byLabel.get("greet")!;
+    expect((names.section as { name: string }).name).toBe("fits this slot");
+    expect(names.boost).toBe(80); // type-valid LOCAL — the top tier
+    expect(greet.boost).toBe(-40); // proven-unfit: demoted, NOT hidden
+    expect(byLabel.get("filter")!.boost).toBe(60); // type-valid builtin
+  });
+
+  it("signatures ride as detail + info; commit chars are scheme's space/paren", async () => {
+    const doc = `${PROG}(car na`;
+    const result = await resultAt(doc, doc.length);
+    const names = result!.options.find((o) => o.label === "names")!;
+    expect(names.detail).toBe("List<string>");
+    expect(typeof names.info).toBe("function");
+    expect(result!.commitCharacters).toEqual([" ", ")"]);
+  });
+
+  it("right after `(` the special forms are SNIPPETS (template apply), elsewhere bare", async () => {
+    const headResult = await resultAt(`${PROG}(de`, `${PROG}(de`.length);
+    const headDefine = headResult!.options.find((o) => o.label === "define")!;
+    expect(typeof headDefine.apply).toBe("function"); // snippetCompletion → function apply
+    const topResult = await resultAt(`${PROG}de`, `${PROG}de`.length);
+    const topDefine = topResult!.options.find((o) => o.label === "define")!;
+    expect(topDefine.apply).toBeUndefined(); // bare keyword inserts its label
+  });
+
+  it("UNPROMPTED at a narrowed argument slot: only the fitting set surfaces", async () => {
+    const doc = `${PROG}(car `;
+    const result = await resultAt(doc, doc.length, false); // NOT explicit
+    expect(result).not.toBeNull();
+    const labels = result!.options.map((o) => o.label);
+    expect(labels).toContain("names");
+    expect(labels).not.toContain("odd?"); // proven-unfit stays out of the unprompted popup
+    expect(labels.length).toBeLessThanOrEqual(12);
+  });
+
+  it("unprompted popup stays QUIET outside narrowed slots (no noise at top level)", async () => {
+    const doc = `${PROG}`;
+    expect(await resultAt(doc, doc.length, false)).toBeNull();
   });
 });
