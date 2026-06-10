@@ -116,7 +116,7 @@ export interface SchemeNeuralRanker {
   rank(
     prefix: string,
     candidates: readonly string[],
-    topP: number,
+    minProb: number,
   ): MaybePromise<readonly { prob: number; inNucleus: boolean }[]>;
 }
 
@@ -353,8 +353,9 @@ export interface SchemeCompletionOptions {
    *  earn the "likely here" section when they ALSO fit, and rise within their
    *  proof tier by probability. Absent → pure Σ∩T ranking. */
   ranker?: SchemeNeuralRanker;
-  /** Nucleus size for the ranker (cumulative top-p mass). Default 0.05. */
-  topP?: number;
+  /** The frame floor: a candidate is 'likely' iff the model gives it ≥ this
+   *  probability (V's “5% frame”). Default 0.05. */
+  minProb?: number;
 }
 
 /** The completion source alone — compose into your own `autocompletion()`.
@@ -385,7 +386,7 @@ export function schemeCompletionSource(backend: SchemeIdeBackend, options?: Sche
           ranks = await options.ranker.rank(
             doc.slice(0, word.from),
             context.entries.map((e) => e.name),
-            options.topP ?? 0.05,
+            options.minProb ?? 0.05,
           );
         } catch {
           ranks = null; // model trouble never blocks the proof-ranked list
@@ -557,8 +558,8 @@ export interface SchemeIdeOptions {
    *  rise; proof+probability agreement earns "likely here") and the ghost
    *  (the model's pick within the proven set). */
   ranker?: SchemeNeuralRanker;
-  /** Nucleus size (cumulative top-p mass) for the ranker. Default 0.05. */
-  topP?: number;
+  /** The frame floor (probability ≥ → 'likely'). Default 0.05. */
+  minProb?: number;
 }
 
 /** The IDE bundle: lint + hover + completion + go-to-definition + semantic
@@ -566,7 +567,7 @@ export interface SchemeIdeOptions {
  *  ghost also require the backend's optional methods). */
 export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions): Extension {
   const ext: Extension[] = [];
-  const neural = options?.ranker === undefined ? undefined : { ranker: options.ranker, topP: options.topP };
+  const neural = options?.ranker === undefined ? undefined : { ranker: options.ranker, minProb: options.minProb };
   if (options?.lint !== false)
     ext.push(schemeLinter(backend, typeof options?.lint === "object" ? options.lint : undefined));
   if (options?.hover !== false) ext.push(schemeHover(backend));
