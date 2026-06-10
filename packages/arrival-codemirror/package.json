@@ -1,0 +1,47 @@
+{
+  "name": "@here.build/arrival-codemirror",
+  "version": "0.1.0",
+  "description": "CodeMirror 6 support for arrival scheme (classic + sweet): the scheme-sweet language, parameter inlay hints, and IDE extensions (diagnostics / hover / completion / go-to-definition) over any SchemeIdeBackend — e.g. @here.build/arrival-type-lens's language service.",
+  "license": "FSL-1.1-MIT",
+  "author": "here.build",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.20.1",
+    "@codemirror/language": "6.12.3",
+    "@codemirror/lint": "6.9.5",
+    "@codemirror/state": "6.6.0",
+    "@codemirror/view": "6.43.0",
+    "@here.build/arrival-chain": "workspace:^",
+    "@lezer/highlight": "1.2.1"
+  },
+  "devDependencies": {
+    "@here.build/arrival-type-lens": "workspace:^",
+    "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
+    "eslint": "9.39.2",
+    "tslib": "2.8.1",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}
