@@ -40,6 +40,8 @@ export {
   type SchemeQuickInfo,
   type SchemeClassifiedSpan,
   type SchemeCompletionEntry,
+  type SchemeRichCompletion,
+  type SchemeCompletionContext,
   type SchemeDefinition,
 } from "./language-service.js";
 // Browser/fs-less runtimes: import `@here.build/arrival-type-lens/browser` —

@@ -131,6 +131,31 @@ export interface SchemeCompletionEntry {
   insertText?: string;
 }
 
+/** One rich completion entry — `SchemeCompletionEntry` plus what the type
+ *  system knows about the candidate AT THIS CURSOR. */
+export interface SchemeRichCompletion extends SchemeCompletionEntry {
+  /** The candidate's type signature one-liner (`(xs: List<T>) => T`), when the
+   *  checker can name it. Builtins always have one; locals usually do. */
+  detail?: string;
+  /** Slot verdict at an argument position — the sampler's Σ∩T mask, surfaced:
+   *  `true` = proven to fit the parameter, `false` = proven NOT to fit,
+   *  `undefined` = unknown / not at an argument slot. */
+  fits?: boolean;
+  /** True iff the candidate is callable (a function-typed value) — drives
+   *  operator-position ranking (Σ's "callables only at the head" filter). */
+  callable?: boolean;
+}
+
+/** The full completion answer for a cursor: entries + where the cursor IS. */
+export interface SchemeCompletionContext {
+  /** Σ-style cursor position: head of a form / argument of a call / top level. */
+  position: "operator" | "argument" | "top";
+  /** At an argument slot: the enclosing call + which parameter the cursor
+   *  fills, with the parameter's type rendered (`xs: List<number>`). */
+  slot?: { callee: string; argIndex: number; paramType?: string };
+  entries: SchemeRichCompletion[];
+}
+
 /** A semantically-classified token span in Scheme coordinates — what an
  *  identifier IS (its role per the type checker), for semantic highlighting. */
 export interface SchemeClassifiedSpan {
@@ -210,6 +235,20 @@ const TOKEN_TYPES = [
 // semantic classifications. Same character class as the sweet reader's atoms.
 const SCHEME_ATOM = /^[\w\-!$%&*+./<=>?@^~:]+$/;
 
+// An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
+// the same class the sampler's typed-scanner uses for partial-atom stripping.
+const ATOM_CHAR = /[^\s()[\]{}"';]/;
+
+/** The bounds of the atom containing `offset` (both edges = `offset` when the
+ *  cursor sits on whitespace/structure — nothing to strip). */
+function atomBoundsAt(scheme: string, offset: number): [number, number] {
+  let start = offset;
+  while (start > 0 && ATOM_CHAR.test(scheme[start - 1]!)) start--;
+  let end = offset;
+  while (end < scheme.length && ATOM_CHAR.test(scheme[end]!)) end++;
+  return [start, end];
+}
+
 const DEFAULT_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
   strict: true,
@@ -239,6 +278,14 @@ export interface SchemeLanguageService {
   getSemanticDiagnostics(scheme: string): SchemeDiagnostic[];
   getQuickInfoAtPosition(scheme: string, schemeOffset: number): SchemeQuickInfo | null;
   getCompletionsAtPosition(scheme: string, schemeOffset: number): SchemeCompletionEntry[];
+  /**
+   * The LOOP-CLOSING completion: the same Σ∩T machinery that masks the
+   * sampler's logits (position discrimination + slot-fit probing), surfaced
+   * for a human. One call returns everything a rich completion UI needs —
+   * entries with signatures + per-candidate slot verdicts + the cursor's
+   * position and expected parameter type.
+   */
+  getCompletionContext(scheme: string, schemeOffset: number): SchemeCompletionContext;
   getDefinitionAtPosition(scheme: string, schemeOffset: number): SchemeDefinition[];
   /**
    * Semantic token classifications in Scheme coordinates — the merge layer over
@@ -330,9 +377,10 @@ export function createSchemeLanguageServiceCore(
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
   // Completion-vocabulary caches (lazy, constant for the service's lifetime —
-  // both depend only on the prelude + host, never on the program).
+  // all depend only on the prelude + host, never on the program).
   let baselineNames: Set<string> | null = null;
   let builtinEntries: SchemeCompletionEntry[] | null = null;
+  let builtinSigs: Map<string, string> | null = null;
 
   /** Emit `scheme`, install it as the program module, and return a Mapper over the
    *  resulting span lens (the bidirectional coordinate bridge for this source). */
@@ -402,45 +450,51 @@ export function createSchemeLanguageServiceCore(
     },
 
     getCompletionsAtPosition(scheme, schemeOffset): SchemeCompletionEntry[] {
-      // The prefix is mid-edit (usually unbalanced) — balance it so it parses; the cursor
-      // offset is unchanged (closers append at the end).
-      const mapper = loadSource(balancePrefix(scheme));
-      const tsOffset = mapper.toTs(schemeOffset);
-      if (tsOffset === null) return [];
-      const completions = service.getCompletionsAtPosition(PROGRAM_FILE, tsOffset, undefined);
-      // Answer in SCHEME terms, not virtual-TS terms (the raw tsc list is the
-      // whole JS global scope — console, Array, the lens's own __arr/sexpr —
-      // none of which is a scheme symbol; pure emission substrate):
-      //   1. SUBTRACT the JS-global baseline (what an EMPTY program completes to);
-      //      what survives is program-local bindings + context-specific members.
-      //   2. MERGE the builtin roster (ArrShape members — real scheme names like
-      //      `string-append`, plus host-injected rosetta tools) — tsc only offers
-      //      them at `__arr.` member positions, which no scheme cursor reaches
-      //      until the emitter maps head tokens; scheme-wise they are in scope
-      //      at every position.
-      const baseline = jsGlobalBaseline();
-      const out: SchemeCompletionEntry[] = [];
-      const seen = new Set<string>();
-      for (const e of completions?.entries ?? []) {
-        // Subtraction matches name AND kind: a program LOCAL that happens to
-        // collide with a substrate name (`(define Array …)` — a const, vs the
-        // baseline's type-only `Array` interface) must survive. Audited
-        // 2026-06-10: name-only matching ate such locals.
-        if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
-        seen.add(e.name);
-        out.push({
-          name: e.name,
-          kind: e.kind,
-          sortText: e.sortText,
-          ...(e.insertText === undefined ? {} : { insertText: e.insertText }),
-        });
+      return computeEntries(scheme, schemeOffset);
+    },
+
+    getCompletionContext(scheme, schemeOffset): SchemeCompletionContext {
+      const entries = computeEntries(scheme, schemeOffset);
+      // Locate the cursor's role with the same sentinel machinery the sampler's
+      // T mask uses — this IS the loop closure. The sentinel REPLACES the atom
+      // being typed (mid-atom, the partial text is a continuation of the same
+      // slot, not a completed earlier argument — the typed-scanner strips it
+      // the same way before narrowing).
+      const [atomStart, atomEnd] = atomBoundsAt(scheme, schemeOffset);
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, atomStart)} ${SENTINEL} ${scheme.slice(atomEnd)}`,
+      );
+      const role = findCursorRole(sentinelScheme);
+      const builtinSigs = builtinSignatures();
+      // Locals' signatures resolve against the program's own emitted consts.
+      const localNames = entries.filter((e) => !builtinSigs.has(e.name)).map((e) => e.name);
+      const localSigs = probeLocalSignatures(scheme, localNames);
+      // At an argument slot: one batched probe gives every candidate's verdict
+      // (exactly the sampler's per-step mask) + the parameter's rendered type.
+      let verdicts: (boolean | null)[] | null = null;
+      let paramType: string | undefined;
+      if (role.kind === "argument") {
+        const probed = probeTypes(scheme, role.calleeText, role.argIndex, entries.map((e) => e.name));
+        verdicts = probed.verdicts;
+        paramType = probed.paramType;
       }
-      for (const b of builtinCompletions()) {
-        if (seen.has(b.name)) continue; // a local shadowing a builtin wins
-        seen.add(b.name);
-        out.push(b);
-      }
-      return out;
+      const rich: SchemeRichCompletion[] = entries.map((e, i) => {
+        const detail = builtinSigs.get(e.name) ?? localSigs.get(e.name);
+        const fits = verdicts?.[i];
+        return {
+          ...e,
+          ...(detail === undefined ? {} : { detail }),
+          ...(fits === null || fits === undefined ? {} : { fits }),
+          ...(detail === undefined ? {} : { callable: CALLABLE_SIG.test(detail) }),
+        };
+      });
+      return {
+        position: role.kind,
+        ...(role.kind === "argument"
+          ? { slot: { callee: role.calleeText, argIndex: role.argIndex, ...(paramType === undefined ? {} : { paramType }) } }
+          : {}),
+        entries: rich,
+      };
     },
 
     getDefinitionAtPosition(scheme, schemeOffset): SchemeDefinition[] {
@@ -494,14 +548,61 @@ export function createSchemeLanguageServiceCore(
       const sentinelScheme = balancePrefix(
         `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
       );
-      const slot = findCallSlot(sentinelScheme);
-      if (slot === null) return cands; // not a typed-call argument slot → no T narrowing
+      const role = findCursorRole(sentinelScheme);
+      if (role.kind !== "argument") return cands; // not a typed-call argument slot → no T narrowing
       // 2. Batched conditional-type probe → per-candidate verdict in one checker read.
-      const verdict = probeTypes(slot.calleeText, slot.argIndex, cands);
+      const { verdicts } = probeTypes(scheme, role.calleeText, role.argIndex, cands);
       // 3. Keep iff PROVEN valid (true) OR unresolved (null) — never drop on uncertainty.
-      return cands.filter((_, i) => verdict[i] !== false);
+      return cands.filter((_, i) => verdicts[i] !== false);
     },
   };
+
+  /** The shared completion-entry computation (see getCompletionsAtPosition):
+   *  tsc's in-scope answer MINUS the substrate baseline PLUS the builtin roster. */
+  function computeEntries(scheme: string, schemeOffset: number): SchemeCompletionEntry[] {
+    // The prefix is mid-edit (usually unbalanced) — balance it so it parses; the cursor
+    // offset is unchanged (closers append at the end). Query tsc at the ATOM'S
+    // START, not the raw cursor: the end of a partial atom falls off its token
+    // mapping into the enclosing form's mapping (→ `__arr.car`), where tsc
+    // answers MEMBER completions — the whole scope vanished (caught 2026-06-10).
+    const mapper = loadSource(balancePrefix(scheme));
+    const tsOffset = mapper.toTs(atomBoundsAt(scheme, schemeOffset)[0]);
+    if (tsOffset === null) return [];
+    const completions = service.getCompletionsAtPosition(PROGRAM_FILE, tsOffset, undefined);
+    // Answer in SCHEME terms, not virtual-TS terms (the raw tsc list is the
+    // whole JS global scope — console, Array, the lens's own __arr/sexpr —
+    // none of which is a scheme symbol; pure emission substrate):
+    //   1. SUBTRACT the JS-global baseline (what an EMPTY program completes to);
+    //      what survives is program-local bindings + context-specific members.
+    //   2. MERGE the builtin roster (ArrShape members — real scheme names like
+    //      `string-append`, plus host-injected rosetta tools) — tsc only offers
+    //      them at `__arr.` member positions, which no scheme cursor reaches
+    //      until the emitter maps head tokens; scheme-wise they are in scope
+    //      at every position.
+    const baseline = jsGlobalBaseline();
+    const out: SchemeCompletionEntry[] = [];
+    const seen = new Set<string>();
+    for (const e of completions?.entries ?? []) {
+      // Subtraction matches name AND kind: a program LOCAL that happens to
+      // collide with a substrate name (`(define Array …)` — a const, vs the
+      // baseline's type-only `Array` interface) must survive. Audited
+      // 2026-06-10: name-only matching ate such locals.
+      if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
+      seen.add(e.name);
+      out.push({
+        name: e.name,
+        kind: e.kind,
+        sortText: e.sortText,
+        ...(e.insertText === undefined ? {} : { insertText: e.insertText }),
+      });
+    }
+    for (const b of builtinCompletions()) {
+      if (seen.has(b.name)) continue; // a local shadowing a builtin wins
+      seen.add(b.name);
+      out.push(b);
+    }
+    return out;
+  }
 
   /** What an EMPTY program completes to at offset 0: the JS/lib global scope, TS
    *  keywords, and the lens's own infrastructure (`__arr`, `sexpr`, `List`, `Dict`…).
@@ -539,15 +640,22 @@ export function createSchemeLanguageServiceCore(
     return builtinEntries;
   }
 
-  /** Emit the sentinel'd scheme, then walk the TS AST to the CallExpression whose ARGUMENTS
-   *  contain the sentinel → its callee text + the argument index the sentinel occupies. Null when
-   *  the sentinel is not an argument of a call (operator slot / top level / not found). */
-  function findCallSlot(sentinelScheme: string): { calleeText: string; argIndex: number } | null {
+  /** Emit the sentinel'd scheme, then walk the TS AST to where the SENTINEL landed —
+   *  the cursor's Σ-style role:
+   *    • inside a CallExpression's ARGUMENTS → `argument` + callee text + arg index
+   *      (the T-narrowable slot);
+   *    • AS a CallExpression's callee, or the scheme cursor sits right after `(`
+   *      (the emitter lowers an unknown head so the sentinel is itself the call) →
+   *      `operator`;
+   *    • anywhere else → `top`. */
+  function findCursorRole(
+    sentinelScheme: string,
+  ): { kind: "argument"; calleeText: string; argIndex: number } | { kind: "operator" } | { kind: "top" } {
     loadSource(sentinelScheme);
     const program = service.getProgram();
     const sf = program?.getSourceFile(PROGRAM_FILE);
-    if (!sf) return null;
-    let found: { calleeText: string; argIndex: number } | null = null;
+    if (!sf) return { kind: "top" };
+    let found: ReturnType<typeof findCursorRole> | null = null;
     const visit = (node: ts.Node): void => {
       if (found) return;
       if (ts.isIdentifier(node) && node.text === SENTINEL) {
@@ -557,62 +665,161 @@ export function createSchemeLanguageServiceCore(
           if (ts.isCallExpression(p)) {
             const argIndex = p.arguments.findIndex((a) => a.getStart(sf) <= s && e <= a.end);
             if (argIndex !== -1) {
-              found = { calleeText: p.expression.getText(sf), argIndex };
+              found = { kind: "argument", calleeText: p.expression.getText(sf), argIndex };
+              return;
+            }
+            if (p.expression.getStart(sf) <= s && e <= p.expression.end) {
+              found = { kind: "operator" };
               return;
             }
           }
         }
+        found = { kind: "top" };
       }
       ts.forEachChild(node, visit);
     };
     visit(sf);
-    return found;
+    return found ?? { kind: "top" };
   }
 
-  /** Load a probe module and read, per candidate, whether it is type-valid in the given call slot.
-   *  `true` = proven assignable, `false` = proven not, `null` = unresolved (kept by the caller).
-   *  ONE program load + ONE checker read for the whole candidate list. */
-  function probeTypes(calleeText: string, argIndex: number, candidates: string[]): (boolean | null)[] {
-    // `__ok<T>`: T fits the slot iff it IS the param type, OR it is a function whose RETURN type is
-    // (the next token at an arg slot is usually a sub-call's operator). `[x]`-tuple wrapping defeats
-    // union distribution. An unresolvable `typeof __arr[name]` is `any` ⇒ both branches `true` ⇒ kept.
-    const okT =
-      `type __ok<T> = (([T] extends [(...a: any[]) => infer R] ? ([R] extends [__E] ? true : false) : false) extends true ? true ` +
-      `: ([T] extends [__E] ? true : false));`;
-    const entry = (name: string) => `__ok<typeof __arr[${JSON.stringify(name)}]>`;
-    programText = [
-      "__arr;", // force the ambient `__arr` into scope
-      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
-      okT,
-      `declare const __probe: [${candidates.map(entry).join(", ")}];`,
-      "export {};",
-    ].join("\n");
+  /** Resolve a probe module and read the tuple type of `declare const <name>: […]`
+   *  element by element off the checker — never through a whole-tuple
+   *  `typeToString` (truncates past ~160 chars; audited 2026-06-10). */
+  function readProbeTuple(probeProgramText: string, name: string): readonly ts.Type[] | null {
+    programText = probeProgramText;
     programVersion += 1;
     const program = service.getProgram();
     const sf = program?.getSourceFile(PROGRAM_FILE);
-    if (!sf || !program) return candidates.map(() => null);
+    if (!sf || !program) return null;
     const checker = program.getTypeChecker();
     let probeNode: ts.Node | null = null;
     const find = (n: ts.Node): void => {
       if (probeNode) return;
-      if (ts.isIdentifier(n) && n.text === "__probe" && ts.isVariableDeclaration(n.parent)) probeNode = n;
+      if (ts.isIdentifier(n) && n.text === name && ts.isVariableDeclaration(n.parent)) probeNode = n;
       else ts.forEachChild(n, find);
     };
     find(sf);
-    if (!probeNode) return candidates.map(() => null);
-    // Read the resolved tuple ELEMENT BY ELEMENT off the checker — never through
-    // `typeToString` (its output truncates past ~160 chars, which silently
-    // un-narrowed every candidate beyond the cutoff in large pools; audited
-    // 2026-06-10). A malformed probe → not a tuple reference → all null.
-    // `__E` unresolved (any) → both __ok branches true → literal `true` → kept.
+    if (!probeNode) return null;
     const tupleType = checker.getTypeAtLocation(probeNode);
-    if (!(tupleType.flags & ts.TypeFlags.Object)) return candidates.map(() => null);
-    const elements = checker.getTypeArguments(tupleType as ts.TypeReference);
-    return candidates.map((_, i) => {
+    if (!(tupleType.flags & ts.TypeFlags.Object)) return null;
+    return checker.getTypeArguments(tupleType as ts.TypeReference);
+  }
+
+  /** The current checker (valid until the next program load). */
+  function checkerNow(): ts.TypeChecker | null {
+    return service.getProgram()?.getTypeChecker() ?? null;
+  }
+
+  /** A `typeof` reference for a candidate: builtins (and any non-identifier
+   *  name) through the ambient `__arr`; identifier-shaped locals by name —
+   *  resolved against the EMITTED PROGRAM the probe rides on. */
+  function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
+    if (!builtinNames.has(name) && /^[A-Za-z_$][\w$]*$/.test(name)) return `typeof ${name}`;
+    return `typeof __arr[${JSON.stringify(name)}]`;
+  }
+
+  /** Load a probe module and read, per candidate, whether it is type-valid in the given call slot.
+   *  `true` = proven assignable, `false` = proven not, `null` = unresolved (kept by the caller).
+   *  The probe rides ON TOP of the emitted program (locals stay in scope: a
+   *  LOCAL callee's parameters resolve, a LOCAL candidate's type resolves —
+   *  both were `any`-kept before). ONE program load for the whole list. */
+  function probeTypes(
+    scheme: string,
+    calleeText: string,
+    argIndex: number,
+    candidates: string[],
+  ): { verdicts: (boolean | null)[]; paramType?: string } {
+    // `__ok<T>`: T fits the slot iff it IS the param type, OR it is a function whose RETURN type is
+    // (the next token at an arg slot is usually a sub-call's operator). `[x]`-tuple wrapping defeats
+    // union distribution. An unresolvable typeof is `any` ⇒ both branches `true` ⇒ kept.
+    const okT =
+      `type __ok<T> = (([T] extends [(...a: any[]) => infer R] ? ([R] extends [__E] ? true : false) : false) extends true ? true ` +
+      `: ([T] extends [__E] ? true : false));`;
+    const builtinNames = new Set(builtinSignatures().keys());
+    const { ts: emitted } = emitTypes(balancePrefix(scheme), { hostMembers: emitterMembers() });
+    const probeProgram = [
+      emitted,
+      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
+      okT,
+      `declare const __probe: [${candidates.map((n) => `__ok<${typeofRef(n, builtinNames)}>`).join(", ")}];`,
+      `declare const __param: [__E];`,
+    ].join("\n");
+    const elements = readProbeTuple(probeProgram, "__probe");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return { verdicts: candidates.map(() => null) };
+    const verdicts = candidates.map((_, i) => {
       const el = elements[i];
       if (el === undefined) return null;
       const text = checker.typeToString(el); // a single literal: "true" / "false" / other
       return text === "true" ? true : text === "false" ? false : null;
     });
+    // The expected parameter type, rendered — the slot's "what goes here".
+    let paramType: string | undefined;
+    const sf = service.getProgram()?.getSourceFile(PROGRAM_FILE);
+    if (sf !== undefined) {
+      let paramNode: ts.Node | null = null;
+      const find = (n: ts.Node): void => {
+        if (paramNode) return;
+        if (ts.isIdentifier(n) && n.text === "__param" && ts.isVariableDeclaration(n.parent)) paramNode = n;
+        else ts.forEachChild(n, find);
+      };
+      find(sf);
+      if (paramNode !== null) {
+        const t = checker.getTypeArguments(checker.getTypeAtLocation(paramNode) as ts.TypeReference)[0];
+        if (t !== undefined) {
+          const text = checker.typeToString(t);
+          if (text !== "any" && text !== "unknown") paramType = text;
+        }
+      }
+    }
+    return { verdicts, ...(paramType === undefined ? {} : { paramType }) };
+  }
+
+  /** Builtin signatures, rendered once per service (the roster is constant):
+   *  ONE ambient probe tuple `[typeof __arr["car"], …]`, element-wise reads. */
+  function builtinSignatures(): Map<string, string> {
+    if (builtinSigs === null) {
+      const names = builtinCompletions().map((e) => e.name);
+      const probeProgram = [
+        "__arr;",
+        `declare const __sigs: [${names.map((n) => `typeof __arr[${JSON.stringify(n)}]`).join(", ")}];`,
+        "export {};",
+      ].join("\n");
+      const elements = readProbeTuple(probeProgram, "__sigs");
+      const checker = checkerNow();
+      builtinSigs = new Map();
+      if (elements !== null && checker !== null) {
+        names.forEach((n, i) => {
+          const el = elements[i];
+          if (el !== undefined) builtinSigs!.set(n, checker.typeToString(el));
+        });
+      }
+    }
+    return builtinSigs;
+  }
+
+  /** Render the locals' types by probing `typeof <name>` against the emitted
+   *  program (they are its top-level consts). Unresolvable names render "any"
+   *  and are omitted. */
+  function probeLocalSignatures(scheme: string, names: readonly string[]): Map<string, string> {
+    const out = new Map<string, string>();
+    const idNames = names.filter((n) => /^[A-Za-z_$][\w$]*$/.test(n));
+    if (idNames.length === 0) return out;
+    const { ts: emitted } = emitTypes(balancePrefix(scheme), { hostMembers: emitterMembers() });
+    const probeProgram = [emitted, `declare const __sigs: [${idNames.map((n) => `typeof ${n}`).join(", ")}];`].join("\n");
+    const elements = readProbeTuple(probeProgram, "__sigs");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return out;
+    idNames.forEach((n, i) => {
+      const el = elements[i];
+      if (el === undefined) return;
+      const text = checker.typeToString(el);
+      if (text !== "any") out.set(n, text);
+    });
+    return out;
   }
 }
+
+/** A rendered signature that denotes a callable value (drives Σ's
+ *  operator-position ranking client-side). */
+const CALLABLE_SIG = /=>/;

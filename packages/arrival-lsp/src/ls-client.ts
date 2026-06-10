@@ -44,6 +44,7 @@ export const LS_METHODS = [
   "getSemanticDiagnostics",
   "getQuickInfoAtPosition",
   "getCompletionsAtPosition",
+  "getCompletionContext",
   "getDefinitionAtPosition",
   "getSemanticClassifications",
   "getTypeValidCandidates",

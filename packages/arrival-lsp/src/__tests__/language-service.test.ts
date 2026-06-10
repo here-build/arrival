@@ -207,6 +207,52 @@ describe("completion subtraction — exact, not name-greedy", () => {
   });
 });
 
+describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)", () => {
+  const PROG = `(define (greet name) (string-append "hi " name))\n(define names (list "ada" "grace"))\n`;
+
+  it("argument slot: per-candidate verdicts = the sampler's mask, plus the param type", () => {
+    const doc = `${PROG}(car `;
+    const ctx = ls.getCompletionContext(doc, doc.length);
+    expect(ctx.position).toBe("argument");
+    expect(ctx.slot).toMatchObject({ argIndex: 0 });
+    expect(ctx.slot!.paramType).toContain("List");
+    const byName = new Map(ctx.entries.map((e) => [e.name, e]));
+    // list producers fit; element/string producers are PROVEN unfit
+    expect(byName.get("names")!.fits).toBe(true);
+    expect(byName.get("filter")!.fits).toBe(true);
+    expect(byName.get("greet")!.fits).toBe(false); // returns a string
+    expect(byName.get("odd?")!.fits).toBe(false);
+    // real narrowing: a clear majority of the roster is proven out at (car •
+    expect(ctx.entries.filter((e) => e.fits === false).length).toBeGreaterThan(ctx.entries.length / 2);
+  });
+
+  it("signatures ride along: builtins always, locals from the emitted program", () => {
+    const doc = `${PROG}(car `;
+    const byName = new Map(ls.getCompletionContext(doc, doc.length).entries.map((e) => [e.name, e]));
+    expect(byName.get("car")!.detail).toContain("List");
+    expect(byName.get("car")!.callable).toBe(true);
+    expect(byName.get("names")!.detail).toBe("List<string>");
+    expect(byName.get("names")!.callable).toBe(false);
+    expect(byName.get("greet")!.detail).toContain("=> string");
+  });
+
+  it("operator position is recognized (Σ's head discrimination), no slot probing", () => {
+    const doc = `${PROG}(`;
+    const ctx = ls.getCompletionContext(doc, doc.length);
+    expect(ctx.position).toBe("operator");
+    expect(ctx.slot).toBeUndefined();
+    expect(ctx.entries.every((e) => e.fits === undefined)).toBe(true);
+  });
+
+  it("a LOCAL callee's slot is found; any-typed params keep everything (honest degrade)", () => {
+    const doc = `${PROG}(greet `;
+    const ctx = ls.getCompletionContext(doc, doc.length);
+    expect(ctx.position).toBe("argument");
+    expect(ctx.slot).toMatchObject({ callee: "greet", argIndex: 0 });
+    expect(ctx.entries.every((e) => e.fits !== false)).toBe(true); // conservative: nothing proven out
+  });
+});
+
 describe("getSemanticClassifications — the checker's knowledge, atom-faithful", () => {
   it("classifies use-sites: parameters, locals, functions — single atoms only", () => {
     const scheme = `(define (greet name)\n  (string-append "hello, " name))\n\n(define names (list "a"))\n(define g (greet (car names)))`;

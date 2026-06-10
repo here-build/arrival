@@ -22,6 +22,8 @@ export type {
   SchemeQuickInfo,
   SchemeClassifiedSpan,
   SchemeCompletionEntry,
+  SchemeRichCompletion,
+  SchemeCompletionContext,
   SchemeDefinition,
   SchemeLanguageService,
   SchemeLanguageServiceOptions,
