@@ -1,0 +1,2 @@
+# tsgo wasm artifacts — built locally via scripts/build-tsgo-wasm.mjs, not committed
+/.tsgo/

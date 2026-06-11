@@ -50,7 +50,7 @@ import { PROGRAM_FILE } from "./virtual-files.js";
  *  be found in the emitted TS. Unlikely to collide with a real scheme symbol. */
 const SENTINEL = "qzcursorzq";
 
-function balancePrefix(scheme: string): string {
+export function balancePrefix(scheme: string): string {
   let depth = 0;
   let inStr = false;
   let esc = false;
