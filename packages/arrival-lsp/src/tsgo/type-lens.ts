@@ -39,7 +39,7 @@
 
 import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
 
-import { balancePrefix } from "../service-core.js";
+import { balancePrefix } from "../balance.js";
 import { PROGRAM_FILE } from "../virtual-files.js";
 import {
   createTsgoClient,

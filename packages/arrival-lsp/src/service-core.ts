@@ -31,68 +31,18 @@ import { parseSexprs, type Node } from "@here.build/arrival-chain/sweet";
 import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
 import ts from "typescript";
 
+import { balancePrefix } from "./balance.js";
 import { Mapper } from "./span-map.js";
 import { PROGRAM_FILE } from "./virtual-files.js";
 
-/**
- * Balance an INCOMPLETE scheme prefix so it parses — for the cursor-position queries
- * (completion / quick-info), which by nature run on a mid-edit, usually-unbalanced prefix.
- * `emitTypes` requires a complete, parseable program (`parseSexprs` throws on an unclosed
- * paren → the whole emit degrades to an empty module → no span at the cursor → no completions).
- * Appending the missing close delimiters makes the prefix parse; the suffix is added at the END,
- * so every cursor offset within the original prefix maps unchanged. String / line-comment /
- * block-comment / char-literal aware, matching arrival's lexer (brackets `()[]` are
- * interchangeable on close, so a single `)` per open level suffices). The diagnostics path does
- * NOT balance — a genuinely malformed complete program should report its errors, not be repaired.
- */
+// balancePrefix moved to balance.ts (the tsgo browser worker imports it
+// without dragging `typescript` into its chunk); re-exported for consumers.
+export { balancePrefix } from "./balance.js";
+
 /** Completion-cursor sentinel for the type-mask probe. Plain letters only: `emitTypes`'
  *  `cleanName` strips leading/trailing `_`, so an underscore-wrapped marker would not survive to
  *  be found in the emitted TS. Unlikely to collide with a real scheme symbol. */
 const SENTINEL = "qzcursorzq";
-
-export function balancePrefix(scheme: string): string {
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  let inLine = false;
-  let block = 0;
-  for (let i = 0; i < scheme.length; i++) {
-    const c = scheme[i]!;
-    if (inLine) {
-      if (c === "\n") inLine = false;
-      continue;
-    }
-    if (block > 0) {
-      if (c === "#" && scheme[i + 1] === "|") {
-        block++;
-        i++;
-      } else if (c === "|" && scheme[i + 1] === "#") {
-        block--;
-        i++;
-      }
-      continue;
-    }
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === "\\") esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === "#" && scheme[i + 1] === "\\") {
-      i += 2;
-      continue;
-    } // char literal `#\(` — skip the next char
-    if (c === '"') inStr = true;
-    else if (c === ";") inLine = true;
-    else if (c === "#" && scheme[i + 1] === "|") {
-      block = 1;
-      i++;
-    } else if (c === "(" || c === "[") depth++;
-    else if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
-  }
-  // An unterminated string can't be balanced into a valid token — close it too, then the parens.
-  return scheme + (inStr ? '"' : "") + ")".repeat(depth);
-}
 
 /** A diagnostic in SCHEME coordinates (the lift-out result). Shape mirrors the
  *  fields `@codemirror/lint`'s `Diagnostic` and LSP's `Diagnostic` both need. */
