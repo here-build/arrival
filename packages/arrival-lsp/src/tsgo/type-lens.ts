@@ -48,7 +48,6 @@ import {
   type SnapshotId,
   type SymbolRef,
   type TsgoClient,
-  type TsgoDiagnostic,
   type TsgoTransport,
   type TypeRef,
   type UpdateSnapshotResult,
@@ -204,21 +203,18 @@ function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
   return `typeof __arr[${JSON.stringify(name)}]`;
 }
 
-/** One candidate's probe location in the assembled module: its `: true` and
- *  `: false` assignment-test statements. */
-interface TriStateSpan {
-  tStart: number;
-  tEnd: number;
-  fStart: number;
-  fEnd: number;
-}
-
-/** Read the `__ok` tri-state off the diagnostics. DROP ⇔ `false` ⇔ the
- *  t-line errors while the f-line is clean; `true` and `boolean` (unprovable
- *  / error-any from 2304/2339 resolution failures — both lines error) KEEP. */
-function readTriStateVerdicts(diagnostics: readonly TsgoDiagnostic[], spans: readonly TriStateSpan[]): boolean[] {
-  const errorsIn = (start: number, end: number): boolean => diagnostics.some((d) => d.pos < end && d.end > start);
-  return spans.map(({ tStart, tEnd, fStart, fEnd }) => !(errorsIn(tStart, tEnd) && !errorsIn(fStart, fEnd)));
+/** Map one verdict alias's resolved type to keep/drop. The alias is
+ *  `[__ok<C>] extends [false] ? 3 : ([__ok<C>] extends [true] ? 1 : 2)` —
+ *  DROP only on the definite literal `3` (its Value rides TypeResponse);
+ *  `1`/`2`, unions (an error-any `C` distributes into `3 | 1 | 2` with no
+ *  single value), `any` and anything unresolved all KEEP — the conservative
+ *  contract falls out of the encoding. Two wire facts, found the hard way:
+ *  the drop sentinel must be NON-ZERO (Value is `json:"value,omitempty"` —
+ *  a literal `0` arrives with no value field, silently keeping every drop),
+ *  and TypeFlags must not be consulted (tsgo renumbered the enum — strada's
+ *  NumberLiteral=256 is 2048 there; `value === 3` needs no flag at all). */
+function verdictOf(type: { value?: unknown } | null | undefined): boolean {
+  return type?.value !== 3;
 }
 
 export interface TsgoTypeLensOptions {
@@ -332,38 +328,35 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
         // The probe module: the emitted program (locals stay in scope), the
         // slot's expected type __E, service-core's __ok<T> VERBATIM (fits =
         // the value, or a call's RETURN, is assignable — `[x]`-tuple wrapping
-        // defeats union distribution), and per candidate the tri-state read.
+        // defeats union distribution), and per candidate ONE verdict ALIAS
+        // folding the tri-state into a number literal. Verdicts are read with
+        // a single batched getTypesAtPositions — DEMAND-driven (the checker
+        // computes only the N alias types, the same laziness the JS
+        // LanguageService's tuple read had), not a full-program diagnostics
+        // pass; this halved the per-slot cost vs the diagnostics encoding.
         const emitted = emitTypes(balancePrefix(scheme), { hostMembers: builtins }).ts;
         let text =
           `${emitted}\n` +
           `type __ok<T> = (([T] extends [(...a: any[]) => infer R] ? ([R] extends [__E] ? true : false) : false) extends true ? true ` +
-          `: ([T] extends [__E] ? true : false));\n`;
-        const eStart = text.length;
-        text += `type __E = Parameters<${calleeRef}>[${slot.argIndex}];\n`;
-        const eEnd = text.length;
-        const spans: TriStateSpan[] = [];
+          `: ([T] extends [__E] ? true : false));\n` +
+          `type __E = Parameters<${calleeRef}>[${slot.argIndex}];\n`;
+        const positions: number[] = [];
         for (const [i, name] of pool.entries()) {
           const ref = typeofRef(name, builtins);
-          const tStart = text.length;
-          text += `const __v${i}t: true = undefined as unknown as __ok<${ref}>;\n`;
-          const tEnd = text.length;
-          text += `const __v${i}f: false = undefined as unknown as __ok<${ref}>;\n`;
-          spans.push({ tStart, tEnd, fStart: tEnd, fEnd: text.length });
+          positions.push(text.length + "type ".length); // the alias NAME — the node the type is read at
+          text += `type __r${i} = [__ok<${ref}>] extends [false] ? 3 : ([__ok<${ref}>] extends [true] ? 1 : 2);\n`;
         }
 
         const w = await loadProgram(text);
-        const diagnostics = await client.request<TsgoDiagnostic[]>("getSemanticDiagnostics", {
+        const types = await client.request<({ flags: number; value?: unknown } | null)[]>("getTypesAtPositions", {
           ...w,
           file: programPath,
+          positions,
         });
-
-        // The slot side couldn't be proven (callee not a value / not callable /
-        // no such parameter) ⇒ __E errors ⇒ keep everything — T never ADDS a
-        // wrong restriction.
-        if (diagnostics.some((d) => d.pos < eEnd && d.end > eStart)) return pool;
-
-        const verdicts = readTriStateVerdicts(diagnostics, spans);
-        return pool.filter((_, i) => verdicts[i]);
+        // An un-provable slot (callee not a value / not callable / no such
+        // parameter) makes __E error-any ⇒ every alias distributes to a
+        // non-literal ⇒ verdictOf keeps all — T never ADDS a wrong restriction.
+        return pool.filter((_, i) => verdictOf(types[i]));
       });
     },
     builtinNames(): readonly string[] {

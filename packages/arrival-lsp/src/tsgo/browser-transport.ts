@@ -160,7 +160,8 @@ export async function createTsgoBrowserTransport(options: TsgoBrowserTransportOp
   // (vite/storybook) inject a partial `process` polyfill ({env}) into worker
   // scopes — object-level skip left `cwd` undefined and Go panicked in
   // syscall/js at boot (fs_js.go Value.Call "property cwd is not a function").
-  const proc = (scope["process"] ??= {}) as Record<string, unknown>;
+  scope["process"] ??= {};
+  const proc = scope["process"] as Record<string, unknown>;
   proc["getuid"] ??= () => -1;
   proc["getgid"] ??= () => -1;
   proc["geteuid"] ??= () => -1;
