@@ -8,8 +8,9 @@
     "outDir": "./dist",
     "declaration": true,
     "declarationMap": true,
+    "jsx": "react-jsx",
     "types": []
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "src/__tests__/**/*"]
 }
