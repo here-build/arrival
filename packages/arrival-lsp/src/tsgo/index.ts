@@ -43,3 +43,16 @@ export {
 export function bundledPreludeFiles(): Map<string, string> {
   return new Map(PRELUDE_BUNDLE);
 }
+
+export {
+  createTsgoSchemeService,
+  type SchemeClassifiedSpan,
+  type SchemeCompletionContext,
+  type SchemeCompletionEntry,
+  type SchemeDefinition,
+  type SchemeDiagnostic,
+  type SchemeQuickInfo,
+  type SchemeRichCompletion,
+  type TsgoSchemeService,
+  type TsgoSchemeServiceOptions,
+} from "./scheme-service.js";
