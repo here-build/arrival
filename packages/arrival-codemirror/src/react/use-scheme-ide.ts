@@ -26,23 +26,48 @@ import { useEffect, useState } from "react";
  */
 const LS_OPTIONS = { compilerOptions: { noImplicitAny: false } };
 
+// ── backend selection: js-ts (default) or tsgo (TypeScript 7 wasm) ──────────
+// Types-first layering: the tsgo worker serves the SAME ls-protocol, so the
+// whole ladder below works unchanged — only the worker file and the init
+// options differ. The app opts in BEFORE preload, passing the wasm asset URL
+// it resolved (vite: `import url from "@here.build/arrival-type-lens/tsgo.wasm?url"`).
+let tsgoConfig: { wasmUrl: string } | null = null;
+
+/** Switch the scheme IDE's language service to the tsgo (TS7 wasm) backend.
+ *  Call once at app boot, before {@link preloadSchemeIde}. */
+export function configureSchemeIdeTsgo(config: { wasmUrl: string }): void {
+  tsgoConfig = config;
+}
+
 let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   const { connectSchemeLs } = await import("@here.build/arrival-type-lens/ls-client");
-  // Both constructions are written out INLINE on purpose: bundlers' worker
+  const connectOptions = tsgoConfig === null ? LS_OPTIONS : { ...LS_OPTIONS, tsgoWasmUrl: tsgoConfig.wasmUrl };
+  // All constructions are written out INLINE on purpose: bundlers' worker
   // transforms (vite/rollup) only recognize the syntactic pattern
   // `new (Shared)Worker(new URL("…", import.meta.url), { type: "module" })` —
   // hoisting the URL into a variable silently skips bundling the worker.
-  const target = shared
-    ? new SharedWorker(new URL("./scheme-ls.worker.js", import.meta.url), {
-        type: "module",
-        name: "arrival-scheme-ls",
-      })
-    : new Worker(new URL("./scheme-ls.worker.js", import.meta.url), {
-        type: "module",
-        name: "arrival-scheme-ls",
-      });
+  const target =
+    tsgoConfig !== null
+      ? shared
+        ? new SharedWorker(new URL("./scheme-tsgo-ls.worker.js", import.meta.url), {
+            type: "module",
+            name: "arrival-scheme-tsgo-ls",
+          })
+        : new Worker(new URL("./scheme-tsgo-ls.worker.js", import.meta.url), {
+            type: "module",
+            name: "arrival-scheme-tsgo-ls",
+          })
+      : shared
+        ? new SharedWorker(new URL("./scheme-ls.worker.js", import.meta.url), {
+            type: "module",
+            name: "arrival-scheme-ls",
+          })
+        : new Worker(new URL("./scheme-ls.worker.js", import.meta.url), {
+            type: "module",
+            name: "arrival-scheme-ls",
+          });
   const port = (shared ? (target as SharedWorker).port : target) as unknown as LsPort;
   return await new Promise<SchemeIdeBackend>((resolve, reject) => {
     // A worker whose module fails to load never answers — its error event is
@@ -50,7 +75,7 @@ async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
     (target as Worker).addEventListener("error", (e) => {
       reject(new Error(`scheme-ls worker error: ${(e as ErrorEvent).message ?? "load failed"}`));
     });
-    connectSchemeLs(port, LS_OPTIONS).then(resolve, reject);
+    connectSchemeLs(port, connectOptions).then(resolve, reject);
   });
 }
 
