@@ -693,8 +693,14 @@ export function createSchemeLanguageServiceCore(
                 // role.calleeText is TS-side currency (probeTypes embeds it in
                 // probe source, so a builtin MUST stay `__arr["…"]` there); the
                 // user-facing slot surfaces the SCHEME name — same glass rule
-                // as the 2304/2552 message rewrite.
-                callee: /^__arr\["(.+)"\]$/.exec(role.calleeText)?.[1] ?? role.calleeText,
+                // as the 2304/2552 message rewrite. BOTH emitter spellings
+                // unwrap: element access (`__arr["string-append"]`) AND dot
+                // access (`__arr.map`, identifier-safe names) — the dot form
+                // used to leak TS currency into the slot card.
+                callee:
+                  /^__arr\["(.+)"\]$/.exec(role.calleeText)?.[1] ??
+                  /^__arr\.([A-Za-z_$][\w$]*)$/.exec(role.calleeText)?.[1] ??
+                  role.calleeText,
                 argIndex: role.argIndex,
                 ...(paramType === undefined ? {} : { paramType }),
               },
