@@ -100,6 +100,9 @@ export interface TsgoSchemeService {
   getSemanticClassifications(scheme: string): Promise<SchemeClassifiedSpan[]>;
   getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): Promise<string[]>;
   setProjectFiles(files: Record<string, string>): Promise<void>;
+  /** The ArrShape roster (+ host members) — Σ grant material and the
+   *  emitter's member set; constant for the service lifetime. */
+  builtinNames(): readonly string[];
   dispose(): void;
 }
 
@@ -687,6 +690,10 @@ export async function createTsgoSchemeService(options: TsgoSchemeServiceOptions)
     setProjectFiles(next): Promise<void> {
       projectFiles = next;
       return Promise.resolve();
+    },
+
+    builtinNames(): readonly string[] {
+      return [...builtins];
     },
 
     dispose(): void {
