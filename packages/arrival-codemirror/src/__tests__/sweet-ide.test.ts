@@ -5,7 +5,7 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { schemeToSweet } from "@here.build/arrival-chain/sweet";
+import { schemeToSweet } from "@here.build/arrival-sweet";
 import { createSchemeLanguageService } from "@here.build/arrival-type-lens";
 import { describe, expect, it } from "vitest";
 

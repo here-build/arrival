@@ -24,7 +24,7 @@
 // that diffs the program file is a later optimization (noted inline).
 
 // The runtime-free reader (spans on every node) — the require scanner's truth.
-import { parseSexprs, type Node } from "@here.build/arrival-chain/sweet";
+import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 // The deep subpath (not the package index): the index re-exports `formatJs`,
 // whose `eslint` import would drag the whole linter into any browser bundle of
 // this service. `types-emit`'s closure is the pure front-end only.

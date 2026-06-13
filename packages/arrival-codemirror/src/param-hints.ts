@@ -1,6 +1,6 @@
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
-import { paramHints, paramHintsSweet, type ParamHint } from "@here.build/arrival-chain/sweet";
+import { paramHints, paramHintsSweet, type ParamHint } from "@here.build/arrival-sweet";
 
 /**
  * Parameter inlay hints for `.scm`: a subtle, non-interactive `param:` void widget

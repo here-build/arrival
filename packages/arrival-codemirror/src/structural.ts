@@ -38,7 +38,7 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 import { keymap, type KeyBinding } from "@codemirror/view";
-import { parseSexprs, type Node } from "@here.build/arrival-chain/sweet";
+import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 
 // ── structure kernel ────────────────────────────────────────────────────────
 

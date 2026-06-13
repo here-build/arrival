@@ -12,7 +12,7 @@
 // token's answer. Diagnostics whose classic span falls inside sugar lift to
 // the innermost enclosing paired node — visible, just wider.
 
-import { alignSweetClassic, type SweetAlignment } from "@here.build/arrival-chain/sweet";
+import { alignSweetClassic, type SweetAlignment } from "@here.build/arrival-sweet";
 
 import type {
   SchemeIdeBackend,

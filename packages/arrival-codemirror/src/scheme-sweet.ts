@@ -4,7 +4,7 @@ import { tags as t } from "@lezer/highlight";
 /**
  * `scheme-sweet` — a StreamLanguage covering BOTH canonical Scheme s-expressions
  * AND our "sweet expression" superset (the readable lens from
- * `@here.build/arrival-chain/sweet`). Forked from the structure of
+ * `@here.build/arrival-sweet`). Forked from the structure of
  * `@codemirror/legacy-modes/mode/scheme` (the radix-number matchers and the
  * string/symbol/block-comment sub-modes are lifted faithfully) and extended with
  * the sweet-only surface: curly-infix `{a + b}`, colon keyword-pairs (`k:` /

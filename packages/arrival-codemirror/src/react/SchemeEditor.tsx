@@ -1,6 +1,6 @@
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { schemeToSweet, sweetToScheme } from "@here.build/arrival-chain/sweet";
+import { schemeToSweet, sweetToScheme } from "@here.build/arrival-sweet";
 import { paramHintsExtension, schemeIde, schemeStructural, schemeSweet, sweetIdeBackend } from "../index.js";
 import CodeMirror from "@uiw/react-codemirror";
 import { useEffect, useMemo, useState } from "react";
