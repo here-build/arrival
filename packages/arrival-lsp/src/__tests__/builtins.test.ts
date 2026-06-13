@@ -27,7 +27,7 @@ const LEAVES = leafFiles.map((f) => readFileSync(path.join(builtinsDir, f), "utf
 /** Compile one snippet against PRE + every merged leaf; return semantic diagnostics. */
 function check(programSource: string): ts.Diagnostic[] {
   const files = new Map<string, string>([["__pre.d.ts", PRE]]);
-  LEAVES.forEach((src, i) => files.set(`__leaf${i}.d.ts`, src));
+  for (const [i, src] of LEAVES.entries()) files.set(`__leaf${i}.d.ts`, src);
   files.set("__program.ts", programSource);
 
   const options: ts.CompilerOptions = {

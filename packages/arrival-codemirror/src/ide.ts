@@ -601,7 +601,9 @@ export function schemeIde(backend: SchemeIdeBackend, options?: SchemeIdeOptions)
   if (options?.hover !== false) ext.push(schemeHover(backend));
   if (options?.completion !== false) ext.push(schemeCompletion(backend, neural));
   if (options?.gotoDefinition !== false)
-    ext.push(schemeGotoDefinition(backend, options?.openFile === undefined ? undefined : { openFile: options.openFile }));
+    ext.push(
+      schemeGotoDefinition(backend, options?.openFile === undefined ? undefined : { openFile: options.openFile }),
+    );
   if (options?.semanticHighlight !== false)
     ext.push(
       schemeSemanticHighlight(

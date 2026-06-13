@@ -1,12 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { schemeToSweet, sweetToScheme } from "@here.build/arrival-sweet";
-import { paramHintsExtension, schemeIde, schemeStructural, schemeSweet, sweetIdeBackend } from "../index.js";
-import CodeMirror from "@uiw/react-codemirror";
-import { useEffect, useMemo, useState } from "react";
-
 import { darcula, FONT_WRITING, overlayTheme } from "@here.build/editor-theme";
+import CodeMirror from "@uiw/react-codemirror";
 
+import { paramHintsExtension, schemeIde, schemeStructural, schemeSweet, sweetIdeBackend } from "../index.js";
 import { useSchemeIde } from "./use-scheme-ide.js";
 import { useSchemeRanker, type SchemeRankerConfig } from "./use-scheme-ranker.js";
 
@@ -94,9 +93,9 @@ export function SchemeEditor({
     try {
       setSweet(schemeToSweet(text));
       setSweetErr(null);
-    } catch (e) {
+    } catch (error) {
       setSweet(text); // un-renderable scheme: fall back to raw, still editable
-      setSweetErr(errMsg(e));
+      setSweetErr(errMsg(error));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -138,8 +137,8 @@ export function SchemeEditor({
       setText(classic);
       onChange?.(classic); // the body stays canonical scheme
       setSweetErr(null);
-    } catch (e) {
-      setSweetErr(errMsg(e)); // hold the last good classic; surface "unsaved"
+    } catch (error) {
+      setSweetErr(errMsg(error)); // hold the last good classic; surface "unsaved"
     }
   };
 
@@ -148,9 +147,7 @@ export function SchemeEditor({
   // backend answers in classic scheme coordinates; the sweet lens mounts the
   // SAME backend through `sweetIdeBackend` (the sweet↔classic span aligner).
   const ide = useSchemeIde(true);
-  const ranker = useSchemeRanker(
-    neural !== undefined && neural !== false ? (neural === true ? {} : neural) : null,
-  );
+  const ranker = useSchemeRanker(neural !== undefined && neural !== false ? (neural === true ? {} : neural) : null);
 
   const classicExt = useMemo<Extension[]>(
     // Parameter inlay hints + structural (paredit) editing are .scm-only, and
@@ -164,9 +161,14 @@ export function SchemeEditor({
       paramHintsExtension("scheme"),
       schemeStructural(),
       overlayTheme,
-      ...(ide !== null
-        ? [schemeIde(ide, { ...(ranker === null ? {} : { ranker }), ...(onNavigate === undefined ? {} : { openFile: onNavigate }) })]
-        : []),
+      ...(ide === null
+        ? []
+        : [
+            schemeIde(ide, {
+              ...(ranker === null ? {} : { ranker }),
+              ...(onNavigate === undefined ? {} : { openFile: onNavigate }),
+            }),
+          ]),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ide, ranker, onNavigate],

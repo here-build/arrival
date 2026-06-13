@@ -1,6 +1,7 @@
-import type { SchemeIdeBackend } from "../index.js";
-import type { LsPort } from "@here.build/arrival-type-lens/ls-client";
 import { useEffect, useState } from "react";
+import type { LsPort } from "@here.build/arrival-type-lens/ls-client";
+
+import type { SchemeIdeBackend } from "../index.js";
 
 /**
  * The scheme language service for the editor — worker-hosted, shared, lazy.
@@ -49,24 +50,24 @@ async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   // `new (Shared)Worker(new URL("…", import.meta.url), { type: "module" })` —
   // hoisting the URL into a variable silently skips bundling the worker.
   const target =
-    tsgoConfig !== null
+    tsgoConfig === null
       ? shared
-        ? new SharedWorker(new URL("./scheme-tsgo-ls.worker.js", import.meta.url), {
+        ? new SharedWorker(new URL("scheme-ls.worker.js", import.meta.url), {
             type: "module",
-            name: "arrival-scheme-tsgo-ls",
+            name: "arrival-scheme-ls",
           })
-        : new Worker(new URL("./scheme-tsgo-ls.worker.js", import.meta.url), {
+        : new Worker(new URL("scheme-ls.worker.js", import.meta.url), {
             type: "module",
-            name: "arrival-scheme-tsgo-ls",
+            name: "arrival-scheme-ls",
           })
       : shared
-        ? new SharedWorker(new URL("./scheme-ls.worker.js", import.meta.url), {
+        ? new SharedWorker(new URL("scheme-tsgo-ls.worker.js", import.meta.url), {
             type: "module",
-            name: "arrival-scheme-ls",
+            name: "arrival-scheme-tsgo-ls",
           })
-        : new Worker(new URL("./scheme-ls.worker.js", import.meta.url), {
+        : new Worker(new URL("scheme-tsgo-ls.worker.js", import.meta.url), {
             type: "module",
-            name: "arrival-scheme-ls",
+            name: "arrival-scheme-tsgo-ls",
           });
   const port = (shared ? (target as SharedWorker).port : target) as unknown as LsPort;
   return await new Promise<SchemeIdeBackend>((resolve, reject) => {
@@ -102,8 +103,8 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
         const backend = await workerBackend(true);
         wireFilesPush(backend);
         return backend;
-      } catch (e) {
-        console.warn("scheme LS: SharedWorker unavailable — trying a dedicated worker", e);
+      } catch (error) {
+        console.warn("scheme LS: SharedWorker unavailable — trying a dedicated worker", error);
       }
     }
     if (typeof Worker === "function") {
@@ -111,8 +112,8 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
         const backend = await workerBackend(false);
         wireFilesPush(backend);
         return backend;
-      } catch (e) {
-        console.warn("scheme LS: worker unavailable — falling back to the main thread", e);
+      } catch (error) {
+        console.warn("scheme LS: worker unavailable — falling back to the main thread", error);
       }
     }
     try {
@@ -122,8 +123,8 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
         ...LS_OPTIONS,
         resolveModule: (path) => projectFiles[path] ?? projectFiles[path.replace(/^\.\//, "")] ?? null,
       });
-    } catch (e) {
-      console.warn("scheme IDE backend failed to load — editing without type intel", e);
+    } catch (error) {
+      console.warn("scheme IDE backend failed to load — editing without type intel", error);
       return null;
     }
   })();

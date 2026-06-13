@@ -24,8 +24,8 @@
 //     lambda/define params) + the ArrShape roster + host members — the
 //     substrate-baseline subtraction dance disappears with the substrate.
 
-import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
+import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 
 import { balancePrefix } from "../balance.js";
 import { Mapper } from "../span-map.js";

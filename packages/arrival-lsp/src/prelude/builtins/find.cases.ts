@@ -5,7 +5,7 @@ export const cases: { good: string[]; bad: string[] } = {
     // predicate over a number-list yields the element type, widened with undefined
     "const x: SNum | undefined = __arr.find((n: SNum) => n > 0, [1, 2, 3]);",
     // predicate over a string-list
-    "__arr.find((s: SStr) => s.length > 0, [\"a\", \"b\"]);",
+    '__arr.find((s: SStr) => s.length > 0, ["a", "b"]);',
   ],
   bad: [
     // predicate param type mismatches the list element type (string pred, number list)

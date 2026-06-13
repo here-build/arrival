@@ -24,11 +24,11 @@
 // that diffs the program file is a later optimization (noted inline).
 
 // The runtime-free reader (spans on every node) — the require scanner's truth.
+import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 // The deep subpath (not the package index): the index re-exports `formatJs`,
 // whose `eslint` import would drag the whole linter into any browser bundle of
 // this service. `types-emit`'s closure is the pure front-end only.
-import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
 import ts from "typescript";
 
 import { balancePrefix } from "./balance.js";

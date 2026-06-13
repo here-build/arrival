@@ -12,7 +12,7 @@ const SIGMA = new Set(["car", "cdr", "filter", "list", "length", "not"]);
  *  drive narrowByType — it only consumes midToken/position/formKind/validSymbols. */
 function mockScanner(position: ScannerState["position"], formKind: ScannerState["formKind"] = "application"): Scanner {
   const ATOM = /[^\s()[\]{}"';]/;
-  const midToken = (s: string) => s.length > 0 && ATOM.test(s[s.length - 1]!);
+  const midToken = (s: string) => s.length > 0 && ATOM.test(s.at(-1)!);
   return {
     feasible: () => true,
     analyze: (s): ScannerState => ({

@@ -5,7 +5,7 @@ export const cases: { good: string[]; bad: string[] } = {
     // predicate over a number-list returns a boolean
     "const b: SBool = __arr.some((x: SNum) => x > 0, [1, 2, 3]);",
     // predicate over a string-list
-    "__arr.some((s: SStr) => s.length > 0, [\"a\", \"b\"]);",
+    '__arr.some((s: SStr) => s.length > 0, ["a", "b"]);',
   ],
   bad: [
     // predicate param type mismatches the list element type (string pred, number list)

@@ -1,5 +1,6 @@
-import type { SchemeNeuralRanker } from "../index.js";
 import { useEffect, useState } from "react";
+
+import type { SchemeNeuralRanker } from "../index.js";
 
 /**
  * The neural candidate ranker, as a lazily-spawned per-tab worker. OPT-IN:
@@ -28,7 +29,7 @@ function spawnRanker(config: SchemeRankerConfig): Promise<SchemeNeuralRanker | n
   rankerPromise ??= (async () => {
     if (typeof Worker !== "function") return null;
     try {
-      const worker = new Worker(new URL("./scheme-ranker.worker.js", import.meta.url), {
+      const worker = new Worker(new URL("scheme-ranker.worker.js", import.meta.url), {
         type: "module",
         name: "arrival-scheme-ranker",
       });
@@ -75,8 +76,8 @@ function spawnRanker(config: SchemeRankerConfig): Promise<SchemeNeuralRanker | n
             { prob: number; inNucleus: boolean }[]
           >,
       } satisfies SchemeNeuralRanker;
-    } catch (e) {
-      console.warn("scheme neural ranker unavailable — completion stays proof-ranked", e);
+    } catch (error) {
+      console.warn("scheme neural ranker unavailable — completion stays proof-ranked", error);
       return null;
     }
   })();

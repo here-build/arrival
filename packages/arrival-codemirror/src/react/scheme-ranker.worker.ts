@@ -8,12 +8,8 @@
 // Protocol (mirrors the LS worker's): {kind:"init", id, options} once, then
 // {kind:"rank", id, prefix, candidates, minProb} → {kind:"reply", id, ok, value}.
 
+import { createCandidateRanker, type CandidateRanker, type CandidateRankerOptions } from "@here.build/arrival-sampler";
 import { env as tjsEnv } from "@huggingface/transformers";
-import {
-  createCandidateRanker,
-  type CandidateRanker,
-  type CandidateRankerOptions,
-} from "@here.build/arrival-sampler";
 
 interface RankerInit {
   kind: "init";
@@ -58,9 +54,9 @@ scope.onmessage = (ev) => {
         if (ranker === null) {
           try {
             ranker = await createCandidateRanker({ ...msg.options, ...(device === undefined ? {} : { device }) });
-          } catch (e) {
+          } catch (error) {
             // Adapter present but init failed (driver/feature gaps) → one wasm retry.
-            if (device !== "webgpu") throw e;
+            if (device !== "webgpu") throw error;
             device = "wasm";
             ranker = await createCandidateRanker({ ...msg.options, device });
           }
