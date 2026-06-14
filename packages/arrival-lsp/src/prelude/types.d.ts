@@ -81,6 +81,29 @@ type Field<O, K extends keyof O> = O[K];
 type HasField<_O extends object, _K extends string> = boolean;
 type FieldKeys<O extends object> = (keyof O & string)[];
 
+// ── Nested path lookup (`path` / `get-in` / `dig` / `navigate`) ───────────────
+// The DEPTH half of the accessor moat. Where `Field<O, K>` is one hop, `PathValue`
+// threads a whole key SEQUENCE through nested objects, so a precise `Dict` (or any
+// object literal the lens captured) round-trips to its precise leaf value at
+// ARBITRARY depth: `(path '(:a :b) {a:{b:30}})` → `SNum`, not `any`.
+//
+//   PathValue<O, Ks>  — recurse one key at a time:
+//     • [K, ...Rest]  and K is a key of O   → descend into PathValue<O[K], Rest>
+//     • [K, ...Rest]  and K is NOT a key    → `undefined` (R.path's miss value —
+//        faithful: a downstream use of the result must account for absence)
+//     • []  (path exhausted)                → the object reached so far, O
+// `const Ks` capture on the leaf binds the literal key tuple the lens emits
+// (`["a","b"] as const`); a typo'd interior key collapses that branch to
+// `undefined` and bites at the use site, exactly like the one-hop `@` accessor.
+type PathValue<O, Ks extends readonly PropertyKey[]> = Ks extends readonly [
+  infer K,
+  ...infer Rest extends readonly PropertyKey[],
+]
+  ? K extends keyof O
+    ? PathValue<O[K], Rest>
+    : undefined
+  : O;
+
 // ── Typed-apply HOF fallback ─────────────────────────────────────────────────
 // `sexpr<F>(f, ...args)` is the fallback for higher-order / indirect application
 // heads — when the head of a form is a *computed* function value rather than a

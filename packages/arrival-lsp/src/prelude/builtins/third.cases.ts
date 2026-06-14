@@ -1,18 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Cases for `third` — third element of a list.
-//
-// good: well-typed calls that should produce 0 diagnostics.
-// bad:  ill-typed calls that should bite (TSxxxx).
+// Bite cases for `third` — third element of a list (third.d.ts → `third<T>(xs: List<T>): T`).
+// expect-type assertions over the ambient `__arr`; inputs are WIDENED list literals
+// so results are exact brands — positives pin with `.toEqualTypeOf<T>()` (an arg-rot
+// OR a return→any rot both bite); negatives use `// @ts-expect-error`.
+// Base vocab (`List`/`SNum`/`SStr`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-export const cases = {
-  good: [
-    // (third (list 1 2 3)) → 3 (a number)
-    "__arr.third([1, 2, 3])",
-    // (third (list "a" "b" "c")) → "c" (a string)
-    '__arr.third(["a", "b", "c"])',
-  ],
-  bad: [
-    // third of a non-list (number) → Argument of type 'number' is not assignable to List<T> (TS2345)
-    "__arr.third(42)",
-  ],
-};
+import { expectTypeOf } from "vitest";
+
+// (third (list 1 2 3)) → 3 (a number)
+expectTypeOf(__arr.third([1, 2, 3])).toEqualTypeOf<SNum>();
+// (third (list "a" "b" "c")) → "c" (a string)
+expectTypeOf(__arr.third(["a", "b", "c"])).toEqualTypeOf<SStr>();
+
+// @ts-expect-error third of a non-list (number) is not assignable to List<T>
+__arr.third(42);

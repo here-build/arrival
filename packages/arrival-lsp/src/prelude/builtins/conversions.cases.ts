@@ -1,18 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Cases for `number->string`, `string->number` — good must check clean; bad must error.
-// These are TS source fragments referencing `__arr` (declared in ../types.d.ts).
+// Bite cases for `number->string` / `string->number` (conversions.d.ts) — the
+// R7RS conversion family. expect-type assertions over the ambient `__arr`; inputs
+// are widened literals so the results are exact brands — positives pin with
+// `.toEqualTypeOf<T>()`. `string->number` is honestly `SNum | SBool` (R7RS returns
+// #f on a parse failure), so arithmetic on the unchecked result SHOULD bite — that
+// is a latent bug, not lens noise. Negatives use `// @ts-expect-error`: a wrong arg
+// type bites at the call, a too-narrow result type at the assignment.
+// Base vocab (`SNum`/`SStr`/`SBool`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
+import { expectTypeOf } from "vitest";
 
-export const cases = {
-  good: [
-    "const s: SStr = __arr['number->string'](42);",
-    "const h: SStr = __arr['number->string'](255, 16);",
-    "__arr['string->number']('3.14');",
-  ],
-  bad: [
-    // number->string wants a number
-    "__arr['number->string']('x');",
-    // string->number may return #f — not silently a precise SNum
-    "const n: SNum = __arr['string->number']('3');",
-  ],
-};
+// (number->string n [radix]) → the decimal (or radix-) string of n
+expectTypeOf(__arr["number->string"](42)).toEqualTypeOf<SStr>();
+expectTypeOf(__arr["number->string"](255, 16)).toEqualTypeOf<SStr>();
+// (string->number s [radix]) → parsed number, or #f when unparseable → SNum | SBool
+expectTypeOf(__arr["string->number"]("3.14")).toEqualTypeOf<SNum | SBool>();
+
+// @ts-expect-error number->string wants a number, not a string
+__arr["number->string"]("x");
+// @ts-expect-error string->number may return #f — not silently a precise SNum
+const n: SNum = __arr["string->number"]("3");

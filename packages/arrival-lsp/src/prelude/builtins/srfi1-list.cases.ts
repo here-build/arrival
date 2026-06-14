@@ -1,0 +1,67 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Bite cases for the live SRFI-1-adjacent list family (srfi1-list.d.ts). expect-type
+// assertions over the ambient `__arr`; inputs are WIDENED list literals (`[1,2,3]` →
+// number[]) so the results are exact brands — positives pin with `.toEqualTypeOf<T>()`
+// (an arg-rot OR a return→any rot both bite). Negatives use `// @ts-expect-error`:
+// a swapped/wrong arg bites at the call (2345), a wrong-typed threaded result at the
+// assignment (2322); if the signature rots to `any` the line stops erroring and the
+// unused directive becomes the failure.
+// Base vocab (`List`/`SNum`/`SStr`/`Unit`) is ambient from ../types.d.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+import { expectTypeOf } from "vitest";
+
+// take / drop — count-first, element type preserved
+expectTypeOf(__arr.take(2, [1, 2, 3, 4])).toEqualTypeOf<List<SNum>>();
+expectTypeOf(__arr.drop(1, ["a", "b", "c"])).toEqualTypeOf<List<SStr>>();
+
+// head — element-or-undefined; tail/rest/init — element type preserved
+expectTypeOf(__arr.head([1, 2, 3])).toEqualTypeOf<SNum | undefined>();
+expectTypeOf(__arr.tail([1, 2, 3])).toEqualTypeOf<List<SNum>>();
+expectTypeOf(__arr.rest(["a", "b"])).toEqualTypeOf<List<SStr>>();
+expectTypeOf(__arr.init([1, 2, 3])).toEqualTypeOf<List<SNum>>();
+
+// concat — string concat, variadic strings → string
+expectTypeOf(__arr.concat("a", "b", "c")).toEqualTypeOf<SStr>();
+
+// flatten — argument is a list; element type is unknown
+expectTypeOf(__arr.flatten([[1, 2], [3, [4]]])).toEqualTypeOf<List<unknown>>();
+
+// fold — accumulator type B threads from seed through callback to result
+expectTypeOf(__arr.fold((acc: SNum, x: SNum): SNum => acc + x, 0, [1, 2, 3])).toEqualTypeOf<SNum>();
+expectTypeOf(__arr.fold((a: List<SNum>, x: SNum): List<SNum> => a, [], [1, 2, 3])).toEqualTypeOf<List<SNum>>();
+
+// nth — index-first, element-or-undefined
+expectTypeOf(__arr.nth(1, [10, 20, 30])).toEqualTypeOf<SNum | undefined>();
+
+// for-each — Unit return; callback param bound to element type
+expectTypeOf(__arr["for-each"]((x: SNum): void => { x; }, [1, 2, 3])).toEqualTypeOf<Unit>();
+
+// count — number result; pred param bound to element type
+expectTypeOf(__arr.count((x: SNum): boolean => x > 1, [1, 2, 3])).toEqualTypeOf<SNum>();
+
+// @ts-expect-error take — args swapped (list where the count goes)
+__arr.take([1, 2, 3], 2);
+// @ts-expect-error drop — wrong-typing the threaded result (SStr list cannot be SNum list)
+const x: List<SNum> = __arr.drop(1, ["a", "b"]);
+// @ts-expect-error head — wrong element type assigned through
+const h: SStr | undefined = __arr.head([1, 2, 3]);
+// @ts-expect-error tail — arg is not a list
+__arr.tail(5);
+// @ts-expect-error init — wrong element type threaded out
+const i: List<SStr> = __arr.init([1, 2, 3]);
+// @ts-expect-error concat — list arg where a string is required (STRING concat, not append)
+__arr.concat([1, 2], [3, 4]);
+// @ts-expect-error flatten — argument is not a list
+__arr.flatten(5);
+// @ts-expect-error fold — callback acc type disagrees with the seed type (SStr acc vs SNum seed)
+__arr.fold((acc: SStr, x: SNum): SStr => acc, 0, [1, 2, 3]);
+// @ts-expect-error fold — element type mismatches the callback's x param (SStr x over SNum list)
+__arr.fold((acc: SNum, x: SStr): SNum => acc, 0, [1, 2, 3]);
+// @ts-expect-error nth — args swapped (list where the index goes)
+__arr.nth([10, 20], 1);
+// @ts-expect-error nth — wrong element type threaded out
+const n: SStr | undefined = __arr.nth(1, [10, 20, 30]);
+// @ts-expect-error for-each — callback param type mismatches the element type
+__arr["for-each"]((x: SStr): void => { x; }, [1, 2, 3]);
+// @ts-expect-error count — pred param type mismatches the element type
+__arr.count((x: SStr): boolean => x.length > 0, [1, 2, 3]);

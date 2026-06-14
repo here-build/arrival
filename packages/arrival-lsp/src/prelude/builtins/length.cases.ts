@@ -1,21 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Cases for `length` — good snippets must type-check clean; bad snippets must error.
-// These are TS source fragments referencing `__arr` (declared in ../types.d.ts).
+// Bite cases for the `length` builtin (length.d.ts → `length(xs: List<unknown>): SNum`).
+// expect-type assertions over the ambient `__arr`. The result is the exact brand
+// `SNum`, so positives pin with a single `.toEqualTypeOf<SNum>()`. Negatives use
+// `// @ts-expect-error`. Base vocab (`List`/`SNum`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
+import { expectTypeOf } from "vitest";
 
-export const cases = {
-  good: [
-    // length of a number list returns SNum
-    "__arr.length([1, 2, 3])",
-    // length of a string list
-    "__arr.length(['a', 'b'])",
-    // length of an empty list
-    "__arr.length([])",
-  ],
-  bad: [
-    // length requires a List<unknown>, not a bare number
-    "__arr.length(42)",
-    // length requires a List<unknown>, not a string
-    "__arr.length('hello')",
-  ],
-} satisfies { good: string[]; bad: string[] };
+// length of a number list returns SNum
+expectTypeOf(__arr.length([1, 2, 3])).toEqualTypeOf<SNum>();
+// length of a string list
+expectTypeOf(__arr.length(["a", "b"])).toEqualTypeOf<SNum>();
+// length of an empty list
+expectTypeOf(__arr.length([])).toEqualTypeOf<SNum>();
+
+// @ts-expect-error length requires a List<unknown>, not a bare number
+__arr.length(42);
+// @ts-expect-error length requires a List<unknown>, not a string
+__arr.length("hello");

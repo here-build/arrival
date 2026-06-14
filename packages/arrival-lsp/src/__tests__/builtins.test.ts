@@ -1,99 +1,75 @@
 // Consolidated bite guard for the whole builtin set.
 //
-// Every leaf's `<slug>.cases.ts` ships `good` snippets (must type-check clean)
-// and `bad` snippets (must each produce a diagnostic). This runner compiles each
-// snippet against PRE + ALL builtin leaves merged into `ArrShape`, so it proves
-// two things at once across the entire fan-out:
-//   1. all leaves merge with no cross-leaf conflict (the program builds), and
-//   2. no signature regressed to `any` — every `bad` snippet still BITES, every
-//      `good` snippet stays clean.
-// A loose `(...args:any[])=>any` leaf is caught here: its `bad` snippet stops biting.
+// Each leaf's `<slug>.cases.ts` asserts its signature with expect-type:
+//   • positives → `expectTypeOf(call).toEqualTypeOf<T>()` / `.toExtend<T>()` pin
+//     the result type, so an arg-rot OR a return→any rot both bite; and
+//   • negatives → `// @ts-expect-error` — if the signature rots so the line stops
+//     erroring, the unused directive becomes the compile error.
+//
+// This runner compiles ONE program = PRE prelude + every leaf `.d.ts` + every
+// `.cases.ts` (the file set of tsconfig.cases.json) and asserts zero diagnostics.
+// That single-program composition proves two things across the whole fan-out:
+//   1. all leaf `interface ArrShape` re-declarations merge with no conflict, and
+//   2. every case assertion holds (no signature silently regressed to `any`).
+// The compiler is the assertion engine; there is no per-snippet string harness.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const preludeDir = path.join(here, "..", "prelude");
-const builtinsDir = path.join(preludeDir, "builtins");
+const pkgRoot = path.join(here, "..", "..");
+const builtinsDir = path.join(here, "..", "prelude", "builtins");
+const casesConfig = path.join(pkgRoot, "tsconfig.cases.json");
 
-const PRE = readFileSync(path.join(preludeDir, "types.d.ts"), "utf8");
-const leafFiles = readdirSync(builtinsDir).filter((f) => f.endsWith(".d.ts") && !f.startsWith("_"));
-const LEAVES = leafFiles.map((f) => readFileSync(path.join(builtinsDir, f), "utf8"));
-
-/** Compile one snippet against PRE + every merged leaf; return semantic diagnostics. */
-function check(programSource: string): ts.Diagnostic[] {
-  const files = new Map<string, string>([["__pre.d.ts", PRE]]);
-  for (const [i, src] of LEAVES.entries()) files.set(`__leaf${i}.d.ts`, src);
-  files.set("__program.ts", programSource);
-
-  const options: ts.CompilerOptions = {
-    noEmit: true,
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    lib: ["lib.es2022.d.ts"],
-    types: [],
-    skipLibCheck: false,
-  };
-
-  const host: ts.LanguageServiceHost = {
-    getScriptFileNames: () => [...files.keys()],
-    getScriptVersion: () => "1",
-    getScriptSnapshot: (fn) => {
-      const inMem = files.get(fn);
-      if (inMem !== undefined) return ts.ScriptSnapshot.fromString(inMem);
-      try {
-        return ts.ScriptSnapshot.fromString(readFileSync(fn, "utf8"));
-      } catch {
-        return undefined;
-      }
+/** Parse tsconfig.cases.json and compile its file set into one program. */
+function compileCasesProgram(): ts.Diagnostic[] {
+  const parsed = ts.getParsedCommandLineOfConfigFile(casesConfig, {}, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: (d) => {
+      throw new Error(ts.flattenDiagnosticMessageText(d.messageText, "\n"));
     },
-    getCurrentDirectory: () => here,
-    getCompilationSettings: () => options,
-    getDefaultLibFileName: (o) => ts.getDefaultLibFilePath(o),
-    fileExists: (fn) => files.has(fn) || ts.sys.fileExists(fn),
-    readFile: (fn) => (files.has(fn) ? files.get(fn) : ts.sys.readFile(fn)),
-    readDirectory: ts.sys.readDirectory,
-    directoryExists: ts.sys.directoryExists,
-    getDirectories: ts.sys.getDirectories,
-  };
-
-  const service = ts.createLanguageService(host, ts.createDocumentRegistry());
-  return [...service.getSemanticDiagnostics("__program.ts")];
+  });
+  if (!parsed) throw new Error(`could not parse ${casesConfig}`);
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  return [...ts.getPreEmitDiagnostics(program)];
 }
 
-const msg = (d: ts.Diagnostic[]): string =>
-  d.map((x) => ts.flattenDiagnosticMessageText(x.messageText, "\n")).join(" | ");
+const fmt = (d: ts.Diagnostic): string => {
+  const msg = ts.flattenDiagnosticMessageText(d.messageText, "\n");
+  if (!d.file || d.start === undefined) return `TS${d.code}: ${msg}`;
+  const { line, character } = d.file.getLineAndCharacterOfPosition(d.start);
+  return `${path.basename(d.file.fileName)}:${line + 1}:${character + 1} TS${d.code}: ${msg}`;
+};
 
+const leafFiles = readdirSync(builtinsDir).filter((f) => f.endsWith(".d.ts") && !f.startsWith("_"));
 const caseFiles = readdirSync(builtinsDir).filter((f) => f.endsWith(".cases.ts"));
+const diagnostics = compileCasesProgram();
 
-describe("builtins — every leaf bites (good clean / bad errors) across the merged set", () => {
-  it("found the full fan-out", () => {
-    expect(leafFiles.length).toBeGreaterThanOrEqual(34);
-    expect(caseFiles.length).toBeGreaterThanOrEqual(33);
+describe("builtins — every leaf bites across the merged cases program", () => {
+  it("found the full fan-out (every non-template leaf has a cases file)", () => {
+    expect(leafFiles.length).toBeGreaterThanOrEqual(45);
+    expect(caseFiles.length).toBeGreaterThanOrEqual(45);
+    const missing = leafFiles
+      .map((f) => f.replace(".d.ts", ""))
+      .filter((slug) => !caseFiles.includes(`${slug}.cases.ts`));
+    expect(missing, `leaves without a .cases.ts: ${missing.join(", ")}`).toEqual([]);
   });
 
+  it("the merged cases program compiles clean (no leaf regressed; no assertion failed)", () => {
+    expect(diagnostics.map(fmt)).toEqual([]);
+  });
+
+  // Per-leaf surfacing: attribute each cases file's own diagnostics for a readable
+  // failure, so a single rotted leaf names itself instead of dumping the whole set.
   for (const cf of caseFiles) {
     const slug = cf.replace(".cases.ts", "");
-    it(`${slug}: good snippets clean, bad snippets bite`, async () => {
-      const mod = (await import(pathToFileURL(path.join(builtinsDir, cf)).href)) as {
-        cases?: { good: string[]; bad: string[] };
-        default?: { good: string[]; bad: string[] };
-      };
-      const cases = mod.cases ?? mod.default;
-      expect(cases, `${cf} must export \`cases\``).toBeDefined();
-
-      for (const good of cases!.good) {
-        const d = check(good);
-        expect(d, `GOOD must be clean: ${good}\n  → ${msg(d)}`).toHaveLength(0);
-      }
-      for (const bad of cases!.bad) {
-        const d = check(bad);
-        expect(d.length, `BAD must bite (regressed to any?): ${bad}`).toBeGreaterThan(0);
-      }
+    it(`${slug}: assertions hold`, () => {
+      const mine = diagnostics.filter((d) => d.file?.fileName.endsWith(`/${cf}`)).map(fmt);
+      expect(mine, mine.join("\n")).toEqual([]);
     });
   }
 });

@@ -11,5 +11,7 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "src/__tests__/**/*"]
+  // `*.cases.ts` are bite-guard fixtures (expect-type assertions that import
+  // vitest); they are NOT shipped — compiled only by tsconfig.cases.json.
+  "exclude": ["node_modules", "dist", "src/__tests__/**/*", "src/**/*.cases.ts"]
 }

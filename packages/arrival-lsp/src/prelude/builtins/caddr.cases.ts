@@ -1,18 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Cases for `caddr` — third element accessor.
-//
-// good: well-typed calls that should produce 0 diagnostics.
-// bad:  ill-typed calls that should bite (TSxxxx).
+// Bite cases for `caddr` — third element accessor, (car (cdr (cdr xs)))
+// (caddr.d.ts → `caddr<T>(xs: List<T>): T`). expect-type assertions over the ambient
+// `__arr`; inputs are WIDENED list literals so the result is the exact element brand
+// — positives pin with `.toEqualTypeOf<T>()` (an arg-rot OR a return→any rot both
+// bite). Negatives use `// @ts-expect-error`. Base vocab (`List`/`SNum`/`SStr`) is
+// ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-export const cases = {
-  good: [
-    // (caddr (list 1 2 3)) → 3 (a number)
-    "__arr.caddr([1, 2, 3])",
-    // (caddr (list "a" "b" "c")) → "c" (a string)
-    '__arr.caddr(["a", "b", "c"])',
-  ],
-  bad: [
-    // caddr of a non-list (number) → Argument of type 'number' is not assignable to List<T> (TS2345)
-    "__arr.caddr(42)",
-  ],
-};
+import { expectTypeOf } from "vitest";
+
+// (caddr (list 1 2 3)) → 3 (a number)
+expectTypeOf(__arr.caddr([1, 2, 3])).toEqualTypeOf<SNum>();
+// (caddr (list "a" "b" "c")) → "c" (a string)
+expectTypeOf(__arr.caddr(["a", "b", "c"])).toEqualTypeOf<SStr>();
+
+// @ts-expect-error caddr of a non-list (number) is not assignable to List<T> (TS2345)
+__arr.caddr(42);

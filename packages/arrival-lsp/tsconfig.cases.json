@@ -1,0 +1,28 @@
+{
+  // ── The bite-guard program ────────────────────────────────────────────────
+  // Compiles EXACTLY {PRE prelude + every builtin leaf + every `<slug>.cases.ts`}
+  // as ONE program. That single-program composition is load-bearing twice over:
+  //   1. all leaf `interface ArrShape` re-declarations merge here — a cross-leaf
+  //      collision is a compile error (merge-soundness), and
+  //   2. every `.cases.ts` sees the fully-merged ambient `__arr`.
+  // The cases assert with `expectTypeOf` (positives, exact result type) and
+  // `// @ts-expect-error` (negatives). A green compile == the whole fan-out bites.
+  //
+  // Strictness is inherited from the package tsconfig so cases are checked under
+  // the same rules the build uses; only module resolution is re-pinned to the
+  // permissive bundler mode (so the `vitest` type-only import resolves cleanly).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "rootDir": "."
+  },
+  "include": [
+    "src/prelude/types.d.ts",
+    "src/prelude/builtins/**/*.d.ts",
+    "src/prelude/builtins/**/*.cases.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
