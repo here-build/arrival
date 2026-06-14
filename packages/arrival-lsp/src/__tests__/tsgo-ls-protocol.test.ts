@@ -11,7 +11,7 @@ import { serveTsgoSchemeLs } from "../tsgo/ls-server.js";
 import { spawnTsgoNodeTransport, tsgoWasmAvailable } from "../tsgo/node-transport.js";
 
 const asPort = (
-  p: MessagePort,
+  p: { postMessage(d: unknown): void },
 ): { postMessage(d: unknown): void; onmessage: ((ev: { data: unknown }) => void) | null } => p as never;
 
 const wasmPresent = tsgoWasmAvailable();
