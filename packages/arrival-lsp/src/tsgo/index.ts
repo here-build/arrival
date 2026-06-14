@@ -56,10 +56,3 @@ export {
   type TsgoSchemeService,
   type TsgoSchemeServiceOptions,
 } from "./scheme-service.js";
-
-export {
-  installTsgoSchemeLsWorker,
-  serveTsgoSchemeLs,
-  type ServeTsgoOptions,
-  type TsgoLsWorkerOptions,
-} from "./ls-server.js";
