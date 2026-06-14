@@ -18,10 +18,9 @@
 import { createBrowserSchemeLanguageService } from "./browser.js";
 import {
   LS_METHODS,
-  type LsCall,
-  type LsInit,
   type LsPort,
   type LsReply,
+  type LsRequest,
   type SchemeLsWorkerOptions,
 } from "./ls-client.js";
 import type { SchemeLanguageService, SchemeLanguageServiceOptions } from "./service-core.js";
@@ -76,11 +75,7 @@ export function serveSchemeLs(port: LsPort): void {
   let files: Readonly<Record<string, string>> | null = null;
   let requireTypes: Readonly<Record<string, string>> | null = null;
   port.onmessage = (ev) => {
-    const msg = ev.data as
-      | LsInit
-      | LsCall
-      | { kind: "files"; id: number; files: Record<string, string> }
-      | { kind: "requireTypes"; id: number; types: Record<string, string> };
+    const msg = ev.data as LsRequest;
     try {
       if (msg.kind === "init") {
         service = serviceFor(msg.options);

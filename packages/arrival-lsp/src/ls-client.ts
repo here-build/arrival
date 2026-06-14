@@ -23,8 +23,24 @@ export interface SchemeLsWorkerOptions {
   schemePrelude?: string;
 }
 
-export type LsInit = { kind: "init"; id: number; options: SchemeLsWorkerOptions };
-export type LsCall = { kind: "call"; id: number; method: string; args: unknown[] };
+export type LsInit = { kind: "init"; options: SchemeLsWorkerOptions };
+export type LsCall = { kind: "call"; method: string; args: unknown[] };
+/** A require-resolution table push: `(require …)` can't ship a callback over
+ *  postMessage, so the connection sends a files snapshot the service resolves
+ *  through (replace-wholesale). */
+export type LsFiles = { kind: "files"; files: Record<string, string> };
+/** The require-TYPE twin of {@link LsFiles}: a precomputed `{ path → TS type }`
+ *  snapshot synthesized host-side. */
+export type LsRequireTypes = { kind: "requireTypes"; types: Record<string, string> };
+/** Every request payload (sans correlation id) — the one named source of truth
+ *  both sides dispatch on. `id` lives only on the wire ({@link LsRequest}): the
+ *  caller passes a payload, `call` stamps the id. Modelled id-less so the union
+ *  can be widened/narrowed by `kind` without `Omit` collapsing it to the shared
+ *  keys (a union `Omit` keeps only common members — it would drop the payloads). */
+export type LsMessage = LsInit | LsCall | LsFiles | LsRequireTypes;
+/** A request as it crosses postMessage: a payload plus its correlation id.
+ *  Intersection distributes over the union, so every member keeps its own keys. */
+export type LsRequest = LsMessage & { id: number };
 export type LsReply =
   | { kind: "reply"; id: number; ok: true; value: unknown }
   | { kind: "reply"; id: number; ok: false; error: string };
@@ -74,34 +90,49 @@ export function connectSchemeLs(
   options: SchemeLsWorkerOptions,
   timeoutMs = 15_000,
 ): Promise<AsyncSchemeLanguageService> {
-  let nextId = 0;
-  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
-  port.onmessage = (ev) => {
-    const msg = ev.data as LsReply;
-    const entry = pending.get(msg.id);
-    if (entry === undefined) return;
-    pending.delete(msg.id);
-    if (msg.ok) entry.resolve(msg.value);
-    else entry.reject(new Error(msg.error));
-  };
-  const call = (message: Omit<LsInit, "id"> | Omit<LsCall, "id">): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      const id = nextId++;
-      pending.set(id, { resolve, reject });
-      port.postMessage({ ...message, id });
-    });
-
-  const client = {
-    ...Object.fromEntries(
-      LS_METHODS.map((method) => [method, (...args: unknown[]) => call({ kind: "call", method, args })]),
-    ),
-    setProjectFiles: (files: Record<string, string>) =>
-      (call as (m: Record<string, unknown>) => Promise<unknown>)({ kind: "files", files }) as Promise<void>,
-    setRequireTypes: (types: Record<string, string>) =>
-      (call as (m: Record<string, unknown>) => Promise<unknown>)({ kind: "requireTypes", types }) as Promise<void>,
-  } as AsyncSchemeLanguageService;
-
   return new Promise((resolve, reject) => {
+    let nextId = 0;
+    const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+    port.onmessage = (ev) => {
+      const msg = ev.data as LsReply;
+      const entry = pending.get(msg.id);
+      if (entry === undefined) return;
+      pending.delete(msg.id);
+      if (msg.ok) entry.resolve(msg.value);
+      else entry.reject(new Error(msg.error));
+    };
+    // The wire reply is genuinely `unknown`, so the promise resolves `unknown`
+    // (its resolver drops straight into the `pending` slot, no variance cast) and
+    // the ONE honest assertion — "the caller knows the reply shape this method
+    // yields" — lives here, at the boundary, rather than repeated at each call site.
+    const call = <R = unknown>(message: LsMessage): Promise<R> =>
+      new Promise<unknown>((res, rej) => {
+        const id = nextId++;
+        pending.set(id, { resolve: res, reject: rej });
+        port.postMessage({ ...message, id } satisfies LsRequest);
+      }) as Promise<R>;
+
+    // One typed RPC binder. The single remaining cast is unavoidable: TS cannot
+    // verify a freshly-built arrow against an indexed-by-generic type
+    // (`AsyncSchemeLanguageService[M]` collapses to an intersection of every
+    // member), so the binding is asserted once, here. `method: M` keeps the name
+    // honest (a typo is a compile error), and the `client` annotation below forces
+    // every method present and correctly named — no blanket `as` over a spread.
+    const rpc = <M extends keyof SchemeLanguageService>(method: M): AsyncSchemeLanguageService[M] =>
+      ((...args: unknown[]) => call({ kind: "call", method, args })) as AsyncSchemeLanguageService[M];
+
+    const client: AsyncSchemeLanguageService = {
+      getSemanticDiagnostics: rpc("getSemanticDiagnostics"),
+      getQuickInfoAtPosition: rpc("getQuickInfoAtPosition"),
+      getCompletionsAtPosition: rpc("getCompletionsAtPosition"),
+      getCompletionContext: rpc("getCompletionContext"),
+      getDefinitionAtPosition: rpc("getDefinitionAtPosition"),
+      getSemanticClassifications: rpc("getSemanticClassifications"),
+      getTypeValidCandidates: rpc("getTypeValidCandidates"),
+      setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
+      setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
+    };
+
     const timer = setTimeout(() => reject(new Error("scheme-ls: worker init timed out")), timeoutMs);
     void (async () => {
       try {
