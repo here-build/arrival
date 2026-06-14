@@ -40,11 +40,31 @@ export function configureSchemeIdeTsgo(config: { wasmUrl: string }): void {
   tsgoConfig = config;
 }
 
+// ── env-derived name roster: host rosettas + scheme stdlib preamble ─────────
+// The lens otherwise knows only its hand-written builtin leaves, so every
+// arrival env binding (`infer`, `require`, `http/*`) and every scheme-prelude
+// helper (`field`, `values-of`, `take`) reads as an unresolved name. Both
+// rosters are DERIVED from the env's single source of truth — `host` from
+// `assembleHostPrelude([...env.__rosettaTypes__])`, `schemePrelude` is the
+// `BUILTIN_PREAMBLE` source string — and threaded in here. Plain data, so they
+// cross the worker boundary in the init options as-is.
+let hostConfig: { host?: { prelude: string; members: readonly string[] }; schemePrelude?: string } = {};
+
+/** Supply the env-derived name roster (host rosettas + scheme stdlib preamble)
+ *  to the scheme IDE. Call once at app boot, before {@link preloadSchemeIde}. */
+export function configureSchemeIdeHost(config: {
+  host?: { prelude: string; members: readonly string[] };
+  schemePrelude?: string;
+}): void {
+  hostConfig = config;
+}
+
 let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   const { connectSchemeLs } = await import("@here.build/arrival-type-lens/ls-client");
-  const connectOptions = tsgoConfig === null ? LS_OPTIONS : { ...LS_OPTIONS, tsgoWasmUrl: tsgoConfig.wasmUrl };
+  const baseOptions = { ...LS_OPTIONS, ...hostConfig };
+  const connectOptions = tsgoConfig === null ? baseOptions : { ...baseOptions, tsgoWasmUrl: tsgoConfig.wasmUrl };
   // All constructions are written out INLINE on purpose: bundlers' worker
   // transforms (vite/rollup) only recognize the syntactic pattern
   // `new (Shared)Worker(new URL("…", import.meta.url), { type: "module" })` —
@@ -88,6 +108,13 @@ async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
 let projectFiles: Record<string, string> = {};
 let pushFiles: ((files: Record<string, string>) => void) | null = null;
 
+// The require-TYPE twin of projectFiles: `{ path → TS type string }`,
+// synthesized HOST-side from the runtime loader registry (resolveRequireType).
+// Data-file `(require)`s resolve to their granular shape; the lens can't run the
+// registry over postMessage, so the host ships the resolved types instead.
+let requireTypes: Record<string, string> = {};
+let pushRequireTypes: ((types: Record<string, string>) => void) | null = null;
+
 /** Publish the project's files for `(require "path")` resolution — call on
  *  project open and whenever files change (replace-wholesale; keys are the
  *  require-style paths). Idempotent and cheap; safe before the IDE loads. */
@@ -96,12 +123,22 @@ export function setSchemeIdeFiles(files: Record<string, string>): void {
   pushFiles?.(files);
 }
 
+/** Publish data-file require TYPES (`{ path → TS type string }`) so a
+ *  `(require "data.json")` resolves to its precise shape. Synthesize host-side
+ *  via the loader registry's `resolveRequireType`. Replace-wholesale; pairs with
+ *  `setSchemeIdeFiles`. */
+export function setSchemeIdeRequireTypes(types: Record<string, string>): void {
+  requireTypes = types;
+  pushRequireTypes?.(types);
+}
+
 function loadIde(): Promise<SchemeIdeBackend | null> {
   idePromise ??= (async () => {
     if (typeof SharedWorker === "function") {
       try {
         const backend = await workerBackend(true);
         wireFilesPush(backend);
+        wireRequireTypesPush(backend);
         return backend;
       } catch (error) {
         console.warn("scheme LS: SharedWorker unavailable — trying a dedicated worker", error);
@@ -111,6 +148,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
       try {
         const backend = await workerBackend(false);
         wireFilesPush(backend);
+        wireRequireTypesPush(backend);
         return backend;
       } catch (error) {
         console.warn("scheme LS: worker unavailable — falling back to the main thread", error);
@@ -121,7 +159,9 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
       // In-thread rung: resolve straight off the live table.
       return m.createBrowserSchemeLanguageService({
         ...LS_OPTIONS,
+        ...hostConfig,
         resolveModule: (path) => projectFiles[path] ?? projectFiles[path.replace(/^\.\//, "")] ?? null,
+        resolveRequireType: (path) => requireTypes[path] ?? requireTypes[path.replace(/^\.\//, "")] ?? null,
       });
     } catch (error) {
       console.warn("scheme IDE backend failed to load — editing without type intel", error);
@@ -138,6 +178,15 @@ function wireFilesPush(backend: SchemeIdeBackend): void {
   if (push === undefined) return;
   pushFiles = (files) => void push.call(backend, files).catch(() => undefined);
   if (Object.keys(projectFiles).length > 0) pushFiles(projectFiles);
+}
+
+/** Wire the worker-rung require-types push: send the current table now, re-send
+ *  on every setSchemeIdeRequireTypes. Parallel to wireFilesPush. */
+function wireRequireTypesPush(backend: SchemeIdeBackend): void {
+  const push = (backend as { setRequireTypes?: (t: Record<string, string>) => Promise<void> }).setRequireTypes;
+  if (push === undefined) return;
+  pushRequireTypes = (types) => void push.call(backend, types).catch(() => undefined);
+  if (Object.keys(requireTypes).length > 0) pushRequireTypes(requireTypes);
 }
 
 const idle = (fn: () => void): void => {

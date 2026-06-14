@@ -158,6 +158,36 @@ export interface SchemeLanguageServiceOptions {
    *     the SLOT side narrows (a host tool as the enclosing call head).
    */
   host?: { prelude: string; members: readonly string[] };
+  /**
+   * The scheme STDLIB preamble source (arrival's `BUILTIN_PREAMBLE`) — the
+   * `(define …)` helpers that are themselves written in scheme (`field`,
+   * `values-of`, `keys-of`, `entries-of`, `take`, `drop`, `count-if`,
+   * `infer/chat/*`, `s/*`, and the `define/overridable` family). These are NOT
+   * rosettas (no native impl, no `.d.ts` leaf) — they are scheme source that the
+   * runtime always loads ahead of the user's program. The lens emits this source
+   * into the SAME virtual module ahead of the require closure (an implicit,
+   * always-present dependency) so its defines resolve, type-flow, and complete
+   * exactly like a required file's. DERIVED from the one source of truth — never
+   * restated as hand-written leaves. Absent → those names read as unresolved.
+   */
+  schemePrelude?: string;
+  /**
+   * `(require "data.json")` → granular SHAPE — the editor twin of the runtime
+   * loader registry. Given a `(require)`d path verbatim, return the TS type the
+   * lens should give that require (in the lens vocabulary: `SStr`/`SNum`/
+   * `List<…>`/object literals), or null when the path has no static shape (a
+   * `.scm` library, an opaque blob). DERIVED host-side from the SAME loader
+   * registry the runtime parses with (`resolveRequireType` over the kernel
+   * loader), so a custom extension's `type` provider reaches the editor too.
+   *
+   * For each require path that yields a non-null shape, the lens emits a
+   * `declare global { interface ArrShape { require(specifier: "<path>"): <T>; } }`
+   * string-literal overload — TS hoists it ahead of the general
+   * `(specifier: SStr): unknown` so `(require "data.json")` resolves to the
+   * precise shape instead of `unknown`. A path with a shape is ALSO skipped as a
+   * scheme dependency (it is data, not loadable forms). Absent → every require
+   * stays `unknown` (today's behavior). */
+  resolveRequireType?: (path: string) => string | null;
 }
 
 /**
@@ -225,6 +255,31 @@ export function scanRequires(scheme: string): RequireRef[] {
     out.push({ path: arg.atom, span: { start: form.span[0], length: form.span[1] - form.span[0] } });
   }
   return out;
+}
+
+/** Every `(require "literal")` path ANYWHERE in the tree — value-position
+ *  (`(define x (require "data.json"))`) included, not just statement-position.
+ *  `scanRequires` finds the top-level load-into-scope requires (the `.scm` dep
+ *  closure); this finds the data-file requires whose VALUE is bound, so the lens
+ *  can give each its precise shape. Deduped, order-preserving. */
+export function scanAllRequirePaths(scheme: string): string[] {
+  let forest: Node[];
+  try {
+    forest = parseSexprs(scheme);
+  } catch {
+    return [];
+  }
+  const seen = new Set<string>();
+  const visit = (node: Node): void => {
+    if (!("list" in node)) return;
+    const [head, arg] = node.list;
+    if (head !== undefined && "atom" in head && head.atom === "require" && arg !== undefined && "atom" in arg && arg.str === true) {
+      seen.add(arg.atom);
+    }
+    for (const child of node.list) visit(child);
+  };
+  for (const form of forest) visit(form);
+  return [...seen];
 }
 
 /** Scheme-legal forms tsc rejects: redefinition is allowed in scheme — both
@@ -371,6 +426,22 @@ export function createSchemeLanguageServiceCore(
     return memberRoster;
   };
 
+  // The scheme stdlib preamble, emitted ONCE to TS and cached — it's constant
+  // for the service's lifetime. Sits at the very front of every program module
+  // (ahead of the require closure) as an implicit, always-present dependency, so
+  // its `(define …)` helpers resolve in program scope. Its own internal spans are
+  // unmapped (no Mapper), so any diagnostic inside it is dropped on lift-out.
+  let schemePreludeTs: string | null = null;
+  const emittedSchemePrelude = (): string => {
+    if (schemePreludeTs === null) {
+      schemePreludeTs =
+        opts?.schemePrelude === undefined
+          ? ""
+          : emitTypes(opts.schemePrelude, { hostMembers: emitterMembers() }).ts.replace(/export \{\};\n$/, "");
+    }
+    return schemePreludeTs;
+  };
+
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
   let programVersion = 0;
@@ -440,7 +511,14 @@ export function createSchemeLanguageServiceCore(
    */
   function loadSource(scheme: string): Mapper {
     const resolve = opts?.resolveModule;
-    programRequires = resolve === undefined ? [] : scanRequires(scheme);
+    const resolveReqType = opts?.resolveRequireType;
+    // Requires are walked when EITHER seam is present: `resolveModule` emits
+    // `.scm` deps into scope, `resolveRequireType` emits data-file overloads.
+    programRequires = resolve === undefined && resolveReqType === undefined ? [] : scanRequires(scheme);
+    // `(require "data.json")` overloads, collected during the dep walk (a data
+    // path is an overload, NOT a scheme dep — see emitDep). Prepended to the
+    // module as a `declare global` augmentation so they merge into ArrShape.
+    const requireOverloads: string[] = [];
     // 1. Emit every unit (deps first), tracking raw segments + LOCAL mappings.
     interface RawUnit {
       path: string;
@@ -450,14 +528,37 @@ export function createSchemeLanguageServiceCore(
       localMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[];
     }
     const rawDeps: RawUnit[] = [];
-    let prefix = "";
-    if (resolve !== undefined && programRequires.length > 0) {
+    // The scheme stdlib preamble leads the module — an implicit dependency ahead
+    // of the require closure. Untracked in rawDeps: it has no Scheme mapper, so
+    // its defines are in scope but its own spans never lift to a diagnostic.
+    let prefix = emittedSchemePrelude();
+    // Data-file requires resolve to a shape (overload), scheme requires load into
+    // scope (dep). A path is a data file iff the registry yields a type for it.
+    // Collected over the WHOLE tree (value-position `(define x (require …))`
+    // included), deduped, so each `(require "data.json")` gets its precise shape.
+    const dataReqTypes = new Map<string, string>();
+    const collectDataReqs = (source: string): void => {
+      if (resolveReqType === undefined) return;
+      for (const path of scanAllRequirePaths(source)) {
+        if (dataReqTypes.has(path)) continue;
+        const reqType = resolveReqType(path);
+        if (reqType !== null) dataReqTypes.set(path, reqType);
+      }
+    };
+    collectDataReqs(scheme);
+    if (programRequires.length > 0) {
       const visited = new Set<string>();
       const emitDep = (path: string): void => {
         if (visited.has(path)) return;
         visited.add(path);
+        // A data file (registry yields a shape) is an OVERLOAD, not a scheme
+        // dep — emitting its source as scheme would parse JSON/YAML as forms and
+        // bind nothing. Its overload is collected by collectDataReqs; stop here.
+        if (dataReqTypes.has(path) || (resolveReqType?.(path) ?? null) !== null) return;
+        if (resolve === undefined) return;
         const source = resolve(path);
         if (source === null) return;
+        collectDataReqs(source);
         for (const nested of scanRequires(source)) emitDep(nested.path);
         const dep = emitTypes(source, { hostMembers: emitterMembers() });
         const text = dep.ts.replace(/export \{\};\n$/, "");
@@ -465,6 +566,17 @@ export function createSchemeLanguageServiceCore(
         prefix += text;
       };
       for (const r of programRequires) emitDep(r.path);
+    }
+    for (const [path, reqType] of dataReqTypes) {
+      requireOverloads.push(`require(specifier: ${JSON.stringify(path)}): ${reqType};`);
+    }
+    // The string-literal `require` overloads merge into the global ArrShape via
+    // `declare global` (the program is a module, so a bare `interface ArrShape`
+    // would be module-local). TS hoists these specialized overloads ahead of the
+    // general `(specifier: SStr): unknown`, so each `(require "data.json")`
+    // resolves to its precise shape. Unmapped (ambient) — never lifts a span.
+    if (requireOverloads.length > 0) {
+      prefix += `declare global { interface ArrShape {\n${requireOverloads.map((o) => `  ${o}`).join("\n")}\n} }\n`;
     }
     const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers: emitterMembers() });
     const programBase = prefix.length;

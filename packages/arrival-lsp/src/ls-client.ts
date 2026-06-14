@@ -17,6 +17,10 @@ import type { SchemeLanguageService } from "./service-core.js";
 export interface SchemeLsWorkerOptions {
   compilerOptions?: Record<string, unknown>;
   host?: { prelude: string; members: readonly string[] };
+  /** The scheme stdlib preamble source (arrival's `BUILTIN_PREAMBLE`) — a plain
+   *  string, so it crosses postMessage as-is. Emitted ahead of the program so
+   *  its `(define …)` helpers resolve. See `SchemeLanguageServiceOptions`. */
+  schemePrelude?: string;
 }
 
 export type LsInit = { kind: "init"; id: number; options: SchemeLsWorkerOptions };
@@ -43,6 +47,12 @@ export type AsyncSchemeLanguageService = {
   ) => Promise<Awaited<ReturnType<SchemeLanguageService[M]>>>;
 } & {
   setProjectFiles(files: Record<string, string>): Promise<void>;
+  /** The require-TYPE twin of `setProjectFiles`: a precomputed `{ path → TS type
+   *  string }` map (synthesized host-side from the runtime loader registry via
+   *  `resolveRequireType`). Like the resolver, a `resolveRequireType` callback
+   *  can't cross postMessage, so the host pushes the resolved snapshot instead —
+   *  re-push on project change, replace-wholesale. */
+  setRequireTypes(types: Record<string, string>): Promise<void>;
 };
 
 export const LS_METHODS = [
@@ -87,6 +97,8 @@ export function connectSchemeLs(
     ),
     setProjectFiles: (files: Record<string, string>) =>
       (call as (m: Record<string, unknown>) => Promise<unknown>)({ kind: "files", files }) as Promise<void>,
+    setRequireTypes: (types: Record<string, string>) =>
+      (call as (m: Record<string, unknown>) => Promise<unknown>)({ kind: "requireTypes", types }) as Promise<void>,
   } as AsyncSchemeLanguageService;
 
   return new Promise((resolve, reject) => {

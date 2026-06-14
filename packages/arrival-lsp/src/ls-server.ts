@@ -37,6 +37,14 @@ let activeFiles: Readonly<Record<string, string>> | null = null;
 const resolveThroughActiveFiles = (path: string): string | null =>
   activeFiles?.[path] ?? activeFiles?.[path.replace(/^\.\//, "")] ?? null;
 
+/** The require-TYPE twin of `activeFiles`: a precomputed `{ path → TS type }`
+ *  map pushed by the connection ({kind:"requireTypes"}). Read through the same
+ *  one-call-at-a-time swap slot — a `resolveRequireType` callback can't cross
+ *  postMessage, so the type is synthesized host-side and the result shipped. */
+let activeRequireTypes: Readonly<Record<string, string>> | null = null;
+const resolveThroughActiveRequireTypes = (path: string): string | null =>
+  activeRequireTypes?.[path] ?? activeRequireTypes?.[path.replace(/^\.\//, "")] ?? null;
+
 /** Service per options-profile — THE sharing point. */
 const sharedServices = new Map<string, SchemeLanguageService>();
 function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
@@ -46,6 +54,7 @@ function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
     svc = createBrowserSchemeLanguageService({
       ...(options as SchemeLanguageServiceOptions),
       resolveModule: resolveThroughActiveFiles,
+      resolveRequireType: resolveThroughActiveRequireTypes,
     });
     sharedServices.set(key, svc);
     // Warm the first compilation off ANY caller's request path.
@@ -65,8 +74,13 @@ function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
 export function serveSchemeLs(port: LsPort): void {
   let service: SchemeLanguageService | null = null;
   let files: Readonly<Record<string, string>> | null = null;
+  let requireTypes: Readonly<Record<string, string>> | null = null;
   port.onmessage = (ev) => {
-    const msg = ev.data as LsInit | LsCall | { kind: "files"; id: number; files: Record<string, string> };
+    const msg = ev.data as
+      | LsInit
+      | LsCall
+      | { kind: "files"; id: number; files: Record<string, string> }
+      | { kind: "requireTypes"; id: number; types: Record<string, string> };
     try {
       if (msg.kind === "init") {
         service = serviceFor(msg.options);
@@ -80,15 +94,24 @@ export function serveSchemeLs(port: LsPort): void {
         port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
         return;
       }
+      if (msg.kind === "requireTypes") {
+        // The connection's require-TYPE table (replace-wholesale; pushed fresh
+        // whenever the project's data files change).
+        requireTypes = msg.types;
+        port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
+        return;
+      }
       if (service === null) throw new Error("scheme-ls: call before init");
       if (!(LS_METHODS as readonly string[]).includes(msg.method))
         throw new Error(`scheme-ls: unknown method ${msg.method}`);
       activeFiles = files;
+      activeRequireTypes = requireTypes;
       let value: unknown;
       try {
         value = (service[msg.method as MethodName] as (...a: unknown[]) => unknown)(...msg.args);
       } finally {
         activeFiles = null;
+        activeRequireTypes = null;
       }
       port.postMessage({ kind: "reply", id: msg.id, ok: true, value } satisfies LsReply);
     } catch (error) {

@@ -26,6 +26,10 @@
       "types": "./dist/ls-client.d.ts",
       "import": "./dist/ls-client.js"
     },
+    "./host-prelude": {
+      "types": "./dist/host-prelude.d.ts",
+      "import": "./dist/host-prelude.js"
+    },
     "./tsgo": {
       "types": "./dist/tsgo/index.d.ts",
       "import": "./dist/tsgo/index.js"
