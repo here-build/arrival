@@ -54,14 +54,16 @@ export function assembleHostPrelude(
 ): HostPrelude {
   const byName = new Map<string, string>(entries);
   const members = [...byName.keys()];
-  const lines = members.map((name) => `  ${JSON.stringify(name)}${byName.get(name)!};`);
-  const prelude = [
-    "// Host-injected ambient prelude (assembled from the rosetta type registry).",
-    opts?.preamble ?? "",
-    "interface ArrShape {",
-    ...lines,
-    "}",
-    "",
-  ].join("\n");
-  return { prelude, members };
+
+  return {
+    prelude: [
+      "// Host-injected ambient prelude (assembled from the rosetta type registry).",
+      opts?.preamble ?? "",
+      "interface ArrShape {",
+      ...members.map((name) => `  ${JSON.stringify(name)}${byName.get(name)!};`),
+      "}",
+      "",
+    ].join("\n"),
+    members,
+  };
 }

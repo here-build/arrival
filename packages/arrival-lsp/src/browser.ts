@@ -32,14 +32,12 @@ export type {
 
 /** The bundled prelude (PRE + builtin leaves) as a fresh mutable map — the
  *  browser twin of `getPreludeFiles()`. */
-export function getBundledPreludeFiles(): Map<string, string> {
-  return new Map(PRELUDE_BUNDLE);
-}
+export const getBundledPreludeFiles = () => new Map<string, string>(PRELUDE_BUNDLE);
 
 /** Create a Scheme language service that runs entirely in the browser (or any
  *  fs-less runtime): bundled prelude + bundled TS default libs, no `ts.sys`. */
-export function createBrowserSchemeLanguageService(opts?: SchemeLanguageServiceOptions): SchemeLanguageService {
-  return createSchemeLanguageServiceCore(
+export const createBrowserSchemeLanguageService = (opts?: SchemeLanguageServiceOptions): SchemeLanguageService =>
+  createSchemeLanguageServiceCore(
     {
       rootFiles: getBundledPreludeFiles(),
       supportFiles: new Map(TS_LIB_FILES),
@@ -52,6 +50,5 @@ export function createBrowserSchemeLanguageService(opts?: SchemeLanguageServiceO
       compilerOptions: { skipLibCheck: true, ...opts?.compilerOptions },
     },
   );
-}
 
 export { scanRequires, type RequireRef } from "./service-core.js";
