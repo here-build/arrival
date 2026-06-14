@@ -26,6 +26,10 @@ import {
 import type { SchemeLanguageService, SchemeLanguageServiceOptions } from "./service-core.js";
 
 type MethodName = (typeof LS_METHODS)[number];
+/** Wire method name → a real service method, proven for the type-checker. `.some`
+ *  with `===` compares each literal against the string with no cast (unlike
+ *  `LS_METHODS.includes`, whose param is the literal union and rejects a `string`). */
+const isMethodName = (m: string): m is MethodName => LS_METHODS.some((name) => name === m);
 
 /** `(require …)` resolution over the wire: a CALLBACK can't cross postMessage,
  *  so each CONNECTION pushes its project-files table ({kind:"files"}) and the
@@ -51,7 +55,13 @@ function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
   let svc = sharedServices.get(key);
   if (svc === undefined) {
     svc = createBrowserSchemeLanguageService({
-      ...(options as SchemeLanguageServiceOptions),
+      ...options,
+      // Only `compilerOptions` genuinely diverges: the wire weakens it to a
+      // cloneable `Record<string, unknown>`, the service wants `ts.CompilerOptions`.
+      // Cast THAT field alone (tied to the service's own field type, so it tracks a
+      // future change) — `host`/`schemePrelude` stay checked, so a drift between the
+      // wire and service shapes is a compile error, not a silently-blinded blanket cast.
+      compilerOptions: options.compilerOptions as SchemeLanguageServiceOptions["compilerOptions"],
       resolveModule: resolveThroughActiveFiles,
       resolveRequireType: resolveThroughActiveRequireTypes,
     });
@@ -97,13 +107,15 @@ export function serveSchemeLs(port: LsPort): void {
         return;
       }
       if (service === null) throw new Error("scheme-ls: call before init");
-      if (!(LS_METHODS as readonly string[]).includes(msg.method))
-        throw new Error(`scheme-ls: unknown method ${msg.method}`);
+      if (!isMethodName(msg.method)) throw new Error(`scheme-ls: unknown method ${msg.method}`);
       activeFiles = files;
       activeRequireTypes = requireTypes;
       let value: unknown;
       try {
-        value = (service[msg.method as MethodName] as (...a: unknown[]) => unknown)(...msg.args);
+        // The dynamic dispatch: `service[name]` is a union of the seven method
+        // signatures, not callable under one arg list — the callable cast is the
+        // unavoidable boundary (the NAME is already proven by `isMethodName`).
+        value = (service[msg.method] as (...a: unknown[]) => unknown)(...msg.args);
       } finally {
         activeFiles = null;
         activeRequireTypes = null;

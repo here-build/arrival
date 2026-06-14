@@ -136,7 +136,8 @@ function parsedForest(scheme: string): Node[] {
   }
 }
 
-const isAtom = (n: Node | undefined): n is Node & { atom: string } => n !== undefined && "atom" in n;
+const isAtom = (n: Node | undefined): n is Node & { atom: string; str?: boolean } =>
+  n !== undefined && "atom" in n;
 const isList = (n: Node | undefined): n is Node & { list: Node[] } => n !== undefined && "list" in n;
 
 /** One scheme binding: name + the span of its BINDING site (define form /
@@ -181,7 +182,7 @@ function bindingsAt(forest: readonly Node[], offset: number | null): SchemeBindi
         // (define (f p…) body) sugar — f is a callable define; params scope to the form.
         const span = spanOf(form);
         if (span !== null) out.push({ name: second.list[0].atom, span, kind: "define", callable: true });
-        if (contains) pushParams({ list: second.list.slice(1) } as Node);
+        if (contains) pushParams({ list: second.list.slice(1) });
       }
     }
     if (isAtom(head) && head.atom === "lambda" && contains && second !== undefined) pushParams(second);
@@ -198,7 +199,7 @@ function scanRequireRefs(scheme: string): { path: string; span: { start: number;
     if (!isList(form) || form.span === undefined) continue;
     const [head, arg] = form.list;
     if (!isAtom(head) || head.atom !== "require") continue;
-    if (!isAtom(arg) || (arg as { str?: boolean }).str !== true) continue;
+    if (!isAtom(arg) || arg.str !== true) continue;
     out.push({ path: arg.atom, span: { start: form.span[0], length: form.span[1] - form.span[0] } });
   }
   return out;
