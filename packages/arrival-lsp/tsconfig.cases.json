@@ -13,7 +13,22 @@
   // permissive bundler mode (so the `vitest` type-only import resolves cleanly).
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
+    // `composite` makes this a referenced project of tsconfig.json, so the editor
+    // routes an opened `<slug>.cases.ts` HERE (not to an inferred project that
+    // lacks the ambient PRE prelude + leaves) — that is what makes a cases file
+    // resolve `__arr` / the brands when opened directly, with no per-file imports
+    // and no `/// <reference>` headers.
+    //
+    // A *referenced* composite project may not set `noEmit` (TS6310), so emit is
+    // directed to a throwaway `dist-cases/` (gitignored, NOT in package `files`, so
+    // never shipped). It is only ever produced by an explicit `tsc -b`; the package
+    // `build` script is plain `tsc`, which does not build references, and the test
+    // harness type-checks via the TS API without emitting. So `dist-cases/` is, in
+    // practice, never written during normal build/test — it exists only to satisfy
+    // the composite-reference contract.
+    "composite": true,
+    "outDir": "./dist-cases",
+    "tsBuildInfoFile": "./dist-cases/.tsbuildinfo",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,
