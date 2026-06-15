@@ -4,8 +4,6 @@
 // Scheme semantics: (max-by key xs) → the element x of `xs` for which `(key x)`
 //   is greatest. `key` is applied to each element and the results are compared
 //   with `>`, so `key` must yield a number. Empty list errors at runtime.
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   arrival-chain-view/src/stdlib.ts:271
 //     `${list}.reduce((acc, el) => (${key(el)} > ${key("acc")} ? el : acc))`
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely

@@ -16,20 +16,13 @@
 //   (match pat s)               → list of match groups, or #f when no match
 //   (escape-regex s)            → s with regex metacharacters escaped
 //
-// Runtime truth (the `any` impls these SHARPEN — do NOT import them):
-//   inference-env.ts:308-320  inline `symbol->string` / `string->symbol`
-//                           (inline binding — highest precedence)
-//   inference-env.ts:342      inline `string-ref` = (s,i) => s[i] ?? nil
-//   inference-env.ts:338-339  inline `join` = (sep,list) => String(lipsJoin(...))
-//   lips.js:3183 substring · 3204 split · 3215 replace · 3225 match
-//   lips.js:3232 search    · 3236 repr  · 3239 escape-regex
-//                           (LIPS builtins via SAFE_BUILTINS — substring/split/
-//                            replace/match/search are in SAFE_BUILTINS, spread
-//                            AFTER RAMDA in inference-env.ts:188-189, so the LIPS
-//                            impl WINS over any ramda-functions.ts alias.)
+//   Inline (highest precedence): `string-ref` = (s,i) => s[i] ?? nil ·
+//   `join` = (sep,list) => String(lipsJoin(...)).
+//   LIPS builtins via SAFE_BUILTINS: substring / split / replace / match / search /
+//   repr / escape-regex — these LIPS impls WIN over any former Ramda alias.
 //
 // ★ Precedence corrections that change the signatures:
-//   • `search` is NOT ramda-functions.ts:193 `R.find`. SAFE_BUILTINS' LIPS
+//   • `search` is NOT a Ramda `find`. SAFE_BUILTINS' LIPS
 //     `search` (string `.search` → an index) overrides it → returns SNum.
 //   • `split`/`replace`/`match` take (sep|pat) FIRST then the string — LIPS arg
 //     order — and `split`/`match` return Scheme LISTS (`array->list`), not arrays.
@@ -37,8 +30,8 @@
 //     so a downstream list use SHOULD bite — a latent bug, not lens noise (same
 //     shape as `string->number`'s `SNum | SBool`).
 //
-// `string-ref` returns `SStr | Nil`: LIPS yields `nil` on an out-of-range index
-// (inference-env.ts:342 `?? nil`), so the absence must be accounted for downstream.
+// `string-ref` returns `SStr | Nil`: LIPS yields `nil` on an out-of-range index,
+// so the absence must be accounted for downstream.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   "symbol->string"(sym: unknown): SStr;

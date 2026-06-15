@@ -7,9 +7,6 @@
 //   the default JS `Array.prototype.sort` ordering.
 //   NOTE: runtime arg order is (LIST, comparator?) — list FIRST, comparator
 //   OPTIONAL second — NOT the `(cmp, xs)` shape; grounded below.
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   inference-env.ts:393
-//
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (`List<T>`, `SNum`). Element type `T` is preserved
 // in → out so a mis-typed comparator or a wrong-typed result bites.

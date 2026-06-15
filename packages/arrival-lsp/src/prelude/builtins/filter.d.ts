@@ -5,9 +5,6 @@
 // for which `(pred x)` is truthy. Element type is preserved (filter narrows the
 // COUNT, not the type), so the result is `List<T>` over the same `T`.
 //
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   inference-env.ts:200 (filter pred,list) · stdlib.ts:202 (mapLike("filter"))
-//
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (`List<T>`, `SBool`). TS merges this into `__arr`.
 // ─────────────────────────────────────────────────────────────────────────────

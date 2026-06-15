@@ -5,9 +5,6 @@
 //   (and a b …) → the first #f-ish value, else the LAST value; (and) → #t
 //   (or a b …)  → the first non-#f value, else the last;       (or)  → #f
 //
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   stdlib.ts:308-309 (`variadicLogic("&&")` / `variadicLogic("||")`)
-//
 // Signature note: scheme truthiness is #f-ONLY (0/""/nil are truthy), so the JS
 // `&&`/`||` result-type algebra would be subtly WRONG here. The honest v1 type
 // is "one of the operands, or a boolean" — `T[number] | SBool` — which keeps

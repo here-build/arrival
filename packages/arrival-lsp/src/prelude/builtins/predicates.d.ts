@@ -12,11 +12,6 @@
 //   (equal? a b)  → #t iff a and b are structurally equal
 //   (eq? a b)     → #t iff a and b are identical (reference equal)
 //
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   stdlib.ts:72-77, stdlib.ts:302-307 · lips.ts:3498, 3844
-//   inference-env.ts:323, inference-env.ts:348
-//   operators/numeric.ts:577, 598, 605
-//
 // Pattern: re-declare `interface ArrShape` with these EIGHT members (all in one
 //   file, all predicate-named → bracketed string keys where TS-illegal), written
 //   purely in terms of PRE's base types. TS merges this into the shared `__arr`

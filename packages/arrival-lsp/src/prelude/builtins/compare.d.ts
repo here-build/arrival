@@ -6,9 +6,6 @@
 //   they accept ≥2 SNum arguments and return a SBool. The emitter lowers them
 //   via `chainCompare` which chains pairwise `&&`-joined comparisons for n>2.
 //
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   stdlib.ts:289-293 · bridge.ts:593-597
-//
 // Pattern: re-declare `interface ArrShape` with these FIVE members (all in one
 //   file, all operator-named → bracketed string keys), written purely in terms
 //   of PRE's base types (`SNum`, `SBool`). TS merges this into the shared

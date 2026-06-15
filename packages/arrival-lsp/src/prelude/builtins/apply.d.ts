@@ -3,9 +3,6 @@
 //
 // Scheme semantics: (apply f args-list) → (f . args-list), i.e. call `f` with the
 // elements of `args-list` spread as its positional arguments.
-// Runtime truth (the emit this SHARPENS — do NOT import it):
-//   arrival-chain-view/src/stdlib.ts:229  (`apply`: `${callee}(...${x})`)
-//
 // The list spread back into parameters is the bite: `args` must be the function's
 // own parameter tuple `A` (a `List<A[number]>` view), and the call yields `R`. A
 // wrong-element-typed list (`apply` of a numeric fn over a list of strings) or a

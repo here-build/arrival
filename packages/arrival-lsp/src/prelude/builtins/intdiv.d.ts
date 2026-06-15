@@ -7,8 +7,6 @@
 //   (quotient  a b) → truncated integer quotient (Math.trunc(a/b))
 // All three take exactly 2 numeric arguments and return a number.
 //
-// Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   stdlib.ts:61-63 (chain-view lowering) · bridge.ts:531-533 · stdlib.ts:284-286
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   modulo(a: SNum, b: SNum): SNum;

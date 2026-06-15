@@ -6,9 +6,6 @@
 //   (@? obj key)   → boolean presence check (open key).
 //   (@keys obj)    → the object's own key strings, as a list.
 //
-// Runtime truth (the `any` impls these SHARPEN — do NOT import them):
-//   inference-env.ts:229 (@) · inference-env.ts:284 (@?) · inference-env.ts:302 (@keys)
-//
 // `@` is generic over the object O and the key K (`K extends keyof O`) so a typo'd
 // key (`(@ row :badkey)`) bites with 2345, and the result carries the precise
 // `Field<O, K>` type so wrong-typing it downstream bites with 2322. Cohesive

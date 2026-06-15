@@ -13,20 +13,19 @@
 //
 // Runtime truth — a comparator is a TAGGED LIST (the `any` impls these SHARPEN —
 // do NOT import them):
-//   arrival-scheme/src/bootstrap.ts:908-952
 //     (make-comparator tt eq ord . hash) = (list 'comparator tt eq ord)
 //       → JS runtime value  ['comparator', typeTest, equality, ordering]
-//     (comparator? x)  = (and (pair? x) (eq? (car x) 'comparator))   (bootstrap.ts:916)
-//     comparator-type-test-predicate = (cadr c)                       (bootstrap.ts:917)
-//     comparator-equality-predicate  = (caddr c)                      (bootstrap.ts:918)
-//     comparator-ordering-predicate  = (cadddr c)                     (bootstrap.ts:919)
-//     comparator-hashable?           = #f always                      (bootstrap.ts:920)
-//     (=? c a b . rest) chains the equality pred over adjacent pairs   (bootstrap.ts:928)
-//     (<? c a b . rest) chains the ordering pred                       (bootstrap.ts:929)
-//     (make-default-comparator) = total order across types            (bootstrap.ts:951)
-//     (default-comparator)      = (make-default-comparator)           (bootstrap.ts:952)
+//     (comparator? x)  = (and (pair? x) (eq? (car x) 'comparator))
+//     comparator-type-test-predicate = (cadr c)
+//     comparator-equality-predicate  = (caddr c)
+//     comparator-ordering-predicate  = (cadddr c)
+//     comparator-hashable?           = #f always
+//     (=? c a b . rest) chains the equality pred over adjacent pairs
+//     (<? c a b . rest) chains the ordering pred
+//     (make-default-comparator) = total order across types
+//     (default-comparator)      = (make-default-comparator)
 //
-// Exposed to the sandbox via SAFE_BUILTINS (safe_builtins.ts:187-200).
+// Exposed to the inference env via SAFE_BUILTINS.
 //
 // MODELING (v1):
 //   • A comparator is the literal-tagged 4-tuple
@@ -39,7 +38,7 @@
 //     `(x: unknown)=>SBool`, equality/ordering `(a: unknown, b: unknown)=>SBool`. A
 //     `Comparator<T>` brand in PRE could thread T — flagged in the report, NOT added.
 //   • default-comparator / make-default-comparator are NULLARY FUNCTIONS that RETURN a
-//     comparator (impl bootstrap.ts:951-952) — typed `(): <comparator>`, NOT a value.
+//     comparator — typed `(): <comparator>`, NOT a value.
 //   • =? / <? / … are variadic in the trailing values (chain-relate) → `...rest`.
 //
 // `?`/punctuation names → bracketed string keys.

@@ -12,20 +12,19 @@
 //
 // Runtime truth — Maybe/Either are TAGGED LISTS, not opaque boxes
 // (the `any` impls these SHARPEN — do NOT import them):
-//   arrival-scheme/src/bootstrap.ts:841-907
 //     (just x)    = (list 'just x)     → JS runtime value  ['just', x]
 //     (nothing)   = (list 'nothing)    → ['nothing']
 //     (left x)    = (list 'left x)     → ['left', x]
 //     (right x)   = (list 'right x)    → ['right', x]
-//     just?  m  = (and (pair? m) (eq? (car m) 'just))         (bootstrap.ts:850)
-//     maybe? m  = (or (just? m) (nothing? m))                  (bootstrap.ts:854)
-//     maybe-ref m         = (car (cdr m)) on Just              (bootstrap.ts:863)
-//     maybe-bind m f      = (f (car (cdr m))) on Just, else m  (bootstrap.ts:871)
-//     maybe-map  f m      = (just (f val)) on Just, else m     (bootstrap.ts:874)
-//     either-bind e f     = (f val) on Right, else e           (bootstrap.ts:895)
-//     either-swap e       = (left x)<->(right x)               (bootstrap.ts:904)
+//     just?  m  = (and (pair? m) (eq? (car m) 'just))
+//     maybe? m  = (or (just? m) (nothing? m))
+//     maybe-ref m         = (car (cdr m)) on Just
+//     maybe-bind m f      = (f (car (cdr m))) on Just, else m
+//     maybe-map  f m      = (just (f val)) on Just, else m
+//     either-bind e f     = (f val) on Right, else e
+//     either-swap e       = (left x)<->(right x)
 //
-// Exposed to the sandbox via SAFE_BUILTINS (safe_builtins.ts:162-185).
+// Exposed to the inference env via SAFE_BUILTINS.
 //
 // MODELING (v1, FAITHFUL-PRECISE — the tagged-list repr is statically expressible):
 //   A Maybe<T>  is the literal-tagged tuple  ['just', T] | ['nothing'].
@@ -64,7 +63,7 @@ interface ArrShape {
     f: (x: T) => R,
   ): R | readonly ["nothing"];
   // maybe-map: maps the wrapped value, preserving Nothing. NOTE: impl arg order is
-  // (f m) — function FIRST (bootstrap.ts:874), unlike maybe-bind's (m f).
+  // (f m) — function FIRST, unlike maybe-bind's (m f).
   "maybe-map"<T, B>(
     f: (x: T) => B,
     m: readonly ["just", T] | readonly ["nothing"],
@@ -87,12 +86,12 @@ interface ArrShape {
   "list->maybe"<T>(lst: List<T>): readonly ["just", T] | readonly ["nothing"];
 
   // ── Either combinators ──────────────────────────────────────────────────────
-  // either-bind: Left short-circuits. (e f) — Either FIRST (bootstrap.ts:895).
+  // either-bind: Left short-circuits. (e f) — Either FIRST.
   "either-bind"<L, R, O extends readonly ["left", unknown] | readonly ["right", unknown]>(
     e: readonly ["left", L] | readonly ["right", R],
     f: (x: R) => O,
   ): O | readonly ["left", L];
-  // either-map: maps a Right, preserving Left. (f e) — function FIRST (bootstrap.ts:898).
+  // either-map: maps a Right, preserving Left. (f e) — function FIRST.
   "either-map"<L, R, B>(
     f: (x: R) => B,
     e: readonly ["left", L] | readonly ["right", R],

@@ -13,23 +13,22 @@
 //   (vector-empty? vec)           → #t iff length 0
 //   (vector-binary-search vec value cmp) → index where (cmp elt value)=0, else #f
 //
-// Runtime truth (the `any` impls these SHARPEN — do NOT import them):
-//   • `vector` / `vector?` mint/test a BOXED SchemeVector (wrappedOps in bridge.ts;
-//     stdlib.ts:1792-1793). v1 MODELS A VECTOR AS `List<T>` per the assignment —
-//     no distinct boxed brand is introduced here; this is the documented coarse
-//     choice. (A `Vector<T>` brand wrapping SchemeVector would be the v2 sharpening.)
+// Runtime shape (the `any` impls these SHARPEN — do NOT import them):
+//   • `vector` / `vector?` mint/test a BOXED SchemeVector. v1 MODELS A VECTOR AS
+//     `List<T>` per the assignment — no distinct boxed brand is introduced here;
+//     this is the documented coarse choice. (A `Vector<T>` brand wrapping
+//     SchemeVector would be the v2 sharpening.)
 //   • The pure SRFI-43 ops are define'd over vector-length/vector-ref:
-//       vector-fold        bootstrap.ts:778-782  — (kons acc elt), acc threads
-//       vector-fold-right  bootstrap.ts:785-788
-//       vector-count       bootstrap.ts:791-795  — pred → count (SNum)
-//       vector-index       bootstrap.ts:798-803  — first index | #f
-//       vector-binary-search bootstrap.ts:806-813 — (vec value cmp), cmp→SNum, idx | #f
-//       vector-empty?      bootstrap.ts:816
-//       vector-any         bootstrap.ts:819-824  — first truthy (pred elt) | #f
-//       vector-every       bootstrap.ts:827-834  — last (pred elt) | #f
+//       vector-fold           — (kons acc elt), acc threads
+//       vector-fold-right
+//       vector-count          — pred → count (SNum)
+//       vector-index          — first index | #f
+//       vector-binary-search  — (vec value cmp), cmp→SNum, idx | #f
+//       vector-empty?
+//       vector-any            — first truthy (pred elt) | #f
+//       vector-every          — last (pred elt) | #f
 //
-// Exposed to the sandbox via SAFE_BUILTINS (safe_builtins.ts:152-160 for the SRFI-43
-// ops; `vector`/`vector?` at safe_builtins.ts:108/80).
+// Exposed to the inference env via SAFE_BUILTINS.
 //
 // MODELING (v1):
 //   • vector V = `List<T>`. So vector-fold/any/etc. take `List<T>` and thread T into
