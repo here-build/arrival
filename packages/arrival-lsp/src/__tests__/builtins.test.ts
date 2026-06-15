@@ -51,8 +51,11 @@ const diagnostics = compileCasesProgram();
 
 describe("builtins — every leaf bites across the merged cases program", () => {
   it("found the full fan-out (every non-template leaf has a cases file)", () => {
-    expect(leafFiles.length).toBeGreaterThanOrEqual(45);
-    expect(caseFiles.length).toBeGreaterThanOrEqual(45);
+    // Floor lowered 45 → 43 on 2026-06-16: the `conversions-ext`, `object-accessors`,
+    // and `ramda-collection` leaves (Ramda-derived vocab cut in the 2026-06-15 eviction)
+    // were deleted to keep the lens a faithful mirror of the live inference env.
+    expect(leafFiles.length).toBeGreaterThanOrEqual(43);
+    expect(caseFiles.length).toBeGreaterThanOrEqual(43);
     const missing = leafFiles
       .map((f) => f.replace(".d.ts", ""))
       .filter((slug) => !caseFiles.includes(`${slug}.cases.ts`));

@@ -1,56 +1,29 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<combinators> — point-free / control combinator family:
-//   `identity`, `id`, `always`, `constant`, `negate`, `tap`, `clone`, `type`,
-//   `repr`, `where`, `when`, `unless`.
+// L<combinators> — the point-free / control combinators that are ACTUALLY LIVE in
+// the inference env: `always`, `clone`, `repr`, `when`, `unless`.
 //
 // Scheme semantics:
-//   (identity x)       → x  (alias: id)
-//   (always x)         → a thunk returning x  (alias: constant)
-//   (negate n)         → arithmetic negation of n  (★ NUMERIC, see below)
-//   (tap fn)           → a function that runs fn for effect and returns its input
-//   (clone xs)         → a structural copy of the list/pair xs
-//   (type obj)         → a string naming obj's runtime type ("number", "pair", …)
-//   (repr obj [quote]) → a printed-representation string of obj
-//   (where pred list)  → list filtered by pred  (★ = filter, see below)
-//   (when test e ...)  → last e if test is truthy, else nil
-//   (unless test e ...)→ last e if test is falsy, else nil
+//   (always x)          → a thunk returning x
+//   (clone xs)          → a structural copy of the list/pair xs
+//   (repr obj [quote])  → a printed-representation string of obj
+//   (when test e ...)   → last e if test is truthy, else nil   (a macro)
+//   (unless test e ...) → last e if test is falsy, else nil    (a macro)
 //
-// Runtime truth (the `any` impls these SHARPEN — do NOT import them):
-//   ramda-functions.ts:75-76  identity / id      = R.identity
-//   ramda-functions.ts:77-78  always / constant  = R.always
-//   ramda-functions.ts:350    negate             = (a) => -a   (★ numeric, NOT R.negate)
-//   ramda-functions.ts:181    where              = R.filter    (★ filter, NOT R.where)
-//   sandbox-env.ts:410-413    tap   (inline)     = (fn) => (x) => { fn(x); return x; }
-//   sandbox-env.ts:364-373    when / unless (inline)
-//   lips.js:3101 clone · 3236 repr · stdlib type() helper (via SAFE_BUILTINS)
+// EMPIRICAL CULL (probed against the constructed inference env, 2026-06-16): the
+// former Ramda-derived members `identity` / `id` / `constant` / `negate` / `type` /
+// `where`, plus the inline `tap`, are NO LONGER BOUND — cut in the 2026-06-15 Ramda
+// eviction (only a curated set survived). Typing them here made the lens advertise
+// symbols unbound at runtime, so they are removed. `when` / `unless` are now
+// `define-macro`s (with evaluator special-forms); their honest return is `T | Nil`
+// (the last body value when the gate passes, else nil — NOT `Unit`).
 //
-// ★ Precedence corrections that change the signatures:
-//   • `negate` is the RAMDA ARITHMETIC `(a) => -a`, NOT boolean R.negate → SNum→SNum.
-//   • `where` aliases `R.filter` (raw), NOT R.where's spec-object predicate map →
-//     it is plain (pred, list) filtering.
-//   • `tap` is CURRIED (inline wins): `(fn) => (x) => x` — note the two-stage call.
-//   • `when`/`unless` are the INLINE sandbox approximations (sandbox-env.ts:364),
-//     which return the last body value when the gate passes, else `nil` — so the
-//     honest return is `T | Nil`, NOT `Unit`.
-//
-// `instanceof` (assigned) is INTENTIONALLY OMITTED: it is in FORBIDDEN_IN_SANDBOX
-// (sandbox-env.ts:178) and stripped from `wrappedOps`, so it is not reachable from
-// sandbox code — there is no runtime binding to type.
-//
-// identity/always thread their input type so a `(map identity xs)` or
-// `((always v))` stays precise rather than collapsing to `any`.
+// Pattern: re-declare `interface ArrShape` with these members, written in terms of
+// PRE's base types (see ../types.d.ts → THE LEAF MERGE CONTRACT).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  identity<T>(x: T): T;
-  id<T>(x: T): T;
   always<T>(x: T): () => T;
-  constant<T>(x: T): () => T;
-  negate(n: SNum): SNum;
-  tap<T>(fn: (x: T) => Unit): (x: T) => T;
   clone<T>(xs: List<T>): List<T>;
-  type(obj: unknown): SStr;
   repr(obj: unknown, quote?: unknown): SStr;
-  where<T>(pred: (x: T) => unknown, list: List<T>): List<T>;
   when<T>(test: unknown, ...body: T[]): T | Nil;
   unless<T>(test: unknown, ...body: T[]): T | Nil;
 }

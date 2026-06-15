@@ -18,7 +18,7 @@
 //
 // Runtime truth (the `any` impls these SHARPEN — do NOT import them):
 //   safe_builtins.ts:75-84  (these names are pulled from lipsGlobalEnv via
-//                            SAFE_BUILTINS — see sandbox-env.ts:189)
+//                            SAFE_BUILTINS — see inference-env.ts:189)
 //   lips.js:3284 function? · 3286 real?  · 3296 number? · 3304 string?
 //   lips.js:3308 pair?     · 3310 regex? · 3318 boolean? · 3324 symbol?
 //   lips.js:3328 array?    · 3332 object? · (list?) is_list

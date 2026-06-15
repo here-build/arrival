@@ -4,7 +4,7 @@
 // Scheme semantics: (third list) → the third element of a list (index 2),
 // equivalent to (car (cdr (cdr list))).
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   sandbox-env.ts:361
+//   inference-env.ts:361
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (here `List<T>`). TS merges this into the shared

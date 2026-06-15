@@ -10,7 +10,7 @@
 //   (string-contains s sub) → #t/#f whether `sub` appears in `s`.
 //
 // Runtime truth (the `any` impls this SHARPENS — do NOT import them):
-//   sandbox-env.ts:330-341  (`string-length`, `string-upcase`, `string-downcase`,
+//   inference-env.ts:330-341  (`string-length`, `string-upcase`, `string-downcase`,
 //                             `string-append`, `string-contains`)
 //   bridge.ts:959,1044,1105,1109  (`string-length`, `string-append`,
 //                                   `string-upcase`, `string-downcase`)

@@ -14,12 +14,6 @@ import { expectTypeOf } from "vitest";
 expectTypeOf(__arr.take(2, [1, 2, 3, 4])).toEqualTypeOf<List<SNum>>();
 expectTypeOf(__arr.drop(1, ["a", "b", "c"])).toEqualTypeOf<List<SStr>>();
 
-// head — element-or-undefined; tail/rest/init — element type preserved
-expectTypeOf(__arr.head([1, 2, 3])).toEqualTypeOf<SNum | undefined>();
-expectTypeOf(__arr.tail([1, 2, 3])).toEqualTypeOf<List<SNum>>();
-expectTypeOf(__arr.rest(["a", "b"])).toEqualTypeOf<List<SStr>>();
-expectTypeOf(__arr.init([1, 2, 3])).toEqualTypeOf<List<SNum>>();
-
 // concat — string concat, variadic strings → string
 expectTypeOf(__arr.concat("a", "b", "c")).toEqualTypeOf<SStr>();
 
@@ -39,16 +33,13 @@ expectTypeOf(__arr["for-each"]((x: SNum): void => { x; }, [1, 2, 3])).toEqualTyp
 // count — number result; pred param bound to element type
 expectTypeOf(__arr.count((x: SNum): boolean => x > 1, [1, 2, 3])).toEqualTypeOf<SNum>();
 
+// remove — inverse filter, element type preserved
+expectTypeOf(__arr.remove((x: SNum): SBool => x > 1, [1, 2, 3])).toEqualTypeOf<List<SNum>>();
+
 // @ts-expect-error take — args swapped (list where the count goes)
 __arr.take([1, 2, 3], 2);
 // @ts-expect-error drop — wrong-typing the threaded result (SStr list cannot be SNum list)
 const x: List<SNum> = __arr.drop(1, ["a", "b"]);
-// @ts-expect-error head — wrong element type assigned through
-const h: SStr | undefined = __arr.head([1, 2, 3]);
-// @ts-expect-error tail — arg is not a list
-__arr.tail(5);
-// @ts-expect-error init — wrong element type threaded out
-const i: List<SStr> = __arr.init([1, 2, 3]);
 // @ts-expect-error concat — list arg where a string is required (STRING concat, not append)
 __arr.concat([1, 2], [3, 4]);
 // @ts-expect-error flatten — argument is not a list

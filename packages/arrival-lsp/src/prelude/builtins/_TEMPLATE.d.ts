@@ -10,7 +10,7 @@
 //      (`+`→`plus`, `<`→`compares` for the chained-compare family) — the FILE
 //      name is cosmetic, only the interface MEMBER key must be the scheme name.
 //   2. Replace the citation below with the real runtime-truth `file:line`
-//      (from `stdlib.ts` / `sandbox-env.ts`) — the `any` impl you SHARPEN.
+//      (from `stdlib.ts` / `inference-env.ts`) — the `any` impl you SHARPEN.
 //      Do NOT import that impl; you are authoring a precise *signature* for it.
 //   3. Write the signature using ONLY PRE's base types
 //      (`List<T>`, `Pair<H,T>`, `Nil`, `Unit`, `SNum`, `SStr`, `SBool`,

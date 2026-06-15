@@ -3,7 +3,7 @@
 //
 // Scheme semantics: (second list) → the element at index 1 of a non-empty list.
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   sandbox-env.ts:360
+//   inference-env.ts:360
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (here `List<T>`). TS merges this into the shared

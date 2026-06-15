@@ -8,7 +8,7 @@
 // glass over SRFI-1's `#f`-on-miss) so callers must account for the absence —
 // `(string-upcase (find p strs))` bites because `find` may be `undefined`.
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   SRFI-1 `find` from the LIPS global env (sandbox-env.ts:140 — the unsandboxed
+//   SRFI-1 `find` from the LIPS global env (inference-env.ts:140 — the unsandboxed
 //   bootstrap env the wrapped ops are drawn from; cf. `xs.find(pred)` semantics).
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely

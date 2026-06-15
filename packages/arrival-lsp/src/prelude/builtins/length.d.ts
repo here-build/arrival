@@ -3,7 +3,7 @@
 //
 // Scheme semantics: (length list) → the number of elements in `list`.
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   sandbox-env.ts:414
+//   inference-env.ts:414
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (`List<T>`, `SNum`). TS merges this into the

@@ -5,7 +5,7 @@
 //   `map` is variadic in lists (`(map f xs ys)` index-zips), but v1 types the
 //   primary unary-list form precisely so the callback ↔ element types bite.
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   sandbox-env.ts:212 (fn first, then ...lists) · stdlib.ts:144 (mapLike) ·
+//   inference-env.ts:212 (fn first, then ...lists) · stdlib.ts:144 (mapLike) ·
 //   stdlib.ts:201 (map: mapLike("map"))
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely

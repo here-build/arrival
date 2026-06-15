@@ -12,7 +12,7 @@
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
 //   bridge.ts:571 (abs)  bridge.ts:605 (floor)  bridge.ts:608 (round)
 //   bridge.ts:609 (sqrt) bridge.ts:598 (max)     bridge.ts:599 (min)
-//   sandbox-env.ts:326 (max)  sandbox-env.ts:327 (min)
+//   inference-env.ts:326 (max)  inference-env.ts:327 (min)
 //
 // Pattern: re-declare `interface ArrShape` with these cohesive members, written
 // purely in terms of PRE's base types (`SNum`). TS merges this into the shared

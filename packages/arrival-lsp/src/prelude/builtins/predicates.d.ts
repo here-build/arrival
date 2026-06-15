@@ -14,7 +14,7 @@
 //
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
 //   stdlib.ts:72-77, stdlib.ts:302-307 · lips.ts:3498, 3844
-//   sandbox-env.ts:323, sandbox-env.ts:348
+//   inference-env.ts:323, inference-env.ts:348
 //   operators/numeric.ts:577, 598, 605
 //
 // Pattern: re-declare `interface ArrShape` with these EIGHT members (all in one
