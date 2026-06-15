@@ -1,6 +1,6 @@
 /**
  * trace → unified flow-graph: the single render-ready model behind the
- * industrial flowchart (React Flow + elkjs renderer in the inhuman studio).
+ * industrial flowchart (React Flow + elkjs renderer in the host studio).
  *
  * The approved causal-statechart mockup is NOT a containment treemap — it is
  * MDL regions (loop / parallel / branch) *wrapping* Lamport-layered infer nodes,

@@ -296,8 +296,7 @@ or fixed them.
 - Use in security-critical contexts
 - Trust sandbox isolation without additional defenses
 
-We welcome security researchers to review and responsibly disclose findings: team@here.build or @merkle_bonsai (
-Telegram/X)
+We welcome security researchers to review and responsibly disclose findings: security@here.build
 
 ## Context Management
 
