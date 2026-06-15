@@ -1,14 +1,13 @@
 {
-  "name": "@here.build/arrival-sweet",
+  "name": "@here.build/arrival-serializer",
   "version": "0.1.0",
-  "description": "Sweet-expression lens for Arrival — classic↔sweet scheme-source rendering (curly-infix, => lambda, colon kwargs, ?? coalesce). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
+  "description": "S-expression serializer for Arrival - converts JavaScript objects to Scheme/Lisp representations",
   "keywords": [
     "arrival",
     "s-expressions",
-    "sweet-expressions",
+    "serialization",
     "lisp",
-    "scheme",
-    "formatter"
+    "scheme"
   ],
   "homepage": "https://github.com/here-build/foundation#readme",
   "bugs": {
@@ -17,20 +16,15 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-sweet"
+    "directory": "arrival/arrival-serializer"
   },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
-  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./names": {
-      "types": "./dist/names.d.ts",
-      "import": "./dist/names.js"
     }
   },
   "main": "./dist/index.js",
@@ -56,15 +50,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@here.build/lexical-namer": "workspace:^",
-    "pluralize": "8.0.0",
-    "tiny-invariant": "1.3.3"
+    "@here.build/arrival-env": "workspace:^"
   },
   "devDependencies": {
+    "@here.build/arrival-scheme": "workspace:^",
     "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
-    "@types/pluralize": "0.0.33",
     "eslint": "9.39.2",
     "globals": "17.3.0",
     "prettier": "3.8.1",
