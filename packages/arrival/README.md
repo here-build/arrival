@@ -130,23 +130,25 @@ npm install @here.build/arrival-env
 
 ### Discovery Tools: Exploration Without Side Effects
 
-Discovery tools let AI agents explore data safely in Scheme:
+A `DiscoveryTool` is a plain value built from an `McpEnvCapability` — the capability declares
+**symbols** (the verbs), with automatic JS ↔ Scheme translation. The tool turns them into a read-only
+Scheme REPL:
 
 ```typescript
-import { DiscoveryToolInteraction } from '@here.build/arrival-mcp';
+import { DiscoveryTool, McpEnvCapability } from '@here.build/arrival-mcp';
 
-class TasksDiscovery extends DiscoveryToolInteraction {
-  static readonly name = 'tasks-discovery';
-  readonly description = 'Explore tasks';
+const capability = new McpEnvCapability('tasks', {
+  symbols: {
+    'get-tasks': {
+      fn: () => database.tasks.getAll(),
+      description: 'get all user tasks',
+    },
+  },
+});
 
-  async registerFunctions() {
-    // Register domain functions - automatic JS ↔ Scheme translation
-    this.registerFunction('get-tasks',
-      "get all user tasks",
-      () => this.context.get('database').tasks.getAll()
-    );
-  }
-}
+const discovery = new DiscoveryTool('tasks-discovery', capability, {
+  description: 'Explore tasks',
+});
 ```
 
 **AI agents explore:**
@@ -160,48 +162,41 @@ class TasksDiscovery extends DiscoveryToolInteraction {
 
 **Key properties:**
 
-- Sandboxed - only registered functions available
+- Sandboxed - only the capability's symbols available
 - Read-only - no state changes possible
 - Exploratory - errors return as data, don't fragment session
 
 ### Action Tools: Mutations With Context Coherence
 
-After exploration, agents commit changes through batched actions:
+After exploration, agents commit changes through batched actions. An `ActionTool` is a value: its
+`context` is validated **once per batch** with the `FieldSpec` system (`str`, `num`, `optional`, …),
+and actions are authored with the `b.act({...})` builder:
 
 ```typescript
-import { ActionToolInteraction } from '@here.build/arrival-mcp';
-import * as z from 'zod';
+import { ActionTool, str, num, optional } from '@here.build/arrival-mcp';
 
-class UpdateTasks extends ActionToolInteraction<{ projectId: string }> {
-  static readonly name = 'update-tasks';
-  readonly description = 'Batch update tasks';
-
-  readonly contextSchema = {
-    projectId: z.string().describe('Project ID')
-  };
-
-  constructor(...args) {
-    super(...args);
-
-    this.registerAction({
+const updateTasks = new ActionTool<{ projectId: string }>('update-tasks', {
+  description: 'Batch update tasks',
+  context: { projectId: str('Project ID') },
+  actions: (b) => [
+    b.act({
       name: 'create-task',
-      description: 'Create a new task',
-      context: ['projectId'],
+      desc: 'Create a new task',
       props: {
-        title: z.string(),
-        priority: z.number().optional()
+        title: str('the task title'),
+        priority: optional(num('the task priority')),
       },
-      handler: async (context, { title, priority }) => {
+      handle: async (ctx, _receiver, { title, priority }) => {
         const task = await database.tasks.create({
-          projectId: context.projectId,
+          projectId: ctx.projectId,
           title,
-          priority: priority ?? 0
+          priority: priority ?? 0,
         });
         return { created: task.id };
-      }
-    });
-  }
-}
+      },
+    }),
+  ],
+});
 ```
 
 **AI agents send:**
@@ -232,7 +227,7 @@ All actions see identical context. Mid-batch drift is structurally impossible.
 
 Discovery tools execute in Scheme interpreter with strict isolation:
 
-- **Allowed**: Registered functions, pure Scheme stdlib (filter, map, reduce, etc.)
+- **Allowed**: The capability's declared symbols, pure Scheme stdlib (filter, map, reduce, etc.)
 - **Blocked**: Filesystem, network, unregistered functions, side effects
 
 Errors stay isolated. If Scheme expression throws, it returns as data. No unwinding, no panic, no fragmentation.
@@ -300,39 +295,29 @@ We welcome security researchers to review and responsibly disclose findings: sec
 
 ## Context Management
 
-Arrival uses Hono as HTTP framework. Three levels of state:
+There is **no bespoke server framework — the official MCP SDK is the server.** `registerTools` wires the
+value tools onto an `McpServer`; an optional resolver maps each call to its `ToolCallCtx`
+(`{ session, user, signal, record }`), which lives *above* the eval membrane so a sandboxed run can't
+reach session identity or another call's state.
 
-**Request context (Hono)** - per HTTP request:
 ```typescript
-app.use('*', async (c, next) => {
-  c.set('database', myDatabase);
-  c.set('user', await getUser(c));
-  return next();
-});
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTools } from '@here.build/arrival-mcp';
+
+const server = new McpServer({ name: 'my-app', version: '0.1.0' }, { capabilities: { tools: {} } });
+registerTools(server, [discovery, updateTasks], (params) => ({ session: resolveSession(params) }));
+await server.connect(transport);
 ```
 
-Available as `this.context` in tools.
+Three levels of state remain distinct, entering at three membrane times:
 
-**Session state** - across tool calls:
-```typescript
-async executeTool(args) {
-  this.state.lastQuery = args.expr; // Persists across calls
-  this.state.queryCount = (this.state.queryCount || 0) + 1;
-}
-```
-
-Keyed by `Mcp-Session-Id` header. Override `getSessionState`/`setSessionState` for Redis/etc.
-
-**Execution focus** - what batch operates on:
-```typescript
-class MyAction extends ActionToolInteraction<{ projectId: string }> {
-  readonly contextSchema = {
-    projectId: z.string()
-  };
-}
-```
-
-Snapshot captured at batch start, immutable for all actions.
+- **Resources** (eval time) — per-call host handles a discovery capability's verbs read, auto-spawned on
+  first touch via `this.resources.<name>.live`.
+- **Call context** (dispatch time) — the `ToolCallCtx` from the `registerTools` resolver: session, user,
+  abort signal, interaction record.
+- **Execution focus** (batch time) — an `ActionTool`'s `context` is validated once at batch start and
+  immutable for every action. An optional per-batch `prepare` merges derived state (e.g. a loaded site)
+  into the context every handler and ref sees.
 
 ## Performance Characteristics
 
@@ -392,7 +377,7 @@ a shared-context membrane over tool calls — is what this package implements. B
 - **[@here.build/arrival-serializer](../arrival-serializer/)** - S-expression serialization with `Symbol.toSExpr`
   protocol
 - **[@here.build/arrival-scheme](../arrival-scheme/)** - Modified LIPS interpreter for sandboxed exploration
-- **[@here.build/arrival-mcp](../arrival-mcp/)** - MCP meta-framework with discovery/action separation on Hono
+- **[@here.build/arrival-mcp](../arrival-mcp/)** - MCP tools as values (discovery/action separation) on the official MCP SDK
 - **[@here.build/arrival-env](../arrival-env/)** - Protocol definitions for shared libraries
 
 Packages work together but can be used independently.
@@ -411,6 +396,6 @@ Early-stage open source. We're interested in:
 
 ## License
 
-Future MIT (irrevocable, effective starting January 1, 2027).
+**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date. Until conversion, the license permits everything *except* Competing Use (making the Software available in a commercial product or service that substitutes for the Software or offers substantially similar functionality). Internal use, non-commercial education and research, and professional services built on top of the Software are always permitted.
 
-Until then: MIT terms except for three specific commercial uses. See [LICENSE.md](../../LICENSE.md) for complete terms.
+For licensing questions, exemptions, or clarifications: team@here.build
