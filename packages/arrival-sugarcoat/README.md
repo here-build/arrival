@@ -14,8 +14,10 @@ The sweet form trades parentheses for surface familiar to JS/Lisp readers:
 - **accessor subscripts** — `it[:verdict][0]` for `(car (:verdict it))`
 
 It is a **zero-dependency leaf**: it carries its own s-expression parser and
-pulls in only `tiny-invariant` (and `pluralize` for bound-name recovery). It
-does NOT depend on the Arrival eval engine. It is consumed by the studio editor
+the `.` entry point pulls in only `tiny-invariant`. The `./names` subpath adds
+`@here.build/lexical-namer` and `pluralize` for bound-name recovery, and is
+tree-shaken away from `.` consumers that don't use it. It does NOT depend on the
+Arrival eval engine. It is consumed by the studio editor
 toggle, the CodeMirror integration, the chain-view compiler, sift's lowering,
 and provenance region-label rendering — none of which need to evaluate scheme.
 

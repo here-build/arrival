@@ -108,7 +108,7 @@ npm install @here.build/arrival-serializer
 npm install @here.build/arrival-mcp
 ```
 
-[See MCP framework guide](../arrival-mcp/README.md#quick-start)
+[See MCP framework guide](../arrival-mcp/README.md#install)
 
 **Scheme exploration for agents:**
 

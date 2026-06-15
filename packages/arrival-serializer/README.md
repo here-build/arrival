@@ -13,7 +13,7 @@ on data expression via s-expression syntax.
 - **Stepped serialization**: Convert JS objects to s-expressions first, and format them as strings later
 - **Simple array IR**: you can simply spread one representation inside another
 - **Configurable, specific serialization**: Use `Symbol.toSExpr` for custom type representations
-- **LIPS type support**: Built-in handling for LIPS (Scheme) types, along with `@here.build/arrival-scheme`
+- **Scheme type support**: Built-in handling for `@here.build/arrival-scheme` runtime types
 - **Smart formatting**: Automatic pretty-printing with context-aware indentation
 - **Type-safe**: Full TypeScript support
 
@@ -30,11 +30,12 @@ import { toSExpr, formatSExpr, toSExprString } from '@here.build/arrival-seriali
 
 // Basic values
 toSExprString(42);              // "42"
-toSExprString("hello");         // '"hello"'
+toSExprString("hello");         // 'hello' (simple strings are emitted unquoted)
+toSExprString("with space");    // '"with space"' (quoted only when needed)
 toSExprString([1, 2, 3]);       // '(list 1 2 3)'
 
 // Objects
-toSExprString({ x: 10, y: 20 }); // '&(:x 10 :y 20)'
+toSExprString({ x: 10, y: 20 }); // '(dict :x 10 :y 20)'
 
 // Custom serialization
 class Point {
@@ -42,7 +43,7 @@ class Point {
   }
 
   // this part is optional - when Symbol.toSExpr is present, serializer tries following heruistics to identify the symbol:
-  // this[Symbol.SExpr]?() ?? this.displayName ?? this.constructor.displayName ?? this.name ?? this.constructor.name
+  // this[Symbol.SExpr]?.() ?? this.displayName ?? this.constructor.displayName ?? this.name ?? this.constructor.name
   [Symbol.SExpr]() {
     return "Point";
   }
@@ -78,7 +79,7 @@ class User {
   name: string;
 
   [Symbol.toSExpr]({ quote, string }) {
-    // note that you do not have to wrap props in any manner. They will auto-convert to &() expr.
+    // note that you do not have to wrap props in any manner. They will auto-convert to a (dict …) expr.
     // serializer will dive into object recursively, and will use Symbol.toSExpr inside where applicable,
     // otherwise just follow standard serialization rules.
     return [quote(this.id), string(this.name), this.props];
@@ -86,10 +87,10 @@ class User {
 }
 ```
 
-will produce this expression (17 Claude tokens, 13 GPT-4o tokens):
+will produce this expression:
 
 ```scheme
-(User 'abc123 "John Doe" & (:role admin))
+(User 'abc123 "John Doe" (dict :role admin))
 ```
 
 For comparison, the JSON representing that data will look like this (47 Claude tokens, 39 GPT-4o tokens; 39 and 32
@@ -131,7 +132,7 @@ class User {
   name: string;
 
   [Symbol.toSExpr]({ quote, keyword, string }) {
-    // note that you do not have to wrap props in any manner. They will auto-convert to &() expr.
+    // note that you do not have to wrap props in any manner. They will auto-convert to a (dict …) expr.
     // serializer will dive into object recursively, and will use Symbol.toSExpr inside where applicable,
     // otherwise just follow standard serialization rules.
     return [
@@ -165,7 +166,7 @@ class Team {
   members: User[];
 
   [Symbol.toSExpr]({ quote, string, expr }) {
-    // note that you do not have to wrap props in any manner. They will auto-convert to &() expr.
+    // note that you do not have to wrap props in any manner. They will auto-convert to a (dict …) expr.
     // serializer will dive into object recursively, and will use Symbol.toSExpr inside where applicable,
     // otherwise just follow standard serialization rules.
     return [quote(this.id), string(this.name), expr("members", ...this.members)];
@@ -326,7 +327,7 @@ Creates a tagged s-expression.
 
 #### `smap(obj: Record<string, any>): SExprDefinition`
 
-Creates a map-style s-expression from an object.
+Creates a `(dict :key value ...)` s-expression from an object.
 
 #### `slist(...items: any[]): SExprDefinition`
 
@@ -360,29 +361,32 @@ The context object provides:
 
 ## Type Mappings
 
-| JavaScript          | S-Expression                  |
-|---------------------|-------------------------------|
-| `null`, `undefined` | `nil`                         |
-| Numbers             | Numbers (with BigInt support) |
-| Strings             | Quoted strings                |
-| Booleans            | `true` / `false`              |
-| Arrays              | `(list ...)`                  |
-| Objects             | `&(:key value ...)`           |
-| Symbols             | `:keyword`                    |
-| Map                 | `&(:key value ...)`           |
-| Set                 | `(set ...)`                   |
-| Date                | ISO string                    |
+| JavaScript  | S-Expression                          |
+|-------------|---------------------------------------|
+| `null`      | `nil`                                 |
+| `undefined` | `undefined`                           |
+| Numbers     | Numbers (with BigInt support)         |
+| Strings     | Unquoted when simple, `"quoted"` otherwise |
+| Booleans    | `true` / `false`                      |
+| Arrays      | `(list ...)`                          |
+| Objects     | `(dict :key value ...)`               |
+| Symbols     | `:keyword`                            |
+| Map         | `(map :key value ...)`                |
+| Set         | `(set ...)`                           |
+| Date        | ISO string                            |
 
-## LIPS Integration
+## Scheme Integration
 
-The serializer has built-in support for LIPS (Scheme interpreter) types:
+The serializer has built-in support for `@here.build/arrival-scheme` runtime types:
 
-- `LNumber`, `LFloat`, `LBigInteger` → Numbers
-- `LSymbol` → Symbols/keywords
-- `LString` → Quoted strings
-- `LCharacter` → Character literals (`#\char`)
-- `Pair` → Lists
+- `SchemeExact` (exact integers / rationals) → Numbers or `num/denom`
+- `SchemeInexact` (floats / complex) → Numbers or `real+imagi`
+- `SchemeSymbol` → Symbols/keywords
+- `SchemeString` → Single-quoted or template strings
+- `SchemeCharacter` → Character literals (`#\char`)
+- `Pair` / `Nil` → Lists
 - `Values` → Multiple return values
+- `EOF`, `Macro`, `Syntax`, `InputPort`/`OutputPort` → reader-friendly placeholders
 
 ## Part of Arrival
 
