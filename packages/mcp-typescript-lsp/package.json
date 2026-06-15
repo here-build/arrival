@@ -1,0 +1,41 @@
+{
+  "name": "@here.build/mcp-typescript-lsp",
+  "version": "0.1.0",
+  "description": "MCP server wrapping TypeScript Language Server with AI-native primitives",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mcp-typescript-lsp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "typescript": "6.0.2",
+    "vscode-languageserver": "9.0.1",
+    "vscode-languageserver-protocol": "3.17.5",
+    "vscode-languageserver-textdocument": "1.0.11",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.2",
+    "vitest": "4.1.0"
+  }
+}
