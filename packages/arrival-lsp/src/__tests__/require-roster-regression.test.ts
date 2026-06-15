@@ -18,7 +18,7 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildArrivalEnv, loaderFromResolver, resolveRequireType } from "@here.build/arrival-chain";
 
@@ -35,8 +35,11 @@ const stubInfer = (async () => [""]) as unknown as Parameters<typeof buildArriva
 const stubLoader = loaderFromResolver((p) => FILES[p] ?? null);
 
 /** The runtime env — its `__rosettaTypes__` is the SINGLE SOURCE OF TRUTH that
- *  studio derives the lens roster from. */
-const env = buildArrivalEnv({ name: "regression", infer: stubInfer, loader: stubLoader });
+ *  studio derives the lens roster from. Built async (eval has no sync path). */
+let env: Awaited<ReturnType<typeof buildArrivalEnv>>;
+beforeAll(async () => {
+  env = await buildArrivalEnv({ name: "regression", infer: stubInfer, loader: stubLoader });
+});
 
 // The seam studio synthesizes host-side: route a file's source through the
 // SAME loader registry the runtime parses with → a TS type string.
