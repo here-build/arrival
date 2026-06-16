@@ -11,7 +11,7 @@
 
 import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
-import run, { evaluate, type EvalTap } from "./evaluator.js";
+import run, { evaluate, SchemeError, type EvalTap } from "./evaluator.js";
 import { is_pair } from "./guards.js";
 import type { Pair } from "../values/Pair.js";
 import type { SchemeValue } from "../values/types.js";
@@ -69,6 +69,13 @@ export interface ExecOptions {
    * docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md.
    */
   speculate?: boolean;
+  /**
+   * Internal: set by the bootstrap's own prelude evals (bridge.initBridge's
+   * `evalScheme`) to bypass the bootstrap-completion gate below — awaiting it
+   * there would deadlock (the prelude eval IS part of the bootstrap it would be
+   * waiting on). Formerly lived on the now-removed stdlib.ts `exec`.
+   */
+  skipBootstrapWait?: boolean;
 }
 
 /**
@@ -93,7 +100,7 @@ export interface ExecOptions {
  */
 export async function exec(
   code: string | SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, speculate }: ExecOptions = {},
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, speculate, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue[]> {
   const lips = await getLips();
 
@@ -104,10 +111,12 @@ export async function exec(
   // embedders never call initBridge() manually. If the bootstrap has already STARTED
   // (e.g. index.ts's fire-and-forget `void initBridge()`), await its COMPLETION
   // promise — the pack assembly is async, so the started-flag alone would let a racing
-  // exec observe a half-assembled env. Bootstrap's own prelude evals use stdlib's
-  // gate-free `exec`, so this await is never re-entrant (no deadlock).
-  if (!actualEnv.initialized) await actualEnv.init();
-  else await (whenBootstrapComplete() ?? actualEnv.init());
+  // exec observe a half-assembled env. `skipBootstrapWait` is the one exception: a
+  // prelude eval that IS the bootstrap can't await its own completion.
+  if (!skipBootstrapWait) {
+    if (!actualEnv.initialized) await actualEnv.init();
+    else await (whenBootstrapComplete() ?? actualEnv.init());
+  }
 
   // Parse if string, otherwise wrap single value in array
   let parsed: SchemeValue[];
@@ -138,18 +147,29 @@ export async function exec(
     for (const expr of parsed) {
       const remaining =
         budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      const result = await run(
-        evaluate(expr, {
-          env: actualEnv,
-          dynamic_env,
-          use_dynamic,
-          tap,
-          nodeFilter,
-          signal,
-          speculate,
-        }),
-        { signal, budgetMs: remaining },
-      );
+      // Preserve the audit-#42 wrapOperator contract (ported from the removed
+      // stdlib.ts `exec_with_stacktrace`): run() wraps every non-SchemeError —
+      // including the TypeError wrapOperator throws to name operator + arg types —
+      // in a SchemeError, masking both the TypeError class and its membrane cause.
+      // Surface the original TypeError so the user-visible error shape survives.
+      let result: SchemeValue;
+      try {
+        result = await run(
+          evaluate(expr, {
+            env: actualEnv,
+            dynamic_env,
+            use_dynamic,
+            tap,
+            nodeFilter,
+            signal,
+            speculate,
+          }),
+          { signal, budgetMs: remaining },
+        );
+      } catch (e) {
+        if (e instanceof SchemeError && e.cause instanceof TypeError) throw e.cause;
+        throw e;
+      }
       results.push(result);
     }
   } finally {
@@ -176,25 +196,32 @@ export async function parse(code: string, env?: Environment, source?: string): P
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, speculate }: ExecOptions = {},
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, speculate, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const lips = await getLips();
   const actualEnv = env ?? lips.env;
 
   // See exec() above: await bootstrap COMPLETION, not just the started-flag.
-  if (!actualEnv.initialized) await actualEnv.init();
-  else await (whenBootstrapComplete() ?? actualEnv.init());
+  if (!skipBootstrapWait) {
+    if (!actualEnv.initialized) await actualEnv.init();
+    else await (whenBootstrapComplete() ?? actualEnv.init());
+  }
 
-  return run(
-    evaluate(expr, {
-      env: actualEnv,
-      dynamic_env,
-      use_dynamic,
-      tap,
-      nodeFilter,
-      signal,
-      speculate,
-    }),
-    { signal, budgetMs },
-  );
+  try {
+    return await run(
+      evaluate(expr, {
+        env: actualEnv,
+        dynamic_env,
+        use_dynamic,
+        tap,
+        nodeFilter,
+        signal,
+        speculate,
+      }),
+      { signal, budgetMs },
+    );
+  } catch (e) {
+    if (e instanceof SchemeError && e.cause instanceof TypeError) throw e.cause;
+    throw e;
+  }
 }

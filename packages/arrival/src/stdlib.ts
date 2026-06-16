@@ -6,7 +6,6 @@
  */
 import invariant from "tiny-invariant";
 import { AValue, unionProvenance } from "./values/AValue.js";
-import { whenBootstrapComplete } from "./boot.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD, setSchemeRuntime } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/EOF.js";
@@ -1982,80 +1981,14 @@ function prepare_fn_args(fn: SchemeValue, args: SchemeValue[]): SchemeValue[] {
 }
 
 // -------------------------------------------------------------------------
-// The legacy `evaluate` (+ its evaluate_args/evaluate_syntax/evaluate_macro/
-// apply/search_param helpers) is DELETED — every evaluation now runs on the
-// generator (evaluator.ts). The audit #42 wrapOperator contract it used to
-// carry is preserved in exec_with_stacktrace below (it surfaces wrapOperator's
-// TypeError + membrane cause out of the generator's SchemeError wrapping).
-async function exec_with_stacktrace(code: SchemeValue, { env, dynamic_env, use_dynamic }: SchemeValue = {}) {
-  // The legacy `evaluate` driver is gone — this runs on the generator. The
-  // generator's run() already attaches a Scheme stack trace (SchemeError.schemeStack)
-  // and threads onReject through the tap, so the old __code__-pushing /
-  // "Error:"-prefix-cleaning error callback is obsolete.
-  try {
-    return await genRun(genEvaluate(code, { env, dynamic_env, use_dynamic }));
-  } catch (e) {
-    // Preserve the audit #42 wrapOperator contract. run() wraps every
-    // non-SchemeError — including the TypeError that wrapOperator throws to name
-    // operator + arg types — in a SchemeError, which masks BOTH the TypeError
-    // class and the membrane "Cannot convert to SchemeNumeric" cause (it sinks to
-    // SchemeError.cause.cause). Surface the original TypeError (it carries its own
-    // membrane cause), so the user-visible shape bridge.ts:wrapOperator
-    // established survives. Plain SchemeErrors pass through with their frames.
-    if (e instanceof SchemeError && e.cause instanceof TypeError) {
-      throw e.cause;
-    }
-    throw e;
-  }
-}
-
-// -------------------------------------------------------------------------
-export const exec = async (
-  arg,
-  {
-    env,
-    dynamic_env,
-    use_dynamic,
-    skipBootstrapWait,
-  }: {
-    env?: Environment | boolean;
-    dynamic_env?: Environment;
-    use_dynamic?: boolean;
-    /** Internal: set by the bootstrap's own prelude eval (bridge.initBridge) to
-     *  bypass the completion gate below — awaiting it there would deadlock (the
-     *  prelude eval IS part of the bootstrap it would be waiting on). */
-    skipBootstrapWait?: boolean;
-  } = {},
-): Promise<SchemeValue[]> => {
-  if (!is_env(dynamic_env)) {
-    dynamic_env = ((env === true ? user_env : env) ?? user_env) as Environment;
-  }
-  const resolvedEnv = ((env === true ? user_env : env) ?? user_env) as Environment;
-
-  // Await bootstrap COMPLETION before evaluating, so a caller never observes a
-  // half-assembled env (the value-domain clusters + .scm packs assemble async onto
-  // global_env/user_env). If the bootstrap hasn't started, kick it off via init().
-  // The bootstrap's own prelude evals pass skipBootstrapWait to avoid awaiting
-  // themselves. Mirrors the public generator-exec gate.
-  if (!skipBootstrapWait) {
-    if (!resolvedEnv.initialized) await resolvedEnv.init();
-    else await (whenBootstrapComplete() ?? resolvedEnv.init());
-  }
-  if (is_pair(arg)) {
-    return [await exec_with_stacktrace(arg, { env: resolvedEnv, dynamic_env, use_dynamic })];
-  }
-  const input = Array.isArray(arg) ? arg : _parse(arg);
-  const results: SchemeValue[] = [];
-  for await (const code of input) {
-    const value = await exec_with_stacktrace(code, {
-      env: resolvedEnv,
-      dynamic_env,
-      use_dynamic,
-    });
-    results.push(await value);
-  }
-  return results;
-};
+// `exec` is the single canonical generator-trampoline entry — it lives in
+// eval/generator-exec.ts (one bootstrap gate + budget/heap/signal bounds + the
+// audit-#42 wrapOperator/TypeError surfacing, all in one place). The old
+// stdlib-local `exec`/`exec_with_stacktrace` wrappers — and the legacy recursive
+// `evaluate` they once drove — are gone; every evaluation now runs on
+// evaluator.ts. Re-exported here so the historical `from "./stdlib"` consumers
+// keep resolving.
+export { exec } from "./eval/generator-exec.js";
 
 for (const [i, cls] of Object.entries(available_class)) {
   class_map[cls] = +i;
