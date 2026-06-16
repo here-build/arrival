@@ -1,401 +1,353 @@
-# @here.build/arrival
+# @here.build/arrival-scheme
 
-**AI agent architecture preventing fragmentation through structure**
+**Sandboxed Scheme interpreter for AI agent exploration**
 
-## What Arrival Provides
+Fork of LIPS.js rewritten to prioritize sandboxing over JavaScript compatibility. AI agents explore problem spaces in
+Scheme without triggering state changes or side effects.
 
-**Token efficiency** (measured and reproducible):
+> ⚠️ **version 0.x may be unsafe - use zero-trust environments only**
+>
+> This is a fork of LIPS.js with known architectural security issues. We've identified potential sandbox escape
+> strategies but haven't fixed all of them yet. **Assume the sandbox can be escaped.** Use only in isolated containers,
+> unprivileged Worker threads and ShadowRealms, or any other environment that can be considered zero-trust.
+>
+> Version 1.x will be released after external audit verifying it is production-ready.
 
-- ~5-10% savings in MCP calls out of the box, model-dependent
-- 30-60% savings with structured domain markup
-- Up to 5x more tools in MCP server without performance degradation
-- [Detailed explanation](../arrival-serializer/README.md#best-practices)
+## Design foundations
 
-**Architectural safety** (structural guarantees):
+The language stance — an R7RS-small sandboxed base, a forgiving superset layered *under* strict
+(never beside it), and the reserved-zone rule that keeps it non-conflicting with any SRFI — is the
+charter in [`docs/language-design-foundations.md`](../../../docs/foundations/arrival-scheme/language-design-foundations.md). Read it
+before adding a reader macro, literal, or dialect borrowing.
 
-- Discovery tools execute in sandboxed Scheme - exploration can't accidentally trigger actions
-- Action tools use batch-level context immutability - mid-operation drift becomes impossible
-- S-expressions match compositional reasoning instead of forcing it into key-value serialization
+## Why Scheme for AI Agents?
 
-**Extended coherent sessions** (observational, corroborated):
+Scheme matches how compositional reasoning works. When AI agents explore data ("find all items where priority >
+threshold"), they think in filter/map/compose patterns. Scheme is the notation for compositional thinking.
 
-- We observe 50+ tool calls without drift in production (here.build)
-- Research on standard MCP finds drift emerging within 5-15 tool calls, with recommendations to monitor every 5-10
-  calls ([arXiv:2508.06418v1](https://arxiv.org/abs/2508.06418v1), tool masking studies)
-- Our observations align with existing research on standard architectures
-- *Needs controlled head-to-head comparison*
-
-## The Core Problem
-
-AI agents fragment not from lack of capability but from architecture mismatch. When tool architectures force different
-reasoning patterns to share state inappropriately, these patterns desynchronize.
-
-**Working hypothesis**: Drift results from subprocess desync, not training limitations
-(see [arXiv:2508.06418v1](https://arxiv.org/abs/2508.06418v1) and the tool-masking studies cited above).
-
-**Arrival prevents this through structure:**
-
-- **Discovery tools** - read-only exploration in sandboxed Scheme
-- **Action tools** - mutation with guaranteed context coherence
-- **Context coherence constraint** - all actions in a batch see exactly the same world-state
-
-## Why S-expressions?
-
-S-expressions map to how compositional reasoning works:
-
-```scheme
-(filter
-  (lambda (item)
-    (and
-      (not (null? item))
-      (> (@ item :priority) threshold)))
-  (map
-    (lambda (x) (process-with context x))
-    candidates))
-```
-
-vs JSON equivalent:
-
-```json
-{
-  "operation": "filter",
-  "predicate": {
-    "type": "and",
-    "conditions": [
-      {"type": "not", "arg": {"type": "null-check", "target": "item"}},
-      {"type": "greater-than", "left": {"type": "get", "object": "item", "key": "priority"}, "right": "threshold"}
-    ]
-  },
-  "input": {
-    "operation": "map",
-    "function": "process-with",
-    "args": ["context", "x"],
-    "collection": "candidates"
-  }
-}
-```
-
-One is thought. The other is data about thought.
-
-When you reason compositionally, you compose: filter by predicate, map over collection, build conditions from
-primitives. S-expressions are the notation for compositional thinking. JSON is what you get when you try to serialize
-that structure into key-value pairs.
-
-There are good approaches to making JSON more efficient (e.g. [toon](https://github.com/toon-format/toon)), but they
-still serialize data rather than expressing intent. S-expressions are homoiconic - code is data, data is code. The
-format doesn't fight the thought process.
+Sandboxing prevents exploration from accidentally executing actions.
 
 ## Quick Start
 
-### Which Package Do I Need?
-
-**Complete bundle:**
 ```bash
-npm install @here.build/arrival
+npm install @here.build/arrival-scheme
 ```
 
-**Just S-expression serialization:**
-
-```bash
-npm install @here.build/arrival-serializer
-```
-
-[See serialization guide](../arrival-serializer/README.md#quick-start)
-
-**Building MCP servers:**
-
-```bash
-npm install @here.build/arrival-mcp
-```
-
-[See MCP framework guide](../arrival-mcp/README.md#install)
-
-**Scheme exploration for agents:**
-
-```bash
-npm install @here.build/arrival-scheme @here.build/arrival-mcp
-```
-
-[See Scheme integration guide](../arrival-scheme/README.md#quick-start)
-
-**Shared libraries with optional serialization:**
-
-```bash
-npm install @here.build/arrival-env
-```
-
-[See protocol-only setup](../arrival-env/README.md#quick-start)
-
-## Architecture Overview
-
-### Discovery Tools: Exploration Without Side Effects
-
-A `DiscoveryTool` is a plain value built from an `McpEnvCapability` — the capability declares
-**symbols** (the verbs), with automatic JS ↔ Scheme translation. The tool turns them into a read-only
-Scheme REPL:
+### Basic Execution
 
 ```typescript
-import { DiscoveryTool, McpEnvCapability } from '@here.build/arrival-mcp';
+import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival-scheme';
 
-const capability = new McpEnvCapability('tasks', {
-  symbols: {
-    'get-tasks': {
-      fn: () => database.tasks.getAll(),
-      description: 'get all user tasks',
-    },
-  },
-});
+const results = await exec(`
+  (filter (lambda (x) (> x 5))
+    (list 1 3 7 9 2))
+`, { env: sandboxedEnv });
 
-const discovery = new DiscoveryTool('tasks-discovery', capability, {
-  description: 'Explore tasks',
-});
+console.log(schemeToJs(results[0], {})); // [7, 9]
 ```
 
-**AI agents explore:**
+### Register Custom Functions
 
-```scheme
-(filter (lambda (task)
-          (and (> (@ task :priority) 5)
-               (= (@ task :status) "open")))
-  (get-tasks))
-```
-
-**Key properties:**
-
-- Sandboxed - only the capability's symbols available
-- Read-only - no state changes possible
-- Exploratory - errors return as data, don't fragment session
-
-### Action Tools: Mutations With Context Coherence
-
-After exploration, agents commit changes through batched actions. An `ActionTool` is a value: its
-`context` is validated **once per batch** with the `FieldSpec` system (`str`, `num`, `optional`, …),
-and actions are authored with the `b.act({...})` builder:
+`@here.build/arrival-scheme` provides scheme-js interoperability layer capable of entities translation between runtimes.
 
 ```typescript
-import { ActionTool, str, num, optional } from '@here.build/arrival-mcp';
+import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival-scheme';
 
-const updateTasks = new ActionTool<{ projectId: string }>('update-tasks', {
-  description: 'Batch update tasks',
-  context: { projectId: str('Project ID') },
-  actions: (b) => [
-    b.act({
-      name: 'create-task',
-      desc: 'Create a new task',
-      props: {
-        title: str('the task title'),
-        priority: optional(num('the task priority')),
-      },
-      handle: async (ctx, _receiver, { title, priority }) => {
-        const task = await database.tasks.create({
-          projectId: ctx.projectId,
-          title,
-          priority: priority ?? 0,
-        });
-        return { created: task.id };
-      },
-    }),
-  ],
+// Rosetta: automatic JS ↔ Scheme conversion
+sandboxedEnv.defineRosetta('double-all', {
+  fn: (numbers: number[]) => numbers.map(x => x * 2)
 });
+
+const results = await exec(`
+  (double-all (list 1 2 3 4 5))
+`, { env: sandboxedEnv });
+
+console.log(schemeToJs(results[0], {})); // [2, 4, 6, 8, 10]
 ```
 
-**AI agents send:**
+### Complex Data
 
-```json
-{
-  "projectId": "proj-123",
-  "actions": [
-    ["create-task", {"title": "Implement login", "priority": 5}],
-    ["create-task", {"title": "Write tests", "priority": 3}],
-    ["update-task", {"taskId": "task-456", "title": "Fix auth bug", "priority": 10}]
-  ]
-}
+```typescript
+import { exec, sandboxedEnv, schemeToJs, jsToScheme } from '@here.build/arrival-scheme';
+
+// Register function filtering objects
+sandboxedEnv.defineRosetta('high-priority-users', {
+  fn: (users: Array<{id: string, priority: number}>) =>
+    users.filter(u => u.priority > 10)
+});
+
+// Pass JS data to Scheme
+const users = [
+  { id: "alice", priority: 15 },
+  { id: "bob", priority: 5 },
+  { id: "charlie", priority: 20 }
+];
+
+sandboxedEnv.set('users', jsToScheme(users, {}));
+
+const results = await exec(`
+  (high-priority-users users)
+`, { env: sandboxedEnv });
+
+console.log(schemeToJs(results[0], {}));
+// [{ id: "alice", priority: 15 }, { id: "charlie", priority: 20 }]
 ```
 
-**What happens:**
+## Key Differences from LIPS.js
 
-1. Validation phase - all actions validated before execution
-2. Context snapshot - `projectId` frozen for batch
-3. Sequential execution - actions run in order
-4. Atomic validation - if ANY action fails validation, NOTHING executes
+This is a **fork** of LIPS with fundamental architectural changes:
 
-All actions see identical context. Mid-batch drift is structurally impossible.
+### 1. Sandboxed by Default
 
-### How Fragmentation is Prevented
+**LIPS.js**: Full JavaScript interop, call any JS function, access global scope
+**arrival-scheme**: Isolated environment, only explicitly registered functions
 
-**Discovery sandbox boundaries:**
+```typescript
+// LIPS.js: dangerous — has a JS member-access form that reaches the host
+await exec(`(. console (log "pwned"))`); // Has console access
 
-Discovery tools execute in Scheme interpreter with strict isolation:
+// arrival-scheme: safe — the host member-access form is gone; member-read
+// goes through the `@` membrane, which has no `console` to reach
+await exec(`(@ console :log)`, { env: sandboxedEnv });
+// Error: console not defined
+```
 
-- **Allowed**: The capability's declared symbols, pure Scheme stdlib (filter, map, reduce, etc.)
-- **Blocked**: Filesystem, network, unregistered functions, side effects
+### 2. Rosetta Integration
 
-Errors stay isolated. If Scheme expression throws, it returns as data. No unwinding, no panic, no fragmentation.
+**LIPS.js**: Manual conversion between JS and Scheme types
+**arrival-scheme**: Automatic translation via Rosetta layer
 
-**Action batch atomicity:**
+```typescript
+// Automatic conversion:
+// - JS arrays ↔ Scheme lists (consider nil)
+// - JS objects ↔ Scheme alists
+// - JS functions → Scheme procedures
+// - Natural interop in both directions
+```
 
-- Context snapshot captured at batch start: `{ projectId: "proj-123" }`
-- All actions see identical context - no mid-batch changes
-- Upfront validation - if action 3 of 5 fails, actions 1-2 don't run
-- Prevents classic pattern: explore with context A, execute with context B, panic to checkpoint C
+### 3. Fantasy-land Support
 
-**Phase separation:**
+**LIPS.js**: Fixed implementations of map, filter, etc.
+**arrival-scheme**: Polymorphic operations defined by data structures
 
-Discovery produces inert data. No side effects, no state changes. Pure exploration.
+Custom data structures can implement `map`, `filter`, `reduce` following
+the [fantasy-land](https://github.com/fantasyland/fantasy-land) spec, and Scheme primitives will use them. This is
+exceptionally useful for complex structures like trees.
 
-Actions are explicit commits. The AI must construct valid batch - can't "accidentally execute."
+### 4. Polyglot runtime
 
-## Standard MCP Compatibility
+Some features from other Lisp dialects were added as expression means — e.g. the `(dict :key value …)` map constructor (the canonical dict surface; the serializer prints it, and arrival-chain-view transpiles it to `{ }`) and its `(:key d)` accessor. See [`docs/language-design-foundations.md`](../../../docs/foundations/arrival-scheme/language-design-foundations.md).
 
-Arrival builds **on top** of Model Context Protocol, not replacing it.
+## Sandbox Architecture
 
-- Discovery tools return S-expression strings (standard MCP text responses)
-- Action tools return JSON arrays (standard MCP structured responses)
-- Discovery/action separation happens server-side through tool design
-- Any MCP client works: Claude Desktop, Claude Code, Cursor, etc.
+### What's Allowed
 
-You can mix Arrival tools with standard MCP tools in the same server.
+**Standard Scheme library**:
+
+- List operations: `car`, `cdr`, `cons`, `list`, `append`, etc.
+- Higher-order: `map`, `filter`, `reduce`, `fold`, etc.
+- Logic: `and`, `or`, `not`, `if`, `cond`, etc.
+- Math: `+`, `-`, `*`, `/`, `>`, `<`, `=`, etc.
+- Lambda functions and closures
+
+**Explicitly registered functions**:
+
+- Via `env.defineRosetta(name, { fn })`
+- Via `env.set(name, value)`
+
+### What's Blocked or NonExistent
+
+**Filesystem access**: No `open-input-file`, `open-output-file`, etc.
+**Network access**: No fetch, HTTP, sockets
+**Process execution**: No `system`, shell commands
+**Global JavaScript**: No `window`, `global`, `process`, `require`
+**Unregistered functions**: Attempting to call undefined function throws error
+
+### Isolation Boundaries
+
+```typescript
+// Environment is isolated per execution
+const env1 = sandboxedEnv.clone();
+const env2 = sandboxedEnv.clone();
+
+env1.set('x', 10);
+env2.set('x', 20);
+
+await exec(`x`, { env: env1 }); // 10
+await exec(`x`, { env: env2 }); // 20
+```
+
+Each environment maintains separate bindings. Global state variance don't leak between executions.
+
+### Error Handling
+
+Errors are thrown with extra metadata at `publicMessage` on potential issues.
+
+This provides valuable feedback instead of opaque, unclear behavior.
 
 ## Security Status
 
-⚠️ **version 0.x is likely unsafe - use zero-trust environments only**
+⚠️ **version 0.x - use at your own risk**
 
-The Scheme sandbox (forked from LIPS.js) contains known architectural issues from deep JavaScript integration. We've
-identified potential attack vectors (missing reentrancy checks, prototype access paths) but haven't fully characterized
-or fixed them.
-
-**Current status (0.x)**:
-
-- **Probably exploitable** by determined attackers
-- **Not externally audited**
-- **Use only in isolated containers with zero-trust architecture**
-
-**Planned for 1.x**:
-
-- External security audit
-- Architecture hardening
-- Formal threat model
-- Production-ready isolation guarantees
-
-**How we use 0.x**:
-
-- Zero-trust containers. MCP runtime has access only to current user bearer token
-- Timeouts on all expressions (5s default)
-- Resource monitoring and limits
-- Assume sandbox can be escaped
+LIPS.js (upstream) has deep JavaScript integration that creates attack surfaces. We've removed the biggest ones (
+filesystem, process, network access) but sandbox escape is still feasible at least via property access and some rosetta
+layer aspects.
 
 **Do not**:
 
-- Expose to untrusted user input directly
-- Deploy without containerization or any other means of isolation
+- Expose to untrusted user input without additional isolation
 - Use in security-critical contexts
-- Trust sandbox isolation without additional defenses
+- Deploy without containerization
+- Trust sandbox isolation
 
-We welcome security researchers to review and responsibly disclose findings: security@here.build
+We welcome security researchers to responsibly disclose findings and collaborate on improvements: security@here.build
 
-## Context Management
+## Rosetta Translation Layer
 
-There is **no bespoke server framework — the official MCP SDK is the server.** `registerTools` wires the
-value tools onto an `McpServer`; an optional resolver maps each call to its `ToolCallCtx`
-(`{ session, user, signal, record }`), which lives *above* the eval membrane so a sandboxed run can't
-reach session identity or another call's state.
+Automatic conversion between JavaScript and Scheme:
+
+### JS → Scheme
+
+| JavaScript           | Scheme                        |
+|----------------------|-------------------------------|
+| `[1, 2, 3]`          | `(list 1 2 3)`                |
+| `{x: 10, y: 20}`     | `((x . 10) (y . 20))` (alist) |
+| `(a, b) => a + b`    | `(lambda (a b) (+ a b))`      |
+| `null` / `undefined` | `nil`                         |
+| `true` / `false`     | `#t` / `#f`                   |
+
+### Scheme → JS
+
+| Scheme                | JavaScript             |
+|-----------------------|------------------------|
+| `(list 1 2 3)`        | `[1, 2, 3]`            |
+| `((x . 10) (y . 20))` | `{x: 10, y: 20}`       |
+| `#t` / `#f`           | `true` / `false`       |
+| `nil`                 | `null`                 |
+| Symbols               | Strings (configurable) |
+
+### Registering Functions
 
 ```typescript
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerTools } from '@here.build/arrival-mcp';
+// Simple function
+env.defineRosetta('add', {
+  fn: (a: number, b: number) => a + b
+});
 
-const server = new McpServer({ name: 'my-app', version: '0.1.0' }, { capabilities: { tools: {} } });
-registerTools(server, [discovery, updateTasks], (params) => ({ session: resolveSession(params) }));
-await server.connect(transport);
+// With type conversion hints
+env.defineRosetta('process-users', {
+  fn: (users: User[]) => users.filter(u => u.active),
+  // Automatic conversion of return value to Scheme list
+});
+
+// Direct Scheme value
+env.set('pi', 3.14159);
+env.set('config', jsToScheme({ timeout: 5000 }, {}));
 ```
 
-Three levels of state remain distinct, entering at three membrane times:
+## Fantasy-land Support
 
-- **Resources** (eval time) — per-call host handles a discovery capability's verbs read, auto-spawned on
-  first touch via `this.resources.<name>.live`.
-- **Call context** (dispatch time) — the `ToolCallCtx` from the `registerTools` resolver: session, user,
-  abort signal, interaction record.
-- **Execution focus** (batch time) — an `ActionTool`'s `context` is validated once at batch start and
-  immutable for every action. An optional per-batch `prepare` merges derived state (e.g. a loaded site)
-  into the context every handler and ref sees.
+Data structures can implement algebraic operations via fantasy-land spec:
+
+```typescript
+// Custom list type implementing map
+class MyList {
+    ["fantasy-land/map"]<U>(fn: (value: T) => U): Tree<U> {
+        return new MyList(
+            fn(this.value),
+            this.children.map((child) => child["fantasy-land/map"](fn))
+        );
+    }
+}
+
+// Scheme (map) will use the .map method
+await exec(`(map double my-list)`, { env });
+```
+
+Supported algebras:
+
+- Functor: `map`
+- Apply: `ap`
+- Chain: `chain` / `flatMap`
+- Monoid: `empty`, `concat`
+
+[request on collaboration: deeper fantasy-land integration and description is needed]
 
 ## Performance Characteristics
 
-**Token efficiency** (measured):
+**Overhead vs native JS**:
 
-- S-expression serialization: 30-60% reduction vs JSON for structured data
-- Tool definitions: 5x more tools in same token budget
-- [Detailed explanation](../arrival-serializer/README.md#best-practices)
+- Interpretation cost: ~10-100x slower than native
+- Worth it for: Isolation, sandboxing, compositional expressiveness, AI intent expression
+- Not worth it for: CPU-intensive computation
 
-**Session coherence** (observational, needs validation):
+**Optimization**:
 
-- 50+ tool calls without drift in production
-- Standard architectures: 10-20 calls before fragmentation
-- Needs controlled experiments and independent replication
+- Register performance-critical functions in JS via Rosetta
+- Use Scheme for orchestration, JS for computation
+- Limit expression complexity
 
-**Execution overhead** (not yet benchmarked):
+**Not yet benchmarked**:
 
-- Scheme sandbox adds interpretation cost
-- Batch validation adds upfront latency
-- Context snapshotting minimal overhead
-- Needs profiling and optimization
+- Precise overhead measurements
+- Memory usage profiles
+- Comparison with other sandboxing approaches
 
-BUT:
+## API Reference
 
-- Discovery queries reduce the data transferred significantly, while allowing complex requests, not just data batching
-  with filters - e.g. "What are top-priority tasks of my colleague I've just assigned current task? How many story
-  points does he have in total in front of my task?"
-- Action burst batching reduces roundabouts
-- Plexus-Arrival integration enables full state presence at the moment of invocation and server response BEFORE state is
-  synced - for here.build, we execute state changes locally, respond to MCP tool call and expect sync as a side effect
+### Core Functions
 
-## When NOT to Use Arrival
+**`exec(code: string, options?: ExecOptions): Promise<SchemeValue[]>`**
 
-**Use standard MCP when:**
+Execute Scheme code, return results.
 
-- Simple CRUD operations - single-step, straightforward
-- JSON is fine for your data - no complex composition needed
-- Low tool count - token efficiency doesn't matter
-- Immediate execution preferred - no need for exploration phase
+```typescript
+const results = await exec(`(+ 1 2 3)`, { env: sandboxedEnv });
+console.log(results[0]); // 6
+```
 
-**Use Arrival for:**
+**`jsToScheme(value: any, options?: RosettaOptions): SchemeValue`**
 
-- Complex multi-step tasks requiring exploration
-- Compositional queries over data
-- Token efficiency matters (large tool sets)
-- Session coherence critical (long-running agents)
+Convert JavaScript value to Scheme representation.
 
-## Research
+**`schemeToJs(value: any, options?: RosettaOptions): any`**
 
-Arrival embeds a working hypothesis about AI agent fragmentation: that drift in long-running
-agents stems from subprocess state-desync rather than model capability. The structural remedy —
-a shared-context membrane over tool calls — is what this package implements. Background reading:
-[arXiv:2508.06418v1](https://arxiv.org/abs/2508.06418v1).
+Convert Scheme value to JavaScript.
 
-## What's Inside
+### Environment Methods
 
-- **[@here.build/arrival-serializer](../arrival-serializer/)** - S-expression serialization with `Symbol.toSExpr`
-  protocol
-- **[@here.build/arrival-scheme](../arrival-scheme/)** - Modified LIPS interpreter for sandboxed exploration
-- **[@here.build/arrival-mcp](../arrival-mcp/)** - MCP tools as values (discovery/action separation) on the official MCP SDK
-- **[@here.build/arrival-env](../arrival-env/)** - Protocol definitions for shared libraries
+**`env.defineRosetta(name: string, { fn: Function })`**
 
-Packages work together but can be used independently.
+Register JS function with automatic type conversion.
+
+**`env.set(name: string, value: SchemeValue)`**
+
+Set binding in environment (use `jsToScheme` for JS values).
+
+**`env.get(name: string): SchemeValue`**
+
+Get binding from environment.
+
+**`env.clone(): Environment`**
+
+Create isolated copy of environment.
+
+TypeScript types coverage will be added eventually.
 
 ## Contributing
 
-Early-stage open source. We're interested in:
+Early-stage fork. We're interested in:
 
-- Security review of Scheme sandbox
-- Controlled drift benchmarks vs standard MCP
-- Migration guides from existing tools
-- Documentation of failure modes
-- Validation or refutation of fragmentation hypothesis
-- General contributions to Scheme sandbox, Rosetta layer improvements and opaque pointer representations
-- MCP server general improvements and spec compliance
+- **Security review** - audit sandbox isolation
+- **Performance benchmarks** - measure overhead
+- **Fantasy-land docs** - document algebraic operations
+- **Testing** - expand test coverage
 
 ## License
 
 **[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date. Until conversion, the license permits everything *except* Competing Use (making the Software available in a commercial product or service that substitutes for the Software or offers substantially similar functionality). Internal use, non-commercial education and research, and professional services built on top of the Software are always permitted.
+
+This is a fork of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed). LIPS.js copyright
+notices are preserved in source files.
 
 For licensing questions, exemptions, or clarifications: team@here.build

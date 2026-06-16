@@ -109,6 +109,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Upstream Licenses
+
+**arrival-scheme** is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT
+licensed by Jakub T. Jankiewicz). LIPS.js source files retain their original
+MIT license and copyright notices.
+
+The R7RS conformance test suite is driven against
+[chibi-scheme](https://github.com/ashinn/chibi-scheme) (BSD-3-Clause, Copyright
+(c) 2009-2021 Alex Shinn), vendored as a git submodule under
+`vendor/chibi-scheme` for development/testing only. It is not part of the
+distributed runtime; its source retains the BSD-3-Clause license and copyright
+notice in `vendor/chibi-scheme/COPYING`.
+
 ## Questions
 
 For licensing questions, exemptions, or clarifications: team@here.build

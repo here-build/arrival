@@ -1,0 +1,558 @@
+import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
+import { isBridgeInitialized } from "./boot.js";
+import type { EOF } from "./values/EOF.js";
+import type {
+  doc as DocFn,
+  get as GetFn,
+  get_props as GetPropsFn,
+  parse as ParseFn,
+  patch_value as PatchValueFn,
+  unbind as UnbindFn,
+} from "./stdlib.js";
+import { SchemeString } from "./values/SchemeString.js";
+import { SchemeSymbol } from "./values/SchemeSymbol.js";
+import type { Macro } from "./eval/Macro.js";
+import { SchemeExact, SchemeInexact } from "./values/numbers.js";
+import type { SchemeValue } from "./values/types.js";
+import { nil } from "./values/types.js";
+import type { RosettaFunction } from "./rosetta.js";
+import { createRosettaWrapper } from "./rosetta.js";
+import { trim_lines } from "./utils/trim-lines.js";
+import { typecheck } from "./utils/typecheck.js";
+import type { Syntax } from "./eval/Syntax.js";
+import type { QuotedPromise } from "./values/QuotedPromise.js";
+import invariant from "tiny-invariant";
+import { fromJS, isSchemeValue } from "./membrane.js";
+
+/**
+ * Brand on a keyword-accessor pluck function carrying its bare field name
+ * (`:tagline` → "tagline"). Lets consumers detect a keyword key EXPLICITLY via
+ * this symbol instead of sniffing valueOf/string shape. Registered (Symbol.for)
+ * so it matches across the package boundary — arrival-chain's `dict` reads the
+ * same key (project.ts).
+ */
+export const KEYWORD_ACCESSOR_FIELD = Symbol.for("@here.build/arrival-scheme/keyword-accessor-field");
+
+// -------------------------------------------------------------------------
+// :: Runtime dependencies - deferred loading to break circular dependency
+// :: These functions are only called at runtime, never during module init.
+// :: We defer the actual import until first use.
+// -------------------------------------------------------------------------
+
+// Type imports are fine - they're erased at runtime
+
+// -------------------------------------------------------------------------
+// :: Type definitions for Environment bindings
+// -------------------------------------------------------------------------
+
+/**
+ * A name that can be used to look up values in an environment.
+ * Supports strings, symbols (both primitive and SchemeSymbol), and SchemeString.
+ */
+export type BindingName = string | symbol | SchemeSymbol | SchemeString;
+
+/**
+ * A function with optional LIPS metadata.
+ */
+export interface LipsFunction extends Function {
+  __doc__?: string;
+  __name__?: string | symbol;
+  __code__?: unknown;
+}
+
+/**
+ * Value that can be stored in an environment.
+ * This includes all SchemeValues plus runtime-specific types like Macro, Syntax, etc.
+ */
+export type EnvironmentValue = SchemeValue | LipsFunction | Macro | Syntax | QuotedPromise | EOF | Environment | RegExp;
+
+// Runtime module cache - populated on first access
+let _runtime: {
+  doc: typeof DocFn;
+  get_props: typeof GetPropsFn;
+  patch_value: typeof PatchValueFn;
+  get: typeof GetFn;
+  unbind: typeof UnbindFn;
+  parse: typeof ParseFn;
+  global_env: Environment;
+} | null = null;
+
+// Setter function to allow stdlib to register itself
+export function setSchemeRuntime(runtime: typeof _runtime) {
+  _runtime = runtime;
+}
+
+function getSchemeRuntime() {
+  invariant(
+    _runtime,
+    `scheme runtime not yet loaded. This usually means a method was called during module initialization before circular dependencies resolved. Make sure to import from the main entry point (index.ts) before using Environment.`,
+  );
+  return _runtime!;
+}
+
+// Wrapper functions that defer to the scheme runtime
+function doc(...args: Parameters<typeof DocFn>): ReturnType<typeof DocFn> {
+  return getSchemeRuntime().doc(...args);
+}
+function get_props(obj: object): (string | symbol)[] {
+  return getSchemeRuntime().get_props(obj);
+}
+function patch_value(value: unknown, context: unknown): EnvironmentValue {
+  return getSchemeRuntime().patch_value(value, context) as EnvironmentValue;
+}
+function get(obj: unknown, ...keys: unknown[]): EnvironmentValue {
+  return getSchemeRuntime().get(obj, ...keys) as EnvironmentValue;
+}
+function unbind(obj: unknown): unknown {
+  return getSchemeRuntime().unbind(obj);
+}
+// -------------------------------------------------------------------------
+export class Environment {
+  static __class__ = "environment";
+  __docs__: Map<string | symbol, string> = new Map();
+  __resolvers__: FallbackResolver[] = [];
+  /**
+   * Harvest surface for the type-lens: the TS signature string each rosetta was
+   * registered with (`defineRosetta(name, { type })`). Inert at runtime; read only
+   * by `arrival-chain`'s rosetta-type harvester to assemble the `ArrShape` leaf.
+   * Keyed by the registered name; populated on each `defineRosetta` that carries a
+   * `type`. Local to the env the rosetta was defined on (not chained).
+   */
+  __rosettaTypes__: Map<string, string> = new Map();
+
+  /**
+   * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
+   * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
+   * scope. Absent ⇒ no allocation bound (the default for un-budgeted callers). Run-scoped, not
+   * chained-and-shared: the nearest one up the chain wins, so concurrent runs meter independently.
+   */
+  __heapMeter__?: import("./heap-budget.js").HeapMeter;
+
+  // -------------------------------------------------------------------------
+  // :: Fallback Resolver Management
+  // -------------------------------------------------------------------------
+
+  constructor(
+    public __name__: string = "anonymous",
+    public __env__: Record<string | symbol, EnvironmentValue> = {},
+    public __parent__: Environment | null = null,
+  ) {}
+
+  /**
+   * Create an environment from composable modules.
+   *
+   * Each module becomes a layer in the environment chain:
+   * - First module is the base (parent: null)
+   * - Last module is the top (where user code runs)
+   *
+   * By default, the pure Scheme module is auto-loaded as the base,
+   * providing core primitives (cons, car, cdr, +, -, etc.).
+   *
+   * Resolution order per module:
+   * 1. Direct bindings
+   * 2. Resolvers (yield on undefined)
+   * 3. Parent module (recursive)
+   *
+   * @param modules - Modules to compose (first = base, last = top)
+   * @param exec - Optional function to evaluate bootstrap Scheme code
+   * @returns The topmost environment
+   *
+   * @example
+   * ```typescript
+   * const env = Environment.fromModules([myModule]);
+   * ```
+   */
+  static fromModules(
+    modules: EnvironmentModule[],
+    exec?: (code: string, env: Environment) => void,
+  ): Environment {
+    const execFn = exec;
+
+    // Build dependency graph and topologically sort
+    const moduleMap = new Map<string, EnvironmentModule>();
+    for (const mod of modules) {
+      moduleMap.set(mod.id, mod);
+    }
+
+    // Topological sort with cycle detection
+    const sorted: EnvironmentModule[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    function visit(mod: EnvironmentModule) {
+      if (visited.has(mod.id)) return;
+      invariant(!visiting.has(mod.id), `Circular dependency detected: ${mod.id}`);
+      visiting.add(mod.id);
+
+      // Visit dependencies first
+      for (const depId of mod.dependencies ?? []) {
+        const dep = moduleMap.get(depId);
+        invariant(dep, `Module '${mod.id}' depends on unknown module '${depId}'`);
+        visit(dep);
+      }
+
+      visiting.delete(mod.id);
+      visited.add(mod.id);
+      sorted.push(mod);
+    }
+
+    // Visit all modules
+    for (const mod of modules) {
+      visit(mod);
+    }
+
+    // Build environment chain
+    let env: Environment | null = null;
+
+    for (const mod of sorted) {
+      // Create child environment with this module's bindings
+      env = new Environment(mod.id, mod.bindings ?? {}, env);
+
+      // Register resolver if present
+      if (mod.resolver) {
+        env.registerResolver(mod.resolver);
+      }
+
+      // Run bootstrap code if present and exec is provided
+      if (mod.bootstrap && execFn) {
+        execFn(mod.bootstrap, env);
+      }
+    }
+
+    invariant(env, "No modules provided");
+
+    return env;
+  }
+
+  /**
+   * Register a fallback resolver.
+   * Resolvers are tried in order when normal lookup fails.
+   */
+  registerResolver(resolver: FallbackResolver): this {
+    // Fail LOUD on a malformed resolver. An `undefined`/`.resolve`-less entry would
+    // otherwise push silently (an empty `__resolvers__.some(...)` short-circuits before
+    // it could throw) and only surface much later as a "cannot read 'resolve'" crash at
+    // lookup time — the symptom of a module-eval-time TDZ capture (see polyglot.ts).
+    invariant(
+      resolver != null && typeof resolver.resolve === "function" && typeof resolver.id === "string",
+      "registerResolver: resolver must have a string id and a resolve() function",
+    );
+    // Prevent duplicate registration
+    if (!this.__resolvers__.some((r) => r.id === resolver.id)) {
+      this.__resolvers__.push(resolver);
+    }
+    return this;
+  }
+
+  defineRosetta(name: string, config: RosettaFunction): void {
+    const wrapper = createRosettaWrapper(config);
+    this.set(name, wrapper);
+    if (config.type !== undefined) this.__rosettaTypes__.set(name, config.type);
+  }
+
+  list(): (string | symbol)[] {
+    return get_props(this.__env__);
+  }
+
+  fs(): EnvironmentValue {
+    return this.get("**fs**");
+  }
+
+  unset(name: BindingName): void {
+    let key: string | symbol;
+    if (name instanceof SchemeSymbol) {
+      key = name.valueOf();
+    } else if (name instanceof SchemeString) {
+      key = name.valueOf();
+    } else {
+      key = name;
+    }
+    delete this.__env__[key as string];
+  }
+
+  inherit(
+    name: string = `child of ${this.__name__ || "unknown"}`,
+    obj: Record<string, EnvironmentValue> = {},
+  ): Environment {
+    return new Environment(name, obj, this);
+  }
+
+  doc(name: BindingName, value: string | null = null, dump: boolean = false): this | string | undefined {
+    let key: string | symbol;
+    if (name instanceof SchemeSymbol) {
+      key = name.__name__;
+    } else if (name instanceof SchemeString) {
+      key = name.valueOf();
+    } else {
+      key = name;
+    }
+    if (value) {
+      const finalValue = dump ? value : trim_lines(value);
+      this.__docs__.set(key, finalValue);
+      return this;
+    }
+    if (this.__docs__.has(key)) {
+      return this.__docs__.get(key);
+    }
+    if (this.__parent__) {
+      return this.__parent__.doc(name) as string | undefined;
+    }
+  }
+
+  /**
+   * Per-module lookup with proper resolution order:
+   * 1. This environment's direct bindings
+   * 2. This environment's resolvers (yield on undefined)
+   * 3. Parent environment's _lookupWithResolvers (recursive)
+   *
+   * This ensures each module (environment layer) has its bindings
+   * checked before its resolvers, and both are checked before
+   * yielding to the parent module.
+   *
+   * @param name - The symbol name to look up (string or symbol)
+   * @returns The resolved value, or undefined if not found
+   */
+  _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
+    // 1. Try this environment's direct bindings first
+    if (Object.hasOwn(this.__env__, name as string)) {
+      return this.__env__[name as string];
+    }
+
+    // 2. Try this environment's resolvers (in registration order)
+    for (const resolver of this.__resolvers__) {
+      const result = resolver.resolve(String(name), this);
+      if (result !== undefined) {
+        return result as EnvironmentValue;
+      }
+    }
+
+    // 3. Yield to parent module
+    return this.__parent__?._lookupWithResolvers(name);
+  }
+
+  toString(): string {
+    return `#<environment:${this.__name__}>`;
+  }
+
+  clone(): Environment {
+    // Duplicate refs while faithfully preserving BOTH:
+    //   - symbol-keyed bindings (Object.keys drops them — Reflect.ownKeys does not),
+    //   - the read-only attribute installed by `constant()` (a non-writable property
+    //     descriptor — a plain `env[key] = …` would silently re-create the slot writable).
+    // OracleSession.clone() relies on this snapshot being lossless: a clone that
+    // dropped symbol keys or stripped constancy would yield a too-narrow valid-symbol
+    // set and let writes land on slots that must stay constant.
+    const env: Record<string | symbol, EnvironmentValue> = {};
+    for (const key of Reflect.ownKeys(this.__env__)) {
+      const descriptor = Object.getOwnPropertyDescriptor(this.__env__, key);
+      if (descriptor) {
+        Object.defineProperty(env, key, descriptor);
+      }
+    }
+    return new Environment(this.__name__, env, this.__parent__);
+  }
+
+  merge(env: Environment, name: string = "merge"): Environment {
+    typecheck("Environment::merge", env, "environment");
+    return this.inherit(name, env.__env__);
+  }
+
+  get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue {
+    // `:key` keyword accessors are no longer special-cased here: a `:`-prefixed symbol
+    // is never a binding, so it falls through to `_lookupWithResolvers` (below) where
+    // the polyglot capability's `keyword-accessor` resolver (membrane.ts) maps it to
+    // the `@`-alias pluck — exactly like the `c[ad]+r` catchall. One catchall path.
+    typecheck("Environment::get", symbol, ["symbol", "string"]);
+    const { throwError = true } = options;
+
+    // Normalize to string/symbol name
+    let name: string | symbol = symbol as string | symbol;
+    if (symbol instanceof SchemeSymbol || symbol instanceof SchemeString) {
+      name = symbol.valueOf();
+    }
+
+    // First, try direct lookup for the literal symbol (handles names like %as.data)
+    const directValue = this._lookupWithResolvers(name);
+    if (directValue !== undefined) {
+      return patch_value(directValue, null);
+    }
+
+    // Determine if this is a dot-notation symbol (e.g., foo.bar.baz)
+    // Only try dot-notation if direct lookup failed
+    let parts: string[] | undefined;
+    if (symbol instanceof SchemeSymbol && (symbol as unknown as { [key: symbol]: string[] })[SchemeSymbol.object]) {
+      // dot notation symbols from syntax-rules that are gensyms
+      parts = (symbol as unknown as { [key: symbol]: string[] })[SchemeSymbol.object];
+    } else if (typeof name === "string" && name.includes(".")) {
+      parts = name.split(".").filter(Boolean);
+    }
+
+    // Handle dot notation: foo.bar.baz
+    if (parts && parts.length > 1) {
+      const [first, ...rest] = parts;
+      // Use _lookupWithResolvers to find the base object
+      const baseValue = this._lookupWithResolvers(first);
+      if (baseValue !== undefined) {
+        // Access nested properties
+        return get(baseValue, ...rest);
+      }
+      // Base not found - fall through to error handling
+    }
+
+    if (throwError) {
+      throw Object.assign(new Error(`Unbound variable \`${name.toString()}'`), {
+        publicMessage: `symbol ${name.toString()} does not exist - look at list of available functions at tool description`,
+      });
+    }
+    return undefined;
+  }
+
+  set(name: BindingName, value: EnvironmentValue | number | bigint, docValue: string | null = null): this {
+    typecheck("Environment::set", name, ["string", "symbol"]);
+    let storedValue: EnvironmentValue;
+
+    // Numbers get special handling (convert to SchemeExact/SchemeInexact for typed numeric ops)
+    if (typeof value === "number") {
+      if (Number.isNaN(value)) {
+        storedValue = new SchemeInexact(value);
+      } else {
+        storedValue = Number.isSafeInteger(value) ? new SchemeExact(BigInt(value)) : new SchemeInexact(value);
+      }
+    } else if (typeof value === "bigint") {
+      storedValue = new SchemeExact(value);
+    }
+    // Already a Scheme value - pass through
+    else if (isSchemeValue(value)) {
+      storedValue = value;
+    }
+    // Primitives (boolean, string, symbol) pass through
+    else if (typeof value === "boolean" || typeof value === "string" || typeof value === "symbol") {
+      storedValue = value as EnvironmentValue;
+    }
+    // Functions pass through as-is (membrane wrapping happens at interop points, not storage)
+    else if (typeof value === "function") {
+      storedValue = value as EnvironmentValue;
+    }
+    // Error objects pass through unwrapped for exception handling (R7RSError, etc.)
+    else if (value instanceof Error) {
+      storedValue = value as EnvironmentValue;
+    }
+    // Objects get wrapped via membrane
+    else {
+      storedValue = fromJS(value) as EnvironmentValue;
+    }
+
+    let key: string | symbol;
+    if (name instanceof SchemeSymbol) {
+      key = name.__name__;
+    } else if (name instanceof SchemeString) {
+      key = name.valueOf();
+    } else {
+      key = name;
+    }
+    this.__env__[key as string] = storedValue;
+    if (docValue) {
+      this.doc(name, docValue, true);
+    }
+    return this;
+  }
+
+  constant(name: string, value: EnvironmentValue): this {
+    invariant(!Object.hasOwn(this.__env__, name), `Environment::constant: ${name} already exists`);
+    Object.defineProperty(this.__env__, name, {
+      value,
+      enumerable: true,
+    });
+    return this;
+  }
+
+  has(name: string): boolean {
+    return this.__env__.hasOwnProperty(name);
+  }
+
+  ref(name: string): Environment | undefined {
+    let env: Environment | null = this;
+    while (true) {
+      if (!env) {
+        break;
+      }
+      if (env.has(name)) {
+        return env;
+      }
+      env = env.__parent__;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // :: Runtime bootstrap (lazy, realm-level)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Whether the runtime bootstrap (bridge: TS builtins + assembled pack preludes
+   * + sandbox seeding) has run for this realm. Realm-global: the bootstrap mutates
+   * global singletons once, so every Environment reads the same flag. `exec` checks
+   * this and calls `init()` when it's down, so embedders never call `initBridge()`.
+   */
+  get initialized(): boolean {
+    return isBridgeInitialized();
+  }
+
+  /**
+   * Ensure the runtime bootstrap has run. Idempotent and cheap once settled —
+   * delegates to the bridge's `initBridge`, which memoizes via a single promise.
+   * Dynamic import avoids a static Environment→bridge cycle (bridge imports
+   * Environment); the edge is call-time only.
+   */
+  async init(): Promise<void> {
+    const { initBridge } = await import("./bridge.js");
+    await initBridge();
+  }
+
+  // -------------------------------------------------------------------------
+  // :: Evaluation API
+  // -------------------------------------------------------------------------
+
+  parents(): Environment[] {
+    let env: Environment | null = this;
+    const result: Environment[] = [];
+    while (env) {
+      result.unshift(env);
+      env = env.__parent__;
+    }
+    return result;
+  }
+
+  /**
+   * Parse and evaluate Scheme code in this environment.
+   * Returns the result of the last expression.
+   *
+   * @example
+   * ```typescript
+   * const env = Environment.fromModules([pureScheme]);
+   * const result = await env.eval('(+ 1 2 3)'); // => 6
+   * ```
+   */
+  async eval(code: string): Promise<SchemeValue> {
+    // Generator path (run(evaluate(...))) rather than the legacy lips.evaluate.
+    // Lazy import keeps the evaluator off Environment's module-init chain — the
+    // edge is call-time only, so no init-order cycle. exec throws on error by
+    // default, matching the old re-throwing handler.
+    const { exec } = await import("./eval/generator-exec.js");
+    const results = await exec(code, { env: this });
+    return results.length > 0 ? results[results.length - 1] : nil;
+  }
+
+  // -------------------------------------------------------------------------
+  // :: Static factory for creating module-based environments
+  // -------------------------------------------------------------------------
+
+  /**
+   * Evaluate a single pre-parsed expression in this environment.
+   * Use this when you've already parsed the code.
+   */
+  async evalExpr(expr: SchemeValue): Promise<SchemeValue> {
+    // Generator path, lazy-imported (see eval() above for the rationale).
+    const { execExpr } = await import("./eval/generator-exec.js");
+    return execExpr(expr, { env: this });
+  }
+}

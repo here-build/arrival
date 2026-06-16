@@ -1,0 +1,793 @@
+/**
+ * The cons cell. Beyond car/cdr, a Pair carries its own metadata — source
+ * location, datum-label/cycle marks, provenance — on the instance (symbol-keyed),
+ * not in a sidecar map, so a value and its origin travel together and survive
+ * structure sharing. Runtime cycles (from `set-cdr!`) are detected actively by
+ * `isCircularList` (Floyd's), which keeps spine-walking builtins from spinning.
+ * The class is a interop boundary (see the bottom of the file).
+ */
+import invariant from "tiny-invariant";
+import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { type SourceLocation } from "../errors.js";
+import { is_native, is_nil, is_pair, is_plain_object } from "./value-guards.js";
+import { SchemeBytevector } from "./SchemeBytevector.js";
+import { SchemeString } from "./SchemeString.js";
+import { SchemeVector } from "./SchemeVector.js";
+import { SchemeSymbol } from "./SchemeSymbol.js";
+import { SchemeExact, SchemeInexact } from "./numbers.js";
+import { __cycles__, __data__, __location__, __ref__ } from "./primitives.js";
+import { markInteropBoundary } from "../interop-access.js";
+import { type PairLike } from "./types.js";
+import { Nil, nil, setPairConstructor } from "./types.js";
+
+interface PairWithMetadata<Car = unknown, Cdr = unknown> extends Pair<Car, Cdr> {
+  [__cycles__]?: { car?: string | Pair; cdr?: string | Pair };
+  [__ref__]?: string;
+  [__location__]?: SourceLocation;
+}
+
+// Trampoline thunk: `mark_cycles` walks arbitrarily deep lists, so it bounces
+// through these instead of recursing and overflowing the native stack.
+class Thunk {
+  fn: () => Thunk | void;
+  cont: () => void;
+
+  constructor(fn: () => Thunk | void, cont: () => void = () => {}) {
+    this.fn = fn;
+    this.cont = cont;
+  }
+
+  toString(): string {
+    return "#<Thunk>";
+  }
+}
+
+// ----------------------------------------------------------------------
+type TrampolineFn = (pair: unknown, parents: Pair[]) => Thunk | void;
+
+function trampoline(fn: TrampolineFn): (pair: unknown, parents: Pair[]) => void {
+  return function (pair: unknown, parents: Pair[]): void {
+    unwind(fn(pair, parents));
+  };
+}
+
+// ----------------------------------------------------------------------
+function unwind(result: Thunk | void): void {
+  while (result instanceof Thunk) {
+    const thunk = result;
+    result = result.fn();
+    if (!(result instanceof Thunk)) {
+      thunk.cont();
+    }
+  }
+}
+
+/**
+ * Floyd's tortoise/hare cycle detection on the cdr-spine. O(n) time, O(1) space.
+ * Returns true iff the list is CIRCULAR (a cdr eventually revisits a node).
+ *
+ * Unlike `have_cycles()` (a metadata read populated only by the reader for `#0=`
+ * datum labels), this ACTIVELY detects cycles created at runtime by `set-cdr!` —
+ * the gap behind the list?/length/append/memq/reverse/list-copy non-termination.
+ * Spine-walking builtins guard on this so a circular list terminates (list? → #f)
+ * or raises a clean error instead of spinning. Never throws; the caller decides
+ * what a cycle means.
+ */
+export function isCircularList(head: unknown): boolean {
+  let slow: unknown = head;
+  let fast: unknown = head;
+  while (is_pair(fast) && is_pair(fast.cdr)) {
+    slow = (slow as Pair).cdr;
+    fast = fast.cdr.cdr;
+    if (slow === fast) return true;
+  }
+  return false;
+}
+
+function is_cycle(pair: unknown): boolean {
+  if (!is_pair(pair)) {
+    return false;
+  }
+  if (pair.have_cycles()) {
+    return true;
+  }
+  return is_cycle(pair.car) || is_cycle(pair.cdr);
+}
+
+// ----------------------------------------------------------------------
+function mark_cycles(pair: Pair): void {
+  const seen_pairs: Pair[] = [];
+  const cycles: PairWithMetadata[] = [];
+  const refs: Pair[] = [];
+
+  function visit(pair: Pair): void {
+    if (!seen_pairs.includes(pair)) {
+      seen_pairs.push(pair);
+    }
+  }
+
+  function set(node: PairWithMetadata, type: "car" | "cdr", child: unknown, parents: Pair[]): boolean {
+    if (is_pair(child) && parents.includes(child)) {
+      if (!refs.includes(child)) {
+        refs.push(child);
+      }
+      if (!node[__cycles__]) {
+        node[__cycles__] = {};
+      }
+      node[__cycles__][type] = child;
+      if (!cycles.includes(node)) {
+        cycles.push(node);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  const detect = trampoline(function detect_thunk(pair: unknown, parents: Pair[]): Thunk | void {
+    if (is_pair(pair)) {
+      const pairWithCycles = pair as PairWithMetadata;
+      delete pairWithCycles[__ref__];
+      delete pairWithCycles[__cycles__];
+      visit(pair);
+      parents.push(pair);
+      const car = set(pairWithCycles, "car", pair.car, parents);
+      const cdr = set(pairWithCycles, "cdr", pair.cdr, parents);
+      if (!car) {
+        detect(pair.car, [...parents]);
+      }
+      if (!cdr) {
+        return new Thunk(() => {
+          return detect_thunk(pair.cdr, [...parents]);
+        });
+      }
+    }
+  });
+
+  function mark_node(node: PairWithMetadata, type: "car" | "cdr"): void {
+    const cycleData = node[__cycles__];
+    if (cycleData && is_pair(cycleData[type])) {
+      const count = ref_nodes.indexOf(cycleData[type]);
+      cycleData[type] = `#${count}#`;
+    }
+  }
+
+  detect(pair, []);
+  const ref_nodes = seen_pairs.filter((node) => refs.includes(node));
+  for (const [i, node] of ref_nodes.entries()) {
+    (node as PairWithMetadata)[__ref__] = `#${i}=`;
+  }
+  for (const node of cycles) {
+    mark_node(node, "car");
+    mark_node(node, "cdr");
+  }
+}
+
+interface ObjectWithToString {
+  toString: (quote?: boolean) => string;
+}
+interface FunctionWithName extends Function {
+  __name__?: string | symbol;
+}
+
+function stringifyValue(obj: unknown, quote?: boolean): string {
+  // Handle null/undefined
+  if (obj === null) return "null";
+  if (obj === undefined) return "#void";
+  if (obj === true) return "#t";
+  if (obj === false) return "#f";
+
+  // Handle primitives
+  const t = typeof obj;
+  if (t === "string") return quote ? JSON.stringify(obj) : (obj as string);
+  if (t === "number" || t === "bigint") return String(obj);
+  if (t === "symbol") return (obj as symbol).toString().replace(/^Symbol\(([^)]+)\)/, "$1");
+
+  // Handle objects with toString method (SchemeSymbol, SchemeString, SchemeCharacter, numbers, nil, etc.)
+  if (t === "object" || t === "function") {
+    // Special handling for functions
+    if (t === "function") {
+      const fn = obj as FunctionWithName;
+      if (fn.__name__) {
+        const name =
+          typeof fn.__name__ === "symbol"
+            ? fn.__name__.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1")
+            : fn.__name__;
+        return `#<procedure:${name}>`;
+      }
+      return "#<procedure>";
+    }
+    // Boxed vectors/bytevectors → R7RS external representation #(...)/#u8(...),
+    // recursing through stringifyValue so nested elements (incl. quoting) format
+    // correctly. Without this they fall through to the generic #<ctor.name>
+    // ("#<SchemeVector>") below — the nested-in-a-list repr leak. (The stdlib
+    // toString path is handled symmetrically via get_instances.)
+    if (obj instanceof SchemeVector) {
+      return `#(${obj.__vector__.map((el) => stringifyValue(el, quote)).join(" ")})`;
+    }
+    if (obj instanceof SchemeBytevector) {
+      return `#u8(${Array.from(obj.__bytevector__).join(" ")})`;
+    }
+    // Objects with custom toString
+    const o = obj as ObjectWithToString;
+    if (typeof o.toString === "function" && o.toString !== Object.prototype.toString) {
+      const str = o.toString(quote);
+      return typeof str === "string" ? str : String(str);
+    }
+    // Fallback for plain objects
+    const ctor = (obj as object).constructor;
+    if (ctor?.name) {
+      return `#<${ctor.name}>`;
+    }
+    return "#<Object>";
+  }
+
+  return String(obj);
+}
+
+export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLike<Car, Cdr> {
+  static __class__ = "pair";
+  readonly kind = "pair" as const;
+  [__data__]?: boolean;
+  [__location__]?: SourceLocation;
+
+  car: Car;
+  cdr: Cdr;
+
+  constructor(car?: Car, cdr?: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
+    this.car = car as Car;
+    this.cdr = cdr as Cdr;
+  }
+
+  // Static methods
+  static match(obj: unknown, item: string | RegExp | SchemeSymbol): boolean {
+    if (obj instanceof SchemeSymbol) {
+      return SchemeSymbol.is(obj, item);
+    } else if (is_pair(obj)) {
+      return Pair.match(obj.car, item) || Pair.match(obj.cdr, item);
+    } else if (Array.isArray(obj)) {
+      return obj.some((x) => Pair.match(x, item));
+    } else if (is_plain_object(obj)) {
+      return Object.values(obj).some((x) => Pair.match(x, item));
+    }
+    return false;
+  }
+
+  static fromArray(array: unknown, deep = true, quote = false): Pair | Nil | unknown[] {
+    if (
+      is_pair(array) ||
+      (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[__data__])
+    ) {
+      return array as Pair | unknown[];
+    }
+    const arr = Array.isArray(array) ? array : [...(array as Iterable<unknown>)];
+    if (deep === false) {
+      let list: Pair | Nil = nil;
+      for (let i = arr.length; i--; ) {
+        list = new Pair(arr[i], list);
+      }
+      return list;
+    }
+    let result: Pair | Nil = nil;
+    let i = arr.length;
+    while (i--) {
+      let car: unknown = arr[i];
+      if (Array.isArray(car)) {
+        car = Pair.fromArray(car, deep, quote);
+      } else if (typeof car === "string") {
+        car = new SchemeString(car);
+      } else if (typeof car === "number" && !Number.isNaN(car)) {
+        car = Number.isSafeInteger(car) ? new SchemeExact(BigInt(car)) : new SchemeInexact(car);
+      } else if (typeof car === "bigint") {
+        car = new SchemeExact(car);
+      }
+      result = new Pair(car, result);
+    }
+    return result;
+  }
+
+  static fromPairs(array: [string, unknown][]): Pair | Nil {
+    return array.reduce<Pair | Nil>((list, pair) => {
+      return new Pair(new Pair(new SchemeSymbol(pair[0]), pair[1]), list);
+    }, nil);
+  }
+
+  static fromObject(obj: Record<string, unknown>): Pair | Nil {
+    const array = Object.keys(obj).map((key) => [key, obj[key]] as [string, unknown]);
+    return Pair.fromPairs(array);
+  }
+
+  /** Returns this for chaining. */
+  setLocation(loc: SourceLocation): this {
+    this[__location__] = loc;
+    return this;
+  }
+
+  getLocation(): SourceLocation | undefined {
+    return this[__location__];
+  }
+
+  // Instance methods
+  flatten(): Pair | Nil | unknown[] {
+    return Pair.fromArray(this.to_array().flat(Infinity));
+  }
+
+  length(): number {
+    let len = 0;
+    let node: Pair | unknown = this;
+    while (true) {
+      if (!node || is_nil(node) || !is_pair(node) || node.have_cycles("cdr")) {
+        break;
+      }
+      len++;
+      node = node.cdr;
+    }
+    return len;
+  }
+
+  find(item: string | RegExp | SchemeSymbol): boolean {
+    return Pair.match(this, item);
+  }
+
+  clone(deep = true): Pair {
+    const visited = new Map<Pair, Pair>();
+
+    function cloneNode(node: unknown): unknown {
+      if (is_pair(node)) {
+        if (visited.has(node)) {
+          return visited.get(node);
+        }
+        const pair = new Pair() as PairWithMetadata;
+        visited.set(node, pair);
+        pair.car = deep ? cloneNode(node.car) : node.car;
+        pair.cdr = cloneNode(node.cdr);
+        pair[__cycles__] = (node as PairWithMetadata)[__cycles__];
+        return pair;
+      }
+      return node;
+    }
+
+    return cloneNode(this) as Pair;
+  }
+
+  last_pair(): Pair | undefined {
+    let node: Pair = this;
+    while (true) {
+      if (!is_pair(node.cdr)) {
+        return node;
+      }
+      if (node.have_cycles("cdr")) {
+        break;
+      }
+      node = node.cdr;
+    }
+  }
+
+  to_array(deep = true): unknown[] {
+    // A circular list can't be materialized to a finite array — the recursion on
+    // `this.cdr` below would stack-overflow. `isCircularList` (Floyd's) is needed
+    // here because `have_cycles()` misses runtime `set-cdr!` cycles.
+    invariant(!isCircularList(this), "cannot convert a circular list to an array");
+    let result: unknown[] = [];
+    if (is_pair(this.car)) {
+      if (deep) {
+        result.push(this.car.to_array());
+      } else {
+        result.push(this.car);
+      }
+    } else {
+      const car = this.car;
+      // When deep=false (used for vector literals), preserve Scheme values as-is
+      // Only call valueOf() for deep conversions to JS primitives
+      if (deep && car !== null && car !== undefined && typeof car === "object" && "valueOf" in car) {
+        // But preserve SchemeSymbol, SchemeString, and number types even in deep mode
+        // as they are Scheme values that should remain wrapped
+        if (
+          car instanceof SchemeSymbol ||
+          car instanceof SchemeString ||
+          car instanceof SchemeExact ||
+          car instanceof SchemeInexact
+        ) {
+          result.push(car);
+        } else {
+          result.push((car as { valueOf(): unknown }).valueOf());
+        }
+      } else {
+        result.push(car);
+      }
+    }
+    if (is_pair(this.cdr)) {
+      result = [...result, ...this.cdr.to_array(deep)];
+    }
+    return result;
+  }
+
+  to_object(literal = false): Record<string, unknown> {
+    let node: Pair | unknown = this;
+    const result: Record<string, unknown> = {};
+    while (true) {
+      if (is_pair(node) && is_pair(node.car)) {
+        const pair = node.car;
+        let name: unknown = pair.car;
+        if (name instanceof SchemeSymbol) {
+          name = name.__name__;
+        }
+        if (name instanceof SchemeString) {
+          name = name.valueOf();
+        }
+        let cdr: unknown = pair.cdr;
+        if (is_pair(cdr)) {
+          cdr = cdr.to_object(literal);
+        }
+        if (is_native(cdr) && !literal) {
+          cdr = (cdr as { valueOf(): unknown }).valueOf();
+        }
+        result[name as string] = cdr;
+        node = node.cdr;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
+  reduce<T>(fn: (acc: T | Nil, val: unknown) => T): T | Nil {
+    let node: Pair | unknown = this;
+    let result: T | Nil = nil;
+    while (true) {
+      if (is_nil(node)) {
+        break;
+      } else if (is_pair(node)) {
+        result = fn(result, node.car);
+        node = node.cdr;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
+  reverse(): Pair | Nil {
+    invariant(!this.have_cycles(), "You can't reverse list that have cycles");
+    let node: Pair | unknown = this;
+    let prev: Pair | Nil = nil;
+    while (!is_nil(node) && is_pair(node)) {
+      const next = node.cdr;
+      node.cdr = prev;
+      prev = node;
+      node = next;
+    }
+    return prev;
+  }
+
+  transform(fn: (val: unknown) => unknown): Pair {
+    const visited: Pair[] = [];
+
+    function recur(pair: unknown): unknown {
+      if (is_pair(pair)) {
+        if ((pair as Pair & { replace?: boolean }).replace) {
+          delete (pair as Pair & { replace?: boolean }).replace;
+          return pair;
+        }
+        let car = fn(pair.car);
+        if (is_pair(car)) {
+          car = recur(car);
+          visited.push(car as Pair);
+        }
+        let cdr = fn(pair.cdr);
+        if (is_pair(cdr)) {
+          cdr = recur(cdr);
+          visited.push(cdr as Pair);
+        }
+        return new Pair(car, cdr);
+      }
+      return pair;
+    }
+
+    return recur(this) as Pair;
+  }
+
+  map(fn: (val: unknown) => unknown): Pair | Nil {
+    return this.car === undefined ? nil : new Pair(fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as Pair).map(fn));
+  }
+
+  mark_cycles(): this {
+    mark_cycles(this);
+    return this;
+  }
+
+  have_cycles(name: "car" | "cdr" | null = null): boolean {
+    if (!name) {
+      return this.have_cycles("car") || this.have_cycles("cdr");
+    }
+    return !!(this as PairWithMetadata)[__cycles__]?.[name];
+  }
+
+  is_cycle(): boolean {
+    return is_cycle(this);
+  }
+
+  toString(quote?: boolean, { nested = false } = {}): string {
+    const parts: string[] = [];
+    const thisWithCycles = this as PairWithMetadata;
+
+    // Opening paren (with ref marker if present)
+    if (thisWithCycles[__ref__]) {
+      parts.push(`${thisWithCycles[__ref__]}(`);
+    } else if (!nested) {
+      parts.push("(");
+    }
+
+    let node: Pair = this;
+    let first = true;
+
+    // Iterate through cdr chain (no recursion on cdr = no stack overflow on long lists)
+    while (is_pair(node)) {
+      const nodeWithCycles = node as PairWithMetadata;
+      if (!first) {
+        if (nodeWithCycles[__ref__]) {
+          // Shared structure in cdr position - print as dotted pair with full notation
+          parts.push(" . ", node.toString(quote));
+          node = nil as unknown as Pair;
+          continue;
+        }
+        parts.push(" ");
+      }
+      first = false;
+
+      // Car value (recursive for nested structures - usually shallow)
+      const carValue = nodeWithCycles[__cycles__]?.car ?? stringifyValue(node.car, quote);
+      if (carValue !== undefined) {
+        parts.push(String(carValue));
+      }
+
+      // Check for cdr cycle marker
+      if (nodeWithCycles[__cycles__]?.cdr) {
+        parts.push(" . ", String(nodeWithCycles[__cycles__].cdr));
+        break;
+      }
+
+      node = node.cdr as Pair;
+    }
+
+    // Improper list tail (non-nil, non-pair cdr)
+    if (!is_nil(node) && !is_pair(node)) {
+      parts.push(" . ", stringifyValue(node, quote));
+    }
+
+    // Closing paren
+    if (!nested || thisWithCycles[__ref__]) {
+      parts.push(")");
+    }
+    return parts.join("");
+  }
+
+  set(prop: "car" | "cdr", value: unknown): void {
+    (this as Pair)[prop] = value;
+    if (is_pair(value)) {
+      this.mark_cycles();
+    }
+  }
+
+  append(arg: unknown): this {
+    if (Array.isArray(arg)) {
+      return this.append(Pair.fromArray(arg));
+    }
+    const self = this as Pair;
+    let p: Pair = self;
+    if (p.car === undefined) {
+      if (is_pair(arg)) {
+        self.car = arg.car;
+        self.cdr = arg.cdr;
+      } else {
+        self.car = arg;
+      }
+    } else if (!is_nil(arg)) {
+      while (true) {
+        if (is_pair(p) && is_pair(p.cdr)) {
+          p = p.cdr;
+        } else {
+          break;
+        }
+      }
+      (p as Pair).cdr = arg;
+    }
+    return this;
+  }
+
+  serialize(): [unknown, unknown] {
+    return [this.car, this.cdr];
+  }
+
+  toJs(): unknown {
+    // toJs's serialization target is cache / log / HTTP JSON — none of which
+    // can represent cycles. `toString` handles them by emitting `#0=` / `#0#`
+    // ref markers via __cycles__ / __ref__ metadata because s-expression text
+    // supports that notation; JSON does not. Loud-fail rather than hand back a
+    // value that explodes downstream — or, worse, hangs forever in the loop below.
+    invariant(!this.have_cycles(), "Pair.toJs: cannot serialize a list with cycles");
+    // Belt-and-suspenders against cycles introduced post-have_cycles check via
+    // mutation between top-level call and a deeper recursive toJs (e.g. a
+    // nested Pair's car being mutated by a side-effecting toJs override). Cheap
+    // — one Set add per pair traversed.
+    const seen = new Set<Pair>();
+    const list: unknown[] = [];
+    let node: unknown = this;
+    while (true) {
+      switch (true) {
+        case is_nil(node):
+          return list;
+        case is_pair(node): {
+          invariant(!seen.has(node), "Pair.toJs: cycle detected mid-traversal");
+          seen.add(node);
+          const car = node.car;
+          list.push(car instanceof AValue ? car.toJs() : car);
+          node = node.cdr;
+          continue;
+        }
+        default:
+          return { __dotted__: true, list, tail: node instanceof AValue ? node.toJs() : node };
+      }
+    }
+  }
+
+  /**
+   * Parser/macro-attached metadata (`__location__`, `__cycles__`, `__ref__`) must
+   * survive — losing it breaks stack traces and reader-cycle reconstruction.
+   */
+  withProvenance(p: ReadonlySet<number>): Pair<Car, Cdr> {
+    const copy = new Pair<Car, Cdr>(this.car, this.cdr, p);
+    const src = this as PairWithMetadata<Car, Cdr>;
+    const dst = copy as PairWithMetadata<Car, Cdr>;
+    if (src[__location__] !== undefined) dst[__location__] = src[__location__];
+    if (src[__cycles__] !== undefined) dst[__cycles__] = src[__cycles__];
+    if (src[__ref__] !== undefined) dst[__ref__] = src[__ref__];
+    return copy;
+  }
+
+  [Symbol.iterator](): Iterator<unknown> {
+    let node: Pair | Nil | unknown = this;
+    return {
+      next(): IteratorResult<unknown> {
+        const cur = node;
+        if (is_nil(cur)) {
+          node = nil;
+          return { value: undefined, done: true };
+        }
+        if (!is_pair(cur)) {
+          node = nil;
+          return { value: cur, done: false };
+        }
+        node = cur.cdr;
+        return { value: cur.car, done: false };
+      },
+    };
+  }
+
+  // ----------------------------------------------------------------------
+  // Fantasy Land structure-algebras (migrated from the fantasy-land.ts
+  // monkey-patch into the class body — plan-2026-06-10-algebras-in-entities.md
+  // wave 2). A Pair is the free monoid + Functor + Foldable + Traversable +
+  // Chain over a list. The recursors below TERMINATE on `instanceof Nil`, not
+  // `=== nil`: after the AValue refactor `nil.withProvenance(p)` mints fresh
+  // Nil clones (types.ts), so reference-equality would recurse past a
+  // provenance-bearing list end and crash on `<Nil-clone>.cdr`. Mirrors
+  // value-guards.ts:is_nil.
+  // ----------------------------------------------------------------------
+
+  // Functor — map each element, preserving the list spine.
+  ["fantasy-land/map"](f: (x: unknown) => unknown): Pair | Nil {
+    return mapPair(f, this);
+  }
+
+  // Filterable — keep elements satisfying the predicate.
+  ["fantasy-land/filter"](predicate: (x: unknown) => unknown): Pair | Nil {
+    return filterPair(predicate, this);
+  }
+
+  // Foldable — left fold over the elements.
+  ["fantasy-land/reduce"]<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc): Acc {
+    return reducePair(f, initial, this);
+  }
+
+  // Traversable — effectful traversal; `of` lifts into the applicative.
+  ["fantasy-land/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
+    return traversePair(of, f, this);
+  }
+
+  // Chain (Monad) — map then flatten. Flattening reuses the PURE list-concat
+  // Semigroup below; there is no `global_env.get("append")` back-edge (the
+  // require("./stdlib") hack the monkey-patch carried existed ONLY because the
+  // method lived outside the class — see plan wave 2).
+  ["fantasy-land/chain"](f: (x: unknown) => Pair | Nil): Pair | Nil {
+    return chainPair(f, this);
+  }
+
+  // Semigroup — list append. `this ⋄ other` = the elements of this list
+  // followed by the elements of `other`. Pure: builds a fresh spine, never
+  // mutates either operand (unlike the in-place `append` method above).
+  ["fantasy-land/concat"](other: Pair | Nil): Pair | Nil {
+    return concatPair(this, other);
+  }
+
+  // Monoid — the empty list is the identity for list-concat.
+  static ["fantasy-land/empty"](): Nil {
+    return nil;
+  }
+
+  // Applicative — single-element list.
+  static ["fantasy-land/of"](value: unknown): Pair {
+    return new Pair(value, nil);
+  }
+}
+
+// Structure-algebra recursors for the Fantasy Land methods above. They terminate
+// on `instanceof Nil`, not `=== nil` — see the class-body comment for why.
+
+// The empty-list sentinel: `new Pair()` (no args) yields `Pair(undefined, nil)`,
+// the shape arrival uses for "empty list" wherever a bare Pair is constructed.
+// EVERY Pair recursor must honor it (the ramda pack's own recursors do too), else
+// delegating through `fantasy-land/*` would fold a phantom `undefined` element.
+// `instanceof Nil` (not `=== nil`) catches provenance clones in the cdr.
+function isEmptyPairSentinel(p: Pair): boolean {
+  return p.car === undefined && p.cdr instanceof Nil;
+}
+
+function mapPair(f: (x: unknown) => unknown, pair: unknown): Pair | Nil {
+  if (!pair || pair instanceof Nil) return nil;
+  const p = pair as Pair;
+  if (isEmptyPairSentinel(p)) return nil;
+  return new Pair(f(p.car), mapPair(f, p.cdr));
+}
+
+function filterPair(predicate: (x: unknown) => unknown, pair: unknown): Pair | Nil {
+  if (!pair || pair instanceof Nil) return nil;
+  const p = pair as Pair;
+  if (isEmptyPairSentinel(p)) return nil;
+  const restFiltered = filterPair(predicate, p.cdr);
+  return predicate(p.car) ? new Pair(p.car, restFiltered) : restFiltered;
+}
+
+function reducePair<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc, pair: unknown): Acc {
+  if (!pair || pair instanceof Nil) return initial;
+  const p = pair as Pair;
+  if (isEmptyPairSentinel(p)) return initial;
+  return reducePair(f, f(initial, p.car), p.cdr);
+}
+
+function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {
+  if (!pair || pair instanceof Nil) return of(nil);
+  const p = pair as Pair;
+  const mappedCar = f(p.car) as { ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined;
+  const mappedCdr = traversePair(of, f, p.cdr);
+  return mappedCar?.["fantasy-land/ap"]
+    ? mappedCar["fantasy-land/ap"](mappedCdr)
+    : of(new Pair(mappedCar, mappedCdr));
+}
+
+// Pure list append (the Semigroup) — fresh spine of `a`'s elements, then `b`.
+function concatPair(a: unknown, b: unknown): Pair | Nil {
+  if (!a || a instanceof Nil) return (b ?? nil) as Pair | Nil;
+  const p = a as Pair;
+  return new Pair(p.car, concatPair(p.cdr, b));
+}
+
+// Chain = map-then-flatten. Each `f(car)` yields a list; concat them with the
+// PURE list-append above — NO global_env.get("append") back-edge.
+function chainPair(f: (x: unknown) => Pair | Nil, pair: unknown): Pair | Nil {
+  if (!pair || pair instanceof Nil) return nil;
+  const p = pair as Pair;
+  const mapped = f(p.car);
+  const chained = chainPair(f, p.cdr);
+  return concatPair(mapped, chained);
+}
+
+// Register Pair constructor with types.ts for Nil.append
+setPairConstructor(Pair);
+
+// Interop boundary. A cons cell's rich prototype (`match`/`fromArray`/`toArray`,
+// the cycle/ref-tracking helpers) and metadata symbols (`__data__`, `__location__`)
+// are reachable from any held Pair via symbol-to-field auto-resolution; the
+// ref-tracking helpers in particular would leak host-side identity comparisons.
+// This marker stops the prototype-chain walk at Pair before any helper is reached.
+markInteropBoundary(Pair);
