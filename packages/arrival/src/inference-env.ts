@@ -43,12 +43,11 @@ export const inferenceEnv = new Environment(
     // base versions surface by inheritance / the spread; the loose copies only erased
     // lineage and the proper Scheme type.
 
-    // `string-contains` stays inline: it has NO base provider (the strings cluster has
-    // no `string-contains`). It is a simplified boolean `.includes`, not the R7RS
-    // index-returning `string-contains` — a candidate to relocate into the strings
-    // pack with proper semantics later, not a redundant shadow to drop now.
-    "string-contains": (haystack: any, needle: any) =>
-      (haystack?.__string__ ?? String(haystack)).includes(needle?.__string__ ?? String(needle)),
+    // `string-contains` is no longer shadowed here — the strings cluster now binds it
+    // (SRFI-13 index-or-#f) alongside the `string-contains?` boolean predicate, both
+    // provenance-carrying, reachable by inheritance. The old inline copy returned a raw
+    // JS boolean (lineage erased); index-or-#f is still truthy in Scheme conditionals
+    // (#f is the only false value), so callers are unaffected.
 
     // `equal?` is no longer shadowed here — the equality cluster binds the identical
     // `structuralEqual(a, b)` (its `seen` map defaults to `new Map()`), reachable by

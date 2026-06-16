@@ -114,6 +114,21 @@ export const STRING_OPS = {
     return true;
   },
 
+  // Substring search. `string-contains` is SRFI-13: the index of the first
+  // occurrence of `sub` in `str`, or #f when absent. (#f is the ONLY false value
+  // in Scheme — an index of 0 is truthy — so `(if (string-contains h n) …)` reads
+  // naturally.) `string-contains?` is the boolean predicate the same way `member?`
+  // pairs with `member`. Both carry the lineage of the strings they searched, so a
+  // "this name contains 'Alloy'" decision over an evidence read stays grounded.
+  "string-contains"(str: unknown, sub: unknown): SchemeExact | boolean {
+    const i = stringValue(str).indexOf(stringValue(sub));
+    return withInputProvenance([str, sub], i < 0 ? false : new SchemeExact(BigInt(i)));
+  },
+
+  "string-contains?"(str: unknown, sub: unknown): boolean {
+    return withInputProvenance([str, sub], stringValue(str).includes(stringValue(sub)));
+  },
+
   "string-append"(...strs: unknown[]): string | SchemeString {
     // Collapsing op: the result inherits lineage from every input — and DEEP, so a
     // nested structure (a list/vector/array of inference-stamped values) is hoisted,
