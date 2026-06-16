@@ -116,6 +116,28 @@ export class SchemeVector extends AValue {
   ["fantasy-land/map"](f: (x: SchemeValue) => SchemeValue): SchemeVector {
     return new SchemeVector(this.__vector__.map(f));
   }
+
+  // Filterable (Fantasy Land) — keep elements satisfying the predicate, into a
+  // fresh vector. Mirrors Pair's fantasy-land/filter so the polymorphic `filter`
+  // builtin works over a vector.
+  ["fantasy-land/filter"](predicate: (x: SchemeValue) => unknown): SchemeVector {
+    return new SchemeVector(this.__vector__.filter((x) => !!predicate(x)));
+  }
+
+  // Foldable (Fantasy Land) — left fold over the elements. Mirrors Pair's
+  // fantasy-land/reduce so the polymorphic `reduce`/`fold` builtins work over a
+  // vector.
+  ["fantasy-land/reduce"]<Acc>(f: (acc: Acc, x: SchemeValue) => Acc, initial: Acc): Acc {
+    return this.__vector__.reduce(f, initial);
+  }
+
+  // A boxed vector is iterable from JS — spread / for-of / Array.from yield its
+  // elements, exactly like a Pair. Delegates to the raw payload's iterator. The
+  // membrane never exposes this (Symbol.iterator is a BLOCKED_WELL_KNOWN_SYMBOL),
+  // so iterability is a host-JS-interop affordance, not a sandbox surface.
+  [Symbol.iterator](): Iterator<SchemeValue> {
+    return this.__vector__[Symbol.iterator]();
+  }
 }
 
 // NOTE: producer-minted (#(...) literal / make-vector / vector / vector-copy /

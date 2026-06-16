@@ -1,0 +1,128 @@
+/**
+ * JS-INTEROP CONTRACT — the README promises "natural interop in both directions".
+ * This suite is that promise, by example: a JS consumer receives a value out of
+ * `exec()` and uses it as a JS value WITHOUT calling `schemeToJs` first.
+ *
+ * `it(...)`        = a promise the boxed value KEEPS today.
+ * `it.fails(...)`  = a promise it BREAKS today (documented gap). The body asserts the
+ *                    IDEAL behavior; `it.fails` passes precisely because that assertion
+ *                    fails right now. When the container is fixed, the assertion starts
+ *                    passing → `it.fails` flips to a hard failure, prompting promotion
+ *                    to `it()`. So this file doubles as the regression target.
+ *
+ * Empirical baseline (2026-06-16): strings/bools auto-unwrap to JS primitives (natural);
+ * numbers coerce via valueOf but break JSON.stringify (BigInt / struct leak); Pair is
+ * iterable but SchemeVector/SchemeBytevector are not; char stringifies to the Scheme
+ * literal; schemeToJs is the working escape hatch except for symbols.
+ */
+import { describe, expect, it } from "vitest";
+import { exec, schemeToJs } from "../index.js";
+
+const one = async (src: string): Promise<any> => (await exec(src))[0];
+
+describe("JS-interop: numbers", () => {
+  it("coerce in arithmetic via valueOf", async () => {
+    const n = await one("(+ 1 2)");
+    expect(n + 1).toBe(4);
+    expect(Number(n)).toBe(3);
+    expect(`${n}`).toBe("3");
+  });
+
+  it.fails("exact numbers SHOULD JSON.stringify to their value (BROKEN: BigInt-backed throws)", async () => {
+    const n = await one("(+ 1 2)");
+    expect(JSON.stringify(n)).toBe("3");
+  });
+
+  it.fails("inexact numbers SHOULD JSON.stringify to their value (BROKEN: leaks {provenance,kind,real,imag})", async () => {
+    const n = await one("(+ 1.5 0.5)");
+    expect(JSON.stringify(n)).toBe("2");
+  });
+});
+
+describe("JS-interop: strings & booleans (auto-unwrapped — natural)", () => {
+  it("strings come back as raw JS strings", async () => {
+    const s = await one('(string-append "ab" "c")');
+    expect(typeof s).toBe("string");
+    expect(s + "!").toBe("abc!");
+    expect([...s].length).toBe(3);
+    expect(JSON.stringify(s)).toBe('"abc"');
+  });
+
+  it("booleans come back as raw JS booleans", async () => {
+    expect(await one("(< 1 2)")).toBe(true);
+    expect(await one("(< 2 1)")).toBe(false);
+  });
+});
+
+describe("JS-interop: characters", () => {
+  it.fails("char SHOULD coerce to the JS char (BROKEN: stringifies to the Scheme literal '#\\\\a')", async () => {
+    const ch = await one("#\\a");
+    expect(String(ch)).toBe("a");
+  });
+});
+
+describe("JS-interop: symbols", () => {
+  it("symbol coerces to its name in a template literal", async () => {
+    const sym = await one("'foo");
+    expect(`${sym}`).toBe("foo");
+  });
+
+  it.fails("schemeToJs(symbol) SHOULD unwrap to a string (BROKEN: returns the internal struct)", async () => {
+    const sym = await one("'foo");
+    expect(schemeToJs(sym, {})).toBe("foo");
+  });
+});
+
+describe("JS-interop: lists (Pair)", () => {
+  it("a list is iterable from JS (spread / for-of / Array.from)", async () => {
+    const lst = await one("(list 1 2 3)");
+    expect(Array.from(lst).length).toBe(3);
+    let count = 0;
+    for (const _ of lst) count++;
+    expect(count).toBe(3);
+  });
+
+  it.fails("JSON.stringify(list) SHOULD produce [1,2,3] (BROKEN: BigInt elements throw)", async () => {
+    const lst = await one("(list 1 2 3)");
+    expect(JSON.stringify(lst)).toBe("[1,2,3]");
+  });
+
+  it("schemeToJs(list) is the working escape hatch", async () => {
+    expect(schemeToJs(await one("(list 1 2 3)"), {})).toEqual([1, 2, 3]);
+  });
+});
+
+describe("JS-interop: vectors", () => {
+  it("a vector is iterable from JS like a Pair (spread / for-of / Array.from)", async () => {
+    const vec = await one("(vector 1 2 3)");
+    expect(Array.from(vec).length).toBe(3);
+    let count = 0;
+    for (const _ of vec) count++;
+    expect(count).toBe(3);
+    // elements coerce to their values (numbers via valueOf, as elsewhere)
+    expect([...vec].map(Number)).toEqual([1, 2, 3]);
+  });
+
+  it("schemeToJs(vector) is the working escape hatch", async () => {
+    expect(schemeToJs(await one("(vector 1 2 3)"), {})).toEqual([1, 2, 3]);
+  });
+});
+
+describe("JS-interop: bytevectors", () => {
+  it("a bytevector is iterable from JS (spread / for-of / Array.from yield bytes)", async () => {
+    const bv = await one("(bytevector 1 2 3)");
+    expect([...bv]).toEqual([1, 2, 3]);
+    expect(Array.from(bv).length).toBe(3);
+  });
+});
+
+describe("JS-interop: dicts / objects", () => {
+  it.fails("JSON.stringify(dict) SHOULD produce its JSON (BROKEN: BigInt-backed values throw)", async () => {
+    const d = await one("(dict :a 1 :b 2)");
+    expect(JSON.stringify(d)).toBe('{"a":1,"b":2}');
+  });
+
+  it("schemeToJs(dict) is the working escape hatch", async () => {
+    expect(schemeToJs(await one("(dict :a 1 :b 2)"), {})).toEqual({ a: 1, b: 2 });
+  });
+});

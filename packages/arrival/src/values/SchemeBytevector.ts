@@ -140,6 +140,14 @@ export class SchemeBytevector extends AValue {
     return a.length <= b.length;
   }
 
+  // A boxed bytevector is iterable from JS — spread / for-of / Array.from yield
+  // its bytes (numbers), like a Pair yields its elements. Delegates to the raw
+  // Uint8Array's iterator. The membrane never exposes this (Symbol.iterator is a
+  // BLOCKED_WELL_KNOWN_SYMBOL), so this is a host-JS-interop affordance only.
+  [Symbol.iterator](): Iterator<number> {
+    return this.__bytevector__[Symbol.iterator]();
+  }
+
   // Semigroup (Fantasy Land) — byte concatenation. Associative; equality via the
   // Setoid above.
   ["fantasy-land/concat"](other: SchemeBytevector): SchemeBytevector {
