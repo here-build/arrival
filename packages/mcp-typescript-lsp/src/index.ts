@@ -1,4 +1,4 @@
-import { toSExprString, type SExprSerializable } from "@here.build/arrival";
+import { toSExprString, type SExprSerializable } from "@here.build/arrival-serializer";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";

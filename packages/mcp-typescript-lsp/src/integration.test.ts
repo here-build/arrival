@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TypeScriptLSPServer } from "./index";
-import { toSExprString } from "@here.build/arrival";
+import { toSExprString } from "@here.build/arrival-serializer";
 import * as fs from "fs";
 import * as path from "path";
 
