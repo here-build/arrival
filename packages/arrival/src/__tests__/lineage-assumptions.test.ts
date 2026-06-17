@@ -153,6 +153,56 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
   });
 });
 
+// ── CONFLUENCE — lazy must produce the SAME value as eager (no capability lost) ──
+// The flip is only sound if `(op … (lazy-seq xs))` ≡ `(op … xs)` for every forcing
+// op. These run each chain BOTH ways over the same source and assert equality —
+// the real regression guard. The eager arm doubles as a baseline: if a chain ever
+// breaks (e.g. reduce semantics), both arms move together and the eager value is
+// pinned too. Numbers are provenance-stamped (id 0) so the lazy path exercises the
+// real AValue arithmetic, not a bare-JS shortcut.
+describe("CAPABILITY — lazy ≡ eager confluence (forcing yields identical results)", () => {
+  const nums = () => Pair.fromArray([1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
+  const jsVal = (r: unknown): unknown => (r instanceof AValue ? r.toJs() : r);
+
+  // Run `chain` with the collection slot filled eager (xs) and lazy (lazy-seq xs).
+  async function bothWays(chain: (coll: string) => string): Promise<{ eager: unknown; lazy: unknown }> {
+    return { eager: jsVal(await runRaw(chain("xs"), { xs: nums() })), lazy: jsVal(await runRaw(chain("(lazy-seq xs)"), { xs: nums() })) };
+  }
+
+  it("map → reduce: (reduce + 0 (map (* x 2) …)) is identical eager and lazy", async () => {
+    const { eager, lazy } = await bothWays((c) => `(reduce + 0 (map (lambda (x) (* x 2)) ${c}))`);
+    expect({ eager, lazy }).toEqual({ eager: 30, lazy: 30 }); // 2+4+6+8+10
+  });
+
+  it("filter → length: the ASYNC pred path counts identically (the soundness risk I flagged)", async () => {
+    const { eager, lazy } = await bothWays((c) => `(length (filter (lambda (x) (> x 2)) ${c}))`);
+    expect({ eager, lazy }).toEqual({ eager: 3, lazy: 3 }); // {3,4,5}
+  });
+
+  it("map → filter → reduce: a full pipeline forces through iterate identically", async () => {
+    // 1..5 → +1 → 2..6 → keep >2 → {3,4,5,6} → sum 18
+    const { eager, lazy } = await bothWays((c) => `(reduce + 0 (filter (lambda (x) (> x 2)) (map (lambda (x) (+ x 1)) ${c})))`);
+    expect({ eager, lazy }).toEqual({ eager: 18, lazy: 18 });
+  });
+
+  it("reduce matches eager fold DIRECTION under forcing — a non-commutative reducer agrees", async () => {
+    // The base `reduce` is a RIGHT fold: (reduce - 100 '(1 2 3 4 5)) =
+    // 1-(2-(3-(4-(5-100)))) = -97. Subtraction makes direction observable. This is
+    // the probe that caught the original bug — a hand-rolled left-fold in
+    // reduceLazySeq gave 85. The fix delegates to builtinReduce, so lazy now agrees.
+    const { eager, lazy } = await bothWays((c) => `(reduce - 100 (map (lambda (x) x) ${c}))`);
+    expect(lazy).toBe(eager);
+    expect(eager).toBe(-97);
+  });
+
+  it("length over a pure-map chain matches eager COUNT (cone differs, value must not)", async () => {
+    // A8-live proved f runs zero times + a minimal cone; here the COUNT itself must
+    // still equal eager — laziness changes the provenance, never the answer.
+    const { eager, lazy } = await bothWays((c) => `(length (map (lambda (x) (* x x)) ${c}))`);
+    expect({ eager, lazy }).toEqual({ eager: 5, lazy: 5 });
+  });
+});
+
 // ── NEXT-STEP assumptions — checks designed, not yet buildable (wait on a slice) ──
 describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   // Step 3 — auto-abort:

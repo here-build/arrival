@@ -167,17 +167,19 @@ async function asyncFLReduce(
 
 // ── LazySeq egress ────────────────────────────────────────────────────────────
 // reduce is a full-egress observation (no `Observation` of its own in the first
-// cut): force the plan with `iterate`, then fold eager. map/filter EXTEND a plan
-// (cheap, run nothing); reduce/length CONSUME it.
+// cut): force the plan with `iterate`, rebuild a Scheme list, and DELEGATE to the
+// captured base `reduce`. Delegating (not re-folding by hand) keeps lazy reduce
+// observationally identical to eager — same fold direction, same provenance
+// propagation — BY CONSTRUCTION. A hand-rolled left-fold here silently disagreed
+// with the base reduce's right-fold for non-commutative reducers (caught by the
+// confluence battery): the lazy plane must defer to the real op, never re-derive it.
 async function reduceLazySeq(
   fn: (acc: unknown, val: unknown) => unknown,
   init: unknown,
   ls: LazySeq,
 ): Promise<unknown> {
   const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
-  let acc = init;
-  for (const val of items) acc = await fn(acc, val);
-  return acc;
+  return builtinReduce!(fn, init, Pair.fromArray([...items], false));
 }
 
 // Materialize a collection's elements — a LIPS pair spine, a lazy SchemeJSArray
