@@ -5,6 +5,12 @@
  * structure sharing. Runtime cycles (from `set-cdr!`) are detected actively by
  * `isCircularList` (Floyd's), which keeps spine-walking builtins from spinning.
  * The class is a interop boundary (see the bottom of the file).
+ *
+ * Lineage: a cons-list is the free monoid over its elements; the Fantasy Land
+ * instances below (Functor/Foldable/Traversable/Chain/Monoid/Semigroup —
+ * fantasyland/fantasy-land) make that algebra explicit. The `Thunk`/trampoline
+ * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
+ * cycle detection is Floyd's tortoise-and-hare.
  */
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";

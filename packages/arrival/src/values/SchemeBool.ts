@@ -1,6 +1,12 @@
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 
+/**
+ * Boxed boolean. Lineage: the representation-blind `fantasy-land/equals` is a
+ * Fantasy Land Setoid (fantasyland/fantasy-land); the shared schemeTrue/
+ * schemeFalse singletons on the empty-provenance fast path are the flyweight
+ * pattern.
+ */
 export class SchemeBool extends AValue {
   static __class__ = "boolean";
   readonly kind = "bool" as const;

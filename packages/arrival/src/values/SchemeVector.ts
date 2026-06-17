@@ -11,6 +11,9 @@
  * them to accept it.
  *
  * Boxing track: docs/plan-2026-06-10-boxing-track.md (S5).
+ *
+ * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
+ * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";

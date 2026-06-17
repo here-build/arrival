@@ -16,6 +16,9 @@
  * - RationalExact: 1/3 → ExactNumber(1n,3n) (keeps exact fractions)
  * - RealInexact: sqrt(-4) → error (rejects complex results)
  * - ComplexInexact: sqrt(-4) → InexactNumber(0,2) (allows complex)
+ *
+ * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real ⊂ complex,
+ * exact/inexact); inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
  */
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";

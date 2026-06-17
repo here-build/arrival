@@ -20,6 +20,12 @@
  * hit). At call time global_env is fully assembled, so the read is safe — and this
  * pack is assembled onto inferenceEnv only AFTER global_env's native assembly + the
  * base packs, so the builtins are live before any symbol here can fire.
+ *
+ * Lineage: the Fantasy Land algebra (fantasyland/fantasy-land) used as a
+ * tagless-final encoding — the polymorphic map/filter/reduce dispatch to a value's
+ * `fantasy-land/*` instance, so the builtins are programs over the algebra, blind
+ * to the instance (Carette, Kiselyov & Shan, "Finally Tagless, Partially
+ * Evaluated", 2009).
  */
 
 import { EnvCapability } from "./capability.js";

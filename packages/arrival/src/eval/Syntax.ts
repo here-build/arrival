@@ -9,6 +9,10 @@ type SyntaxLike = Syntax | Function;
  * definition env (`__env__`) for hygiene and returns a quoted-already expansion
  * (evaluatePair forwards Syntax results without re-evaluating — see the
  * `is_syntax` branch there).
+ *
+ * Lineage: a hygienic macro transformer (Kohlbecker et al. 1986; Clinger & Rees,
+ * "Macros That Work", POPL 1991); the nested `Parameter` is SRFI-139 syntax
+ * parameters.
  */
 export class Syntax extends Macro {
   static __class__ = "syntax";

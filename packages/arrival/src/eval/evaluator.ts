@@ -13,6 +13,12 @@
  * - yield { call: generator } to invoke a sub-generator (flat, no stack growth)
  * - yield promise for JS interop (runner awaits it)
  * - yield TICK for periodic event loop breathing
+ *
+ * Lineage: trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP
+ * 1999); a generator/CPS definitional interpreter (Reynolds, "Definitional
+ * Interpreters for Higher-Order Programming Languages", 1972). Proper tail calls
+ * per R7RS §3.5 (Clinger, "Proper Tail Recursion and Space Efficiency", PLDI
+ * 1998); delay/force promises per R7RS §4.2.5.
  */
 
 import invariant from "tiny-invariant";

@@ -1,5 +1,8 @@
 // @here.build/arrival/r7rs — standard R7RS derived-syntax pack.
 //
+// Lineage: R7RS-small (Shinn, Cowan & Gleckler, eds., 2013) — §4.2 derived
+// conditionals/binding and §6.11 exceptions.
+//
 // The portable Scheme control forms arrival supports as macros, expanded from
 // the small special-form core: cond / case / when / unless, let-values /
 // let*-values, and the R7RS §6.11 exception system (raise, raise-continuable,

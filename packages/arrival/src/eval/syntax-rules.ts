@@ -8,6 +8,10 @@
 // consumed by the `syntax-rules` / `macroexpand` builtins in lips.ts.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
+//
+// Lineage: hygienic macro expansion (Kohlbecker et al., "Hygienic Macro
+// Expansion", 1986; Clinger & Rees, "Macros That Work", POPL 1991); R7RS §4.3
+// syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { EnvLookup } from "../EnvLookup.js";

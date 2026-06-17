@@ -1,5 +1,7 @@
 // String wrapper — copy + in-place mutation (string-set!/string-fill!) over a
 // code-point view, with provenance and Fantasy Land algebras on the instance.
+// Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
+// Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { SchemeNumeric } from "./numbers.js";
 import { markInteropBoundary } from "../interop-access.js";

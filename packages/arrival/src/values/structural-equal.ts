@@ -29,6 +29,10 @@ import type { SchemeValue } from "./types.js";
  * `seen` maps each visited `a`-reference to the SET of `b`-partners it has been
  * compared against on the current path. Two structures are equal iff the walk
  * never finds a mismatch; a re-encountered `(a, b)` pair short-circuits to true.
+ *
+ * Lineage: R7RS-small §6.1 three-tier eq?/eqv?/equal?; the visited-pair walk is
+ * a co-inductive bisimulation (the standard occurs-check); equality dispatches
+ * through each value's Fantasy Land Setoid (`fantasy-land/equals`).
  */
 export function structuralEqual(a: any, b: any, seen: Map<object, Set<object>> = new Map()): boolean {
   // Fast paths: identity, then valueOf-equality (covers SchemeExact/Inexact,

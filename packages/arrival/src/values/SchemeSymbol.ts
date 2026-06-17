@@ -11,6 +11,9 @@ type SchemeSymbolName = string | symbol;
  * replace it (that would stamp every other reader with one call-site's
  * provenance); instead it mints a fresh uninterned copy via this sentinel.
  * Safe because `SchemeSymbol.is` compares `__name__`, not reference.
+ *
+ * Lineage: symbol interning is hash-consing (Ershov, 1958) / the flyweight
+ * pattern — canonical shared instances keyed by name.
  */
 const UNINTERNED = Symbol("UNINTERNED");
 

@@ -10,6 +10,13 @@
  * Boxer registry rather than a switch in `fromJs`: a switch would import every
  * subtype, but subtypes already import this file for `extends AValue` — cycle.
  * Registry inverts the dependency; subtypes call `registerBoxer` at module load.
+ *
+ * Lineage (claimed: none — see docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §1,§11):
+ * provenance-on-the-value is how-provenance — provenance as an expression/circuit
+ * over operators, not a flat trace (Green, Karvounarakis & Tannen, "Provenance
+ * Semirings", PODS 2007). Its dual — a demanded slice of the output induces the
+ * minimal slice of the input — is Galois slicing (Perera, Acar, Cheney & Levy,
+ * "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
 import invariant from "tiny-invariant";

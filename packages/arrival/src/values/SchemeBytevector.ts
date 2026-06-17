@@ -8,6 +8,9 @@
  * normalizes to a single Uint8Array payload.
  *
  * Boxing track: docs/plan-2026-06-10-boxing-track.md (S1).
+ *
+ * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
+ * Fantasy Land (fantasyland/fantasy-land).
  */
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";

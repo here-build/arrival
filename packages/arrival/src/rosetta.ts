@@ -3,6 +3,11 @@
  *
  * Extends LIPS Environment with automatic LIPS ↔ JS conversion for seamless interop.
  * Provides Environment.defineRosetta() for declarative function wrapping.
+ *
+ * Lineage: foreign-function-interface marshalling at the JS↔Scheme boundary. The
+ * goal that `schemeToJs`/`jsToScheme` round-trip to identity in both directions is
+ * the project's bifunctor framing — see the bifunctor-iso note in docs/ and
+ * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md.
  */
 
 import invariant from "tiny-invariant";

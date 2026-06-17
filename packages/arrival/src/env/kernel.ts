@@ -7,7 +7,9 @@
 // Design: docs/working-proposals/env-pack-capability-dag-2026-06-13.md
 //
 // P0 scope: the env-agnostic core — closure + cycle detection, identity dedup, C3 linearization
-// (Python MRO, cited not invented), and the apply loop with LIFO disposal + per-pack apply timeout.
+// (Python MRO — Barrett, Cassels, Haahr et al., "A Monotonic Superclass Linearization
+// for Dylan", OOPSLA 1996; cited not invented), and the apply loop with LIFO disposal
+// + per-pack apply timeout.
 // No consumer wires it yet (that is P1: buildArrivalEnv-as-one-pack).
 
 /** A capability contribution to an env. Identity = (name, config). `deps` are the DAG edges. */

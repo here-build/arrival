@@ -12,6 +12,10 @@
  *
  * "Boundary" here is the membrane sense — the prototype where the member walk STOPS —
  * not a sandbox. See docs/sandbox-security-model.md for the original design rationale.
+ *
+ * Lineage: GraalVM Truffle InteropLibrary (Würthinger et al., "One VM to Rule Them
+ * All", 2013; "Practical Partial Evaluation…", PLDI 2017); object-capability
+ * membrane (Miller, "Robust Composition", 2006).
  */
 
 // Installs the global `Error.invariant` / `TypeError.invariant` assertion helper used

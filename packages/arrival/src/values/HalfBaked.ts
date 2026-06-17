@@ -33,6 +33,12 @@
  * is a one-shot `Promise<SchemeValue[]>` settling once. No scheduler, no
  * subscription, no backpressure. The "streaming" effect is a fan of one-shot
  * promises settling at different times.
+ *
+ * Lineage: lenient / speculative evaluation (Traub, "Sequential Implementation
+ * of Lenient Programming Languages", 1988); futures (Baker & Hewitt 1977;
+ * Halstead, MultiLisp, 1985). The narrowing cardinality interval is an interval
+ * abstract domain (Cousot & Cousot, 1977); `decide` is give-up-safe early
+ * collapse.
  */
 
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";

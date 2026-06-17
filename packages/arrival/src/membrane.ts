@@ -13,6 +13,11 @@
  *    - Type-safe FFI between Scheme and JavaScript
  *
  * See docs/membrane-design.md for full design rationale.
+ *
+ * Lineage: object-capability membranes (Miller, "Robust Composition", 2006; Van
+ * Cutsem & Miller, "Trustworthy Proxies — Membranes", 2013); the CODEC layer is
+ * foreign-function-interface marshalling. The member-read protocol mirrors GraalVM
+ * Truffle's InteropLibrary (Würthinger et al. 2013/2017) — see interop-access.ts.
  */
 
 import invariant from "tiny-invariant";

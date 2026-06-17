@@ -13,6 +13,10 @@ export interface MacroInvokeContext {
  * A define-macro fexpr: a function that receives UNEVALUATED code and returns a
  * replacement form. `Syntax` (syntax-rules) subclasses this. `__defmacro__` marks
  * instances that `macroexpand` is allowed to expand.
+ *
+ * Lineage: a fexpr — a first-class operative that receives UNEVALUATED operands
+ * (Pitman, "Special Forms in Lisp", 1980; Shutt, "Fexprs as the basis of Lisp
+ * function application", 2010).
  */
 export class Macro {
   static __class__ = "macro";
