@@ -65,6 +65,15 @@ const isProvBearing = (n: LineageNode): boolean => n.kind !== "literal";
  * Build the lineage skeleton from a parsed AST — STATIC, no evaluation. The
  * pipe-vs-merge cut is just the count of provenance-bearing (non-literal)
  * operands: ≤1 → pipe (pass-through), ≥2 → merge (the tree branches).
+ *
+ * SCOPE (spike) — handles APPLICATIONS only. Special forms (`if`/`let`/`lambda`/
+ * `quote`/`cond`) are Pairs too and are WRONGLY treated as applications here: the
+ * design's own `(if (< 0 (* x x)) x -1)` example needs a `mux` node this union
+ * lacks (so it is proven only on the hand-sliced predicate, not end-to-end); a
+ * computed operator `((f a) b)` stringifies via `opName`; an n-ary `(map f xs ys)`
+ * keeps only `xs`; a lambda/computed fan-fn mis-reads `introduces` (the HOF hole).
+ * All are step-2+ work, tracked as `it.todo`s in lineage-assumptions.test.ts
+ * (A4-classifier, A21, HOF). Until then: pass macro-expanded, application-shaped ASTs.
  */
 export function classify(ast: SchemeValue, c: Classifier): LineageNode {
   if (isLiteral(ast)) return { kind: "literal" };

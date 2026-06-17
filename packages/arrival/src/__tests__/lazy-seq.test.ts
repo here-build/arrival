@@ -2,6 +2,13 @@
  * THE THESIS, by example: the demand cone IS the provenance cone, and lazy
  * evaluation is what makes correct-minimal provenance fall out for free.
  *
+ * SCOPE: `LazySeq` is a STANDALONE carrier, NOT wired into the interpreter — these
+ * prove the thesis on the carrier in isolation. The live interpreter still runs
+ * `f` eagerly (see dataflow-thesis-probes.test.ts, where the same shape calls f
+ * 5×); making it real through the builtins is the slice-2 flip. The strongest
+ * evidence below is the CALL-COUNT assertions (behavioral); the cone equalities
+ * are locked observations of this carrier, not an independent minimality proof.
+ *
  * Each test instruments `f`/`g`/`pred` with a call counter and gives each source
  * element + each op a distinct provenance id, so we can assert TWO things at once
  * from a single `refine`:

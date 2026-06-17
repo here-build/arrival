@@ -68,7 +68,12 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
   });
 });
 
-describe("lineage checkpoint — representation is O(program), not O(data) (the memory gate)", () => {
+describe("lineage checkpoint — the static skeleton is constant in N (eager retained set is O(N))", () => {
+  // HONEST SCOPE (audit C1): this proves the *skeleton* is O(program) and the
+  // *eager retained* provenance is O(N) — suggestive, but NOT yet a like-for-like
+  // total-memory proof: a fullCone over N elements still materializes O(N). The
+  // real win — a minimal count-cone over a big fan staying O(1) — needs the
+  // collection-grouping vs element provenance split, which is not modeled yet.
   async function eagerProvSize(n: number): Promise<number> {
     await initBridge();
     const env = sandboxedEnv.inherit(`lin-scale-${n}`);
@@ -90,6 +95,11 @@ describe("lineage checkpoint — representation is O(program), not O(data) (the 
     await initBridge();
     const [ast] = await parse(`(length (map f xs))`, sandboxedEnv);
     const nodes = countNodes(classify(ast, C)); // Pipe(length) -> Fan(f) -> Leaf(xs)
-    expect(nodes).toBeLessThanOrEqual(4); // O(AST), not O(N): the IR earns its build
+    expect(nodes).toBeLessThanOrEqual(4); // O(AST), constant in N (NOT a total-memory claim — see scope note)
   });
+
+  // The like-for-like memory win this checkpoint does NOT yet prove (audit C1):
+  it.todo(
+    "like-for-like: a minimal count-cone over an N-element fan source stays O(1) — needs the collection-grouping vs element provenance split",
+  );
 });

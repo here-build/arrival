@@ -28,9 +28,11 @@ describe("JS-interop: numbers", () => {
     expect(`${n}`).toBe("3");
   });
 
-  it.fails("exact numbers SHOULD JSON.stringify to their value (BROKEN: BigInt-backed throws)", async () => {
+  it("exact numbers do NOT JSON.stringify today — BigInt-backed throws (flips → promote to .toBe ideal when fixed)", async () => {
     const n = await one("(+ 1 2)");
-    expect(JSON.stringify(n)).toBe("3");
+    // Pin the SPECIFIC current failure, not an undifferentiated throw: when the
+    // BigInt backing is fixed this stops throwing and the test goes red.
+    expect(() => JSON.stringify(n)).toThrow(/BigInt/);
   });
 
   it.fails("inexact numbers SHOULD JSON.stringify to their value (BROKEN: leaks {provenance,kind,real,imag})", async () => {
@@ -82,9 +84,9 @@ describe("JS-interop: lists (Pair)", () => {
     expect(count).toBe(3);
   });
 
-  it.fails("JSON.stringify(list) SHOULD produce [1,2,3] (BROKEN: BigInt elements throw)", async () => {
+  it("JSON.stringify(list) throws today — BigInt elements (flips → promote to [1,2,3] ideal when fixed)", async () => {
     const lst = await one("(list 1 2 3)");
-    expect(JSON.stringify(lst)).toBe("[1,2,3]");
+    expect(() => JSON.stringify(lst)).toThrow(/BigInt/);
   });
 
   it("schemeToJs(list) is the working escape hatch", async () => {
@@ -117,9 +119,9 @@ describe("JS-interop: bytevectors", () => {
 });
 
 describe("JS-interop: dicts / objects", () => {
-  it.fails("JSON.stringify(dict) SHOULD produce its JSON (BROKEN: BigInt-backed values throw)", async () => {
+  it("JSON.stringify(dict) throws today — BigInt-backed values (flips → promote to {a:1,b:2} ideal when fixed)", async () => {
     const d = await one("(dict :a 1 :b 2)");
-    expect(JSON.stringify(d)).toBe('{"a":1,"b":2}');
+    expect(() => JSON.stringify(d)).toThrow(/BigInt/);
   });
 
   it("schemeToJs(dict) is the working escape hatch", async () => {
