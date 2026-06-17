@@ -25,6 +25,7 @@ import { AValue, EMPTY_PROVENANCE } from "./values/AValue.js";
 import { SchemeBool } from "./values/SchemeBool.js";
 import { SchemeBytevector } from "./values/SchemeBytevector.js";
 import { SchemeVector } from "./values/SchemeVector.js";
+import { LazySeq } from "./values/LazySeq.js";
 import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import type { ResolverSpec } from "./env/scheme-env.js";
 import { SchemePromise } from "./eval/evaluator.js";
@@ -113,6 +114,7 @@ export function isSchemeValue(value: unknown): boolean {
     case value instanceof SchemeString:
     case value instanceof SchemeBytevector:
     case value instanceof SchemeVector:
+    case value instanceof LazySeq:
     case value instanceof SchemeCharacter:
     case value instanceof SchemeExact:
     case value instanceof SchemeInexact:

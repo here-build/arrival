@@ -67,9 +67,22 @@ type Provenance = ReadonlySet<number>;
  *  - `map`    → false (one out per in; length/order/type preserved; value = fn)
  *  - `filter` → true  (length depends on running pred over each element)
  */
+// fn/pred may be async: live LIPS lambdas always return Promises (the carrier was
+// born with sync JS fns for the isolated proof). `refine` awaits them. The headline
+// `(length (map f xs))` never invokes fn at all, so a pure-map length cone stays
+// zero-cost regardless of async-ness — the async only materializes when an
+// observation's cone genuinely reaches the fn (a filter, or iterate).
 export type LazyOp =
-  | { readonly kind: "map"; readonly fn: (x: SchemeValue) => SchemeValue; readonly prov: Provenance }
-  | { readonly kind: "filter"; readonly pred: (x: SchemeValue) => boolean; readonly prov: Provenance };
+  | {
+      readonly kind: "map";
+      readonly fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>;
+      readonly prov: Provenance;
+    }
+  | {
+      readonly kind: "filter";
+      readonly pred: (x: SchemeValue) => boolean | Promise<boolean>;
+      readonly prov: Provenance;
+    };
 
 function isLengthChanging(op: LazyOp): boolean {
   return op.kind === "filter";
@@ -77,9 +90,7 @@ function isLengthChanging(op: LazyOp): boolean {
 
 /** What a consumer demands of the collection. The refine fold runs only the
  *  ops this observation's cone reaches. */
-export type Observation =
-  | { readonly kind: "length"; readonly callId?: number }
-  | { readonly kind: "iterate" };
+export type Observation = { readonly kind: "length"; readonly callId?: number } | { readonly kind: "iterate" };
 
 /** A refine result carries the value AND the provenance cone the fold walked —
  *  by construction the minimal dependency cone for that observation. */
@@ -130,16 +141,17 @@ export class LazySeq extends AValue {
     return new LazySeq(this.source, [...this.ops, op], this.provenance);
   }
 
-  map(fn: (x: SchemeValue) => SchemeValue, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
+  map(fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
     return this.pipe({ kind: "map", fn, prov });
   }
 
-  filter(pred: (x: SchemeValue) => boolean, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
+  filter(pred: (x: SchemeValue) => boolean | Promise<boolean>, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
     return this.pipe({ kind: "filter", pred, prov });
   }
 
-  /** `refine` — fold under an observation, running only what its cone reaches. */
-  refine(obs: Observation): LengthResult | IterateResult {
+  /** `refine` — fold under an observation, running only what its cone reaches.
+   *  Async to match the interpreter: a live op's fn/pred may return a Promise. */
+  async refine(obs: Observation): Promise<LengthResult | IterateResult> {
     return obs.kind === "length" ? this.refineLength(obs.callId) : this.refineIterate();
   }
 
@@ -151,7 +163,7 @@ export class LazySeq extends AValue {
    * actually run plus the provenance of every element those ops inspected; that
    * is the true minimal dependency set for the count.
    */
-  private refineLength(callId?: number): LengthResult {
+  private async refineLength(callId?: number): Promise<LengthResult> {
     const callProv = callId === undefined ? EMPTY_PROVENANCE : pointProvenance(callId);
 
     // Index of the last length-changing op. -1 ⇒ count is the source length and
@@ -167,29 +179,28 @@ export class LazySeq extends AValue {
     if (lastChanging === -1) {
       // Pure length: cone = the collection grouping fact ∪ this length call.
       // (Element values and every op's fn are OUTSIDE the cone — correctly.)
+      // No op runs, so no await happens — zero-cost even for async fns.
       return { count: this.source.length, provenance: union(this.provenance, callProv) };
     }
 
     // Run ops[0..lastChanging] over the elements — a filter observes the output
     // of every preceding op, so all of them (maps included) must run; ops after
     // the last filter are length-preserving and stay un-run. Accumulate the cone
-    // from the ops run and every element value inspected.
-    let items: SchemeValue[] = this.source.slice();
+    // from the ops run and every element value inspected. Sequential await
+    // preserves order and is correct for async lambdas (parallelization is a
+    // later optimization, gated on a Monoid/independence proof — not the proof).
+    let items: SchemeValue[] = [...this.source];
     let cone = union(this.provenance, callProv);
     for (let k = 0; k <= lastChanging; k++) {
       const op = this.ops[k];
       cone = union(cone, op.prov);
-      if (op.kind === "map") {
-        items = items.map((x) => {
-          cone = union(cone, provOf(x));
-          return op.fn(x);
-        });
-      } else {
-        items = items.filter((x) => {
-          cone = union(cone, provOf(x));
-          return op.pred(x);
-        });
+      const next: SchemeValue[] = [];
+      for (const x of items) {
+        cone = union(cone, provOf(x));
+        if (op.kind === "map") next.push(await op.fn(x));
+        else if (await op.pred(x)) next.push(x);
       }
+      items = next;
     }
     return { count: items.length, provenance: cone };
   }
@@ -199,22 +210,18 @@ export class LazySeq extends AValue {
    * Runs the whole plan in order; this is where a map's fn finally runs. The
    * cone is everything: the grouping fact, every op, every element inspected.
    */
-  private refineIterate(): IterateResult {
-    let items: SchemeValue[] = this.source.slice();
+  private async refineIterate(): Promise<IterateResult> {
+    let items: SchemeValue[] = [...this.source];
     let cone = this.provenance;
     for (const op of this.ops) {
       cone = union(cone, op.prov);
-      if (op.kind === "map") {
-        items = items.map((x) => {
-          cone = union(cone, provOf(x));
-          return op.fn(x);
-        });
-      } else {
-        items = items.filter((x) => {
-          cone = union(cone, provOf(x));
-          return op.pred(x);
-        });
+      const next: SchemeValue[] = [];
+      for (const x of items) {
+        cone = union(cone, provOf(x));
+        if (op.kind === "map") next.push(await op.fn(x));
+        else if (await op.pred(x)) next.push(x);
       }
+      items = next;
     }
     return { items, provenance: cone };
   }

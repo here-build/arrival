@@ -2,12 +2,14 @@
  * THE THESIS, by example: the demand cone IS the provenance cone, and lazy
  * evaluation is what makes correct-minimal provenance fall out for free.
  *
- * SCOPE: `LazySeq` is a STANDALONE carrier, NOT wired into the interpreter — these
- * prove the thesis on the carrier in isolation. The live interpreter still runs
- * `f` eagerly (see dataflow-thesis-probes.test.ts, where the same shape calls f
- * 5×); making it real through the builtins is the slice-2 flip. The strongest
- * evidence below is the CALL-COUNT assertions (behavioral); the cone equalities
- * are locked observations of this carrier, not an independent minimality proof.
+ * SCOPE: these test the carrier in ISOLATION (sync fns, hand-assigned op ids) —
+ * the unit-level proof. The carrier is now WIRED into the live builtins (Step 2 of
+ * the flip): the same thesis through the real async map/filter/length lives in
+ * lineage-assumptions.test.ts (A18/A8-live). `refine` is async to match the
+ * interpreter, so these await it; a sync JS fn awaits through transparently. The
+ * strongest evidence below is the CALL-COUNT assertions (behavioral); the cone
+ * equalities are locked observations of this carrier, not an independent
+ * minimality proof.
  *
  * Each test instruments `f`/`g`/`pred` with a call counter and gives each source
  * element + each op a distinct provenance id, so we can assert TWO things at once
@@ -44,7 +46,7 @@ function provSource(count: number, base: number): ProvNum[] {
 const ids = (p: ReadonlySet<number>): number[] => [...p].sort((a, b) => a - b);
 
 describe("LazySeq — demand cone == provenance cone", () => {
-  it("(length (map f xs)) runs f ZERO times and f is OUTSIDE the cone", () => {
+  it("(length (map f xs)) runs f ZERO times and f is OUTSIDE the cone", async () => {
     let fCalls = 0;
     const f = (x: ProvNum) => {
       fCalls++;
@@ -54,7 +56,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
     const xs = new LazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const mapped = xs.map(f, pointProvenance(2)); // op id 2 (f's introduction)
 
-    const r = mapped.refine({ kind: "length", callId: 999 }) as { count: number; provenance: ReadonlySet<number> };
+    const r = (await mapped.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
 
     // (1) work: map preserves length → length never touches a value.
     expect(fCalls).toBe(0);
@@ -64,7 +66,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
     expect(ids(r.provenance)).toEqual([1, 999]);
   });
 
-  it("(length (filter pred xs)) DOES run pred and pulls pred + inspected elements into the cone", () => {
+  it("(length (filter pred xs)) DOES run pred and pulls pred + inspected elements into the cone", async () => {
     let predCalls = 0;
     const pred = (x: ProvNum) => {
       predCalls++;
@@ -74,7 +76,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
     const xs = new LazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const filtered = xs.filter(pred, pointProvenance(3)); // op id 3
 
-    const r = filtered.refine({ kind: "length", callId: 999 }) as { count: number; provenance: ReadonlySet<number> };
+    const r = (await filtered.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
 
     // length depends on which elements pass → pred runs on every element.
     expect(predCalls).toBe(5);
@@ -83,7 +85,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
     expect(ids(r.provenance)).toEqual([1, 3, 100, 101, 102, 103, 104, 999]);
   });
 
-  it("(length (map g (filter pred (map f xs)))): f & pred run (filter needs them), g does NOT, g is OUTSIDE the cone", () => {
+  it("(length (map g (filter pred (map f xs)))): f & pred run (filter needs them), g does NOT, g is OUTSIDE the cone", async () => {
     let fCalls = 0;
     let gCalls = 0;
     let predCalls = 0;
@@ -106,7 +108,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       .filter(pred, pointProvenance(3)) // last length-changing op
       .map(g, pointProvenance(4)); // after the filter → length-preserving → SKIPPED
 
-    const r = plan.refine({ kind: "length", callId: 999 }) as { count: number; provenance: ReadonlySet<number> };
+    const r = (await plan.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
 
     // f runs (the filter observes f's output); pred runs; g never runs.
     expect(fCalls).toBe(5);
@@ -119,14 +121,14 @@ describe("LazySeq — demand cone == provenance cone", () => {
     expect(ids(r.provenance)).toEqual([1, 2, 3, 100, 101, 102, 103, 104, 999]);
   });
 
-  it("refine('iterate') is the eager egress: the WHOLE plan runs and materializes", () => {
+  it("refine('iterate') is the eager egress: the WHOLE plan runs and materializes", async () => {
     let fCalls = 0;
     const f = (x: ProvNum) => {
       fCalls++;
       return new ProvNum(x.n * 2, EMPTY_PROVENANCE);
     };
     const xs = new LazySeq(provSource(3, 100), [], pointProvenance(1));
-    const r = xs.map(f, pointProvenance(2)).refine({ kind: "iterate" }) as {
+    const r = (await xs.map(f, pointProvenance(2)).refine({ kind: "iterate" })) as {
       items: ProvNum[];
       provenance: ReadonlySet<number>;
     };

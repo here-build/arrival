@@ -13,6 +13,7 @@ import { sandboxedEnv } from "../sandbox-env";
 import { SchemeString } from "../values/SchemeString";
 import { Pair } from "../values/Pair";
 import { AValue } from "../values/AValue";
+import { LazySeq, is_lazy_seq } from "../values/LazySeq";
 
 let seq = 0;
 const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
@@ -20,11 +21,15 @@ const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
 const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
 
 async function run(src: string, binds: Record<string, AValue> = {}): Promise<number[]> {
+  return provOf(await runRaw(src, binds));
+}
+
+async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
   await initBridge();
   const env = sandboxedEnv.inherit(`la-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v);
+  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
   const [r] = await exec(src, { env });
-  return provOf(r);
+  return r;
 }
 
 describe("ASSUMPTION — provenance is minted only at Rosetta crossings (§5)", () => {
@@ -82,12 +87,46 @@ describe("ASSUMPTION — a count is identity-entangled today (teleological); the
   });
 });
 
+// ── Step 2 — the Fantasy Land flip (LIVE: a LazySeq flows through the REAL builtins) ──
+describe("ASSUMPTION — the demand cone is the provenance cone, through the live builtins (§5, Step 2)", () => {
+  // A bare JS source value carries no provenance; the GROUPING fact (id 7) is the
+  // collection-level provenance — the only thing a pure-map length should depend on.
+  const lazy = (els: AValue[], groupId: number) => new LazySeq(els, [], new Set([groupId]));
+
+  it("A18: (map f xs) over a LazySeq hits the fast-path — returns a LazySeq (extend), NOT an eager collect", async () => {
+    const xs = lazy([sStr("a", 100), sStr("b", 101)], 7);
+    const r = await runRaw(`(map (lambda (e) e) xs)`, { xs });
+    expect(is_lazy_seq(r)).toBe(true); // the plan was extended; nothing ran
+  });
+
+  it("A8-live: (length (map f xs)) runs f ZERO times — `f` THROWS, yet length resolves to the source count", async () => {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    // If the map were eager, this fn runs and the whole exec rejects. It does not.
+    env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
+    env.set("xs", lazy([sStr("a", 100), sStr("b", 101), sStr("c", 102)], 7) as unknown as AValue);
+    const [r] = await exec(`(length (map boom xs))`, { env });
+    expect(r instanceof AValue ? r.toJs() : r).toBe(3); // f never touched → count is the source length
+    // The cone is the GROUPING fact alone (id 7) — NOT the elements (100,101,102),
+    // NOT boom's op. A pure-map length depends on none of them. (Contrast A13's
+    // eager over-attribution: every element id leaks into the count.)
+    expect(provOf(r)).toEqual([7]);
+  });
+
+  it("A18b: with NO LazySeq, the eager path is byte-identical — (length (map id ys)) over a Pair still over-attributes", async () => {
+    // The fast-paths are guarded on `is_lazy_seq`; a plain Pair is untouched, so
+    // the pre-flip behavior (A13) is preserved exactly. This is the speculate
+    // discipline: laziness changes nothing it doesn't explicitly touch.
+    const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+    expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
+  });
+});
+
 // ── NEXT-STEP assumptions — checks designed, not yet buildable (wait on a slice) ──
 describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
-  // Step 2 — the Fantasy Land flip:
-  it.todo("A18: a lazy node hits the is_lazy_seq fast-path BEFORE fl-interop's eager asyncFL collect");
-  it.todo("A18b: with the lazy flag OFF, results+provenance are byte-identical to eager (speculate discipline)");
-  it.todo("A8-live: (length (map f xs)) through the REAL builtins runs f ZERO times");
+  // Step 2 follow-ups — egress completeness + a scheme-surface constructor:
+  it.todo("A18c: a public `lazy-seq` scheme constructor introduces laziness from user code (today: JS-bound only)");
+  it.todo("A18d: an un-forced LazySeq reaching a non-recognizing egress (car/first/display) fails LOUD, never silent-nil");
   // Step 3 — auto-abort:
   it.todo("A10: a lost race over a PURE fan is cancelled with no observable effect");
   it.todo("A10-hazard: a loser that already crossed the membrane (fired an effect) is NOT silently un-fired");

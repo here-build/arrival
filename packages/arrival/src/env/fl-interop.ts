@@ -35,6 +35,7 @@ import { SchemeJSArray } from "../membrane.js";
 import { is_false } from "../eval/guards.js";
 import { Pair } from "../values/Pair.js";
 import { AValue, unionProvenance } from "../values/AValue.js";
+import { is_lazy_seq, type LazySeq } from "../values/LazySeq.js";
 
 // ── FL protocol surface ──────────────────────────────────────────────────────
 // Fantasy-Land structures are opaque carriers — we only ever touch their FL
@@ -153,6 +154,17 @@ async function asyncFLReduce(fn: (acc: unknown, val: unknown) => unknown, init: 
   return acc;
 }
 
+// ── LazySeq egress ────────────────────────────────────────────────────────────
+// reduce is a full-egress observation (no `Observation` of its own in the first
+// cut): force the plan with `iterate`, then fold eager. map/filter EXTEND a plan
+// (cheap, run nothing); reduce/length CONSUME it.
+async function reduceLazySeq(fn: (acc: unknown, val: unknown) => unknown, init: unknown, ls: LazySeq): Promise<unknown> {
+  const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
+  let acc = init;
+  for (const val of items) acc = await fn(acc, val);
+  return acc;
+}
+
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
 export const FL_INTEROP_OPS = {
@@ -178,6 +190,10 @@ export const FL_INTEROP_OPS = {
     // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
     // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
     if (list == null || is_false(list)) return nil;
+    // LazySeq fast-path — BEFORE the FL/asyncFL collect: extend the plan, run
+    // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
+    // the interop boundary, so the carrier stays a generic async-aware pipe.
+    if (is_lazy_seq(list)) return list.filter(async (x: unknown) => !is_false(await arg(x)));
     if (list && typeof list === "object" && !(list instanceof Pair) && (list as Partial<FantasyLand>)["fantasy-land/filter"]) {
       return asyncFLFilter(arg, list as FantasyLand);
     }
@@ -186,6 +202,10 @@ export const FL_INTEROP_OPS = {
   map: function map(this: unknown, fn: (v: unknown) => unknown, ...lists: unknown[]) {
     captureBuiltins();
     if (lists.length === 1 && (lists[0] == null || is_false(lists[0]))) return nil; // nil-tolerant (see filter)
+    // LazySeq fast-path — extend the plan, run nothing (a pure map mints no
+    // provenance of its own, so its op-prov is empty; the source's grouping
+    // provenance and the elements' provenance ride the carrier).
+    if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
     if (lists.length === 1 && !(lists[0] instanceof Pair) && (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]) {
       return asyncFLMap(fn, lists[0] as FantasyLand);
     }
@@ -193,6 +213,7 @@ export const FL_INTEROP_OPS = {
   },
   reduce: function reduce(this: unknown, fn: (acc: unknown, val: unknown) => unknown, init: unknown, collection: unknown) {
     captureBuiltins();
+    if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
     if (collection && typeof collection === "object" && !(collection instanceof Pair) && (collection as Partial<FantasyLand>)["fantasy-land/reduce"]) {
       return asyncFLReduce(fn, init, collection as FantasyLand);
     }
@@ -290,6 +311,17 @@ export const FL_INTEROP_OPS = {
   },
 
   length: (collection: any) => {
+    // LazySeq fast-path — the demand cone IS the provenance cone: refine under a
+    // `length` observation runs only the ops the count depends on (a pure-map
+    // chain runs NOTHING — `(length (map f xs))` never touches f) and stamps the
+    // minimal cone from the same walk. Returns a Promise only here; the eager
+    // path below stays sync and byte-identical (the speculate discipline).
+    if (is_lazy_seq(collection)) {
+      return collection.refine({ kind: "length" }).then((r) => {
+        const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
+        return provenance.size === 0 ? count : AValue.fromJs(count, provenance);
+      });
+    }
     // Collect elements so the count can carry their provenance (V: "provenance
     // everything; exclusion should not be possible in teleological mode"). A
     // `(count …)`/`(length …)` the seal can't sign — even though every row that
