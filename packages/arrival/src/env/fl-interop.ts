@@ -34,8 +34,8 @@ import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
 import { is_false } from "../eval/guards.js";
 import { Pair } from "../values/Pair.js";
-import { AValue, unionProvenance } from "../values/AValue.js";
-import { is_lazy_seq, type LazySeq } from "../values/LazySeq.js";
+import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/AValue.js";
+import { LazySeq, is_lazy_seq } from "../values/LazySeq.js";
 
 // ── FL protocol surface ──────────────────────────────────────────────────────
 // Fantasy-Land structures are opaque carriers — we only ever touch their FL
@@ -94,7 +94,10 @@ function isNilOperand(v: unknown): boolean {
  */
 function flCollectValues(structure: FantasyLand): unknown[] {
   const values: unknown[] = [];
-  structure["fantasy-land/reduce"]((acc: null, val: unknown) => { values.push(val); return acc; }, null);
+  structure["fantasy-land/reduce"]((acc: null, val: unknown) => {
+    values.push(val);
+    return acc;
+  }, null);
   return values;
 }
 
@@ -126,26 +129,34 @@ function unwrapLipsValue(v: unknown): unknown {
 async function asyncFLMap(fn: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
   const values = flCollectValues(structure);
   const cache = new Map<unknown, unknown>();
-  await Promise.all(values.map(async (v) => {
-    if (!cache.has(v)) {
-      cache.set(v, unwrapLipsValue(await fn(v)));
-    }
-  }));
+  await Promise.all(
+    values.map(async (v) => {
+      if (!cache.has(v)) {
+        cache.set(v, unwrapLipsValue(await fn(v)));
+      }
+    }),
+  );
   return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
 }
 
 async function asyncFLFilter(pred: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
   const values = flCollectValues(structure);
   const cache = new Map<unknown, unknown>();
-  await Promise.all(values.map(async (v) => {
-    if (!cache.has(v)) {
-      cache.set(v, await pred(v));
-    }
-  }));
+  await Promise.all(
+    values.map(async (v) => {
+      if (!cache.has(v)) {
+        cache.set(v, await pred(v));
+      }
+    }),
+  );
   return structure["fantasy-land/filter"]((v: unknown) => !is_false(cache.get(v)));
 }
 
-async function asyncFLReduce(fn: (acc: unknown, val: unknown) => unknown, init: unknown, structure: FantasyLand): Promise<unknown> {
+async function asyncFLReduce(
+  fn: (acc: unknown, val: unknown) => unknown,
+  init: unknown,
+  structure: FantasyLand,
+): Promise<unknown> {
   const values = flCollectValues(structure);
   let acc = init;
   for (const val of values) {
@@ -158,11 +169,46 @@ async function asyncFLReduce(fn: (acc: unknown, val: unknown) => unknown, init: 
 // reduce is a full-egress observation (no `Observation` of its own in the first
 // cut): force the plan with `iterate`, then fold eager. map/filter EXTEND a plan
 // (cheap, run nothing); reduce/length CONSUME it.
-async function reduceLazySeq(fn: (acc: unknown, val: unknown) => unknown, init: unknown, ls: LazySeq): Promise<unknown> {
+async function reduceLazySeq(
+  fn: (acc: unknown, val: unknown) => unknown,
+  init: unknown,
+  ls: LazySeq,
+): Promise<unknown> {
   const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
   let acc = init;
   for (const val of items) acc = await fn(acc, val);
   return acc;
+}
+
+// Materialize a collection's elements — a LIPS pair spine, a lazy SchemeJSArray
+// wrapper, or a raw JS array — to a flat element array. Shared by `length` and
+// the `lazy-seq` constructor so both see the same element set. As lenient as the
+// old length: an unrecognized input yields `[]` (an empty collection).
+function collectElements(collection: any): unknown[] {
+  const elements: unknown[] = [];
+  if (collection && typeof collection === "object" && "car" in collection) {
+    let current = collection; // LIPS list — walk the spine.
+    while (current?.constructor && current.constructor.name !== "Nil") {
+      elements.push(current.car);
+      current = current.cdr;
+    }
+  } else if (collection instanceof SchemeJSArray) {
+    elements.push(...collection.source); // lazy JS-array wrapper from `@`/membrane
+  } else if (Array.isArray(collection)) {
+    elements.push(...collection);
+  }
+  return elements;
+}
+
+// A18d — un-forced egress is a programmer error (LazySeq.ts header). An accessor
+// the first cut hasn't taught to force a LazySeq throws LOUD here, never returns a
+// silent nil/empty. The lazy plane is map/filter (extend) → length/iterate/reduce
+// (force); everything else forces explicitly or waits for a later slice.
+function unforcedLazyEgress(op: string): never {
+  throw new Error(
+    `\`${op}\` received an un-forced lazy-seq — the first cut supports map/filter then ` +
+      `length/iterate/reduce only. Force it to a list before \`${op}\` (a later slice may teach it to force).`,
+  );
 }
 
 // ── The interop overlay symbols ──────────────────────────────────────────────
@@ -171,12 +217,16 @@ export const FL_INTEROP_OPS = {
   // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers, delegate pairs to LIPS
   car: (list: unknown) => {
     captureBuiltins();
+    if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
     return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
   },
   cdr: (list: unknown) => {
     captureBuiltins();
+    if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
     return list instanceof SchemeJSArray
-      ? (list.length <= 1 ? nil : new SchemeJSArray(list.source.slice(1)))
+      ? list.length <= 1
+        ? nil
+        : new SchemeJSArray(list.source.slice(1))
       : builtinCdr!(list);
   },
   // FL-dispatch: external Fantasy Land entities → async-aware FL helpers, LIPS types → Scheme
@@ -194,7 +244,12 @@ export const FL_INTEROP_OPS = {
     // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
     // the interop boundary, so the carrier stays a generic async-aware pipe.
     if (is_lazy_seq(list)) return list.filter(async (x: unknown) => !is_false(await arg(x)));
-    if (list && typeof list === "object" && !(list instanceof Pair) && (list as Partial<FantasyLand>)["fantasy-land/filter"]) {
+    if (
+      list &&
+      typeof list === "object" &&
+      !(list instanceof Pair) &&
+      (list as Partial<FantasyLand>)["fantasy-land/filter"]
+    ) {
       return asyncFLFilter(arg, list as FantasyLand);
     }
     return builtinFilter!.call(this, arg, list);
@@ -206,15 +261,29 @@ export const FL_INTEROP_OPS = {
     // provenance of its own, so its op-prov is empty; the source's grouping
     // provenance and the elements' provenance ride the carrier).
     if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
-    if (lists.length === 1 && !(lists[0] instanceof Pair) && (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]) {
+    if (
+      lists.length === 1 &&
+      !(lists[0] instanceof Pair) &&
+      (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]
+    ) {
       return asyncFLMap(fn, lists[0] as FantasyLand);
     }
     return builtinMap!.call(this, fn, ...lists);
   },
-  reduce: function reduce(this: unknown, fn: (acc: unknown, val: unknown) => unknown, init: unknown, collection: unknown) {
+  reduce: function reduce(
+    this: unknown,
+    fn: (acc: unknown, val: unknown) => unknown,
+    init: unknown,
+    collection: unknown,
+  ) {
     captureBuiltins();
     if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
-    if (collection && typeof collection === "object" && !(collection instanceof Pair) && (collection as Partial<FantasyLand>)["fantasy-land/reduce"]) {
+    if (
+      collection &&
+      typeof collection === "object" &&
+      !(collection instanceof Pair) &&
+      (collection as Partial<FantasyLand>)["fantasy-land/reduce"]
+    ) {
       return asyncFLReduce(fn, init, collection as FantasyLand);
     }
     return builtinReduce!.call(this, fn, init, collection);
@@ -259,20 +328,33 @@ export const FL_INTEROP_OPS = {
   // hand the inference plane) and LIPS pairs. Self-contained — no builtin capture.
 
   // ── List aliases (models expect these) ──
-  first: (list: any) => list?.car ?? (Array.isArray(list) ? list[0] : nil),
+  // Each guards against an un-forced lazy-seq (A18d): without it these silently
+  // return nil for a LazySeq (no `.car`, not an array), masking the misuse.
+  first: (list: any) => {
+    if (is_lazy_seq(list)) unforcedLazyEgress("first");
+    return list?.car ?? (Array.isArray(list) ? list[0] : nil);
+  },
   last: (list: any) => {
-    if (Array.isArray(list)) return list[list.length - 1] ?? nil;
+    if (is_lazy_seq(list)) unforcedLazyEgress("last");
+    if (Array.isArray(list)) return list.at(-1) ?? nil;
     let current = list;
     while (current?.cdr?.constructor?.name !== "Nil" && current?.cdr != null) {
       current = current.cdr;
     }
     return current?.car ?? nil;
   },
-  second: (list: any) => list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil),
-  third: (list: any) => list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil),
+  second: (list: any) => {
+    if (is_lazy_seq(list)) unforcedLazyEgress("second");
+    return list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil);
+  },
+  third: (list: any) => {
+    if (is_lazy_seq(list)) unforcedLazyEgress("third");
+    return list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil);
+  },
 
   // ── Association lists ──
   assoc: (key: any, alist: any) => {
+    if (is_lazy_seq(alist)) unforcedLazyEgress("assoc");
     if (!alist) return nil;
     const items = Array.isArray(alist) ? alist : [];
     // Convert LIPS pairs to traversable
@@ -290,6 +372,7 @@ export const FL_INTEROP_OPS = {
 
   // ── Sort ──
   sort: (list: any, comparator?: any) => {
+    if (is_lazy_seq(list)) unforcedLazyEgress("sort");
     const arr = Array.isArray(list) ? [...list] : [];
     if (!Array.isArray(list) && list?.car) {
       let current = list;
@@ -326,28 +409,27 @@ export const FL_INTEROP_OPS = {
     // everything; exclusion should not be possible in teleological mode"). A
     // `(count …)`/`(length …)` the seal can't sign — even though every row that
     // produced it was grounded — is exactly the hole the teleological seal forbids.
-    const elements: unknown[] = [];
-    if (collection && typeof collection === "object" && "car" in collection) {
-      // LIPS list — walk the spine.
-      let current = collection;
-      while (current?.constructor && current.constructor.name !== "Nil") {
-        elements.push(current.car);
-        current = current.cdr;
-      }
-    } else if (collection instanceof SchemeJSArray) {
-      // Lazy JS-array wrapper (what `@`/the membrane hand the inference plane).
-      // `.source` is raw JS — its elements carry no provenance — but the count
-      // is still correct (the old code returned 0 here, a latent miscount).
-      elements.push(...collection.source);
-    } else if (Array.isArray(collection)) {
-      elements.push(...collection);
-    }
+    const elements = collectElements(collection);
     const count = elements.length;
     const inputs = elements.filter((e): e is AValue => e instanceof AValue);
     if (inputs.length === 0) return count;
     const prov = unionProvenance(inputs);
     return prov.size === 0 ? count : AValue.fromJs(count, prov);
   },
+
+  // A18c — the scheme-surface entry into the lazy plane. `(lazy-seq xs)` wraps a
+  // collection's elements into an un-run plan; `map`/`filter` then EXTEND it and
+  // `length`/`reduce`/iterate FORCE it. The collection's own provenance is the
+  // grouping fact (cheap, eager); per-element provenance rides the elements and
+  // is distributed only on materialization. Conservative by design: laziness is
+  // opt-in, so a plain Pair stays eager and byte-identical (the speculate
+  // discipline) — flipping map's default to lazy is a separate, deliberate call.
+  "lazy-seq": (collection: any) =>
+    new LazySeq(
+      collectElements(collection),
+      [],
+      collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,
+    ),
 };
 
 export default new EnvCapability("scheme/fl-interop", {

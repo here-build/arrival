@@ -120,13 +120,41 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
     const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
   });
+
+  it("A18c: `(lazy-seq ys)` introduces laziness from PURE scheme — (length (map boom (lazy-seq ys))) runs boom ZERO times", async () => {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
+    // The Pair's OWN provenance (id 7) is the grouping fact lazy-seq lifts to the
+    // collection level; the elements carry their own per-element provenance.
+    const ys = (Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
+    env.set("ys", ys);
+
+    // (map boom (lazy-seq ys)) over a plain Pair, lifted lazy from user code, EXTENDS
+    // a plan — boom is stored, not run; the result is a LazySeq.
+    const [lazyResult] = await exec(`(map boom (lazy-seq ys))`, { env });
+    expect(is_lazy_seq(lazyResult)).toBe(true);
+
+    // length forces it — and boom STILL never runs (pure-map length cone excludes f).
+    const [len] = await exec(`(length (map boom (lazy-seq ys)))`, { env });
+    expect(len instanceof AValue ? len.toJs() : len).toBe(3);
+    expect(provOf(len)).toEqual([7]); // grouping fact only — boom & elements outside the cone
+  });
+
+  it("A18d: an un-forced lazy-seq at a non-recognizing egress FAILS LOUD — never a silent nil/empty", async () => {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101)], false);
+    env.set("ys", ys as unknown as AValue);
+    // Without the guard, `first` returns nil and `sort` returns '() — both silent
+    // wrong answers. The first cut hasn't taught these to force, so they throw.
+    await expect(exec(`(first (lazy-seq ys))`, { env })).rejects.toThrow(/lazy-seq/);
+    await expect(exec(`(sort (lazy-seq ys))`, { env })).rejects.toThrow(/lazy-seq/);
+  });
 });
 
 // ── NEXT-STEP assumptions — checks designed, not yet buildable (wait on a slice) ──
 describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
-  // Step 2 follow-ups — egress completeness + a scheme-surface constructor:
-  it.todo("A18c: a public `lazy-seq` scheme constructor introduces laziness from user code (today: JS-bound only)");
-  it.todo("A18d: an un-forced LazySeq reaching a non-recognizing egress (car/first/display) fails LOUD, never silent-nil");
   // Step 3 — auto-abort:
   it.todo("A10: a lost race over a PURE fan is cancelled with no observable effect");
   it.todo("A10-hazard: a loser that already crossed the membrane (fired an effect) is NOT silently un-fired");
