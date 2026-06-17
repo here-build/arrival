@@ -80,6 +80,20 @@ export interface RosettaFunction {
    * host entity types (`SchemeIP`, row shapes) come from the env's type-preamble.
    */
   type?: string;
+  /**
+   * Provenance role marker. By default a registered rosetta is a Rosetta-IN
+   * SOURCE: it introduces external data, so its result MINTS a fresh provenance
+   * leaf (the conservative default — never silently lose an origin). Set `pure:
+   * true` to declare instead that the fn only TRANSFORMS its arguments (like
+   * `string-append` / `dedent`): its result PROPAGATES the inputs' provenance —
+   * a pipe/merge, not a source — and it has no effect. Same trust model as `type`
+   * and the discovery/action split: an author assertion over the `any` impl, not
+   * mechanically verifiable (JS purity is undecidable here). INERT at runtime
+   * today; read by the lineage classifier (see docs/working-proposals/confluent-
+   * dataflow-graph-ir-2026-06-17.md §5 — the Rosetta source/pure/sink roles).
+   * The richer role taxonomy is deferred; this boolean is the starting point.
+   */
+  pure?: boolean;
 }
 
 /**

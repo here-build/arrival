@@ -121,6 +121,16 @@ export class Environment {
   __rosettaTypes__: Map<string, string> = new Map();
 
   /**
+   * Provenance-role harvest surface, sibling to `__rosettaTypes__`: the set of
+   * rosetta names registered with `pure: true` — fns that PROPAGATE their inputs'
+   * provenance (a pipe, like `string-append`) rather than MINT a fresh source.
+   * Inert at runtime today; read by the lineage classifier's op-taxonomy (a pure
+   * rosetta classifies like a pure builtin, not a Rosetta-in source). Default
+   * (absent) = source/mint, the conservative direction. Local to the defining env.
+   */
+  __rosettaPure__: Set<string> = new Set();
+
+  /**
    * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
    * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
    * scope. Absent ⇒ no allocation bound (the default for un-budgeted callers). Run-scoped, not
@@ -248,6 +258,7 @@ export class Environment {
     const wrapper = createRosettaWrapper(config);
     this.set(name, wrapper);
     if (config.type !== undefined) this.__rosettaTypes__.set(name, config.type);
+    if (config.pure) this.__rosettaPure__.add(name);
   }
 
   list(): (string | symbol)[] {
