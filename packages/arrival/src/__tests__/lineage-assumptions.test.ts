@@ -9,12 +9,14 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
+import { parse } from "../eval/generator-exec";
 import { sandboxedEnv } from "../sandbox-env";
 import { SchemeString } from "../values/SchemeString";
 import { SchemeVector } from "../values/SchemeVector";
 import { Pair } from "../values/Pair";
 import { AValue } from "../values/AValue";
 import { LazySeq, is_lazy_seq } from "../values/LazySeq";
+import { classify, fullCone, type Classifier } from "../values/lineage";
 
 let seq = 0;
 const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
@@ -217,9 +219,41 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   it.todo("A-uneval: eval(uneval(chunk)) === chunk — a lineage chunk round-trips to readable source");
   // Step 7 — effects:
   it.todo("A16: write-set ∩ later read-set != ∅ is a detectable back-edge through the membrane (reject/warn)");
-  // Classifier gaps surfaced this session:
-  it.todo("A4-classifier: classify() handles `let`/`if` (special forms), not just applications — currently only apps");
-  it.todo("A21: classify() runs on the MACRO-EXPANDED ast, not the raw reader output");
+  // Classifier gaps surfaced this session — now CLOSED by W1 (classify() handles
+  // surface special forms by shape; lineage-spike + golden-prov-special-forms
+  // carry the full proof). These pin the headline closure here in the ledger.
+  it("A4-classifier: classify() handles `let`/`if` (special forms), not just applications", async () => {
+    await initBridge();
+    const C: Classifier = {
+      isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "length"].includes(op),
+      isRosettaIn: () => false,
+      isFan: (op) => ["map", "filter"].includes(op),
+      isOpaque: () => false,
+    };
+    const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
+      const [ast] = await parse(src, sandboxedEnv);
+      return fullCone(classify(ast, C), b);
+    };
+    // `if` → a `mux` (not a mis-read application); predicate ∪ taken arm.
+    const [ifAst] = await parse(`(if (< 0 x) v -1)`, sandboxedEnv);
+    expect(classify(ifAst, C).kind).toBe("mux");
+    expect(await cone(`(if (< 0 x) v -1)`, { x: [7], v: [5] })).toEqual([5, 7]);
+    // `let` → transparent: same cone as the inlined form.
+    expect(await cone(`(let ((foo (+ 1 v2))) (* v1 foo))`, { v1: [100], v2: [200] })).toEqual([100, 200]);
+  });
+
+  it("A21: classify() runs on the SURFACE ast — this engine dispatches special forms directly (no macro-expansion)", async () => {
+    await initBridge();
+    const C: Classifier = { isPure: (op) => ["*", "+"].includes(op), isRosettaIn: () => false, isFan: () => false, isOpaque: () => false };
+    // The evaluator's SPECIAL_FORMS dispatches `let` directly, so the parsed AST
+    // head is still the literal `let` symbol (NOT desugared to a lambda
+    // application). classify() handles that surface shape rather than requiring a
+    // macro-expanded input — so the original "must run on macro-expanded ast"
+    // assumption is resolved by surface handling, not by adding an expander.
+    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, sandboxedEnv);
+    expect((ast as { car?: { valueOf?: () => unknown } })?.car?.valueOf?.()).toBe("let"); // surface form, unexpanded
+    expect(fullCone(classify(ast, C), { v1: [100] })).toEqual([100]); // transparent on the surface form
+  });
 });
 
 // ── v0.1 FINALIZATION GATES (G1–G7) ──

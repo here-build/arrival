@@ -33,11 +33,29 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
+import { parse } from "../eval/generator-exec";
 import { sandboxedEnv } from "../sandbox-env";
 import { AValue } from "../values/AValue";
+import { classify, fullCone, type Classifier } from "../values/lineage";
 
 let seq = 0;
 const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
+
+/** STATIC classifier for the gate checks below — the control forms here use only
+ *  arithmetic/comparison pures (no Rosetta-in, no fans). */
+const C: Classifier = {
+  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length"].includes(op),
+  isRosettaIn: () => false,
+  isFan: (op) => ["map", "filter"].includes(op),
+  isOpaque: () => false,
+};
+
+/** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */
+async function staticCone(src: string, b: Record<string, readonly number[]>): Promise<number[]> {
+  await initBridge();
+  const [ast] = await parse(src, sandboxedEnv);
+  return fullCone(classify(ast, C), b);
+}
 /** A provenance-stamped number source — exercises the real AValue arithmetic path.
  *  (if/let/cond cones are all numeric here; the string source the assumptions
  *  ledger uses for per-element ids is unnecessary for the scalar control forms.) */
@@ -229,19 +247,77 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
   });
 });
 
-// ── GATE TODO — the static path must reproduce the goldens above ──────────────
-describe("GATE G2 (static lineage == eager golden on special forms) — TODO until --ir-lineage lands", () => {
-  // classify() currently treats if/let/cond as plain applications (lineage.ts
-  // §SCOPE) and has no `mux` node, so it cannot yet reproduce the goldens above.
-  // When the classifier learns special forms, assert: for each program here,
-  // fullCone(classify(macroExpand(ast)), bindings) === <the eager snapshot>.
-  it.todo("A4-classifier: classify() handles if/let/cond (special forms) — fullCone == eager golden");
-  // The cond asymmetry (matched selector contributes, failed selectors do not)
-  // and the if predicate-taint require a selector-aware `mux` node, not the
-  // pure-control `mux` the spike's SCOPE note sketched (which would DROP the
-  // predicate and fail the `if (< 0 v) v -1 → {5}` literal-arm golden).
-  it.todo("A4-mux: the `mux` node's cone = matched-selector ∪ taken-arm (NOT a dropped predicate)");
-  // G2 demands the comparison run on macro-expanded ASTs (cond desugars to nested
-  // if; let to a lambda application) — the classifier input is post-expansion.
-  it.todo("A21: classify() runs on the MACRO-EXPANDED ast (cond→if, let→lambda), not raw reader output");
+// ── GATE — the static classifier reproduces these goldens (W1) ────────────────
+// classify() now handles the special forms by shape (lineage.ts header): `if`/
+// `cond` → a `mux`, `let` family → transparent substitution. These assert the
+// static cone against the EAGER goldens captured above, on the cases the static
+// tree CAN reproduce — and name precisely the one it cannot (the control-flow
+// `why` that DR3 keeps eager-sourced).
+describe("GATE G2 (static lineage == eager golden on special forms) — W1", () => {
+  // A4-mux: the `if` mux keeps the predicate (it does NOT drop it) — selector ∪
+  // arms. Every captured `if` golden has literal non-taken arms, so the
+  // conservative static cone coincides exactly with the eager taken-arm cone.
+  it("A4-mux: `if` classifies to a `mux` whose cone = predicate ∪ arms (predicate NOT dropped)", async () => {
+    await initBridge();
+    const [ast] = await parse(`(if (< 0 (* x x)) 99 -1)`, sandboxedEnv);
+    const node = classify(ast, C);
+    expect(node.kind).toBe("mux"); // not an application, not a dropped-predicate node
+    // Both arms are literals; the cone is the predicate's source ALONE — exactly
+    // the eager `predicate-only source` golden ({7}), NOT the empty set the old
+    // pure-control sketch would have produced.
+    expect(fullCone(node, { x: [7] })).toEqual([7]);
+  });
+
+  // A4-classifier (if): every captured `if` golden reproduces byte-identically.
+  it("A4-classifier(if): static fullCone == eager golden for all captured `if` cases", async () => {
+    expect(await staticCone(`(if (< 0 v) v -1)`, { v: [5] })).toEqual([5]);
+    expect(await staticCone(`(if (< 0 (* x x)) 99 -1)`, { x: [7] })).toEqual([7]);
+    expect(await staticCone(`(if (< 0 x) v -1)`, { x: [7], v: [5] })).toEqual([5, 7]);
+    expect(await staticCone(`(if (< 0 x) (* v1 v2) -1)`, { x: [7], v1: [100], v2: [200] })).toEqual([7, 100, 200]);
+  });
+
+  // A4-classifier (let): the let family is genuinely transparent — byte-identical
+  // to the inlined form, the load-bearing 121-163 goldens.
+  it("A4-classifier(let): transparent — static fullCone == eager golden (== inlined)", async () => {
+    const b = { v1: [100], v2: [200] };
+    expect(await staticCone(`(let ((foo (+ 1 v2))) (* v1 foo))`, b)).toEqual([100, 200]);
+    expect(await staticCone(`(let ((a v1)) (let ((b v2)) (+ a b)))`, b)).toEqual([100, 200]);
+    expect(await staticCone(`(let* ((a v1) (b (+ a v2))) b)`, b)).toEqual([100, 200]);
+    expect(await staticCone(`(let ((foo v1)) 42)`, { v1: [100] })).toEqual([]);
+  });
+
+  // A4-classifier (cond, reproducible cases): a single matched clause with a
+  // literal else reproduces the eager matched-clause golden exactly.
+  it("A4-classifier(cond): static fullCone == eager golden for a single-matched-clause cond", async () => {
+    expect(await staticCone(`(cond ((< v 0) (* p q)) (else 0))`, { v: [5], p: [9], q: [13] })).toEqual([5, 9, 13]);
+  });
+
+  // THE DR3 BOUNDARY (NOT my unit to close): where the eager engine drops a FAILED
+  // clause's selector or an un-taken arm, the STATIC tree's cone is a conservative
+  // SUPERSET — it cannot know the taken branch. Byte-identical control-flow `why`
+  // is stamped by the evaluator's control-flow wrappers (Wave S), not the static
+  // classifier. This documents the gap with a runnable witness.
+  it("DR3: the static cond cone is a conservative SUPERSET of the eager cone (control-flow why stays eager)", async () => {
+    // Eager `else arm` golden is {22} (failed predicate + un-taken arms dropped);
+    // the static tree unions the selector and EVERY arm.
+    const got = await staticCone(`(cond ((< v 0) a) (else b))`, { v: [5], a: [11], b: [22] });
+    expect(got).toEqual([5, 11, 22]); // ⊋ eager {22}
+    expect(got).toEqual(expect.arrayContaining([22])); // superset: the eager answer is contained
+  });
+  it.todo(
+    "A4-mux-eager: byte-identical control-flow why (failed-clause non-leak, un-taken-arm exclusion) — Wave S evaluator wrappers, not the static classifier (DR3)",
+  );
+
+  // A21 is MOOT for this engine: classify() runs on the SURFACE reader output
+  // because the evaluator dispatches if/let/cond DIRECTLY from SPECIAL_FORMS —
+  // they are never macro-expanded to applications. The "macro-expanded" premise
+  // does not apply; the surface-form handling above IS the resolution.
+  it("A21: classify() handles SURFACE special forms directly (this engine does NOT macro-expand them)", async () => {
+    await initBridge();
+    // `let` is a SPECIAL_FORMS entry, so the parsed AST head is still the literal
+    // `let` symbol (no lambda-application desugaring) — and classify() handles it.
+    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, sandboxedEnv);
+    expect(classify(ast, C).kind).not.toBe("literal"); // recognised + transparent, not mis-read
+    expect(await staticCone(`(let ((foo v1)) (* v1 foo))`, { v1: [100] })).toEqual([100]);
+  });
 });

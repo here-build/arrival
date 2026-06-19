@@ -13,7 +13,7 @@ import { sandboxedEnv } from "../sandbox-env";
 import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../values/lineage";
 
 const C: Classifier = {
-  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list"].includes(op),
+  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length", "not"].includes(op),
   isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
   isFan: (op) => ["map", "filter"].includes(op),
   isOpaque: (op) => ["ext-call"].includes(op),
@@ -77,5 +77,145 @@ describe("lineage spike — Rosetta-in mints, opaque is holistic", () => {
     const n = await skeleton(`(ext-call a b)`);
     expect(n.kind).toBe("opaque");
     expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]);
+  });
+});
+
+// ── W1 — FILTER-FAN countCone (the §5 confluent-IR fix) ───────────────────────
+// The original spike pruned EVERY fan under a count-query. That is wrong for
+// `filter`: a filter is length-CHANGING, so a count depends on the predicate AND
+// the inspected elements. Only a LENGTH-PRESERVING fan (map) may be pruned. The
+// `fan.lengthPreserving` flag carries the distinction; walk() prunes on it.
+describe("lineage spike — count-cone prunes a MAP fan but NOT a FILTER fan (§5)", () => {
+  it("(map infer xs): count prunes the length-preserving fan; full keeps the mint", async () => {
+    const n = await skeleton(`(map infer xs)`);
+    expect(n.kind).toBe("fan");
+    if (n.kind !== "fan") return;
+    expect(n.lengthPreserving).toBe(true); // map preserves length
+    expect(fullCone(n, { xs: [10], infer: [20] })).toEqual([10, 20]);
+    expect(countCone(n, { xs: [10], infer: [20] })).toEqual([10]); // mint pruned
+  });
+
+  it("(filter infer xs): count does NOT prune — the predicate's mint stays in the count cone", async () => {
+    const n = await skeleton(`(filter infer xs)`);
+    expect(n.kind).toBe("fan");
+    if (n.kind !== "fan") return;
+    expect(n.lengthPreserving).toBe(false); // filter changes length
+    // A filter's output cardinality depends on what the predicate decided per
+    // element — so the count cone is the SAME as the full cone (no prune).
+    expect(fullCone(n, { xs: [10], infer: [20] })).toEqual([10, 20]);
+    expect(countCone(n, { xs: [10], infer: [20] })).toEqual([10, 20]);
+  });
+
+  it("(length (filter pred xs)): a pure filter's count keeps the source — the fan is not pruned", async () => {
+    const n = await skeleton(`(length (filter pred xs))`);
+    // length over a filter: the filter's source must survive the count prune.
+    expect(countCone(n, { xs: [10], pred: [] })).toEqual([10]);
+    expect(fullCone(n, { xs: [10], pred: [] })).toEqual([10]);
+  });
+
+  it("(length (map f xs)): the map fan still prunes under count, byte-identical to before", async () => {
+    const n = await skeleton(`(length (map f xs))`);
+    // f is a plain (non-Rosetta) leaf here, so map introduces nothing; the point
+    // is the SHAPE — a length-preserving fan under a count adds only the source.
+    expect(countCone(n, { xs: [10], f: [] })).toEqual([10]);
+  });
+});
+
+// ── W1 — SPECIAL FORMS (the engine dispatches these as surface Pairs) ─────────
+// classify() now handles if/cond/let-family/begin/and/or/lambda by shape (they
+// are NOT macro-expanded by this engine). Closes lineage-assumptions A4-classifier.
+describe("lineage spike — `if` / `cond` classify to a `mux` (selector ∪ arms)", () => {
+  it("(if (< 0 x) v -1) → mux(selector=test, arms=[v, -1]); cone = predicate ∪ taken-arm", async () => {
+    const n = await skeleton(`(if (< 0 x) v -1)`);
+    expect(n.kind).toBe("mux");
+    if (n.kind !== "mux") return;
+    expect(n.op).toBe("if");
+    // selector carries the predicate's source x; the literal -1 arm carries nothing.
+    expect(n.selector).toEqual({ kind: "pipe", op: "<", child: { kind: "leaf", slot: "x" } });
+    expect(n.arms).toEqual([{ kind: "leaf", slot: "v" }, { kind: "literal" }]);
+    // Static cone unions the selector with EVERY arm (the taken arm is a runtime
+    // fact the tree cannot know — DR3 conservative over-approximation).
+    expect(fullCone(n, { x: [7], v: [5] })).toEqual([5, 7]);
+  });
+
+  it("(if (< 0 (* x x)) 99 -1) → cone is the predicate's source ALONE (both arms literal)", async () => {
+    // The spike's old `classify` would DROP the predicate and wrongly yield [].
+    // The mux keeps it: the eager engine taints the result with the predicate too.
+    const n = await skeleton(`(if (< 0 (* x x)) 99 -1)`);
+    expect(fullCone(n, { x: [7] })).toEqual([7]);
+  });
+
+  it("(cond ((< v 0) (* p q)) (else 0)) → mux; cone = matched-selector ∪ merge-arm", async () => {
+    const n = await skeleton(`(cond ((< v 0) (* p q)) (else 0))`);
+    expect(n.kind).toBe("mux");
+    if (n.kind !== "mux") return;
+    expect(n.op).toBe("cond");
+    expect(n.arms[0]).toEqual({ kind: "merge", op: "*", children: [{ kind: "leaf", slot: "p" }, { kind: "leaf", slot: "q" }] });
+    expect(fullCone(n, { v: [5], p: [9], q: [13] })).toEqual([5, 9, 13]);
+  });
+
+  it("cond `=>` threads the test cone into the arm: (cond ((car al) => f) (else 0))", async () => {
+    const n = await skeleton(`(cond ((car al) => f) (else 0))`);
+    expect(n.kind).toBe("mux");
+    if (n.kind !== "mux") return;
+    // The arm value is (f testResult), so the cone includes BOTH f and the test's
+    // source (al, via the `car` selector) — the `=>` arm threads the test cone.
+    expect(fullCone(n, { al: [3], f: [] })).toEqual([3]);
+  });
+
+  it("CONSERVATIVE cone — a multi-clause cond unions ALL selectors (not just the matched one)", async () => {
+    // The eager engine drops a FAILED clause's selector (golden-prov-special-forms
+    // `else arm`); the STATIC tree cannot, so its cone is a superset. This is the
+    // documented DR3 boundary: byte-identical control-flow `why` stays eager.
+    const n = await skeleton(`(cond ((< w 0) z) ((> v 0) a) (else b))`);
+    // Both selectors (w, v) and every arm (z, a, b) appear — the conservative union.
+    expect(fullCone(n, { w: [50], v: [5], z: [99], a: [11], b: [22] })).toEqual([5, 11, 22, 50, 99]);
+  });
+});
+
+describe("lineage spike — `let` family is TRANSPARENT (body == inlined form)", () => {
+  it("(let ((foo (+ 1 v2))) (* v1 foo)) classifies IDENTICALLY to the inlined (* v1 (+ 1 v2))", async () => {
+    const letform = await skeleton(`(let ((foo (+ 1 v2))) (* v1 foo))`);
+    const inlined = await skeleton(`(* v1 (+ 1 v2))`);
+    expect(letform).toEqual(inlined); // structural identity — the binding is pure substitution
+    const b = { v1: [100], v2: [200] };
+    expect(fullCone(letform, b)).toEqual(fullCone(inlined, b));
+  });
+
+  it("let* threads bindings left-to-right: (let* ((a v1) (b (+ a v2))) b) ≡ inlined", async () => {
+    const n = await skeleton(`(let* ((a v1) (b (+ a v2))) b)`);
+    const inlined = await skeleton(`(+ v1 v2)`);
+    expect(fullCone(n, { v1: [100], v2: [200] })).toEqual(fullCone(inlined, { v1: [100], v2: [200] }));
+  });
+
+  it("a let body returning a pure literal carries NOTHING: (let ((foo v1)) 42) → []", async () => {
+    const n = await skeleton(`(let ((foo v1)) 42)`);
+    expect(n).toEqual({ kind: "literal" });
+    expect(fullCone(n, { v1: [100] })).toEqual([]);
+  });
+});
+
+describe("lineage spike — begin / and / or / lambda", () => {
+  it("(begin a b c) is a pass-through of the LAST expression — cone = {c}", async () => {
+    const n = await skeleton(`(begin a b c)`);
+    expect(n).toEqual({ kind: "leaf", slot: "c" });
+    expect(fullCone(n, { a: [1], b: [2], c: [3] })).toEqual([3]);
+  });
+
+  it("(and x y z) is a selector-free value-select — cone = union of operands, NO predicate-taint", async () => {
+    const n = await skeleton(`(and x y z)`);
+    expect(n.kind).toBe("merge"); // ≥2 prov-bearing operands
+    expect(fullCone(n, { x: [1], y: [2], z: [3] })).toEqual([1, 2, 3]);
+  });
+
+  it("(or x y) likewise unions its operands — the result is one of them", async () => {
+    const n = await skeleton(`(or x y)`);
+    expect(fullCone(n, { x: [1], y: [2] })).toEqual([1, 2]);
+  });
+
+  it("a `lambda` literal contributes NO provenance at its definition site", async () => {
+    const n = await skeleton(`(lambda (x) (* x x))`);
+    expect(n).toEqual({ kind: "literal" });
+    expect(fullCone(n, {})).toEqual([]);
   });
 });

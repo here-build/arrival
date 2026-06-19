@@ -41,6 +41,8 @@ function countNodes(n: LineageNode): number {
       return 1 + countNodes(n.child);
     case "fan":
       return 1 + countNodes(n.source);
+    case "mux":
+      return 1 + countNodes(n.selector) + n.arms.reduce((a, arm) => a + countNodes(arm), 0);
     case "merge":
     case "opaque":
       return 1 + n.children.reduce((a, ch) => a + countNodes(ch), 0);
