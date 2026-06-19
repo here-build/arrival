@@ -34,6 +34,7 @@ import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
 import { is_false } from "../eval/guards.js";
 import { Pair } from "../values/Pair.js";
+import { SchemeVector } from "../values/SchemeVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/AValue.js";
 import { LazySeq, is_lazy_seq } from "../values/LazySeq.js";
 
@@ -182,10 +183,16 @@ async function reduceLazySeq(
   return builtinReduce!(fn, init, Pair.fromArray([...items], false));
 }
 
-// Materialize a collection's elements — a LIPS pair spine, a lazy SchemeJSArray
-// wrapper, or a raw JS array — to a flat element array. Shared by `length` and
-// the `lazy-seq` constructor so both see the same element set. As lenient as the
-// old length: an unrecognized input yields `[]` (an empty collection).
+// Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
+// SchemeJSArray wrapper, or a raw JS array — to a flat element array. Shared by
+// `length` and the `lazy-seq` constructor so both see the same element set. As
+// lenient as the old length: an unrecognized input yields `[]` (an empty collection).
+//
+// G6 (carrier-coercion soundness): the SchemeVector branch mirrors its twin
+// `collapseProvenance` (provenance-collapse.ts), which already deep-walks
+// `__vector__`. Without it a SchemeVector matched none of the branches and
+// silently collected `[]` — so `(length vec)` counted 0 and `(lazy-seq vec)` held
+// an empty plan, dropping every element's provenance with no error.
 function collectElements(collection: any): unknown[] {
   const elements: unknown[] = [];
   if (collection && typeof collection === "object" && "car" in collection) {
@@ -194,6 +201,8 @@ function collectElements(collection: any): unknown[] {
       elements.push(current.car);
       current = current.cdr;
     }
+  } else if (collection instanceof SchemeVector) {
+    elements.push(...collection.__vector__); // boxed vector — its elements carry provenance
   } else if (collection instanceof SchemeJSArray) {
     elements.push(...collection.source); // lazy JS-array wrapper from `@`/membrane
   } else if (Array.isArray(collection)) {
