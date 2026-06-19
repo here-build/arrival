@@ -12,9 +12,17 @@
 import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
 import run, { evaluate, SchemeError, type EvalTap } from "./evaluator.js";
-import { is_pair } from "./guards.js";
+import { is_pair, is_macro } from "./guards.js";
+import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
+import { assertShadowCone, classifyForm, installMacroGuard } from "../values/lineage-shadow.js";
+import type { LineageNode } from "../values/lineage.js";
 import type { Pair } from "../values/Pair.js";
 import type { SchemeValue } from "../values/types.js";
+
+// Give the value-layer shadow module the evaluator's own `is_macro` without a
+// static value→eval import edge (the macro-head skip needs it; this module already
+// sits above eval/guards in the DAG). Idempotent — set once at module load.
+installMacroGuard(is_macro);
 
 // Lazy import to avoid circular dependency during module initialization
 let _lips: typeof import("../stdlib.js") | null = null;
@@ -76,6 +84,28 @@ export interface ExecOptions {
    * waiting on). Formerly lived on the now-removed stdlib.ts `exec`.
    */
   skipBootstrapWait?: boolean;
+  /**
+   * SHADOW MODE (W3 slices 2–3 — provenance-static-lineage-finalization §8). When
+   * set, after each top-level form is evaluated, the static lineage `fullCone`
+   * (values/lineage.ts) is computed and ASSERTED equal to the form's UNTAPPED eager
+   * `result.provenance`. A divergence throws `ProvenanceShadowDivergence`. This is a
+   * read-only cross-check of the static classifier against the live engine — it does
+   * NOT alter evaluation; **flag-OFF (the default) is byte-identical to today**, as
+   * the skeleton build + assert are gated entirely behind this flag. Asserts
+   * `fullCone` only (never `countCone`, which diverges by design — the v0.2 minimal
+   * cone). Forms outside shadow's provable set are skipped + recorded, not asserted.
+   */
+  irLineage?: boolean;
+  /**
+   * The Rosetta-IN (provenance-MINTING) op names for `classifierFromEnv` when
+   * `irLineage` is on (the documented explicit seam — the env has no source
+   * registry yet). DEFAULT empty ⇒ the SOURCE-FREE provable scope: untapped eager
+   * eval does not mint at sources (the mint is tap-gated, rosetta.ts:453, falling
+   * back to input provenance), so a declared-source program's untapped result need
+   * not match a `{kind:source}` skeleton — shadow is scoped to source-free programs
+   * where it genuinely matches. Pass a set only when extending shadow knowingly.
+   */
+  irLineageSources?: Iterable<string>;
 }
 
 /**
@@ -100,7 +130,20 @@ export interface ExecOptions {
  */
 export async function exec(
   code: string | SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, speculate, skipBootstrapWait }: ExecOptions = {},
+  {
+    env,
+    dynamic_env,
+    use_dynamic,
+    tap,
+    nodeFilter,
+    signal,
+    budgetMs,
+    heapBudget,
+    speculate,
+    skipBootstrapWait,
+    irLineage,
+    irLineageSources,
+  }: ExecOptions = {},
 ): Promise<SchemeValue[]> {
   const lips = await getLips();
 
@@ -130,6 +173,18 @@ export async function exec(
     parsed = [code];
   }
 
+  // SHADOW MODE slice 2 — classify@load. Build one static lineage skeleton per
+  // parsed form, BEFORE evaluation. Pure (classify runs no eval); gated entirely
+  // behind the flag so the flag-OFF path is byte-identical. The classifier is
+  // env-derived (classifierFromEnv); `irLineageSources` defaults empty ⇒ the
+  // source-free provable scope (see ExecOptions.irLineageSources). Skeletons align
+  // by index with `parsed`, consumed at the per-form assert hook below.
+  let shadowSkeletons: LineageNode[] | undefined;
+  if (irLineage) {
+    const classifier = classifierFromEnv(actualEnv, new Set(irLineageSources));
+    shadowSkeletons = parsed.map((form) => classifyForm(form, classifier));
+  }
+
   // Evaluate each expression in sequence. The budget spans the WHOLE exec call
   // (all top-level forms share one deadline) — a sandbox program that splits a
   // hang across several forms is still bounded. Recompute the remaining budget
@@ -144,7 +199,8 @@ export async function exec(
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
   try {
-    for (const expr of parsed) {
+    for (let i = 0; i < parsed.length; i++) {
+      const expr = parsed[i];
       const remaining =
         budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
       // Preserve the audit-#42 wrapOperator contract (ported from the removed
@@ -171,6 +227,16 @@ export async function exec(
         throw e;
       }
       results.push(result);
+
+      // SHADOW MODE slice 3 — the assert. Compare the static fullCone against this
+      // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
+      // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
+      // keyword-projection form abstains (returns a skip reason we discard — it is
+      // outside the classifier's model, so shadow does not assert it). Behind the
+      // flag — never runs flag-OFF.
+      if (irLineage && shadowSkeletons) {
+        assertShadowCone(shadowSkeletons[i], expr, result, actualEnv, String(expr));
+      }
     }
   } finally {
     if (heapBudget !== undefined) actualEnv.__heapMeter__ = priorMeter;

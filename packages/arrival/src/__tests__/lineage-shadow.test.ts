@@ -1,0 +1,297 @@
+/**
+ * SHADOW MODE (W3 slices 2–3) — the static lineage `fullCone` reproduces the
+ * UNTAPPED eager `result.provenance`, asserted INSIDE `exec` behind the `irLineage`
+ * flag. Design: docs/working-proposals/provenance-static-lineage-finalization-v0.1-
+ * 2026-06-19.md §8 "W3 wiring design — SHADOW MODE".
+ *
+ * WHAT THIS LOCKS. The golden-prov-{arithmetic,fan,special-forms}.test.ts froze the
+ * eager engine's provenance with inline snapshots (the G2 oracle). Those goldens
+ * read `provOf(result)` directly. Here we run the SAME program shapes with
+ * `irLineage: true`, which makes `exec` itself assert `fullCone(skeleton, bindings)
+ * == provOf(result)` per form — so a green run here is a machine-checked agreement
+ * between the static classifier and what those goldens froze. (We additionally
+ * recompute the cone out-of-band and assert it equals the golden ids, so the
+ * agreement is visible at the call site, not only as "exec didn't throw".)
+ *
+ * THE TWO PROVENANCE MECHANISMS (the doc's load-bearing correction): shadow compares
+ * `fullCone` against mechanism (1) — the per-op EAGER STAMP that `exec` returns on
+ * `result.provenance`, NO trace tap installed — never mechanism (2)'s tap-only
+ * `computeProvenance`. The proven `lineage-checkpoint.test.ts:60-69` shape,
+ * generalized over the golden program families.
+ *
+ * THE PROVABLE SCOPE (empirically determined, see lineage-shadow.ts "BOUNDARIES"):
+ * SOURCE-FREE programs over input-leaf bindings, in the VALUE-position shapes where
+ * the static cone coincides with the eager stamp — literals, pure pipe/merge
+ * arithmetic, the string-collapse path, `cons` union, and `if`/`let`/`cond` whose
+ * conservative selector∪arms superset equals the taken-arm eager cone. The
+ * by-design divergences (element-projection car/cdr, cardinality-drop string-length,
+ * spine-rebuild append, control-flow cond superset, fan-cardinality length-over-map)
+ * are deliberately NOT run under the flag — `exec` would throw on them, which is the
+ * correct shadow signal that they lie outside the provable set (they are covered as
+ * eager goldens in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc).
+ */
+import { describe, it, expect } from "vitest";
+import { initBridge } from "../bridge";
+import { exec, parse } from "../eval/generator-exec";
+import { sandboxedEnv } from "../sandbox-env";
+import { SchemeString } from "../values/SchemeString";
+import { AValue } from "../values/AValue";
+import { classify, fullCone } from "../values/lineage";
+import { classifierFromEnv } from "../values/lineage-classifier-from-env";
+import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
+
+let seq = 0;
+
+/** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
+const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
+const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
+
+const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
+const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) });
+
+/**
+ * Run `src` under SHADOW MODE and return both cones. `exec({irLineage:true})`
+ * asserts `fullCone == provOf(result)` internally (throws on in-scope divergence);
+ * we ALSO recompute the static cone out-of-band so the agreement is asserted at the
+ * call site against the golden ids. Source-free by default (empty sources).
+ */
+async function shadow(src: string, binds: Record<string, unknown>): Promise<{ staticCone: number[]; eager: number[] }> {
+  await initBridge();
+  const env = sandboxedEnv.inherit(`shadow-${seq++}`);
+  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
+
+  // exec under the flag: this is the in-engine shadow assert (slices 2+3). If the
+  // static cone diverged from the eager stamp on any form, exec would throw here.
+  const [result] = await exec(src, { env, irLineage: true });
+  const eager = provOf(result);
+
+  // Out-of-band recompute for a call-site-visible assertion against the golden ids.
+  const [ast] = await parse(src, env);
+  const skel = classify(ast, classifierFromEnv(env, new Set()));
+  const staticCone = fullCone(skel, bindingsForSkeleton(skel, env));
+  return { staticCone, eager };
+}
+
+/** Assert the static cone, the eager stamp, AND the frozen golden are all equal. */
+async function expectCone(src: string, binds: Record<string, unknown>, golden: number[]): Promise<void> {
+  const { staticCone, eager } = await shadow(src, binds);
+  expect(eager).toEqual(golden); // the eager stamp matches what golden-prov-* froze
+  expect(staticCone).toEqual(golden); // and the static fullCone reproduces it (no divergence)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARITHMETIC — literals (mint nothing), pipes (1 source), merges (≥2 sources).
+// Oracle: golden-prov-arithmetic.test.ts §§1–3.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW — arithmetic: literals / pipes / merges == eager golden", () => {
+  it("(+ 1 2) — all-literal mints nothing", async () => {
+    await expectCone(`(+ 1 2)`, {}, []);
+  });
+  it("(- 10 (* 2 3)) — nested all-literal tree", async () => {
+    await expectCone(`(- 10 (* 2 3))`, {}, []);
+  });
+  it("(* x x) — one source used twice (pipe)", async () => {
+    await expectCone(`(* x x)`, { x: sNum(7, 200) }, [200]);
+  });
+  it("(+ a 5) — source + literal carries only the source (pipe)", async () => {
+    await expectCone(`(+ a 5)`, nums(), [100]);
+  });
+  it("(< 0 (* x x)) — predicate over a single source (pipe)", async () => {
+    await expectCone(`(< 0 (* x x))`, { x: sNum(7, 200) }, [200]);
+  });
+  it("(+ a b) — two sources fan in (merge)", async () => {
+    await expectCone(`(+ a b)`, nums(), [100, 200]);
+  });
+  it("(max a b) — n-ary numeric merge", async () => {
+    await expectCone(`(max a b)`, nums(), [100, 200]);
+  });
+  it("(* a (+ 1 b)) — merge over a source and a one-source pipe", async () => {
+    await expectCone(`(* a (+ 1 b))`, nums(), [100, 200]);
+  });
+  it("(+ a (* b c)) — three sources fan in across two levels", async () => {
+    await expectCone(`(+ a (* b c))`, nums(), [100, 200, 300]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STRING COLLAPSE + cons union. Oracle: golden-prov-arithmetic.test.ts §§4–5.
+// (Only the union-shaped list ops match; car/cdr element-projection diverge by
+// design and are covered as eager goldens + boundary below.)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW — string-collapse & cons-union == eager golden", () => {
+  it("(string-append a b) — two stamped strings union", async () => {
+    await expectCone(`(string-append a b)`, strs(), [100, 200]);
+  });
+  it("(string-append a b c) — three-way collapse", async () => {
+    await expectCone(`(string-append a b c)`, strs(), [100, 200, 300]);
+  });
+  it('(join "," (list a b)) — join over a list of stamped strings', async () => {
+    await expectCone(`(join "," (list a b))`, strs(), [100, 200]);
+  });
+  it('(string-append "x:" (join "," (list a b))) — nested collapse', async () => {
+    await expectCone(`(string-append "x:" (join "," (list a b)))`, strs(), [100, 200]);
+  });
+  it("(cons a b) — the cons cell carries the UNION of both elements", async () => {
+    await expectCone(`(cons a b)`, strs(), [100, 200]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPECIAL FORMS — if / let / cond, in the cases where the conservative static
+// superset (selector ∪ arms / transparent substitution) coincides with the eager
+// taken-arm cone. Oracle: golden-prov-special-forms.test.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW — `if` mux (selector ∪ arms) == eager golden", () => {
+  it("positive arm: (if (< 0 v) v -1), v>0", async () => {
+    await expectCone(`(if (< 0 v) v -1)`, { v: sNum(10, 5) }, [5]);
+  });
+  it("predicate taints a literal arm: (if (< 0 v) v -1), v<0 → still {5}", async () => {
+    await expectCone(`(if (< 0 v) v -1)`, { v: sNum(-3, 5) }, [5]);
+  });
+  it("predicate-only source, literal arms: (if (< 0 (* x x)) 99 -1) → {7}", async () => {
+    await expectCone(`(if (< 0 (* x x)) 99 -1)`, { x: sNum(3, 7) }, [7]);
+  });
+  it("predicate source UNION arm source: (if (< 0 x) v -1) → {5,7}", async () => {
+    await expectCone(`(if (< 0 x) v -1)`, { x: sNum(3, 7), v: sNum(10, 5) }, [5, 7]);
+  });
+  it("two-armed merge in the taken branch: (if (< 0 x) (* v1 v2) -1) → {7,100,200}", async () => {
+    await expectCone(`(if (< 0 x) (* v1 v2) -1)`, { x: sNum(3, 7), v1: sNum(5, 100), v2: sNum(7, 200) }, [7, 100, 200]);
+  });
+});
+
+describe("SHADOW — `let` transparency == eager golden (== inlined)", () => {
+  it("(let ((foo (+ 1 v2))) (* v1 foo)) == inlined cone", async () => {
+    await expectCone(`(let ((foo (+ 1 v2))) (* v1 foo))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
+  });
+  it("inlined twin (* v1 (+ 1 v2)) — same cone", async () => {
+    await expectCone(`(* v1 (+ 1 v2))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
+  });
+  it("nested let threads both bindings", async () => {
+    await expectCone(`(let ((a v1)) (let ((b v2)) (+ a b)))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
+  });
+  it("let* sequential binding is transparent", async () => {
+    await expectCone(`(let* ((a v1) (b (+ a v2))) b)`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
+  });
+  it("a let body returning a pure literal carries NOTHING", async () => {
+    await expectCone(`(let ((foo v1)) 42)`, { v1: sNum(5, 100) }, []);
+  });
+});
+
+describe("SHADOW — `cond` single-matched-clause (superset == taken arm) == eager golden", () => {
+  // The matched-clause-with-literal-else cases where the static selector∪arms
+  // superset coincides with the eager matched cone (no failed-clause selector to
+  // drop, no live un-taken arm). The else-taken / distinct-failed-selector cases
+  // diverge by design (DR3) and are excluded — see the BOUNDARY test below.
+  it("matched clause, merge arm, literal else: (cond ((< v 0) (* p q)) (else 0)) → {5,9,13}", async () => {
+    await expectCone(`(cond ((< v 0) (* p q)) (else 0))`, { v: sNum(-1, 5), p: sNum(4, 9), q: sNum(2, 13) }, [5, 9, 13]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FANS (the matching half). A bare `map`/`filter` result's SPINE carries [] on
+// BOTH paths (the per-element ids live on the elements, not the list head — the
+// golden-prov-fan §"the mapped LIST head's own provenance is EMPTY" finding), so
+// the fan-value cone matches. The CARDINALITY observation (length over a fan) is
+// the by-design over-attribution divergence — excluded, see BOUNDARY below.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () => {
+  it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-fan-${seq++}`);
+    const { Pair } = await import("../values/Pair");
+    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
+    expect(provOf(result)).toEqual([]); // eager spine
+    const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
+    const skel = classify(ast, classifierFromEnv(env, new Set()));
+    expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]); // static spine — agree
+  });
+  it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-fan-${seq++}`);
+    const { Pair } = await import("../values/Pair");
+    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
+    expect(provOf(result)).toEqual([]);
+    const [ast] = await parse(`(filter (lambda (e) (not (string=? e "b"))) xs)`, env);
+    const skel = classify(ast, classifierFromEnv(env, new Set()));
+    expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE BOUNDARY — by-design divergences. Each program below is a CORRECT static
+// cone that legitimately disagrees with the eager stamp; running it under the flag
+// MUST throw ProvenanceShadowDivergence. This proves the shadow assert is strict
+// (it does NOT silently pass divergence) and documents exactly what is out of the
+// v0.1 provable set. These are the eager goldens in golden-prov-* + the v0.2 line.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict, not swallowed)", () => {
+  async function runFlagged(src: string, binds: Record<string, unknown>): Promise<void> {
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-bound-${seq++}`);
+    for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
+    await exec(src, { env, irLineage: true });
+  }
+
+  it("car element-projection: (car (cons a b)) — static unions {100,200}, eager projects {100}", async () => {
+    // §5.3 element-vs-container projection: the static tree has no projection node
+    // (car is treated as a pure op → operand union). Out of v0.1 scope.
+    await expect(runFlagged(`(car (cons a b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
+  });
+  it("cardinality drop: (string-length a) — static pipes {100}, eager drops to {}", async () => {
+    // The documented cardinality asymmetry (golden-prov-arithmetic §"documented
+    // asymmetries"). fullCone vs countCone — the v0.2 minimal-cone tension (DR2/B1).
+    await expect(runFlagged(`(string-length a)`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
+  });
+  it("spine rebuild: (append (list a) (list b)) — static unions {100,200}, eager drops to {}", async () => {
+    // append rebuilds an unstamped spine. Out of v0.1 scope (spine-vs-element).
+    await expect(runFlagged(`(append (list a) (list b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
+  });
+  it("control-flow superset: (cond ((< v 0) a) (else b)), else taken — static {5,11,22} ⊋ eager {22}", async () => {
+    // DR3: the static cond cone is a conservative SUPERSET (it cannot know the
+    // taken branch); byte-identical control-flow why stays eager-sourced (Wave S).
+    await expect(
+      runFlagged(`(cond ((< v 0) a) (else b))`, { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) }),
+    ).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
+  });
+  it("fan cardinality over-attribution: (length (map id xs)) — static {} (spine), eager {100,101,102}", async () => {
+    // The A13 leak (golden-prov-fan): length touches each element and unions their
+    // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-bound-${seq++}`);
+    const { Pair } = await import("../values/Pair");
+    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
+      /PROVENANCE-SHADOW-DIVERGENCE/,
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SKIP CATEGORIES — macro head + keyword projection are RECORDED (uncovered), not
+// asserted. A macro-headed / `(:field …)` form must NOT throw under the flag even
+// though its eager and static cones may differ — it is out of the classifier's
+// model entirely (no static node), so shadow correctly abstains.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no throw)", () => {
+  it("keyword projection (:length …) is skipped, not asserted", async () => {
+    // A `(:keyword …)` head is a where-provenance projection with no static node
+    // (v0.2/B2). exec under the flag must not throw — the form is recorded uncovered.
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-skip-${seq++}`);
+    env.set("a", sStr("hello", 100));
+    // `(:length a)` resolves via the keyword-accessor membrane pluck; whatever its
+    // value/cone, shadow abstains because the head starts with ':'.
+    await expect(exec(`(:length a)`, { env, irLineage: true })).resolves.toBeDefined();
+  });
+
+  it("a `define` (macro/special head with no value-cone match) does not crash shadow", async () => {
+    // `define` returns undefined (no AValue) — provOf is []. Its skeleton is whatever
+    // classify makes of the surface form; the assert runs but must agree ([]==[]) or
+    // be skipped. This guards that a non-value-producing top-level form is handled.
+    await initBridge();
+    const env = sandboxedEnv.inherit(`shadow-skip-${seq++}`);
+    await expect(exec(`(define z 5)`, { env, irLineage: true })).resolves.toBeDefined();
+  });
+});

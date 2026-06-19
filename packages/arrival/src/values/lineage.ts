@@ -88,6 +88,30 @@ function opName(x: SchemeValue): string {
   return typeof v === "string" || typeof v === "symbol" ? String(v) : String(x);
 }
 
+/**
+ * The special-form heads `classify()` models BY SHAPE (the switch in classifyWith
+ * below). These resolve to `Macro` instances in the live env — the evaluator
+ * dispatches them from SPECIAL_FORMS, not by macro expansion — so a consumer that
+ * skips "macro heads" (e.g. the shadow assert) must EXCLUDE these: classify handles
+ * them, they are in scope, not opaque macros. SINGLE SOURCE OF TRUTH — keep in lock
+ * step with the switch (adding a case here without the switch over-asserts; the
+ * reverse over-skips). `quote`/`lambda` produce a literal but are still "handled". */
+export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
+  "if",
+  "cond",
+  "let",
+  "let*",
+  "letrec",
+  "letrec*",
+  "begin",
+  "when",
+  "unless",
+  "and",
+  "or",
+  "lambda",
+  "quote",
+]);
+
 /** Surface-form heads dispatched by SPECIAL_FORMS, recognised by name. */
 const isSym = (x: SchemeValue, name: string): boolean => x instanceof SchemeSymbol && opName(x) === name;
 
