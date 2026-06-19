@@ -212,3 +212,43 @@ describe("G6 golden(eager-parity) — wrong-carrier silent nil [CONTESTED: DR4]"
     expect(() => ops.map(idSync, mkArr())).toThrow(/pair or nil/i);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// G6 TOTALITY — element-projection accessors (car/cdr/assoc) + reduce across
+// carriers. The audit flagged these as ZERO-coverage cells, yet car/cdr IS the
+// §5.3 element projection and the wrong-carrier silent-nil/throw is the DR4 risk.
+// Characterization (run-pinned): which carriers project the box, which fall
+// through to a LIPS builtin that typechecks pair|nil and throws.
+// ════════════════════════════════════════════════════════════════════════════
+describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", () => {
+  // car/cdr project ONE element — its box must survive (this IS §5.3 element
+  // provenance; the golden-prov-arithmetic car/cons goldens depend on it).
+  it("car(Pair) projects the head element WITH its box", async () => {
+    expect(provOf(await force(ops.car(mkPair())))).toEqual([100]);
+  });
+  it("car(SchemeJSArray) projects the head element WITH its box (the .at(0) carrier path)", async () => {
+    expect(provOf(await force(ops.car(mkArr())))).toEqual([100]);
+  });
+  it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
+    expect(elemProvs(await force(ops.cdr(mkPair())))).toEqual([[101]]);
+  });
+  it("cdr(SchemeJSArray): the tail wrapper carries the remaining element's box", async () => {
+    expect(elemProvs(await force(ops.cdr(mkArr())))).toEqual([[101]]);
+  });
+  it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
+    const alist = new Pair(new Pair(el("k", 100), el("v", 101)), nil);
+    const found = (await force(ops.assoc(el("k", 200), alist))) as Pair;
+    expect(provOf(found.car)).toEqual([100]); // key box
+    expect(provOf(found.cdr)).toEqual([101]); // value box
+  });
+
+  // Wrong-carrier: car over a SchemeVector + reduce over a SchemeJSArray have NO
+  // overlay branch → fall through to the LIPS builtin which typechecks pair|nil
+  // → THROW (the DR4 surface — errors-as-doors, not a silent box-drop).
+  it("car(SchemeVector) THROWS — no SchemeVector branch in the accessor [CONTESTED: DR4]", () => {
+    expect(() => ops.car(mkVec())).toThrow();
+  });
+  it("reduce(SchemeJSArray) THROWS — overlay reduce has no SchemeJSArray branch [CONTESTED]", () => {
+    expect(() => ops.reduce((a: unknown, _b: unknown) => a, el("z", 0), mkArr())).toThrow(/pair or nil/i);
+  });
+});
