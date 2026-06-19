@@ -11,29 +11,17 @@ import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { parse } from "../eval/generator-exec";
 import { sandboxedEnv } from "../sandbox-env";
-import { SchemeString } from "../values/SchemeString";
 import { SchemeVector } from "../values/SchemeVector";
 import { Pair } from "../values/Pair";
 import { AValue } from "../values/AValue";
 import { LazySeq, is_lazy_seq } from "../values/LazySeq";
 import { classify, fullCone, type Classifier } from "../values/lineage";
+import { provOf } from "../values/lineage-shadow";
+import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers";
 
+// `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
+// a `defineRosetta`/LazySeq fixture); the shared run/runRaw own a separate counter.
 let seq = 0;
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
-const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
-const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
-
-async function run(src: string, binds: Record<string, AValue> = {}): Promise<number[]> {
-  return provOf(await runRaw(src, binds));
-}
-
-async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  await initBridge();
-  const env = sandboxedEnv.inherit(`la-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
-  const [r] = await exec(src, { env });
-  return r;
-}
 
 describe("ASSUMPTION — provenance is minted only at Rosetta crossings (§5)", () => {
   it("A11a: pure op over literals mints NOTHING — (+ 1 2) has empty provenance", async () => {

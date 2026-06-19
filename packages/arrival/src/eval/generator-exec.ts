@@ -14,8 +14,8 @@ import type { Environment } from "../Environment.js";
 import run, { evaluate, SchemeError, type EvalTap } from "./evaluator.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
-import { assertShadowCone, classifyForm, installMacroGuard } from "../values/lineage-shadow.js";
-import type { LineageNode } from "../values/lineage.js";
+import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
+import { classify, type LineageNode } from "../values/lineage.js";
 import type { Pair } from "../values/Pair.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -182,7 +182,7 @@ export async function exec(
   let shadowSkeletons: LineageNode[] | undefined;
   if (irLineage) {
     const classifier = classifierFromEnv(actualEnv, new Set(irLineageSources));
-    shadowSkeletons = parsed.map((form) => classifyForm(form, classifier));
+    shadowSkeletons = parsed.map((form) => classify(form, classifier));
   }
 
   // Evaluate each expression in sequence. The budget spans the WHOLE exec call

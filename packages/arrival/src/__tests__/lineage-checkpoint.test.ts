@@ -16,10 +16,10 @@ import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { exec } from "../stdlib";
 import { sandboxedEnv } from "../sandbox-env";
-import { SchemeString } from "../values/SchemeString";
 import { Pair } from "../values/Pair";
-import { AValue } from "../values/AValue";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";
+import { provOf } from "../values/lineage-shadow";
+import { sStr } from "./_lineage-test-helpers";
 
 const C: Classifier = {
   isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length"].includes(op),
@@ -27,9 +27,6 @@ const C: Classifier = {
   isFan: (op) => ["map", "filter"].includes(op),
   isOpaque: (op) => ["ext-call"].includes(op),
 };
-
-const stamped = (s: string, p: number) => new SchemeString(s, new Set([p]));
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
 
 function countNodes(n: LineageNode): number {
   switch (n.kind) {
@@ -53,9 +50,9 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
   it("lineage full-cone == the eager interpreter's provenance, for (length (list a b c))", async () => {
     await initBridge();
     const env = sandboxedEnv.inherit("lin-correct");
-    env.set("a", stamped("a", 100));
-    env.set("b", stamped("b", 101));
-    env.set("c", stamped("c", 102));
+    env.set("a", sStr("a", 100));
+    env.set("b", sStr("b", 101));
+    env.set("c", sStr("c", 102));
 
     const [r] = await exec(`(length (list a b c))`, { env });
     const eager = provOf(r);
@@ -80,7 +77,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
     await initBridge();
     const env = sandboxedEnv.inherit(`lin-scale-${n}`);
     const xs = Pair.fromArray(
-      Array.from({ length: n }, (_, i) => stamped(`e${i}`, 1000 + i)),
+      Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),
       false,
     );
     env.set("xs", xs);

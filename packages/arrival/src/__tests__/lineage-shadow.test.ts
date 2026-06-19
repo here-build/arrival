@@ -187,6 +187,20 @@ describe("SHADOW — `cond` single-matched-clause (superset == taken arm) == eag
   });
 });
 
+describe("SHADOW — `when` / `unless` mux (one-armed if) == eager golden", () => {
+  // when/unless go through classifyGuardedBody → a one-armed mux(selector=test,
+  // arms=[body]). When the body arm is TAKEN (when's test true / unless's test
+  // false), the static selector∪body superset coincides with the eager cone (the
+  // predicate's taint ∪ the body), so shadow agrees with NO throw — exercising the
+  // live wiring of the guarded-body path, not just classify() in isolation.
+  it("when, test TRUE → body taken: (when (< 0 x) v), x>0 → predicate ∪ body {5,7}", async () => {
+    await expectCone(`(when (< 0 x) v)`, { x: sNum(3, 7), v: sNum(10, 5) }, [5, 7]);
+  });
+  it("unless, test FALSE → body taken: (unless (< 0 x) v), x<0 → predicate ∪ body {5,7}", async () => {
+    await expectCone(`(unless (< 0 x) v)`, { x: sNum(-3, 7), v: sNum(10, 5) }, [5, 7]);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FANS (the matching half). A bare `map`/`filter` result's SPINE carries [] on
 // BOTH paths (the per-element ids live on the elements, not the list head — the
@@ -286,10 +300,13 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     await expect(exec(`(:length a)`, { env, irLineage: true })).resolves.toBeDefined();
   });
 
-  it("a `define` (macro/special head with no value-cone match) does not crash shadow", async () => {
-    // `define` returns undefined (no AValue) — provOf is []. Its skeleton is whatever
-    // classify makes of the surface form; the assert runs but must agree ([]==[]) or
-    // be skipped. This guards that a non-value-producing top-level form is handled.
+  it("a `define` (macro head) is skipped via the macro-head branch, never asserted", async () => {
+    // `define` is bound to a `Macro` in the env (it is NOT in CLASSIFIED_SPECIAL_FORMS),
+    // so `shadowSkipReason` returns {kind:"macro-head"} and `assertShadowCone` takes the
+    // skip EARLY-RETURN — it abstains and never reaches the cone compare (no fullCone vs
+    // provOf at all). Same abstention path as the keyword-projection sibling above, just
+    // via the macro-head branch instead of the ':'-prefix one. Guards that a
+    // macro-headed top-level form does not throw under the flag.
     await initBridge();
     const env = sandboxedEnv.inherit(`shadow-skip-${seq++}`);
     await expect(exec(`(define z 5)`, { env, irLineage: true })).resolves.toBeDefined();

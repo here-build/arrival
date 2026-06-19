@@ -39,21 +39,16 @@
  *                          (the dict carries two per-field ids; projecting one NARROWS
  *                          to it — "field-projection refining a point", design §5.3 A).
  *
- * Self-contained by construction (helpers inlined from lineage-assumptions.test.ts):
- * a reviewer may flag the duplication; the parent dedupes at integration. That keeps
- * this NEW file collision-free with every sibling Wave-R file.
+ * Shared provenance helpers (provOf, sStr, runRaw) are imported — provOf from the
+ * canonical production shadow module, sStr/runRaw from the test-helper module — so
+ * there is ONE definition of each across the suite. The file-SPECIFIC part is the
+ * `inferSources` setup (the deterministic `defineRosetta` fixtures), passed to the
+ * shared `runRaw` via its setup hook; the `prov`/`value` wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
-import { SchemeString } from "../values/SchemeString";
 import { AValue } from "../values/AValue";
-
-// ── inline helpers (copied from lineage-assumptions.test.ts; parent dedupes) ──
-let seq = 0;
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
-const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
+import { provOf } from "../values/lineage-shadow";
+import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 // The SHAPE of how they flow (born / propagate / merge / narrow) is the invariant;
@@ -63,33 +58,28 @@ const MINT_Y = 600; // infer-y's minted leaf
 const FIELD_ID = 700; // infer-dict's `field` slot id
 const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the projection)
 
-// Register deterministic fake Rosetta-IN sources, then run `src`. Each fake source
+// Register deterministic fake Rosetta-IN sources on the run env. Each fake source
 // IGNORES its argument and returns an already-stamped value: this is the "data is
 // born at the membrane" behavior — the result's provenance is the mint, independent
 // of the (literal) input. Mirrors lineage-assumptions.test.ts env.defineRosetta(...).
-async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  await initBridge();
-  const env = sandboxedEnv.inherit(`gpi-${seq++}`);
+const inferSources: EnvSetup = (env) => {
   // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
   env.defineRosetta("infer-x", { fn: () => sStr("RESULT-X", MINT_X) });
   env.defineRosetta("infer-y", { fn: () => sStr("RESULT-Y", MINT_Y) });
   // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
   // field projection has something to narrow FROM (two ids) TO (one id).
   env.defineRosetta("infer-dict", { fn: () => ({ field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) });
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
-  const [r] = await exec(src, { env });
-  return r;
-}
+};
 
-// provenance of the result
+// provenance of the result (the infer sources are registered via the setup hook)
 async function prov(src: string, binds: Record<string, unknown> = {}): Promise<number[]> {
-  return provOf(await runRaw(src, binds));
+  return provOf(await runRaw(src, binds, inferSources));
 }
 
 // the runtime value, unwrapped to plain JS (pinned alongside the cone so a rewrite
 // that changes the VALUE — not just the provenance — is also caught).
 async function value(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  const r = await runRaw(src, binds);
+  const r = await runRaw(src, binds, inferSources);
   return r instanceof AValue ? r.toJs() : r;
 }
 

@@ -30,30 +30,16 @@
  *   - filter length cone    INCLUDES the predicate's cone (filter is the
  *     length-changing fan countCone does NOT prune).
  *
- * Self-contained by construction (helpers inlined from lineage-assumptions.test.ts):
- * a reviewer may flag the duplication; the parent dedupes at integration. That keeps
- * this NEW file collision-free with every sibling Wave-R file.
+ * Shared provenance helpers (provOf, sStr, runRaw) are imported — provOf from the
+ * canonical production shadow module, the rest from the test-helper module — so
+ * there is ONE definition of each across the suite. The file-SPECIFIC `value`
+ * (unwrap-to-JS) and `triple` (Pair fixture) wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
-import { SchemeString } from "../values/SchemeString";
 import { Pair } from "../values/Pair";
 import { AValue } from "../values/AValue";
-
-// ── inline helpers (copied from lineage-assumptions.test.ts; parent dedupes) ──
-let seq = 0;
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
-const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
-
-async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  await initBridge();
-  const env = sandboxedEnv.inherit(`gpf-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
-  const [r] = await exec(src, { env });
-  return r;
-}
+import { provOf } from "../values/lineage-shadow";
+import { sStr, runRaw } from "./_lineage-test-helpers";
 
 // provenance of the result
 async function prov(src: string, binds: Record<string, unknown> = {}): Promise<number[]> {

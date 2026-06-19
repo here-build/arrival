@@ -10,9 +10,9 @@
  * (gate G2 — equivalence on macro-expanded REAL programs incl. if/let/cond),
  * and `flag-off` must stay byte-identical to what is snapshotted below.
  *
- * Self-contained by design (inline helpers mirror lineage-assumptions.test.ts /
- * lineage-spike.test.ts) so the file never collides with a sibling under
- * concurrent authoring; the parent dedupes helpers at integration.
+ * Shared provenance helpers (sNum, run) are imported from the test-helper module
+ * (run wraps the canonical provOf); the file-SPECIFIC static classifier `C` and the
+ * `staticCone` driver stay local.
  *
  * THE LOAD-BEARING DISCOVERY these goldens lock (and where the spike's stated
  * assumption diverges from observed reality):
@@ -32,14 +32,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
 import { parse } from "../eval/generator-exec";
 import { sandboxedEnv } from "../sandbox-env";
-import { AValue } from "../values/AValue";
 import { classify, fullCone, type Classifier } from "../values/lineage";
-
-let seq = 0;
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
+import { sNum, run } from "./_lineage-test-helpers";
 
 /** STATIC classifier for the gate checks below — the control forms here use only
  *  arithmetic/comparison pures (no Rosetta-in, no fans). */
@@ -55,23 +51,6 @@ async function staticCone(src: string, b: Record<string, readonly number[]>): Pr
   await initBridge();
   const [ast] = await parse(src, sandboxedEnv);
   return fullCone(classify(ast, C), b);
-}
-/** A provenance-stamped number source — exercises the real AValue arithmetic path.
- *  (if/let/cond cones are all numeric here; the string source the assumptions
- *  ledger uses for per-element ids is unnecessary for the scalar control forms.) */
-const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
-
-/** Provenance of the evaluated form, sorted ascending. */
-async function run(src: string, binds: Record<string, unknown> = {}): Promise<number[]> {
-  return provOf(await runRaw(src, binds));
-}
-
-async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  await initBridge();
-  const env = sandboxedEnv.inherit(`gpsf-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
-  const [r] = await exec(src, { env });
-  return r;
 }
 
 // ── if ──────────────────────────────────────────────────────────────────────

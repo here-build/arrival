@@ -219,3 +219,58 @@ describe("lineage spike — begin / and / or / lambda", () => {
     expect(fullCone(n, {})).toEqual([]);
   });
 });
+
+// ── W1 — the remaining CLASSIFIED_SPECIAL_FORMS (totality) ────────────────────
+// quote / when / unless / letrec / letrec* are in CLASSIFIED_SPECIAL_FORMS but were
+// untested by the spike. when/unless go through the DISTINCT classifyGuardedBody
+// path (a one-armed `if`-mux), letrec/letrec* through the TRANSPARENT let path.
+// quote is a literal. (named-let → opaque is the sibling describe below.)
+describe("lineage spike — quote / when / unless / letrec(*) classify correctly", () => {
+  it("(quote (a b c)) is a self-evaluating constant — literal, cone = {}", async () => {
+    const n = await skeleton(`(quote (a b c))`);
+    expect(n).toEqual({ kind: "literal" });
+    expect(fullCone(n, {})).toEqual([]);
+  });
+
+  it("(when (< 0 x) v) → mux(selector=test, arms=[body]); cone = predicate ∪ body", async () => {
+    const n = await skeleton(`(when (< 0 x) v)`);
+    expect(n.kind).toBe("mux");
+    if (n.kind !== "mux") return;
+    expect(n.op).toBe("when");
+    // selector carries the predicate's source x; the single arm is the body `v`.
+    expect(n.selector).toEqual({ kind: "pipe", op: "<", child: { kind: "leaf", slot: "x" } });
+    expect(n.arms).toEqual([{ kind: "leaf", slot: "v" }]);
+    expect(fullCone(n, { x: [7], v: [5] })).toEqual([5, 7]);
+  });
+
+  it("(unless (< 0 x) v) → mux likewise (one-armed if over the body); cone = predicate ∪ body", async () => {
+    const n = await skeleton(`(unless (< 0 x) v)`);
+    expect(n.kind).toBe("mux");
+    if (n.kind !== "mux") return;
+    expect(n.op).toBe("unless");
+    expect(n.arms).toEqual([{ kind: "leaf", slot: "v" }]);
+    expect(fullCone(n, { x: [7], v: [5] })).toEqual([5, 7]);
+  });
+
+  it("(letrec ((a v1)) (* a v2)) is TRANSPARENT like let* — classifies as the inlined merge", async () => {
+    const n = await skeleton(`(letrec ((a v1)) (* a v2))`);
+    const inlined = await skeleton(`(* v1 v2)`);
+    expect(n).toEqual(inlined); // structural identity — the binding is pure substitution
+    expect(fullCone(n, { v1: [100], v2: [200] })).toEqual([100, 200]);
+  });
+
+  it("(letrec* ((a v1) (b (+ a v2))) b) threads bindings left-to-right like let*", async () => {
+    const n = await skeleton(`(letrec* ((a v1) (b (+ a v2))) b)`);
+    const inlined = await skeleton(`(+ v1 v2)`);
+    expect(fullCone(n, { v1: [100], v2: [200] })).toEqual(fullCone(inlined, { v1: [100], v2: [200] }));
+  });
+});
+
+describe("lineage spike — a NAMED let is recursive ⇒ opaque (not transparently inlineable)", () => {
+  it("(let loop ((a v1)) a) → opaque over its RHSs + body (the named-let branch)", async () => {
+    const n = await skeleton(`(let loop ((a v1)) a)`);
+    expect(n.kind).toBe("opaque");
+    if (n.kind !== "opaque") return;
+    expect(n.op).toBe("named-let");
+  });
+});

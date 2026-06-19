@@ -397,8 +397,9 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, countOnly: boolean)
       // The value depends on the per-element transform; for a LENGTH-PRESERVING
       // fan (map) the COUNT does not, so a count-query prunes it — the same tree,
       // two answers. A FILTER is length-CHANGING: the count depends on the
-      // predicate and the inspected elements, so it is NOT pruned (confluent-IR
-      // §5; the lineage.ts:127-129 own admission this fixes).
+      // predicate and the inspected elements, so it is NOT pruned (the §5
+      // confluent-IR filter-fan admission — the prune is gated on `lengthPreserving`,
+      // not on "is it a fan"; see the W1 filter-fan tests in lineage-spike.test.ts).
       walk(n.source, b, out, countOnly);
       if (countOnly && n.lengthPreserving) return; // map: prune the per-element transform
       if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));

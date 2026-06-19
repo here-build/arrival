@@ -38,7 +38,7 @@
 import { is_pair } from "./value-guards.js";
 import { SchemeSymbol } from "./SchemeSymbol.js";
 import { AValue } from "./AValue.js";
-import { CLASSIFIED_SPECIAL_FORMS, classify, fullCone, type Bindings, type Classifier, type LineageNode } from "./lineage.js";
+import { CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
 import type { Pair } from "./Pair.js";
 import type { SchemeValue } from "./types.js";
@@ -177,10 +177,4 @@ export function assertShadowCone(
     throw new ProvenanceShadowDivergence(formText, staticCone, eagerCone);
   }
   return null;
-}
-
-/** Slice 2: build the per-form skeleton at load. Pure (no evaluation) — the flag-OFF
- *  path never calls this, so building it cannot perturb evaluation. */
-export function classifyForm(form: SchemeValue, c: Classifier): LineageNode {
-  return classify(form, c);
 }

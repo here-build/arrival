@@ -20,38 +20,13 @@
  * they are load-bearing for byte-equivalence — the static path must reproduce the
  * eager engine's current behavior here, warts and all, or G2 fails.
  *
- * Self-contained by design (inline helpers copied from lineage-assumptions.test.ts
- * + dataflow-thesis-probes.test.ts) so new Wave-R files never collide; a reviewer
- * may flag the duplication and the parent dedupes at integration. That is the flow.
+ * Shared provenance helpers (sStr, sNum, run) are imported from the test-helper
+ * module so there is ONE definition of each across the whole suite (run wraps the
+ * canonical provOf from the production shadow module). Only the file-SPECIFIC
+ * fixtures (strs/nums) stay local.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
-import { SchemeString } from "../values/SchemeString";
-import { AValue } from "../values/AValue";
-
-let seq = 0;
-
-/** Provenance ids on a value, sorted — `[]` for a non-AValue (e.g. raw JS). */
-const provOf = (v: unknown): number[] =>
-  v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
-
-/** Stamp a single source-id onto a string / number input. */
-const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
-const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
-
-async function runRaw(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
-  await initBridge();
-  const env = sandboxedEnv.inherit(`golden-prov-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
-  const [r] = await exec(src, { env });
-  return r;
-}
-
-/** Run a program and return the sorted provenance of its result. */
-const run = async (src: string, binds: Record<string, unknown> = {}): Promise<number[]> =>
-  provOf(await runRaw(src, binds));
+import { sStr, sNum, run } from "./_lineage-test-helpers";
 
 // Standard stamped fixtures, fresh per call (AValues are immutable, but a fresh
 // object keeps each test independent and the intent readable at the call site).

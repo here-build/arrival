@@ -29,7 +29,6 @@
 
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge.js";
-import { AValue } from "../values/AValue.js";
 import { Pair } from "../values/Pair.js";
 import { SchemeVector } from "../values/SchemeVector.js";
 import { SchemeString } from "../values/SchemeString.js";
@@ -37,13 +36,12 @@ import { LazySeq } from "../values/LazySeq.js";
 import { SchemeJSArray } from "../membrane.js";
 import { FL_INTEROP_OPS } from "../env/fl-interop.js";
 import { nil } from "../values/types.js";
+import { provOf } from "../values/lineage-shadow.js";
 
 await initBridge();
 const ops = FL_INTEROP_OPS as unknown as Record<string, (...a: any[]) => any>;
 
-// ── DR5 helpers (inline, matching the provenance test-dir idiom) ──────────────
-/** Direct container/value provenance — never `equal?`. */
-const provOf = (v: unknown): number[] => (v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : []);
+// ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
 /** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the
  *  asyncFLMap box-strip) treats it as a real boxed value, not an inert host num. */
 const el = (s: string, p: number) => new SchemeString(s, new Set([p]));
