@@ -13,6 +13,7 @@
 import invariant from "tiny-invariant";
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/AValue.js";
+import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
 import { SchemeBool } from "./values/SchemeBool.js";
 import { SchemeBytevector } from "./values/SchemeBytevector.js";
 import { SchemeVector } from "./values/SchemeVector.js";
@@ -367,7 +368,15 @@ function deepProvenance(value: unknown): ReadonlySet<number> {
   return acc;
 }
 
-export const createRosettaWrapper = ({ fn, options = {}, withContext = false }: RosettaFunction) => {
+export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pure = false }: RosettaFunction) => {
+  // CONFLUENCE GUARD (G5, dev-mode): a `pure: true` rosetta is classified as a
+  // PIPE — it propagates its inputs' provenance and mints nothing — which is sound
+  // only if it does NOT mutate those inputs (design §3). We arm a shallow
+  // mutation fingerprint around the fn call iff the marker is set AND the assert is
+  // enabled (ARRIVAL_PURITY_ASSERT=1). The wrapper name is the verb label (the
+  // registered name isn't threaded here; fn.name is the best available handle).
+  const purityChecked = pure === true && PURITY_ASSERT_ENABLED;
+  const pureVerb = fn.name || "<anonymous pure rosetta>";
   // provenancePoint can't reach ctx.currentInvocation without withContext —
   // throw rather than silently degrade. The doc on RosettaOptions explains why.
   invariant(
@@ -411,8 +420,19 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false }: 
     const jsArgs = schemeArgs.map((arg) => schemeToJs(arg, options));
     const callArgs = effectiveWithContext ? [ctx, ...jsArgs] : jsArgs;
 
+    // Dev-mode confluence guard: fingerprint the pure rosetta's scheme inputs
+    // (their mutable car/cdr/vector slots) before the call, to detect in-place
+    // mutation after. Empty/no-op unless `purityChecked`. snapshotInputs only
+    // fingerprints AValue args; raw-JS args aren't part of the lineage contract.
+    const purityBefore: readonly Fingerprint[] = purityChecked ? snapshotInputs(schemeArgs) : [];
+
     try {
       const rawResult = await fn(...callArgs);
+
+      // A pure rosetta MUST NOT have mutated an input — catch it at the crossing,
+      // before its falsified lineage propagates. Throws PurityViolation naming the
+      // verb + offending arg. (Sound: a pure fn touches no input slot; depth-1.)
+      if (purityChecked) assertInputsUnmutated(pureVerb, schemeArgs, purityBefore);
 
       const inv = (ctx as CtxWithInvocation | undefined)?.currentInvocation;
 
