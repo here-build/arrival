@@ -137,3 +137,27 @@ export { installHeapMeter, findHeapMeter, type HeapMeter } from "./heap-budget.j
 // evaluator. The legacy `evaluate` is DELETED — stdlib.ts's own `exec` now also
 // delegates to the generator, so the two paths agree.
 export { exec, parse } from "./eval/generator-exec.js";
+
+// Static lineage carrier (provenance-static-lineage-v0.x). The STATIC analogue of
+// the runtime provenance trace: `classify` builds a per-form lineage skeleton from the
+// parsed AST (no eval), and the cone/resolve queries answer the teleological full-cone,
+// the demand-as-projection field-cone, and (v0.2) the field-point base+key the JOIN
+// consumers read. Surfaced on the package boundary so the consumer-equivalence SHADOW
+// (which lives above this package, alongside EvalTrace) can prove the static walk
+// reproduces the live field-points before the runtime mint is retired.
+export {
+  classify,
+  fullCone,
+  countCone,
+  fieldCone,
+  fieldResolve,
+  stepKey,
+  sameStep,
+  CLASSIFIED_SPECIAL_FORMS,
+  type LineageNode,
+  type PathStep,
+  type Bindings,
+  type Classifier,
+  type FieldResolution,
+} from "./values/lineage.js";
+export { classifierFromEnv } from "./values/lineage-classifier-from-env.js";

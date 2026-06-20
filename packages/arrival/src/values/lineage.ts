@@ -602,6 +602,54 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
   return [...out].sort((a, z) => a - z);
 }
 
+/** The plucked key of a `PathStep` in the SAME shape the runtime field-point stores
+ *  it (`FieldPointMeta.key`, trace.ts:57-60): a named member → its bare name string
+ *  (`(:verdict x)` / `(@ x :verdict)` → `"verdict"`), a positional index → its number
+ *  (`(vector-ref x 1)` → `1`), `car` → `null` (the head of a pair has no key — the
+ *  runtime never mints a field-point for it, so there is no key to correspond to). */
+export function stepKey(step: PathStep): string | number | null {
+  if ("field" in step) return step.field;
+  if ("index" in step) return step.index;
+  return null; // car — no plucked key
+}
+
+/** What a field-projection chain bottoms out at, in the SHAPE the two JOIN consumers
+ *  read today (v0.2 §"The consumer-equivalence contract"):
+ *   - `base`  — the source-leaf ids the value derives from (the producer points). This
+ *     is the carrier's static analogue of the sift seal's `resolveReadIds`
+ *     (slice.ts:169-181): walk to the BASE producer, **key discarded**. Computed as the
+ *     `fullCone` of the field node's focused CHILD (the source the projection reads).
+ *   - `key`   — the INNERMOST projected step (D-v02-1 ABSORPTION), the dag's
+ *     `resolvePoint` pin (statechart.ts:126-138) surfaced as `FlowGraphEdge.fields`.
+ *     The field node's `step` is ALREADY the innermost: `classify` returns the inner
+ *     field unchanged for a field-under-field (lineage.ts:347), exactly as the runtime
+ *     `fieldPoint` absorbs `fieldPoint(fieldPoint(P,inner),outer) = {origin:P,key:inner}`
+ *     (trace.ts:341-359). So the carrier and the trace pin the SAME key with no path.
+ *
+ *  For a NON-field node (a plain source / pipe / merge — the value was not produced by
+ *  a member-read) there is no projected key: `key = null`, `base = fullCone(node)`. The
+ *  runtime mints no field-point in that case either (the producer's own point flows
+ *  unprojected), so the correspondence still holds — `base` = the producer set, no pin.
+ *
+ *  READ-ONLY (v02-G1): this is the static reproduction of the live field-point queries,
+ *  proven by the tapped shadow before `computeProvenance`'s field-point minting is
+ *  retired (a LATER phase). It does NOT mutate the tree or touch the runtime mint. */
+export interface FieldResolution {
+  readonly base: number[];
+  readonly key: string | number | null;
+}
+
+export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
+  if (n.kind === "field") {
+    // base = the source the projection reads (its focused child's full cone — the
+    // siblings were pruned structurally at classify time, so this is the producer set);
+    // key = this node's step, which absorption already collapsed to the innermost.
+    return { base: fullCone(n.child, b), key: stepKey(n.step) };
+  }
+  // Not a member-read: the whole value's cone is the base, with no projected key.
+  return { base: fullCone(n, b), key: null };
+}
+
 function walkField(n: LineageNode, b: Bindings, step: PathStep, out: Set<number>): void {
   switch (n.kind) {
     case "literal":
