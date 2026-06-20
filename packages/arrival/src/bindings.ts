@@ -38,14 +38,13 @@ export interface FallbackResolver {
 }
 
 /**
- * An EnvironmentModule is a composable unit that provides:
- * - Direct bindings (eager, added to __env__)
- * - A resolver for lazy/dynamic lookup
- * - Bootstrap Scheme code to run after bindings are set
- *
- * Modules are composed into an environment chain where each module
- * becomes a child environment of the previous one. Resolution order
- * is per-module: bindings first, then resolver, then yield to parent.
+ * A composable env layer: eager `bindings`, a lazy `resolver`, and post-binding
+ * `bootstrap` Scheme. `dependencies` drive the composition order — a module is
+ * chained as a CHILD of (i.e. ABOVE, shadowing) every module it depends on, so its
+ * overrides win over the deeper dependency (see `Environment.fromModules` for why
+ * that ordering is load-bearing, not cosmetic). Per-layer resolution is
+ * bindings → resolver → parent (`_lookupWithResolvers`): an explicit binding beats
+ * the layer's own catch-all resolver, both beat the dependency below.
  */
 export interface EnvironmentModule {
   /**

@@ -149,28 +149,22 @@ export class Environment {
   ) {}
 
   /**
-   * Create an environment from composable modules.
+   * Compose modules into a parent-chained environment, dependency-deepest as the
+   * base. The chain order is load-bearing, not cosmetic: a later module SHADOWS an
+   * earlier one (lookup walks child→parent, see `_lookupWithResolvers`), so a
+   * dependency must sit BELOW its dependents to be overridable by them. The
+   * topological sort is what guarantees that — a module is pushed only after every
+   * module it depends on, so deps are always nearer the base. The cycle guard is not
+   * defensive boilerplate: a dependency cycle has no valid shadowing order (A must be
+   * below B and B below A), so it is an unsatisfiable composition, caught at build
+   * rather than surfacing as a missing binding at lookup.
    *
-   * Each module becomes a layer in the environment chain:
-   * - First module is the base (parent: null)
-   * - Last module is the top (where user code runs)
+   * Returns the TOP env (where user code runs); the pure-Scheme base auto-loads
+   * unless a module already provides the core primitives.
    *
-   * By default, the pure Scheme module is auto-loaded as the base,
-   * providing core primitives (cons, car, cdr, +, -, etc.).
-   *
-   * Resolution order per module:
-   * 1. Direct bindings
-   * 2. Resolvers (yield on undefined)
-   * 3. Parent module (recursive)
-   *
-   * @param modules - Modules to compose (first = base, last = top)
-   * @param exec - Optional function to evaluate bootstrap Scheme code
+   * @param modules - Modules to compose (dependency order is derived, not assumed)
+   * @param exec - Optional evaluator for each module's bootstrap Scheme
    * @returns The topmost environment
-   *
-   * @example
-   * ```typescript
-   * const env = Environment.fromModules([myModule]);
-   * ```
    */
   static fromModules(
     modules: EnvironmentModule[],
@@ -178,13 +172,14 @@ export class Environment {
   ): Environment {
     const execFn = exec;
 
-    // Build dependency graph and topologically sort
     const moduleMap = new Map<string, EnvironmentModule>();
     for (const mod of modules) {
       moduleMap.set(mod.id, mod);
     }
 
-    // Topological sort with cycle detection
+    // DFS post-order = dependency-deepest first (the base-to-top chain order). The
+    // `visiting` set is the back-edge detector: re-entering a node still on the
+    // current DFS path is a cycle (the unsatisfiable shadowing order, see header).
     const sorted: EnvironmentModule[] = [];
     const visited = new Set<string>();
     const visiting = new Set<string>();
@@ -194,7 +189,6 @@ export class Environment {
       invariant(!visiting.has(mod.id), `Circular dependency detected: ${mod.id}`);
       visiting.add(mod.id);
 
-      // Visit dependencies first
       for (const depId of mod.dependencies ?? []) {
         const dep = moduleMap.get(depId);
         invariant(dep, `Module '${mod.id}' depends on unknown module '${depId}'`);
@@ -311,25 +305,22 @@ export class Environment {
   }
 
   /**
-   * Per-module lookup with proper resolution order:
-   * 1. This environment's direct bindings
-   * 2. This environment's resolvers (yield on undefined)
-   * 3. Parent environment's _lookupWithResolvers (recursive)
-   *
-   * This ensures each module (environment layer) has its bindings
-   * checked before its resolvers, and both are checked before
-   * yielding to the parent module.
-   *
-   * @param name - The symbol name to look up (string or symbol)
-   * @returns The resolved value, or undefined if not found
+   * Resolve a name within one env layer before yielding to its parent. The
+   * direct-bindings → resolvers → parent ordering is a precedence contract, not an
+   * optimization: a module's explicit binding must WIN over its own lazy resolver
+   * (so a pinned override can't be undone by a catch-all fallback in the same layer),
+   * and BOTH must win over the parent (so a closer module shadows a deeper dependency
+   * — the same child-before-parent rule `fromModules` builds the chain to honor). A
+   * resolver returns `undefined` to mean "not mine, keep looking"; that is why the
+   * loop treats `undefined` as yield rather than as a found nil.
    */
   _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
-    // 1. Try this environment's direct bindings first
     if (Object.hasOwn(this.__env__, name as string)) {
       return this.__env__[name as string];
     }
 
-    // 2. Try this environment's resolvers (in registration order)
+    // Resolvers fire only AFTER a direct miss — a generated binding never masks an
+    // explicit one in the same layer. `undefined` = "not mine"; anything else is the hit.
     for (const resolver of this.__resolvers__) {
       const result = resolver.resolve(String(name), this);
       if (result !== undefined) {
@@ -337,7 +328,6 @@ export class Environment {
       }
     }
 
-    // 3. Yield to parent module
     return this.__parent__?._lookupWithResolvers(name);
   }
 
