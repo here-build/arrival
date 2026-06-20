@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";
 
 const ls = createSchemeLanguageService();
@@ -331,6 +332,68 @@ describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
   it("empty candidate set + unbalanced prefix don't crash", () => {
     expect(ls.getTypeValidCandidates("(car ", 5, [])).toEqual([]);
     expect(() => ls.getTypeValidCandidates("(filter (lambda (x) (> x ", 25, POOL)).not.toThrow();
+  });
+});
+
+// ── Layer T, the LITERAL case: a quoted string at a string-literal-union slot ──
+// The shipping BFCL-typed path emits enum members as BOUND TYPED value-symbols
+// (`celsius: T_unit`), which already narrow (`typeof __arr["celsius"]` resolves
+// to the union). This block covers the OTHER shape: a raw quoted string `"thai"`
+// at a literal-union param. Before the fix it degraded to `typeof
+// __arr["\"thai\""]` = any ⇒ every literal survived (wrong-enum + non-member
+// both kept). The fix interpolates a string-literal candidate AS the literal
+// type (`["thai"] extends [Cuisine]`) at the SAME scanner offset — additively,
+// without touching the callable/value path above.
+describe("getTypeValidCandidates — Layer T, the string-literal narrowing", () => {
+  // A realistic typed prelude: `book_table`'s cuisine is a string-literal union;
+  // `note_table`/`count_table` are free-form (the never-wrong control slots).
+  const host = assembleHostPrelude(
+    [
+      ["book_table", "(cuisine: T_book_cuisine): SStr"],
+      ["plan_meals", "(diets: T_plan_diets[]): SStr"], // array-of-union slot
+      ["note_table", "(note: string): SStr"], // free-form string
+      ["count_table", "(n: number): SStr"], // free-form number
+      // bound typed value-symbols (the production path — must keep narrowing)
+      ["thai", ": T_book_cuisine"],
+      ["italian", ": T_book_cuisine"],
+      ["mexican", ": T_book_cuisine"],
+    ],
+    { preamble: `type T_book_cuisine = "thai" | "italian" | "mexican";\ntype T_plan_diets = "vegan" | "keto";` },
+  );
+  const lit = createSchemeLanguageService({ host });
+  const at = (scheme: string, cands: string[]) =>
+    new Set(lit.getTypeValidCandidates(scheme, "(book_table ".length, cands));
+
+  it("a quoted-string enum slot keeps only string-literal MEMBERS (wrong-enum + non-member dropped)", () => {
+    // POOL = valid members + a wrong-enum value + a total non-member.
+    const v = at("(book_table )", ['"thai"', '"italian"', '"vegan"', '"nonsense"']);
+    expect(v).toEqual(new Set(['"thai"', '"italian"'])); // "vegan" (wrong enum) + "nonsense" both rejected
+  });
+
+  it("a keyword-VALUE enum (bound typed value-symbols) narrows the same — production path unregressed", () => {
+    const v = at("(book_table )", ["thai", "italian", "mexican"]);
+    expect(v).toEqual(new Set(["thai", "italian", "mexican"])); // all three are members of T_book_cuisine
+    // a wrong-domain bound symbol is dropped (already true pre-fix; guard it)
+    const lits = at("(book_table )", ['"thai"', "thai"]); // literal + bound symbol of the SAME value
+    expect(lits).toEqual(new Set(['"thai"', "thai"]));
+  });
+
+  it("a free-form `string` slot KEEPS an arbitrary literal (never-wrong restriction)", () => {
+    const v = new Set(
+      lit.getTypeValidCandidates("(note_table )", "(note_table ".length, ['"anything at all"', '"thai"']),
+    );
+    expect(v).toEqual(new Set(['"anything at all"', '"thai"'])); // string slot → any literal fits
+  });
+
+  it("a `number` slot KEEPS a number literal (never-wrong restriction)", () => {
+    const v = new Set(lit.getTypeValidCandidates("(count_table )", "(count_table ".length, ["42", "7"]));
+    expect(v).toEqual(new Set(["42", "7"])); // 42 is not string-shaped → conservative typeof path → kept
+  });
+
+  it("an unresolved enum slot keeps every literal (error-any __E → no wrong restriction)", () => {
+    // `unknown_tool` has no declaration → __E is error-any → tri-state keeps all.
+    const v = new Set(lit.getTypeValidCandidates("(unknown_tool )", "(unknown_tool ".length, ['"thai"', '"nonsense"']));
+    expect(v).toEqual(new Set(['"thai"', '"nonsense"']));
   });
 });
 

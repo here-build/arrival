@@ -39,7 +39,7 @@
 
 import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
 
-import { balancePrefix } from "../balance.js";
+import { balancePrefix, stringLiteralType } from "../balance.js";
 import { PROGRAM_FILE } from "../virtual-files.js";
 import {
   createTsgoClient,
@@ -194,11 +194,17 @@ const TSCONFIG_PATH = `${MOUNT}/tsconfig.json`;
 // program locals; everything else types only through the ambient `__arr`.
 const IDENTIFIER_SHAPED = /^[A-Z_$][\w$]*$/i;
 
-/** A `typeof` reference for a name — builtins (and any non-identifier name)
- *  through the ambient `__arr`; identifier-shaped non-builtins by name
- *  (program locals; unresolved → 2304, error-any, kept). Mirrors
- *  service-core's `typeofRef` exactly. */
+/** The TYPE EXPRESSION a candidate contributes to `__ok<…>`. Mirrors
+ *  service-core's `typeofRef` EXACTLY (tsgo-equivalence): a STRING-LITERAL
+ *  candidate (`"thai"`) → the literal type itself (so an enum-union slot proves
+ *  it IN/OUT, not the kept-blind `typeof __arr["\"thai\""]`=any); an
+ *  identifier-shaped non-builtin → `typeof <name>` (a program local; unresolved
+ *  → 2304, error-any, kept); everything else (builtins, kebab/operator names)
+ *  → `typeof __arr["…"]`. A callee is never string-shaped (`scanInnermostCall`
+ *  reports a string head as `null`), so the literal branch is a no-op there. */
 function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
+  const lit = stringLiteralType(name);
+  if (lit !== null) return lit;
   if (!builtinNames.has(name) && IDENTIFIER_SHAPED.test(name)) return `typeof ${name}`;
   return `typeof __arr[${JSON.stringify(name)}]`;
 }

@@ -31,7 +31,7 @@ import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 // this service. `types-emit`'s closure is the pure front-end only.
 import ts from "typescript";
 
-import { balancePrefix } from "./balance.js";
+import { balancePrefix, stringLiteralType } from "./balance.js";
 import { Mapper } from "./span-map.js";
 import { PROGRAM_FILE } from "./virtual-files.js";
 
@@ -1046,10 +1046,20 @@ export function createSchemeLanguageServiceCore(
     return service.getProgram()?.getTypeChecker() ?? null;
   }
 
-  /** A `typeof` reference for a candidate: builtins (and any non-identifier
-   *  name) through the ambient `__arr`; identifier-shaped locals by name —
-   *  resolved against the EMITTED PROGRAM the probe rides on. */
+  /** The TYPE EXPRESSION a candidate contributes to `__ok<…>`. THREE cases:
+   *   • a STRING-LITERAL candidate (`"thai"` — the model emitted a quoted string,
+   *     not a bound symbol) → the literal type ITSELF (`"thai"`), so `__ok`
+   *     checks `["thai"] extends [__E]`. A literal union slot
+   *     (`"thai"|"italian"`) narrows the wrong member out; a free-form `string`
+   *     slot keeps it (`["thai"] extends [string]` = true) — never a wrong
+   *     restriction. Without this the candidate degraded to
+   *     `typeof __arr["\"thai\""]` = `any` ⇒ every literal survived (the gap).
+   *   • an identifier-shaped non-builtin → `typeof <name>` (a program local).
+   *   • everything else (builtins, kebab/operator names) → `typeof __arr["…"]`.
+   *  The string-literal case is read off `isStringLiteralCandidate`. */
   function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
+    const lit = stringLiteralType(name);
+    if (lit !== null) return lit;
     if (!builtinNames.has(name) && /^[A-Z_$][\w$]*$/i.test(name)) return `typeof ${name}`;
     return `typeof __arr[${JSON.stringify(name)}]`;
   }

@@ -11,10 +11,31 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService, type SchemeLanguageService } from "../language-service.js";
 import { getPreludeFiles } from "../prelude.js";
 import { spawnTsgoNodeTransport, tsgoWasmAvailable } from "../tsgo/node-transport.js";
 import { createTsgoTypeLens, scanInnermostCall, type TsgoTypeLens } from "../tsgo/type-lens.js";
+
+// A typed enum prelude shared by the literal-narrowing equivalence row: the
+// JS-TS lens consumes it as a `host`; the tsgo lens needs the same leaf merged
+// into its `preludeFiles` (the tsgo lens derives its member roster from the
+// merged ArrShape, so adding the leaf narrows both slot and candidate sides).
+const ENUM_HOST = assembleHostPrelude(
+  [
+    ["book_table", "(cuisine: T_book_cuisine): SStr"],
+    ["thai", ": T_book_cuisine"],
+    ["italian", ": T_book_cuisine"],
+    ["mexican", ": T_book_cuisine"],
+  ],
+  { preamble: `type T_book_cuisine = "thai" | "italian" | "mexican";` },
+);
+/** The base prelude files + the enum host leaf, for the tsgo lens. */
+function enumPreludeFiles(): Map<string, string> {
+  const files = getPreludeFiles();
+  files.set("__host.d.ts", ENUM_HOST.prelude);
+  return files;
+}
 
 const wasmPresent = tsgoWasmAvailable();
 if (!wasmPresent) {
@@ -122,6 +143,30 @@ describe.skipIf(!wasmPresent)("tsgo Layer T ≡ JS-TS Layer T (the AB canary)", 
   it("empty pool and unbalanced prefixes are safe", { timeout: 60_000 }, async () => {
     expect(await tsgoLens!.getTypeValidCandidates("(car ", 5, [])).toEqual([]);
     await expect(tsgoLens!.getTypeValidCandidates("(filter (lambda (x) (> x ", 25, POOL)).resolves.toBeDefined();
+  });
+
+  it("string-literal candidates narrow IDENTICALLY at an enum-union slot", { timeout: 60_000 }, async () => {
+    // The literal-narrowing fix (a quoted string `"thai"` interpolated AS the
+    // literal type) must produce the same verdicts on both backends — same
+    // shared `stringLiteralType` + identical `typeofRef` body.
+    const ENUM_POOL = ['"thai"', '"italian"', '"vegan"', '"nonsense"', "thai", "italian"];
+    const jsEnum = createSchemeLanguageService({ host: ENUM_HOST });
+    const tsgoEnum = await createTsgoTypeLens({
+      preludeFiles: enumPreludeFiles(),
+      transport: spawnTsgoNodeTransport(),
+    });
+    try {
+      const js = new Set(jsEnum.getTypeValidCandidates("(book_table )", "(book_table ".length, ENUM_POOL));
+      const tsgo = new Set(await tsgoEnum.getTypeValidCandidates("(book_table )", "(book_table ".length, ENUM_POOL));
+      expect(tsgo).toEqual(js);
+      // and the verdict is the right one (the gap was: every literal kept-blind)
+      expect(tsgo.has('"thai"')).toBe(true); // a member
+      expect(tsgo.has('"vegan"')).toBe(false); // wrong-enum literal → dropped
+      expect(tsgo.has('"nonsense"')).toBe(false); // non-member literal → dropped
+      expect(tsgo.has("thai")).toBe(true); // bound typed symbol → kept (production path)
+    } finally {
+      tsgoEnum.dispose();
+    }
   });
 
   it("perf note: per-slot narrowing cost, tsgo vs js", { timeout: 60_000 }, async () => {

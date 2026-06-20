@@ -57,3 +57,34 @@ export function balancePrefix(scheme: string): string {
   // An unterminated string can't be balanced into a valid token — close it too, then the parens.
   return scheme + (inStr ? '"' : "") + ")".repeat(depth);
 }
+
+/**
+ * The TS string-literal TYPE for a candidate token that IS a quoted string
+ * literal (`"thai"` → `"thai"`), or `null` for anything else (a bound symbol
+ * `thai`, a builtin `car`, an operator `+`, a number `42`, an unterminated
+ * `"un`-closed). Used by the type-lens probes to embed a quoted-string
+ * candidate as the literal type it denotes — so an enum-union slot can prove it
+ * IN or OUT (`["thai"] extends [Cuisine]`) instead of the candidate degrading
+ * to `typeof __arr["\"thai\""]` = `any` (kept-blind, the literal-narrowing gap).
+ *
+ * Discriminant: a well-formed double-quoted JSON string. `JSON.parse` validates
+ * it is a single complete string token (rejecting `"a" "b"`, bare atoms,
+ * numbers, and malformed escapes); `JSON.stringify` of the parsed value yields
+ * the canonical TS literal spelling (escapes normalised the SAME way the
+ * emitter's `JSON.stringify(decodeString(...))` normalises an emitted string
+ * literal, so the candidate side and the program side speak one literal
+ * vocabulary). A non-string parse (`"42"` is a string, but `42`/`true`/`null`
+ * are not double-quoted so never reach here) or any parse failure → `null`,
+ * which the caller maps to the conservative `typeof` path (kept). The result is
+ * a complete TS type expression, safe to interpolate into `__ok<…>`.
+ */
+export function stringLiteralType(candidate: string): string | null {
+  if (candidate.length < 2 || candidate[0] !== '"' || candidate.at(-1) !== '"') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    return null; // not a single well-formed string token → conservative typeof path
+  }
+  return typeof parsed === "string" ? JSON.stringify(parsed) : null;
+}
