@@ -678,18 +678,18 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
   return [...out].sort((a, z) => a - z);
 }
 
-/** The CARRIER's canonical plucked key of a `PathStep`. It COINCIDES with the runtime
- *  field-point's key (`FieldPointMeta.key`, trace.ts:57-60 — typed `string`) ONLY for
- *  the keyword/field case: a named member → its bare name string (`(:verdict x)` /
- *  `(@ x :verdict)` → `"verdict"`), which is exactly what `accessorField`+`fieldPoint`
- *  pin. The other two arms have NO runtime field-point counterpart: a positional index
- *  → its number (`(vector-ref x 1)` → `1`), and `car` → `null` — the runtime mints no
- *  field-point for either (it pins keyword heads only), so this is the carrier's own
- *  key shape, not a correspondence to anything the trace stores. */
-export function stepKey(step: PathStep): string | number | null {
+/** The CARRIER's canonical plucked key of a `PathStep` — the NAMED location only.
+ *  A named member → its bare name string (`(:verdict x)` / `(@ x :verdict)` / `(@ x "verdict")`
+ *  → `"verdict"`), which is what `accessorField`+`fieldPoint` pin for the keyword form.
+ *  POSITIONAL access FORWARDS (no key): `car` AND `index` both → `null`. Per D-v02-4
+ *  (named-pin / positional-forward), the carrier tracks normalized provenance (producer +
+ *  *named* location), NOT the specific access type or the exact position — the index is the
+ *  z-stack / fan axis (the `{index}` node stays in the tree for the viz/z-stack, read via
+ *  `.step`), never a `:fields` key. So no numeric key ever reaches a consumer (E4 dissolved);
+ *  index edges then *agree* with the live mint, which also pins nothing positional. */
+export function stepKey(step: PathStep): string | null {
   if ("field" in step) return step.field;
-  if ("index" in step) return step.index;
-  return null; // car — no plucked key
+  return null; // positional (car / index) — forwarded, no plucked key (D-v02-4)
 }
 
 /** What a field-projection chain bottoms out at, in the SHAPE the two JOIN consumers
@@ -715,7 +715,7 @@ export function stepKey(step: PathStep): string | number | null {
  *  retired (a LATER phase). It does NOT mutate the tree or touch the runtime mint. */
 export interface FieldResolution {
   readonly base: number[];
-  readonly key: string | number | null;
+  readonly key: string | null; // named field-name or forwarded; never a positional index (D-v02-4)
 }
 
 export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
