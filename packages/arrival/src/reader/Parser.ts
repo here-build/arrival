@@ -101,7 +101,10 @@ export class Parser {
   private readonly _meta!: boolean;
   private readonly _source?: string;
   private _refs!: (SchemeValue | Promise<SchemeValue>)[];
-  private readonly _state!: { parentheses: number; fold_case: boolean };
+  // `parentheses` is the live descent depth (the nesting-cap counter); `brackets`
+  // is the typed open-delimiter stack holding each open's EXPECTED close char, so
+  // a close must match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
+  private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
   constructor({ env, meta = false, formatter = defaultFormatter, source }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
@@ -133,6 +136,7 @@ export class Parser {
     Object.defineProperty(this, "_state", {
       value: {
         parentheses: 0,
+        brackets: [],
         fold_case: false,
       },
       configurable: true,
@@ -195,6 +199,11 @@ export class Parser {
 
   reset() {
     this._refs.length = 0;
+    // Each top-level datum starts balanced; clear any descent state a prior throw
+    // (e.g. a mismatched bracket) left behind, so stale depth can't leak a false
+    // pairing error into the next read.
+    this._state.parentheses = 0;
+    this._state.brackets.length = 0;
   }
 
   skip() {
@@ -236,18 +245,40 @@ export class Parser {
    * delimiter (list, vector literal, bytevector literal) BEFORE recursing, so
    * we bail before the native JS stack overflows. See `maxNestingDepth`.
    */
-  private _enterNesting() {
+  private _enterNesting(expectedClose: string) {
+    this._state.brackets.push(expectedClose);
     if (++this._state.parentheses > maxNestingDepth) {
       throw new ParseError(`input nesting depth exceeded ${maxNestingDepth}`, this._getLocation());
     }
   }
 
+  /**
+   * Leave one nesting level on a close delimiter, enforcing STRICT PAIRING: the
+   * close must match the char its opener pushed (`(`→`)`, `{`→`}`). A close with
+   * an empty stack is unmatched; a close of the wrong type is mismatched. Both
+   * throw a ParseError rather than silently rebalancing (the old behaviour, which
+   * let `(a]` and a stray `)` through).
+   */
+  private _exitNesting(closeToken: string, loc?: SourceLocation) {
+    const expected = this._state.brackets.pop();
+    if (expected === undefined) {
+      throw new ParseError(`unexpected '${closeToken}'`, loc ?? undefined);
+    }
+    if (closeToken !== expected) {
+      throw new ParseError(`mismatched bracket: expected '${expected}' but found '${closeToken}'`, loc ?? undefined);
+    }
+    --this._state.parentheses;
+  }
+
+  // `[` / `]` were dropped from the grammar: s-expressions use `(` … `)` only,
+  // `{` … `}` is reserved for SRFI-105 curly-infix. Square brackets are no longer
+  // an interchangeable delimiter.
   is_open(token: string) {
-    return ["(", "["].includes(token);
+    return token === "(";
   }
 
   is_close(token: string) {
-    return [")", "]"].includes(token);
+    return token === ")";
   }
 
   is_curly_open(token: string) {
@@ -268,7 +299,7 @@ export class Parser {
         break;
       }
       if (typeof token === "string" && this.is_close(token)) {
-        --this._state.parentheses;
+        this._exitNesting(token, this._getLocation());
         this.skip();
         break;
       }
@@ -307,7 +338,7 @@ export class Parser {
         throw new Unterminated("unterminated curly-infix '{'");
       }
       if (typeof token === "string" && this.is_curly_close(token)) {
-        --this._state.parentheses;
+        this._exitNesting(token, this._getLocation());
         this.skip();
         break;
       }
@@ -420,11 +451,20 @@ export class Parser {
     }
     // Capture location early for all constructs
     const loc = this._getLocation();
+    // `[` / `]` were removed from the grammar (s-expressions are `(` … `)` only).
+    // Reject them explicitly with their own location rather than letting them fall
+    // through to `read_value` and silently parse as an atom.
+    if (token === "[" || token === "]") {
+      throw new ParseError(
+        `'${token}' is not part of the grammar — s-expressions use '(' … ')' (square brackets removed)`,
+        loc ?? undefined,
+      );
+    }
     if (is_special(token)) {
       // Handle vector literals #(...) specially
       if (is_vector_literal(token)) {
         this.skip();
-        this._enterNesting();
+        this._enterNesting(")");
         const list = await this.read_list();
         // Convert list to a boxed vector (#(...) literal producer). R7RS literals
         // are immutable → freeze, so a later vector-set!/fill! on the literal is
@@ -436,7 +476,7 @@ export class Parser {
       // Handle bytevector literals #u8(...) specially
       if (is_bytevector_literal(token)) {
         this.skip();
-        this._enterNesting();
+        this._enterNesting(")");
         const list = await this.read_list();
         // Convert list to a boxed bytevector (#u8(...) literal producer). R7RS
         // literals are immutable → freeze (see the #(...) case above).
@@ -517,7 +557,7 @@ export class Parser {
       this._refs[+ref_label] = this._read_object() as SchemeValue | Promise<SchemeValue>;
       return this._refs[+ref_label] as SchemeValue | Promise<SchemeValue>;
     } else if (this.is_curly_open(token)) {
-      this._enterNesting();
+      this._enterNesting("}");
       this.skip();
       const elements = await this.read_curly_elements();
       const datum = canonicalizeCurly(elements, loc);
@@ -526,13 +566,19 @@ export class Parser {
       }
       return datum;
     } else if (this.is_curly_close(token)) {
-      throw new ParseError("unexpected '}'", loc ?? undefined);
-    } else if (this.is_close(token)) {
-      --this._state.parentheses;
+      // a stray/mismatched `}` (read_curly_elements consumes its OWN close);
+      // _exitNesting reports the mismatch — e.g. a `}` inside a `(` list — or the
+      // unmatched close.
+      this._exitNesting(token, loc ?? undefined);
       this.skip();
-      // invalid state, we don't need to return anything
+    } else if (this.is_close(token)) {
+      // a stray/mismatched `)` — e.g. a `)` inside `{…}`, or a top-level close
+      // with nothing open. Strict pairing rejects it (the old code silently
+      // rebalanced and returned nothing).
+      this._exitNesting(token, loc ?? undefined);
+      this.skip();
     } else if (this.is_open(token)) {
-      this._enterNesting();
+      this._enterNesting(")");
       this.skip();
       const list = await this.read_list();
       if (loc && is_pair(list)) {

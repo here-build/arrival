@@ -158,8 +158,8 @@ describe("curly-infix — quote distribution", () => {
 });
 
 describe("curly-infix — non-regression", () => {
-  it("square brackets still read as an ordinary list", async () => {
-    expect(await readOne("[a b]")).toBe("(a b)");
+  it("square brackets are rejected — removed from the grammar", async () => {
+    await expect(readOne("[a b]")).rejects.toThrow(/square brackets removed|not part of the grammar/);
   });
   it("parenthesized forms unchanged", async () => {
     expect(await readOne("(+ 1 2)")).toBe("(+ 1 2)");
@@ -167,8 +167,8 @@ describe("curly-infix — non-regression", () => {
   it("curly nested inside a normal list", async () => {
     expect(await readOne("(a {b + c} d)")).toBe("(a (+ b c) d)");
   });
-  it("bracket-list as a curly operand", async () => {
-    expect(await readOne("{[a b] + c}")).toBe("(+ (a b) c)");
+  it("a bracket inside curly-infix is rejected", async () => {
+    await expect(readOne("{[a b] + c}")).rejects.toThrow(/square brackets removed|not part of the grammar/);
   });
   it("reads multiple top-level curly forms", async () => {
     const out = await readAll("{a + b} {c * d}");
@@ -188,6 +188,36 @@ describe("curly-infix — structural errors", () => {
   });
   it("deep nesting trips the stack-depth guard", async () => {
     await expect(readOne("{".repeat(3000))).rejects.toThrow("nesting depth exceeded");
+  });
+});
+
+describe("reader — `[]` removed from sexprs + strict bracket pairing", () => {
+  it("a paren list still reads", async () => {
+    expect(await readOne("(a b c)")).toBe("(a b c)");
+  });
+  it("a curly-infix form still reads", async () => {
+    expect(await readOne("{a + b}")).toBe("(+ a b)");
+  });
+  it("nested parens + curlies pair correctly", async () => {
+    expect(await readOne("(a {b + c} d)")).toBe("(a (+ b c) d)");
+  });
+  it("a top-level `[` is rejected", async () => {
+    await expect(readOne("[a]")).rejects.toThrow("square brackets removed");
+  });
+  it("a top-level `]` is rejected", async () => {
+    await expect(readOne("]")).rejects.toThrow("square brackets removed");
+  });
+  it("a `(` closed by `]` is rejected (brackets are not interchangeable)", async () => {
+    await expect(readOne("(a b]")).rejects.toThrow("square brackets removed");
+  });
+  it("a `(` closed by `}` is a mismatch", async () => {
+    await expect(readOne("(a}")).rejects.toThrow("mismatched bracket: expected ')' but found '}'");
+  });
+  it("a `{` closed by `)` is a mismatch", async () => {
+    await expect(readOne("{a + b)")).rejects.toThrow("mismatched bracket: expected '}' but found ')'");
+  });
+  it("a stray `)` is rejected", async () => {
+    await expect(readOne(")")).rejects.toThrow("unexpected ')'");
   });
 });
 
