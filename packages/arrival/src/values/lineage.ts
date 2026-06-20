@@ -340,11 +340,18 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
   const projected = memberRead(head, args);
   if (projected !== null) {
     const child = classifyWith(projected.argExpr, c, subst);
-    // D-v02-1 ABSORPTION (mirrors trace.ts:351-352): a field directly under another
-    // field is a deeper pluck within the SAME producer pin — keep base + INNERMOST
-    // step (return the inner field unchanged), do NOT compose nested keys into a
-    // path. The viz reconstructs the path from the tree's nesting, not a stored one.
-    if (child.kind === "field") return child;
+    // D-v02-1 ABSORPTION (mirrors trace.ts:341-359): a field directly under another
+    // field is a deeper pluck within the SAME producer pin — keep base + ONE step, do
+    // NOT compose nested keys into a path. KEYWORD-PRIORITY: the live field-point minter
+    // (accessorField, arrival-provenance/trace.ts:65-70) pins ONLY keyword heads and is
+    // BLIND to the positional `car`/`index` steps, so a keyword anywhere in the chain
+    // wins over a transparent positional step. This makes the static carrier agree with
+    // the live mint on `(:verdict (car x))` → {field:"verdict"} (NOT {car}) — the 2b fix.
+    if (child.kind === "field") {
+      if ("field" in child.step) return child; // inner keyword wins (innermost pin)
+      if ("field" in projected.step) return { kind: "field", op, step: projected.step, child }; // keyword over a transparent positional child
+      return child; // positional over positional — no keyword to pin, keep the innermost
+    }
     return { kind: "field", op, step: projected.step, child };
   }
 
@@ -513,7 +520,14 @@ function classifyBegin(body: SchemeValue, c: Classifier, subst: Subst): LineageN
 /** Runtime bindings: a slot/source name → the provenance ids it carries. */
 export type Bindings = Record<string, readonly number[]>;
 
-function walk(n: LineageNode, b: Bindings, out: Set<number>, countOnly: boolean): void {
+/** The ONE parameterized backward fold (M1 — folds the former `walk` cone-walk and
+ *  `walkField` demand-walk into a single recursion, per the file's "one interpreter").
+ *  Two orthogonal knobs:
+ *   - `countOnly` — a cardinality observation prunes the length-preserving fan transform.
+ *   - `demand`    — DEMAND-AS-PROJECTION (D-v02-2): only the matching field of the value
+ *     is observed; a non-matching `field` node is a pruned sibling. The two never combine
+ *     in practice (demand mode runs with countOnly false), but both are carried verbatim. */
+function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?: boolean; demand?: PathStep }): void {
   switch (n.kind) {
     case "literal":
       return;
@@ -524,39 +538,52 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, countOnly: boolean)
       (b[n.op] ?? []).forEach((x) => out.add(x));
       return;
     case "pipe":
-      walk(n.child, b, out, countOnly); // a pure pipe adds nothing of its own
+      walk(n.child, b, out, opts); // a pure pipe adds nothing of its own; preserves both knobs
       return;
     case "field":
-      // Descend the FOCUSED child only — the siblings (the other fields of the
-      // projected value) were pruned STRUCTURALLY at classify time (never built as
-      // branches), so there is no ⊥ to propagate. This keeps fullCone NEUTRAL vs the
-      // pre-v0.2 pipe classification of a member-read: a field over x still yields
-      // x's cone (the teleological query is unchanged). The where-provenance KEY is
-      // carried in the node for the consumer queries (basePoint / (basePoint,key)),
-      // it does not change the set walk.
-      walk(n.child, b, out, countOnly);
+      if (opts.demand) {
+        // DEMAND mode: follow this projection IFF it is the field we demand. On a
+        // match the demand is SATISFIED — descend the child with the FULL cone
+        // ({}), since the demanded value IS this projection's whole lineage. On a
+        // miss this node is a pruned SIBLING (the lens complement) — add nothing.
+        if (sameStep(n.step, opts.demand)) walk(n.child, b, out, {});
+        return;
+      }
+      // CONE mode: descend the FOCUSED child only — siblings were pruned STRUCTURALLY
+      // at classify time, so there is no ⊥ to propagate. fullCone stays NEUTRAL vs the
+      // pre-v0.2 pipe classification of a member-read (a field over x yields x's cone).
+      // The where-provenance KEY rides the node for the consumer queries; it does not
+      // change the set walk.
+      walk(n.child, b, out, opts);
       return;
     case "merge":
     case "opaque":
-      n.children.forEach((ch) => walk(ch, b, out, countOnly));
+      // M2 (the soundness fix): a merge/opaque is a fan-in to a FRESH value (`(+ a b)`,
+      // a constructed dict). A field demand reaching it CANNOT be statically attributed
+      // to one child (no genesis labels yet — that is v02-G6), so the merge is a DEMAND
+      // BARRIER: walk each child with the demand DROPPED (full cone), keeping countOnly.
+      // (Re-projecting `:foo` into each child would ask "which inputs feed child.:foo" —
+      // wrong: the children are not the field, the merge IS the producer. The old
+      // walkField distributed the demand into children; that was the M2 bug.)
+      for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":
-      // Static over-approximation: the value is the selector-gated choice of one
-      // arm, so the cone is selector ∪ every arm (the taken arm is a runtime
-      // fact the static tree cannot know — DR3). Pruning is selector-agnostic:
-      // a cardinality query still depends on whichever arm is chosen.
-      walk(n.selector, b, out, countOnly);
-      n.arms.forEach((arm) => walk(arm, b, out, countOnly));
+      // Static over-approximation: the value is the selector-gated choice of one arm,
+      // so the cone is selector ∪ every arm (the taken arm is a runtime fact the static
+      // tree cannot know — DR3). Both knobs survive: a field demand crosses a conditional
+      // into BOTH arms (a correct over-approximation, NOT a barrier — unlike a merge, an
+      // arm IS the value, not an input to a fresh genesis).
+      walk(n.selector, b, out, opts);
+      n.arms.forEach((arm) => walk(arm, b, out, opts));
       return;
     case "fan":
-      // The value depends on the per-element transform; for a LENGTH-PRESERVING
-      // fan (map) the COUNT does not, so a count-query prunes it — the same tree,
-      // two answers. A FILTER is length-CHANGING: the count depends on the
-      // predicate and the inspected elements, so it is NOT pruned (the §5
-      // confluent-IR filter-fan admission — the prune is gated on `lengthPreserving`,
-      // not on "is it a fan"; see the W1 filter-fan tests in lineage-spike.test.ts).
-      walk(n.source, b, out, countOnly);
-      if (countOnly && n.lengthPreserving) return; // map: prune the per-element transform
+      // The value depends on the per-element transform; for a LENGTH-PRESERVING fan
+      // (map) the COUNT does not, so a count-query prunes it — the same tree, two
+      // answers. A FILTER is length-CHANGING (count depends on the predicate), so it is
+      // NOT pruned. In demand mode countOnly is false, so the prune never fires —
+      // reproducing the old walkField fan behavior exactly (thread to source + mint).
+      walk(n.source, b, out, opts);
+      if (opts.countOnly && n.lengthPreserving) return; // map: prune the per-element transform
       if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));
       return;
   }
@@ -565,7 +592,7 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, countOnly: boolean)
 /** Teleological "provenance everything": every source the value derives from. */
 export function fullCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
-  walk(n, b, out, false);
+  walk(n, b, out, {});
   return [...out].sort((a, z) => a - z);
 }
 
@@ -573,7 +600,7 @@ export function fullCone(n: LineageNode, b: Bindings): number[] {
  *  length-preserving transforms a count cannot depend on. */
 export function countCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
-  walk(n, b, out, true);
+  walk(n, b, out, { countOnly: true });
   return [...out].sort((a, z) => a - z);
 }
 
@@ -598,7 +625,7 @@ export function sameStep(a: PathStep, z: PathStep): boolean {
  */
 export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[] {
   const out = new Set<number>();
-  walkField(n, b, step, out);
+  walk(n, b, out, { demand: step });
   return [...out].sort((a, z) => a - z);
 }
 
@@ -648,41 +675,4 @@ export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
   }
   // Not a member-read: the whole value's cone is the base, with no projected key.
   return { base: fullCone(n, b), key: null };
-}
-
-function walkField(n: LineageNode, b: Bindings, step: PathStep, out: Set<number>): void {
-  switch (n.kind) {
-    case "literal":
-      return;
-    case "leaf":
-      (b[n.slot] ?? []).forEach((x) => out.add(x)); // the demanded field of an input leaf is the leaf's lineage
-      return;
-    case "source":
-      (b[n.op] ?? []).forEach((x) => out.add(x)); // a source mint carries its whole lineage
-      return;
-    case "field":
-      // The focused projection: follow it IFF it is the field we demand; otherwise
-      // this node is a SIBLING of the focus and contributes nothing (the structural
-      // complement). Once matched, the demand is SATISFIED — its child's FULL cone
-      // is the projection's lineage.
-      if (sameStep(n.step, step)) walk(n.child, b, out, false);
-      return;
-    case "pipe":
-      walkField(n.child, b, step, out); // a pass-through preserves the demanded field
-      return;
-    case "merge":
-    case "opaque":
-      n.children.forEach((ch) => walkField(ch, b, step, out));
-      return;
-    case "mux":
-      walkField(n.selector, b, step, out);
-      n.arms.forEach((arm) => walkField(arm, b, step, out));
-      return;
-    case "fan":
-      // A field demand on a fan result threads to the source (the z-axis is
-      // preserved; the per-element field lives in the template, read by the viz).
-      walkField(n.source, b, step, out);
-      if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));
-      return;
-  }
 }

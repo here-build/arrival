@@ -134,14 +134,19 @@ describe("lineage field — nested projection ABSORBS to base + INNERMOST step",
     expect(n.child).toEqual({ kind: "leaf", slot: "x" }); // base — NOT a field{:a, field{:b, …}}
   });
 
-  it("absorption is cross-syntax: (car (:b x)) and (@ (car x) :a) collapse to the inner step too", async () => {
+  it("absorption is KEYWORD-PRIORITY across syntaxes: a keyword pins over a transparent positional step", async () => {
+    // (car (:b x)): the inner KEYWORD `:b` wins — a keyword anywhere in the chain is
+    // the pin (the live minter is blind to the outer `car`). Innermost keyword.
     const carOverField = await skeleton(`(car (:b x))`);
     expect(carOverField.kind).toBe("field");
     if (carOverField.kind === "field") expect(carOverField.step).toEqual({ field: "b" });
 
+    // (@ (car x) :a): the OUTER keyword `:a` over a transparent positional `car` child
+    // now pins `{field:"a"}` (NOT `{car}`) — keyword-priority makes the static carrier
+    // agree with the live field-point minter, which ignores `car` and pins the keyword.
     const fieldOverCar = await skeleton(`(@ (car x) :a)`);
     expect(fieldOverCar.kind).toBe("field");
-    if (fieldOverCar.kind === "field") expect(fieldOverCar.step).toEqual({ car: true }); // innermost = car
+    if (fieldOverCar.kind === "field") expect(fieldOverCar.step).toEqual({ field: "a" }); // keyword wins over positional
   });
 
   it("triple nesting (:a (:b (:c x))) absorbs to the single innermost step :c", async () => {
@@ -185,14 +190,20 @@ describe("lineage field — fieldCone descends the matching field, prunes the si
     expect(fieldCone(n, { x: [42] }, { field: "bar" })).toEqual([]);
   });
 
-  it("the demand threads THROUGH a merge: only the matching field-sibling contributes", async () => {
-    // (cons (:foo a) (:bar b)) — a merge of two field projections. Demanding `foo`
-    // reaches a's cone and PRUNES b (the :bar sibling); demanding `bar` is the dual.
+  it("a merge is a DEMAND BARRIER (M2): a field demand cannot be attributed to one child — full cone", async () => {
+    // (cons (:foo a) (:bar b)) — `cons` is a fan-in producing a FRESH value, so a
+    // `:foo` demand reaching the merge cannot be statically attributed to one child
+    // (no genesis labels yet — that is v02-G6). The sound move (M2) is the full cone:
+    // the demand is DROPPED at the barrier and both children contribute. Distributing
+    // the demand into the children (the old walkField behavior) was the M2 bug —
+    // re-projecting `:foo` into each child asks "which inputs feed child.:foo", which
+    // is the wrong question (the children are not the field; the merge IS the producer).
     const n = await skeleton(`(cons (:foo a) (:bar b))`);
     expect(n.kind).toBe("merge");
-    expect(fieldCone(n, { a: [1], b: [2] }, { field: "foo" })).toEqual([1]); // b pruned
-    expect(fieldCone(n, { a: [1], b: [2] }, { field: "bar" })).toEqual([2]); // a pruned
-    expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // teleological keeps both
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "foo" })).toEqual([1, 2]); // barrier: both children
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "bar" })).toEqual([1, 2]); // barrier: both children
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "absent" })).toEqual([1, 2]); // a demand the merge can't satisfy still falls back
+    expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // teleological — same as the barrier fallback
   });
 
   it("an index demand is distinct from a field demand of the same name-shape", async () => {
@@ -276,5 +287,24 @@ describe("lineage field — fan × lens composes PARAMETRICALLY (the z-axis is p
     // teleological query reaches the fan's source (xs). The template is viz-only.
     const n = await skeleton(`(:foo (map (lambda (it) (:bar it)) xs))`);
     expect(fullCone(n, { xs: [10] })).toEqual([10]);
+  });
+
+  it("a PRESENT template is cone-NEUTRAL: fullCone/countCone equal the template-less twin (walk never descends template)", async () => {
+    // The defining additive promise (walk never descends n.template), asserted THROUGH
+    // the cone, not just the structure: a template-bearing fan and the same fan with the
+    // template stripped yield byte-identical fullCone AND countCone. A regression that
+    // descended `template` (e.g. counting the body's `:bar it` leaf) would diverge here.
+    const withTemplate = await skeleton(`(map (lambda (it) (:bar it)) xs)`);
+    expect(withTemplate.kind).toBe("fan");
+    if (withTemplate.kind !== "fan") return;
+    expect(withTemplate.template).toBeDefined(); // the lambda built a per-element template
+    // The template-less twin: the same fan node with `template` removed (structurally
+    // identical to a bare-symbol fan over the same source/op/flags).
+    const { template: _t, ...withoutTemplate } = withTemplate;
+    const b = { xs: [10, 11] };
+    expect(fullCone(withTemplate, b)).toEqual(fullCone(withoutTemplate, b)); // [10,11] either way
+    expect(fullCone(withTemplate, b)).toEqual([10, 11]); // = the source cone (lambda body mints nothing)
+    expect(countCone(withTemplate, b)).toEqual(countCone(withoutTemplate, b)); // map → pruned identically
+    expect(countCone(withTemplate, b)).toEqual([10, 11]); // map count = source cone; the per-element prune drops only the introduce (none here)
   });
 });
