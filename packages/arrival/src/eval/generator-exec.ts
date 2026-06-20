@@ -94,6 +94,12 @@ export interface ExecOptions {
    * the skeleton build + assert are gated entirely behind this flag. Asserts
    * `fullCone` only (never `countCone`, which diverges by design — the v0.2 minimal
    * cone). Forms outside shadow's provable set are skipped + recorded, not asserted.
+   *
+   * NAME CAVEAT: the `ir`-prefix is borrowed (from the studio's `--ir-*`
+   * compile-erased-superset markers) and is a MISFIT here — this flag toggles
+   * shadow/dual-run VALIDATION, it does not lower an authoring superset to spec.
+   * Read it as "validate-static-lineage," not as an IR feature. (The eventual public
+   * name is `--ir-lineage`; the misfit rides along, see the v0.2 carrier doc §1.)
    */
   irLineage?: boolean;
   /**
