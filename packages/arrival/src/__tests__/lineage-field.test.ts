@@ -76,6 +76,18 @@ describe("lineage field — member-read syntaxes normalize to a canonical `field
     expect(n.step).toEqual({ field: "foo" });
   });
 
+  it("(@ x 1) → field{step:{index:1}} (a LITERAL int membrane key is a positional step)", async () => {
+    // memberRead's `@` arm: a non-symbol, non-pair key whose valueOf is an integer takes
+    // the `literalIndex` branch (lineage.ts:201-202) → {index:1}, the same canonical
+    // positional step `(vector-ref x 1)` produces. (The only `@`-return arm with no
+    // dedicated coverage before this.)
+    const n = await skeleton(`(@ x 1)`);
+    expect(n.kind).toBe("field");
+    if (n.kind !== "field") return;
+    expect(n.step).toEqual({ index: 1 });
+    expect(n.child).toEqual({ kind: "leaf", slot: "x" });
+  });
+
   it("(car x) → field{step:{car:true}} over leaf(x)", async () => {
     const n = await skeleton(`(car x)`);
     expect(n.kind).toBe("field");
@@ -146,7 +158,19 @@ describe("lineage field — nested projection ABSORBS to base + INNERMOST step",
     // agree with the live field-point minter, which ignores `car` and pins the keyword.
     const fieldOverCar = await skeleton(`(@ (car x) :a)`);
     expect(fieldOverCar.kind).toBe("field");
-    if (fieldOverCar.kind === "field") expect(fieldOverCar.step).toEqual({ field: "a" }); // keyword wins over positional
+    if (fieldOverCar.kind !== "field") return;
+    expect(fieldOverCar.step).toEqual({ field: "a" }); // keyword wins over positional
+    // The 2-DEEP structure (lineage.ts:352 keeps `child` as the transparent positional
+    // node, NOT a bare leaf): the outer keyword node wraps the inner `field{car}` node.
+    // This diverges from the FLAT runtime field-point pin (which absorbs car→null and
+    // surfaces only "a"); pinning the nested shape here guards the static carrier against
+    // a regression that flattened the child to `leaf(x)`.
+    expect(fieldOverCar.child).toEqual({
+      kind: "field",
+      op: "car",
+      step: { car: true },
+      child: { kind: "leaf", slot: "x" },
+    });
   });
 
   it("triple nesting (:a (:b (:c x))) absorbs to the single innermost step :c", async () => {
@@ -155,6 +179,47 @@ describe("lineage field — nested projection ABSORBS to base + INNERMOST step",
     if (n.kind !== "field") return;
     expect(n.step).toEqual({ field: "c" });
     expect(n.child).toEqual({ kind: "leaf", slot: "x" });
+  });
+
+  it("POSITIONAL over positional (car (vector-ref x 0)): no keyword to pin → keep the INNER positional, drop the outer car", async () => {
+    // lineage.ts:353 — the field-under-field arm with NO keyword anywhere: neither the
+    // outer `car` step nor the inner `index` step is a `field`, so `return child` keeps
+    // the INNERMOST member-read (`vector-ref`'s {index:0}) and discards the outer `car`.
+    // (NOT null — that prior expectation was wrong; the code returns the inner node.)
+    const n = await skeleton(`(car (vector-ref x 0))`);
+    expect(n.kind).toBe("field");
+    if (n.kind !== "field") return;
+    expect(n.op).toBe("vector-ref"); // the inner node's surface head, not the outer `car`
+    expect(n.step).toEqual({ index: 0 }); // INNERMOST positional kept
+    expect(n.child).toEqual({ kind: "leaf", slot: "x" }); // base = leaf, the outer car absorbed
+  });
+
+  it("KEYWORD over index (:a (vector-ref x 0)): the keyword wraps the transparent positional child (2-deep)", async () => {
+    // lineage.ts:352 — the inner child is a positional `field{index:0}` (not a keyword),
+    // and the OUTER step IS a keyword, so the keyword pins ON TOP of the transparent
+    // positional: a field{:a} node whose child is the field{index:0} node (2-deep).
+    const n = await skeleton(`(:a (vector-ref x 0))`);
+    expect(n.kind).toBe("field");
+    if (n.kind !== "field") return;
+    expect(n.step).toEqual({ field: "a" }); // outer keyword pins
+    expect(n.child).toEqual({
+      kind: "field",
+      op: "vector-ref",
+      step: { index: 0 }, // the transparent positional child, kept NESTED under the keyword
+      child: { kind: "leaf", slot: "x" },
+    });
+  });
+
+  it("INDEX over keyword (vector-ref (:b x) 0): the inner keyword wins, the outer index is absorbed", async () => {
+    // lineage.ts:351 — the inner child is a keyword `field{:b}`, so `"field" in child.step`
+    // fires: `return child`. The outer `index` step is dropped (a keyword anywhere wins the
+    // pin), leaving field{:b} directly over leaf(x).
+    const n = await skeleton(`(vector-ref (:b x) 0)`);
+    expect(n.kind).toBe("field");
+    if (n.kind !== "field") return;
+    expect(n.op).toBe(":b"); // the inner keyword node's head, not the outer `vector-ref`
+    expect(n.step).toEqual({ field: "b" }); // inner keyword pin
+    expect(n.child).toEqual({ kind: "leaf", slot: "x" }); // base = leaf, outer index absorbed
   });
 });
 
@@ -204,6 +269,36 @@ describe("lineage field — fieldCone descends the matching field, prunes the si
     expect(fieldCone(n, { a: [1], b: [2] }, { field: "bar" })).toEqual([1, 2]); // barrier: both children
     expect(fieldCone(n, { a: [1], b: [2] }, { field: "absent" })).toEqual([1, 2]); // a demand the merge can't satisfy still falls back
     expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // teleological — same as the barrier fallback
+  });
+
+  it("an OPAQUE head is ALSO a demand barrier (walk merge/opaque share the M2 case): a field demand drops to the full cone", async () => {
+    // walk()'s `case "merge": case "opaque":` is shared (lineage.ts:559-568): an opaque
+    // black-box is a fan-in to a fresh value just like a merge, so a field demand reaching
+    // it cannot be attributed to one child — the demand is DROPPED and every child walks the
+    // full cone. Only `merge` was covered before; `ext-call` (the classifier's lone opaque)
+    // exercises the opaque arm of the same barrier.
+    const n = await skeleton(`(ext-call (:foo a) (:bar b))`);
+    expect(n.kind).toBe("opaque");
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "foo" })).toEqual([1, 2]); // barrier: both children, demand dropped
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "bar" })).toEqual([1, 2]); // barrier: both children
+    expect(fieldCone(n, { a: [1], b: [2] }, { field: "absent" })).toEqual([1, 2]); // unsatisfiable demand → full cone fallback
+    expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // teleological == the barrier fallback
+  });
+
+  it("a MUX is NOT a barrier: a field demand CROSSES the `if` into BOTH arms and still FILTERS them", async () => {
+    // walk()'s `case "mux"` (lineage.ts:570-578) carries the demand into the selector AND
+    // every arm (unlike merge/opaque, which DROP it): an arm IS the value, not an input to a
+    // fresh genesis, so the projection is the arm's own projection. The designed contrast to
+    // the merge barrier: a MATCHING demand reaches both arms; a NON-matching demand PRUNES
+    // them (a barrier would ignore the demand and return both children either way).
+    const n = await skeleton(`(if p (:foo a) (:foo b))`);
+    expect(n.kind).toBe("mux");
+    // The selector leaf (`p`) is always walked (a leaf ignores the demand) — it is the
+    // constant `[9]` across both demands, isolating the arm toggling.
+    const b = { p: [9], a: [1], b: [2] };
+    expect(fieldCone(n, b, { field: "foo" })).toEqual([1, 2, 9]); // demand matches both arms → both flow (+ selector)
+    expect(fieldCone(n, b, { field: "zzz" })).toEqual([9]); // demand crosses in and PRUNES both arms (not a barrier)
+    expect(fullCone(n, b)).toEqual([1, 2, 9]); // teleological: selector ∪ both arms
   });
 
   it("an index demand is distinct from a field demand of the same name-shape", async () => {
