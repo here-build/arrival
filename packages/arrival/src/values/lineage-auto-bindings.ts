@@ -12,8 +12,9 @@
  * producer `b` specifically" — exactly the distinction the dag's causal edges depend on.
  *
  * THE FIX — bind PER-VALUE / PER-INVOCATION, never per-name. Each value already carries
- * its producer id(s) in `AValue.provenance` (the eager stamp, mechanism 1, placed at the
- * source's exit, rosetta.ts:459 → trace.ts:496). So the auto-binding does NOT mint a new
+ * its producer id(s) in `AValue.provenance` (the eager stamp, mechanism 1: the source
+ * mints its point at rosetta.ts:459, and `EvalTrace.exit` stamps it back onto the value
+ * via the substitution-return at ~trace.ts:529). So the auto-binding does NOT mint a new
  * id; it CAPTURES the producer ids a runtime value carries, keyed to the CONSUMER
  * INVOCATION that read it (its scope), not to a global slot. When `reflect`'s body reads
  * `reactions` (bound to `(list (react …))`, whose element carries react's producer id),
@@ -29,18 +30,24 @@
  * HOOK + REVERSIBILITY. An `AutoBindings` instance is attached to an `EvalTrace`
  * explicitly (the flag). When present, the trace's `exit` records this invocation's
  * symbol resolutions (already in `trace.symbolValues`) into it. When ABSENT (the default)
- * the trace touches nothing — byte-identical to today. Deleting this file + the one
- * `recordInvocation` call in trace.ts fully reverts the spike.
+ * the trace touches nothing — byte-identical to today. A full revert: delete this file,
+ * drop the `AutoBindings` import + the `autoBindings`/`withAutoBindings` field+method and
+ * the one `recordInvocation` call in trace.ts, and drop `AutoBindings`/`slotsOf` from the
+ * arrival barrel (index.ts).
  */
-import { AValue } from "./AValue.js";
-import { is_pair } from "./value-guards.js";
-import { SchemeVector } from "./SchemeVector.js";
+import { deepProvenance } from "./deep-provenance.js";
 import type { Bindings, LineageNode } from "./lineage.js";
 
 /** The free LEAF/SOURCE slots a classified skeleton references — the slots an auto-binding
- *  must resolve. A read-only walk over the static tree (mirrors lineage-shadow.ts's
+ *  must resolve. A read-only walk over the static tree (DUPLICATES lineage-shadow.ts's
  *  `collectSlots`, kept here so the spike is self-contained; M1 will later fold both into
- *  `walk`). Descends a `field`'s focused child only — siblings were pruned at classify. */
+ *  `walk`). Descends a `field`'s focused child only — siblings were pruned at classify.
+ *
+ *  DIVERGENCE from `collectSlots` (reconcile when folding in M1): the `fan` arm here ALSO
+ *  descends `n.template` (the per-element body's free slots); `collectSlots` descends
+ *  `n.source` ONLY. So this collects strictly MORE slots — any free var captured inside a
+ *  `(map (lambda (e) … outer …) xs)` body. Intentional for auto-binding (those slots need
+ *  per-value resolution too); the fold must pick this superset, not the narrower one. */
 export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<string> {
   switch (n.kind) {
     case "literal":
@@ -70,34 +77,6 @@ export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<strin
   }
 }
 
-/** Deep provenance of a runtime value: every producer id reachable from it — itself, a
- *  Pair's car/cdr spine, a vector's elements (a packed list/vector leaves the SPINE's
- *  provenance empty, so origins live on the elements). Mirrors rosetta.ts's
- *  `deepProvenance` (340-369), inlined here to keep this value-layer module dependency-
- *  light (it is the same reachability the eager stamp's union walks). Cycle-guarded. */
-function deepProvenance(value: unknown): Set<number> {
-  const acc = new Set<number>();
-  const seen = new Set<unknown>();
-  const walk = (v: unknown): void => {
-    if (v === null || typeof v !== "object") return;
-    if (seen.has(v)) return;
-    seen.add(v);
-    if (v instanceof AValue) {
-      for (const p of v.provenance) acc.add(p);
-      if (is_pair(v)) {
-        walk(v.car);
-        walk(v.cdr);
-      } else if (v instanceof SchemeVector) {
-        for (const el of v.__vector__) walk(el);
-      }
-    } else if (Array.isArray(v)) {
-      for (const el of v) walk(el);
-    }
-  };
-  walk(value);
-  return acc;
-}
-
 /**
  * The additive, flag-gated AUTO-BINDING sidecar. Populated by `EvalTrace.exit` (only when
  * an instance is attached — otherwise the trace never touches it). Records, PER CONSUMER
@@ -112,7 +91,16 @@ function deepProvenance(value: unknown): Set<number> {
  */
 export class AutoBindings {
   /** consumer-invocation id → (free-symbol slot → the producer ids that slot's runtime
-   *  value carried, at THIS invocation). */
+   *  value carried, at THIS invocation).
+   *
+   *  RETENTION CAVEAT (flag-ON only): this map holds O(invocations-that-resolved-a-
+   *  provenanced-symbol) entries for the WHOLE run — it does NOT participate in
+   *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding (that frees child provenance
+   *  Sets + values; it never touches `symbolValues` or this sidecar). Bounded (≤ the
+   *  trace cap, since invocation ids are), so it's fine for the spike's bounded programs.
+   *  Before this rides a real LOOPING run it needs revisiting — either `#pruneChildProvenance`
+   *  should also drop the `byInvocation` entry for a pruned invocation, or the capture
+   *  should be scoped to the queries that will actually read it. */
   readonly byInvocation = new Map<number, Map<string, Set<number>>>();
 
   /**
@@ -136,8 +124,13 @@ export class AutoBindings {
         this.byInvocation.set(invocationId, slots);
       }
       const existing = slots.get(name);
+      // The merge branch is DEFENSIVE: the live caller passes a `symbolValues` Map (unique
+      // keys) once per invocation, so each `name` is recorded exactly once and `existing`
+      // is undefined here in practice. It only fires if a future caller re-records a name
+      // into the same invocation. `ids` is a ReadonlySet from the shared deepProvenance, so
+      // the per-invocation map owns a MUTABLE copy for that (hypothetical) extension.
       if (existing) for (const id of ids) existing.add(id);
-      else slots.set(name, ids);
+      else slots.set(name, new Set(ids));
     }
   }
 

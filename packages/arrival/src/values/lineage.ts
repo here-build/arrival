@@ -1,6 +1,6 @@
 /**
- * SPIKE — the lineage data model + STATIC chunk classifier.
- * Build-step 1 of docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5.
+ * CARRIER CORE — the lineage data model + STATIC chunk classifier. Build-step 1 of
+ * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5.
  *
  * Proves the centerpiece: provenance is a static lineage TREE — pipe / merge /
  * fan / mux nodes — *minted only at Rosetta crossings*, with the SHAPE derivable
@@ -9,9 +9,14 @@
  * answers BOTH the teleological full-cone (seal: walk to every leaf) and the
  * minimal demand-cone (e.g. a count, which prunes a length-preserving fan).
  *
- * Standalone + throwaway, like LazySeq.ts — NOT wired into the interpreter. It
- * operates on real AST nodes (Pair / SchemeSymbol from the reader); classify()
- * runs no evaluation. We claim none of the lineage; see the design note §11/§12
+ * SHADOW-VALIDATED PUBLIC API. `classify`/`fullCone`/`countCone`/`fieldCone`/
+ * `fieldResolve`/`stepKey`/`PathStep`/`LineageNode`/… are exported from the package
+ * barrel (arrival/src/index.ts) and consumed cross-package by the arrival-chain
+ * field-point shadows (lineage-field-shadow{,-autobound}.test.ts), which assert the
+ * static carrier reproduces the live runtime field-points before that mint is
+ * retired; lineage-shadow.ts wires the full-cone shadow in-package. It operates on
+ * real AST nodes (Pair / SchemeSymbol from the reader); classify() runs no
+ * evaluation. We claim none of the prior art; see the design note §11/§12
  * (how-provenance, Galois slicing, SSA def-use, why/how/where).
  *
  * SPECIAL FORMS. This engine dispatches `if`/`cond`/`let`/`let*`/`letrec`/`begin`/
@@ -52,6 +57,16 @@ import { SchemeSymbol } from "./SchemeSymbol.js";
 import type { Pair } from "./Pair.js";
 import type { SchemeValue } from "./types.js";
 
+/** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes
+ *  "added a node kind, forgot a walker arm" a COMPILE error (the new kind no longer
+ *  narrows to `never` at the default arm); the throw covers the impossible runtime
+ *  path. Internal to the carrier package (not re-exported from index.ts). Shared by the
+ *  walkers here and in the sibling shadow/auto-binding modules so they stay in lock-step
+ *  with the union by construction. */
+export function assertNever(x: never): never {
+  throw new Error(`unhandled LineageNode kind: ${JSON.stringify(x)}`);
+}
+
 /** A CANONICAL member-read step — the *where* of where-provenance. The field node
  *  is normalized to ONE of these regardless of the surface accessor syntax
  *  (`(:foo x)` / `(@ x :foo)` / `(car x)` / `(vector-ref x i)`), so a lineage
@@ -59,6 +74,11 @@ import type { SchemeValue } from "./types.js";
  *  (`(@ obj :foo)` → `obj.foo`) is an optional later display layer, not the
  *  carrier's concern. Mirrors `trace.ts`'s runtime `FieldPointMeta = {origin,key}`
  *  (v0.2 §"The carrier"). */
+// The keyword/positional CONFLATION here is INTENTIONAL: `field` carries the named-key
+// case and `index`/`car` the positional cases as a flat union — the distinction that
+// MATTERS (keyword wins a chain, positionals are transparent) does not live in this
+// type. It lives in the `step`, resolved at classify time by D-v02-1 ABSORPTION
+// (keyword-priority, lineage.ts ~:350) and surfaced by `stepKey`.
 export type PathStep =
   | { readonly field: string } // a named key — (:foo x) / (@ x :foo): step = {field:"foo"}
   | { readonly car: true } // the head of a pair — (car x)
@@ -114,13 +134,20 @@ function opName(x: SchemeValue): string {
 }
 
 /**
- * The special-form heads `classify()` models BY SHAPE (the switch in classifyWith
- * below). These resolve to `Macro` instances in the live env — the evaluator
- * dispatches them from SPECIAL_FORMS, not by macro expansion — so a consumer that
- * skips "macro heads" (e.g. the shadow assert) must EXCLUDE these: classify handles
- * them, they are in scope, not opaque macros. SINGLE SOURCE OF TRUTH — keep in lock
- * step with the switch (adding a case here without the switch over-asserts; the
- * reverse over-skips). `quote`/`lambda` produce a literal but are still "handled". */
+ * A curated SUBSET of the evaluator's special forms — exactly the forms `classify()`
+ * models BY SHAPE (the switch in classifyWith below). These resolve to `Macro`
+ * instances in the live env — the evaluator dispatches them from SPECIAL_FORMS, not
+ * by macro expansion — so a consumer that skips "macro heads" (e.g. the shadow
+ * assert) must EXCLUDE these: classify handles them, they are in scope, not opaque
+ * macros. `quote`/`lambda` produce a literal but are still "handled".
+ *
+ * NOT exhaustive over SPECIAL_FORMS. Forms classify does NOT model
+ * (case / do / while / quasiquote / …) are absent here and fall through to the
+ * application path, where they are mis-modeled by shape; this is safe only because
+ * the shadow skips them as macro-heads (they resolve to `Macro` in the env). Keep
+ * THIS set and the switch in step with EACH OTHER (a head here without a switch arm
+ * over-asserts; a switch arm without an entry here over-skips) — but do not treat
+ * either as a mirror of the evaluator's full special-form table. */
 export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "if",
   "cond",
@@ -251,9 +278,18 @@ function classifyFanTemplate(fn: SchemeValue, c: Classifier, subst: Subst): Line
 }
 
 /** The pipe-vs-merge arity cut, shared by pure ops and synthetic combinations
- *  (cond's selector, a `=>` arm). Mirrors `unionProvenance` (AValue.ts:104-120):
- *  drop empties, FORWARD a singleton (pipe), UNION ≥2 (merge). `op` tags the
- *  synthetic node honestly (the form/op that combines the children). */
+ *  (cond's selector, a `=>` arm). Drop empties, FORWARD a singleton (pipe), UNION ≥2
+ *  (merge). `op` tags the synthetic node honestly (the form/op that combines the
+ *  children).
+ *
+ *  Like `unionProvenance` (AValue.ts:104-120) in spirit, but the cuts differ: this
+ *  one counts NODES (static, pre-binding), `unionProvenance` cuts on distinct SET
+ *  identity at runtime. So two operands that will resolve to the SAME provenance set
+ *  still count as 2 here → `merge`, where the runtime would singleton-forward (one
+ *  distinct set → pipe). `fullCone` is unaffected — the union of two equal sets is
+ *  that set — but the spurious `merge` makes `fieldCone` hit the M2 demand-barrier
+ *  (walk() merge/opaque case) CONSERVATIVELY at a point the runtime forwards through.
+ *  Sound: the barrier over-approximates the cone, never under-approximates it. */
 function combine(op: string, nodes: readonly LineageNode[]): LineageNode {
   const bearing = nodes.filter(isProvBearing);
   if (bearing.length === 0) return { kind: "literal" };
@@ -348,8 +384,10 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
     // wins over a transparent positional step. This makes the static carrier agree with
     // the live mint on `(:verdict (car x))` → {field:"verdict"} (NOT {car}) — the 2b fix.
     if (child.kind === "field") {
-      if ("field" in child.step) return child; // inner keyword wins (innermost pin)
-      if ("field" in projected.step) return { kind: "field", op, step: projected.step, child }; // keyword over a transparent positional child
+      const innerIsKeyword = "field" in child.step;
+      const outerIsKeyword = "field" in projected.step;
+      if (innerIsKeyword) return child; // inner keyword wins (innermost pin)
+      if (outerIsKeyword) return { kind: "field", op, step: projected.step, child }; // keyword over a transparent positional child
       return child; // positional over positional — no keyword to pin, keep the innermost
     }
     return { kind: "field", op, step: projected.step, child };
@@ -558,13 +596,20 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       return;
     case "merge":
     case "opaque":
-      // M2 (the soundness fix): a merge/opaque is a fan-in to a FRESH value (`(+ a b)`,
-      // a constructed dict). A field demand reaching it CANNOT be statically attributed
-      // to one child (no genesis labels yet — that is v02-G6), so the merge is a DEMAND
-      // BARRIER: walk each child with the demand DROPPED (full cone), keeping countOnly.
-      // (Re-projecting `:foo` into each child would ask "which inputs feed child.:foo" —
-      // wrong: the children are not the field, the merge IS the producer. The old
-      // walkField distributed the demand into children; that was the M2 bug.)
+      // M2 (the soundness fix): both are DEMAND BARRIERS — walk each child with the
+      // demand DROPPED (full cone), keeping countOnly — but for DISTINCT reasons, so do
+      // not collapse the rationale:
+      //   - merge: a fan-in to a FRESH value (`(+ a b)`, a constructed dict). A field
+      //     demand reaching it CANNOT be statically attributed to one child (no genesis
+      //     labels yet — that is v02-G6); the children are not the field, the merge IS
+      //     the producer. (Re-projecting `:foo` into each child would ask "which inputs
+      //     feed child.:foo" — wrong. The old walkField distributed the demand into
+      //     children; that was the M2 bug.)
+      //   - opaque: barrier'd for CONSERVATISM, not genesis — we cannot see inside a
+      //     membrane/foreign call to know whether or how the demanded field survives it,
+      //     so we conservatively take every child's full cone. Do NOT "optimize" this by
+      //     re-distributing the demand into an opaque's children: there is no visible
+      //     structure to justify the narrowing, so it would be unsound.
       for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":
@@ -586,6 +631,10 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       if (opts.countOnly && n.lengthPreserving) return; // map: prune the per-element transform
       if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));
       return;
+    default:
+      // A new LineageNode kind added without a walker arm fails to compile here (it no
+      // longer narrows to `never`) — converting a silent under-cone into a build error.
+      assertNever(n);
   }
 }
 
@@ -629,11 +678,14 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
   return [...out].sort((a, z) => a - z);
 }
 
-/** The plucked key of a `PathStep` in the SAME shape the runtime field-point stores
- *  it (`FieldPointMeta.key`, trace.ts:57-60): a named member → its bare name string
- *  (`(:verdict x)` / `(@ x :verdict)` → `"verdict"`), a positional index → its number
- *  (`(vector-ref x 1)` → `1`), `car` → `null` (the head of a pair has no key — the
- *  runtime never mints a field-point for it, so there is no key to correspond to). */
+/** The CARRIER's canonical plucked key of a `PathStep`. It COINCIDES with the runtime
+ *  field-point's key (`FieldPointMeta.key`, trace.ts:57-60 — typed `string`) ONLY for
+ *  the keyword/field case: a named member → its bare name string (`(:verdict x)` /
+ *  `(@ x :verdict)` → `"verdict"`), which is exactly what `accessorField`+`fieldPoint`
+ *  pin. The other two arms have NO runtime field-point counterpart: a positional index
+ *  → its number (`(vector-ref x 1)` → `1`), and `car` → `null` — the runtime mints no
+ *  field-point for either (it pins keyword heads only), so this is the carrier's own
+ *  key shape, not a correspondence to anything the trace stores. */
 export function stepKey(step: PathStep): string | number | null {
   if ("field" in step) return step.field;
   if ("index" in step) return step.index;

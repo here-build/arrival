@@ -38,7 +38,7 @@
 import { is_pair } from "./value-guards.js";
 import { SchemeSymbol } from "./SchemeSymbol.js";
 import { AValue } from "./AValue.js";
-import { CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
+import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
 import type { Pair } from "./Pair.js";
 import type { SchemeValue } from "./types.js";
@@ -125,6 +125,10 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
     case "opaque":
       n.children.forEach((ch) => collectSlots(ch, out));
       return;
+    default:
+      // Same exhaustiveness contract as walk(): a new LineageNode kind without a
+      // collect arm fails to compile here rather than silently under-collecting slots.
+      assertNever(n);
   }
 }
 

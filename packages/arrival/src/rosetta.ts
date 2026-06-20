@@ -13,6 +13,7 @@
 import invariant from "tiny-invariant";
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/AValue.js";
+import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
 import { SchemeBool } from "./values/SchemeBool.js";
 import { SchemeBytevector } from "./values/SchemeBytevector.js";
@@ -334,38 +335,6 @@ export function jsToScheme(
 
   // Functions, exotic objects (Promise, Buffer, …): the caller's responsibility.
   return value;
-}
-
-/**
- * Deep provenance of a scheme value: the union of `.provenance` over every AValue
- * reachable from it — itself, a Pair's car/cdr spine (recursively), and the
- * elements of a JS array. List construction (`new Pair(value, rest)`) leaves the
- * spine's provenance EMPTY, so the origins live only on the elements; a shallow
- * top-level read would return ∅ for any packed list. Cycle/visited-guarded.
- */
-function deepProvenance(value: unknown): ReadonlySet<number> {
-  const acc = new Set<number>();
-  const seen = new Set<unknown>();
-  const walk = (v: unknown): void => {
-    if (v === null || typeof v !== "object") return;
-    if (seen.has(v)) return;
-    seen.add(v);
-    if (v instanceof AValue) {
-      for (const p of v.provenance) acc.add(p);
-      if (v instanceof Pair) {
-        walk(v.car);
-        walk(v.cdr);
-      } else if (v instanceof SchemeVector) {
-        // A vector's element provenance lives on the elements (the container is
-        // provenance-transparent, like a packed list's spine), so walk them.
-        for (const el of v.__vector__) walk(el);
-      }
-    } else if (Array.isArray(v)) {
-      for (const el of v) walk(el);
-    }
-  };
-  walk(value);
-  return acc;
 }
 
 export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pure = false }: RosettaFunction) => {
