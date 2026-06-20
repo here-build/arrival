@@ -25,7 +25,7 @@
  * `docs/foundations/arrival-scheme/reference/provenance-model.md` — read it before changing
  * `computeProvenance`, the authoritative-set forwarding, or `fieldPoint`.
  */
-import { AValue, EMPTY_PROVENANCE, type EvalTap, type Pair, type SchemeSymbol } from "@here.build/arrival";
+import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type Pair, type SchemeSymbol } from "@here.build/arrival";
 import { action, observable } from "mobx";
 import invariant from "tiny-invariant";
 
@@ -290,6 +290,27 @@ export class EvalTrace implements EvalTap {
    * lambda-parameter reference like `name` in `(string-append "hi " name)`.
    */
   readonly symbolValues = new WeakMap<Invocation, Map<string, unknown>>();
+
+  /**
+   * v02-G0 SPIKE — the AUTO-BINDING leaf-stamp sidecar (provenance-static-lineage v0.2,
+   * §"v02-G0"). ADDITIVE + flag-gated: undefined by default, so `exit` never touches it
+   * and the trace is byte-identical to today. When a caller attaches one via
+   * {@link withAutoBindings}, each `exit` records the invocation's symbol resolutions
+   * (already in `symbolValues`) into it — capturing, per consumer invocation, the producer
+   * ids each read value carries. This lets the static carrier's leaf slots auto-bind to
+   * the right per-invocation producer (replacing the manual `{ infer: ids }` global map
+   * the v02-G1 shadow uses), WITHOUT collapsing distinct invocations of one source name.
+   * Riding ALONGSIDE the eager Set + the field-point mint, never replacing either.
+   */
+  autoBindings: AutoBindings | undefined = undefined;
+
+  /** Attach a fresh (or given) {@link AutoBindings} collector and return it — the spike
+   *  flag. Off (the default `undefined`) = no recording = byte-identical eval. */
+  withAutoBindings(sink: AutoBindings = new AutoBindings()): AutoBindings {
+    this.autoBindings = sink;
+    return sink;
+  }
+
   #nextId = 0;
 
   /**
@@ -478,6 +499,14 @@ export class EvalTrace implements EvalTap {
     inv.value = result.value;
     inv.provenance = computeProvenance(inv, this);
     this.#pruneChildProvenance(inv);
+
+    // v02-G0 SPIKE (flag-gated): capture this invocation's symbol resolutions into the
+    // auto-binding sidecar — the per-value leaf-stamp. No-op unless a sink is attached
+    // (`autoBindings === undefined` by default), so the flag-OFF path is byte-identical.
+    // Reads the same `symbolValues` the tap already built; records the producer ids each
+    // read value carries, scoped to THIS invocation (no name-collapse). Runs after prune
+    // (which never touches `symbolValues`), so the capture is complete.
+    if (this.autoBindings) this.autoBindings.recordInvocation(inv.id, this.symbolValues.get(inv));
 
     // Stamp the computed provenance back onto the value itself, so it rides
     // through env bindings and emerges intact at the next symbol resolution.

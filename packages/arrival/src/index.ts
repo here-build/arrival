@@ -161,3 +161,9 @@ export {
   type FieldResolution,
 } from "./values/lineage.js";
 export { classifierFromEnv } from "./values/lineage-classifier-from-env.js";
+// v02-G0 SPIKE — the per-value AUTO-BINDING leaf-stamp (flag-gated, additive). Captures,
+// per consumer invocation, the producer ids each read value carries, so the static
+// carrier's leaf slots auto-bind to the right per-invocation producer (replacing the
+// manual `{ infer: ids }` global map the v02-G1 shadow uses) without collapsing distinct
+// invocations of one source name. Populated by EvalTrace.exit when attached.
+export { AutoBindings, slotsOf } from "./values/lineage-auto-bindings.js";
