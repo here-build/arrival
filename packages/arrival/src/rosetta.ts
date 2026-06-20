@@ -10,8 +10,6 @@
  * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md.
  */
 
-import invariant from "tiny-invariant";
-
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/AValue.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
@@ -27,23 +25,6 @@ interface RosettaOptions {
   forceBigInt?: boolean;
   returnEither?: boolean;
   /**
-   * When true, calls to this rosetta become provenance points — the result's
-   * provenance is `{ inv.id }` rather than the union of input provenances.
-   * Implies `withContext: true`: the wrapper needs `ctx.currentInvocation` to
-   * read the id, and explicit opt-out is rejected via invariant so the failure
-   * mode is loud (vs silently losing provenance-point marking).
-   *
-   * Marked by flipping `isProvenancePoint` on the currentInvocation — the
-   * trace-side exit-tap reads this flag in computeProvenance (see
-   * arrival-chain/trace.ts). The flag is the contract. We prefer the
-   * invocation's own `markProvenancePoint()` method when present (the real
-   * Invocation is a MobX observable; the method is an action, so the write is
-   * legal under strict-mode), falling back to a direct set for plain POJOs.
-   * Structural duck-typing on `{ id; isProvenancePoint?; markProvenancePoint?() }`
-   * keeps the cycle one-way — no import of arrival-chain or MobX from here.
-   */
-  provenancePoint?: boolean;
-  /**
    * When true, the wrapper attaches a `ctx.argProvenance` array — one entry per
    * scheme arg, in order — holding that arg's DEEP provenance set (the union of
    * every AValue reachable inside it: itself, Pair car/cdr spines, JS arrays).
@@ -51,8 +32,9 @@ interface RosettaOptions {
    * only the elements do — so a shallow `arg.provenance` read misses per-element
    * origins entirely; the deep walk is what makes packed-into-array values keep
    * their per-field provenance. Computed BEFORE schemeToJs strips the AValue
-   * identity. Implies `withContext: true` (the array rides on `ctx`); rejected
-   * loudly otherwise so the failure mode isn't a silently-absent field.
+   * identity. The array rides on `ctx`; since the wrapper now always receives
+   * ctx (every rosetta is `__withCtx`), `argProvenance: true` also routes ctx to
+   * the FN (so it can read the array) — see `fnWantsCtx` in createRosettaWrapper.
    */
   argProvenance?: boolean;
 }
@@ -337,6 +319,33 @@ export function jsToScheme(
   return value;
 }
 
+/**
+ * Duck-type the evaluator-appended trailing arg as an EvalContext.
+ *
+ * The flip makes EVERY rosetta wrapper `__withCtx` (so the evaluator always
+ * appends ctx and `inv` is always reachable to mint), which means the wrapper
+ * must ALWAYS strip a trailing ctx. But some tests call a wrapper DIRECTLY (no
+ * evaluator → no ctx appended), passing a real scheme value as the last arg —
+ * an unconditional strip would eat it. So we strip only if the trailing arg
+ * LOOKS like a context.
+ *
+ * Why this is unambiguous: by the time a wrapper runs under the evaluator, the
+ * scheme DATA args are already evaluated scheme values (AValue subclasses,
+ * SchemeJSObject, raw arrays/primitives) — the genuine EvalContext is the only
+ * raw plain object carrying `env`/`currentInvocation`/`tap`/`signal` that ever
+ * reaches here. A scheme value is never an AValue-excluded plain object with an
+ * `env` field. `currentInvocation`/`tap`/`signal` may be absent on a minimal
+ * ctx, but `env` is required on every EvalContext (evaluator.ts EvalContext),
+ * so the `env` probe alone suffices; the others are kept as a belt-and-braces
+ * OR for any future ctx shape.
+ */
+const looksLikeEvalContext = (x: unknown): boolean =>
+  x != null &&
+  typeof x === "object" &&
+  !(x instanceof AValue) &&
+  !Array.isArray(x) &&
+  ("env" in x || "currentInvocation" in x || "tap" in x || "signal" in x);
+
 export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pure = false }: RosettaFunction) => {
   // CONFLUENCE GUARD (G5, dev-mode): a `pure: true` rosetta is classified as a
   // PIPE — it propagates its inputs' provenance and mints nothing — which is sound
@@ -346,26 +355,31 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
   // registered name isn't threaded here; fn.name is the best available handle).
   const purityChecked = pure === true && PURITY_ASSERT_ENABLED;
   const pureVerb = fn.name || "<anonymous pure rosetta>";
-  // provenancePoint can't reach ctx.currentInvocation without withContext —
-  // throw rather than silently degrade. The doc on RosettaOptions explains why.
-  invariant(
-    !options.provenancePoint || withContext !== false,
-    "createRosettaWrapper: options.provenancePoint requires withContext: true (cannot reach ctx.currentInvocation otherwise)",
-  );
-  // argProvenance rides on ctx — same requirement, same loud failure.
-  invariant(
-    !options.argProvenance || withContext !== false,
-    "createRosettaWrapper: options.argProvenance requires withContext: true (the per-arg provenance array rides on ctx)",
-  );
-  const effectiveWithContext = withContext || options.provenancePoint === true || options.argProvenance === true;
+  // THE FLIP: a non-pure rosetta is a Rosetta-IN SOURCE — it mints a fresh point
+  // by default (data is born at the membrane crossing); a `pure: true` rosetta is
+  // a PIPE that forwards its inputs' provenance and mints nothing. This is already
+  // the documented default + the static classifier's cut (`isRosettaIn === !pure`);
+  // the runtime now honors it instead of the legacy `provenancePoint` opt-in.
+  const mintsPoint = pure !== true;
+
+  // The WRAPPER always needs ctx (to read `inv` for the mint), so it is always
+  // tagged `__withCtx` and always strips the evaluator-appended ctx (duck-typed,
+  // so direct-JS test calls without a ctx are not mis-stripped). The FN only
+  // RECEIVES ctx when it opts in — back-compat `withContext`, or `argProvenance`
+  // (the per-arg array rides on ctx). argProvenance still rides on ctx, so it too
+  // requires the fn to see it; but since the wrapper now always HAS ctx, the old
+  // `withContext` invariant is moot.
+  const fnWantsCtx = withContext || options.argProvenance === true;
 
   const rosettaWrapper = async function rosettaWrapper(...args: any[]) {
-    // When withContext, the evaluator appends EvalContext as the final arg.
-    // We strip it off, then pass it to the user fn FIRST (so variadic scheme
-    // args don't shift ctx around when called with fewer than max arity).
+    // The evaluator appends EvalContext as the final arg for every __withCtx
+    // wrapper (which, post-flip, is all of them). Strip it iff it looks like a
+    // ctx — a direct-JS caller passes a scheme value here instead, which must NOT
+    // be stripped. The fn (if it wants ctx) receives it FIRST so variadic scheme
+    // args don't shift it around when called with fewer than max arity.
     let ctx: unknown = undefined;
     let schemeArgs = args;
-    if (effectiveWithContext) {
+    if (args.length > 0 && looksLikeEvalContext(args[args.length - 1])) {
       ctx = args[args.length - 1];
       schemeArgs = args.slice(0, -1);
     }
@@ -387,7 +401,7 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
     }
 
     const jsArgs = schemeArgs.map((arg) => schemeToJs(arg, options));
-    const callArgs = effectiveWithContext ? [ctx, ...jsArgs] : jsArgs;
+    const callArgs = fnWantsCtx ? [ctx, ...jsArgs] : jsArgs;
 
     // Dev-mode confluence guard: fingerprint the pure rosetta's scheme inputs
     // (their mutable car/cdr/vector slots) before the call, to detect in-place
@@ -409,7 +423,7 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
       // reaches every constructed AValue in one traversal (spec §5.3 — every
       // element returned by a rosetta carries its origin from the moment it
       // crosses the boundary, not after a separate `withProvenance` walk on
-      // the top-level container). Provenance-point overrides inputs.
+      // the top-level container). The mint overrides inputs.
       //
       // No invocation in ctx: silent. The rosetta is being called from a path the
       // tap doesn't reach (e.g., direct JS invocation in tests); there's no node to
@@ -419,7 +433,7 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
       // by the rosetta fn via `ctx.currentInvocation.setMetadata(…)` at call time —
       // it's known up front, so it doesn't ride the result back through here.
       let resultProvenance = inputProvenance;
-      if (options.provenancePoint === true && inv && typeof inv.id === "number") {
+      if (mintsPoint && inv && typeof inv.id === "number") {
         // The real Invocation is a MobX observable — flip the flag through its
         // own action so this is safe under strict-mode (the studio enables it).
         // A plain POJO (direct-JS tests) has no method → set it directly.
@@ -439,9 +453,9 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
       }
     }
   };
-  if (effectiveWithContext) {
-    (rosettaWrapper as { __withCtx?: boolean }).__withCtx = true;
-  }
+  // ALWAYS tag — every rosetta wrapper now needs ctx appended (to mint by default;
+  // a pure pipe still needs the strip-guard symmetric so direct calls behave).
+  (rosettaWrapper as { __withCtx?: boolean }).__withCtx = true;
   return rosettaWrapper;
 };
 

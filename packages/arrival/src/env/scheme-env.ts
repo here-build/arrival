@@ -29,7 +29,7 @@ export interface RosettaSpec {
   type?: string;
   /** Receive the EvalContext as a context argument (host-side). */
   withContext?: boolean;
-  /** Rosetta options (e.g. `{ provenancePoint: true }`) — passed through verbatim. */
+  /** Rosetta options (e.g. `{ argProvenance: true }`) — passed through verbatim. */
   options?: unknown;
 }
 
