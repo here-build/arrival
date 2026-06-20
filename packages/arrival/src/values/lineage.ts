@@ -52,6 +52,18 @@ import { SchemeSymbol } from "./SchemeSymbol.js";
 import type { Pair } from "./Pair.js";
 import type { SchemeValue } from "./types.js";
 
+/** A CANONICAL member-read step — the *where* of where-provenance. The field node
+ *  is normalized to ONE of these regardless of the surface accessor syntax
+ *  (`(:foo x)` / `(@ x :foo)` / `(car x)` / `(vector-ref x i)`), so a lineage
+ *  chunk's `uneval` targets minimal scheme with no polyglot sugar; re-sugaring
+ *  (`(@ obj :foo)` → `obj.foo`) is an optional later display layer, not the
+ *  carrier's concern. Mirrors `trace.ts`'s runtime `FieldPointMeta = {origin,key}`
+ *  (v0.2 §"The carrier"). */
+export type PathStep =
+  | { readonly field: string } // a named key — (:foo x) / (@ x :foo): step = {field:"foo"}
+  | { readonly car: true } // the head of a pair — (car x)
+  | { readonly index: number }; // a positional index — (vector-ref x i) / (list-ref x i), i a LITERAL int
+
 /** A node of the static lineage skeleton. `slot`/`op` names are filled with the
  *  actual provenance set at runtime (the leaf-stamping step). */
 export type LineageNode =
@@ -60,14 +72,27 @@ export type LineageNode =
   | { readonly kind: "source"; readonly op: string } // a Rosetta-in mint (infer/fetch/db-read/…)
   | { readonly kind: "pipe"; readonly op: string; readonly child: LineageNode } // ≤1 prov input → pass-through
   | { readonly kind: "merge"; readonly op: string; readonly children: readonly LineageNode[] } // ≥2 → fan-in
+  // A WHERE-PROVENANCE lens step: a canonical member-read (`step`) focused on
+  // `child`. walk() descends the focused child ONLY — siblings are pruned
+  // STRUCTURALLY (never built as branches), so the hole-placement and the
+  // addressing are the same act. The static form of trace.ts's runtime field-point
+  // (v0.2 §"The carrier"). `op` records the surface head for the viz / debug.
+  | { readonly kind: "field"; readonly op: string; readonly step: PathStep; readonly child: LineageNode }
   // map/filter: a uniform per-element pipe template. `lengthPreserving` (map=true,
-  // filter=false) gates the count-cone prune — see walk()/countCone.
+  // filter=false) gates the count-cone prune — see walk()/countCone. `template`
+  // (present iff the fan function is a lambda) carries the per-element body — the
+  // z-stack axis preserved PARAMETRIC so a field projected through a fan composes
+  // without unrolling (the fan×lens product, v0.2 §"The viz constraint"). It is a
+  // carrier-/viz-shaping structure, NOT a cone contributor: walk() never descends
+  // it (the source+introduces over-approximation already bounds the per-element
+  // cone), so fullCone/countCone stay byte-identical to a template-less fan.
   | {
       readonly kind: "fan";
       readonly op: string;
       readonly introduces: boolean;
       readonly lengthPreserving: boolean;
       readonly source: LineageNode;
+      readonly template?: LineageNode;
     }
   // if/cond — a value-SELECT over arms gated by a selector (the test cone). The
   // static cone is selector ∪ arms (conservative; the taken arm is a runtime fact).
@@ -131,6 +156,99 @@ function operands(app: Pair): SchemeValue[] {
 }
 
 const isProvBearing = (n: LineageNode): boolean => n.kind !== "literal";
+
+/** A LITERAL integer datum's value (`(vector-ref x 1)` → `1`), else null. The
+ *  index must be a self-evaluating exact integer; a variable index (`(vector-ref
+ *  x n)`) leaves the form a plain op (no static field — the key isn't known). */
+function literalIndex(x: SchemeValue): number | null {
+  if (x instanceof SchemeSymbol || is_pair(x)) return null;
+  const v = (x as { valueOf?: () => unknown })?.valueOf?.();
+  return typeof v === "number" && Number.isInteger(v) ? v : null;
+}
+
+/**
+ * Recognize a member-read across its SURFACE syntaxes and return the CANONICAL
+ * step + the projected argument expression — else null. Mirrors trace.ts's
+ * `accessorField` (65-70) for the keyword head, generalized to the four accessor
+ * shapes consumers pin (v0.2 §"The carrier"):
+ *   - `(:foo x)`        keyword head — a SchemeSymbol `__name__` ":foo" (len>1) → {field:"foo"}
+ *   - `(@ x :foo)`      membrane.readMember — key is the 2nd operand (`:foo` symbol or "foo" string)
+ *   - `(car x)`         pair head → {car:true}
+ *   - `(vector-ref x i)` / `(list-ref x i)` with a LITERAL int i → {index:i}
+ * The emitted node is uniform regardless of which surface produced it; the
+ * no-lookahead property the sampler relies on lives at this canonical level.
+ */
+function memberRead(head: SchemeValue, args: SchemeValue[]): { step: PathStep; argExpr: SchemeValue } | null {
+  if (!(head instanceof SchemeSymbol)) return null;
+  const name = opName(head);
+
+  // (:foo x) — keyword accessor. Head is `:foo`; a bare `:` (no field) is not one.
+  if (name.length > 1 && name.startsWith(":") && args.length >= 1) {
+    return { step: { field: name.slice(1) }, argExpr: args[0] };
+  }
+
+  // (@ x :foo) / (@ x "foo") — membrane member-read; same canonical step. The key
+  // is the SECOND operand: a `:foo` keyword symbol, a "foo" string, or a literal int.
+  if (name === "@" && args.length >= 2) {
+    const key = args[1];
+    const keyName = key instanceof SchemeSymbol ? opName(key) : null;
+    if (keyName !== null && keyName.length > 1 && keyName.startsWith(":")) {
+      return { step: { field: keyName.slice(1) }, argExpr: args[0] };
+    }
+    if (!(key instanceof SchemeSymbol) && !is_pair(key)) {
+      const kv = (key as { valueOf?: () => unknown })?.valueOf?.();
+      if (typeof kv === "string") return { step: { field: kv }, argExpr: args[0] };
+      const ki = literalIndex(key);
+      if (ki !== null) return { step: { index: ki }, argExpr: args[0] };
+    }
+    return null; // computed key (`(@ x k)`) — not a static field
+  }
+
+  // (car x) — the head of a pair.
+  if (name === "car" && args.length >= 1) return { step: { car: true }, argExpr: args[0] };
+
+  // (vector-ref x i) / (list-ref x i) — a positional index, i a LITERAL integer.
+  if ((name === "vector-ref" || name === "list-ref") && args.length >= 2) {
+    const i = literalIndex(args[1]);
+    if (i !== null) return { step: { index: i }, argExpr: args[0] };
+  }
+
+  return null;
+}
+
+/** Pull the parameter symbols out of a lambda's formal list — `(it)` → ["it"],
+ *  `(a b)` → ["a","b"]. A variadic/rest tail (`(a . r)`, or a bare symbol formal)
+ *  is ignored for binding (the element flows in via the leading positionals only).*/
+function lambdaParams(formals: SchemeValue): string[] {
+  const out: string[] = [];
+  let n: SchemeValue = formals;
+  while (is_pair(n)) {
+    if (n.car instanceof SchemeSymbol) out.push(opName(n.car));
+    n = n.cdr;
+  }
+  return out;
+}
+
+/**
+ * Build a fan's per-element TEMPLATE when its function is a `(lambda (p…) body)`:
+ * classify the body with each param bound to an ELEMENT leaf (`leaf{slot: p}`), so
+ * a field projected inside the body nests under the fan (the fan×lens parametric
+ * path). Returns undefined for a bare function symbol / non-lambda — those keep the
+ * template-less fan, byte-identical to before. The template is a viz-/carrier-
+ * shaping structure; walk() never descends it (cone neutrality).
+ */
+function classifyFanTemplate(fn: SchemeValue, c: Classifier, subst: Subst): LineageNode | undefined {
+  if (!is_pair(fn) || !isSym(fn.car, "lambda")) return undefined;
+  const afterKw = fn.cdr;
+  if (!is_pair(afterKw)) return undefined;
+  const params = lambdaParams(afterKw.car);
+  const bodyForms = afterKw.cdr; // (body…) — classify the LAST (begin pass-through)
+  // The element binds the params as leaves; the surrounding subst still applies to
+  // free vars captured from the enclosing scope (e.g. an outer `let`-bound source).
+  const extended = new Map(subst);
+  for (const p of params) extended.set(p, { kind: "leaf", slot: p });
+  return classifyBegin(bodyForms, c, extended);
+}
 
 /** The pipe-vs-merge arity cut, shared by pure ops and synthetic combinations
  *  (cond's selector, a `=>` arm). Mirrors `unionProvenance` (AValue.ts:104-120):
@@ -212,6 +330,24 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
   const op = opName(head);
   const args = operands(ast as Pair);
 
+  // ── WHERE-PROVENANCE: a member-read, NORMALIZED to a canonical field node ──
+  // Recognized across all its surface syntaxes (keyword/`@`/`car`/`vector-ref`);
+  // the EMITTED node is uniform regardless (the `uneval` targets minimal scheme,
+  // so the chunk is one canonical primitive shape — v0.2 §"The carrier"). Placed
+  // before the source/fan/opaque cuts so a projection head is never mis-read as a
+  // pure op. cdr/cadr/rest stay PIPES (a sound over-approximation — consumers only
+  // ever pin keyword/car/index fields).
+  const projected = memberRead(head, args);
+  if (projected !== null) {
+    const child = classifyWith(projected.argExpr, c, subst);
+    // D-v02-1 ABSORPTION (mirrors trace.ts:351-352): a field directly under another
+    // field is a deeper pluck within the SAME producer pin — keep base + INNERMOST
+    // step (return the inner field unchanged), do NOT compose nested keys into a
+    // path. The viz reconstructs the path from the tree's nesting, not a stored one.
+    if (child.kind === "field") return child;
+    return { kind: "field", op, step: projected.step, child };
+  }
+
   if (c.isRosettaIn(op)) return { kind: "source", op }; // provenance is BORN here
 
   if (c.isOpaque(op)) {
@@ -223,14 +359,23 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
     // (map f xs) / (filter p xs) — f introduces provenance iff it is itself a
     // Rosetta-in source. `lengthPreserving` distinguishes map (true) from filter
     // (false) for the count-cone prune in walk().
-    const fanOp = opName(args[0]);
+    const fn = args[0];
+    const fanOp = opName(fn);
     const lengthPreserving = op === "map" || op === "vector-map";
+    // FAN×LENS (v0.2 §"The viz constraint"): when the function is a lambda, classify
+    // its body with each param bound to an ELEMENT leaf, nesting the per-element
+    // template under the fan. A field projected inside the body (`(:bar it)`) then
+    // becomes a field node UNDER the fan template — the z-stack axis stays parametric,
+    // so a field-in-fan composes with a field-over-fan WITHOUT unrolling. A bare
+    // function symbol (`(map infer xs)`) builds NO template — byte-identical to before.
+    const template = classifyFanTemplate(fn, c, subst);
     return {
       kind: "fan",
       op: fanOp,
       introduces: c.isRosettaIn(fanOp),
       lengthPreserving,
       source: classifyWith(args[1], c, subst),
+      ...(template !== undefined ? { template } : {}),
     };
   }
 
@@ -381,6 +526,16 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, countOnly: boolean)
     case "pipe":
       walk(n.child, b, out, countOnly); // a pure pipe adds nothing of its own
       return;
+    case "field":
+      // Descend the FOCUSED child only — the siblings (the other fields of the
+      // projected value) were pruned STRUCTURALLY at classify time (never built as
+      // branches), so there is no ⊥ to propagate. This keeps fullCone NEUTRAL vs the
+      // pre-v0.2 pipe classification of a member-read: a field over x still yields
+      // x's cone (the teleological query is unchanged). The where-provenance KEY is
+      // carried in the node for the consumer queries (basePoint / (basePoint,key)),
+      // it does not change the set walk.
+      walk(n.child, b, out, countOnly);
+      return;
     case "merge":
     case "opaque":
       n.children.forEach((ch) => walk(ch, b, out, countOnly));
@@ -420,4 +575,66 @@ export function countCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
   walk(n, b, out, true);
   return [...out].sort((a, z) => a - z);
+}
+
+/** Two `PathStep`s address the same member. */
+export function sameStep(a: PathStep, z: PathStep): boolean {
+  if ("field" in a) return "field" in z && a.field === z.field;
+  if ("car" in a) return "car" in z;
+  return "index" in z && a.index === z.index;
+}
+
+/**
+ * DEMAND-AS-PROJECTION (D-v02-2): the cone needed when only ONE field of the value
+ * is demanded — the per-node hole-lattice element pushed backward. A field node is
+ * followed IFF its step matches the demand; a NON-matching field node is a pruned
+ * SIBLING (contributes nothing — the lens complement as set-difference). Every
+ * other node propagates the same field demand to where the value is produced.
+ *
+ * This is the projection-parameterized `walk`: the explicit-optic machinery
+ * (profunctor lenses / StyleLens) collapses to this single parameter because
+ * arrival has ONE interpreter (`walk`) — the multi-interpreter uniformity a
+ * profunctor buys is not needed (v0.2 §"Test demand-as-projection FIRST").
+ */
+export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[] {
+  const out = new Set<number>();
+  walkField(n, b, step, out);
+  return [...out].sort((a, z) => a - z);
+}
+
+function walkField(n: LineageNode, b: Bindings, step: PathStep, out: Set<number>): void {
+  switch (n.kind) {
+    case "literal":
+      return;
+    case "leaf":
+      (b[n.slot] ?? []).forEach((x) => out.add(x)); // the demanded field of an input leaf is the leaf's lineage
+      return;
+    case "source":
+      (b[n.op] ?? []).forEach((x) => out.add(x)); // a source mint carries its whole lineage
+      return;
+    case "field":
+      // The focused projection: follow it IFF it is the field we demand; otherwise
+      // this node is a SIBLING of the focus and contributes nothing (the structural
+      // complement). Once matched, the demand is SATISFIED — its child's FULL cone
+      // is the projection's lineage.
+      if (sameStep(n.step, step)) walk(n.child, b, out, false);
+      return;
+    case "pipe":
+      walkField(n.child, b, step, out); // a pass-through preserves the demanded field
+      return;
+    case "merge":
+    case "opaque":
+      n.children.forEach((ch) => walkField(ch, b, step, out));
+      return;
+    case "mux":
+      walkField(n.selector, b, step, out);
+      n.arms.forEach((arm) => walkField(arm, b, step, out));
+      return;
+    case "fan":
+      // A field demand on a fan result threads to the source (the z-axis is
+      // preserved; the per-element field lives in the template, read by the viz).
+      walkField(n.source, b, step, out);
+      if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));
+      return;
+  }
 }

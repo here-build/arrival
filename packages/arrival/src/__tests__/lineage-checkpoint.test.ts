@@ -36,6 +36,8 @@ function countNodes(n: LineageNode): number {
       return 1;
     case "pipe":
       return 1 + countNodes(n.child);
+    case "field":
+      return 1 + countNodes(n.child);
     case "fan":
       return 1 + countNodes(n.source);
     case "mux":

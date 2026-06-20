@@ -111,6 +111,9 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
     case "pipe":
       collectSlots(n.child, out);
       return;
+    case "field":
+      collectSlots(n.child, out); // the focused child only — siblings were never built
+      return;
     case "fan":
       collectSlots(n.source, out);
       return;
