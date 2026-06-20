@@ -1,11 +1,8 @@
-# @here.build/arrival-scheme
+# @here.build/arrival
 
-**Sandboxed Scheme interpreter for AI agent exploration**
+**First ever language built for AI, finally built for AI**
 
-Fork of LIPS.js rewritten to prioritize sandboxing over JavaScript compatibility. AI agents explore problem spaces in
-Scheme without triggering state changes or side effects.
-
-> ⚠️ **version 0.x may be unsafe - use zero-trust environments only**
+> ⚠️ **version 0.x sandbox isolation is non-audited. **
 >
 > This is a fork of LIPS.js with known architectural security issues. We've identified potential sandbox escape
 > strategies but haven't fixed all of them yet. **Assume the sandbox can be escaped.** Use only in isolated containers,
@@ -26,6 +23,21 @@ Scheme matches how compositional reasoning works. When AI agents explore data ("
 threshold"), they think in filter/map/compose patterns. Scheme is the notation for compositional thinking.
 
 Sandboxing prevents exploration from accidentally executing actions.
+
+### Prior art
+
+The stance above — *symbolic programming as the reasoning medium, not static tool-calling* — is argued
+independently in Jordi de la Torre, [*From Tool Calling to Symbolic Thinking: LLMs in a Persistent Lisp
+Metaprogramming Loop*](https://arxiv.org/abs/2506.10021) (arXiv:2506.10021, 2025). It proposes embedding
+Lisp in generation, intercepting it through a **middleware layer**, and giving the model a **persistent
+REPL** in which it defines, invokes, and evolves its own tools — so the thought and the executable program
+are the same artifact, not English-reasoning-then-translate-to-a-tool-call.
+
+That paper offers *design principles*; arrival is the built system. Its middleware layer is our membrane
+(`@`); its persistent REPL is the per-run capability environment; its "evolve your own tools" is the
+capability DAG. And where it leaves the environment open, arrival's base is sandboxed, no-IO, and
+R7RS-faithful — we add what a design framework omits: the boundary that makes a self-evolving symbolic
+loop safe to run.
 
 ## Quick Start
 
@@ -124,6 +136,12 @@ await exec(`(@ console :log)`, { env: sandboxedEnv });
 // - JS functions → Scheme procedures
 // - Natural interop in both directions
 ```
+
+A registered rosetta is a **provenance SOURCE by default**: it introduces external
+data, so its result mints a fresh provenance point (never silently lose an origin).
+Pass `pure: true` to opt out to a pass-through **PIPE** — a transform that forwards
+its inputs' provenance and mints nothing (use it for fns that only reshape their
+arguments, like `string-append`).
 
 ### 3. Fantasy-land Support
 
@@ -229,7 +247,7 @@ Automatic conversion between JavaScript and Scheme:
 ### Registering Functions
 
 ```typescript
-// Simple function
+// Simple function — a provenance SOURCE by default (its result mints a point)
 env.defineRosetta('add', {
   fn: (a: number, b: number) => a + b
 });
@@ -238,6 +256,12 @@ env.defineRosetta('add', {
 env.defineRosetta('process-users', {
   fn: (users: User[]) => users.filter(u => u.active),
   // Automatic conversion of return value to Scheme list
+});
+
+// `pure: true` opts out to a PIPE — forwards its inputs' provenance, mints nothing
+env.defineRosetta('shout', {
+  pure: true,
+  fn: (s: string) => s.toUpperCase()
 });
 
 // Direct Scheme value
@@ -316,9 +340,12 @@ Convert Scheme value to JavaScript.
 
 ### Environment Methods
 
-**`env.defineRosetta(name: string, { fn: Function })`**
+**`env.defineRosetta(name: string, { fn: Function, pure?: boolean })`**
 
-Register JS function with automatic type conversion.
+Register JS function with automatic type conversion. By default the rosetta is a
+provenance **source** — its result mints a fresh provenance point. Pass
+`pure: true` to make it a pass-through **pipe** that forwards its inputs'
+provenance instead of minting.
 
 **`env.set(name: string, value: SchemeValue)`**
 
