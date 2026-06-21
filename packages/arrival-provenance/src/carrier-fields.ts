@@ -19,19 +19,22 @@
  * mint's retirement, are later L2 steps; this rides ALONGSIDE the mint until every consumer
  * migrates.
  *
- * SCOPE (matches the G0/E2 spikes): single-binding (non-loop) field edges. `bindingsFor`
- * resolves a slot to its first-recorded producer set globally (`AutoBindings.producersFor`) —
- * exact when a slot is bound once (the corpus), the deferred fan×lens z-axis otherwise.
- * GENESIS caveat: a `:foo` plucked off a fresh constructor (`(:foo (list …))`) has no live
- * field-point (the list is not a producer point), but its carrier `base` can still reach an
- * upstream producer through the constructor — a potential over-pin. None occur in the corpus;
- * the dual-run flags it the moment a genesis program enters the corpus (the deferred v02-G6
- * genesis-labeling closes it).
+ * SLOT SCOPING: each field node's slots resolve ONLY against auto-bindings recorded within the
+ * CONSUMER point's invocation subtree (`subtreeIds`), NOT the global first-match — so two
+ * consumers reading the same slot name bind to their OWN producer, and a looped consumer's
+ * iterations each bind their own (unioned per cell by the statechart's fan-collapse).
+ * GENESIS: `collectFieldNodes` mirrors the live `fieldPoint` absorption — a keyword plucked off a
+ * fresh constructor (`(:a (list (:b x)))`) does NOT pin the upstream producer (only the inner `:b`
+ * that reaches it does), guarded by `hasKeywordField`.
+ * KNOWN GAPS (corpus-gated `it.todo`, fast-follow): (1) an INLINE-SOURCE pluck `(:k (car (infer …)))`
+ * loses its pin — the operator slot `infer` carries no provenance so it never auto-binds (the
+ * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
+ * keyword-only live `accessorField` (trace.ts:65) mints nothing — the carrier is the faithful side.
  */
 import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
 import type { Classifier, LineageNode } from "@here.build/arrival";
 
-import type { EvalTrace } from "./trace.js";
+import type { EvalTrace, Invocation } from "./trace.js";
 
 /** Structural pair test — local, so the reader needs no `is_pair` import (mirrors statechart.ts). */
 const isPair = (v: unknown): v is { readonly car: unknown; readonly cdr: unknown } =>
@@ -48,14 +51,38 @@ function operandsOf(node: unknown): unknown[] {
   return out;
 }
 
-/** Every `field` node reachable in a classified skeleton (the plucks). A field node's own
- *  child IS descended: a positional child carries `key=null` (skipped downstream) and nested
- *  keyword plucks already absorbed to this innermost field at classify time, so descending
- *  neither double-counts a real pin nor misses a pluck nested in the base expression. */
+/** Does `n`'s subtree contain a KEYWORD field node? (A positional `car`/`index` step does not
+ *  count — it never pins.) Used to mirror the live `fieldPoint` absorption: a keyword plucked
+ *  off a value that ALREADY had a keyword plucked from it absorbs into the inner one. */
+function hasKeywordField(n: LineageNode): boolean {
+  switch (n.kind) {
+    case "field":
+      return "field" in n.step || hasKeywordField(n.child);
+    case "pipe":
+      return hasKeywordField(n.child);
+    case "fan":
+      return hasKeywordField(n.source) || (n.template ? hasKeywordField(n.template) : false);
+    case "mux":
+      return hasKeywordField(n.selector) || n.arms.some(hasKeywordField);
+    case "merge":
+    case "opaque":
+      return n.children.some(hasKeywordField);
+    default:
+      return false; // leaf / source / literal
+  }
+}
+
+/** The KEYWORD `field` nodes in a classified skeleton that actually PIN — i.e. whose base
+ *  reaches a producer with NO intervening keyword field. A keyword plucked off an already-plucked
+ *  value ABSORBS into the inner one (the live `fieldPoint` collapses `fieldPoint(fieldPoint(P,b),a)`
+ *  → {P, b}, trace.ts:390) — so the outer key pins nothing new on the producer. This guards the
+ *  GENESIS over-pin `(:a (list (:b x)))`: `:a` is plucked off a fresh constructor, not the producer
+ *  `:b` reaches, so only `:b` pins. A positional `car`/`index` field (key=null) never pins; we
+ *  don't collect it, but we still descend its child for deeper keyword plucks. */
 function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode[] {
   switch (n.kind) {
     case "field":
-      out.push(n);
+      if ("field" in n.step && !hasKeywordField(n.child)) out.push(n);
       collectFieldNodes(n.child, out);
       break;
     case "pipe":
@@ -76,6 +103,21 @@ function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode
     // leaf / source / literal carry no pluck.
   }
   return out;
+}
+
+/** Every invocation id in a consumer point's SUBTREE (itself + transitive children). A field
+ *  pluck's symbol resolution is recorded under the child invocation that read it (e.g. the `car`
+ *  invocation), which is a descendant of the consumer point — so this is the scope to resolve the
+ *  pluck's slots against, isolating each consumer from another that reads the same slot name. */
+function subtreeIds(root: Invocation): Set<number> {
+  const ids = new Set<number>();
+  const stack: Invocation[] = [root];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    ids.add(n.id);
+    for (const c of n.children) stack.push(c);
+  }
+  return ids;
 }
 
 /** Leading op-symbol of a call AST `(head . args)` → its `__name__`, else null. */
@@ -132,9 +174,25 @@ export function carrierFieldEdges(trace: EvalTrace, classifier: Classifier = cla
   for (const inv of trace.invocationLog) {
     if (!inv.isProvenancePoint) continue; // consumers are the source-points (infer/effect calls)
     const consumer = inv.id;
+    const scope = subtreeIds(inv); // resolve this consumer's slots only against ITS subtree's bindings
+    // Resolve a field node's slots against bindings recorded WITHIN this consumer's subtree — not
+    // the global first-match — so two consumers reading the same slot name bind to their own
+    // producer, and a looped consumer's iterations each bind their own (unioned per cell downstream).
+    const scopedBindings = (slots: Iterable<string>): Record<string, readonly number[]> => {
+      const b: Record<string, readonly number[]> = {};
+      for (const slot of slots) {
+        const ids = auto.producersFor(slot, (cands) => {
+          const u = new Set<number>();
+          for (const c of cands) if (scope.has(c.invocationId)) for (const x of c.ids) u.add(x);
+          return [...u];
+        });
+        if (ids.length > 0) b[slot] = ids;
+      }
+      return b;
+    };
     for (const argExpr of operandsOf(inv.node)) {
       for (const fieldNode of collectFieldNodes(classify(argExpr, classifier))) {
-        const { base, key } = fieldResolve(fieldNode, auto.bindingsFor(slotsOf(fieldNode)));
+        const { base, key } = fieldResolve(fieldNode, scopedBindings(slotsOf(fieldNode)));
         if (key === null) continue; // positional-forward (car / index) — no pin (D-v02-4)
         for (const producer of base) {
           if (producer === consumer) continue; // self-edge — a mid-flight artifact (matches statechart.ts:176)
