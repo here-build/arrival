@@ -306,11 +306,7 @@ export class EvalTrace implements EvalTap {
    * the v02-G1 shadow uses), WITHOUT collapsing distinct invocations of one source name.
    * Riding ALONGSIDE the eager Set + the field-point mint, never replacing either.
    */
-  // Default-ON at mint-death: the dag self-serves `carrierFieldEdges` from per-value bindings
-  // to recover the `:fields` the forward (non-minting) path drops. RETENTION: `byInvocation`
-  // grows per consumer-invocation, bounded by the trace cap — a prune-integration follow-up
-  // before this rides a long looping run (linear, not the quadratic field-point blowup).
-  autoBindings: AutoBindings | undefined = new AutoBindings();
+  autoBindings: AutoBindings | undefined = undefined;
 
   /** Attach a fresh (or given) {@link AutoBindings} collector and return it — the spike
    *  flag. Off (the default `undefined`) = no recording = byte-identical eval. */
@@ -322,11 +318,10 @@ export class EvalTrace implements EvalTap {
    * carrier (`carrierFieldEdges`, read by the dag). The origin-only consumers (`resolveOriginVia`
    * in chain/regions/fold, `resolveReadIds` in the sift seal) become byte-identical: they walked
    * the field-point back to its origin anyway, and now the origin is already there (the walk is
-   * identity). Default TRUE = mint-death (forward; the carrier serves the dag's `:fields`). Set
-   * false to restore the live mint — the dissolve dual-run + the carrier-vs-mint shadows do this.
-   * Proven forward==mint (scope-id-normalized) by `mint-forward-dualrun.test.ts`.
+   * identity). Default false = the live mint, byte-identical. Proven forward==mint over the
+   * corpus by `mint-forward-dualrun.test.ts`; flipped to the default at mint-death.
    */
-  forwardFields = true;
+  forwardFields = false;
 
   withAutoBindings(sink: AutoBindings = new AutoBindings()): AutoBindings {
     this.autoBindings = sink;
