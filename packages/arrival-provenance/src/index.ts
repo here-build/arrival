@@ -14,6 +14,7 @@ export {
   type ChartEdge,
   type EdgeKind,
 } from "./statechart.js";
+export { carrierFieldEdges } from "./carrier-fields.js";
 export {
   collapseMDL,
   type CandidateBox,
