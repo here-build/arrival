@@ -418,6 +418,31 @@ export interface SchemeLanguageService {
    * BOUND value-symbol that passes Σ on its own, so it needs no exemption.
    */
   getSlotAcceptsBareWord(scheme: string, schemeOffset: number): boolean | null;
+  /**
+   * The ELEMENT-type verdict at an ARRAY-ELEMENT cursor — the inner twin of {@link getSlotAcceptsBareWord}
+   * for a value sitting INSIDE an array surface (`(list …)`, `'(…)`, `[…]`). At an array value slot the
+   * element-type bit is LOST the instant the cursor descends past the opener: `(list …)` lowers to the
+   * generic `__arr.list(…)` whose `Parameters[i]` is `unknown` (→ stringy=true → a bare multi-word word
+   * slips in), and `'(…)` lowers to a TS array-LITERAL with no enclosing call (→ the slot probes find
+   * nothing). This probe recovers the element type DESPITE the surface:
+   *  - `(list …)` / `[…]` / `(array …)`: the cursor is inside a list-MATERIALIZER call — walk OUT to the
+   *    array param that materializer fills and read its ELEMENT type (the outer slot's number-index type),
+   *    NOT the materializer's own `unknown` param.
+   *  - `'(…)`: the quote lowered to a TS array literal — read the element via the literal's CONTEXTUAL type
+   *    (its expected array type → number-index element type).
+   * Returns `{ isStringy, enum }`:
+   *  - `isStringy` — `true` ⇒ the element type is a free-form `string`/`any`/`unknown` (NOT array, NOT
+   *    number/boolean/object): the model's bare value-word must be FORCED into a quoted string here (the
+   *    INVERSE of the scalar exemption — at an array element a bare multi-word word whitespace-splits at the
+   *    scorer, so the quote is forced UPFRONT). `false` ⇒ number/boolean/object/array element. `null` ⇒
+   *    unresolved (not an array-element cursor, unknown callee, un-nameable type) ⇒ the force-quote stays inert.
+   *  - `enum` — the element type's string-literal-union MEMBERS (the Σ∩T array analog: narrow the element to
+   *    exactly these), or `null` when the element is not a finite string-literal union. A `null` here with
+   *    `isStringy===true` is the free-form (force-quote) case; a non-null `enum` is the closed-domain case.
+   * Feeds the sampler's array-element structure gate (the typed scanner stamps it as
+   * `elementIsStringy`/`elementEnum`); a `null`/`null` verdict leaves that gate a no-op (superset-safe).
+   */
+  getSlotElementType(scheme: string, schemeOffset: number): { isStringy: boolean | null; enum: string[] | null };
 }
 
 /**
@@ -935,6 +960,16 @@ export function createSchemeLanguageServiceCore(
       if (role.kind !== "argument") return null; // not a typed-call argument slot → no exemption
       return probeSlotAcceptsBareWord(scheme, role.calleeText, role.argIndex);
     },
+
+    getSlotElementType(scheme, schemeOffset): { isStringy: boolean | null; enum: string[] | null } {
+      // Same sentinel placement as the slot probes, but the WALK is different: we don't want the cursor's
+      // immediate argument slot (which is `list`'s `unknown` inside `(list …)`, or nothing inside `'(…)`),
+      // we want the ENCLOSING ARRAY's ELEMENT type. probeElementType drives the TS AST from the sentinel.
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
+      );
+      return probeElementType(sentinelScheme);
+    },
   };
 
   /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back
@@ -987,6 +1022,109 @@ export function createSchemeLanguageServiceCore(
     if (el === undefined) return null;
     const text = checker.typeToString(el); // a single literal: "true" / "false" / other (error-any)
     return text === "true" ? true : text === "false" ? false : null;
+  }
+
+  /**
+   * Resolve the ELEMENT type at the sentinel'd array-element cursor and derive `{ isStringy, enum }`.
+   * Unlike the `__E = Parameters<…>` slot probes (a type-alias readback), this is a CHECKER-INSTANCE query
+   * on the live emitted node: it finds the INNERMOST array-PRODUCING expression that directly contains the
+   * sentinel and reads the ELEMENT of that expression's CONTEXTUAL type. The two live array surfaces both
+   * resolve through ONE primitive — `getContextualType` does the outer-slot resolution for free:
+   *  - `'(…)` lowered to a TS array LITERAL `[…]`: `getContextualType(literal)` = the expected array type
+   *    (`T_diet[]` / `readonly unknown[]`); its number-index is the element type.
+   *  - `(list …)` lowered to `__arr.list(…)`: `getContextualType(thatCall)` = the same expected array type
+   *    (TS flows the outer slot INTO the call's contextual position — verified: `__arr.list(x)` filling a
+   *    `T_diet[]` slot has contextual type `T_diet[]`, NOT the generic `list`'s `unknown`); number-index → element.
+   * A regular nested call (`(find-y …)`) is NOT a materializer — its args are typed by ITS OWN signature, so
+   * it is deliberately NOT treated as an array producer (only an array literal, or a `__arr.list` call, is).
+   * Returns `{ isStringy: null, enum: null }` when the cursor is not inside such a surface (the gate no-ops).
+   */
+  function probeElementType(sentinelScheme: string): { isStringy: boolean | null; enum: string[] | null } {
+    const NONE = { isStringy: null, enum: null } as const;
+    loadSource(sentinelScheme);
+    const program = service.getProgram();
+    const sf = program?.getSourceFile(PROGRAM_FILE);
+    if (!sf || !program) return NONE;
+    const checker = program.getTypeChecker();
+    // Find the sentinel node in the emitted TS. CRITICAL: inside a `'(…)` quote-list the sentinel lowers to
+    // a STRING LITERAL (`emitQuoteDatum` renders a bare symbol as `JSON.stringify(atom)` → `"qzcursorzq"`),
+    // whereas inside `(list …)` it stays a bare IDENTIFIER. Match both spellings so both surfaces resolve.
+    let sentinel: ts.Node | null = null;
+    const find = (n: ts.Node): void => {
+      if (sentinel) return;
+      if ((ts.isIdentifier(n) && n.text === SENTINEL) || (ts.isStringLiteral(n) && n.text === SENTINEL)) sentinel = n;
+      else ts.forEachChild(n, find);
+    };
+    find(sf);
+    if (sentinel === null) return NONE;
+    const s = (sentinel as ts.Node).getStart(sf);
+    const e = (sentinel as ts.Node).getEnd();
+    // Walk up to the INNERMOST array-producing expression directly containing the sentinel: a TS array
+    // literal (the `'(…)` lowering), or a `__arr.list(…)` materializer CALL whose argument is the sentinel.
+    let producer: ts.Expression | null = null;
+    for (let p: ts.Node | undefined = (sentinel as ts.Node).parent; p; p = p.parent) {
+      if (ts.isArrayLiteralExpression(p)) {
+        producer = p;
+        break;
+      }
+      if (ts.isCallExpression(p) && isListMaterializerCallee(p.expression.getText(sf))) {
+        // Only when the sentinel is one of the call's ARGUMENTS (an element), not its callee.
+        if (p.arguments.some((a) => a.getStart(sf) <= s && e <= a.end)) {
+          producer = p;
+          break;
+        }
+      }
+      // A non-materializer CallExpression that encloses the sentinel as an argument means the cursor is an
+      // argument of a REGULAR call (its own param type governs) — stop: this is not an array element.
+      if (ts.isCallExpression(p) && p.arguments.some((a) => a.getStart(sf) <= s && e <= a.end)) return NONE;
+    }
+    if (producer === null) return NONE;
+    const arrayCtx = checker.getContextualType(producer);
+    if (arrayCtx === undefined) return NONE;
+    // The element type = the array's number-index type. (No number-index ⇒ the contextual type is not an
+    // array here — e.g. an inner literal sitting at a scalar element slot — so there is no element to force.)
+    const elem = checker.getIndexTypeOfType(arrayCtx, ts.IndexKind.Number);
+    if (elem === undefined) return NONE;
+    return deriveElementVerdict(checker, elem);
+  }
+
+  /** Is `calleeText` the list-materializer `list` (the `(list …)` surface lowers its head to `__arr.list`
+   *  / `__arr["list"]`)? Only this exact constructor is an array producer whose arguments ARE the elements;
+   *  every other call is a regular function whose arguments are its own params. */
+  function isListMaterializerCallee(calleeText: string): boolean {
+    return calleeText === "__arr.list" || calleeText === '__arr["list"]';
+  }
+
+  /** From the resolved ELEMENT `ts.Type`, derive the array-element verdict:
+   *   - `enum` — the element's string-literal-union MEMBERS (each a `StringLiteral` type's value), or `null`
+   *     when the element is not a pure finite union of string literals.
+   *   - `isStringy` — `true` iff the element is a free-form `string`/`any`/`unknown` (NOT an array, NOT a
+   *     number/boolean/object, NOT a closed string-literal union): the force-quote case. A string-literal
+   *     union is `false` (it is the `enum` case — its members are bound value-symbols). */
+  function deriveElementVerdict(
+    checker: ts.TypeChecker,
+    elem: ts.Type,
+  ): { isStringy: boolean | null; enum: string[] | null } {
+    // ENUM — a string-literal, or a union all of whose members are string literals.
+    const members = stringLiteralMembers(elem);
+    if (members !== null && members.length > 0) return { isStringy: false, enum: members };
+    // STRINGY — `string`/`any`/`unknown` element accepts a bare value-word → force-quote. (Array / number /
+    // boolean / object element ⇒ not stringy ⇒ no force-quote.)
+    if (elem.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { isStringy: true, enum: null };
+    if (elem.flags & ts.TypeFlags.String) return { isStringy: true, enum: null };
+    return { isStringy: false, enum: null };
+  }
+
+  /** The members of a string-literal-union element type (`"a" | "b"` → `["a","b"]`, `"a"` → `["a"]`), or
+   *  `null` when `elem` is not a pure union of string literals (it has any non-string-literal constituent). */
+  function stringLiteralMembers(elem: ts.Type): string[] | null {
+    const consts = elem.isUnion() ? elem.types : [elem];
+    const out: string[] = [];
+    for (const t of consts) {
+      if (t.isStringLiteral()) out.push(t.value);
+      else return null; // a non-string-literal constituent ⇒ not a closed string-literal domain
+    }
+    return out;
   }
 
   /** The shared completion-entry computation (see getCompletionsAtPosition):
