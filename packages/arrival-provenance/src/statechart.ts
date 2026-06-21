@@ -143,8 +143,17 @@ function resolvePoint(
  * provenance-point invocations (the `(infer …)` calls — the "meaningful events"
  * the meta-plane cares about); intermediate plumbing invocations are folded into
  * the edge computation but never become nodes.
+ *
+ * `opts.fieldEdges` (v02-L2·C1, the `--ir-lineage` consumer seam): when supplied,
+ * the per-`"producer>consumer"` `:fields` pins come from this map — the carrier's
+ * static reproduction (`carrierFieldEdges`) — INSTEAD of the live `fieldPointMeta`
+ * mint walked in step 2. Same key-space (producer/consumer POINT ids), so the
+ * cell-lift in step 5 is unchanged. Omitted ⇒ the mint path, byte-identical (proven
+ * by `lineage-field-shadow-corpus.test.ts`). The eventual mint-death deletes step
+ * 2's `r.field` half and leaves this override the sole `:fields` source; the
+ * upstream/origin half (`r.origin`) stays on the mint until consumer #2 migrates.
  */
-export function traceToStatechart(trace: EvalTrace): Statechart {
+export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<string, Set<string>> } = {}): Statechart {
   // De-proxy the observable trace into plain data once; everything below runs on
   // plain Sets/arrays (no MobX per-read cost). The single read pass inside
   // snapshotTrace is the reactive boundary the React observer tracks for live-fill.
@@ -219,11 +228,12 @@ export function traceToStatechart(trace: EvalTrace): Statechart {
   }));
   const layerByCell = new Map(nodes.map((n) => [n.id, n.layer]));
 
-  // 5. Lift the per-point pins (step 2) onto cell-edges: many point-edges
-  //    collapse onto one cell-edge (a fan-out producer, a tail-recursive loop),
-  //    so the field set unions across them.
+  // 5. Lift the per-point pins (step 2's mint walk, or `opts.fieldEdges` — the
+  //    carrier override) onto cell-edges: many point-edges collapse onto one
+  //    cell-edge (a fan-out producer, a tail-recursive loop), so the field set
+  //    unions across them.
   const fieldsByCellEdge = new Map<string, Set<string>>();
-  for (const [pointEdge, fields] of fieldsByPointEdge) {
+  for (const [pointEdge, fields] of opts.fieldEdges ?? fieldsByPointEdge) {
     const [producer, consumer] = pointEdge.split(">").map(Number) as [number, number];
     const cellKey = `${cellIdOf.get(producer)!}>${cellIdOf.get(consumer)!}`;
     const set = fieldsByCellEdge.get(cellKey) ?? fieldsByCellEdge.set(cellKey, new Set()).get(cellKey)!;
