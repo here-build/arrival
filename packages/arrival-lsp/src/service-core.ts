@@ -394,6 +394,16 @@ export interface SchemeLanguageService {
    * kept — conservative: T only ever DROPS a provably ill-typed candidate, never a valid one.
    */
   getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): string[];
+  /**
+   * Is the argument slot at `schemeOffset` a LIST/array TS type? `true` ⇒ the slot's expected type
+   * `__E` extends `readonly unknown[]` (a tuple like `[number, number]` extends it too — it IS a
+   * list materializer slot), `false` ⇒ it does not, `null` ⇒ unresolved (not a typed-call argument,
+   * unknown callee, or an un-nameable type). Reuses the SAME slot-location + `__E`-extraction probe
+   * machinery as {@link getTypeValidCandidates}; the verdict rides one extra conditional-type alias.
+   * Feeds the sampler's PRECISE list-structure gate (the async typed scanner stamps it as
+   * `slotIsArray`); `null` leaves that gate a no-op (superset-safe).
+   */
+  getSlotIsArray(scheme: string, schemeOffset: number): boolean | null;
 }
 
 /**
@@ -891,7 +901,41 @@ export function createSchemeLanguageServiceCore(
       // 3. Keep iff PROVEN valid (true) OR unresolved (null) — never drop on uncertainty.
       return cands.filter((_, i) => verdicts[i] !== false);
     },
+
+    getSlotIsArray(scheme, schemeOffset): boolean | null {
+      // Same slot-location as getTypeValidCandidates: sentinel at the cursor, balance, find the role.
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
+      );
+      const role = findCursorRole(sentinelScheme);
+      if (role.kind !== "argument") return null; // not a typed-call argument slot → no structure verdict
+      return probeSlotIsArray(scheme, role.calleeText, role.argIndex);
+    },
   };
+
+  /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back
+   *  whether it extends `readonly unknown[]` (a list/array materializer slot). `true` / `false` /
+   *  `null` (unresolved — an error-any `__E` distributes the conditional to a non-`true`/`false`
+   *  type, kept as `null`). Rides ON TOP of the emitted program (locals + require closure in scope),
+   *  ONE program load — the same construction as {@link probeTypes}, with a single `__isArr` alias
+   *  instead of the per-candidate tuple. `[__E]`-tuple wrapping defeats union distribution. */
+  function probeSlotIsArray(scheme: string, calleeText: string, argIndex: number): boolean | null {
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
+    const probeProgram = [
+      emitted,
+      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
+      `type __isArr = [__E] extends [readonly unknown[]] ? true : false;`,
+      `declare const __probe: [__isArr];`,
+    ].join("\n");
+    const elements = readProbeTuple(probeProgram, "__probe");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return null;
+    const el = elements[0];
+    if (el === undefined) return null;
+    const text = checker.typeToString(el); // a single literal: "true" / "false" / other (error-any)
+    return text === "true" ? true : text === "false" ? false : null;
+  }
 
   /** The shared completion-entry computation (see getCompletionsAtPosition):
    *  tsc's in-scope answer MINUS the substrate baseline PLUS the builtin roster. */

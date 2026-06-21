@@ -112,7 +112,7 @@ export function serveSchemeLs(port: LsPort): void {
       activeRequireTypes = requireTypes;
       let value: unknown;
       try {
-        // The dynamic dispatch: `service[name]` is a union of the seven method
+        // The dynamic dispatch: `service[name]` is a union of the eight method
         // signatures, not callable under one arg list — the callable cast is the
         // unavoidable boundary (the NAME is already proven by `isMethodName`).
         value = (service[msg.method] as (...a: unknown[]) => unknown)(...msg.args);

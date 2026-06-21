@@ -235,10 +235,26 @@ export interface TsgoTypeLensOptions {
  *  `TypeLens` contract), served by the tsgo checker. */
 export interface TsgoTypeLens {
   getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): Promise<string[]>;
+  /** Is the argument slot at `schemeOffset` a LIST/array TS type? `true` ⇒ the
+   *  slot's `__E` extends `readonly unknown[]` (incl. a tuple like `[number,
+   *  number]` — a list materializer slot), `false` ⇒ it does not, `null` ⇒
+   *  unresolved (not a typed-call argument / unknown callee / un-nameable
+   *  type). Feeds the sampler's PRECISE list-structure gate via the async typed
+   *  scanner's `slotIsArray` stamp; `null` leaves the gate a no-op. */
+  getSlotIsArray(scheme: string, schemeOffset: number): Promise<boolean | null>;
   /** The builtin roster (ArrShape member names) — also the emitter's member
    *  set; exposed for tests/diagnostics. */
   builtinNames(): readonly string[];
   dispose(): void;
+}
+
+/** Map the `__isArr` alias's resolved type to the tri-state. The alias resolves
+ *  to `1` (slot type extends `readonly unknown[]`), `2` (it does not), or — when
+ *  `__E` is error-any (unresolved callee / no such parameter) — a UNION with no
+ *  single `value` ⇒ `null` (superset-safe: the gate stays a no-op). Same
+ *  non-zero-sentinel discipline as {@link verdictOf} (`value` is omitempty). */
+function arrayVerdictOf(type: { value?: unknown } | null | undefined): boolean | null {
+  return type?.value === 1 ? true : type?.value === 2 ? false : null;
 }
 
 export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<TsgoTypeLens> {
@@ -363,6 +379,29 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
         // parameter) makes __E error-any ⇒ every alias distributes to a
         // non-literal ⇒ verdictOf keeps all — T never ADDS a wrong restriction.
         return pool.filter((_, i) => verdictOf(types[i]));
+      });
+    },
+    getSlotIsArray(scheme, schemeOffset): Promise<boolean | null> {
+      return serialize(async () => {
+        const slot = scanInnermostCall(scheme.slice(0, schemeOffset));
+        if (slot?.callee == null) return null; // not a call argument ⇒ Σ owns it, no structure gate
+        const calleeRef = typeofRef(slot.callee, builtins);
+        // The slot's expected type __E (same extraction as the verdict probe),
+        // then ONE alias folding "__E extends readonly unknown[]" into a numeric
+        // literal read by getTypesAtPositions — the same demand-driven, single
+        // read the candidate verdicts use. `[__E]`-tuple wrapping defeats union
+        // distribution (a `T[] | undefined` optional-list slot stays a list).
+        const emitted = emitTypes(balancePrefix(scheme), { hostMembers: builtins }).ts;
+        let text = `${emitted}\n` + `type __E = Parameters<${calleeRef}>[${slot.argIndex}];\n`;
+        const position = text.length + "type ".length; // the alias NAME — where its resolved type is read
+        text += `type __isArr = [__E] extends [readonly unknown[]] ? 1 : 2;\n`;
+        const w = await loadProgram(text);
+        const types = await client.request<({ flags: number; value?: unknown } | null)[]>("getTypesAtPositions", {
+          ...w,
+          file: programPath,
+          positions: [position],
+        });
+        return arrayVerdictOf(types[0]);
       });
     },
     builtinNames(): readonly string[] {
