@@ -54,12 +54,17 @@ import type { EvalTrace, Invocation } from "./trace.js";
 export type { FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeKind } from "./flow-graph.js";
 export { flowForwardCone, flowBackwardCone } from "./flow-graph.js";
 
-export interface FlowGraphOptions extends ForestOptions, CollapseParams {}
+export interface FlowGraphOptions extends ForestOptions, CollapseParams {
+  /** v02-L2·C1 — the carrier `:fields` override, threaded straight to `traceToStatechart`
+   *  (see there). Omitted ⇒ the live `fieldPointMeta` mint, byte-identical. The dag's
+   *  scope-id-keyed surface lets a carrier-fed FORWARD run compare equal to a mint run. */
+  fieldEdges?: Map<string, Set<string>>;
+}
 
 export function traceToFlowGraph(trace: EvalTrace, opts: FlowGraphOptions = {}): FlowGraph {
   const forest = traceToForest(trace, { promoted: opts.promoted });
   const { decisions, totalBits, rawBits } = collapseMDL(forest, { lambda: opts.lambda });
-  const chart = traceToStatechart(trace);
+  const chart = traceToStatechart(trace, { fieldEdges: opts.fieldEdges });
 
   // Bridge chart node id (numeric rep invocation id) → forest scope id (string).
   const invById = new Map<number, Invocation>();

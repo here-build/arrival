@@ -135,9 +135,13 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   // `car`/`cdr` (§5.3) already attributes to the right fan-out producer, so a
   // chained `(:verdict (car reactions))` qualifies react[0]'s point specifically.
   if (field !== null) {
-    const refined = new Set<number>();
-    for (const s of distinct) for (const p of s) refined.add(trace.fieldPoint(p, field));
-    return trace.markAuthoritativeProvenance(refined);
+    // MINT (default) refines each upstream point P into a field-point (P, field). FORWARD
+    // (mint-death, `trace.forwardFields`) keeps P itself — the origin/intent — and lets the
+    // carrier supply the dropped key. Either way the result is AUTHORITATIVE (a complete
+    // projected lineage), so a forwarding parent never re-unions it.
+    const out = new Set<number>();
+    for (const s of distinct) for (const p of s) out.add(trace.forwardFields ? p : trace.fieldPoint(p, field));
+    return trace.markAuthoritativeProvenance(out);
   }
 
   if (distinct.size === 1) return distinct.values().next().value!;
@@ -306,6 +310,19 @@ export class EvalTrace implements EvalTap {
 
   /** Attach a fresh (or given) {@link AutoBindings} collector and return it — the spike
    *  flag. Off (the default `undefined`) = no recording = byte-identical eval. */
+  /**
+   * v02-L2 MINT→FORWARD (the field-point mint retirement, provenance-static-lineage v0.2 §1).
+   * When true, `computeProvenance`'s field branch FORWARDS the producer's provenance (the
+   * origin = intent) instead of MINTING a field-point `(origin, key)`. The `:fields` KEY — the
+   * one thing forwarding drops (the grammar shape of the pluck) — is supplied statically by the
+   * carrier (`carrierFieldEdges`, read by the dag). The origin-only consumers (`resolveOriginVia`
+   * in chain/regions/fold, `resolveReadIds` in the sift seal) become byte-identical: they walked
+   * the field-point back to its origin anyway, and now the origin is already there (the walk is
+   * identity). Default false = the live mint, byte-identical. Proven forward==mint over the
+   * corpus by `mint-forward-dualrun.test.ts`; flipped to the default at mint-death.
+   */
+  forwardFields = false;
+
   withAutoBindings(sink: AutoBindings = new AutoBindings()): AutoBindings {
     this.autoBindings = sink;
     return sink;
