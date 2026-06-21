@@ -242,6 +242,14 @@ export interface TsgoTypeLens {
    *  type). Feeds the sampler's PRECISE list-structure gate via the async typed
    *  scanner's `slotIsArray` stamp; `null` leaves the gate a no-op. */
   getSlotIsArray(scheme: string, schemeOffset: number): Promise<boolean | null>;
+  /** Does the argument slot at `schemeOffset` ADMIT A BARE WORD AS A STRING VALUE? `true` ⇒ `__E` is
+   *  not an array AND a plain `string` is assignable to it (`string` / `any` / `unknown`), so a bare
+   *  value-word is a fair string materialization and the Σ gate exempts it here; `false` ⇒ number /
+   *  boolean / object / array (a bare word stays masked); `null` ⇒ unresolved. Feeds the sampler's
+   *  scalar-string Σ exemption via the async typed scanner's `slotIsStringy` stamp; `null` leaves the
+   *  exemption inert. ENUM slots resolve `false` (the union is not `string`-assignable), which is correct —
+   *  enum members are bound value-symbols that pass Σ unaided. */
+  getSlotAcceptsBareWord(scheme: string, schemeOffset: number): Promise<boolean | null>;
   /** The builtin roster (ArrShape member names) — also the emitter's member
    *  set; exposed for tests/diagnostics. */
   builtinNames(): readonly string[];
@@ -254,6 +262,13 @@ export interface TsgoTypeLens {
  *  single `value` ⇒ `null` (superset-safe: the gate stays a no-op). Same
  *  non-zero-sentinel discipline as {@link verdictOf} (`value` is omitempty). */
 function arrayVerdictOf(type: { value?: unknown } | null | undefined): boolean | null {
+  return type?.value === 1 ? true : type?.value === 2 ? false : null;
+}
+
+/** Map the `__stringy` alias's resolved type to the tri-state (mirror of {@link arrayVerdictOf}): `1` ⇒ the
+ *  slot admits a bare word as a string, `2` ⇒ it does not, anything else (error-any `__E` distributing to a
+ *  union) ⇒ `null`. Same non-zero-sentinel discipline (`value` is omitempty). */
+function stringyVerdictOf(type: { value?: unknown } | null | undefined): boolean | null {
   return type?.value === 1 ? true : type?.value === 2 ? false : null;
 }
 
@@ -402,6 +417,29 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
           positions: [position],
         });
         return arrayVerdictOf(types[0]);
+      });
+    },
+    getSlotAcceptsBareWord(scheme, schemeOffset): Promise<boolean | null> {
+      return serialize(async () => {
+        const slot = scanInnermostCall(scheme.slice(0, schemeOffset));
+        if (slot?.callee == null) return null; // not a call argument ⇒ Σ owns it, no exemption
+        const calleeRef = typeofRef(slot.callee, builtins);
+        // The slot's expected type __E (same extraction as getSlotIsArray), then ONE alias folding the
+        // bare-word-as-string ladder into a numeric literal: NOT-array AND `string` assignable ⇒ 1 (stringy),
+        // else 2. `[__E]`-tuple wrapping defeats union distribution (a `string | undefined` optional slot
+        // stays stringy). An enum union resolves 2 (it is not `string`-assignable) — correct, its members are
+        // bound value-symbols.
+        const emitted = emitTypes(balancePrefix(scheme), { hostMembers: builtins }).ts;
+        let text = `${emitted}\n` + `type __E = Parameters<${calleeRef}>[${slot.argIndex}];\n`;
+        const position = text.length + "type ".length; // the alias NAME — where its resolved type is read
+        text += `type __stringy = [__E] extends [readonly unknown[]] ? 2 : ([string] extends [__E] ? 1 : 2);\n`;
+        const w = await loadProgram(text);
+        const types = await client.request<({ flags: number; value?: unknown } | null)[]>("getTypesAtPositions", {
+          ...w,
+          file: programPath,
+          positions: [position],
+        });
+        return stringyVerdictOf(types[0]);
       });
     },
     builtinNames(): readonly string[] {

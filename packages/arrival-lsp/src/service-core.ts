@@ -404,6 +404,20 @@ export interface SchemeLanguageService {
    * `slotIsArray`); `null` leaves that gate a no-op (superset-safe).
    */
   getSlotIsArray(scheme: string, schemeOffset: number): boolean | null;
+  /**
+   * Does the argument slot at `schemeOffset` ADMIT A BARE WORD AS A STRING VALUE? `true` ⇒ the slot's
+   * expected type `__E` accepts a plain string (`string` / `any` / `unknown`) and is NEITHER an array NOR
+   * number-only — so a bare value-word (`men`, `classical`) is a fair materialization of the string value
+   * (`(fn men)` ≡ `(fn "men")`), and the Σ bound-symbol gate exempts it at this slot. `false` ⇒ the slot is
+   * a number / boolean / object / array — a bare word stays MASKED (genuinely wrong there). `null` ⇒
+   * unresolved (not a typed-call argument, unknown callee, un-nameable type). Reuses the SAME slot-location +
+   * `__E`-extraction machinery as {@link getSlotIsArray}; the verdict rides one extra conditional-type alias.
+   * Feeds the sampler's scalar-string Σ exemption (the async typed scanner stamps it as `slotIsStringy`);
+   * `null` leaves that exemption inert (the bare word stays Σ-gated — superset-safe). ENUM slots resolve
+   * `false` (a string-literal union is not `string`-assignable), which is correct: an enum member is already a
+   * BOUND value-symbol that passes Σ on its own, so it needs no exemption.
+   */
+  getSlotAcceptsBareWord(scheme: string, schemeOffset: number): boolean | null;
 }
 
 /**
@@ -911,6 +925,16 @@ export function createSchemeLanguageServiceCore(
       if (role.kind !== "argument") return null; // not a typed-call argument slot → no structure verdict
       return probeSlotIsArray(scheme, role.calleeText, role.argIndex);
     },
+
+    getSlotAcceptsBareWord(scheme, schemeOffset): boolean | null {
+      // Same slot-location as getSlotIsArray: sentinel at the cursor, balance, find the role.
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
+      );
+      const role = findCursorRole(sentinelScheme);
+      if (role.kind !== "argument") return null; // not a typed-call argument slot → no exemption
+      return probeSlotAcceptsBareWord(scheme, role.calleeText, role.argIndex);
+    },
   };
 
   /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back
@@ -927,6 +951,34 @@ export function createSchemeLanguageServiceCore(
       `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
       `type __isArr = [__E] extends [readonly unknown[]] ? true : false;`,
       `declare const __probe: [__isArr];`,
+    ].join("\n");
+    const elements = readProbeTuple(probeProgram, "__probe");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return null;
+    const el = elements[0];
+    if (el === undefined) return null;
+    const text = checker.typeToString(el); // a single literal: "true" / "false" / other (error-any)
+    return text === "true" ? true : text === "false" ? false : null;
+  }
+
+  /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back whether
+   *  it ADMITS A BARE WORD AS A STRING (the scalar-string Σ exemption's source). `true` ⇒ `__E` is NOT an
+   *  array AND a plain `string` is assignable to it (`string` / `any` / `unknown`); `false` ⇒ it is a number
+   *  / boolean / object / array; `null` ⇒ unresolved (error-any `__E`). Same construction as
+   *  {@link probeSlotIsArray} (ONE program load, one alias). The conditional ladder:
+   *    array? → false (the structure gate owns lists; a bare word is never a list element here)
+   *    else `[string] extends [__E]` → true (string / any / unknown admit a bare word as their value)
+   *    else → false (number / boolean / object — a bare word is genuinely wrong; an enum union is `false`
+   *           too, correctly: its members are already bound value-symbols that pass Σ unaided).
+   *  `[__E]`-tuple wrapping defeats union distribution (a `string | undefined` optional slot stays stringy). */
+  function probeSlotAcceptsBareWord(scheme: string, calleeText: string, argIndex: number): boolean | null {
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
+    const probeProgram = [
+      emitted,
+      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
+      `type __stringy = [__E] extends [readonly unknown[]] ? false : ([string] extends [__E] ? true : false);`,
+      `declare const __probe: [__stringy];`,
     ].join("\n");
     const elements = readProbeTuple(probeProgram, "__probe");
     const checker = checkerNow();
