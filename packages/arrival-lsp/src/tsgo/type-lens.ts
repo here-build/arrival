@@ -250,6 +250,14 @@ export interface TsgoTypeLens {
    *  exemption inert. ENUM slots resolve `false` (the union is not `string`-assignable), which is correct —
    *  enum members are bound value-symbols that pass Σ unaided. */
   getSlotAcceptsBareWord(scheme: string, schemeOffset: number): Promise<boolean | null>;
+  /** The ELEMENT-type verdict at an array-element cursor (CUT A). NODE-ONLY today (needs a contextual-type
+   *  RPC the tsgo wasm surface lacks) — the tsgo lens returns `{ null, null }` (inert), so the array-element
+   *  force-quote / enum-narrow gate is a no-op on the browser path. The node `service-core` lens implements
+   *  it for both surfaces (the bfcl eval path). See `OracleState.elementIsStringy`. */
+  getSlotElementType(
+    scheme: string,
+    schemeOffset: number,
+  ): Promise<{ isStringy: boolean | null; enum: string[] | null }>;
   /** The builtin roster (ArrShape member names) — also the emitter's member
    *  set; exposed for tests/diagnostics. */
   builtinNames(): readonly string[];
@@ -441,6 +449,18 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
         });
         return stringyVerdictOf(types[0]);
       });
+    },
+    getSlotElementType(
+      _scheme,
+      _schemeOffset,
+    ): Promise<{ isStringy: boolean | null; enum: string[] | null }> {
+      // CUT A (array-element type recovery) is NODE-ONLY for now: it reads a node's CONTEXTUAL type
+      // (`getContextualType` over the live emitted `'(…)` array-literal / `(list …)` materializer call),
+      // which the tsgo wasm RPC surface (alias-name reads via `getTypesAtPositions`) does not expose. The
+      // tsgo lens is the BROWSER/studio path, NOT the bfcl eval path (which uses the node `service-core`
+      // lens, where both surfaces resolve). Return inert so the element gate is a no-op here (superset-safe,
+      // browser byte-identical); recovering it over tsgo needs a contextual-type RPC (a later step).
+      return Promise.resolve({ isStringy: null, enum: null });
     },
     builtinNames(): readonly string[] {
       return [...builtins];
