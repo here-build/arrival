@@ -55,16 +55,23 @@ describe("narrowByType — Σ∩T at the argument slot", () => {
   it("memoizes the type query per slot — one lens call for all candidates of a step", () => {
     const spy = vi.fn(ls.getTypeValidCandidates.bind(ls));
     const arrSpy = vi.fn(ls.getSlotIsArray.bind(ls));
-    const scanner = narrowByType(mockScanner("argument"), { getTypeValidCandidates: spy, getSlotIsArray: arrSpy });
+    const strSpy = vi.fn(ls.getSlotAcceptsBareWord.bind(ls));
+    const scanner = narrowByType(mockScanner("argument"), {
+      getTypeValidCandidates: spy,
+      getSlotIsArray: arrSpy,
+      getSlotAcceptsBareWord: strSpy,
+    });
     // Same slot `(car `, different trailing atoms (as candidates extend the prefix): one query EACH.
     scanner.analyze("(car c");
     scanner.analyze("(car ca");
     scanner.analyze("(car cd");
     expect(spy).toHaveBeenCalledTimes(1);
     expect(arrSpy).toHaveBeenCalledTimes(1); // the structure verdict is memoized per slot too
+    expect(strSpy).toHaveBeenCalledTimes(1); // the scalar-string verdict is memoized per slot too
     // A different slot → a second query of each.
     scanner.analyze("(+ 1 l");
     expect(spy).toHaveBeenCalledTimes(2);
     expect(arrSpy).toHaveBeenCalledTimes(2);
+    expect(strSpy).toHaveBeenCalledTimes(2);
   });
 });
