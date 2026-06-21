@@ -78,11 +78,53 @@ function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode
   return out;
 }
 
+/** Leading op-symbol of a call AST `(head . args)` → its `__name__`, else null. */
+function headSymbol(node: unknown): string | null {
+  if (!isPair(node)) return null;
+  const head = node.car;
+  if (head !== null && typeof head === "object" && "__name__" in head) {
+    const n = (head as { __name__: unknown }).__name__;
+    if (typeof n === "string") return n;
+  }
+  return null;
+}
+
+/** Collection ops `classify` models as a per-element fan template (mirrors the arrival
+ *  classifier's FAN_OPS — fan-ness is not structural, so it's a tiny enumerated set). */
+const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
+
+/**
+ * A `Classifier` derived from the TRACE — no env, no hardcoded source list. The source ops
+ * (`isRosettaIn`) are exactly the head-symbols of the run's provenance-point invocations: post
+ * the points-by-default flip a rosetta mints iff it is a point, so the trace's points ARE the
+ * sources that actually fired (http/sql/db included; new sources automatic). `classify` never
+ * consults `isPure`, and `isOpaque` does not change which `field` nodes `collectFieldNodes` finds
+ * (a member-read is recognized before the opaque cut, and opaque + pure both descend children) —
+ * so both are trivial. This is what lets the dag self-serve the carrier under `forwardFields` with
+ * nothing wired in (the production routing the env source-registry seam never closed).
+ */
+export function classifierFromTrace(trace: EvalTrace): Classifier {
+  const sources = new Set<string>();
+  for (const inv of trace.invocationLog) {
+    if (!inv.isProvenancePoint) continue;
+    const head = headSymbol(inv.node);
+    if (head !== null) sources.add(head);
+  }
+  return {
+    isPure: () => false, // classify() does not consult isPure — pure ops fall through to combine
+    isRosettaIn: (op) => sources.has(op),
+    isFan: (op) => FAN_OPS.has(op),
+    isOpaque: () => false, // irrelevant to which field nodes collectFieldNodes collects
+  };
+}
+
 /**
  * The carrier analogue of the live `fieldsByPointEdge`: `Map<"producer>consumer", Set<field>>`.
- * Empty when the `AutoBindings` flag is off (the live path is then byte-identical).
+ * Empty when the `AutoBindings` flag is off (the live path is then byte-identical). The classifier
+ * defaults to `classifierFromTrace` — the trace self-describes its sources, so the production caller
+ * (and the dag under `forwardFields`) needs no env or source list.
  */
-export function carrierFieldEdges(trace: EvalTrace, classifier: Classifier): Map<string, Set<string>> {
+export function carrierFieldEdges(trace: EvalTrace, classifier: Classifier = classifierFromTrace(trace)): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   const auto = trace.autoBindings;
   if (!auto) return out; // flag OFF — the carrier contributes nothing

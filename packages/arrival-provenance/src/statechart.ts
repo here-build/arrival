@@ -40,6 +40,7 @@
  */
 import type { Pair, SchemeSymbol } from "@here.build/arrival";
 
+import { carrierFieldEdges } from "./carrier-fields.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
 import type { EvalTrace } from "./trace.js";
 
@@ -228,12 +229,15 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
   }));
   const layerByCell = new Map(nodes.map((n) => [n.id, n.layer]));
 
-  // 5. Lift the per-point pins (step 2's mint walk, or `opts.fieldEdges` — the
-  //    carrier override) onto cell-edges: many point-edges collapse onto one
-  //    cell-edge (a fan-out producer, a tail-recursive loop), so the field set
-  //    unions across them.
+  // 5. Lift the per-point pins onto cell-edges: many point-edges collapse onto one
+  //    cell-edge (a fan-out producer, a tail-recursive loop), so the field set unions
+  //    across them. SOURCE of the pins, in precedence: an explicit `opts.fieldEdges`
+  //    override (tests); else, under `forwardFields` (mint-death — `fieldPointMeta` is
+  //    empty because `(:field x)` forwarded instead of minting) the carrier self-served
+  //    from the trace; else step 2's live mint walk.
   const fieldsByCellEdge = new Map<string, Set<string>>();
-  for (const [pointEdge, fields] of opts.fieldEdges ?? fieldsByPointEdge) {
+  const pinSource = opts.fieldEdges ?? (trace.forwardFields ? carrierFieldEdges(trace) : fieldsByPointEdge);
+  for (const [pointEdge, fields] of pinSource) {
     const [producer, consumer] = pointEdge.split(">").map(Number) as [number, number];
     const cellKey = `${cellIdOf.get(producer)!}>${cellIdOf.get(consumer)!}`;
     const set = fieldsByCellEdge.get(cellKey) ?? fieldsByCellEdge.set(cellKey, new Set()).get(cellKey)!;
