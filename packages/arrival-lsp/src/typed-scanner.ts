@@ -21,15 +21,20 @@ export interface ScannerState {
   readonly formKind: "top" | "application" | "lambda-list" | "quote" | "lazy-arm";
   readonly closeable: boolean;
   validSymbols(): ReadonlySet<string> | null;
+  /** The argument slot's TS type is an array/list type — the precise list-structure gate's source.
+   *  Stamped SYNCHRONOUSLY here so it is present the instant the (sync) mask reads it at the value-opener. */
+  readonly slotIsArray?: boolean | null;
 }
 export interface Scanner {
   analyze(prefix: string): ScannerState;
   feasible(prefix: string): boolean;
 }
 
-/** The only method of the language service this adapter needs. */
+/** The two methods of the language service this adapter needs — the value narrowing (Σ∩T) and the
+ *  structure verdict (the list-structure gate). Both SYNC: the LS is sync, so the scanner is too. */
 export interface TypeLens {
   getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): string[];
+  getSlotIsArray(scheme: string, schemeOffset: number): boolean | null;
 }
 
 const ATOM = /[^\s()[\]{}"';]/; // an atom character (arrival's lexer: not ws / bracket / string / quote / comment)
@@ -51,28 +56,47 @@ function trailingAtom(s: string): string {
 export function narrowByType(base: Scanner, lens: TypeLens): Scanner {
   // slotPrefix → the T-valid subset of that slot's Σ (as a Set). Memoized across the decode step.
   const cache = new Map<string, ReadonlySet<string>>();
+  // slotPrefix → the slot's array-ness (the structure-gate source). Memoized per slot, like `cache`.
+  const arrayCache = new Map<string, boolean | null>();
   return {
     feasible: (prefix) => base.feasible(prefix),
     analyze(s) {
       const st = base.analyze(s);
-      if (!st.midToken || st.formKind !== "application" || st.position !== "argument") return st;
-      const baseValid = st.validSymbols();
-      if (baseValid === null || baseValid.size === 0) return st; // Σ not modelled / empty — nothing to narrow.
-      // The slot is fixed for the whole atom being typed → key by the prefix up to the atom start.
+      // Act only inside an application ARGUMENT slot (Σ owns operators; T never adds a wrong restriction).
+      if (st.formKind !== "application" || st.position !== "argument") return st;
+      // The slot is fixed for the whole atom being typed → key by the prefix up to the atom start. At a
+      // value BOUNDARY (no atom yet) the trailing atom is "" ⇒ slotPrefix = s, the slot about to open.
       const slotPrefix = s.slice(0, s.length - trailingAtom(s).length);
-      let narrowed = cache.get(slotPrefix);
-      if (narrowed === undefined) {
-        narrowed = new Set(lens.getTypeValidCandidates(slotPrefix, slotPrefix.length, [...baseValid]));
-        cache.set(slotPrefix, narrowed);
+
+      // STRUCTURE — stamp the slot's array-ness, SYNCHRONOUSLY, at the boundary AND mid-atom (the gate
+      // decides list-vs-scalar at the value-opener, a boundary the value-narrowing path skips). This is
+      // the whole point of the sync scanner: the verdict is present the instant the sync mask reads it.
+      let slotIsArray = arrayCache.get(slotPrefix);
+      if (slotIsArray === undefined) {
+        slotIsArray = lens.getSlotIsArray(slotPrefix, slotPrefix.length);
+        arrayCache.set(slotPrefix, slotIsArray);
       }
-      // Return a state identical except for the narrowed validSymbols. (Only the fields the mask
-      // consumes are reconstructed — see arrival-sampler/oracle-types.ts.)
+
+      // VALUE (Σ∩T) — narrow validSymbols ONLY mid-atom (a partial symbol being typed), as before.
+      let validSymbols = st.validSymbols;
+      const baseValid = st.midToken ? st.validSymbols() : null;
+      if (baseValid !== null && baseValid.size > 0) {
+        let narrowed = cache.get(slotPrefix);
+        if (narrowed === undefined) {
+          narrowed = new Set(lens.getTypeValidCandidates(slotPrefix, slotPrefix.length, [...baseValid]));
+          cache.set(slotPrefix, narrowed);
+        }
+        validSymbols = () => narrowed!;
+      }
+
+      // Reconstruct only the fields the mask consumes (see arrival-sampler/oracle-types.ts) + slotIsArray.
       return {
         midToken: st.midToken,
         position: st.position,
         formKind: st.formKind,
         closeable: st.closeable,
-        validSymbols: () => narrowed!,
+        validSymbols,
+        slotIsArray,
       };
     },
   };
