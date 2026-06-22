@@ -1,14 +1,75 @@
 # @here.build/arrival
 
-**First ever language built for AI, finally built for AI**
+**A small language that can't keep a secret from itself — small because hiding is what makes languages big.**
 
-> ⚠️ **version 0.x sandbox isolation is non-audited. **
->
-> This is a fork of LIPS.js with known architectural security issues. We've identified potential sandbox escape
-> strategies but haven't fixed all of them yet. **Assume the sandbox can be escaped.** Use only in isolated containers,
-> unprivileged Worker threads and ShadowRealms, or any other environment that can be considered zero-trust.
->
-> Version 1.x will be released after external audit verifying it is production-ready.
+arrival is a programming medium, not a tool. The grain, stated by subtraction: take an ordinary
+small Scheme and remove its ability to hide where a value came from. What's left is a language in
+which every value remembers its own origin, and you can ask it.
+
+Most of what makes a language big is hiding. A function body hides how a result was computed. An
+abstraction hides what it stands on. A value, once produced, is opaque — a bare `7` that could have
+come from a config file, a database row, a model's guess, or thin air, and nothing about the `7`
+tells you which. Opacity is the default everywhere; it's so total it's invisible. arrival is that
+default, minus the one bit — and removing it costs almost nothing, because *hiding* is the expensive
+feature, not *remembering*.
+
+Two tradeoffs that usually trade against each other, here don't:
+
+- **Real, yet whitebox.** A whitebox language is normally a toy — a stepper over arithmetic. arrival
+  reaches real I/O (HTTP, SQL, an LLM call) through a membrane that records each crossing, so the
+  transparency survives contact with the outside world. The trick is that arrival is an **IR, not a
+  runtime**: it compiles *toward* JavaScript (Python and others are plausible), so raw speed is the
+  *target's* concern, and whitebox/provenance stays an *authoring-time* property. You don't pay for
+  transparency where it would hurt.
+- **Small, yet not weak.** It's smaller than Scheme — an R7RS-small base, no IO in the base, a
+  forgiving layer that fires only *under* strict (never beside it). The smallness is the source of
+  the power: a language that refuses to hide is a language a tool can reason about completely.
+
+## The one thing to see
+
+Give a value a source, derive from it, and the derived value still knows where it came from. This is
+real, in-package, and it's all you need to feel the grain:
+
+```typescript
+import { exec, sandboxedEnv, schemeToJs, jsToScheme, pointProvenance } from '@here.build/arrival';
+
+const env = sandboxedEnv.inherit('demo');
+
+// A value crosses into the language carrying its origin (here: provenance point #7,
+// as a real source — an HTTP read, a DB row — would mint at the membrane).
+env.set('forecast', jsToScheme('cloudy in berlin', {}, pointProvenance(7)));
+
+// Derive from it through ordinary Scheme. Nobody threads the origin by hand.
+const [result] = await exec(`(string-append "today: " forecast)`, { env });
+
+schemeToJs(result, {});      // "today: cloudy in berlin"
+[...result.provenance];      // [7]  — the value confesses where it descends from
+```
+
+Ask any result `result.provenance` and it answers truthfully — not because a logging layer was
+wired in, but because the value *carries* its lineage and every builtin propagates it. Join two
+sources and the origins **union** (`[1, 2]`); a value made of nothing but literals has no origin to
+confess. There is no honest way for a derived value to disown its sources, because the carrying lives
+on the value itself, not in a sidecar that a builtin could forget to update — a builtin can only fail
+to *propagate* (a visibly empty result), never to *carry*.
+
+That `pointProvenance(7)` is a stand-in for the real story: a registered function is a **source by
+default** (its result is born at the membrane carrying a fresh origin); pass `pure: true` to make it
+a forwarding pipe that mints nothing and just relays its inputs' lineage. See the `defineRosetta`
+reference below.
+
+## Then build the thing only you can see
+
+We built it and the first thing that fell out was a **seal** — a verdict that walks every leaf of a
+result, checks that each one traces to a real source, and *mathematically refuses to sign* one that
+doesn't. Not a lint pass you can disable: a value with a fabricated leaf has no signature to give,
+because the grounding is read per-leaf off the lineage the value already carries. (The seal, and the
+human-readable `whyOf` / `whereOf` / `howOf` / `dagOf` lineage queries, live one layer up on this
+substrate — in `@here.build/arrival-chain` and the sift work — built *on* the provenance this package
+makes free.)
+
+That's one thing. We don't fully know what else this medium is for; neither will you, until you build
+it. A language that can't keep a secret from itself is a strange piece of clay — here it is.
 
 ## Design foundations
 
@@ -16,6 +77,13 @@ The language stance — an R7RS-small sandboxed base, a forgiving superset layer
 (never beside it), and the reserved-zone rule that keeps it non-conflicting with any SRFI — is the
 charter in [`docs/language-design-foundations.md`](../../../docs/foundations/arrival-scheme/language-design-foundations.md). Read it
 before adding a reader macro, literal, or dialect borrowing.
+
+Two surface facts the examples below rely on. The grammar is `( … )` lists plus `{ … }` SRFI-105
+curly-infix, canonicalized at read-time (`{1 + 2 * 3}` → `7`, plain PEMDAS); there is no `[ … ]` —
+it was removed from the grammar, so a stray bracket is a clean parse error. The membrane is polyglot:
+`@` / `@?` / `:key` read members over a dict, an array, or a lazy proxy uniformly, and JS is a
+**peer, not a host** beneath the language — there is no ambient host to reach, so real effects stay
+recorded crossings rather than escape hatches.
 
 ## Why Scheme for AI Agents?
 
@@ -42,13 +110,13 @@ loop safe to run.
 ## Quick Start
 
 ```bash
-npm install @here.build/arrival-scheme
+npm install @here.build/arrival
 ```
 
 ### Basic Execution
 
 ```typescript
-import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival-scheme';
+import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival';
 
 const results = await exec(`
   (filter (lambda (x) (> x 5))
@@ -60,10 +128,10 @@ console.log(schemeToJs(results[0], {})); // [7, 9]
 
 ### Register Custom Functions
 
-`@here.build/arrival-scheme` provides scheme-js interoperability layer capable of entities translation between runtimes.
+`@here.build/arrival` provides scheme-js interoperability layer capable of entities translation between runtimes.
 
 ```typescript
-import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival-scheme';
+import { exec, sandboxedEnv, schemeToJs } from '@here.build/arrival';
 
 // Rosetta: automatic JS ↔ Scheme conversion
 sandboxedEnv.defineRosetta('double-all', {
@@ -80,7 +148,7 @@ console.log(schemeToJs(results[0], {})); // [2, 4, 6, 8, 10]
 ### Complex Data
 
 ```typescript
-import { exec, sandboxedEnv, schemeToJs, jsToScheme } from '@here.build/arrival-scheme';
+import { exec, sandboxedEnv, schemeToJs, jsToScheme } from '@here.build/arrival';
 
 // Register function filtering objects
 sandboxedEnv.defineRosetta('high-priority-users', {
