@@ -58,7 +58,7 @@ export function unpromise(
 }
 
 // ----------------------------------------------------------------------
-export function unpromise_array(
+function unpromise_array(
   array: unknown[],
   fn: (x: unknown) => unknown,
   error: ((e: unknown) => void) | null,
@@ -78,7 +78,7 @@ export function unpromise_array(
 }
 
 // ----------------------------------------------------------------------
-export function unpromise_object(
+function unpromise_object(
   object: Record<string, unknown>,
   fn: (x: unknown) => unknown,
   error: ((e: unknown) => void) | null,
