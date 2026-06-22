@@ -321,7 +321,7 @@ export class EvalTrace implements EvalTap {
    * identity). Default false = the live mint, byte-identical. Proven forward==mint over the
    * corpus by `mint-forward-dualrun.test.ts`; flipped to the default at mint-death.
    */
-  forwardFields = false;
+  forwardFields = true;
 
   withAutoBindings(sink: AutoBindings = new AutoBindings()): AutoBindings {
     this.autoBindings = sink;
