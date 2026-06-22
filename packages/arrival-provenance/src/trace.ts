@@ -135,12 +135,13 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   // `car`/`cdr` (§5.3) already attributes to the right fan-out producer, so a
   // chained `(:verdict (car reactions))` qualifies react[0]'s point specifically.
   if (field !== null) {
-    // MINT (default) refines each upstream point P into a field-point (P, field). FORWARD
-    // (mint-death, `trace.forwardFields`) keeps P itself — the origin/intent — and lets the
-    // carrier supply the dropped key. Either way the result is AUTHORITATIVE (a complete
-    // projected lineage), so a forwarding parent never re-unions it.
+    // FORWARD a `(:field x)` projection: keep each upstream point P itself — the origin/intent —
+    // and let the static carrier (`carrierFieldEdges`, read by the dag) supply the dropped KEY. The
+    // result is AUTHORITATIVE (a complete projected lineage), so a forwarding parent never re-unions
+    // it. (The field-point MINT this once did — refining P → synthetic (P,field) — is retired; the
+    // key lives in the carrier now. `field` is still computed: it ROUTES this authoritative branch.)
     const out = new Set<number>();
-    for (const s of distinct) for (const p of s) out.add(trace.forwardFields ? p : trace.fieldPoint(p, field));
+    for (const s of distinct) for (const p of s) out.add(p);
     return trace.markAuthoritativeProvenance(out);
   }
 
@@ -310,19 +311,6 @@ export class EvalTrace implements EvalTap {
 
   /** Attach a fresh (or given) {@link AutoBindings} collector and return it — the spike
    *  flag. Off (the default `undefined`) = no recording = byte-identical eval. */
-  /**
-   * v02-L2 MINT→FORWARD (the field-point mint retirement, provenance-static-lineage v0.2 §1).
-   * When true, `computeProvenance`'s field branch FORWARDS the producer's provenance (the
-   * origin = intent) instead of MINTING a field-point `(origin, key)`. The `:fields` KEY — the
-   * one thing forwarding drops (the grammar shape of the pluck) — is supplied statically by the
-   * carrier (`carrierFieldEdges`, read by the dag). The origin-only consumers (`resolveOriginVia`
-   * in chain/regions/fold, `resolveReadIds` in the sift seal) become byte-identical: they walked
-   * the field-point back to its origin anyway, and now the origin is already there (the walk is
-   * identity). Default false = the live mint, byte-identical. Proven forward==mint over the
-   * corpus by `mint-forward-dualrun.test.ts`; flipped to the default at mint-death.
-   */
-  forwardFields = true;
-
   withAutoBindings(sink: AutoBindings = new AutoBindings()): AutoBindings {
     this.autoBindings = sink;
     return sink;
@@ -358,44 +346,14 @@ export class EvalTrace implements EvalTap {
   }
 
   /**
-   * Field-point registry: synthetic provenance-point id → its origin + plucked
-   * field. A field-point is minted by `computeProvenance` when a keyword
-   * accessor `(:field x)` projects across the structured-output membrane (§5.3
-   * sibling). It is a first-class member of `provenance: Set<number>` — so it
-   * flows through `string-append`/binding/absorb like any point — but it is NOT
-   * an invocation, so the statechart resolves it back through here to the real
-   * producer cell + pin. `origin` may itself be a field-point id (nested
-   * `(:a (:b x))`); resolve transitively, the pin being the key closest to the
-   * real producer point (its actual output field). See `FieldPointMeta`.
+   * Field-point registry — VESTIGIAL under forward (mint-death v0.2 §1). Nothing mints field-points
+   * anymore: `computeProvenance`'s `(:field x)` branch FORWARDS the producer's point, and the static
+   * carrier (`carrierFieldEdges`) supplies the dropped key. So this Map is always EMPTY, and the
+   * origin readers that walk it (`resolveOriginVia` in regions/fold, `resolveReadIds` in the
+   * slice/seal, the chain's walk) all degrade to identity. Kept only so those readers compile
+   * unchanged; a trivial follow-up removes it and collapses the readers to literal identity.
    */
   readonly fieldPointMeta = new Map<number, FieldPointMeta>();
-  /** (origin,key) → field-point id, so the same pluck mints a stable singleton
-   *  id across every fire (matching how Pair-identity collapses invocations). */
-  readonly #fieldPointIds = new Map<string, number>();
-
-  /** Mint (or reuse) the synthetic field-point id for plucking `key` off a value
-   *  whose provenance carries `origin`. Lazy + singleton per (origin, key).
-   *
-   *  ABSORPTION: if `origin` is ITSELF a field-point, return it unchanged rather
-   *  than minting `fieldPoint(fieldPoint(P,…), key)`. A re-projection
-   *  (`(:a (:b x))`) is a deeper pluck within the SAME producer pin; `resolvePoint`
-   *  already keeps the INNER key as the producer port and walks the chain to the
-   *  base point, so the outer mint is observably a no-op. Minting it anyway is the
-   *  one non-idempotent op in the provenance semiring — and under loop
-   *  accumulation it compounds to the O(n²) field-point blow-up that froze the
-   *  chart (80k field-points from ~1.8k invocations). Absorbing it caps the
-   *  registry at base-points × keys and restores the semiring's free loop bound.
-   *  See docs/working-proposals/trace-provenance-idempotence-fix-2026-06-04.md. */
-  fieldPoint(origin: number, key: string): number {
-    if (this.fieldPointMeta.has(origin)) return origin;
-    const memo = `${origin}:${key}`;
-    const existing = this.#fieldPointIds.get(memo);
-    if (existing !== undefined) return existing;
-    const id = this.#nextId++;
-    this.#fieldPointIds.set(memo, id);
-    this.fieldPointMeta.set(id, { origin, key });
-    return id;
-  }
 
   /**
    * The provenance sets that are AUTHORITATIVE — minted by a provenance point

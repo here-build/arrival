@@ -168,12 +168,11 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
   if (points.size === 0) return { nodes: [], edges: [], layerCount: 0 };
 
   // 2. Uncollapsed causal edges (upstream infer id → this infer id). Each input
-  //    provenance id resolves to a real producer point; a field-point resolves
-  //    through `fieldPointMeta` to its producer AND the pin it plucked, recorded
-  //    per producer→consumer point-edge. (A non-point that resolves to nothing
-  //    — only possible mid-flight — is dropped.)
+  //    provenance id resolves to a real producer point. (A non-point that resolves
+  //    to nothing — only possible mid-flight — is dropped.) The per-edge field PINS
+  //    are supplied separately by the carrier (`carrierFieldEdges`, step 5): under
+  //    forward `fieldPointMeta` is empty, so `resolvePoint` yields origins only.
   const upstream = new Map<number, Set<number>>();
-  const fieldsByPointEdge = new Map<string, Set<string>>(); // `${producer}>${consumer}` → fields
   const resolveMemo = new Map<number, { origin: number; field?: string } | null>();
   for (const [id, inv] of points) {
     const ups = new Set<number>();
@@ -185,10 +184,6 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
         const r = resolvePoint(snap.fieldPointMeta, points, u, resolveMemo);
         if (!r || r.origin === id) continue;
         ups.add(r.origin);
-        if (r.field !== undefined) {
-          const key = `${r.origin}>${id}`;
-          (fieldsByPointEdge.get(key) ?? fieldsByPointEdge.set(key, new Set()).get(key)!).add(r.field);
-        }
       }
     }
     upstream.set(id, ups);
@@ -231,12 +226,11 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
 
   // 5. Lift the per-point pins onto cell-edges: many point-edges collapse onto one
   //    cell-edge (a fan-out producer, a tail-recursive loop), so the field set unions
-  //    across them. SOURCE of the pins, in precedence: an explicit `opts.fieldEdges`
-  //    override (tests); else, under `forwardFields` (mint-death — `fieldPointMeta` is
-  //    empty because `(:field x)` forwarded instead of minting) the carrier self-served
-  //    from the trace; else step 2's live mint walk.
+  //    across them. The pins come from the carrier (`carrierFieldEdges` reproduces them
+  //    statically from the trace — the field-point mint that once supplied them is
+  //    retired), unless an explicit `opts.fieldEdges` override is passed (tests).
   const fieldsByCellEdge = new Map<string, Set<string>>();
-  const pinSource = opts.fieldEdges ?? (trace.forwardFields ? carrierFieldEdges(trace) : fieldsByPointEdge);
+  const pinSource = opts.fieldEdges ?? carrierFieldEdges(trace);
   for (const [pointEdge, fields] of pinSource) {
     const [producer, consumer] = pointEdge.split(">").map(Number) as [number, number];
     const cellKey = `${cellIdOf.get(producer)!}>${cellIdOf.get(consumer)!}`;

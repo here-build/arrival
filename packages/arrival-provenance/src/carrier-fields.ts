@@ -142,8 +142,8 @@ const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
  * sources that actually fired (http/sql/db included; new sources automatic). `classify` never
  * consults `isPure`, and `isOpaque` does not change which `field` nodes `collectFieldNodes` finds
  * (a member-read is recognized before the opaque cut, and opaque + pure both descend children) —
- * so both are trivial. This is what lets the dag self-serve the carrier under `forwardFields` with
- * nothing wired in (the production routing the env source-registry seam never closed).
+ * so both are trivial. This is what lets the dag self-serve the carrier — the only `:fields` source
+ * now that the mint is retired — with nothing wired in (the env source-registry seam never closed).
  */
 export function classifierFromTrace(trace: EvalTrace): Classifier {
   const sources = new Set<string>();
@@ -161,10 +161,10 @@ export function classifierFromTrace(trace: EvalTrace): Classifier {
 }
 
 /**
- * The carrier analogue of the live `fieldsByPointEdge`: `Map<"producer>consumer", Set<field>>`.
- * Empty when the `AutoBindings` flag is off (the live path is then byte-identical). The classifier
- * defaults to `classifierFromTrace` — the trace self-describes its sources, so the production caller
- * (and the dag under `forwardFields`) needs no env or source list.
+ * The statechart's `:fields` source: `Map<"producer>consumer", Set<field>>`. Empty when no
+ * `AutoBindings` sidecar is attached (so a trace built without it carries no `:fields`). The
+ * classifier defaults to `classifierFromTrace` — the trace self-describes its sources, so the dag
+ * needs no env or source list.
  */
 export function carrierFieldEdges(trace: EvalTrace, classifier: Classifier = classifierFromTrace(trace)): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
