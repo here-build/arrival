@@ -19,7 +19,8 @@ import { ArrivalError } from "./ArrivalError.js";
 
 export class PurityError extends ArrivalError {
   static __class__ = "purity-error";
-  readonly owner = "owned-by/purity-invariant";
+  public readonly owner = "owned-by/purity-invariant";
+  public readonly name = "PurityError";
 
   constructor(
     message: string,
@@ -27,7 +28,6 @@ export class PurityError extends ArrivalError {
     public readonly feature: string,
   ) {
     super(message);
-    this.name = "PurityError";
   }
 }
 

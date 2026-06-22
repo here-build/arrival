@@ -102,13 +102,13 @@ export function toIndex(v: unknown): number {
  */
 export function asVector(obj: unknown, fnName: string, forMutation = false): SchemeValue[] {
   if (obj instanceof SchemeVector) {
-    if (forMutation && obj.frozen) {
-      TypeError.invariant(false, `${fnName}: cannot mutate an immutable vector literal`);
-    }
+    TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable vector literal`);
     return obj.__vector__;
+  } else if (Array.isArray(obj)) {
+    return obj;
+  } else {
+    throw new TypeError(`${fnName}: expected vector`);
   }
-  if (Array.isArray(obj)) return obj;
-  TypeError.invariant(false, `${fnName}: expected vector`);
 }
 
 /**
@@ -121,9 +121,7 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
     case obj instanceof SchemeBytevector:
       // Unwrap by reference so in-place mutators (bytevector-u8-set!,
       // bytevector-copy!) write through to the boxed payload.
-      if (forMutation && obj.frozen) {
-        TypeError.invariant(false, `${fnName}: cannot mutate an immutable bytevector literal`);
-      }
+      TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable bytevector literal`);
       return obj.__bytevector__;
     case obj instanceof Uint8Array:
       // FFI coercion: a raw Uint8Array handed to byte vector op (e.g., from a
@@ -138,7 +136,7 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
     case typeof Buffer !== "undefined" && obj instanceof Buffer:
       return new Uint8Array(obj.buffer, obj.byteOffset, obj.byteLength);
     default:
-      TypeError.invariant(false, `${fnName}: expected bytevector, got ${typeof obj}`);
+      throw new TypeError(`${fnName}: expected bytevector, got ${typeof obj}`);
   }
 }
 
@@ -228,12 +226,12 @@ export function coerceNumeric(value: unknown): SchemeNumeric {
         case typeof val === "number":
           return Number.isSafeInteger(val) ? new SchemeExact(BigInt(val)) : new SchemeInexact(val);
         default:
-          TypeError.invariant(false, `Cannot convert to SchemeNumeric: ${val}`);
+          throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }
       break;
     }
     default:
-      TypeError.invariant(false, `Cannot convert to SchemeNumeric: ${value}`);
+      throw new TypeError( `Cannot convert to SchemeNumeric: ${value}`);
   }
 }
 

@@ -51,13 +51,14 @@ export function balanced(code: string | TokenMeta[]): boolean {
   }
 
   const stack = new Stack<string>();
-  for (const token of tokens.filter((token) => brackets.has(token))) {
-    if (open_tokens.includes(token)) {
+  for (const token of tokens) {
+    if (!brackets.has(token)) {
+      continue;
+    } else if (open_tokens.includes(token)) {
       stack.push(token);
-    } else if (stack.is_empty()) {
-      // closing bracket without opening
-      invariant(false, `Syntax error: not matched closing ${token}`);
     } else {
+      // closing bracket without opening
+      invariant(!stack.is_empty(), `Syntax error: not matched closing ${token}`);
       // closing token
       const last = stack.top()!;
       // last on stack need to match

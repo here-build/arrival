@@ -329,9 +329,7 @@ function to_array(name: string, deep = false): SchemeFunction {
     // have_cycles() below only catches reader #0= cycles; actively detect a
     // runtime set-cdr! cycle so we raise a clean error instead of growing the
     // array until "Invalid array length" (the reverse symptom).
-    if (isCircularList(list)) {
-      invariant(false, `${name}: can't convert a circular list`);
-    }
+    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
     // Per-run allocation bound: `to_array` is the choke point every collection op (filter/map/append/
     // join) funnels through, so charging materialized elements HERE catches the O(K²)-churn runaway
     // that the TICK-cadence wall-clock budget can't preempt (a single native list pass emits no TICK).
@@ -1600,7 +1598,7 @@ export const global_env = new Environment(
           return obj.toCardinalityNumber();
         }
         if (is_pair(obj)) {
-          if (isCircularList(obj)) TypeError.invariant(false, "length: circular list");
+          TypeError.invariant(!isCircularList(obj), "length: circular list");
           return withInputProvenance([obj], obj.length());
         }
         if ("length" in obj) {

@@ -61,17 +61,14 @@ export interface StackFrame {
 
 /** ArrivalError carrying the Scheme-level evaluation stack (host JS frames are useless here). */
 export class SchemeError extends ArrivalError {
-  readonly name = "SchemeError";
+  public readonly name = "SchemeError";
 
   constructor(
     message: string,
     public readonly schemeStack: StackFrame[],
-    cause?: Error,
+    public readonly cause?: Error,
   ) {
     super(message);
-    if (cause) {
-      this.cause = cause;
-    }
   }
 
   toString(): string {
@@ -649,13 +646,9 @@ function env_get(env: Environment, sym: SchemeSymbol): SchemeValue {
   // resolved by Environment.get's property-splitting path, which _lookupWithResolvers
   // does not implement. Delegate ONLY after the direct miss (matching Environment.get's
   // "dot notation only after direct lookup fails" ordering), so the hot path is unchanged.
-  const hasObjectParts =
-    (sym as unknown as { [key: symbol]: unknown })[SchemeSymbol.object] != null;
-  if (hasObjectParts || (typeof name === "string" && name.includes("."))) {
-    return env.get(sym);
-  }
-
-  invariant(false, `Unbound variable \`${String(name)}'`);
+  const hasObjectParts = (sym as unknown as { [key: symbol]: unknown })[SchemeSymbol.object] != null;
+  invariant(hasObjectParts || (typeof name === "string" && name.includes(".")), `Unbound variable \`${String(name)}'`);
+  return env.get(sym);
 }
 
 // ============================================================================
@@ -673,10 +666,7 @@ function env_get(env: Environment, sym: SchemeSymbol): SchemeValue {
  * 5. Tracks stack frames for error reporting
  * 6. Honors an optional AbortSignal at iteration boundaries
  */
-async function run<T>(
-  generator: Generator<unknown, T, unknown>,
-  options: RunOptions = {},
-): Promise<T> {
+async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOptions = {}): Promise<T> {
   const { signal, budgetMs } = options;
 
   // Fast-fail: if the caller passed an already-aborted signal, refuse
@@ -689,8 +679,7 @@ async function run<T>(
   // per-TICK comparison short-circuits to a single `!== undefined` check.
   // A non-positive budget means "already expired" — refuse on entry, the
   // budget analogue of the pre-aborted-signal fast path above.
-  const deadline =
-    budgetMs === undefined ? undefined : performance.now() + budgetMs;
+  const deadline = budgetMs === undefined ? undefined : performance.now() + budgetMs;
   if (deadline !== undefined && budgetMs! <= 0) {
     throw new SchemeError(`execution budget exceeded (${budgetMs}ms)`, []);
   }
@@ -1007,9 +996,7 @@ function restrictControlFlowProvenance(predicate: SchemeValue, armResult: Scheme
  * returns `armResult` — the trampoline applies this hook before sending the
  * value back, so the transform already happened for the non-collapsed path.
  */
-function controlFlowResolve(
-  predicate: SchemeValue,
-): ((value: unknown) => unknown | undefined) | undefined {
+function controlFlowResolve(predicate: SchemeValue): ((value: unknown) => unknown | undefined) | undefined {
   if (!(predicate instanceof AValue) || predicate.provenance.size === 0) return undefined;
   return (value: unknown): unknown | undefined => {
     const stamped = restrictControlFlowProvenance(predicate, value as SchemeValue);
@@ -1874,10 +1861,9 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   let result: SchemeValue;
   if (proc instanceof SchemeJSFunction) {
     result = proc.call(arg);
-  } else if (is_function(proc)) {
-    result = proc(arg);
   } else {
-    invariant(false, "=> requires a procedure");
+    invariant(is_function(proc), "=> requires a procedure");
+    result = proc(arg);
   }
   if (is_promise(result)) {
     result = yield result;
@@ -2382,7 +2368,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return yield resultPromise;
 }
 
-
 // ============================================================================
 // Core Evaluator
 // ============================================================================
@@ -2532,10 +2517,9 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     // `evaluate()`. Without this, tracers miss the resolved value of every
     // function name (e.g., `(my-hof xs)` never reports `my-hof`'s lambda).
     ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn as SchemeValue);
-  } else if (is_function(first)) {
-    fn = first;
   } else {
-    invariant(false, `Cannot apply ${typeof first}: ${first}`);
+    invariant(is_function(first), `Cannot apply ${typeof first}: ${first}`);
+    fn = first;
   }
 
   // Check what kind of callable we have
@@ -2737,13 +2721,10 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
   }
 
   // Handle Parameter - calling a parameter returns its value
-  if (is_parameter(fn)) {
-    // Parameters are called with no args to get their value
-    // (my-param) -> returns the parameter's current value
-    return fn.invoke();
-  }
-
-  invariant(false, `Not callable: ${typeof fn}`);
+  invariant(is_parameter(fn), `Not callable: ${typeof fn}`);
+  // Parameters are called with no args to get their value
+  // (my-param) -> returns the parameter's current value
+  return fn.invoke();
 }
 
 /**

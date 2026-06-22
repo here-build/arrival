@@ -36,6 +36,7 @@ import { SchemeVector } from "./values/SchemeVector.js";
 export class PurityViolation extends ArrivalError {
   static __class__ = "purity-violation";
   readonly owner = "owned-by/purity-invariant";
+  public readonly name = "PurityViolation";
 
   constructor(
     message: string,
@@ -43,7 +44,6 @@ export class PurityViolation extends ArrivalError {
     public readonly verb: string,
   ) {
     super(message);
-    this.name = "PurityViolation";
   }
 }
 

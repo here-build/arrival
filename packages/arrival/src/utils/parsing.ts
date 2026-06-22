@@ -242,12 +242,9 @@ export function parse_complex(arg: string, radix = 10): SchemeExact | SchemeInex
     } else if (/nan.0$/.test(n)) {
       return new SchemeInexact(Number.NaN);
     } else if (/inf.0$/.test(n)) {
-      if (n[0] === "-") {
-        return new SchemeInexact(Number.NEGATIVE_INFINITY);
-      }
-      return new SchemeInexact(Number.POSITIVE_INFINITY);
+      return new SchemeInexact(n[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
     } else {
-      invariant(false, `Internal Parser Error at: ${n}`);
+      throw new Error( `Internal Parser Error at: ${n}`);
     }
     if (parse.inexact) {
       return new SchemeInexact(value.valueOf());

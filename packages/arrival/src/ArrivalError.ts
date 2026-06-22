@@ -4,14 +4,15 @@
 
 import type { SchemeValue } from "./values/types.js";
 
-export class ArrivalError extends Error {
+export abstract class ArrivalError extends Error {
   static __class__ = "arrival-error";
 
-  args: SchemeValue;
+  public abstract readonly name: string;
 
-  constructor(message: string, args?: SchemeValue) {
+  constructor(
+    message: string,
+    public readonly args?: SchemeValue,
+  ) {
     super(message);
-    this.name = "ArrivalError";
-    this.args = args;
   }
 }

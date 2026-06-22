@@ -82,7 +82,7 @@ export const LIST_OPS = {
     // intact for both the singleton and any clones.
     if (list instanceof Nil) return nil;
     if (!(list instanceof Pair)) return list;
-    if (isCircularList(list)) TypeError.invariant(false, "list-copy: circular list");
+    TypeError.invariant(!isCircularList(list), "list-copy: circular list");
     // Deep copy the spine of the list
     const copy = (lst: unknown): unknown => {
       // Same clone-aware check at the recursion base: a Nil clone in the cdr
@@ -98,7 +98,7 @@ export const LIST_OPS = {
   // R7RS 6.4 List searching functions
   memq(obj: unknown, list: unknown): unknown {
     let current = list;
-    if (isCircularList(list)) TypeError.invariant(false, "memq: circular list");
+    TypeError.invariant(!isCircularList(list), "memq: circular list");
     while (current instanceof Pair) {
       // eq? comparison (object identity)
       if (current.car === obj) return current;
@@ -109,7 +109,7 @@ export const LIST_OPS = {
 
   memv(obj: unknown, list: unknown): unknown {
     let current = list;
-    if (isCircularList(list)) TypeError.invariant(false, "memv: circular list");
+    TypeError.invariant(!isCircularList(list), "memv: circular list");
     while (current instanceof Pair) {
       if (eqv(current.car, obj)) return current;
       current = current.cdr;
@@ -119,7 +119,7 @@ export const LIST_OPS = {
 
   assq(obj: unknown, alist: unknown): unknown {
     let current = alist;
-    if (isCircularList(alist)) TypeError.invariant(false, "assq: circular list");
+    TypeError.invariant(!isCircularList(alist), "assq: circular list");
     while (current instanceof Pair) {
       const pair = current.car;
       if (pair instanceof Pair && pair.car === obj) return pair;
@@ -130,7 +130,7 @@ export const LIST_OPS = {
 
   assv(obj: unknown, alist: unknown): unknown {
     let current = alist;
-    if (isCircularList(alist)) TypeError.invariant(false, "assv: circular list");
+    TypeError.invariant(!isCircularList(alist), "assv: circular list");
     while (current instanceof Pair) {
       const pair = current.car;
       if (pair instanceof Pair && eqv(pair.car, obj)) return pair;
@@ -143,7 +143,7 @@ export const LIST_OPS = {
   member(obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
     const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
     let current = list;
-    if (isCircularList(list)) TypeError.invariant(false, "member: circular list");
+    TypeError.invariant(!isCircularList(list), "member: circular list");
     while (current instanceof Pair) {
       // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
       // SchemeBool post-L1 (a truthy JS object); route through is_false.
@@ -157,7 +157,7 @@ export const LIST_OPS = {
   assoc(obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
     const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
     let current = alist;
-    if (isCircularList(alist)) TypeError.invariant(false, "assoc: circular list");
+    TypeError.invariant(!isCircularList(alist), "assoc: circular list");
     while (current instanceof Pair) {
       const pair = current.car;
       // `cmp` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.

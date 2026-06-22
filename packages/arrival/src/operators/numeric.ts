@@ -783,12 +783,10 @@ export const numerator = new Operator("numerator", {
     if (x instanceof SchemeExact) {
       return new SchemeExact(x.num);
     }
+    invariant(x instanceof SchemeInexact && x.imag === 0, "numerator requires a rational number");
     // For inexact, convert to rational and return inexact numerator
-    if (x instanceof SchemeInexact && x.imag === 0) {
-      const { num } = floatToRational(x.real);
-      return new SchemeInexact(Number(num));
-    }
-    invariant(false, "numerator requires a rational number");
+    const { num } = floatToRational(x.real);
+    return new SchemeInexact(Number(num));
   },
 });
 
@@ -801,11 +799,9 @@ export const denominator = new Operator("denominator", {
       return new SchemeExact(x.denom);
     }
     // For inexact, convert to rational and return inexact denominator
-    if (x instanceof SchemeInexact && x.imag === 0) {
-      const { denom } = floatToRational(x.real);
-      return new SchemeInexact(Number(denom));
-    }
-    invariant(false, "denominator requires a rational number");
+    invariant(x instanceof SchemeInexact && x.imag === 0, "denominator requires a rational number");
+    const { denom } = floatToRational(x.real);
+    return new SchemeInexact(Number(denom));
   },
 });
 

@@ -33,7 +33,7 @@ import { LambdaContext } from "./eval/LambdaContext.js";
 import { SchemeString } from "./values/SchemeString.js";
 import { SchemeSymbol } from "./values/SchemeSymbol.js";
 import { Macro } from "./eval/Macro.js";
-import { type SchemeNumeric, SchemeExact, SchemeInexact } from "./values/numbers.js";
+import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./values/numbers.js";
 import { Pair } from "./values/Pair.js";
 import { __lambda__ } from "./values/primitives.js";
 import { QuotedPromise } from "./values/QuotedPromise.js";
@@ -44,15 +44,15 @@ import { QuotedPromise } from "./values/QuotedPromise.js";
 // reads `jsToScheme` when actually invoked.
 import { jsToScheme } from "./rosetta.js";
 import {
-  markInteropBoundary,
-  NOT_FOUND,
-  InteropAccessError,
-  accessMember,
   accessHas,
   accessKeys,
+  accessMember,
+  InteropAccessError,
+  markInteropBoundary,
+  NOT_FOUND,
 } from "./interop-access.js";
 import { Syntax } from "./eval/Syntax.js";
-import { type SchemeValue, Nil, nil, SchemeCharacter } from "./values/types.js";
+import { Nil, nil, SchemeCharacter, type SchemeValue } from "./values/types.js";
 
 // Re-export the interop-access primitives for consumers.
 export {
@@ -373,7 +373,7 @@ export class SchemeJSFunction extends AValue {
 
   /** Procedures are not serializable. */
   toJs(): never {
-    invariant(false, "SchemeJSFunction: not serializable");
+    throw new Error("SchemeJSFunction: not serializable");
   }
 
   withProvenance(p: ReadonlySet<number>): SchemeJSFunction {
