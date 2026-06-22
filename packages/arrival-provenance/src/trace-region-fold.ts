@@ -155,9 +155,6 @@ export class TraceRegionFold {
   readonly #pointIds = new Set<number>();
   readonly #reach = new Map<number, Set<number>>();
   readonly #baseEdges: RegionEdge[] = [];
-  /** field-point → producer origin; sound across ticks (`fieldPointMeta` is append-only,
-   *  never rewrites an existing entry — see `resolveOriginVia`). */
-  readonly #originCache = new Map<number, number>();
 
   // ── recursion + branch-liveness signals (monotonic) ───────────────────────────
   readonly #recursiveHeads = new Set<string>();
@@ -309,7 +306,7 @@ export class TraceRegionFold {
     for (const inv of fresh) {
       if (!inv.isProvenancePoint) continue;
       const plain = this.#invById.get(inv.id)!;
-      const up = upstreamOfPoint(plain, this.#pointIds, this.#trace.fieldPointMeta, this.#originCache);
+      const up = upstreamOfPoint(plain, this.#pointIds);
       const { edges: added } = addPointToHasse(plain.id, up, this.#reach);
       this.#baseEdges.push(...added);
     }
@@ -409,8 +406,6 @@ export class TraceRegionFold {
       valueById,
       liveValueById,
       livePointsUnder,
-      fieldPointMeta: this.#trace.fieldPointMeta,
-      originCache: this.#originCache,
       knotArm,
       knotInputs,
       iterationCache,
@@ -429,8 +424,6 @@ export class TraceRegionFold {
       points: this.#points,
       pointIds: this.#pointIds,
       reach: this.#reach,
-      fieldPointMeta: this.#trace.fieldPointMeta,
-      originCache: this.#originCache,
     };
     const edges = attributeFieldEdges(this.#baseEdges, finalizeCtx);
 
@@ -628,7 +621,7 @@ export class TraceRegionFold {
     for (const { producerId } of decisionInputProducers(inv, valueById)) {
       if (this.#pointIds.has(producerId)) return true;
       for (const p of valueProvenance(this.#liveById.get(producerId)?.value)) {
-        if (this.#pointIds.has(resolveOriginVia(p, this.#trace.fieldPointMeta, this.#originCache))) return true;
+        if (this.#pointIds.has(resolveOriginVia(p))) return true;
       }
     }
     return false;

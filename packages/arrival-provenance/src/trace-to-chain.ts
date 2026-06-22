@@ -53,38 +53,18 @@ export function traceToChain(trace: EvalTrace): ProvenanceChain {
   const points = snap.invocations.filter((i) => i.isProvenancePoint);
   const pointIds = new Set(points.map((p) => p.id));
 
-  // A child's provenance no longer carries a producer's RAW point id — a value
-  // read across the structured-output membrane (`(:verdict (car reactions))`,
-  // `(:next …)`) carries the FIELD-POINT that truncates to it, and that's the
-  // complete lineage (the raw point only ever appeared transitively before the
-  // field-projection truncation was made authoritative). So resolve each id to its
-  // origin point through `fieldPointMeta` — exactly as `traceToRegions` does — then
-  // intersect with the point set. Without this, every field-plucked edge (react→
-  // reflect, reflect→next-iter react) vanishes. Pure function of the id; memoized.
-  const originCache = new Map<number, number>();
-  const resolveOrigin = (id: number): number => {
-    const cached = originCache.get(id);
-    if (cached !== undefined) return cached;
-    let cur = id;
-    for (let guard = 0; guard < 64; guard++) {
-      const meta = snap.fieldPointMeta.get(cur);
-      if (!meta) break;
-      cur = meta.origin;
-    }
-    originCache.set(id, cur);
-    return cur;
-  };
-
   // upstream(X) = the points feeding X = ⋃ over X's children of child.provenance,
-  // origin-resolved, ∩ points, minus X itself (X's own subtree carries X's id past
-  // the override).
+  // ∩ points, minus X itself (X's own subtree carries X's id past the override).
+  // Under FORWARD (the field-point mint is retired), a value read across the
+  // structured-output membrane (`(:verdict (car reactions))`, `(:next …)`) forwards
+  // the producer's own point rather than a field-point that truncates to it — so each
+  // provenance id IS already its origin point (no `fieldPointMeta` walk needed).
   const upstreamOf = new Map<number, number[]>();
   for (const x of points) {
     const up = new Set<number>();
     for (const child of x.children) {
       for (const p of child.provenance) {
-        const o = resolveOrigin(p);
-        if (o !== x.id && pointIds.has(o)) up.add(o);
+        if (p !== x.id && pointIds.has(p)) up.add(p);
       }
     }
     upstreamOf.set(x.id, [...up]);

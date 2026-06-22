@@ -41,7 +41,7 @@
 import type { Pair, SchemeSymbol } from "@here.build/arrival";
 
 import { carrierFieldEdges } from "./carrier-fields.js";
-import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
+import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
 import type { EvalTrace } from "./trace.js";
 
 export type EdgeKind = "forward" | "loopback";
@@ -103,40 +103,15 @@ function leadingSymbol(node: Pair): string {
 }
 
 /**
- * Resolve a provenance id to its real producer point + (if it arrived via a
- * keyword pluck) the field that was projected. A field-point's id isn't a real
- * point — it lives in `fieldPointMeta`, possibly chained (nested `(:a (:b x))`).
- * Walk the chain to the real producer point; the pin is the key closest to that
- * point (its actual output field — the OUTER key of a chain is a projection of an
- * already-projected field, so the inner one names the producer's port). Returns
- * null if the chain bottoms out at a non-point.
+ * Resolve a provenance id to its real producer point. Under FORWARD (the field-point
+ * mint is retired) a value read across the structured-output membrane forwards the
+ * producer's own point rather than a field-point that truncates to it — so a
+ * provenance id is a producer point iff `points` holds it. A non-point id (only
+ * possible mid-flight, before the producer resolved) yields null. The per-edge field
+ * PINS are supplied separately by the carrier (`carrierFieldEdges`, step 5).
  */
-function resolvePoint(
-  fieldPointMeta: PlainTrace["fieldPointMeta"],
-  points: Map<number, PlainInv>,
-  u: number,
-  memo: Map<number, { origin: number; field?: string } | null>,
-): { origin: number; field?: string } | null {
-  // Resolution is a pure function of `u` within one build, and the same upstream
-  // id recurs across many points' input-provenance sets (a popular producer; a
-  // repeatedly-plucked field). Without this memo, re-resolving every occurrence —
-  // walking the field-point chain and allocating a fresh record each time —
-  // dominated a large render (~50% self-time in profiling). Cache per `u`.
-  if (memo.has(u)) return memo.get(u)!;
-  let result: { origin: number; field?: string } | null;
-  if (points.has(u)) {
-    result = { origin: u };
-  } else {
-    const meta = fieldPointMeta.get(u);
-    if (meta) {
-      const inner = resolvePoint(fieldPointMeta, points, meta.origin, memo);
-      result = inner ? { origin: inner.origin, field: inner.field ?? meta.key } : null;
-    } else {
-      result = null;
-    }
-  }
-  memo.set(u, result);
-  return result;
+function resolvePoint(points: Map<number, PlainInv>, u: number): { origin: number } | null {
+  return points.has(u) ? { origin: u } : null;
 }
 
 /**
@@ -170,18 +145,15 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
   // 2. Uncollapsed causal edges (upstream infer id → this infer id). Each input
   //    provenance id resolves to a real producer point. (A non-point that resolves
   //    to nothing — only possible mid-flight — is dropped.) The per-edge field PINS
-  //    are supplied separately by the carrier (`carrierFieldEdges`, step 5): under
-  //    forward `fieldPointMeta` is empty, so `resolvePoint` yields origins only.
+  //    are supplied separately by the carrier (`carrierFieldEdges`, step 5).
   const upstream = new Map<number, Set<number>>();
-  const resolveMemo = new Map<number, { origin: number; field?: string } | null>();
   for (const [id, inv] of points) {
     const ups = new Set<number>();
     // The upstream infers feeding this point are ⋃ child.provenance over its
-    // direct children — iterate that straight through (ups + the memo dedupe),
-    // no intermediate union set.
+    // direct children — iterate that straight through, no intermediate union set.
     for (const child of inv.children) {
       for (const u of child.provenance) {
-        const r = resolvePoint(snap.fieldPointMeta, points, u, resolveMemo);
+        const r = resolvePoint(points, u);
         if (!r || r.origin === id) continue;
         ups.add(r.origin);
       }

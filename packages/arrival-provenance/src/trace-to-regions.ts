@@ -508,25 +508,14 @@ const hasSelfAncestor = (inv: PlainInv): boolean => {
 };
 
 // ── shared origin resolution (field-point → producer) ─────────────────────────
-/** Resolve a (possibly field-point) id to its concrete producer origin, chasing the
- *  `fieldPointMeta` chain (`:verdict` of a `:next` of an infer → the infer). Memoized
- *  via `cache`; pure in `fieldPointMeta`, so the cache is sound across the build (and
- *  across incremental ticks — `fieldPointMeta` only grows, never rewrites an entry). */
-export function resolveOriginVia(
-  id: number,
-  fieldPointMeta: PlainTrace["fieldPointMeta"],
-  cache: Map<number, number>,
-): number {
-  const cached = cache.get(id);
-  if (cached !== undefined) return cached;
-  let cur = id;
-  for (let guard = 0; guard < 64; guard++) {
-    const meta = fieldPointMeta.get(cur);
-    if (!meta) break;
-    cur = meta.origin;
-  }
-  cache.set(id, cur);
-  return cur;
+/** Resolve a provenance id to its concrete producer origin. Under FORWARD (the
+ *  field-point mint is retired), a `(:field x)` projection forwards the producer's own
+ *  point rather than minting a field-point that truncates to it — so a provenance id
+ *  IS its origin, and this is the identity. (Kept as a named function so the call sites
+ *  read as "resolve to origin" and to localize the place a future grounded carrier
+ *  would re-introduce a walk.) */
+export function resolveOriginVia(id: number): number {
+  return id;
 }
 
 const EMPTY: ReadonlySet<number> = new Set();
@@ -565,17 +554,13 @@ export function addPointToHasse(
 }
 
 /** x's in-graph upstream origin set: ⋃ over x's children of child.provenance, each
- *  origin-resolved (field-point → producer) and kept iff it's a point and not x. */
-export function upstreamOfPoint(
-  x: PlainInv,
-  pointIds: ReadonlySet<number>,
-  fieldPointMeta: PlainTrace["fieldPointMeta"],
-  originCache: Map<number, number>,
-): Set<number> {
+ *  origin-resolved (identity under forward — see `resolveOriginVia`) and kept iff it's
+ *  a point and not x. */
+export function upstreamOfPoint(x: PlainInv, pointIds: ReadonlySet<number>): Set<number> {
   const up = new Set<number>();
   for (const c of x.children)
     for (const p of c.provenance) {
-      const o = resolveOriginVia(p, fieldPointMeta, originCache);
+      const o = resolveOriginVia(p);
       if (o !== x.id && pointIds.has(o)) up.add(o);
     }
   return up;
@@ -618,8 +603,6 @@ export interface RegionWalkCtx {
    *  survives STRUCTURALLY — the infer point lives in the pluck invocation's subtree, and
    *  points are never pruned — so the decision gate recovers it by walking here. */
   livePointsUnder: (id: number) => readonly number[];
-  fieldPointMeta: PlainTrace["fieldPointMeta"];
-  originCache: Map<number, number>;
   /** Collectors filled during the walk (knot→arm control wires, knot→operand data
    *  wires) — read after the walk to append the decision edges. */
   knotArm: { knot: number; arm: number }[];
@@ -797,7 +780,7 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
       let origins = ctx.pointIds.has(producerId)
         ? [producerId]
         : [...valueProvenance(ctx.liveValueById(producerId))]
-            .map((p) => resolveOriginVia(p, ctx.fieldPointMeta, ctx.originCache))
+            .map((p) => resolveOriginVia(p))
             .filter((o) => ctx.pointIds.has(o));
       // Pruned pluck value (`(:big (car (infer …)))`): its stamped provenance was GC'd, but the
       // infer point survives in the live subtree — recover the origins structurally.
@@ -839,8 +822,6 @@ export interface FinalizeCtx {
   points: PlainInv[];
   pointIds: ReadonlySet<number>;
   reach: Map<number, Set<number>>;
-  fieldPointMeta: PlainTrace["fieldPointMeta"];
-  originCache: Map<number, number>;
 }
 
 /**
@@ -867,7 +848,7 @@ export function attributeFieldEdges(edges: RegionEdge[], ctx: FinalizeCtx): Regi
     for (const [k, ids] of Object.entries(ip)) {
       const origins = new Set<number>();
       for (const id of ids) {
-        const o = resolveOriginVia(id, ctx.fieldPointMeta, ctx.originCache);
+        const o = resolveOriginVia(id);
         if (pointIds.has(o)) origins.add(o);
       }
       const immediate = new Set<number>();
@@ -978,7 +959,7 @@ export function appendOutput(
   if (!(roots.length > 0 && final?.value !== undefined)) return;
   const origins = new Set<number>();
   for (const p of final.provenance) {
-    const o = resolveOriginVia(p, ctx.fieldPointMeta, ctx.originCache);
+    const o = resolveOriginVia(p);
     if (ctx.pointIds.has(o)) origins.add(o);
   }
   for (const o of origins) {
@@ -1134,11 +1115,10 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   };
 
   // Edges (Hasse transitive reduction) over the points, in ascending id order.
-  const originCache = new Map<number, number>();
   const reach = new Map<number, Set<number>>();
   const edges: RegionEdge[] = [];
   for (const x of [...points].sort((a, b) => a.id - b.id)) {
-    const up = upstreamOfPoint(x, pointIds, snap.fieldPointMeta, originCache);
+    const up = upstreamOfPoint(x, pointIds);
     const { edges: added } = addPointToHasse(x.id, up, reach);
     edges.push(...added);
   }
@@ -1157,8 +1137,6 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     valueById,
     liveValueById,
     livePointsUnder,
-    fieldPointMeta: snap.fieldPointMeta,
-    originCache,
     knotArm,
     knotInputs,
   };
@@ -1166,7 +1144,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const roots = tops.flatMap((t) => regionsAt(t, ctx));
 
   // Field attribution rewrites the base edges in place.
-  const finalizeCtx: FinalizeCtx = { points, pointIds, reach, fieldPointMeta: snap.fieldPointMeta, originCache };
+  const finalizeCtx: FinalizeCtx = { points, pointIds, reach };
   const attributed = attributeFieldEdges(edges, finalizeCtx);
   edges.length = 0;
   edges.push(...attributed);

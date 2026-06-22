@@ -47,18 +47,6 @@ import invariant from "tiny-invariant";
 
 export type InvocationState = "running" | "resolved" | "rejected";
 
-/**
- * A field-point's origin: which producer point it projects from, and the field
- * key plucked. The `origin` may itself be a field-point id (nested `(:a (:b x))`)
- * — resolve transitively to the real producer point; the pin is the key closest
- * to that real point (the producer's actual output field). See
- * `EvalTrace.fieldPointMeta`.
- */
-export interface FieldPointMeta {
-  origin: number;
-  key: string;
-}
-
 /** If a form is a keyword-accessor application `(:field x)`, the bare field name
  *  (`"verdict"`), else null. The head is the keyword SchemeSymbol whose
  *  `__name__` is `":verdict"`; a head of exactly `":"` (no field) is not one. */
@@ -344,16 +332,6 @@ export class EvalTrace implements EvalTap {
   get invocationLog(): readonly Invocation[] {
     return this.#invocationLog;
   }
-
-  /**
-   * Field-point registry — VESTIGIAL under forward (mint-death v0.2 §1). Nothing mints field-points
-   * anymore: `computeProvenance`'s `(:field x)` branch FORWARDS the producer's point, and the static
-   * carrier (`carrierFieldEdges`) supplies the dropped key. So this Map is always EMPTY, and the
-   * origin readers that walk it (`resolveOriginVia` in regions/fold, `resolveReadIds` in the
-   * slice/seal, the chain's walk) all degrade to identity. Kept only so those readers compile
-   * unchanged; a trivial follow-up removes it and collapses the readers to literal identity.
-   */
-  readonly fieldPointMeta = new Map<number, FieldPointMeta>();
 
   /**
    * The provenance sets that are AUTHORITATIVE — minted by a provenance point

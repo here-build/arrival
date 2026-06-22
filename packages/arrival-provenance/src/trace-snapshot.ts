@@ -34,7 +34,7 @@
  *     `.prompt` card reads are strings / numbers / plain objects / Sets.
  *   - `parent` / `children` — object references; the DAG/back-edges are rebuilt
  *     faithfully by structured-clone (it de-dups shared refs and tolerates cycles).
- *   - `PlainTrace.invocations` array and `fieldPointMeta` `Map` — both clone-safe.
+ *   - `PlainTrace.invocations` array — clone-safe.
  *   - **Invocation ids round-trip intact** — the load-bearing requirement: a later
  *     node binds per-cell values back to worker-produced regions BY `id`, so the
  *     ids MUST survive the boundary. They do (plain numbers).
@@ -115,8 +115,6 @@ export interface PlainInv {
 export interface PlainTrace {
   /** Every invocation, in records order. */
   invocations: PlainInv[];
-  /** Field-point id → producer origin + plucked key (the field-provenance map). */
-  fieldPointMeta: EvalTrace["fieldPointMeta"];
 }
 
 /** The branch heads whose children carry decision-relevant values. A child of one
@@ -190,5 +188,5 @@ export function snapshotTrace(trace: EvalTrace): PlainTrace {
       }
     }
   }
-  return { invocations, fieldPointMeta: new Map(trace.fieldPointMeta) };
+  return { invocations };
 }
