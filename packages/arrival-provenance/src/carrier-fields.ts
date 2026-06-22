@@ -1,7 +1,8 @@
 /**
- * The carrier's STATIC reproduction of the dag `:fields` point-edge map — L2 consumer #1
- * (the `:fields` half of `traceToStatechart`'s `resolvePoint`). It reads the auto-bound
- * lineage carrier instead of walking the live `fieldPointMeta` mint:
+ * The dag `:fields` point-edge map, derived STATICALLY from the trace — the SOLE source
+ * of the per-edge field pins now the field-point mint is retired (it was first proven a
+ * byte-identical reproduction of that mint, then took over as the mint died). It reads
+ * the auto-bound lineage carrier rather than walking any runtime field-point registry:
  *
  *   for each consumer source-point, classify its ARGUMENT sub-expressions (`classify` stops
  *   at the source head — `lineage.ts:396` — so the whole call would be inert; the keyword
@@ -23,13 +24,13 @@
  * CONSUMER point's invocation subtree (`subtreeIds`), NOT the global first-match — so two
  * consumers reading the same slot name bind to their OWN producer, and a looped consumer's
  * iterations each bind their own (unioned per cell by the statechart's fan-collapse).
- * GENESIS: `collectFieldNodes` mirrors the live `fieldPoint` absorption — a keyword plucked off a
- * fresh constructor (`(:a (list (:b x)))`) does NOT pin the upstream producer (only the inner `:b`
- * that reaches it does), guarded by `hasKeywordField`.
+ * GENESIS: `collectFieldNodes` implements the field-projection absorption rule — a keyword plucked
+ * off a fresh constructor (`(:a (list (:b x)))`) does NOT pin the upstream producer (only the inner
+ * `:b` that reaches it does), guarded by `hasKeywordField`.
  * KNOWN GAPS (corpus-gated `it.todo`, fast-follow): (1) an INLINE-SOURCE pluck `(:k (car (infer …)))`
  * loses its pin — the operator slot `infer` carries no provenance so it never auto-binds (the
  * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
- * keyword-only live `accessorField` (trace.ts:65) mints nothing — the carrier is the faithful side.
+ * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
  */
 import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
 import type { Classifier, LineageNode } from "@here.build/arrival";
@@ -52,7 +53,7 @@ function operandsOf(node: unknown): unknown[] {
 }
 
 /** Does `n`'s subtree contain a KEYWORD field node? (A positional `car`/`index` step does not
- *  count — it never pins.) Used to mirror the live `fieldPoint` absorption: a keyword plucked
+ *  count — it never pins.) Implements the field-projection absorption rule: a keyword plucked
  *  off a value that ALREADY had a keyword plucked from it absorbs into the inner one. */
 function hasKeywordField(n: LineageNode): boolean {
   switch (n.kind) {
@@ -74,8 +75,8 @@ function hasKeywordField(n: LineageNode): boolean {
 
 /** The KEYWORD `field` nodes in a classified skeleton that actually PIN — i.e. whose base
  *  reaches a producer with NO intervening keyword field. A keyword plucked off an already-plucked
- *  value ABSORBS into the inner one (the live `fieldPoint` collapses `fieldPoint(fieldPoint(P,b),a)`
- *  → {P, b}, trace.ts:390) — so the outer key pins nothing new on the producer. This guards the
+ *  value ABSORBS into the inner one (a nested `(:a (:b x))` collapses to the innermost key `b`,
+ *  origin P) — so the outer key pins nothing new on the producer. This guards the
  *  GENESIS over-pin `(:a (list (:b x)))`: `:a` is plucked off a fresh constructor, not the producer
  *  `:b` reaches, so only `:b` pins. A positional `car`/`index` field (key=null) never pins; we
  *  don't collect it, but we still descend its child for deeper keyword plucks. */

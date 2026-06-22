@@ -20,10 +20,11 @@
  * tap-firing rules already filter them.
  *
  * The provenance taxonomy invariant this file implements (mint-only-at-boundaries;
- * pure ops union/forward; branch is an edge-role NOT a node; field-points are a node
- * kind) is documented at
+ * pure ops union/forward; branch is an edge-role NOT a node; a `(:field …)` projection
+ * FORWARDS the producer's point — the dropped key lives in the static carrier, not a
+ * minted node) is documented at
  * `docs/foundations/arrival-scheme/reference/provenance-model.md` — read it before changing
- * `computeProvenance`, the authoritative-set forwarding, or `fieldPoint`.
+ * `computeProvenance`, the authoritative-set forwarding, or `accessorField`.
  */
 import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type Pair, type SchemeSymbol } from "@here.build/arrival";
 import { action, observable } from "mobx";
@@ -113,21 +114,18 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   if (distinct.size === 0) return EMPTY_PROVENANCE;
 
   // Field-qualified projection (§5.3 sibling): a keyword-accessor `(:verdict x)`
-  // crosses the structured-output membrane — it doesn't merely forward the
-  // producer's provenance, it REFINES each upstream point P into a field-point
-  // (P, "verdict"). The field-point is a plain synthetic id (minted lazily,
-  // singleton per (origin, field) via the trace registry), so it rides through
-  // `string-append`/binding as an ordinary `Set<number>` member and survives
-  // absorb. The statechart resolves it back to (producer cell, pin) for the
-  // per-property flow wire / go-to-source edge. Element-only provenance from
-  // `car`/`cdr` (§5.3) already attributes to the right fan-out producer, so a
-  // chained `(:verdict (car reactions))` qualifies react[0]'s point specifically.
+  // crosses the structured-output membrane. It FORWARDS each upstream point P itself
+  // — the origin/intent — and lets the static carrier (`carrierFieldEdges`, read by
+  // the dag's statechart) supply the dropped KEY. The forwarded set is marked
+  // AUTHORITATIVE (a complete projected lineage), so a forwarding parent never
+  // re-unions it. Element-only provenance from `car`/`cdr` (§5.3) already attributes
+  // to the right fan-out producer, so a chained `(:verdict (car reactions))` carries
+  // react[0]'s point specifically. (`field` is still computed: it ROUTES this branch
+  // — excluding the accessor from the plain forward above so it lands here.)
   if (field !== null) {
-    // FORWARD a `(:field x)` projection: keep each upstream point P itself — the origin/intent —
-    // and let the static carrier (`carrierFieldEdges`, read by the dag) supply the dropped KEY. The
-    // result is AUTHORITATIVE (a complete projected lineage), so a forwarding parent never re-unions
-    // it. (The field-point MINT this once did — refining P → synthetic (P,field) — is retired; the
-    // key lives in the carrier now. `field` is still computed: it ROUTES this authoritative branch.)
+    // The field-point MINT this once did — refining P → a synthetic (P,field) id, walked
+    // by the readers — is retired: `(:field x)` keeps P, and the key now lives solely in
+    // the static carrier. The walk below just unions the upstream points (P is forwarded).
     const out = new Set<number>();
     for (const s of distinct) for (const p of s) out.add(p);
     return trace.markAuthoritativeProvenance(out);
@@ -293,7 +291,7 @@ export class EvalTrace implements EvalTap {
    * ids each read value carries. This lets the static carrier's leaf slots auto-bind to
    * the right per-invocation producer (replacing the manual `{ infer: ids }` global map
    * the v02-G1 shadow uses), WITHOUT collapsing distinct invocations of one source name.
-   * Riding ALONGSIDE the eager Set + the field-point mint, never replacing either.
+   * Riding ALONGSIDE the eager Set (`AValue.provenance`), never replacing it.
    */
   autoBindings: AutoBindings | undefined = undefined;
 
@@ -322,11 +320,11 @@ export class EvalTrace implements EvalTap {
 
   /**
    * Flat append-ordered log of every invocation, in `enter` order — which is
-   * strictly ascending invocation id (each `enter` mints the next id, and only
-   * `enter` pushes here, so field-point ids that share `#nextId` leave gaps but
-   * never reorder). The region fold slices new invocations off the tail by an
-   * index cursor — O(Δ) per tick — instead of re-scanning every `records` binding.
-   * Pointer array only: the Invocations already live in `records`.
+   * strictly ascending, gap-free invocation id (each `enter` mints the next id, and
+   * only `enter` pushes here — nothing else consumes `#nextId` — so ids never reorder).
+   * The region fold slices new invocations off the tail by an index cursor — O(Δ) per
+   * tick — instead of re-scanning every `records` binding. Pointer array only: the
+   * Invocations already live in `records`.
    */
   readonly #invocationLog: Invocation[] = [];
   get invocationLog(): readonly Invocation[] {
@@ -334,11 +332,12 @@ export class EvalTrace implements EvalTap {
   }
 
   /**
-   * The provenance sets that are AUTHORITATIVE — minted by a provenance point
-   * (`{self.id}`) or a `(:field …)` projection (`{field-point ids}`). An
+   * The provenance sets that are AUTHORITATIVE — emitted by a provenance point
+   * (`{self.id}`) or forwarded by a `(:field …)` projection (the producer's own
+   * points; the dropped key lives in the static carrier, not in this set). An
    * authoritative set is the COMPLETE lineage of the value it stamps: upstream is
-   * reached by FOLLOWING the link (the point / field-point resolves back to its
-   * producer), never by carrying the transitive closure. `computeProvenance`
+   * reached by FOLLOWING the link (the point resolves back to its producer), never
+   * by carrying the transitive closure. `computeProvenance`
    * forwards an authoritative set across a forwarding boundary (function-call
    * return, `let`, tail-recursive pass-through) instead of re-unioning it with the
    * frame's other resolutions — that re-union is the depth-accumulation that turned
@@ -402,9 +401,9 @@ export class EvalTrace implements EvalTap {
   // `action` (strict mode rejects a bare observed write). `exit`/`markProvenancePoint`
   // touch only plain fields, so they stay bare.
 
-  /** Cap on total trace entries (invocations + field-points share `#nextId`). The trace retains an
-   *  Invocation PER reduction with its value/children — monotonic, never GC'd — so a long or runaway
-   *  loop grows the trace unboundedly even when the program's own data is bounded. `enter` throws once
+  /** Cap on total trace entries (one per invocation — `enter` mints the only `#nextId`). The trace
+   *  retains an Invocation PER reduction with its value/children — monotonic, never GC'd — so a long or
+   *  runaway loop grows the trace unboundedly even when the program's own data is bounded. `enter` throws once
    *  the cap is hit: the run aborts with the partial trace (the half-baked graph), instead of OOMing
    *  the shared isolate (or freezing a browser canvas). DEFAULTS to a bound — the safe default IS the
    *  default, so a caller that forgets a cap (e.g. the studio's `new EvalTrace()`) is still protected.

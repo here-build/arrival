@@ -55,9 +55,10 @@ export type { FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeKind } from "./fl
 export { flowForwardCone, flowBackwardCone } from "./flow-graph.js";
 
 export interface FlowGraphOptions extends ForestOptions, CollapseParams {
-  /** v02-L2·C1 — the carrier `:fields` override, threaded straight to `traceToStatechart`
-   *  (see there). Omitted ⇒ the live `fieldPointMeta` mint, byte-identical. The dag's
-   *  scope-id-keyed surface lets a carrier-fed FORWARD run compare equal to a mint run. */
+  /** v02-L2·C1 — an explicit `:fields` override, threaded straight to `traceToStatechart`
+   *  (see there). Omitted ⇒ the statechart derives `:fields` from the static carrier
+   *  (`carrierFieldEdges`), the sole source now the field-point mint is retired; tests pass
+   *  a curated map here. The dag's scope-id-keyed surface keys both the same way. */
   fieldEdges?: Map<string, Set<string>>;
 }
 

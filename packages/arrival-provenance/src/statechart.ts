@@ -120,14 +120,13 @@ function resolvePoint(points: Map<number, PlainInv>, u: number): { origin: numbe
  * the meta-plane cares about); intermediate plumbing invocations are folded into
  * the edge computation but never become nodes.
  *
- * `opts.fieldEdges` (v02-L2·C1, the `--ir-lineage` consumer seam): when supplied,
- * the per-`"producer>consumer"` `:fields` pins come from this map — the carrier's
- * static reproduction (`carrierFieldEdges`) — INSTEAD of the live `fieldPointMeta`
- * mint walked in step 2. Same key-space (producer/consumer POINT ids), so the
- * cell-lift in step 5 is unchanged. Omitted ⇒ the mint path, byte-identical (proven
- * by `lineage-field-shadow-corpus.test.ts`). The eventual mint-death deletes step
- * 2's `r.field` half and leaves this override the sole `:fields` source; the
- * upstream/origin half (`r.origin`) stays on the mint until consumer #2 migrates.
+ * `:fields` pins come from the static carrier (`carrierFieldEdges`, step 5) now that
+ * the field-point mint is retired — `resolvePoint` (step 2) is plain identity (a
+ * `(:field …)` projection forwards the producer's point, so a provenance id IS its
+ * producer point; there is no `.field` half to walk). `opts.fieldEdges` lets a caller
+ * pass an explicit `Map<"producer>consumer", Set<field>>` instead (tests supply a
+ * curated map); same key-space (producer/consumer POINT ids), so the cell-lift in
+ * step 5 is unchanged.
  */
 export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<string, Set<string>> } = {}): Statechart {
   // De-proxy the observable trace into plain data once; everything below runs on

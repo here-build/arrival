@@ -72,8 +72,9 @@ export function assertNever(x: never): never {
  *  (`(:foo x)` / `(@ x :foo)` / `(car x)` / `(vector-ref x i)`), so a lineage
  *  chunk's `uneval` targets minimal scheme with no polyglot sugar; re-sugaring
  *  (`(@ obj :foo)` → `obj.foo`) is an optional later display layer, not the
- *  carrier's concern. Mirrors `trace.ts`'s runtime `FieldPointMeta = {origin,key}`
- *  (v0.2 §"The carrier"). */
+ *  carrier's concern. The carrier is now the SOLE home of the dropped key (the
+ *  runtime field-point that once recorded `{origin,key}` is retired — `(:field x)`
+ *  forwards the producer's point; v0.2 §"The carrier"). */
 // The keyword/positional CONFLATION here is INTENTIONAL: `field` carries the named-key
 // case and `index`/`car` the positional cases as a flat union — the distinction that
 // MATTERS (keyword wins a chain, positionals are transparent) does not live in this
@@ -376,13 +377,13 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
   const projected = memberRead(head, args);
   if (projected !== null) {
     const child = classifyWith(projected.argExpr, c, subst);
-    // D-v02-1 ABSORPTION (mirrors trace.ts:341-359): a field directly under another
-    // field is a deeper pluck within the SAME producer pin — keep base + ONE step, do
-    // NOT compose nested keys into a path. KEYWORD-PRIORITY: the live field-point minter
-    // (accessorField, arrival-provenance/trace.ts:65-70) pins ONLY keyword heads and is
+    // D-v02-1 ABSORPTION: a field directly under another field is a deeper pluck within
+    // the SAME producer pin — keep base + ONE step, do NOT compose nested keys into a
+    // path. KEYWORD-PRIORITY: the runtime accessor that ROUTES the forward branch
+    // (`accessorField`, arrival-provenance/trace.ts) recognizes ONLY keyword heads and is
     // BLIND to the positional `car`/`index` steps, so a keyword anywhere in the chain
-    // wins over a transparent positional step. This makes the static carrier agree with
-    // the live mint on `(:verdict (car x))` → {field:"verdict"} (NOT {car}) — the 2b fix.
+    // wins over a transparent positional step. This keeps the carrier — now the sole home
+    // of the key — pinning `(:verdict (car x))` → {field:"verdict"} (NOT {car}); the 2b fix.
     if (child.kind === "field") {
       const innerIsKeyword = "field" in child.step;
       const outerIsKeyword = "field" in projected.step;
@@ -680,7 +681,8 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
 
 /** The CARRIER's canonical plucked key of a `PathStep` — the NAMED location only.
  *  A named member → its bare name string (`(:verdict x)` / `(@ x :verdict)` / `(@ x "verdict")`
- *  → `"verdict"`), which is what `accessorField`+`fieldPoint` pin for the keyword form.
+ *  → `"verdict"`), the keyword form the runtime accessor (`accessorField`) recognizes — though
+ *  the carrier is now the SOLE place that key is pinned (the runtime forwards the producer's point).
  *  POSITIONAL access FORWARDS (no key): `car` AND `index` both → `null`. Per D-v02-4
  *  (named-pin / positional-forward), the carrier tracks normalized provenance (producer +
  *  *named* location), NOT the specific access type or the exact position — the index is the
@@ -698,21 +700,19 @@ export function stepKey(step: PathStep): string | null {
  *     is the carrier's static analogue of the sift seal's `resolveReadIds`
  *     (slice.ts:169-181): walk to the BASE producer, **key discarded**. Computed as the
  *     `fullCone` of the field node's focused CHILD (the source the projection reads).
- *   - `key`   — the INNERMOST projected step (D-v02-1 ABSORPTION), the dag's
- *     `resolvePoint` pin (statechart.ts:126-138) surfaced as `FlowGraphEdge.fields`.
- *     The field node's `step` is ALREADY the innermost: `classify` returns the inner
- *     field unchanged for a field-under-field (lineage.ts:347), exactly as the runtime
- *     `fieldPoint` absorbs `fieldPoint(fieldPoint(P,inner),outer) = {origin:P,key:inner}`
- *     (trace.ts:341-359). So the carrier and the trace pin the SAME key with no path.
+ *   - `key`   — the INNERMOST projected step (D-v02-1 ABSORPTION), surfaced on the dag's
+ *     point-edge as `FlowGraphEdge.fields`. The field node's `step` is ALREADY the
+ *     innermost: `classify` returns the inner field unchanged for a field-under-field
+ *     (the absorption above), so a nested `(:a (:b x))` keeps just `:b` — keep base +
+ *     ONE innermost key, no composed path.
  *
  *  For a NON-field node (a plain source / pipe / merge — the value was not produced by
- *  a member-read) there is no projected key: `key = null`, `base = fullCone(node)`. The
- *  runtime mints no field-point in that case either (the producer's own point flows
- *  unprojected), so the correspondence still holds — `base` = the producer set, no pin.
+ *  a member-read) there is no projected key: `key = null`, `base = fullCone(node)` (the
+ *  producer's own point flows unprojected), so `base` = the producer set, no pin.
  *
- *  READ-ONLY (v02-G1): this is the static reproduction of the live field-point queries,
- *  proven by the tapped shadow before `computeProvenance`'s field-point minting is
- *  retired (a LATER phase). It does NOT mutate the tree or touch the runtime mint. */
+ *  This is the SOLE source of the dropped key — the runtime field-point mint it was
+ *  shadow-proven against (before that mint was retired) is gone, so `(:field x)` now
+ *  forwards the producer's point and the dag reads its `:fields` from here. */
 export interface FieldResolution {
   readonly base: number[];
   readonly key: string | null; // named field-name or forwarded; never a positional index (D-v02-4)
