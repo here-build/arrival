@@ -149,6 +149,30 @@ async function asyncFLMap(fn: (v: unknown) => unknown, structure: FantasyLand): 
   return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
 }
 
+// Box-PRESERVING map twin of asyncFLMap — for OUR OWN containers (a LIPS Pair), which
+// are NOT crossing out to a foreign Functor, so their element boxes (SchemeString /
+// SchemeExact) and provenance sets must survive. The ONLY difference from asyncFLMap is
+// that the cache stores the RAW `await fn(v)` result instead of `unwrapLipsValue(...)`:
+// asyncFLMap strips boxes (external FL structures want raw JS values — pinned GOLDEN by
+// coercion-soundness's SchemeVector case), but a Pair mapped here reproduces the eager
+// scheme `map` builtin's box-preserving `Pair.fromArray(results)` semantics. Same
+// value-identity cache as asyncFLMap (FL visit-order independence — all `cache.has`
+// checks run before any `await` populates it, so no fn-call dedup is observable), same
+// rebuild via the structure's own `fantasy-land/map` (mapPair builds a fresh spine,
+// dropping the container box exactly as the eager builtin does — stratum-2 parity).
+async function asyncArrivalMap(fn: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
+  const values = flCollectValues(structure);
+  const cache = new Map<unknown, unknown>();
+  await Promise.all(
+    values.map(async (v) => {
+      if (!cache.has(v)) {
+        cache.set(v, await fn(v)); // RAW result — NO unwrapLipsValue (preserve element box + provenance)
+      }
+    }),
+  );
+  return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
+}
+
 async function asyncFLFilter(arg: ((v: unknown) => unknown) | RegExp, structure: FantasyLand): Promise<unknown> {
   // Adapt a regex arg the same way the eager builtin's `matcher` does (regex →
   // `String(x).match(arg)`, a fn passes through). `String(x)` sees the same raw
@@ -309,6 +333,19 @@ export const FL_INTEROP_OPS = {
     // provenance of its own, so its op-prov is empty; the source's grouping
     // provenance and the elements' provenance ride the carrier).
     if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
+    // FL-dispatch — NOW INCLUDING a single-list LIPS Pair, which computes by its OWN
+    // fantasy-land/map (mapPair) here instead of reaching the env-resolved scheme builtin
+    // (mirrors filter/reduce). asyncArrivalMap is the box-PRESERVING twin (no unwrapLipsValue),
+    // so per-element boxes + provenance survive — byte-identical to the eager builtin's
+    // `Pair.fromArray(results)` (coercion-soundness "Pair · map preserves every element's
+    // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
+    // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
+    if (lists.length === 1 && lists[0] instanceof Pair) {
+      return asyncArrivalMap(fn, lists[0] as unknown as FantasyLand);
+    }
+    // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
+    // crossing out, so asyncFLMap's unwrapLipsValue strips boxes to raw JS values (the DR4
+    // box-strip, pinned GOLDEN for SchemeVector). UNCHANGED.
     if (
       lists.length === 1 &&
       !(lists[0] instanceof Pair) &&
@@ -316,6 +353,8 @@ export const FL_INTEROP_OPS = {
     ) {
       return asyncFLMap(fn, lists[0] as FantasyLand);
     }
+    // Fallback — multi-list (zip), or a non-FL input (a SchemeJSArray: builtinMap
+    // typechecks pair|nil and THROWS, the coercion-soundness pin).
     return builtinMap!.call(this, fn, ...lists);
   },
   reduce: function reduce(
