@@ -274,15 +274,17 @@ function unforcedLazyEgress(op: string): never {
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
 export const FL_INTEROP_OPS = {
-  // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers, delegate pairs to LIPS
+  // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers; a Pair computes on the term (arrival/tagless-final/car)
   car: (list: unknown) => {
     captureBuiltins();
     if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
+    if (list instanceof Pair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
     return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
   },
   cdr: (list: unknown) => {
     captureBuiltins();
     if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
+    if (list instanceof Pair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
     return list instanceof SchemeJSArray
       ? list.length <= 1
         ? nil

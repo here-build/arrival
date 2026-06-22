@@ -14,6 +14,7 @@
  */
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { withInputProvenance } from "./op-helpers.js";
 import { type SourceLocation } from "../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "./value-guards.js";
 import { SchemeBytevector } from "./SchemeBytevector.js";
@@ -704,6 +705,21 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   ["arrival/tagless-final/reduce"]<Acc>(fn: (element: unknown, acc: Acc) => Acc, initial: Acc): Acc {
     return (this as { ["fantasy-land/reduce"]: (f: (acc: Acc, x: unknown) => Acc, init: Acc) => Acc })
       ["fantasy-land/reduce"]((acc, element) => fn(element, acc), initial);
+  }
+
+  // Arrival's canonical car/cdr — the head/tail PROJECTIONS. They mirror the scheme
+  // `car`/`cdr` builtins exactly (spec §5.3): the result inherits ONLY the element's
+  // own provenance, never the container's, so `withInputProvenance` is passed the
+  // element as its single input (an AValue element is re-stamped with its own
+  // provenance — a no-op clone preserving identity; a raw element returns unchanged).
+  // fl-interop's car/cdr overlay dispatches a LIPS Pair HERE so the head/tail projection
+  // computes on the term, not via the env-resolved scheme builtin (mirrors map/filter/reduce).
+  ["arrival/tagless-final/car"](): Car {
+    return withInputProvenance([this.car], this.car);
+  }
+
+  ["arrival/tagless-final/cdr"](): Cdr {
+    return withInputProvenance([this.cdr], this.cdr);
   }
 
   // Traversable — effectful traversal; `of` lifts into the applicative.
