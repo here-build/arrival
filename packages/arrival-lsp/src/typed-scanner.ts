@@ -24,6 +24,17 @@ export interface ScannerState {
   /** The argument slot's TS type is an array/list type — the precise list-structure gate's source.
    *  Stamped SYNCHRONOUSLY here so it is present the instant the (sync) mask reads it at the value-opener. */
   readonly slotIsArray?: boolean | null;
+  /** The argument slot admits a bare word as a STRING — the scalar-string Σ exemption's source. Stamped
+   *  SYNCHRONOUSLY here so it is present the instant the (sync) mask's Σ gate reads it. See
+   *  `OracleState.slotIsStringy` in arrival-sampler. */
+  readonly slotIsStringy?: boolean | null;
+  /** The ELEMENT type at an array-element cursor is a free-form string/any (CUT A) — the array-element
+   *  force-quote gate's source. Stamped SYNCHRONOUSLY here so it is present the instant the sync mask reads
+   *  it at the element value-opener. See `OracleState.elementIsStringy` in arrival-sampler. */
+  readonly elementIsStringy?: boolean | null;
+  /** The ELEMENT type at an array-element cursor is a closed string-literal union — its MEMBERS (CUT A) — the
+   *  element enum-narrow's source. See `OracleState.elementEnum` in arrival-sampler. */
+  readonly elementEnum?: readonly string[] | null;
 }
 export interface Scanner {
   analyze(prefix: string): ScannerState;
@@ -35,6 +46,8 @@ export interface Scanner {
 export interface TypeLens {
   getTypeValidCandidates(scheme: string, schemeOffset: number, candidates: readonly string[]): string[];
   getSlotIsArray(scheme: string, schemeOffset: number): boolean | null;
+  getSlotAcceptsBareWord(scheme: string, schemeOffset: number): boolean | null;
+  getSlotElementType(scheme: string, schemeOffset: number): { isStringy: boolean | null; enum: string[] | null };
 }
 
 const ATOM = /[^\s()[\]{}"';]/; // an atom character (arrival's lexer: not ws / bracket / string / quote / comment)
@@ -58,38 +71,73 @@ export function narrowByType(base: Scanner, lens: TypeLens): Scanner {
   const cache = new Map<string, ReadonlySet<string>>();
   // slotPrefix → the slot's array-ness (the structure-gate source). Memoized per slot, like `cache`.
   const arrayCache = new Map<string, boolean | null>();
+  // slotPrefix → the slot's stringy-ness (the scalar-string Σ-exemption source). Memoized per slot.
+  const stringyCache = new Map<string, boolean | null>();
+  // slotPrefix → the array-ELEMENT verdict (CUT A: force-quote / enum-narrow source). Memoized per slot.
+  const elementCache = new Map<string, { isStringy: boolean | null; enum: string[] | null }>();
   return {
     feasible: (prefix) => base.feasible(prefix),
     analyze(s) {
       const st = base.analyze(s);
-      // Act only inside an application ARGUMENT slot (Σ owns operators; T never adds a wrong restriction).
-      if (st.formKind !== "application" || st.position !== "argument") return st;
+      // The three SCALAR axes act only inside an application ARGUMENT slot (Σ owns operators; T never adds a
+      // wrong restriction). The ELEMENT axis (CUT A) ALSO acts inside a QUOTE form — the `'(…)` array surface.
+      const inAppArg = st.formKind === "application" && st.position === "argument";
+      const inQuote = st.formKind === "quote";
+      if (!inAppArg && !inQuote) return st;
       // The slot is fixed for the whole atom being typed → key by the prefix up to the atom start. At a
       // value BOUNDARY (no atom yet) the trailing atom is "" ⇒ slotPrefix = s, the slot about to open.
       const slotPrefix = s.slice(0, s.length - trailingAtom(s).length);
 
-      // STRUCTURE — stamp the slot's array-ness, SYNCHRONOUSLY, at the boundary AND mid-atom (the gate
-      // decides list-vs-scalar at the value-opener, a boundary the value-narrowing path skips). This is
-      // the whole point of the sync scanner: the verdict is present the instant the sync mask reads it.
-      let slotIsArray = arrayCache.get(slotPrefix);
-      if (slotIsArray === undefined) {
-        slotIsArray = lens.getSlotIsArray(slotPrefix, slotPrefix.length);
-        arrayCache.set(slotPrefix, slotIsArray);
+      // ELEMENT (CUT A) — stamp the array-element verdict SYNCHRONOUSLY, in BOTH surfaces, at the boundary
+      // AND mid-atom (the force-quote masks the value-opener; the enum-narrow reads while a bare word is
+      // typed). The whole point of the sync scanner: present the instant the sync mask reads it.
+      let element = elementCache.get(slotPrefix);
+      if (element === undefined) {
+        element = lens.getSlotElementType(slotPrefix, slotPrefix.length);
+        elementCache.set(slotPrefix, element);
       }
 
-      // VALUE (Σ∩T) — narrow validSymbols ONLY mid-atom (a partial symbol being typed), as before.
+      let slotIsArray: boolean | null = null;
+      let slotIsStringy: boolean | null = null;
       let validSymbols = st.validSymbols;
+      if (inAppArg) {
+        // STRUCTURE — stamp the slot's array-ness, SYNCHRONOUSLY, at the boundary AND mid-atom.
+        slotIsArray = arrayCache.get(slotPrefix) ?? null;
+        if (!arrayCache.has(slotPrefix)) {
+          slotIsArray = lens.getSlotIsArray(slotPrefix, slotPrefix.length);
+          arrayCache.set(slotPrefix, slotIsArray);
+        }
+
+        // SCALAR-STRING — stamp whether the slot admits a bare word as a string, SYNCHRONOUSLY.
+        slotIsStringy = stringyCache.get(slotPrefix) ?? null;
+        if (!stringyCache.has(slotPrefix)) {
+          slotIsStringy = lens.getSlotAcceptsBareWord(slotPrefix, slotPrefix.length);
+          stringyCache.set(slotPrefix, slotIsStringy);
+        }
+      }
+
+      // VALUE (Σ∩T) — narrow validSymbols ONLY mid-atom (a partial symbol being typed). CUT A: at an ENUM
+      // ELEMENT, intersect with the element members (the array analog, reaching inside `(list …)` / `'(…)`);
+      // otherwise the in-app-arg Σ∩T narrowing as before.
       const baseValid = st.midToken ? st.validSymbols() : null;
       if (baseValid !== null && baseValid.size > 0) {
-        let narrowed = cache.get(slotPrefix);
-        if (narrowed === undefined) {
-          narrowed = new Set(lens.getTypeValidCandidates(slotPrefix, slotPrefix.length, [...baseValid]));
-          cache.set(slotPrefix, narrowed);
+        if (element.enum !== null) {
+          const members = new Set(element.enum);
+          const narrowed = new Set([...baseValid].filter((sym) => members.has(sym)));
+          validSymbols = () => narrowed;
+        } else if (inAppArg) {
+          let narrowed = cache.get(slotPrefix);
+          if (narrowed === undefined) {
+            narrowed = new Set(lens.getTypeValidCandidates(slotPrefix, slotPrefix.length, [...baseValid]));
+            cache.set(slotPrefix, narrowed);
+          }
+          validSymbols = () => narrowed!;
         }
-        validSymbols = () => narrowed!;
       }
 
-      // Reconstruct only the fields the mask consumes (see arrival-sampler/oracle-types.ts) + slotIsArray.
+      // Reconstruct only the fields the mask consumes (see arrival-sampler/oracle-types.ts) + the
+      // type-stamped axes (slotIsArray/slotIsStringy for the scalar gates, elementIsStringy/elementEnum for
+      // the array-element gate).
       return {
         midToken: st.midToken,
         position: st.position,
@@ -97,6 +145,9 @@ export function narrowByType(base: Scanner, lens: TypeLens): Scanner {
         closeable: st.closeable,
         validSymbols,
         slotIsArray,
+        slotIsStringy,
+        elementIsStringy: element.isStringy,
+        elementEnum: element.enum,
       };
     },
   };

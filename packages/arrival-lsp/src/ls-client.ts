@@ -80,6 +80,8 @@ export const LS_METHODS = [
   "getSemanticClassifications",
   "getTypeValidCandidates",
   "getSlotIsArray",
+  "getSlotAcceptsBareWord",
+  "getSlotElementType",
 ] as const;
 
 /** Connect to a served port. Resolves once the server acknowledges the init —
@@ -131,6 +133,8 @@ export function connectSchemeLs(
       getSemanticClassifications: rpc("getSemanticClassifications"),
       getTypeValidCandidates: rpc("getTypeValidCandidates"),
       getSlotIsArray: rpc("getSlotIsArray"),
+      getSlotAcceptsBareWord: rpc("getSlotAcceptsBareWord"),
+      getSlotElementType: rpc("getSlotElementType"),
       setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
       setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
     };
