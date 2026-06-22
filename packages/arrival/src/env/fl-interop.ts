@@ -32,7 +32,7 @@ import { EnvCapability } from "./capability.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
-import { is_false } from "../eval/guards.js";
+import { is_false, is_nil } from "../eval/guards.js";
 import { Pair } from "../values/Pair.js";
 import { SchemeVector } from "../values/SchemeVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/AValue.js";
@@ -140,7 +140,11 @@ async function asyncFLMap(fn: (v: unknown) => unknown, structure: FantasyLand): 
   return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
 }
 
-async function asyncFLFilter(pred: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
+async function asyncFLFilter(arg: ((v: unknown) => unknown) | RegExp, structure: FantasyLand): Promise<unknown> {
+  // Adapt a regex arg the same way the eager builtin's `matcher` does (regex →
+  // `String(x).match(arg)`, a fn passes through). `String(x)` sees the same raw
+  // boxed element `flCollectValues` collects as `listToArray` fed the builtin.
+  const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
   const values = flCollectValues(structure);
   const cache = new Map<unknown, unknown>();
   await Promise.all(
@@ -150,7 +154,10 @@ async function asyncFLFilter(pred: (v: unknown) => unknown, structure: FantasyLa
       }
     }),
   );
-  return structure["fantasy-land/filter"]((v: unknown) => !is_false(cache.get(v)));
+  // Canonical keep-rule — IDENTICAL to the eager scheme `filter` builtin: Scheme-truthy
+  // (`!is_false`) AND nil dropped (`!is_nil`, arrival's nil-as-false rule for a #f/void/nil
+  // predicate result). FL `filterPair` is JS-truthy on the predicate, so it gets a Boolean.
+  return structure["fantasy-land/filter"]((v: unknown) => !is_false(cache.get(v)) && !is_nil(cache.get(v)));
 }
 
 async function asyncFLReduce(
@@ -240,10 +247,12 @@ export const FL_INTEROP_OPS = {
         : new SchemeJSArray(list.source.slice(1))
       : builtinCdr!(list);
   },
-  // FL-dispatch: external Fantasy Land entities → async-aware FL helpers, LIPS types → Scheme
-  // LIPS Pairs implement FL but must use scheme filter/map (FL impl inverts results)
+  // FL-dispatch: any FL entity — INCLUDING a LIPS Pair (filterPair preserves spine
+  // order; the coercion-soundness suite pins per-element-box order) — computes by its
+  // own fantasy-land/filter, so this no longer reaches the env-resolved scheme builtin.
+  // (map/reduce below still route Pairs to the builtin — only filter is flipped here.)
   // LIPS lambdas are async; FL methods are sync. asyncFL* bridges this gap.
-  filter: function filter(this: unknown, arg: (v: unknown) => unknown, list: unknown) {
+  filter: function filter(this: unknown, arg: ((v: unknown) => unknown) | RegExp, list: unknown) {
     captureBuiltins();
     // Nil-tolerant: a `(first? …)`/`(if …)` that yielded #f or void flowing into a
     // filter resolves to the empty list, not a crash — so a multi-leaf proof can still
@@ -251,18 +260,28 @@ export const FL_INTEROP_OPS = {
     // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
     // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
     if (list == null || is_false(list)) return nil;
+    // Empty/nil list → nil, like the eager builtin. asyncFLFilter on a Nil (which
+    // lacks fantasy-land/filter) would misbehave, so guard it before the FL route.
+    if (is_nil(list)) return nil;
     // LazySeq fast-path — BEFORE the FL/asyncFL collect: extend the plan, run
     // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
-    // the interop boundary, so the carrier stays a generic async-aware pipe.
-    if (is_lazy_seq(list)) return list.filter(async (x: unknown) => !is_false(await arg(x)));
+    // the interop boundary, so the carrier stays a generic async-aware pipe. A regex
+    // arg never reaches a LazySeq in practice; cast to the fn form for the await.
+    if (is_lazy_seq(list)) return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
+    // FL-dispatch — NOW INCLUDING LIPS Pairs. A Pair implements fantasy-land/filter
+    // (filterPair walks the spine, preserving element boxes), so it computes by FL
+    // here instead of reaching the env-resolved scheme builtin. asyncFLFilter applies
+    // the canonical keep-rule and adapts a regex arg, so this is byte-identical to the
+    // eager builtin's VALUE semantics (the heap-meter charge listToArray did is the one
+    // resource-accounting difference; no value-level behavior changes).
     if (
       list &&
       typeof list === "object" &&
-      !(list instanceof Pair) &&
       (list as Partial<FantasyLand>)["fantasy-land/filter"]
     ) {
       return asyncFLFilter(arg, list as FantasyLand);
     }
+    // Final fallback — any input that implements neither LazySeq nor fantasy-land/filter.
     return builtinFilter!.call(this, arg, list);
   },
   map: function map(this: unknown, fn: (v: unknown) => unknown, ...lists: unknown[]) {
