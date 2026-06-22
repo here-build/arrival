@@ -273,7 +273,14 @@ export function scanAllRequirePaths(scheme: string): string[] {
   const visit = (node: Node): void => {
     if (!("list" in node)) return;
     const [head, arg] = node.list;
-    if (head !== undefined && "atom" in head && head.atom === "require" && arg !== undefined && "atom" in arg && arg.str === true) {
+    if (
+      head !== undefined &&
+      "atom" in head &&
+      head.atom === "require" &&
+      arg !== undefined &&
+      "atom" in arg &&
+      arg.str === true
+    ) {
       seen.add(arg.atom);
     }
     for (const child of node.list) visit(child);
@@ -443,6 +450,38 @@ export interface SchemeLanguageService {
    * `elementIsStringy`/`elementEnum`); a `null`/`null` verdict leaves that gate a no-op (superset-safe).
    */
   getSlotElementType(scheme: string, schemeOffset: number): { isStringy: boolean | null; enum: string[] | null };
+  /**
+   * Does the HEAD symbol `head` (resolved in `scheme`'s scope) PROVABLY return a LIST/array? `true` ⇒
+   * `ReturnType<typeof head>` extends `readonly unknown[]` (a `list`/`vector`/`append`-style materializer —
+   * a value of its result is a list, never a scalar), `false` ⇒ it provably does NOT (`car`/`first`/a
+   * field accessor return an element `T`; `vector-ref` returns the element), `null` ⇒ unresolved (an
+   * un-nameable / unbound head, or a non-callable). The ReturnType TWIN of {@link getSlotIsArray}: same
+   * `[…] extends [readonly unknown[]]` test, but over the head's RETURN instead of a slot's expected type.
+   *
+   * Feeds the sampler's TYPE-REACHABILITY gate (the async typed scanner stamps the provably-array heads as
+   * `arrayReturningHeads`). The polarity is the SOUND DUAL of a `ReturnType ⊆ T` query: an uninstantiated
+   * generic head (`car<T>` with no argument) infers `R = unknown`, which is NOT `⊆ T` for any concrete `T`,
+   * so a `⊆ T` test would DROP `car` and CUT the `(car …)` pipe. Instead we mask only what is PROVABLY array
+   * (a dead end at a scalar slot) and ADMIT everything else — `car`/`first`/`:field` (return an element, not
+   * an array) and any unresolved head pass, deferring the real value-typing to the argument-slot recursion.
+   * `null`/`false` therefore both leave the head ADMITTED (the gate masks only on `true`). Slot-independent:
+   * the head's return type is the same wherever it is called, so no slot argument is taken.
+   */
+  getHeadReturnsArray(scheme: string, head: string): boolean | null;
+  /**
+   * Is the argument slot at `schemeOffset` STRING-TYPED — its expected type `__E` a subtype of `string`
+   * (`string`, `any`-narrowing aside, OR a closed string-literal union like `"fastest" | "scenic"`), and
+   * NOT an array? `true` ⇒ a non-string scalar literal (`#t`/`#f`/`#\c`, a NUMBER) is type-wrong here and the
+   * structure gate masks it (only a quoted string, a bound enum member, or a `T`-producing call belongs);
+   * `false` ⇒ the slot is a number / boolean / object / array (a `#`-literal or number may be RIGHT — do not
+   * mask it); `null` ⇒ unresolved. The DISCRIMINATOR {@link getSlotAcceptsBareWord} cannot supply: an ENUM
+   * resolves `acceptsBareWord:false` (its members are bound symbols, not free-form `string`) AND a number slot
+   * ALSO resolves `false`, so `slotIsStringy===false` alone conflates string-enum with number/boolean — this
+   * probe separates them via `[__E] extends [string]` (true for `string` AND a string-literal union, false for
+   * number/boolean). Feeds the sampler's structure gate (stamped as `slotIsStringTyped`); `null`/`false` leave
+   * the non-string-literal masking inert (superset-safe — a `#`-literal / number stays admitted).
+   */
+  getSlotIsStringTyped(scheme: string, schemeOffset: number): boolean | null;
 }
 
 /**
@@ -970,6 +1009,23 @@ export function createSchemeLanguageServiceCore(
       );
       return probeElementType(sentinelScheme);
     },
+
+    getHeadReturnsArray(scheme, head): boolean | null {
+      // No slot to locate — the verdict is a property of the HEAD's signature alone (its ReturnType is the
+      // same wherever it is applied). Resolve the head against `scheme`'s scope (locals + require closure)
+      // exactly as the slot probes do, then ride one `__isArrRet` alias.
+      return probeHeadReturnsArray(scheme, head);
+    },
+
+    getSlotIsStringTyped(scheme, schemeOffset): boolean | null {
+      // Same slot-location as getSlotIsArray: sentinel at the cursor, balance, find the role.
+      const sentinelScheme = balancePrefix(
+        `${scheme.slice(0, schemeOffset)} ${SENTINEL} ${scheme.slice(schemeOffset)}`,
+      );
+      const role = findCursorRole(sentinelScheme);
+      if (role.kind !== "argument") return null; // not a typed-call argument slot → no string-typed verdict
+      return probeSlotIsStringTyped(scheme, role.calleeText, role.argIndex);
+    },
   };
 
   /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back
@@ -1024,6 +1080,64 @@ export function createSchemeLanguageServiceCore(
     return text === "true" ? true : text === "false" ? false : null;
   }
 
+  /** Resolve the HEAD `head`'s RETURN type and read whether it extends `readonly unknown[]` (provably a
+   *  list/array materializer). The ReturnType TWIN of {@link probeSlotIsArray}: `ReturnType<typeof <ref>>`
+   *  instead of `Parameters<…>[i]`, same `[…] extends [readonly unknown[]]` test, ONE program load, one
+   *  alias. `typeofRef` resolves the head exactly as the candidate probe does (a program local via
+   *  `typeof <name>`, a builtin/operator via `typeof __arr["…"]`). `true` ⇒ provably array (mask it at a
+   *  scalar slot); `false` ⇒ provably not (an element-returning `car`/`first`/accessor — ADMIT); `null` ⇒
+   *  unresolved (un-nameable head, unbound name → error-any return → ADMIT). The `[…]`-tuple wrapping defeats
+   *  union distribution. A NON-callable head makes `ReturnType<…>` an error-any ⇒ `null` ⇒ admitted. */
+  function probeHeadReturnsArray(scheme: string, head: string): boolean | null {
+    const builtinNames = new Set(builtinSignatures().keys());
+    const ref = typeofRef(head, builtinNames);
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
+    // The `: false` non-function arm is LOAD-BEARING: writing `? R : never` and testing `[R] extends […]`
+    // separately collapses a NON-CALLABLE head (a value symbol, an unbound name) to `__R = never`, and
+    // `[never] extends [readonly unknown[]]` is `true` — which would MASK a non-array, non-callable value at a
+    // scalar slot (a value symbol like an enum member). Folding the array test INSIDE the function-arm makes a
+    // non-function resolve `false` (ADMIT), so only a head that IS a function AND returns array yields `true`.
+    const probeProgram = [
+      emitted,
+      `type __isArrRet = [${ref}] extends [(...a: any[]) => infer R] ? ([R] extends [readonly unknown[]] ? true : false) : false;`,
+      `declare const __probe: [__isArrRet];`,
+    ].join("\n");
+    const elements = readProbeTuple(probeProgram, "__probe");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return null;
+    const el = elements[0];
+    if (el === undefined) return null;
+    const text = checker.typeToString(el); // a single literal: "true" / "false" / other (error-any → null)
+    return text === "true" ? true : text === "false" ? false : null;
+  }
+
+  /** Resolve the call slot's expected type `__E` and read whether it is STRING-TYPED — a subtype of `string`
+   *  (`string` or a closed string-literal union), NOT an array. The conditional ladder mirrors
+   *  {@link probeSlotAcceptsBareWord} but asks `[__E] extends [string]` (a SUBTYPE test) rather than
+   *  `[string] extends [__E]` (an assignability test): `"a"|"b"` IS `extends string` (→ true) but `string` is
+   *  NOT assignable-TO `"a"|"b"` (so getSlotAcceptsBareWord returns false for an enum). This is exactly the
+   *  separation the gate needs: a string-literal enum and a free-form string both resolve `true` here (mask
+   *  non-string literals), while number/boolean/object resolve `false`. ONE program load, one alias;
+   *  `[__E]`-tuple wrapping defeats union distribution (a `string | undefined` optional slot stays string). */
+  function probeSlotIsStringTyped(scheme: string, calleeText: string, argIndex: number): boolean | null {
+    loadSource(balancePrefix(scheme));
+    const emitted = programText;
+    const probeProgram = [
+      emitted,
+      `type __E = Parameters<typeof ${calleeText}>[${argIndex}];`,
+      `type __strTyped = [__E] extends [readonly unknown[]] ? false : ([__E] extends [string] ? true : false);`,
+      `declare const __probe: [__strTyped];`,
+    ].join("\n");
+    const elements = readProbeTuple(probeProgram, "__probe");
+    const checker = checkerNow();
+    if (elements === null || checker === null) return null;
+    const el = elements[0];
+    if (el === undefined) return null;
+    const text = checker.typeToString(el); // a single literal: "true" / "false" / other (error-any)
+    return text === "true" ? true : text === "false" ? false : null;
+  }
+
   /**
    * Resolve the ELEMENT type at the sentinel'd array-element cursor and derive `{ isStringy, enum }`.
    * Unlike the `__E = Parameters<…>` slot probes (a type-alias readback), this is a CHECKER-INSTANCE query
@@ -1067,12 +1181,13 @@ export function createSchemeLanguageServiceCore(
         producer = p;
         break;
       }
-      if (ts.isCallExpression(p) && isListMaterializerCallee(p.expression.getText(sf))) {
-        // Only when the sentinel is one of the call's ARGUMENTS (an element), not its callee.
-        if (p.arguments.some((a) => a.getStart(sf) <= s && e <= a.end)) {
-          producer = p;
-          break;
-        }
+      if (
+        ts.isCallExpression(p) &&
+        isListMaterializerCallee(p.expression.getText(sf)) && // Only when the sentinel is one of the call's ARGUMENTS (an element), not its callee.
+        p.arguments.some((a) => a.getStart(sf) <= s && e <= a.end)
+      ) {
+        producer = p;
+        break;
       }
       // A non-materializer CallExpression that encloses the sentinel as an argument means the cursor is an
       // argument of a REGULAR call (its own param type governs) — stop: this is not an array element.

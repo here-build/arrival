@@ -258,6 +258,21 @@ export interface TsgoTypeLens {
     scheme: string,
     schemeOffset: number,
   ): Promise<{ isStringy: boolean | null; enum: string[] | null }>;
+  /** Does HEAD `head` (resolved in `scheme`'s scope) PROVABLY return a list/array? `true` ⇒
+   *  `ReturnType<typeof head>` extends `readonly unknown[]` (a `list`/`vector`/`append` materializer),
+   *  `false` ⇒ it provably does not (an element-returning `car`/`first`/accessor, OR a non-callable),
+   *  `null` ⇒ unresolved. The ReturnType twin of {@link getSlotIsArray}; feeds the sampler's
+   *  type-reachability gate (`arrayReturningHeads`). The gate masks ONLY on `true`, so `false`/`null` both
+   *  ADMIT — the SOUND dual of a `ReturnType ⊆ T` query (an uninstantiated `car<T>` infers `unknown ⊄ T`,
+   *  which a `⊆ T` test would over-drop, cutting the `(car …)` pipe). Slot-independent (no slot argument). */
+  getHeadReturnsArray(scheme: string, head: string): Promise<boolean | null>;
+  /** Is the argument slot at `schemeOffset` STRING-TYPED — `__E` a subtype of `string` (`string` or a closed
+   *  string-literal union) and NOT an array? `true` ⇒ a non-string scalar literal (`#t`/`#f`, a number) is
+   *  type-wrong (the structure gate masks it), `false` ⇒ number/boolean/object/array, `null` ⇒ unresolved.
+   *  The `[__E] extends [string]` SUBTYPE twin of {@link getSlotAcceptsBareWord}'s `[string] extends [__E]`
+   *  assignability test — the separation an enum needs (a string-literal union is `extends string` → true,
+   *  but `string` is not assignable to it → acceptsBareWord false). Feeds the gate as `slotIsStringTyped`. */
+  getSlotIsStringTyped(scheme: string, schemeOffset: number): Promise<boolean | null>;
   /** The builtin roster (ArrShape member names) — also the emitter's member
    *  set; exposed for tests/diagnostics. */
   builtinNames(): readonly string[];
@@ -450,10 +465,7 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
         return stringyVerdictOf(types[0]);
       });
     },
-    getSlotElementType(
-      _scheme,
-      _schemeOffset,
-    ): Promise<{ isStringy: boolean | null; enum: string[] | null }> {
+    getSlotElementType(_scheme, _schemeOffset): Promise<{ isStringy: boolean | null; enum: string[] | null }> {
       // CUT A (array-element type recovery) is NODE-ONLY for now: it reads a node's CONTEXTUAL type
       // (`getContextualType` over the live emitted `'(…)` array-literal / `(list …)` materializer call),
       // which the tsgo wasm RPC surface (alias-name reads via `getTypesAtPositions`) does not expose. The
@@ -461,6 +473,48 @@ export async function createTsgoTypeLens(options: TsgoTypeLensOptions): Promise<
       // lens, where both surfaces resolve). Return inert so the element gate is a no-op here (superset-safe,
       // browser byte-identical); recovering it over tsgo needs a contextual-type RPC (a later step).
       return Promise.resolve({ isStringy: null, enum: null });
+    },
+    getHeadReturnsArray(scheme, head): Promise<boolean | null> {
+      return serialize(async () => {
+        const ref = typeofRef(head, builtins);
+        // ONE alias folding "head IS a function AND its return extends readonly unknown[]" into a numeric
+        // literal. The array test sits INSIDE the function-arm (`: 2` otherwise): a NON-callable head — a
+        // value symbol, an unbound name — must resolve `2` (NOT array, admit), not collapse through a
+        // `never` return that `[never] extends [readonly unknown[]]` would mark `1`. Same demand-driven
+        // single read as getSlotIsArray. `[…]`-tuple wrapping defeats union distribution.
+        const emitted = emitTypes(balancePrefix(scheme), { hostMembers: builtins }).ts;
+        let text = `${emitted}\n`;
+        const position = text.length + "type ".length; // the alias NAME — where its resolved type is read
+        text += `type __isArrRet = [${ref}] extends [(...a: any[]) => infer R] ? ([R] extends [readonly unknown[]] ? 1 : 2) : 2;\n`;
+        const w = await loadProgram(text);
+        const types = await client.request<({ flags: number; value?: unknown } | null)[]>("getTypesAtPositions", {
+          ...w,
+          file: programPath,
+          positions: [position],
+        });
+        return arrayVerdictOf(types[0]);
+      });
+    },
+    getSlotIsStringTyped(scheme, schemeOffset): Promise<boolean | null> {
+      return serialize(async () => {
+        const slot = scanInnermostCall(scheme.slice(0, schemeOffset));
+        if (slot?.callee == null) return null; // not a call argument ⇒ no string-typed verdict
+        const calleeRef = typeofRef(slot.callee, builtins);
+        // The slot's __E, then ONE alias folding the SUBTYPE ladder into a numeric literal: NOT-array AND
+        // `__E extends string` ⇒ 1 (string-typed: `string` or a string-literal union), else 2. `[__E]`-tuple
+        // wrapping defeats union distribution (a `string | undefined` optional slot stays string-typed).
+        const emitted = emitTypes(balancePrefix(scheme), { hostMembers: builtins }).ts;
+        let text = `${emitted}\n` + `type __E = Parameters<${calleeRef}>[${slot.argIndex}];\n`;
+        const position = text.length + "type ".length; // the alias NAME — where its resolved type is read
+        text += `type __strTyped = [__E] extends [readonly unknown[]] ? 2 : ([__E] extends [string] ? 1 : 2);\n`;
+        const w = await loadProgram(text);
+        const types = await client.request<({ flags: number; value?: unknown } | null)[]>("getTypesAtPositions", {
+          ...w,
+          file: programPath,
+          positions: [position],
+        });
+        return arrayVerdictOf(types[0]); // 1 ⇒ true (string-typed), 2 ⇒ false, else null — same tri-state map
+      });
     },
     builtinNames(): readonly string[] {
       return [...builtins];
