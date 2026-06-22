@@ -696,6 +696,16 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     return reducePair(f, initial, this);
   }
 
+  // Arrival's canonical reduce — the scheme/SRFI fold convention `fn(element, acc)`
+  // (accumulator last), head-to-tail. PASSES THE CALL TO FL: delegates to the FL
+  // Foldable `fantasy-land/reduce` (acc-first) with the argument order adapted, so the
+  // arrival convention lives on the term in one place and the borrowed FL algebra stays
+  // pure FL-spec underneath. The scheme `reduce` builtin + fl-interop dispatch to THIS.
+  ["arrival/tagless-final/reduce"]<Acc>(fn: (element: unknown, acc: Acc) => Acc, initial: Acc): Acc {
+    return (this as { ["fantasy-land/reduce"]: (f: (acc: Acc, x: unknown) => Acc, init: Acc) => Acc })
+      ["fantasy-land/reduce"]((acc, element) => fn(element, acc), initial);
+  }
+
   // Traversable — effectful traversal; `of` lifts into the applicative.
   ["fantasy-land/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
     return traversePair(of, f, this);

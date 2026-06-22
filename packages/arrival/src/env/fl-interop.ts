@@ -47,6 +47,15 @@ interface FantasyLand {
   "fantasy-land/filter"(p: (val: unknown) => unknown): unknown;
 }
 
+// Arrival's canonical reduce protocol method — present on every arrival list term
+// (Pair, via Pair.ts). It carries the scheme/SRFI fold convention `fn(element, acc)`
+// (accumulator LAST), the opposite arg order of the FL Foldable it delegates to. The
+// overlay routes any value bearing this method (and any FL Foldable) through the
+// element-first async fold below, so a Pair reduces in scheme convention.
+interface ArrivalFoldable {
+  "arrival/tagless-final/reduce"<A>(fn: (element: unknown, acc: A) => A, init: A): A;
+}
+
 type Callable = (...args: unknown[]) => unknown;
 
 // ── Lazy builtin capture ────────────────────────────────────────────────────
@@ -160,15 +169,24 @@ async function asyncFLFilter(arg: ((v: unknown) => unknown) | RegExp, structure:
   return structure["fantasy-land/filter"]((v: unknown) => !is_false(cache.get(v)) && !is_nil(cache.get(v)));
 }
 
-async function asyncFLReduce(
+// Arrival-convention async fold — the SCHEME/SRFI fold `fn(element, acc)` (element
+// FIRST), left fold, head-to-tail.
+// This is the async-aware twin of the term's `arrival/tagless-final/reduce` method:
+// LIPS lambdas return Promises while the FL Foldable is sync, so we collect the
+// elements (same traversal order fantasy-land/reduce visits them) then thread the
+// accumulator sequentially with `await`. Reproduces the eager scheme `reduce` builtin
+// EXACTLY — `(reduce - 100 '(1 2 3 4 5))` = 1-(...)=-97 — so a Pair list folds in
+// scheme convention through the overlay, not the FL acc-first convention.
+async function asyncArrivalReduce(
   fn: (acc: unknown, val: unknown) => unknown,
   init: unknown,
   structure: FantasyLand,
 ): Promise<unknown> {
   const values = flCollectValues(structure);
   let acc = init;
-  for (const val of values) {
-    acc = await fn(acc, val);
+  for (const element of values) {
+    // element FIRST (scheme convention), acc threaded.
+    acc = await fn(element, acc);
   }
   return acc;
 }
@@ -308,14 +326,27 @@ export const FL_INTEROP_OPS = {
   ) {
     captureBuiltins();
     if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
+    // FL-Foldable dispatch — NOW INCLUDING LIPS Pairs — folds in ARRIVAL/SCHEME
+    // convention (`fn(element, acc)`, element first), the opposite of the FL Foldable's
+    // own acc-first order. A Pair carries `arrival/tagless-final/reduce` (Pair.ts) which
+    // is exactly `fantasy-land/reduce` with the args swapped; rather than re-fold by hand
+    // we run that same element-first fold async-aware here (asyncArrivalReduce), so the
+    // overlay reduce over a Pair is byte-identical to the eager scheme `reduce` builtin —
+    // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85. Routing on
+    // `fantasy-land/reduce` keeps the branch total over every arrival Foldable (Pair +
+    // SchemeVector); the `arrival/tagless-final/reduce` carrier names the convention on
+    // the term. A SchemeJSArray has neither method, so it still falls through to
+    // builtinReduce, whose pair|nil typecheck throws (the coercion-soundness DR4 pin).
     if (
       collection &&
       typeof collection === "object" &&
-      !(collection instanceof Pair) &&
-      (collection as Partial<FantasyLand>)["fantasy-land/reduce"]
+      ((collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"] ||
+        (collection as Partial<FantasyLand>)["fantasy-land/reduce"])
     ) {
-      return asyncFLReduce(fn, init, collection as FantasyLand);
+      return asyncArrivalReduce(fn, init, collection as FantasyLand);
     }
+    // Fallback — neither LazySeq nor an FL/arrival Foldable (a SchemeJSArray, a raw
+    // input). builtinReduce typechecks pair|nil and folds (or throws for a non-list).
     return builtinReduce!.call(this, fn, init, collection);
   },
 
