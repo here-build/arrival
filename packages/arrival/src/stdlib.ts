@@ -361,6 +361,85 @@ function to_array(name: string, deep = false): SchemeFunction {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared list/array core impls — module-scope so sibling builtins (append,
+// reverse, map, join, …) CALL them directly instead of reaching through
+// `global_env.get("list->array")` for a sibling they can't name lexically. The
+// global-env bindings below are these same functions; calling them directly is
+// behavior-identical (already early-bound today) and avoids a per-call env lookup.
+// ---------------------------------------------------------------------------
+const listToArray = to_array("list->array");
+
+function arrayToList(array: SchemeValue): SchemeValue {
+  typecheck("array->list", array, "array");
+  return Pair.fromArray(array);
+}
+
+function isProperList(obj: SchemeValue): SchemeValue {
+  // A circular list is NOT a proper list (R7RS). Detect runtime cycles
+  // (have_cycles below only catches reader #0= cycles).
+  if (is_pair(obj) && isCircularList(obj)) {
+    return false;
+  }
+  let node = obj;
+  while (true) {
+    if (is_nil(node)) {
+      return true;
+    }
+    if (!is_pair(node)) {
+      return false;
+    }
+    if (node.have_cycles("cdr")) {
+      return false;
+    }
+    node = node.cdr;
+  }
+}
+
+function mapImpl(this: SchemeValue, fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
+  typecheck("map", fn, "function");
+  const is_list = isProperList;
+  for (const [i, arg] of lists.entries()) {
+    typecheck("map", arg, ["pair", "nil"], i + 1);
+    // detect cycles
+    invariant(!is_pair(arg) || is_list.call(this, arg), `map: argument ${i + 1} is not a list`);
+  }
+  if (lists.length === 0 || lists.some(is_nil)) {
+    return nil;
+  }
+
+  // Convert lists to arrays for parallel processing
+  const arrays = lists.map((l) => listToArray(l));
+  const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
+
+  // Call function for all elements in parallel
+  const { env, dynamic_env, use_dynamic } = this;
+  const results: SchemeValue[] = [];
+  for (let i = 0; i < length; i++) {
+    const args = arrays.map((arr: SchemeValue[]) => arr[i]);
+    results.push(call_function(fn, args, { env, dynamic_env, use_dynamic }));
+  }
+
+  // Wait for all and convert back to list
+  const hasPromises = results.some(is_promise);
+
+  // Tier-2 speculation: map's count is known exactly up front (one output
+  // per input → bounds [1,1]), so its `HalfBaked` interval is already a
+  // point — `length` is decidable immediately while values still resolve.
+  // This carries speculation THROUGH a map sitting between filter and the
+  // length/comparison (the values stay lazy; only the count is surfaced).
+  if (hasPromises && isSpeculating()) {
+    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
+    return HalfBaked.collection(slots, () => [1, 1]);
+  }
+  if (hasPromises) {
+    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
+      Pair.fromArray(resolved as SchemeValue[]),
+    );
+  }
+  return Pair.fromArray(results);
+}
+
 // Old Pair prototype methods are now in the Pair class above
 
 const repr = new Map();
@@ -1121,7 +1200,7 @@ export const global_env = new Environment(
     "syntax-parameterize": doc(
       null,
       new Macro("syntax-parameterize", function (this: Environment, code: SchemeValue, eval_args: SchemeValue) {
-        const args = (global_env.get("list->array") as SchemeFunction)(code.car) as Pair[];
+        const args = listToArray(code.car) as Pair[];
         const env = this.inherit("syntax-parameterize");
         // Each binding's transformer evaluates in `this` (NOT the accumulating
         // env), so the bindings are independent and pure (syntax-rules build a
@@ -1364,7 +1443,7 @@ export const global_env = new Environment(
       // new thing. (The destructive `append!` builtin this used to delegate to is
       // OMITTED by the purity invariant — doored in core.ts. Its splice
       // logic is inlined here, operating on clones, so it stays pure.)
-      const is_list = global_env.get("list?") as SchemeFunction;
+      const is_list = isProperList;
       const cloned = items.map((item) => (is_pair(item) ? item.clone() : item));
       return cloned.reduce((acc, item, idx) => {
         typecheck("append", acc, ["nil", "pair"]);
@@ -1389,8 +1468,8 @@ export const global_env = new Environment(
         return nil;
       }
       if (is_pair(arg)) {
-        const arr = (global_env.get("list->array") as SchemeFunction).call(this, arg).toReversed();
-        return (global_env.get("array->list") as SchemeFunction)(arr);
+        const arr = listToArray.call(this, arg).toReversed();
+        return arrayToList(arr);
       } else if (Array.isArray(arg)) {
         return arg.toReversed();
       } else {
@@ -1442,14 +1521,14 @@ export const global_env = new Environment(
       // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
       // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
       // strips the provenance the trace wires on. See provenance-collapse.ts.
-      const joined = (global_env.get("list->array") as SchemeFunction).call(this, list).join(separator);
+      const joined = listToArray.call(this, list).join(separator);
       return taintString(String(joined), collapseProvenance(separator, list));
     }),
     // ------------------------------------------------------------------
     split: doc("split", function split(separator, string) {
       typecheck("split", separator, ["regex", "string"]);
       typecheck("split", string, "string");
-      return (global_env.get("array->list") as SchemeFunction)(string.split(separator));
+      return arrayToList(string.split(separator));
     }),
     // ------------------------------------------------------------------
     replace: doc("replace", function replace(pattern, replacement, string) {
@@ -1473,7 +1552,7 @@ export const global_env = new Environment(
       typecheck("match", pattern, ["regex", "string"]);
       typecheck("match", string, "string");
       const m = string.match(pattern);
-      return m ? (global_env.get("array->list") as SchemeFunction)(m) : false;
+      return m ? arrayToList(m) : false;
     }),
     // ------------------------------------------------------------------
     search: doc("search", function search(pattern, string) {
@@ -1568,20 +1647,17 @@ export const global_env = new Environment(
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
     // ------------------------------------------------------------------
-    "array->list": doc("array->list", function (array) {
-      typecheck("array->list", array, "array");
-      return Pair.fromArray(array);
-    }),
+    "array->list": doc("array->list", arrayToList),
     // ------------------------------------------------------------------
     "tree->array": doc("tree->array", to_array("tree->array", true)),
     // ------------------------------------------------------------------
-    "list->array": doc("list->array", to_array("list->array")),
+    "list->array": doc("list->array", listToArray),
     // ------------------------------------------------------------------
     apply: doc("apply", function apply(this: Environment, fn: SchemeFunction, ...args: SchemeValue[]) {
       typecheck("apply", fn, "function", 1);
       const last = args.pop();
       typecheck("apply", last, ["pair", "nil"], args.length + 2);
-      args = args.concat((global_env.get("list->array") as SchemeFunction).call(this, last));
+      args = args.concat(listToArray.call(this, last));
       return fn.apply(this, prepare_fn_args(fn, args));
     }),
     // ------------------------------------------------------------------
@@ -1666,76 +1742,15 @@ export const global_env = new Environment(
       // we need to use call(this because babel transpile this code into:
       // var ret = map.apply(void 0, [fn].concat(lists));
       // it don't work with weakBind
-      const ret = (global_env.get("map") as SchemeFunction).call(this, fn, ...lists);
+      const ret = mapImpl.call(this, fn, ...lists);
       if (is_promise(ret)) {
         return ret.then(() => {});
       }
     }),
     // ------------------------------------------------------------------
-    map: doc("map", function map(this: SchemeValue, fn: SchemeFunction, ...lists: SchemeValue[]) {
-      typecheck("map", fn, "function");
-      const is_list = global_env.get("list?") as SchemeFunction;
-      for (const [i, arg] of lists.entries()) {
-        typecheck("map", arg, ["pair", "nil"], i + 1);
-        // detect cycles
-        invariant(!is_pair(arg) || is_list.call(this, arg), `map: argument ${i + 1} is not a list`);
-      }
-      if (lists.length === 0 || lists.some(is_nil)) {
-        return nil;
-      }
-
-      // Convert lists to arrays for parallel processing
-      const arrays = lists.map((l) => (global_env.get("list->array") as SchemeFunction)(l));
-      const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
-
-      // Call function for all elements in parallel
-      const { env, dynamic_env, use_dynamic } = this;
-      const results: SchemeValue[] = [];
-      for (let i = 0; i < length; i++) {
-        const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-        results.push(call_function(fn, args, { env, dynamic_env, use_dynamic }));
-      }
-
-      // Wait for all and convert back to list
-      const hasPromises = results.some(is_promise);
-
-      // Tier-2 speculation: map's count is known exactly up front (one output
-      // per input → bounds [1,1]), so its `HalfBaked` interval is already a
-      // point — `length` is decidable immediately while values still resolve.
-      // This carries speculation THROUGH a map sitting between filter and the
-      // length/comparison (the values stay lazy; only the count is surfaced).
-      if (hasPromises && isSpeculating()) {
-        const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-        return HalfBaked.collection(slots, () => [1, 1]);
-      }
-      if (hasPromises) {
-        return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-          Pair.fromArray(resolved as SchemeValue[]),
-        );
-      }
-      return Pair.fromArray(results);
-    }),
+    map: doc("map", mapImpl),
     // ------------------------------------------------------------------
-    "list?": doc("list?", function (obj) {
-      // A circular list is NOT a proper list (R7RS). Detect runtime cycles
-      // (have_cycles below only catches reader #0= cycles).
-      if (is_pair(obj) && isCircularList(obj)) {
-        return false;
-      }
-      let node = obj;
-      while (true) {
-        if (is_nil(node)) {
-          return true;
-        }
-        if (!is_pair(node)) {
-          return false;
-        }
-        if (node.have_cycles("cdr")) {
-          return false;
-        }
-        node = node.cdr;
-      }
-    }),
+    "list?": doc("list?", isProperList),
     // ------------------------------------------------------------------
     fold: doc(
       "fold",
@@ -1792,7 +1807,7 @@ export const global_env = new Environment(
       typecheck("filter", list, ["pair", "nil"]);
       // `.call(this, …)` forwards the run env so `to_array` finds this run's heap meter (the per-run
       // allocation bound). Bare `(…)(list)` would drop `this` → the meter goes uncharged.
-      const array = (global_env.get("list->array") as SchemeFunction).call(this, list);
+      const array = listToArray.call(this, list);
       if (array.length === 0) {
         return nil;
       }
