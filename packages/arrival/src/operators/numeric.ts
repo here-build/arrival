@@ -8,7 +8,7 @@
 import type { Codec } from "../membrane.js";
 import { AnyNum, Bool, Environment, Int, Num, Operator, SafeInt } from "../membrane.js";
 import type { SchemeNumeric } from "../values/numbers.js";
-import { bigintISqrt, SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { bigintISqrt, schemeCompare, SchemeExact, SchemeInexact, toReal } from "../values/numbers.js";
 import invariant from "tiny-invariant";
 
 // ============================================================================
@@ -436,40 +436,6 @@ export const numEq = new Operator("=", {
     return rest.every((x) => schemeNumEq(first, x));
   },
 });
-
-/**
- * Get real value from SchemeNumeric. Throws if complex with non-zero imaginary.
- */
-function toReal(n: SchemeNumeric, opName: string): number {
-  if (n instanceof SchemeExact) {
-    return Number(n.num) / Number(n.denom);
-  }
-  TypeError.invariant(n.imag === 0, `${opName}: not a real number`);
-  return n.real;
-}
-
-/**
- * Three-way comparison of two reals: -1 / 0 / 1, or NaN if incomparable
- * (either operand is a NaN inexact). The exact/exact case routes through
- * `SchemeExact.cmp` (bigint cross-multiplication) instead of coercing to a
- * JS double — that float coercion was the source of the R7RS bug where
- * `(< 999999999999999998 999999999999999999)` returned #f: both 18-digit
- * integers collapse to the same double (1e18), so `prev < curr` was false.
- * Only when at least one side is inexact do we fall back to `toReal`, where
- * the precision is already gone and float comparison is the correct semantics
- * (and NaN naturally propagates → every comparison against it is #f).
- */
-function schemeCompare(a: SchemeNumeric, b: SchemeNumeric, opName: string): number {
-  if (a instanceof SchemeExact && b instanceof SchemeExact) {
-    return a.cmp(b);
-  }
-  const ar = toReal(a, opName);
-  const br = toReal(b, opName);
-  if (ar < br) return -1;
-  if (ar > br) return 1;
-  if (ar === br) return 0;
-  return Number.NaN; // a NaN operand → incomparable; all chained tests fail
-}
 
 /** (< n1 n2 ...) - Returns #t if arguments are in strictly increasing order. */
 export const lt = new Operator("<", {

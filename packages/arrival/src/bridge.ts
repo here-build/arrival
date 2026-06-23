@@ -16,7 +16,7 @@ import type { EvalSchemeInto, SchemeEnv } from "./env/scheme-env.js";
 import { HalfBaked, type Interval, is_half_baked } from "./values/HalfBaked.js";
 import type { Environment } from "./Environment.js";
 import { schemeFalse, schemeTrue } from "./values/SchemeBool.js";
-import { coerceNumeric, getAllocationLimit, isOrd, isSchemeNumber, ORD_REL, setAllocationLimit } from "./values/op-helpers.js";
+import { coerceNumeric, type FLOrd, getAllocationLimit, isOrd, isSchemeNumber, ORD_REL, setAllocationLimit } from "./values/op-helpers.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
 // They are no longer spread into `wrappedOps`: `initBridge` ASSEMBLES them onto
@@ -286,14 +286,20 @@ function makeTypePredicate(name: string, predicate: (n: SchemeNumeric) => boolea
 // the FL-Ord fallback, so it belongs with the numeric bridge core.
 function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
   const rel = ORD_REL[sym];
+  // FL-Ord only intercepts NON-NUMERIC ordered entities (string/char/symbol/DateTime/…).
+  // A number is excluded even though it now carries a `fantasy-land/lte` (numbers' Ord is
+  // numeric): ORD_REL is a TOTAL-order shortcut (`<` ≡ `!lte(b,a)`) that is WRONG for the
+  // partial numeric order (NaN-incomparable ⇒ would yield #t for `(< +nan.0 1)`), and the
+  // numeric Operator additionally carries provenance + the speculative early-collapse the
+  // FL branch can't. So numbers fall through to `numeric(...)`, exactly as before numbers
+  // gained an Ord — the invariant this branch always relied on, now made explicit.
+  const isOrdEntity = (x: unknown): x is FLOrd => isOrd(x) && !isSchemeNumber(x);
   const fn = (...args: unknown[]): unknown => {
-    // FL-Ord only intercepts ENTITY operands; numeric/HalfBaked args take the wrapped
-    // numeric op untouched, so its speculative early-collapse path is preserved.
-    if (args.length >= 2 && args.some(isOrd)) {
+    if (args.length >= 2 && args.some(isOrdEntity)) {
       for (let i = 0; i < args.length - 1; i++) {
         const a = args[i];
         const b = args[i + 1];
-        if (!isOrd(a) || !isOrd(b)) return numeric(...args); // mixed → numeric path's clear error
+        if (!isOrdEntity(a) || !isOrdEntity(b)) return numeric(...args); // mixed → numeric path's clear error
         if (!rel(a, b)) return schemeFalse;
       }
       return schemeTrue;

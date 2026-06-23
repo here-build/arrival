@@ -178,6 +178,18 @@ export class SchemeExact extends AValue {
     return other instanceof SchemeExact && this.equals(other);
   }
 
+  // Ord (Fantasy Land, extends Setoid). NUMERIC value comparison via schemeCompare
+  // — `(<= 1 1.0)` is #t (cross-type via toReal), unlike the representation Setoid
+  // above where exact ≠ inexact. NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is #f,
+  // so every relation derived from this collapses to #f on a NaN operand, exactly
+  // like the numeric `<=` Operator. Non-number → false (Ord convention).
+  ["fantasy-land/lte"](other: unknown): boolean {
+    return (
+      (other instanceof SchemeExact || other instanceof SchemeInexact) &&
+      schemeCompare(this, other, "<=") <= 0
+    );
+  }
+
   // Same-type arithmetic
   add(other: SchemeExact): SchemeExact {
     return new SchemeExact(this.num * other.denom + other.num * this.denom, this.denom * other.denom);
@@ -458,6 +470,18 @@ export class SchemeInexact extends AValue {
     );
   }
 
+  // Ord (Fantasy Land, extends Setoid). NUMERIC value comparison via schemeCompare
+  // — same numeric/NaN semantics as SchemeExact's lte (cross-type, NaN ⇒ #f). The
+  // representation Setoid above uses Object.is (so eqv? NaN is reflexive); this Ord
+  // uses schemeCompare (so `(= +nan.0 +nan.0)` is #f) — two genuine comparisons.
+  // Non-number → false (Ord convention).
+  ["fantasy-land/lte"](other: unknown): boolean {
+    return (
+      (other instanceof SchemeExact || other instanceof SchemeInexact) &&
+      schemeCompare(this, other, "<=") <= 0
+    );
+  }
+
   // Same-type arithmetic
   add(other: SchemeInexact): SchemeInexact {
     return new SchemeInexact(this.real + other.real, this.imag + other.imag);
@@ -606,6 +630,47 @@ export class SchemeInexact extends AValue {
     // Use continued fraction approximation for better results
     return SchemeInexact.floatToRational(this.real);
   }
+}
+
+// ============================================================================
+// Numeric comparison — the value-layer cmp the operators + numbers' Ord share
+// ============================================================================
+
+/**
+ * Get real value from SchemeNumeric. Throws if complex with non-zero imaginary.
+ *
+ * Lives in the value layer (not operators/numeric.ts) so the number classes' own
+ * `fantasy-land/lte` Ord can compute by-value without the operators→numbers cycle.
+ */
+export function toReal(n: SchemeNumeric, opName: string): number {
+  if (n instanceof SchemeExact) {
+    return Number(n.num) / Number(n.denom);
+  }
+  TypeError.invariant(n.imag === 0, `${opName}: not a real number`);
+  return n.real;
+}
+
+/**
+ * Three-way comparison of two reals: -1 / 0 / 1, or NaN if incomparable
+ * (either operand is a NaN inexact). The exact/exact case routes through
+ * `SchemeExact.cmp` (bigint cross-multiplication) instead of coercing to a
+ * JS double — that float coercion was the source of the R7RS bug where
+ * `(< 999999999999999998 999999999999999999)` returned #f: both 18-digit
+ * integers collapse to the same double (1e18), so `prev < curr` was false.
+ * Only when at least one side is inexact do we fall back to `toReal`, where
+ * the precision is already gone and float comparison is the correct semantics
+ * (and NaN naturally propagates → every comparison against it is #f).
+ */
+export function schemeCompare(a: SchemeNumeric, b: SchemeNumeric, opName: string): number {
+  if (a instanceof SchemeExact && b instanceof SchemeExact) {
+    return a.cmp(b);
+  }
+  const ar = toReal(a, opName);
+  const br = toReal(b, opName);
+  if (ar < br) return -1;
+  if (ar > br) return 1;
+  if (ar === br) return 0;
+  return Number.NaN; // a NaN operand → incomparable; all chained tests fail
 }
 
 // ============================================================================

@@ -32,10 +32,12 @@ import { EnvCapability } from "./capability.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
+import { SchemeExact, SchemeInexact, type SchemeNumeric } from "../values/numbers.js";
 import { is_false, is_nil } from "../eval/guards.js";
 import { Pair } from "../values/Pair.js";
 import { SchemeVector } from "../values/SchemeVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/AValue.js";
+import { schemeFalse, schemeTrue } from "../values/SchemeBool.js";
 import { LazySeq, is_lazy_seq } from "../values/LazySeq.js";
 
 // ── FL protocol surface ──────────────────────────────────────────────────────
@@ -94,6 +96,48 @@ function captureBuiltins(): void {
 // "absent value" that should compare to #f rather than crash the whole proof.
 function isNilOperand(v: unknown): boolean {
   return v == null || (v as { constructor?: { name?: string } })?.constructor?.name === "Nil";
+}
+
+// ── Numeric Ord chain (plane-local) ─────────────────────────────────────────
+// The 5 comparisons below derive PURELY from the operands' numeric `fantasy-land/lte`
+// (SchemeExact/SchemeInexact, added value-side) when EVERY operand is a number — no
+// `global_env.get("=")` env-read. NaN ⇒ both `lte` directions are #f ⇒ every relation
+// collapses to #f, exactly like the numeric Operators. A non-number operand (or arity 0)
+// can't be served by `lte` without diverging from the Operator's membrane type-error, so
+// it routes to the kept builtin (which IS that Operator — identical throw). nil is
+// short-circuited to #f first (the plane's nil-tolerance, see filter/map).
+const isNumberOperand = (v: unknown): v is SchemeNumeric =>
+  v instanceof SchemeExact || v instanceof SchemeInexact;
+const flLteNum = (a: SchemeNumeric, b: SchemeNumeric): boolean => a["fantasy-land/lte"](b);
+// Each relation of the (partial — NaN-incomparable) numeric order, from the single `lte`.
+// Strict </> use the CONJUNCTIVE form (`lte(a,b) && !lte(b,a)`), NOT `!lte(b,a)`: the
+// latter is the total-order shortcut and would wrongly yield #t for a NaN pair.
+const NUM_PAIR: Record<"=" | "<" | ">" | "<=" | ">=", (a: SchemeNumeric, b: SchemeNumeric) => boolean> = {
+  "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
+  "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
+  ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
+  "<=": (a, b) => flLteNum(a, b),
+  ">=": (a, b) => flLteNum(b, a),
+};
+// Adjacent-pair chain — matches the Operators' `prev`-walk. (`=`'s Operator is
+// first-vs-each, equivalent for an equivalence relation: with no NaN, transitivity makes
+// adjacent ≡ first-vs-each; with a NaN, both forms hit a failing pair → #f.)
+function numericChain(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[]): boolean {
+  const rel = NUM_PAIR[sym];
+  for (let i = 0; i < args.length - 1; i++) {
+    if (!rel(args[i], args[i + 1])) return false;
+  }
+  return true;
+}
+// Stamp the verdict with the operands' provenance union — byte-identical to bridge.ts's
+// wrapOperator (out: Bool): box to schemeTrue/schemeFalse ONLY when provenance is non-empty
+// (empty ⇒ raw bool, to keep the `!== false`/find landmine callers alive), else withProvenance.
+function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[]): unknown {
+  const verdict = numericChain(sym, args);
+  // Every operand is a SchemeExact/SchemeInexact (subtype of AValue), so union directly.
+  const provenance = unionProvenance(args);
+  if (provenance.size > 0) return (verdict ? schemeTrue : schemeFalse).withProvenance(provenance);
+  return verdict;
 }
 
 // ── FL async-dispatch helpers (module-private) ───────────────────────────────
@@ -397,31 +441,38 @@ export const FL_INTEROP_OPS = {
   // (a nil PID, an unmatched lookup) throws before the body runs — forcing models
   // to write defensive `(if (nil? x) … (= x …))` guards. Completing the plane's
   // existing nil-tolerance grain (see filter/map): a nil operand resolves the
-  // comparison to #f rather than crashing the proof. Non-nil operands delegate to
-  // the bridged builtin unchanged (provenance flows through the operator path).
+  // comparison to #f rather than crashing the proof. Non-nil NUMBER operands compute
+  // by-value via their `fantasy-land/lte` (numericChain — no env-read, byte-identical
+  // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
+  // falls back to the kept bridged builtin, which is that Operator (identical throw).
   "=": function numEq(...args: unknown[]) {
-    captureBuiltins();
     if (args.some(isNilOperand)) return false;
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("=", args);
+    captureBuiltins();
     return builtinNumEq!(...args);
   },
   "<": function lt(...args: unknown[]) {
-    captureBuiltins();
     if (args.some(isNilOperand)) return false;
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<", args);
+    captureBuiltins();
     return builtinLt!(...args);
   },
   ">": function gt(...args: unknown[]) {
-    captureBuiltins();
     if (args.some(isNilOperand)) return false;
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">", args);
+    captureBuiltins();
     return builtinGt!(...args);
   },
   "<=": function lte(...args: unknown[]) {
-    captureBuiltins();
     if (args.some(isNilOperand)) return false;
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<=", args);
+    captureBuiltins();
     return builtinLte!(...args);
   },
   ">=": function gte(...args: unknown[]) {
-    captureBuiltins();
     if (args.some(isNilOperand)) return false;
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">=", args);
+    captureBuiltins();
     return builtinGte!(...args);
   },
 
