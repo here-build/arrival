@@ -15,6 +15,7 @@ import { SchemeBool } from "../values/SchemeBool.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { EnvCapability } from "./capability.js";
+import { is_callable, is_macro } from "../eval/guards.js";
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -49,8 +50,10 @@ export default new EnvCapability("scheme/equality", {
     },
 
     "procedure?": {
+      // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
+      // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
       value(obj: unknown): boolean {
-        return typeof obj === "function";
+        return is_callable(obj) && !is_macro(obj);
       },
     },
 
