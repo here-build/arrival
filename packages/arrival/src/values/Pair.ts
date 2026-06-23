@@ -781,52 +781,123 @@ function isEmptyPairSentinel(p: Pair): boolean {
 }
 
 function mapPair(f: (x: unknown) => unknown, pair: unknown): Pair | Nil {
-  if (!pair || pair instanceof Nil) return nil;
-  const p = pair as Pair;
-  if (isEmptyPairSentinel(p)) return nil;
-  return new Pair(f(p.car), mapPair(f, p.cdr));
+  // Iterative spine-walk (was self-recursive on the cdr → O(depth) host stack →
+  // overflow on a long list via fantasy-land/map). Builds into a JS array then
+  // re-conses shallow via Pair.fromArray(arr, false) — the exact form the eager
+  // builtins use, freshening the spine and terminating in the canonical `nil`.
+  // Behavior-preserving: same per-element f order, same empty-sentinel/Nil-clone
+  // termination, and an improper tail still folds ONE phantom `f(undefined)` (the
+  // non-Pair tail is read as a node with `.car === undefined`, exactly as before).
+  const out: unknown[] = [];
+  let node: unknown = pair;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    if (isEmptyPairSentinel(p)) break;
+    out.push(f(p.car));
+    node = p.cdr;
+  }
+  return Pair.fromArray(out, false) as Pair | Nil;
 }
 
 function filterPair(predicate: (x: unknown) => unknown, pair: unknown): Pair | Nil {
-  if (!pair || pair instanceof Nil) return nil;
-  const p = pair as Pair;
-  if (isEmptyPairSentinel(p)) return nil;
-  const restFiltered = filterPair(predicate, p.cdr);
-  return predicate(p.car) ? new Pair(p.car, restFiltered) : restFiltered;
+  // Iterative spine-walk (was self-recursive → O(depth) host stack). JS-truthy on
+  // the predicate (unchanged); kept elements are re-consed shallow in order via
+  // Pair.fromArray(arr, false). Behavior-preserving: same empty-sentinel/Nil-clone
+  // termination, all-false → nil, and an improper tail still tests `predicate(undefined)`
+  // for the phantom node exactly as the recursive base case did.
+  const out: unknown[] = [];
+  let node: unknown = pair;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    if (isEmptyPairSentinel(p)) break;
+    if (predicate(p.car)) out.push(p.car);
+    node = p.cdr;
+  }
+  return Pair.fromArray(out, false) as Pair | Nil;
 }
 
 function reducePair<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc, pair: unknown): Acc {
-  if (!pair || pair instanceof Nil) return initial;
-  const p = pair as Pair;
-  if (isEmptyPairSentinel(p)) return initial;
-  return reducePair(f, f(initial, p.car), p.cdr);
+  // Iterative left fold (was self-recursive on the cdr → O(depth) host stack →
+  // the ~6000-frame overflow on `(filter … (range 50000))` that isContainment()
+  // misread as a budget hit). Behavior-preserving: same left-to-right fold, same
+  // empty-sentinel/Nil-clone termination, and an improper tail still folds ONE
+  // phantom `f(acc, undefined)` before the non-Pair cdr ends the walk.
+  let acc = initial;
+  let node: unknown = pair;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    if (isEmptyPairSentinel(p)) break;
+    acc = f(acc, p.car);
+    node = p.cdr;
+  }
+  return acc;
 }
 
 function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {
-  if (!pair || pair instanceof Nil) return of(nil);
-  const p = pair as Pair;
-  const mappedCar = f(p.car) as { ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined;
-  const mappedCdr = traversePair(of, f, p.cdr);
-  return mappedCar?.["fantasy-land/ap"]
-    ? mappedCar["fantasy-land/ap"](mappedCdr)
-    : of(new Pair(mappedCar, mappedCdr));
+  // Iterative right fold (was self-recursive → O(depth) host stack). traverse is a
+  // RIGHT fold: collect each `f(car)` left-to-right (preserving f-call order), then
+  // combine from the tail with `of(nil)` as the seed — `ap` when the mapped head is
+  // applicative, else the leaf wrap `of(new Pair(head, acc))`. This reproduces the
+  // recursive unwind exactly: same of-call count/order (base `of(nil)` first, then one
+  // wrap per element from last to first), same ap-vs-leaf branch per node, and the same
+  // single phantom step on an improper/non-Pair tail (no sentinel guard, as before).
+  const heads: ({ ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined)[] = [];
+  let node: unknown = pair;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    heads.push(f(p.car) as { ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined);
+    node = p.cdr;
+  }
+  let acc = of(nil);
+  for (let i = heads.length; i--; ) {
+    const mappedCar = heads[i];
+    acc = mappedCar?.["fantasy-land/ap"]
+      ? mappedCar["fantasy-land/ap"](acc)
+      : of(new Pair(mappedCar, acc));
+  }
+  return acc;
 }
 
 // Pure list append (the Semigroup) — fresh spine of `a`'s elements, then `b`.
+// Iterative (was self-recursive on `a`'s cdr → O(depth) host stack). Collect a's
+// cars in order, then prepend them onto `b` (shared by reference, exactly as the
+// recursive base `return b ?? nil` did — purity: a's spine is fresh, b untouched).
+// An improper `a` still contributes its phantom `undefined` car before the non-Pair
+// tail ends the walk, matching the recursive form.
 function concatPair(a: unknown, b: unknown): Pair | Nil {
-  if (!a || a instanceof Nil) return (b ?? nil) as Pair | Nil;
-  const p = a as Pair;
-  return new Pair(p.car, concatPair(p.cdr, b));
+  const cars: unknown[] = [];
+  let node: unknown = a;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    cars.push(p.car);
+    node = p.cdr;
+  }
+  let result: Pair | Nil = (b ?? nil) as Pair | Nil;
+  for (let i = cars.length; i--; ) {
+    result = new Pair(cars[i], result);
+  }
+  return result;
 }
 
 // Chain = map-then-flatten. Each `f(car)` yields a list; concat them with the
 // PURE list-append above — NO global_env.get("append") back-edge.
+// Iterative (was self-recursive → O(depth) host stack). Map each car left-to-right
+// (preserving f-call order), then concat from the right onto `nil` — the same right-
+// associated fold the recursion produced, so the flattened result is identical
+// (concat is associative). An improper tail still maps its phantom `f(undefined)`.
 function chainPair(f: (x: unknown) => Pair | Nil, pair: unknown): Pair | Nil {
-  if (!pair || pair instanceof Nil) return nil;
-  const p = pair as Pair;
-  const mapped = f(p.car);
-  const chained = chainPair(f, p.cdr);
-  return concatPair(mapped, chained);
+  const parts: (Pair | Nil)[] = [];
+  let node: unknown = pair;
+  while (node && !(node instanceof Nil)) {
+    const p = node as Pair;
+    parts.push(f(p.car));
+    node = p.cdr;
+  }
+  let result: Pair | Nil = nil;
+  for (let i = parts.length; i--; ) {
+    result = concatPair(parts[i], result);
+  }
+  return result;
 }
 
 // Register Pair constructor with types.ts for Nil.append

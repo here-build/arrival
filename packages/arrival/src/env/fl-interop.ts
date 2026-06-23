@@ -39,6 +39,8 @@ import { SchemeVector } from "../values/SchemeVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/SchemeBool.js";
 import { LazySeq, is_lazy_seq } from "../values/LazySeq.js";
+import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
+import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
 
 // ── FL protocol surface ──────────────────────────────────────────────────────
 // Fantasy-Land structures are opaque carriers — we only ever touch their FL
@@ -145,11 +147,25 @@ function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[
 /**
  * Collect all leaf values from an FL Foldable using fantasy-land/reduce.
  * Returns values in traversal order (same order as map visits them).
+ *
+ * Charges the per-run heap meter per collected element — the SAME mechanism
+ * `to_array` uses (stdlib.ts): the compute-by-fl refactor re-routed filter/map/
+ * reduce over Pairs through HERE instead of `to_array`, so the allocation bound
+ * was orphaned off this path; every FL collection op funnels through this single
+ * chokepoint, so the O(K²)-churn runaway (a list re-materialized once per loop
+ * iteration) is caught here exactly as it was in `to_array`. The run env comes
+ * from the evaluator's run-scoped `currentRunEnv()`; meter looked up ONCE
+ * (O(depth)), then a bare int compare per element. Undefined ⇒ no budget ⇒ no
+ * overhead beyond the lookup.
  */
 function flCollectValues(structure: FantasyLand): unknown[] {
+  const meter = findHeapMeter(currentRunEnv() ?? null);
   const values: unknown[] = [];
   structure["fantasy-land/reduce"]((acc: null, val: unknown) => {
     values.push(val);
+    if (meter !== undefined && ++meter.used > meter.max) {
+      throw new SchemeError(heapBudgetMessage(meter.max), []);
+    }
     return acc;
   }, null);
   return values;

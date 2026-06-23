@@ -1,23 +1,31 @@
 // heap-budget.ts — a per-run ALLOCATION bound, the memory analogue of the wall-clock `budgetMs`.
 //
 // WHY: the wall-clock budget is checked at trampoline TICKs (loop-step / tail-call boundaries). A
-// native collection op — `filter`/`map`/`append`/`join` — materializes its whole list through
-// `to_array` in ONE synchronous JS loop that emits no TICK, so a single reduction over a large list
-// runs uninterruptibly (a `(filter pred huge-list)` can burn tens of seconds before the trampoline
-// regains control to check the deadline). Counting REDUCTIONS can't see inside that loop; counting
-// ALLOCATIONS can. The killer pattern is O(K²) churn — re-materializing a list that grows by one each
-// iteration (`(append seen fresh)` in a loop) — and cumulative element-charge catches it fast while a
-// legitimately large LINEAR pass (materialize a 1M list a handful of times) stays well under a
-// generous cap. Monotonic, like the EvalTrace entry cap: we bound cumulative work, not live heap.
+// native collection op — `filter`/`map`/`append`/`join` — materializes its whole list in ONE
+// synchronous JS loop that emits no TICK, so a single reduction over a large list runs uninterruptibly
+// (a `(filter pred huge-list)` can burn tens of seconds before the trampoline regains control to check
+// the deadline). Counting REDUCTIONS can't see inside that loop; counting ALLOCATIONS can. The killer
+// pattern is O(K²) churn — re-materializing a list that grows by one each iteration (`(append seen
+// fresh)` in a loop) — and cumulative element-charge catches it fast while a legitimately large LINEAR
+// pass (materialize a 1M list a handful of times) stays well under a generous cap. Monotonic, like the
+// EvalTrace entry cap: we bound cumulative work, not live heap.
+//
+// WHERE the charge happens: every native collection op funnels its element materialization through ONE
+// of two chokepoints, and BOTH charge the meter per element — `to_array` (stdlib.ts, the eager
+// list->array path used by append/join/reverse/…) and `flCollectValues` (env/fl-interop.ts, the
+// compute-by-fl path filter/map/reduce over a Pair were re-routed onto via the Fantasy-Land term
+// algebra). The fl path was originally uncharged — the budget was attached to `to_array` alone on the
+// premise it was the sole materialization point — which orphaned the bound once filter/map/reduce
+// stopped going through it; charging both closes that gap.
 //
 // The meter lives on the RUN's environment (installed by `exec`), found by walking the parent chain
-// from the calling scope — so it is run-scoped and safe against async interleaving of concurrent runs
-// (each run's builtins resolve their own env's meter), with no module-level ambient state.
+// from the run-scoped `currentRunEnv()` — so it is run-scoped and safe against async interleaving of
+// concurrent runs (each run's builtins resolve their own env's meter), with no module-level ambient state.
 
 import type { Environment } from "./Environment.js";
 
-/** A run's cumulative allocation meter. `used` counts elements materialized through `to_array`; once
- *  it passes `max` the run is contained. */
+/** A run's cumulative allocation meter. `used` counts elements materialized through `to_array` OR
+ *  `flCollectValues` (the two collection-op chokepoints); once it passes `max` the run is contained. */
 export interface HeapMeter {
   used: number;
   max: number;
@@ -33,7 +41,8 @@ export function installHeapMeter(env: Environment, max: number): void {
 }
 
 /** Walk the env parent chain for the nearest installed meter (nearest = this run's). O(depth), called
- *  once per `to_array` (not per element). Returns undefined when no budget was requested. */
+ *  once per `to_array` / `flCollectValues` pass (not per element). Returns undefined when no budget
+ *  was requested. */
 export function findHeapMeter(env: Environment | null): HeapMeter | undefined {
   for (let e = env; e; e = e.__parent__) {
     if (e.__heapMeter__ !== undefined) return e.__heapMeter__;
