@@ -25,7 +25,7 @@ import { isCircularList, Pair } from "../values/Pair.js";
 import { eqv, structuralEqual } from "../values/structural-equal.js";
 import { Nil, nil } from "../values/types.js";
 import { is_false } from "../eval/guards.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const LIST_OPS = {
   // R7RS 6.4 Pairs and lists
@@ -170,5 +170,5 @@ export const LIST_OPS = {
 };
 
 export default new EnvCapability("scheme/lists", {
-  symbols: Object.fromEntries(Object.entries(LIST_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(LIST_OPS),
 });

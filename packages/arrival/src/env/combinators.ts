@@ -19,7 +19,7 @@ import { Nil, nil } from "../values/types.js";
 import { is_false } from "../eval/guards.js";
 import { unpromise } from "../utils/promises.js";
 
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const COMBINATOR_OPS = {
   single(list: unknown): boolean {
@@ -147,5 +147,5 @@ export const COMBINATOR_OPS = {
 };
 
 export default new EnvCapability("scheme/combinators", {
-  symbols: Object.fromEntries(Object.entries(COMBINATOR_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(COMBINATOR_OPS),
 });

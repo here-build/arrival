@@ -26,7 +26,7 @@ import {
   withInputProvenance,
 } from "../values/op-helpers.js";
 
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const VECTOR_OPS = {
   "make-vector"(k: unknown, fill?: unknown): SchemeVector {
@@ -92,7 +92,6 @@ export const VECTOR_OPS = {
     return withInputProvenance([list], new SchemeVector(result));
   },
 
-
   "vector->string"(vec: unknown, start?: unknown, end?: unknown): SchemeString {
     const arr = asVector(vec, "vector->string");
     const s = start === undefined ? 0 : toIndex(start);
@@ -140,8 +139,8 @@ export const VECTOR_OPS = {
     // returned vector holds SETTLED values (not "[object Promise]") and provenance
     // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
     if (result.some(is_promise)) {
-      return (promise_all(result) as Promise<SchemeValue[]>).then(
-        (resolved) => withInputProvenance(vectors, new SchemeVector(resolved)),
+      return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
+        withInputProvenance(vectors, new SchemeVector(resolved)),
       );
     }
     return withInputProvenance(vectors, new SchemeVector(result));
@@ -164,5 +163,5 @@ export const VECTOR_OPS = {
 };
 
 export default new EnvCapability("scheme/vectors", {
-  symbols: Object.fromEntries(Object.entries(VECTOR_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(VECTOR_OPS),
 });

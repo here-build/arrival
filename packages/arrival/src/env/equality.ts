@@ -14,7 +14,7 @@
 import { SchemeBool } from "../values/SchemeBool.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const EQUALITY_OPS = {
   // R7RS 6.3 Booleans
@@ -53,5 +53,5 @@ export const EQUALITY_OPS = {
 };
 
 export default new EnvCapability("scheme/equality", {
-  symbols: Object.fromEntries(Object.entries(EQUALITY_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(EQUALITY_OPS),
 });

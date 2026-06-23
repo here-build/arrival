@@ -16,7 +16,7 @@ import invariant from "tiny-invariant";
 import { charValue, coerceNumeric, deriveOrd } from "../values/op-helpers.js";
 import { SchemeExact } from "../values/numbers.js";
 import { SchemeCharacter } from "../values/types.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const CHAR_OPS = {
   "char?"(obj: unknown): boolean {
@@ -150,7 +150,7 @@ export const CHAR_OPS = {
     // sigma, etc.), there is no single-char result, so the operation MUST
     // return the input unchanged. Truncating to `folded[0]` produces a
     // different character (ß → s) which violates the round-trip identity.
-    return [...folded].length === 1 ? new SchemeCharacter(folded) : char as SchemeCharacter;
+    return [...folded].length === 1 ? new SchemeCharacter(folded) : (char as SchemeCharacter);
   },
 
   // Character/integer conversion
@@ -170,12 +170,15 @@ export const CHAR_OPS = {
   "integer->char"(n: unknown): SchemeCharacter {
     const num = coerceNumeric(n);
     const code = num instanceof SchemeExact ? Number(num.num) : Math.floor(num.real);
-    invariant(code >= 0 && code <= 0x10ffff, `integer->char: code point ${code} out of Unicode range`);
-    invariant(code < 0xd800 || code > 0xdfff, `integer->char: surrogate code point ${code.toString(16)} is not a Unicode scalar`);
+    invariant(code >= 0 && code <= 0x10_ff_ff, `integer->char: code point ${code} out of Unicode range`);
+    invariant(
+      code < 0xd8_00 || code > 0xdf_ff,
+      `integer->char: surrogate code point ${code.toString(16)} is not a Unicode scalar`,
+    );
     return new SchemeCharacter(String.fromCodePoint(code));
   },
 };
 
 export default new EnvCapability("scheme/chars", {
-  symbols: Object.fromEntries(Object.entries(CHAR_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(CHAR_OPS),
 });

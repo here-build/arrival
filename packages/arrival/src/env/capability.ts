@@ -17,6 +17,7 @@ import { z } from "zod";
 import type { EnvPack } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
+import invariant from "tiny-invariant";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
  *  = re-spawn). The kernel uses the EnvPack face; a lifecycle owner calls these. */
@@ -38,7 +39,6 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
   readonly resources: RefsOf<R>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- symbol args are call-shape-checked at the boundary
 type Fn = (...args: any[]) => unknown;
 
 /** A symbol is a bare fn, a rosetta config (`withContext`/`type`/`options`), or a raw
@@ -74,6 +74,12 @@ export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, 
   return out;
 }
 
+/** Lift a plain `name → value` ops map into a `symbols` record of raw `{ value }` bindings —
+ *  the bulk form of the per-entry `{ value: v }` wrap. For value-domain packs whose ops are
+ *  plain (this-free) callables/constants bound as-is (no rosetta, no `this`). */
+export const valueSymbols = <T>(ops: Record<string, T>): Record<string, { value: T }> =>
+  Object.fromEntries(Object.entries(ops).map(([k, v]) => [k, { value: v }]));
+
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   /** zod schemas for per-env config; values are supplied + validated at `lower()`. */
   configuration?: C;
@@ -104,7 +110,7 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
 }
 
 /** A configured, lowerable env capability. The default export of every palette pack. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- variance over the two type params; consumers are precise
+
 export class EnvCapability<C extends ZodMap = any, R extends Record<string, Resource<unknown>> = any> {
   constructor(
     readonly name: string,
@@ -122,7 +128,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // Resources → ref-counted cells. A provider entry reads the parsed config.
     const cells = {} as Record<string, ResourceCell<unknown>>;
     for (const [key, def] of Object.entries(spec.resources ?? {})) {
-      const resource = (typeof def === "function" ? (def as (c: InferCfg<C>) => Resource<unknown>)(configuration) : def) as Resource<unknown>;
+      const resource = (
+        typeof def === "function" ? (def as (c: InferCfg<C>) => Resource<unknown>)(configuration) : def
+      ) as Resource<unknown>;
       cells[key] = new ResourceCell(resource);
     }
     const activation = { configuration, resources: cells } as unknown as Activation<C, R>;
@@ -133,7 +141,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // entity set; the env accessor (this wrapper) makes presence a precondition.
     const cellList = Object.values(cells);
     let spawned: Promise<void> | undefined;
-    const ensureSpawned = (): Promise<void> => (spawned ??= Promise.all(cellList.map((c) => c.get())).then(() => undefined));
+    const ensureSpawned = (): Promise<void> =>
+      (spawned ??= Promise.all(cellList.map((c) => c.get())).then(() => undefined));
 
     return {
       name,
@@ -141,7 +150,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
       // Deps inherit the SAME raw `config` object (each validates its own slice via its schema; the
       // stored `config` field stays reference-equal across a capability's root + dep appearances, so
       // closure dedup matches by identity instead of tripping AssembleConfigConflictError).
-      ...(spec.deps ? { deps: spec.deps.map((d) => d.lower({ evalScheme: opts.evalScheme, config: opts.config })) } : {}),
+      ...(spec.deps
+        ? { deps: spec.deps.map((d) => d.lower({ evalScheme: opts.evalScheme, config: opts.config })) }
+        : {}),
       // Lifecycle (pause/resume) over this capability's cells. Wiring is untouched.
       windDown: async () => {
         spawned = undefined;
@@ -168,16 +179,19 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             cellList.length === 0
               ? bound
               : async (...args: unknown[]) => {
-                await ensureSpawned();
-                return bound(...args);
-              };
+                  await ensureSpawned();
+                  return bound(...args);
+                };
           env.defineRosetta(verb, { ...sym, fn: gated } as RosettaSpec);
         }
         for (const resolver of spec.resolvers ?? []) {
           env.registerResolver(resolver);
         }
         if (spec.prelude !== undefined) {
-          if (opts.evalScheme === undefined) throw new Error(`capability "${name}" has a prelude but no evalScheme was provided to lower()`);
+          invariant(
+            opts.evalScheme !== undefined,
+            `capability "${name}" has a prelude but no evalScheme was provided to lower()`,
+          );
           await opts.evalScheme(env, spec.prelude);
         }
       },

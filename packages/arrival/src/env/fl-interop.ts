@@ -28,7 +28,7 @@
  * Evaluated", 2009).
  */
 
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
@@ -586,5 +586,5 @@ export const FL_INTEROP_OPS = {
 };
 
 export default new EnvCapability("scheme/fl-interop", {
-  symbols: Object.fromEntries(Object.entries(FL_INTEROP_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(FL_INTEROP_OPS),
 });

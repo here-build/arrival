@@ -21,7 +21,7 @@ import {
   toIndex,
   withInputProvenance,
 } from "../values/op-helpers.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const BYTEVECTOR_OPS = {
   "bytevector?"(obj: unknown): boolean {
@@ -105,5 +105,5 @@ export const BYTEVECTOR_OPS = {
 };
 
 export default new EnvCapability("scheme/bytevectors", {
-  symbols: Object.fromEntries(Object.entries(BYTEVECTOR_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(BYTEVECTOR_OPS),
 });

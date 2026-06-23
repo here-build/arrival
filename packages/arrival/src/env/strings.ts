@@ -31,7 +31,7 @@ import { Pair } from "../values/Pair.js";
 import { SchemeCharacter, nil } from "../values/types.js";
 import { is_promise } from "../eval/guards.js";
 import { promise_all } from "../utils/promises.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability, valueSymbols } from "./capability.js";
 
 export const STRING_OPS = {
   "make-string"(k: unknown, char?: unknown): SchemeString {
@@ -217,5 +217,5 @@ export const STRING_OPS = {
 };
 
 export default new EnvCapability("scheme/strings", {
-  symbols: Object.fromEntries(Object.entries(STRING_OPS).map(([k, v]) => [k, { value: v }])),
+  symbols: valueSymbols(STRING_OPS),
 });
