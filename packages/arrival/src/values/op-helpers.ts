@@ -14,7 +14,7 @@
 import invariant from "tiny-invariant";
 
 import { AValue, unionProvenance } from "./AValue.js";
-import { SchemeBool, schemeFalse, schemeTrue } from "./SchemeBool.js";
+import { schemeFalse, schemeTrue } from "./SchemeBool.js";
 import { SchemeBytevector } from "./SchemeBytevector.js";
 import { SchemeString } from "./SchemeString.js";
 import { SchemeVector } from "./SchemeVector.js";
@@ -137,33 +137,6 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
       return new Uint8Array(obj.buffer, obj.byteOffset, obj.byteLength);
     default:
       throw new TypeError(`${fnName}: expected bytevector, got ${typeof obj}`);
-  }
-}
-
-/**
- * eqv? comparison - identity plus numeric value equality
- *
- * R7RS § 6.1: eqv? is #t for two characters with the same `char=?` value
- * (`(eqv? #\a #\a)` → #t) even across distinct heap instances — so `(memv #\a
- * (list #\a))` must succeed. SchemeCharacter heap-distinct copies would fail the
- * `a === b` line, so compare `__char__` explicitly.
- */
-export function eqv(a: unknown, b: unknown): boolean {
-  switch (true) {
-    case a === b:
-      return true;
-    case typeof a === "number" && typeof b === "number":
-      return a === b;
-    case a instanceof SchemeExact && b instanceof SchemeExact:
-      return a.cmp(b) === 0;
-    case a instanceof SchemeInexact && b instanceof SchemeInexact:
-      return a.cmp(b) === 0;
-    case a instanceof SchemeBool && b instanceof SchemeBool:
-      return a.value === b.value;
-    case a instanceof SchemeCharacter && b instanceof SchemeCharacter:
-      return a.__char__ === b.__char__;
-    default:
-      return false;
   }
 }
 

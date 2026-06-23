@@ -13,6 +13,7 @@ import { LazySeq } from "../values/LazySeq.js";
 import { SchemeJSObject, SchemeJSFunction } from "../membrane.js";
 import { Nil, nil, SchemeCharacter } from "../values/types.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
+import { LIST_OPS } from "../env/lists.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — fantasy-land/equals as a totalic, cycle-safe, tagless-final Setoid.
@@ -229,5 +230,147 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
   it("eqv? exact vs inexact #f; exact vs exact #t", () => {
     expect(eqv(new SchemeExact(1n), new SchemeInexact(1))).toBe(false);
     expect(eqv(new SchemeExact(1n), new SchemeExact(1n))).toBe(true);
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G6 — EQUALITY-SUITE CLEANUP (tagless-final wave). Two changes under test:
+//   (1) the duplicate op-helpers `eqv` is collapsed onto the canonical
+//       structural-equal `eqv` (= `eq`); env/lists' memv/assv now use the
+//       canonical semantics, fixing the latent symbol/nil divergence.
+//   (2) eq()'s scalar cases route THROUGH each term's fantasy-land/equals Setoid
+//       (de-dup of the per-scalar compare) — with the SchemeBool boundary pinned.
+//
+// Interning note (verified): SchemeSymbol interns by default, so two bare
+// `new SchemeSymbol("a")` calls are `===` (same heap instance). The op-helpers
+// vs canonical divergence is therefore LATENT for interned symbols (the `===`
+// fast-path masks it). It MANIFESTS only for distinct-instance symbols of the
+// same name — which is exactly what a provenance clone is
+// (`sym.withProvenance(p)` mints an UNINTERNED copy). The memv/assv tests below
+// build that distinct instance to make the divergence real.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("G6 equality-suite cleanup", () => {
+  // A distinct-instance symbol of the same name (uninterned provenance clone).
+  const distinctSym = (name: string): SchemeSymbol =>
+    new SchemeSymbol(name).withProvenance(new Set([1]));
+
+  describe("eqv? over scalars (canonical structural-equal)", () => {
+    it("exact ≡ exact (same value) → true", () => {
+      expect(eqv(new SchemeExact(1n), new SchemeExact(1n))).toBe(true);
+    });
+    it("exact vs inexact → false (exactness distinguishes)", () => {
+      expect(eqv(new SchemeExact(1n), new SchemeInexact(1))).toBe(false);
+    });
+    it("char same/diff", () => {
+      expect(eqv(new SchemeCharacter("a"), new SchemeCharacter("a"))).toBe(true);
+      expect(eqv(new SchemeCharacter("a"), new SchemeCharacter("b"))).toBe(false);
+    });
+    it("bool same/diff", () => {
+      expect(eqv(new SchemeBool(true), new SchemeBool(true))).toBe(true);
+      expect(eqv(new SchemeBool(true), new SchemeBool(false))).toBe(false);
+    });
+    it("two DISTINCT-instance symbols of the same name → true", () => {
+      const a = distinctSym("a");
+      const b = distinctSym("a");
+      expect(a).not.toBe(b); // genuinely distinct heap instances
+      expect(eqv(a, b)).toBe(true);
+    });
+    it("two Nil → true", () => {
+      expect(eqv(nil, nil)).toBe(true);
+      // a provenance clone of nil is still eqv?
+      expect(eqv(nil, nil.withProvenance(new Set([1])))).toBe(true);
+    });
+  });
+
+  describe("eq()/eqv() scalar result == the term's own Setoid", () => {
+    const EQM = (x: AValue, y: unknown): boolean =>
+      (x as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](y);
+    const pairs: { name: string; x: AValue; y: AValue }[] = [
+      { name: "exact==exact", x: new SchemeExact(1n), y: new SchemeExact(1n) },
+      { name: "exact!=exact", x: new SchemeExact(1n), y: new SchemeExact(2n) },
+      { name: "inexact==inexact", x: new SchemeInexact(1.5), y: new SchemeInexact(1.5) },
+      { name: "char==char", x: new SchemeCharacter("a"), y: new SchemeCharacter("a") },
+      { name: "char!=char", x: new SchemeCharacter("a"), y: new SchemeCharacter("b") },
+      { name: "bool==bool", x: new SchemeBool(true), y: new SchemeBool(true) },
+      { name: "bool!=bool", x: new SchemeBool(true), y: new SchemeBool(false) },
+      { name: "sym==sym(distinct)", x: distinctSym("a"), y: distinctSym("a") },
+      { name: "nil==nil", x: nil, y: nil.withProvenance(new Set([1])) },
+    ];
+    for (const { name, x, y } of pairs) {
+      it(name + ": eq() routes identically to the Setoid", () => {
+        expect(eq(x, y)).toBe(EQM(x, y));
+        expect(eqv(x, y)).toBe(EQM(x, y));
+      });
+    }
+  });
+
+  describe("memv/assv consistency with eqv? on distinct-instance symbols/nil", () => {
+    // memv('a, (b a c)) finds the 'a — matches eqv?. With the op-helpers eqv this
+    // is RED for a distinct-instance 'a (no SchemeSymbol case → #f).
+    it("memv finds a distinct-instance symbol of the same name", () => {
+      const needle = distinctSym("a");
+      const lst = list(new SchemeSymbol("b"), new SchemeSymbol("a"), new SchemeSymbol("c"));
+      const found = LIST_OPS.memv(needle, lst);
+      expect(found).not.toBe(false);
+      expect((found as Pair).car).toBeInstanceOf(SchemeSymbol);
+      expect(((found as Pair).car as SchemeSymbol).__name__).toBe("a");
+    });
+
+    it("memv finds a distinct-instance nil", () => {
+      const needle = nil.withProvenance(new Set([1]));
+      const lst = list(new SchemeSymbol("x"), nil);
+      const found = LIST_OPS.memv(needle, lst);
+      expect(found).not.toBe(false);
+      expect((found as Pair).car).toBeInstanceOf(Nil);
+    });
+
+    it("assv finds a distinct-instance symbol key of the same name", () => {
+      const needle = distinctSym("k");
+      const alist = list(
+        new Pair(new SchemeSymbol("j"), new SchemeExact(1n)),
+        new Pair(new SchemeSymbol("k"), new SchemeExact(2n)),
+      );
+      const found = LIST_OPS.assv(needle, alist);
+      expect(found).not.toBe(false);
+      expect(((found as Pair).car as SchemeSymbol).__name__).toBe("k");
+      expect(((found as Pair).cdr as SchemeExact).valueOf()).toBe(2);
+    });
+
+    // Numeric eqv? path (interned-symbol-independent): assv still matches numbers.
+    it("memv matches distinct-instance exact numbers (eqv? numeric path)", () => {
+      const needle = new SchemeExact(2n);
+      const lst = list(new SchemeExact(1n), new SchemeExact(2n), new SchemeExact(3n));
+      const found = LIST_OPS.memv(needle, lst);
+      expect(found).not.toBe(false);
+      expect(((found as Pair).car as SchemeExact).valueOf()).toBe(2);
+    });
+  });
+
+  describe("G5 reaffirm — eq/eqv stay pointer-grade on Pairs (NOT deep)", () => {
+    it("distinct equal Pairs: eq/eqv #f, equal? #t", () => {
+      const a = list(new SchemeExact(1n), new SchemeExact(2n)) as Pair;
+      const b = list(new SchemeExact(1n), new SchemeExact(2n)) as Pair;
+      expect(eq(a, b)).toBe(false);
+      expect(eqv(a, b)).toBe(false);
+      expect(structuralEqual(a, b)).toBe(true);
+    });
+  });
+
+  describe("LANDMINE pin — eq?/eqv? scalar boundary must NOT widen", () => {
+    // SchemeBool's Setoid is representation-BLIND: it also matches a RAW JS boolean
+    // (`this.value === other`). eq?/eqv? must NOT inherit that — a raw JS boolean
+    // is not eq? to a boxed SchemeBool. raw booleans DO flow as scheme values
+    // (membrane.fromJS(true) === true), so this boundary is reachable. This test
+    // pins eq()'s SchemeBool case so a naive route-through-Setoid (which would
+    // flip #f→#t here) is caught.
+    it("eq?/eqv? of a boxed SchemeBool vs a raw JS boolean is #f", () => {
+      expect(eq(new SchemeBool(true), true as unknown as never)).toBe(false);
+      expect(eqv(new SchemeBool(true), true as unknown as never)).toBe(false);
+      // but the Setoid itself IS representation-blind (documents the divergence):
+      expect(
+        (new SchemeBool(true) as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](true),
+      ).toBe(true);
+    });
   });
 });

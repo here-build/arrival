@@ -5,11 +5,12 @@
  * VERBATIM out of `wrappedOps` in `../bridge.ts`. These are behavior-preserving
  * copies of the interpreter's hot-path list builtins; the implementations —
  * including their inline comments — are otherwise identical to the source. The
- * only change from the bridge originals is that cross-cutting helpers
- * (`withInputProvenance`, `eqv`) come from `../op-helpers.js`, the value-type
- * classes (`Pair`/`isCircularList`, `Nil`/`nil`) from their own leaf modules,
- * `structuralEqual` from `../structural-equal.js`, and `is_false` from
- * `../guards.js`, rather than being referenced as bridge locals. `TypeError`
+ * only change from the bridge originals is that cross-cutting helpers come
+ * from their own leaf modules rather than being referenced as bridge locals:
+ * `withInputProvenance` from `../op-helpers.js`; `eqv` (the canonical R7RS
+ * `eqv?`, shared by `eq?`) and `structuralEqual` from `../structural-equal.js`;
+ * the value-type classes (`Pair`/`isCircularList`, `Nil`/`nil`) from their own
+ * leaf modules; and `is_false` from `../guards.js`. `TypeError`
  * carries its `.invariant` assertion via the side-effect import below. The
  * c[ad]+r accessor family is intentionally NOT declared here — those are served
  * by a resolver, not by `wrappedOps`.
@@ -19,9 +20,9 @@
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
 
-import { eqv, withInputProvenance } from "../values/op-helpers.js";
+import { withInputProvenance } from "../values/op-helpers.js";
 import { isCircularList, Pair } from "../values/Pair.js";
-import { structuralEqual } from "../values/structural-equal.js";
+import { eqv, structuralEqual } from "../values/structural-equal.js";
 import { Nil, nil } from "../values/types.js";
 import { is_false } from "../eval/guards.js";
 import { EnvCapability } from "./capability.js";

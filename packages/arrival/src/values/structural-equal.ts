@@ -137,15 +137,32 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // eq? against the singleton, breaking `(eq? x '())`).
 // ----------------------------------------------------------------------
 export function eq(x: SchemeValue, y: SchemeValue): boolean {
+  // Identity first — also the only true-answer for the pointer-grade types below
+  // (Pair / vector / SchemeString / plain object). Then the SCALAR types route
+  // their value-comparison THROUGH their own Setoid (`fantasy-land/equals`): the
+  // single comparison impl now lives on each term, not inlined here. Post-B2 each
+  // scalar's Setoid is exactly the compare this used to inline.
+  //
+  // SchemeBool is the one guarded exception: its Setoid is representation-BLIND
+  // (it also equals a RAW JS boolean, `this.value === other`), but `eq?`/`eqv?`
+  // are pointer/scalar-grade over BOXED scheme values — a bare `true` is NOT eq?
+  // to a boxed SchemeBool. The `y instanceof SchemeBool` guard keeps that boundary
+  // (raw-boolean `y` ⇒ #f) while still routing the boxed×boxed compare through the
+  // term (the Setoid's ternary reads `other.value` when `other` IS a SchemeBool).
   if (x === y) return true;
-  if (x instanceof SchemeSymbol && y instanceof SchemeSymbol) return x.__name__ === y.__name__;
-  if (x instanceof Nil && y instanceof Nil) return true;
-  if (x instanceof SchemeBool && y instanceof SchemeBool) return x.value === y.value;
-  if (x instanceof SchemeCharacter && y instanceof SchemeCharacter) return x.__char__ === y.__char__;
-  if (x instanceof SchemeExact && y instanceof SchemeExact) return x.equals(y);
-  if (x instanceof SchemeInexact && y instanceof SchemeInexact) return x.equals(y);
+  if (
+    x instanceof SchemeSymbol ||
+    x instanceof Nil ||
+    x instanceof SchemeCharacter ||
+    x instanceof SchemeExact ||
+    x instanceof SchemeInexact
+  ) {
+    return x["fantasy-land/equals"](y);
+  }
+  if (x instanceof SchemeBool) return y instanceof SchemeBool && x["fantasy-land/equals"](y);
   // Everything else (Pair, vector/Array, SchemeString, plain objects) keeps
-  // strict pointer-grade — distinct heap instances answer #f.
+  // strict pointer-grade — distinct heap instances answer #f (the === above is
+  // the only true case).
   return false;
 }
 
