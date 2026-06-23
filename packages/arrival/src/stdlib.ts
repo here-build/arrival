@@ -68,7 +68,7 @@ import {
   SchemeJSObject,
 } from "./membrane.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
-import genRun, { type EvalContext, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
+import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
 
 // Declare jQuery for browser environments
 declare const jQuery: { fn: { init: new (...args: unknown[]) => object } } | undefined;
@@ -320,7 +320,7 @@ function speculative<T>(fn: T): T {
 
 // ----------------------------------------------------------------------
 function to_array(name: string, deep = false): SchemeFunction {
-  return function recur(this: Environment, list: SchemeValue): SchemeValue[] {
+  return function recur(list: SchemeValue): SchemeValue[] {
     typecheck(name, list, ["pair", "nil"]);
     if (is_nil(list)) {
       return [];
@@ -333,8 +333,10 @@ function to_array(name: string, deep = false): SchemeFunction {
     // join) funnels through, so charging materialized elements HERE catches the O(K²)-churn runaway
     // that the TICK-cadence wall-clock budget can't preempt (a single native list pass emits no TICK).
     // Look the meter up ONCE (O(depth)); the per-element check is a bare int compare. Undefined ⇒ no
-    // budget requested ⇒ zero overhead beyond the lookup.
-    const meter = findHeapMeter(this);
+    // budget requested ⇒ zero overhead beyond the lookup. The run env comes from the evaluator's
+    // run-scoped `currentRunEnv()` (set at the apply boundary) — env-as-`this` is fully erased.
+    const runEnv = currentRunEnv();
+    const meter = findHeapMeter(runEnv ?? null);
     const result: SchemeValue[] = [];
     let node = list;
     while (true) {
@@ -344,7 +346,9 @@ function to_array(name: string, deep = false): SchemeFunction {
         }
         let car = node.car;
         if (deep && is_pair(car)) {
-          car = (this.get(name) as SchemeFunction).call(this, car);
+          // tree->array deep recursion (untested branch): resolve the recursive
+          // fn from the run env (was `this.get(name)`), now `currentRunEnv()`.
+          car = (runEnv?.get(name) as SchemeFunction)(car);
         }
         result.push(car);
         if (meter !== undefined && ++meter.used > meter.max) {
@@ -395,13 +399,13 @@ function isProperList(obj: SchemeValue): SchemeValue {
   }
 }
 
-function mapImpl(this: SchemeValue, fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
+function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
   typecheck("map", fn, "function");
   const is_list = isProperList;
   for (const [i, arg] of lists.entries()) {
     typecheck("map", arg, ["pair", "nil"], i + 1);
     // detect cycles
-    invariant(!is_pair(arg) || is_list.call(this, arg), `map: argument ${i + 1} is not a list`);
+    invariant(!is_pair(arg) || is_list(arg), `map: argument ${i + 1} is not a list`);
   }
   if (lists.length === 0 || lists.some(is_nil)) {
     return nil;
@@ -411,12 +415,14 @@ function mapImpl(this: SchemeValue, fn: SchemeFunction, ...lists: SchemeValue[])
   const arrays = lists.map((l) => listToArray(l));
   const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
 
-  // Call function for all elements in parallel
-  const { env, dynamic_env, use_dynamic } = this;
+  // Call function for all elements in parallel. (Formerly destructured
+  // {env,dynamic_env,use_dynamic} off env-as-`this` — all always undefined, so
+  // call_function got an empty options bag; passing {} directly is identical and
+  // drops the last `this` read here.)
   const results: SchemeValue[] = [];
   for (let i = 0; i < length; i++) {
     const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-    results.push(call_function(fn, args, { env, dynamic_env, use_dynamic }));
+    results.push(call_function(fn, args, {}));
   }
 
   // Wait for all and convert back to list
@@ -1133,17 +1139,17 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     "call-with-values": doc(
       "call-with-values",
-      function (this: Environment, producer: SchemeFunction, consumer: SchemeFunction) {
+      function (producer: SchemeFunction, consumer: SchemeFunction) {
         typecheck("call-with-values", producer, "function", 1);
         typecheck("call-with-values", consumer, "function", 2);
         // The producer is usually a generator-lambda, so `producer.apply` returns
         // a Promise — unwrap it BEFORE the `instanceof Values` check, else a
         // multi-value producer leaks the Promise as a single arg (wrong arity).
-        return unpromise(producer.apply(this), (maybe) => {
+        return unpromise(producer.apply(undefined), (maybe) => {
           if (maybe instanceof Values) {
-            return consumer.apply(this, maybe.valueOf());
+            return consumer.apply(undefined, maybe.valueOf());
           }
-          return consumer.call(this, maybe);
+          return consumer(maybe);
         });
       },
     ),
@@ -1336,7 +1342,7 @@ export const global_env = new Environment(
         return nil;
       }
       if (is_pair(arg)) {
-        const arr = listToArray.call(this, arg).toReversed();
+        const arr = listToArray(arg).toReversed();
         return arrayToList(arr);
       } else if (Array.isArray(arg)) {
         return arg.toReversed();
@@ -1389,7 +1395,7 @@ export const global_env = new Environment(
       // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
       // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
       // strips the provenance the trace wires on. See provenance-collapse.ts.
-      const joined = listToArray.call(this, list).join(separator);
+      const joined = listToArray(list).join(separator);
       return taintString(String(joined), collapseProvenance(separator, list));
     }),
     // ------------------------------------------------------------------
@@ -1525,8 +1531,8 @@ export const global_env = new Environment(
       typecheck("apply", fn, "function", 1);
       const last = args.pop();
       typecheck("apply", last, ["pair", "nil"], args.length + 2);
-      args = args.concat(listToArray.call(this, last));
-      return fn.apply(this, args);
+      args = args.concat(listToArray(last));
+      return fn.apply(undefined, args);
     }),
     // ------------------------------------------------------------------
     length: speculative(
@@ -1673,9 +1679,9 @@ export const global_env = new Environment(
     filter: doc("filter", function filter(this: Environment, arg, list) {
       typecheck("filter", arg, ["regex", "function"]);
       typecheck("filter", list, ["pair", "nil"]);
-      // `.call(this, …)` forwards the run env so `to_array` finds this run's heap meter (the per-run
-      // allocation bound). Bare `(…)(list)` would drop `this` → the meter goes uncharged.
-      const array = listToArray.call(this, list);
+      // `to_array` finds this run's heap meter via the evaluator's run-scoped
+      // `currentRunEnv()` (set at the apply boundary), so no env threading is needed here.
+      const array = listToArray(list);
       if (array.length === 0) {
         return nil;
       }

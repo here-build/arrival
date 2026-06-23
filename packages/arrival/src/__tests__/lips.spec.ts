@@ -14,14 +14,22 @@ beforeAll(async () => {
 
 describe("environment", function () {
   const env = global_environment;
-  var functions = {
-    scope_name: function () {
-      if (this.__name__ === "__frame__") {
-        return this.__parent__.__name__;
+  // Native extension fns no longer receive env-as-`this` (that ABI was retired
+  // when the evaluator stopped injecting `ctx.env` as the apply-site `this`).
+  // A native fn that needs the run env opts into the `__withCtx` channel: the
+  // evaluator appends the EvalContext as the trailing arg, so the body reads
+  // `ctx.env` explicitly and stays `this`-free.
+  const scope_name = Object.assign(
+    function scope_name(ctx) {
+      const env = ctx.env;
+      if (env.__name__ === "__frame__") {
+        return env.__parent__.__name__;
       }
-      return this.__name__;
+      return env.__name__;
     },
-  };
+    { __withCtx: true },
+  );
+  var functions = { scope_name };
   async function scope(env) {
     const result = await exec("(scope_name)", { env });
     return result[0].valueOf();

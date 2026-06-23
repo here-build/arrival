@@ -239,7 +239,7 @@ export interface EvalContext {
   tail?: boolean;
   /**
    * Speculative-evaluation flag (Tier 2 — see
-   * `docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md`).
+   * `docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md`).
    * When false/absent (the default) the evaluator is byte-identical to today:
    * collection operators resolve their promise fans eagerly to a `Pair`. When
    * true, `filter`/`map`/`list` may return a `HalfBaked` lazy carrier so that
@@ -335,12 +335,33 @@ let _canBounce = false;
  * variadic / HOF / value uses of the producers see it without a wrapper that
  * would break their arity. Saved/restored around each apply, mirroring
  * `_canBounce`. Off by default → eager, byte-identical path. See
- * docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md.
+ * docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
  */
 let _speculate = false;
 
 /** Producer builtins read this synchronously at apply time. */
 export const isSpeculating = (): boolean => _speculate;
+
+/**
+ * Run-scoped CURRENT ENV, set to `ctx.env` at the same apply boundary as
+ * `_canBounce`/`_dynamicCallSite`/`_speculate` (saved + restored in the
+ * surrounding finally). This is the replacement for env-as-`this`: native
+ * builtins that previously read their run env off `this` (the heap-meter
+ * chokepoint `to_array`) now read it from here via `currentRunEnv()`. The
+ * apply site passes `undefined` for `this` to BOTH arms — nothing reads it.
+ *
+ * Why module-level (not a `__withCtx` trailing arg, like rosettas): the meter
+ * readers are variadic / HOF builtins (`filter`/`join`/`reverse`/`apply`,
+ * and `to_array` reached through them) whose arity a trailing `ctx` would
+ * corrupt. Single-threaded JS makes the holder safe; nesting is handled by the
+ * save/restore. The meter is found by walking `__parent__` from this env, so a
+ * child-frame env still resolves the run's installed meter.
+ */
+let _currentRunEnv: Environment | undefined = undefined;
+
+/** The run's current env at apply time. Read by `to_array`'s heap-meter lookup
+ *  (stdlib.ts) in place of the erased env-as-`this`. */
+export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda passed as
@@ -2582,21 +2603,26 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     _canBounce = (fn as LambdaFunction).__lambda__ === true;
     const __savedSpeculate = _speculate;
     _speculate = ctx.speculate === true;
+    const __savedRunEnv = _currentRunEnv;
+    _currentRunEnv = ctx.env;
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
-      // __withCtx fns (all rosettas) read the env from the explicit trailing `ctx`, so
-      // env-as-`this` is redundant for them → pass undefined. The legacy arm KEEPS
-      // `ctx.env` as `this`: externally-registered native fns (exec(code,{env},{fns})) rely
-      // on that contract (a tested public extension ABI) — erasing it there is a separate
-      // native-extension-API decision, not this change.
+      // env-as-`this` is fully erased: BOTH arms pass `undefined` for `this`.
+      // __withCtx fns (all rosettas) read the env from the explicit trailing `ctx`.
+      // Legacy native builtins that need the run env read it from `_currentRunEnv`
+      // (set just above, via `currentRunEnv()`) — the heap-meter chokepoint
+      // `to_array` is the only such reader. Externally-registered native fns that
+      // want the env opt into the `__withCtx` channel (see lips.spec scope_name);
+      // the old public `this===env` ABI is intentionally retired.
       result = (fn as { __withCtx?: boolean }).__withCtx
         ? fn.apply(undefined, [...wrappedArgs, ctx])
-        : fn.apply(ctx.env, wrappedArgs);
+        : fn.apply(undefined, wrappedArgs);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;
       _speculate = __savedSpeculate;
+      _currentRunEnv = __savedRunEnv;
     }
 
     // Bounce result — the callee was a Scheme lambda speaking the protocol
