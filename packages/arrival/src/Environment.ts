@@ -262,22 +262,6 @@ export class Environment {
     return ownProps(this.__env__);
   }
 
-  fs(): EnvironmentValue {
-    return this.get("**fs**");
-  }
-
-  unset(name: BindingName): void {
-    let key: string | symbol;
-    if (name instanceof SchemeSymbol) {
-      key = name.valueOf();
-    } else if (name instanceof SchemeString) {
-      key = name.valueOf();
-    } else {
-      key = name;
-    }
-    delete this.__env__[key as string];
-  }
-
   inherit(
     name: string = `child of ${this.__name__ || "unknown"}`,
     obj: Record<string, EnvironmentValue> = {},
@@ -336,24 +320,6 @@ export class Environment {
 
   toString(): string {
     return `#<environment:${this.__name__}>`;
-  }
-
-  clone(): Environment {
-    // Duplicate refs while faithfully preserving BOTH:
-    //   - symbol-keyed bindings (Object.keys drops them — Reflect.ownKeys does not),
-    //   - the read-only attribute installed by `constant()` (a non-writable property
-    //     descriptor — a plain `env[key] = …` would silently re-create the slot writable).
-    // OracleSession.clone() relies on this snapshot being lossless: a clone that
-    // dropped symbol keys or stripped constancy would yield a too-narrow valid-symbol
-    // set and let writes land on slots that must stay constant.
-    const env: Record<string | symbol, EnvironmentValue> = {};
-    for (const key of Reflect.ownKeys(this.__env__)) {
-      const descriptor = Object.getOwnPropertyDescriptor(this.__env__, key);
-      if (descriptor) {
-        Object.defineProperty(env, key, descriptor);
-      }
-    }
-    return new Environment(this.__name__, env, this.__parent__);
   }
 
   merge(env: Environment, name: string = "merge"): Environment {
@@ -516,16 +482,6 @@ export class Environment {
   // :: Evaluation API
   // -------------------------------------------------------------------------
 
-  parents(): Environment[] {
-    let env: Environment | null = this;
-    const result: Environment[] = [];
-    while (env) {
-      result.unshift(env);
-      env = env.__parent__;
-    }
-    return result;
-  }
-
   /**
    * Parse and evaluate Scheme code in this environment.
    * Returns the result of the last expression.
@@ -546,17 +502,4 @@ export class Environment {
     return results.length > 0 ? results[results.length - 1] : nil;
   }
 
-  // -------------------------------------------------------------------------
-  // :: Static factory for creating module-based environments
-  // -------------------------------------------------------------------------
-
-  /**
-   * Evaluate a single pre-parsed expression in this environment.
-   * Use this when you've already parsed the code.
-   */
-  async evalExpr(expr: SchemeValue): Promise<SchemeValue> {
-    // Generator path, lazy-imported (see eval() above for the rationale).
-    const { execExpr } = await import("./eval/generator-exec.js");
-    return execExpr(expr, { env: this });
-  }
 }
