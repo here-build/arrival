@@ -229,7 +229,9 @@ function symbol_to_string(obj: SchemeValue): string {
 // :: helper function that make symbols in names array hygienic
 // ----------------------------------------------------------------------
 function hygienic_begin(envs, expr) {
-  const begin = global_env.get("begin");
+  // Re-derive the begin macro directly (genMacroWrapper is how the env binds it) rather
+  // than reaching global_env.get("begin") — keeps this helper off the global registry.
+  const begin = genMacroWrapper("begin");
   const g_begin = gensym("begin");
   for (const env of envs) {
     env.set(g_begin, begin);
