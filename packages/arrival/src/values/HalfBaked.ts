@@ -256,6 +256,15 @@ export class HalfBaked extends AValue {
     return { __halfBaked__: this.domain, lo, hi };
   }
 
+  // Setoid (Fantasy Land) — IDENTITY. A HalfBaked is a still-resolving computation
+  // (a fan of promise-slots / a narrowing interval), not a settled value; two distinct
+  // HalfBakeds are never `equal?` even with the same interval. The abstract AValue
+  // Setoid forces this method; identity is the faithful minimal choice. (`seen` unused
+  // — identity never recurses.)
+  ["fantasy-land/equals"](other: unknown): boolean {
+    return this === other;
+  }
+
   withProvenance(p: Provenance): AValue {
     return new HalfBaked(this.domain, this.slots, this.records, this.source, p);
   }

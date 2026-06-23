@@ -15,6 +15,7 @@
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "./op-helpers.js";
+import { structuralEqual, type SeenMap } from "./structural-equal.js";
 import { type SourceLocation } from "../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "./value-guards.js";
 import { SchemeBytevector } from "./SchemeBytevector.js";
@@ -669,6 +670,20 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
         return { value: cur.car, done: false };
       },
     };
+  }
+
+  // Setoid (Fantasy Land) — structural car/cdr equality, threading the harness's
+  // shared `seen`. NO cycle bookkeeping here: structuralEqual recorded (this, other)
+  // BEFORE dispatching, so a cyclic list (`a.cdr = a`) re-encounters the pair in the
+  // harness and short-circuits — this method just recurses element-wise. A non-Pair
+  // `other` is false. (B2: per-type `equal?` moved onto the term; the abstract AValue
+  // Setoid forces it. Mirrors SchemeVector's seen-threaded Setoid.)
+  ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
+    return (
+      other instanceof Pair &&
+      structuralEqual(this.car, other.car, seen) &&
+      structuralEqual(this.cdr, other.cdr, seen)
+    );
   }
 
   // ----------------------------------------------------------------------

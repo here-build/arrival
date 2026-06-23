@@ -21,6 +21,7 @@
 
 import invariant from "tiny-invariant";
 import { markInteropBoundary } from "../interop-access.js";
+import type { SeenMap } from "./structural-equal.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -58,6 +59,18 @@ export abstract class AValue {
 
   /** AValues are immutable — provenance updates mint a new instance. */
   abstract withProvenance(p: ReadonlySet<number>): AValue;
+
+  /**
+   * Fantasy Land Setoid — structural equality, ON THE TERM. Making this abstract
+   * forces EVERY subtype to own its `equal?` comparison (totality): a subtype
+   * with no equals is a compile error, not a silent fall-through. `structuralEqual`
+   * is the harness — it records the (this, other) co-induction pair, then dispatches
+   * HERE, threading the shared `seen` so recursive terms (Pair/Vector) co-induct
+   * through one visited set and mutual cycles terminate. The `seen` parameter is
+   * optional: a direct `a["fantasy-land/equals"](b)` call (no harness) starts a
+   * fresh walk; leaf Setoids ignore it.
+   */
+  abstract ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean;
 
   /** Subtype modules call this at top-level. Registration order is not significant. */
   static registerBoxer(typeofTag: string, fn: Boxer): void {

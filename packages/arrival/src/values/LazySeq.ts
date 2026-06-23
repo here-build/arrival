@@ -232,6 +232,14 @@ export class LazySeq extends AValue {
     return { __lazySeq__: true, sourceLength: this.source.length, ops: this.ops.map((o) => o.kind) };
   }
 
+  // Setoid (Fantasy Land) — IDENTITY. A LazySeq is a deferred-compute plan (a source
+  // plus un-run op CLOSURES); op fns/preds are functions, structurally incomparable, so
+  // there is no value equality to define. The abstract AValue Setoid forces this method;
+  // identity is faithful and minimal. (`seen` unused — identity never recurses.)
+  ["fantasy-land/equals"](other: unknown): boolean {
+    return this === other;
+  }
+
   withProvenance(p: Provenance): LazySeq {
     return new LazySeq(this.source, this.ops, p);
   }

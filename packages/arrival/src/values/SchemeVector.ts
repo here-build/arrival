@@ -17,7 +17,7 @@
  */
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
-import { structuralEqual } from "./structural-equal.js";
+import { structuralEqual, type SeenMap } from "./structural-equal.js";
 import type { SchemeValue } from "./types.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
@@ -92,17 +92,20 @@ export class SchemeVector extends AValue {
     return v;
   }
 
-  // Setoid (Fantasy Land) — structural element-wise equality. structuralEqual
-  // consults fantasy-land/equals first, so (equal? (vector 1 2) (vector 1 2)) → #t;
-  // elements recurse through structuralEqual (handles nested AValues/Pairs/vectors),
-  // mirroring the raw-array branch in structural-equal.ts. Non-SchemeVector → false.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  // Setoid (Fantasy Land) — structural element-wise equality, threading the harness's
+  // shared `seen`. structuralEqual records (this, other) BEFORE dispatching here, so a
+  // MUTUALLY-CYCLIC vector pair (a↔b vs c↔d) re-encounters the pair in the harness and
+  // short-circuits instead of recursing forever — fixing the fresh-seen-per-call
+  // stack-blow this method used to risk once the harness's inline-Vector special-case
+  // was removed (B2). Elements recurse through structuralEqual threading the SAME map
+  // (handles nested AValues/Pairs/vectors). Non-SchemeVector → false.
+  ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof SchemeVector)) return false;
     const a = this.__vector__;
     const b = other.__vector__;
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
-      if (!structuralEqual(a[i], b[i])) return false;
+      if (!structuralEqual(a[i], b[i], seen)) return false;
     }
     return true;
   }

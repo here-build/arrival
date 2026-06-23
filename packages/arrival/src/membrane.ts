@@ -343,6 +343,15 @@ export class SchemeJSObject extends AValue {
     return accessKeys(this.source);
   }
 
+  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME source
+  // (reference identity). A SchemeJSObject is a transparent, read-only view over an
+  // OPAQUE foreign object; deep-comparing the source is the "deep semantics" the membrane
+  // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
+  // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
+  ["fantasy-land/equals"](other: unknown): boolean {
+    return other instanceof SchemeJSObject && this.source === other.source;
+  }
+
   toString(): string {
     return "#<js-object>";
   }
@@ -391,6 +400,13 @@ export class SchemeJSFunction extends AValue {
   /** Call with no this binding. */
   call(...args: SchemeValue[]): SchemeValue {
     return this.apply(undefined, args);
+  }
+
+  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME function
+  // (reference identity); functions have no structural equality. The abstract AValue
+  // Setoid forces this; reference compare is faithful, minimal, and matches pre-B2 equal?.
+  ["fantasy-land/equals"](other: unknown): boolean {
+    return other instanceof SchemeJSFunction && this.source === other.source;
   }
 
   toString(): string {

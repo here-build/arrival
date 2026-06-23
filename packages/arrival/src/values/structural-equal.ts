@@ -1,8 +1,6 @@
 import { SchemeBool } from "./SchemeBool.js";
 import { SchemeSymbol } from "./SchemeSymbol.js";
-import { SchemeVector } from "./SchemeVector.js";
 import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { Pair } from "./Pair.js";
 import { Nil, SchemeCharacter } from "./types.js";
 import type { SchemeValue } from "./types.js";
 
@@ -34,40 +32,48 @@ import type { SchemeValue } from "./types.js";
  * a co-inductive bisimulation (the standard occurs-check); equality dispatches
  * through each value's Fantasy Land Setoid (`fantasy-land/equals`).
  */
-export function structuralEqual(a: any, b: any, seen: Map<object, Set<object>> = new Map()): boolean {
+/**
+ * The co-induction visited set threaded through a single `equal?` walk. Maps each
+ * visited `a`-reference to the SET of `b`-partners it has been compared against on
+ * the current path; a re-encountered `(a, b)` short-circuits to true (the standard
+ * occurs-check). Shared by the harness AND by each term's `fantasy-land/equals`
+ * (Pair/Vector recurse through `structuralEqual` threading this map), so mutually-
+ * cyclic structures terminate. Exported so AValue's abstract Setoid can type its
+ * optional `seen` parameter identically.
+ */
+export type SeenMap = Map<object, Set<object>>;
+
+export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): boolean {
   // Fast paths: identity, then valueOf-equality (covers SchemeExact/Inexact,
   // boxed primitives, SchemeCharacter's __char__ via valueOf) and SchemeString's
   // `__string__`.
   if (a === b) return true;
   if (a == null || b == null) return a === b;
 
-  // SchemeVector: handle HERE (before the fantasy-land/equals hook below), inside
-  // the `seen` occurs-check, so cyclic vectors terminate co-inductively instead of
-  // recursing forever. The class's own `fantasy-land/equals` recurses with a FRESH
-  // seen-map per call, so a mutually-cyclic pair would blow the JS stack if we let
-  // the line-43 hook take it — breaking this walker's never-throws cycle-safety
-  // contract (the war story above). Element recursion threads the shared `seen`.
-  if (a instanceof SchemeVector || b instanceof SchemeVector) {
-    if (!(a instanceof SchemeVector) || !(b instanceof SchemeVector)) return false;
-    const av = a.__vector__;
-    const bv = b.__vector__;
-    if (av.length !== bv.length) return false;
+  // Co-induction bookkeeping — record the (a, b) partner pair BEFORE descending,
+  // GENERICALLY for any object pair (no longer Vector-specific). A re-encountered
+  // (a, b) short-circuits to true, so cyclic structures (Pair/Vector/array/plain
+  // object) terminate co-inductively. Recording here, before the Setoid dispatch,
+  // is what lets each term's `fantasy-land/equals` recurse through `structuralEqual`
+  // with a shared `seen` and never re-record — so a mutually-cyclic vector pair
+  // can no longer blow the stack (the war story / the moved-inline-Vector case).
+  // Primitives can't carry cycles; they fall straight through to the leaf fallbacks.
+  if (typeof a === "object" && typeof b === "object") {
     const partners = seen.get(a);
     if (partners?.has(b)) return true;
     if (partners) partners.add(b);
     else seen.set(a, new Set([b]));
-    for (let i = 0; i < av.length; i++) {
-      if (!structuralEqual(av[i], bv[i], seen)) return false;
-    }
-    return true;
   }
 
-  // Setoid (Fantasy Land): a value that defines its own equality OWNS the comparison
-  // — opaque entities (IP/hash/SID) whose canonical match differs from structural key
-  // comparison (and whose sealed #fields make structural comparison meaningless). An
-  // entity compared to a non-entity (a bare literal) returns false. Symmetric.
-  if (typeof a?.["fantasy-land/equals"] === "function") return Boolean(a["fantasy-land/equals"](b));
-  if (typeof b?.["fantasy-land/equals"] === "function") return Boolean(b["fantasy-land/equals"](a));
+  // Setoid (Fantasy Land): a value that defines its own equality OWNS the comparison.
+  // Now total over every AValue (the abstract method forces it) — Pair and SchemeVector
+  // route HERE, each threading the shared `seen` so cyclic terms terminate. Opaque
+  // entities (IP/hash/SID) whose canonical match differs from structural key comparison
+  // also own it; an entity compared to a non-entity (a bare literal) returns false.
+  // Symmetric. The `seen` is forwarded so a Setoid's element recursion co-inducts
+  // through the SAME visited set this harness just recorded into.
+  if (typeof a["fantasy-land/equals"] === "function") return Boolean(a["fantasy-land/equals"](b, seen));
+  if (typeof b["fantasy-land/equals"] === "function") return Boolean(b["fantasy-land/equals"](a, seen));
 
   const av = a?.valueOf?.();
   const bv = b?.valueOf?.();
@@ -76,22 +82,6 @@ export function structuralEqual(a: any, b: any, seen: Map<object, Set<object>> =
 
   // Both must be objects to recurse; otherwise they're unequal primitives.
   if (typeof a !== "object" || typeof b !== "object") return false;
-
-  // Occurs-check: if we're already comparing this exact (a, b) pair higher up
-  // the stack, the structures are cyclic in the same shape → treat as equal.
-  const partners = seen.get(a);
-  if (partners?.has(b)) return true;
-  if (partners) partners.add(b);
-  else seen.set(a, new Set([b]));
-
-  // LIPS Pairs: compare car/cdr structurally (handles cyclic lists).
-  if (a instanceof Pair && b instanceof Pair) {
-    return (
-      structuralEqual(a.car, b.car, seen) &&
-      structuralEqual(a.cdr, b.cdr, seen)
-    );
-  }
-  if (a instanceof Pair || b instanceof Pair) return false;
 
   // Arrays (incl. SchemeJSArray sources are raw arrays by this point).
   const aArr = Array.isArray(a);
