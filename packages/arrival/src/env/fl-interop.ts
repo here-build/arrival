@@ -28,7 +28,7 @@
  * Evaluated", 2009).
  */
 
-import { EnvCapability, valueSymbols } from "./capability.js";
+import { EnvCapability } from "./capability.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
@@ -317,274 +317,305 @@ function unforcedLazyEgress(op: string): never {
 
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
-export const FL_INTEROP_OPS = {
-  // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers; a Pair computes on the term (arrival/tagless-final/car)
-  car: (list: unknown) => {
-    captureBuiltins();
-    if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
-    if (list instanceof Pair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
-    return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
-  },
-  cdr: (list: unknown) => {
-    captureBuiltins();
-    if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
-    if (list instanceof Pair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
-    return list instanceof SchemeJSArray
-      ? list.length <= 1
-        ? nil
-        : new SchemeJSArray(list.source.slice(1))
-      : builtinCdr!(list);
-  },
-  // FL-dispatch: any FL entity — INCLUDING a LIPS Pair (filterPair preserves spine
-  // order; the coercion-soundness suite pins per-element-box order) — computes by its
-  // own fantasy-land/filter, so this no longer reaches the env-resolved scheme builtin.
-  // (map/reduce below still route Pairs to the builtin — only filter is flipped here.)
-  // LIPS lambdas are async; FL methods are sync. asyncFL* bridges this gap.
-  filter: function filter(this: unknown, arg: ((v: unknown) => unknown) | RegExp, list: unknown) {
-    captureBuiltins();
-    // Nil-tolerant: a `(first? …)`/`(if …)` that yielded #f or void flowing into a
-    // filter resolves to the empty list, not a crash — so a multi-leaf proof can still
-    // ground its OTHER leaves instead of losing the whole program to one absent read.
-    // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
-    // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
-    if (list == null || is_false(list)) return nil;
-    // Empty/nil list → nil, like the eager builtin. asyncFLFilter on a Nil (which
-    // lacks fantasy-land/filter) would misbehave, so guard it before the FL route.
-    if (is_nil(list)) return nil;
-    // LazySeq fast-path — BEFORE the FL/asyncFL collect: extend the plan, run
-    // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
-    // the interop boundary, so the carrier stays a generic async-aware pipe. A regex
-    // arg never reaches a LazySeq in practice; cast to the fn form for the await.
-    if (is_lazy_seq(list)) return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
-    // FL-dispatch — NOW INCLUDING LIPS Pairs. A Pair implements fantasy-land/filter
-    // (filterPair walks the spine, preserving element boxes), so it computes by FL
-    // here instead of reaching the env-resolved scheme builtin. asyncFLFilter applies
-    // the canonical keep-rule and adapts a regex arg, so this is byte-identical to the
-    // eager builtin's VALUE semantics (the heap-meter charge listToArray did is the one
-    // resource-accounting difference; no value-level behavior changes).
-    if (
-      list &&
-      typeof list === "object" &&
-      (list as Partial<FantasyLand>)["fantasy-land/filter"]
-    ) {
-      return asyncFLFilter(arg, list as FantasyLand);
-    }
-    // Final fallback — any input that implements neither LazySeq nor fantasy-land/filter.
-    return builtinFilter!.call(this, arg, list);
-  },
-  map: function map(this: unknown, fn: (v: unknown) => unknown, ...lists: unknown[]) {
-    captureBuiltins();
-    if (lists.length === 1 && (lists[0] == null || is_false(lists[0]))) return nil; // nil-tolerant (see filter)
-    // LazySeq fast-path — extend the plan, run nothing (a pure map mints no
-    // provenance of its own, so its op-prov is empty; the source's grouping
-    // provenance and the elements' provenance ride the carrier).
-    if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
-    // FL-dispatch — NOW INCLUDING a single-list LIPS Pair, which computes by its OWN
-    // fantasy-land/map (mapPair) here instead of reaching the env-resolved scheme builtin
-    // (mirrors filter/reduce). asyncArrivalMap is the box-PRESERVING twin (no unwrapLipsValue),
-    // so per-element boxes + provenance survive — byte-identical to the eager builtin's
-    // `Pair.fromArray(results)` (coercion-soundness "Pair · map preserves every element's
-    // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
-    // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
-    if (lists.length === 1 && lists[0] instanceof Pair) {
-      return asyncArrivalMap(fn, lists[0] as unknown as FantasyLand);
-    }
-    // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
-    // crossing out, so asyncFLMap's unwrapLipsValue strips boxes to raw JS values (the DR4
-    // box-strip, pinned GOLDEN for SchemeVector). UNCHANGED.
-    if (
-      lists.length === 1 &&
-      !(lists[0] instanceof Pair) &&
-      (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]
-    ) {
-      return asyncFLMap(fn, lists[0] as FantasyLand);
-    }
-    // Fallback — multi-list (zip), or a non-FL input (a SchemeJSArray: builtinMap
-    // typechecks pair|nil and THROWS, the coercion-soundness pin).
-    return builtinMap!.call(this, fn, ...lists);
-  },
-  reduce: function reduce(
-    this: unknown,
-    fn: (acc: unknown, val: unknown) => unknown,
-    init: unknown,
-    collection: unknown,
-  ) {
-    captureBuiltins();
-    if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
-    // FL-Foldable dispatch — NOW INCLUDING LIPS Pairs — folds in ARRIVAL/SCHEME
-    // convention (`fn(element, acc)`, element first), the opposite of the FL Foldable's
-    // own acc-first order. A Pair carries `arrival/tagless-final/reduce` (Pair.ts) which
-    // is exactly `fantasy-land/reduce` with the args swapped; rather than re-fold by hand
-    // we run that same element-first fold async-aware here (asyncArrivalReduce), so the
-    // overlay reduce over a Pair is byte-identical to the eager scheme `reduce` builtin —
-    // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85. Routing on
-    // `fantasy-land/reduce` keeps the branch total over every arrival Foldable (Pair +
-    // SchemeVector); the `arrival/tagless-final/reduce` carrier names the convention on
-    // the term. A SchemeJSArray has neither method, so it still falls through to
-    // builtinReduce, whose pair|nil typecheck throws (the coercion-soundness DR4 pin).
-    if (
-      collection &&
-      typeof collection === "object" &&
-      ((collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"] ||
-        (collection as Partial<FantasyLand>)["fantasy-land/reduce"])
-    ) {
-      return asyncArrivalReduce(fn, init, collection as FantasyLand);
-    }
-    // Fallback — neither LazySeq nor an FL/arrival Foldable (a SchemeJSArray, a raw
-    // input). builtinReduce typechecks pair|nil and folds (or throws for a non-list).
-    return builtinReduce!.call(this, fn, init, collection);
-  },
-
-  // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────
-  // The operator membrane rejects a nil operand at codec-match time (the `=`/`<`/…
-  // Operators declare `in: [SchemeNum]`), so a comparison against an absent value
-  // (a nil PID, an unmatched lookup) throws before the body runs — forcing models
-  // to write defensive `(if (nil? x) … (= x …))` guards. Completing the plane's
-  // existing nil-tolerance grain (see filter/map): a nil operand resolves the
-  // comparison to #f rather than crashing the proof. Non-nil NUMBER operands compute
-  // by-value via their `fantasy-land/lte` (numericChain — no env-read, byte-identical
-  // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
-  // falls back to the kept bridged builtin, which is that Operator (identical throw).
-  "=": function numEq(...args: unknown[]) {
-    if (args.some(isNilOperand)) return false;
-    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("=", args);
-    captureBuiltins();
-    return builtinNumEq!(...args);
-  },
-  "<": function lt(...args: unknown[]) {
-    if (args.some(isNilOperand)) return false;
-    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<", args);
-    captureBuiltins();
-    return builtinLt!(...args);
-  },
-  ">": function gt(...args: unknown[]) {
-    if (args.some(isNilOperand)) return false;
-    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">", args);
-    captureBuiltins();
-    return builtinGt!(...args);
-  },
-  "<=": function lte(...args: unknown[]) {
-    if (args.some(isNilOperand)) return false;
-    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<=", args);
-    captureBuiltins();
-    return builtinLte!(...args);
-  },
-  ">=": function gte(...args: unknown[]) {
-    if (args.some(isNilOperand)) return false;
-    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">=", args);
-    captureBuiltins();
-    return builtinGte!(...args);
-  },
-
-  // ── Array-aware list accessors ───────────────────────────────────────────────
-  // Nil-tolerant accessors that work over both JS arrays (what `@`/SchemeJSArray
-  // hand the inference plane) and LIPS pairs. Self-contained — no builtin capture.
-
-  // ── List aliases (models expect these) ──
-  // Each guards against an un-forced lazy-seq (A18d): without it these silently
-  // return nil for a LazySeq (no `.car`, not an array), masking the misuse.
-  first: (list: any) => {
-    if (is_lazy_seq(list)) unforcedLazyEgress("first");
-    return list?.car ?? (Array.isArray(list) ? list[0] : nil);
-  },
-  last: (list: any) => {
-    if (is_lazy_seq(list)) unforcedLazyEgress("last");
-    if (Array.isArray(list)) return list.at(-1) ?? nil;
-    let current = list;
-    while (current?.cdr?.constructor?.name !== "Nil" && current?.cdr != null) {
-      current = current.cdr;
-    }
-    return current?.car ?? nil;
-  },
-  second: (list: any) => {
-    if (is_lazy_seq(list)) unforcedLazyEgress("second");
-    return list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil);
-  },
-  third: (list: any) => {
-    if (is_lazy_seq(list)) unforcedLazyEgress("third");
-    return list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil);
-  },
-
-  // ── Association lists ──
-  assoc: (key: any, alist: any) => {
-    if (is_lazy_seq(alist)) unforcedLazyEgress("assoc");
-    if (!alist) return nil;
-    const items = Array.isArray(alist) ? alist : [];
-    // Convert LIPS pairs to traversable
-    if (!Array.isArray(alist) && alist?.car) {
-      let current = alist;
-      while (current?.car) {
-        const pair = current.car;
-        if (pair?.car?.valueOf?.() === key?.valueOf?.() || pair?.car === key) return pair;
-        current = current.cdr;
-      }
-      return nil;
-    }
-    return items.find((pair: any) => pair?.[0] === key || pair?.car === key) ?? nil;
-  },
-
-  // ── Sort ──
-  sort: (list: any, comparator?: any) => {
-    if (is_lazy_seq(list)) unforcedLazyEgress("sort");
-    const arr = Array.isArray(list) ? [...list] : [];
-    if (!Array.isArray(list) && list?.car) {
-      let current = list;
-      while (current?.car) {
-        arr.push(current.car);
-        current = current.cdr;
-      }
-    }
-    if (comparator) {
-      arr.sort((a: any, b: any) => comparator(a, b));
-    } else {
-      arr.sort();
-    }
-    // Return a Scheme LIST, not a raw JS array — a Lisp `sort` whose result the sibling
-    // `map`/`filter` reject ("Expecting pair or nil, got array") is an inconsistency. The elements
-    // are already Scheme values (we just reordered them), so build the list shallow (no re-boxing);
-    // an empty result is nil.
-    return Pair.fromArray(arr, false);
-  },
-
-  length: (collection: any) => {
-    // LazySeq fast-path — the demand cone IS the provenance cone: refine under a
-    // `length` observation runs only the ops the count depends on (a pure-map
-    // chain runs NOTHING — `(length (map f xs))` never touches f) and stamps the
-    // minimal cone from the same walk. Returns a Promise only here; the eager
-    // path below stays sync and byte-identical (the speculate discipline).
-    if (is_lazy_seq(collection)) {
-      return collection.refine({ kind: "length" }).then((r) => {
-        const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
-        return provenance.size === 0 ? count : AValue.fromJs(count, provenance);
-      });
-    }
-    // Collect elements so the count can carry their provenance (V: "provenance
-    // everything; exclusion should not be possible in teleological mode"). A
-    // `(count …)`/`(length …)` the seal can't sign — even though every row that
-    // produced it was grounded — is exactly the hole the teleological seal forbids.
-    const elements = collectElements(collection);
-    const count = elements.length;
-    const inputs = elements.filter((e): e is AValue => e instanceof AValue);
-    if (inputs.length === 0) return count;
-    const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : AValue.fromJs(count, prov);
-  },
-
-  // A18c — the scheme-surface entry into the lazy plane. `(lazy-seq xs)` wraps a
-  // collection's elements into an un-run plan; `map`/`filter` then EXTEND it and
-  // `length`/`reduce`/iterate FORCE it. The collection's own provenance is the
-  // grouping fact (cheap, eager); per-element provenance rides the elements and
-  // is distributed only on materialization. Conservative by design: laziness is
-  // opt-in, so a plain Pair stays eager and byte-identical (the speculate
-  // discipline) — flipping map's default to lazy is a separate, deliberate call.
-  "lazy-seq": (collection: any) =>
-    new LazySeq(
-      collectElements(collection),
-      [],
-      collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,
-    ),
-};
-
 export default new EnvCapability("scheme/fl-interop", {
-  symbols: valueSymbols(FL_INTEROP_OPS),
+  symbols: {
+    // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers; a Pair computes on the term (arrival/tagless-final/car)
+    car: {
+      value: (list: unknown) => {
+        captureBuiltins();
+        if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
+        if (list instanceof Pair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
+        return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
+      },
+    },
+    cdr: {
+      value: (list: unknown) => {
+        captureBuiltins();
+        if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
+        if (list instanceof Pair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
+        return list instanceof SchemeJSArray
+          ? list.length <= 1
+            ? nil
+            : new SchemeJSArray(list.source.slice(1))
+          : builtinCdr!(list);
+      },
+    },
+    // FL-dispatch: any FL entity — INCLUDING a LIPS Pair (filterPair preserves spine
+    // order; the coercion-soundness suite pins per-element-box order) — computes by its
+    // own fantasy-land/filter, so this no longer reaches the env-resolved scheme builtin.
+    // (map/reduce below still route Pairs to the builtin — only filter is flipped here.)
+    // LIPS lambdas are async; FL methods are sync. asyncFL* bridges this gap.
+    filter: {
+      value: function filter(this: unknown, arg: ((v: unknown) => unknown) | RegExp, list: unknown) {
+        captureBuiltins();
+        // Nil-tolerant: a `(first? …)`/`(if …)` that yielded #f or void flowing into a
+        // filter resolves to the empty list, not a crash — so a multi-leaf proof can still
+        // ground its OTHER leaves instead of losing the whole program to one absent read.
+        // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
+        // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
+        if (list == null || is_false(list)) return nil;
+        // Empty/nil list → nil, like the eager builtin. asyncFLFilter on a Nil (which
+        // lacks fantasy-land/filter) would misbehave, so guard it before the FL route.
+        if (is_nil(list)) return nil;
+        // LazySeq fast-path — BEFORE the FL/asyncFL collect: extend the plan, run
+        // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
+        // the interop boundary, so the carrier stays a generic async-aware pipe. A regex
+        // arg never reaches a LazySeq in practice; cast to the fn form for the await.
+        if (is_lazy_seq(list))
+          return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
+        // FL-dispatch — NOW INCLUDING LIPS Pairs. A Pair implements fantasy-land/filter
+        // (filterPair walks the spine, preserving element boxes), so it computes by FL
+        // here instead of reaching the env-resolved scheme builtin. asyncFLFilter applies
+        // the canonical keep-rule and adapts a regex arg, so this is byte-identical to the
+        // eager builtin's VALUE semantics (the heap-meter charge listToArray did is the one
+        // resource-accounting difference; no value-level behavior changes).
+        if (list && typeof list === "object" && (list as Partial<FantasyLand>)["fantasy-land/filter"]) {
+          return asyncFLFilter(arg, list as FantasyLand);
+        }
+        // Final fallback — any input that implements neither LazySeq nor fantasy-land/filter.
+        return builtinFilter!.call(this, arg, list);
+      },
+    },
+    map: {
+      value: function map(this: unknown, fn: (v: unknown) => unknown, ...lists: unknown[]) {
+        captureBuiltins();
+        if (lists.length === 1 && (lists[0] == null || is_false(lists[0]))) return nil; // nil-tolerant (see filter)
+        // LazySeq fast-path — extend the plan, run nothing (a pure map mints no
+        // provenance of its own, so its op-prov is empty; the source's grouping
+        // provenance and the elements' provenance ride the carrier).
+        if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
+        // FL-dispatch — NOW INCLUDING a single-list LIPS Pair, which computes by its OWN
+        // fantasy-land/map (mapPair) here instead of reaching the env-resolved scheme builtin
+        // (mirrors filter/reduce). asyncArrivalMap is the box-PRESERVING twin (no unwrapLipsValue),
+        // so per-element boxes + provenance survive — byte-identical to the eager builtin's
+        // `Pair.fromArray(results)` (coercion-soundness "Pair · map preserves every element's
+        // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
+        // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
+        if (lists.length === 1 && lists[0] instanceof Pair) {
+          return asyncArrivalMap(fn, lists[0] as unknown as FantasyLand);
+        }
+        // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
+        // crossing out, so asyncFLMap's unwrapLipsValue strips boxes to raw JS values (the DR4
+        // box-strip, pinned GOLDEN for SchemeVector). UNCHANGED.
+        if (
+          lists.length === 1 &&
+          !(lists[0] instanceof Pair) &&
+          (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]
+        ) {
+          return asyncFLMap(fn, lists[0] as FantasyLand);
+        }
+        // Fallback — multi-list (zip), or a non-FL input (a SchemeJSArray: builtinMap
+        // typechecks pair|nil and THROWS, the coercion-soundness pin).
+        return builtinMap!.call(this, fn, ...lists);
+      },
+    },
+    reduce: {
+      value: function reduce(
+        this: unknown,
+        fn: (acc: unknown, val: unknown) => unknown,
+        init: unknown,
+        collection: unknown,
+      ) {
+        captureBuiltins();
+        if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
+        // FL-Foldable dispatch — NOW INCLUDING LIPS Pairs — folds in ARRIVAL/SCHEME
+        // convention (`fn(element, acc)`, element first), the opposite of the FL Foldable's
+        // own acc-first order. A Pair carries `arrival/tagless-final/reduce` (Pair.ts) which
+        // is exactly `fantasy-land/reduce` with the args swapped; rather than re-fold by hand
+        // we run that same element-first fold async-aware here (asyncArrivalReduce), so the
+        // overlay reduce over a Pair is byte-identical to the eager scheme `reduce` builtin —
+        // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85. Routing on
+        // `fantasy-land/reduce` keeps the branch total over every arrival Foldable (Pair +
+        // SchemeVector); the `arrival/tagless-final/reduce` carrier names the convention on
+        // the term. A SchemeJSArray has neither method, so it still falls through to
+        // builtinReduce, whose pair|nil typecheck throws (the coercion-soundness DR4 pin).
+        if (
+          collection &&
+          typeof collection === "object" &&
+          ((collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"] ||
+            (collection as Partial<FantasyLand>)["fantasy-land/reduce"])
+        ) {
+          return asyncArrivalReduce(fn, init, collection as FantasyLand);
+        }
+        // Fallback — neither LazySeq nor an FL/arrival Foldable (a SchemeJSArray, a raw
+        // input). builtinReduce typechecks pair|nil and folds (or throws for a non-list).
+        return builtinReduce!.call(this, fn, init, collection);
+      },
+    },
+
+    // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────
+    // The operator membrane rejects a nil operand at codec-match time (the `=`/`<`/…
+    // Operators declare `in: [SchemeNum]`), so a comparison against an absent value
+    // (a nil PID, an unmatched lookup) throws before the body runs — forcing models
+    // to write defensive `(if (nil? x) … (= x …))` guards. Completing the plane's
+    // existing nil-tolerance grain (see filter/map): a nil operand resolves the
+    // comparison to #f rather than crashing the proof. Non-nil NUMBER operands compute
+    // by-value via their `fantasy-land/lte` (numericChain — no env-read, byte-identical
+    // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
+    // falls back to the kept bridged builtin, which is that Operator (identical throw).
+    "=": {
+      value: function numEq(...args: unknown[]) {
+        if (args.some(isNilOperand)) return false;
+        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("=", args);
+        captureBuiltins();
+        return builtinNumEq!(...args);
+      },
+    },
+    "<": {
+      value: function lt(...args: unknown[]) {
+        if (args.some(isNilOperand)) return false;
+        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<", args);
+        captureBuiltins();
+        return builtinLt!(...args);
+      },
+    },
+    ">": {
+      value: function gt(...args: unknown[]) {
+        if (args.some(isNilOperand)) return false;
+        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">", args);
+        captureBuiltins();
+        return builtinGt!(...args);
+      },
+    },
+    "<=": {
+      value: function lte(...args: unknown[]) {
+        if (args.some(isNilOperand)) return false;
+        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<=", args);
+        captureBuiltins();
+        return builtinLte!(...args);
+      },
+    },
+    ">=": {
+      value: function gte(...args: unknown[]) {
+        if (args.some(isNilOperand)) return false;
+        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">=", args);
+        captureBuiltins();
+        return builtinGte!(...args);
+      },
+    },
+
+    // ── Array-aware list accessors ───────────────────────────────────────────────
+    // Nil-tolerant accessors that work over both JS arrays (what `@`/SchemeJSArray
+    // hand the inference plane) and LIPS pairs. Self-contained — no builtin capture.
+
+    // ── List aliases (models expect these) ──
+    // Each guards against an un-forced lazy-seq (A18d): without it these silently
+    // return nil for a LazySeq (no `.car`, not an array), masking the misuse.
+    first: {
+      value: (list: any) => {
+        if (is_lazy_seq(list)) unforcedLazyEgress("first");
+        return list?.car ?? (Array.isArray(list) ? list[0] : nil);
+      },
+    },
+    last: {
+      value: (list: any) => {
+        if (is_lazy_seq(list)) unforcedLazyEgress("last");
+        if (Array.isArray(list)) return list.at(-1) ?? nil;
+        let current = list;
+        while (current?.cdr?.constructor?.name !== "Nil" && current?.cdr != null) {
+          current = current.cdr;
+        }
+        return current?.car ?? nil;
+      },
+    },
+    second: {
+      value: (list: any) => {
+        if (is_lazy_seq(list)) unforcedLazyEgress("second");
+        return list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil);
+      },
+    },
+    third: {
+      value: (list: any) => {
+        if (is_lazy_seq(list)) unforcedLazyEgress("third");
+        return list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil);
+      },
+    },
+
+    // ── Association lists ──
+    assoc: {
+      value: (key: any, alist: any) => {
+        if (is_lazy_seq(alist)) unforcedLazyEgress("assoc");
+        if (!alist) return nil;
+        const items = Array.isArray(alist) ? alist : [];
+        // Convert LIPS pairs to traversable
+        if (!Array.isArray(alist) && alist?.car) {
+          let current = alist;
+          while (current?.car) {
+            const pair = current.car;
+            if (pair?.car?.valueOf?.() === key?.valueOf?.() || pair?.car === key) return pair;
+            current = current.cdr;
+          }
+          return nil;
+        }
+        return items.find((pair: any) => pair?.[0] === key || pair?.car === key) ?? nil;
+      },
+    },
+
+    // ── Sort ──
+    sort: {
+      value: (list: any, comparator?: any) => {
+        if (is_lazy_seq(list)) unforcedLazyEgress("sort");
+        const arr = Array.isArray(list) ? [...list] : [];
+        if (!Array.isArray(list) && list?.car) {
+          let current = list;
+          while (current?.car) {
+            arr.push(current.car);
+            current = current.cdr;
+          }
+        }
+        if (comparator) {
+          arr.sort((a: any, b: any) => comparator(a, b));
+        } else {
+          arr.sort();
+        }
+        // Return a Scheme LIST, not a raw JS array — a Lisp `sort` whose result the sibling
+        // `map`/`filter` reject ("Expecting pair or nil, got array") is an inconsistency. The elements
+        // are already Scheme values (we just reordered them), so build the list shallow (no re-boxing);
+        // an empty result is nil.
+        return Pair.fromArray(arr, false);
+      },
+    },
+
+    length: {
+      value: (collection: any) => {
+        // LazySeq fast-path — the demand cone IS the provenance cone: refine under a
+        // `length` observation runs only the ops the count depends on (a pure-map
+        // chain runs NOTHING — `(length (map f xs))` never touches f) and stamps the
+        // minimal cone from the same walk. Returns a Promise only here; the eager
+        // path below stays sync and byte-identical (the speculate discipline).
+        if (is_lazy_seq(collection)) {
+          return collection.refine({ kind: "length" }).then((r) => {
+            const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
+            return provenance.size === 0 ? count : AValue.fromJs(count, provenance);
+          });
+        }
+        // Collect elements so the count can carry their provenance (V: "provenance
+        // everything; exclusion should not be possible in teleological mode"). A
+        // `(count …)`/`(length …)` the seal can't sign — even though every row that
+        // produced it was grounded — is exactly the hole the teleological seal forbids.
+        const elements = collectElements(collection);
+        const count = elements.length;
+        const inputs = elements.filter((e): e is AValue => e instanceof AValue);
+        if (inputs.length === 0) return count;
+        const prov = unionProvenance(inputs);
+        return prov.size === 0 ? count : AValue.fromJs(count, prov);
+      },
+    },
+
+    // A18c — the scheme-surface entry into the lazy plane. `(lazy-seq xs)` wraps a
+    // collection's elements into an un-run plan; `map`/`filter` then EXTEND it and
+    // `length`/`reduce`/iterate FORCE it. The collection's own provenance is the
+    // grouping fact (cheap, eager); per-element provenance rides the elements and
+    // is distributed only on materialization. Conservative by design: laziness is
+    // opt-in, so a plain Pair stays eager and byte-identical (the speculate
+    // discipline) — flipping map's default to lazy is a separate, deliberate call.
+    "lazy-seq": {
+      value: (collection: any) =>
+        new LazySeq(
+          collectElements(collection),
+          [],
+          collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,
+        ),
+    },
+  },
 });

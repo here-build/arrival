@@ -14,44 +14,50 @@
 import { SchemeBool } from "../values/SchemeBool.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
-import { EnvCapability, valueSymbols } from "./capability.js";
-
-export const EQUALITY_OPS = {
-  // R7RS 6.3 Booleans
-  "boolean=?"(...bools: unknown[]): boolean {
-    if (bools.length < 2) return true;
-    // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
-    // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
-    // the type-guard one line up would already have rejected the schemeTrue
-    // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-    const unwrap = (b: unknown): boolean | undefined => {
-      if (typeof b === "boolean") return b;
-      if (b instanceof SchemeBool) return b.value;
-      return undefined;
-    };
-    const first = unwrap(bools[0]);
-    if (first === undefined) return false;
-    return bools.every((b) => unwrap(b) === first);
-  },
-
-  // R7RS 6.5 Symbols
-  "symbol=?"(...syms: unknown[]): boolean {
-    if (syms.length < 2) return true;
-    const first = syms[0];
-    if (!(first instanceof SchemeSymbol)) return false;
-    const firstName = first.__name__;
-    return syms.every((s) => s instanceof SchemeSymbol && s.__name__ === firstName);
-  },
-
-  "procedure?"(obj: unknown): boolean {
-    return typeof obj === "function";
-  },
-
-  "equal?"(a: unknown, b: unknown): boolean {
-    return structuralEqual(a, b);
-  },
-};
+import { EnvCapability } from "./capability.js";
 
 export default new EnvCapability("scheme/equality", {
-  symbols: valueSymbols(EQUALITY_OPS),
+  symbols: {
+    // R7RS 6.3 Booleans
+    "boolean=?": {
+      value(...bools: unknown[]): boolean {
+        if (bools.length < 2) return true;
+        // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
+        // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
+        // the type-guard one line up would already have rejected the schemeTrue
+        // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
+        const unwrap = (b: unknown): boolean | undefined => {
+          if (typeof b === "boolean") return b;
+          if (b instanceof SchemeBool) return b.value;
+          return undefined;
+        };
+        const first = unwrap(bools[0]);
+        if (first === undefined) return false;
+        return bools.every((b) => unwrap(b) === first);
+      },
+    },
+
+    // R7RS 6.5 Symbols
+    "symbol=?": {
+      value(...syms: unknown[]): boolean {
+        if (syms.length < 2) return true;
+        const first = syms[0];
+        if (!(first instanceof SchemeSymbol)) return false;
+        const firstName = first.__name__;
+        return syms.every((s) => s instanceof SchemeSymbol && s.__name__ === firstName);
+      },
+    },
+
+    "procedure?": {
+      value(obj: unknown): boolean {
+        return typeof obj === "function";
+      },
+    },
+
+    "equal?": {
+      value(a: unknown, b: unknown): boolean {
+        return structuralEqual(a, b);
+      },
+    },
+  },
 });

@@ -34,12 +34,20 @@ import { SchemeVector } from "../values/SchemeVector.js";
 import { SchemeString } from "../values/SchemeString.js";
 import { LazySeq } from "../values/LazySeq.js";
 import { SchemeJSArray } from "../membrane.js";
-import { FL_INTEROP_OPS } from "../env/fl-interop.js";
+import flInteropCap from "../env/fl-interop.js";
+import type { EnvCapability } from "../env/capability.js";
 import { nil } from "../values/types.js";
 import { provOf } from "../values/lineage-shadow.js";
 
 await initBridge();
-const ops = FL_INTEROP_OPS as unknown as Record<string, (...a: any[]) => any>;
+// Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
+// inlined into the constructor; the capability default export is the single
+// declaration site). These packs are all the record form of `spec.symbols`.
+const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
+  Object.fromEntries(
+    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+  );
+const ops = opsOf(flInteropCap);
 
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
 /** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the

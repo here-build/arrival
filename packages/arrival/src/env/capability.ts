@@ -74,12 +74,6 @@ export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, 
   return out;
 }
 
-/** Lift a plain `name → value` ops map into a `symbols` record of raw `{ value }` bindings —
- *  the bulk form of the per-entry `{ value: v }` wrap. For value-domain packs whose ops are
- *  plain (this-free) callables/constants bound as-is (no rosetta, no `this`). */
-export const valueSymbols = <T>(ops: Record<string, T>): Record<string, { value: T }> =>
-  Object.fromEntries(Object.entries(ops).map(([k, v]) => [k, { value: v }]));
-
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   /** zod schemas for per-env config; values are supplied + validated at `lower()`. */
   configuration?: C;

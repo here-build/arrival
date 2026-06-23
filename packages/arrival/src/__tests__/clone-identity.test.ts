@@ -34,8 +34,9 @@ import { describe, expect, it } from "vitest";
 import { is_nil } from "../eval/guards";
 import { hasMember, isSchemeValue, readMember, toJS } from "../membrane";
 import { schemeToJs } from "../rosetta";
-import { COMBINATOR_OPS } from "../env/combinators";
-import { LIST_OPS } from "../env/lists";
+import combinatorsCap from "../env/combinators";
+import listsCap from "../env/lists";
+import type { EnvCapability } from "../env/capability";
 import { Pair } from "../values/Pair";
 import { Nil, nil } from "../values/types";
 
@@ -44,6 +45,16 @@ import { Nil, nil } from "../values/types";
 // arm resolves to nil while the predicate carries provenance. Same shape the
 // rosetta wrapper mints for AValue results (rosetta.ts:217-223).
 const cloneNil = (origin = 42) => nil.withProvenance(new Set<number>([origin]));
+
+// Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
+// inlined into the constructor; the capability default export is the single
+// declaration site). These packs are all the record form of `spec.symbols`.
+const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
+  Object.fromEntries(
+    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+  );
+const LIST_OPS = opsOf(listsCap);
+const COMBINATOR_OPS = opsOf(combinatorsCap);
 
 // Sanity check: confirm the witness has the right shape before any sites
 // are exercised. If this breaks, every test below is meaningless.

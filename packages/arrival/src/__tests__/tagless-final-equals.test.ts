@@ -13,7 +13,8 @@ import { LazySeq } from "../values/LazySeq.js";
 import { SchemeJSObject, SchemeJSFunction } from "../membrane.js";
 import { Nil, nil, SchemeCharacter } from "../values/types.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
-import { LIST_OPS } from "../env/lists.js";
+import listsCap from "../env/lists.js";
+import type { EnvCapability } from "../env/capability.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — fantasy-land/equals as a totalic, cycle-safe, tagless-final Setoid.
@@ -38,6 +39,15 @@ import { LIST_OPS } from "../env/lists.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EQ = "fantasy-land/equals";
+
+// Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
+// inlined into the constructor; the capability default export is the single
+// declaration site). These packs are all the record form of `spec.symbols`.
+const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
+  Object.fromEntries(
+    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+  );
+const LIST_OPS = opsOf(listsCap);
 
 // Build a proper list of Pairs terminated by nil.
 function list(...xs: unknown[]): Pair | Nil {

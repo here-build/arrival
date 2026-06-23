@@ -25,150 +25,170 @@ import { isCircularList, Pair } from "../values/Pair.js";
 import { eqv, structuralEqual } from "../values/structural-equal.js";
 import { Nil, nil } from "../values/types.js";
 import { is_false } from "../eval/guards.js";
-import { EnvCapability, valueSymbols } from "./capability.js";
-
-export const LIST_OPS = {
-  // R7RS 6.4 Pairs and lists
-  "make-list"(k: unknown, fill?: unknown): unknown {
-    const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-    const value = fill === undefined ? false : fill;
-    let result: unknown = nil;
-    for (let i = 0; i < count; i++) {
-      result = new Pair(value, result);
-    }
-    // Stamp the head Pair only — internal cons cells share the same lineage
-    // by definition; downstream traversal reads provenance off whichever pair
-    // is bound. Parallel to lips.ts `cons` which only stamps the produced cell.
-    return withInputProvenance(fill === undefined ? [k] : [k, fill], result);
-  },
-
-  "list-tail"(list: unknown, k: unknown): unknown {
-    const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-    let current = list;
-    for (let i = 0; i < count; i++) {
-      TypeError.invariant(current instanceof Pair, `list-tail: list too short`);
-      current = current.cdr;
-    }
-    return current;
-  },
-
-  "list-ref"(list: unknown, k: unknown): unknown {
-    const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-    let current = list;
-    for (let i = 0; i < count; i++) {
-      TypeError.invariant(current instanceof Pair, `list-ref: list too short`);
-      current = current.cdr;
-    }
-    TypeError.invariant(current instanceof Pair, `list-ref: index out of bounds`);
-    return current.car;
-  },
-
-  "list-set!"(list: unknown, k: unknown, obj: unknown): void {
-    const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-    let current = list;
-    for (let i = 0; i < count; i++) {
-      TypeError.invariant(current instanceof Pair, `list-set!: list too short`);
-      current = current.cdr;
-    }
-    TypeError.invariant(current instanceof Pair, `list-set!: index out of bounds`);
-    current.car = obj;
-  },
-
-  "list-copy"(list: unknown): unknown {
-    // `=== nil` would miss Nil clones (singletons minted via withProvenance by
-    // the evaluator's control-flow provenance pass). A clone bypassed the
-    // guard, fell to the `!(instanceof Pair)` improper-list branch on the next
-    // line, and aliased the input by reference — violating R7RS list-copy's
-    // fresh-allocation contract. `instanceof Nil` keeps the freshness story
-    // intact for both the singleton and any clones.
-    if (list instanceof Nil) return nil;
-    if (!(list instanceof Pair)) return list;
-    TypeError.invariant(!isCircularList(list), "list-copy: circular list");
-    // Deep copy the spine of the list
-    const copy = (lst: unknown): unknown => {
-      // Same clone-aware check at the recursion base: a Nil clone in the cdr
-      // would otherwise be preserved as an improper-list tail.
-      if (lst instanceof Nil) return nil;
-      if (!(lst instanceof Pair)) return lst; // improper list tail
-      return new Pair(lst.car, copy(lst.cdr));
-    };
-    // Copy is a fresh allocation but semantically the same lineage as `list`.
-    return withInputProvenance([list], copy(list));
-  },
-
-  // R7RS 6.4 List searching functions
-  memq(obj: unknown, list: unknown): unknown {
-    let current = list;
-    TypeError.invariant(!isCircularList(list), "memq: circular list");
-    while (current instanceof Pair) {
-      // eq? comparison (object identity)
-      if (current.car === obj) return current;
-      current = current.cdr;
-    }
-    return false;
-  },
-
-  memv(obj: unknown, list: unknown): unknown {
-    let current = list;
-    TypeError.invariant(!isCircularList(list), "memv: circular list");
-    while (current instanceof Pair) {
-      if (eqv(current.car, obj)) return current;
-      current = current.cdr;
-    }
-    return false;
-  },
-
-  assq(obj: unknown, alist: unknown): unknown {
-    let current = alist;
-    TypeError.invariant(!isCircularList(alist), "assq: circular list");
-    while (current instanceof Pair) {
-      const pair = current.car;
-      if (pair instanceof Pair && pair.car === obj) return pair;
-      current = current.cdr;
-    }
-    return false;
-  },
-
-  assv(obj: unknown, alist: unknown): unknown {
-    let current = alist;
-    TypeError.invariant(!isCircularList(alist), "assv: circular list");
-    while (current instanceof Pair) {
-      const pair = current.car;
-      if (pair instanceof Pair && eqv(pair.car, obj)) return pair;
-      current = current.cdr;
-    }
-    return false;
-  },
-
-  // member uses equal? (deep structural equality)
-  member(obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
-    const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
-    let current = list;
-    TypeError.invariant(!isCircularList(list), "member: circular list");
-    while (current instanceof Pair) {
-      // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
-      // SchemeBool post-L1 (a truthy JS object); route through is_false.
-      if (!is_false(cmp(obj, current.car))) return current;
-      current = current.cdr;
-    }
-    return false;
-  },
-
-  // assoc uses equal? (deep structural equality)
-  assoc(obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
-    const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
-    let current = alist;
-    TypeError.invariant(!isCircularList(alist), "assoc: circular list");
-    while (current instanceof Pair) {
-      const pair = current.car;
-      // `cmp` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
-      if (pair instanceof Pair && !is_false(cmp(obj, pair.car))) return pair;
-      current = current.cdr;
-    }
-    return false;
-  },
-};
+import { EnvCapability } from "./capability.js";
 
 export default new EnvCapability("scheme/lists", {
-  symbols: valueSymbols(LIST_OPS),
+  symbols: {
+    // R7RS 6.4 Pairs and lists
+    "make-list": {
+      value(k: unknown, fill?: unknown): unknown {
+        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
+        const value = fill === undefined ? false : fill;
+        let result: unknown = nil;
+        for (let i = 0; i < count; i++) {
+          result = new Pair(value, result);
+        }
+        // Stamp the head Pair only — internal cons cells share the same lineage
+        // by definition; downstream traversal reads provenance off whichever pair
+        // is bound. Parallel to lips.ts `cons` which only stamps the produced cell.
+        return withInputProvenance(fill === undefined ? [k] : [k, fill], result);
+      },
+    },
+
+    "list-tail": {
+      value(list: unknown, k: unknown): unknown {
+        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
+        let current = list;
+        for (let i = 0; i < count; i++) {
+          TypeError.invariant(current instanceof Pair, `list-tail: list too short`);
+          current = current.cdr;
+        }
+        return current;
+      },
+    },
+
+    "list-ref": {
+      value(list: unknown, k: unknown): unknown {
+        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
+        let current = list;
+        for (let i = 0; i < count; i++) {
+          TypeError.invariant(current instanceof Pair, `list-ref: list too short`);
+          current = current.cdr;
+        }
+        TypeError.invariant(current instanceof Pair, `list-ref: index out of bounds`);
+        return current.car;
+      },
+    },
+
+    "list-set!": {
+      value(list: unknown, k: unknown, obj: unknown): void {
+        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
+        let current = list;
+        for (let i = 0; i < count; i++) {
+          TypeError.invariant(current instanceof Pair, `list-set!: list too short`);
+          current = current.cdr;
+        }
+        TypeError.invariant(current instanceof Pair, `list-set!: index out of bounds`);
+        current.car = obj;
+      },
+    },
+
+    "list-copy": {
+      value(list: unknown): unknown {
+        // `=== nil` would miss Nil clones (singletons minted via withProvenance by
+        // the evaluator's control-flow provenance pass). A clone bypassed the
+        // guard, fell to the `!(instanceof Pair)` improper-list branch on the next
+        // line, and aliased the input by reference — violating R7RS list-copy's
+        // fresh-allocation contract. `instanceof Nil` keeps the freshness story
+        // intact for both the singleton and any clones.
+        if (list instanceof Nil) return nil;
+        if (!(list instanceof Pair)) return list;
+        TypeError.invariant(!isCircularList(list), "list-copy: circular list");
+        // Deep copy the spine of the list
+        const copy = (lst: unknown): unknown => {
+          // Same clone-aware check at the recursion base: a Nil clone in the cdr
+          // would otherwise be preserved as an improper-list tail.
+          if (lst instanceof Nil) return nil;
+          if (!(lst instanceof Pair)) return lst; // improper list tail
+          return new Pair(lst.car, copy(lst.cdr));
+        };
+        // Copy is a fresh allocation but semantically the same lineage as `list`.
+        return withInputProvenance([list], copy(list));
+      },
+    },
+
+    // R7RS 6.4 List searching functions
+    memq: {
+      value(obj: unknown, list: unknown): unknown {
+        let current = list;
+        TypeError.invariant(!isCircularList(list), "memq: circular list");
+        while (current instanceof Pair) {
+          // eq? comparison (object identity)
+          if (current.car === obj) return current;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+
+    memv: {
+      value(obj: unknown, list: unknown): unknown {
+        let current = list;
+        TypeError.invariant(!isCircularList(list), "memv: circular list");
+        while (current instanceof Pair) {
+          if (eqv(current.car, obj)) return current;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+
+    assq: {
+      value(obj: unknown, alist: unknown): unknown {
+        let current = alist;
+        TypeError.invariant(!isCircularList(alist), "assq: circular list");
+        while (current instanceof Pair) {
+          const pair = current.car;
+          if (pair instanceof Pair && pair.car === obj) return pair;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+
+    assv: {
+      value(obj: unknown, alist: unknown): unknown {
+        let current = alist;
+        TypeError.invariant(!isCircularList(alist), "assv: circular list");
+        while (current instanceof Pair) {
+          const pair = current.car;
+          if (pair instanceof Pair && eqv(pair.car, obj)) return pair;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+
+    // member uses equal? (deep structural equality)
+    member: {
+      value(obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
+        const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
+        let current = list;
+        TypeError.invariant(!isCircularList(list), "member: circular list");
+        while (current instanceof Pair) {
+          // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
+          // SchemeBool post-L1 (a truthy JS object); route through is_false.
+          if (!is_false(cmp(obj, current.car))) return current;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+
+    // assoc uses equal? (deep structural equality)
+    assoc: {
+      value(obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown {
+        const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
+        let current = alist;
+        TypeError.invariant(!isCircularList(alist), "assoc: circular list");
+        while (current instanceof Pair) {
+          const pair = current.car;
+          // `cmp` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
+          if (pair instanceof Pair && !is_false(cmp(obj, pair.car))) return pair;
+          current = current.cdr;
+        }
+        return false;
+      },
+    },
+  },
 });
