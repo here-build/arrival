@@ -1,10 +1,8 @@
-import { Continuation } from "../values/Continuation.js";
 import { Environment } from "../Environment.js";
 import { LambdaContext } from "./LambdaContext.js";
 import { SchemeBool } from "../values/SchemeBool.js";
 import { Macro } from "./Macro.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { Parameter } from "../values/Parameter.js";
 import { Syntax } from "./Syntax.js";
 import {
   __lambda__,
@@ -135,11 +133,6 @@ export function is_context(o: unknown): o is LambdaContext {
 }
 
 // ----------------------------------------------------------------------
-export function is_parameter(o: unknown): o is Parameter {
-  return o instanceof Parameter;
-}
-
-// ----------------------------------------------------------------------
 export function is_env(o: unknown): o is Environment {
   return o instanceof Environment;
 }
@@ -170,13 +163,8 @@ export function is_undef(value: unknown): value is undefined {
 }
 
 // ----------------------------------------------------------------------
-export function is_continuation(o: unknown): o is Continuation {
-  return o instanceof Continuation;
-}
-
-// ----------------------------------------------------------------------
 export function is_callable(o: unknown): boolean {
-  return is_function(o) || is_continuation(o) || is_parameter(o) || is_macro(o) || is_js_function_wrapper(o);
+  return is_function(o) || is_macro(o) || is_js_function_wrapper(o);
 }
 
 // Check for SchemeJSFunction without importing (avoids circular dep)

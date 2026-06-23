@@ -27,13 +27,11 @@ import { Environment } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
 import {
   is_callable,
-  is_continuation,
   is_false,
   is_function,
   is_macro,
   is_nil,
   is_pair,
-  is_parameter,
   is_promise,
   is_syntax,
 } from "./guards.js";
@@ -2570,12 +2568,6 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
       }
     }
 
-    // Handle continuations specially
-    if (is_continuation(fn)) {
-      // Continuations are invoked via their invoke method (no args per Continuation class)
-      return fn.invoke();
-    }
-
     // is_function narrowed fn to Function, so we can call apply directly.
     // Rosetta wrappers tagged with __withCtx receive ctx as their final arg.
     // Thread the dynamic call site so user lambdas invoked synchronously
@@ -2751,11 +2743,8 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     return result;
   }
 
-  // Handle Parameter - calling a parameter returns its value
-  invariant(is_parameter(fn), `Not callable: ${typeof fn}`);
-  // Parameters are called with no args to get their value
-  // (my-param) -> returns the parameter's current value
-  return fn.invoke();
+  // Nothing above matched — fn is not a callable value kind.
+  invariant(false, `Not callable: ${typeof fn}`);
 }
 
 /**

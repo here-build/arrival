@@ -66,7 +66,6 @@ export * as Scheme from "./Scheme.js";
 void initBridge();
 
 // Classes that may be needed for type checking or extension
-export { Continuation as Continuation } from "./values/Continuation.js";
 export { EOF as EOF } from "./values/EOF.js";
 export { Environment as Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 
