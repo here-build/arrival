@@ -6,12 +6,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { exec } from "../stdlib";
 import { jsToScheme, schemeToJs } from "../rosetta";
 
 // Helper to execute and get first result
-async function execOne(expr: string, env = sandboxedEnv): Promise<any> {
+async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }
@@ -54,7 +54,7 @@ describe("Escaped Symbol Resolution", () => {
     it("should access numeric object keys", async () => {
       const result = await execOne(
         `(@ test-obj :|24|)`,
-        sandboxedEnv.inherit("escaped-test", {
+        inferenceEnv.inherit("escaped-test", {
           "test-obj": {
             "24": "value-24",
             "42": "value-42",
@@ -68,7 +68,7 @@ describe("Escaped Symbol Resolution", () => {
 
   describe("Escaped symbols in function names", () => {
     it("should define and call functions with escaped names", async () => {
-      sandboxedEnv.defineRosetta("get-24", {
+      inferenceEnv.defineRosetta("get-24", {
         fn: () => 24,
       });
 
@@ -77,7 +77,7 @@ describe("Escaped Symbol Resolution", () => {
     });
 
     it("should define functions with space-containing names", async () => {
-      sandboxedEnv.defineRosetta("my function", {
+      inferenceEnv.defineRosetta("my function", {
         fn: (x: number) => x * 2,
       });
 
@@ -92,7 +92,7 @@ describe("Escaped Symbol Resolution", () => {
         "24": "numeric key value",
       };
 
-      sandboxedEnv.set("test-obj", testObj);
+      inferenceEnv.set("test-obj", testObj);
 
       // :24 should be treated as keyword and converted to "24" by @ function
       const result1 = await execOne(`(@ test-obj :24)`);
@@ -109,7 +109,7 @@ describe("Escaped Symbol Resolution", () => {
         foo_bar: "underscored",
       };
 
-      sandboxedEnv.set("test-obj", testObj);
+      inferenceEnv.set("test-obj", testObj);
 
       const result = await execOne(`
         (list
@@ -184,7 +184,7 @@ describe("Escaped Symbol Resolution", () => {
         },
       };
 
-      sandboxedEnv.set("components", component);
+      inferenceEnv.set("components", component);
 
       const result = await execOne(`
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
@@ -205,7 +205,7 @@ describe("Escaped Symbol Resolution", () => {
         ],
       };
 
-      sandboxedEnv.set("data", data);
+      inferenceEnv.set("data", data);
 
       const result = await execOne(`
         (begin
@@ -231,7 +231,7 @@ describe("Escaped Symbol Resolution", () => {
       ];
 
       // Convert to LIPS list — scheme filter expects pair chains, not JS arrays
-      sandboxedEnv.set("items", jsToScheme(items));
+      inferenceEnv.set("items", jsToScheme(items));
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)
       // and post-eq?/eqv?-split returns #f for two distinct heap string instances.

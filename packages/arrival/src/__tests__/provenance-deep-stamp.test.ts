@@ -23,7 +23,7 @@ import { SchemeJSObject } from "../membrane";
 import { SchemeExact, SchemeInexact } from "../values/numbers";
 import { Pair } from "../values/Pair";
 import { jsToScheme } from "../rosetta";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { exec } from "../stdlib";
 import { Nil, nil } from "../values/types";
 
@@ -178,7 +178,7 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // Both `@` and `:key` dispatch into `obj.get(...)` for SchemeJSObject
     // targets — the wrapper's cache makes the two surfaces return the same
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
-    const env = sandboxedEnv.inherit("test");
+    const env = inferenceEnv.inherit("test");
     const wrapper = new SchemeJSObject({ x: "hello" });
     env.set("obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });

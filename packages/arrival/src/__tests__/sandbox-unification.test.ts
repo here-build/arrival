@@ -7,13 +7,13 @@
  * regression re-introducing any of them turns these red.
  *
  * (Was "sandbox unification": it also locked `createSandbox`/`PURE_SCHEME_BINDINGS`
- * to the `sandboxedEnv` surface. That dual-path projection apparatus is gone —
+ * to the `inferenceEnv` surface. That dual-path projection apparatus is gone —
  * there is ONE construction path now — so only the verbs-unbound half remains.)
  */
 
 import { describe, expect, it, beforeAll } from "vitest";
 import { initBridge } from "../bridge";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 
 // The host-language verbs the sweep deleted at the source. The old
 // FORBIDDEN_IN_SANDBOX block list fenced them per-env; now they simply do not
@@ -29,13 +29,13 @@ beforeAll(async () => {
 describe("host-language verbs are non-existent", () => {
   it("every host-language verb is genuinely Unbound in the inference env", () => {
     for (const verb of HOST_LANGUAGE_VERBS) {
-      const value = sandboxedEnv.get(verb, { throwError: false });
+      const value = inferenceEnv.get(verb, { throwError: false });
       expect(value, `'${verb}' must NOT be bound`).toBeUndefined();
     }
   });
 
   it("no host-language verb appears in the env's own surface", () => {
-    const names = new Set(Object.keys(sandboxedEnv.__env__));
+    const names = new Set(Object.keys(inferenceEnv.__env__));
     for (const verb of HOST_LANGUAGE_VERBS) {
       expect(names.has(verb), `'${verb}' must not appear in the surface`).toBe(false);
     }

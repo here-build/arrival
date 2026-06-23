@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../values/lineage";
 
 const C: Classifier = {
@@ -21,7 +21,7 @@ const C: Classifier = {
 
 async function skeleton(src: string): Promise<LineageNode> {
   await initBridge();
-  const [ast] = await parse(src, sandboxedEnv);
+  const [ast] = await parse(src, inferenceEnv);
   return classify(ast, C); // STATIC — no execution
 }
 

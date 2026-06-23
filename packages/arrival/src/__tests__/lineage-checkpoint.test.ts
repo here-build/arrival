@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { Pair } from "../values/Pair";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";
 import { provOf } from "../values/lineage-shadow";
@@ -51,7 +51,7 @@ function countNodes(n: LineageNode): number {
 describe("lineage checkpoint — runtime stamping derives the SAME cone (correctness)", () => {
   it("lineage full-cone == the eager interpreter's provenance, for (length (list a b c))", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("lin-correct");
+    const env = inferenceEnv.inherit("lin-correct");
     env.set("a", sStr("a", 100));
     env.set("b", sStr("b", 101));
     env.set("c", sStr("c", 102));
@@ -77,7 +77,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   // collection-grouping vs element provenance split, which is not modeled yet.
   async function eagerProvSize(n: number): Promise<number> {
     await initBridge();
-    const env = sandboxedEnv.inherit(`lin-scale-${n}`);
+    const env = inferenceEnv.inherit(`lin-scale-${n}`);
     const xs = Pair.fromArray(
       Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),
       false,
@@ -94,7 +94,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
 
   it("the static lineage skeleton node-count is CONSTANT — independent of N", async () => {
     await initBridge();
-    const [ast] = await parse(`(length (map f xs))`, sandboxedEnv);
+    const [ast] = await parse(`(length (map f xs))`, inferenceEnv);
     const nodes = countNodes(classify(ast, C)); // Pipe(length) -> Fan(f) -> Leaf(xs)
     expect(nodes).toBeLessThanOrEqual(4); // O(AST), constant in N (NOT a total-memory claim — see scope note)
   });

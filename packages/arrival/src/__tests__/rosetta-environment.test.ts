@@ -3,13 +3,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { createRosettaWrapper, jsToScheme, schemeToJs } from "../rosetta";
 import { exec } from "../stdlib";
 
 // Helper to unwrap exec results
 async function execOne(expr: string): Promise<any> {
-  const results = await exec(expr, { env: sandboxedEnv });
+  const results = await exec(expr, { env: inferenceEnv });
   return results[0];
 }
 
@@ -202,7 +202,7 @@ describe("Rosetta Environment", () => {
   describe("Environment.defineRosetta", () => {
     it("should extend environment with Rosetta functions", async () => {
       // Define a Rosetta function in the environment
-      sandboxedEnv.defineRosetta("double-all", {
+      inferenceEnv.defineRosetta("double-all", {
         fn: (numbers: number[]) => numbers.map((x) => x * 2),
       });
 
@@ -220,11 +220,11 @@ describe("Rosetta Environment", () => {
 
     it("should handle multiple Rosetta functions", async () => {
       // Define multiple functions
-      sandboxedEnv.defineRosetta("sum-array", {
+      inferenceEnv.defineRosetta("sum-array", {
         fn: (numbers: number[]) => numbers.reduce((a, b) => a + b, 0),
       });
 
-      sandboxedEnv.defineRosetta("filter-evens", {
+      inferenceEnv.defineRosetta("filter-evens", {
         fn: (numbers: number[]) => numbers.filter((x) => x % 2 === 0),
       });
 
@@ -242,7 +242,7 @@ describe("Rosetta Environment", () => {
 
     it("should work with complex data structures", async () => {
       // Define a function that works with objects
-      sandboxedEnv.defineRosetta("extract-values", {
+      inferenceEnv.defineRosetta("extract-values", {
         fn: (objects: any[]) => objects.map((obj) => obj.value),
       });
 
@@ -255,7 +255,7 @@ describe("Rosetta Environment", () => {
 
       // Convert to LIPS and call function
       const lipsData = jsToScheme(testData, {});
-      const rosettaFn = sandboxedEnv.get("extract-values");
+      const rosettaFn = inferenceEnv.get("extract-values");
       const result = await rosettaFn(lipsData);
 
       console.log("Complex data result:", result);
@@ -268,7 +268,7 @@ describe("Rosetta Environment", () => {
   describe("Real-world Use Cases", () => {
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
-      sandboxedEnv.defineRosetta("filter-by-css-property", {
+      inferenceEnv.defineRosetta("filter-by-css-property", {
         fn: (nodes: any[], property: string, value: string) => {
           return nodes.filter((node) => node.style && node.style[property] === value);
         },
@@ -284,7 +284,7 @@ describe("Rosetta Environment", () => {
 
       // Convert to LIPS and filter
       const lipsNodes = jsToScheme(testNodes, {});
-      const filterFn = sandboxedEnv.get("filter-by-css-property");
+      const filterFn = inferenceEnv.get("filter-by-css-property");
       const result = await filterFn(lipsNodes, "overflow", "hidden");
 
       console.log("CSS filtering result:", result);
@@ -296,7 +296,7 @@ describe("Rosetta Environment", () => {
     });
 
     it("should create CSS statistics like the MCP server needs", async () => {
-      sandboxedEnv.defineRosetta("css-property-stats", {
+      inferenceEnv.defineRosetta("css-property-stats", {
         fn: (nodes: any[]) => {
           const stats: Record<string, number> = {};
           nodes.forEach((node) => {
@@ -318,7 +318,7 @@ describe("Rosetta Environment", () => {
       ];
 
       const lipsNodes = jsToScheme(testNodes, {});
-      const statsFn = sandboxedEnv.get("css-property-stats");
+      const statsFn = inferenceEnv.get("css-property-stats");
       const result = await statsFn(lipsNodes);
 
       console.log("CSS stats result:", result);

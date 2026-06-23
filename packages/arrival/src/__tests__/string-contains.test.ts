@@ -14,7 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { SchemeString } from "../values/SchemeString";
 import { SchemeExact } from "../values/numbers";
 import { AValue } from "../values/AValue";
@@ -28,7 +28,7 @@ const js = (x: unknown) => (x instanceof AValue ? x.toJs() : x);
 describe("string-contains? — boolean predicate", () => {
   it("true when present, false when absent", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("string-contains-pred");
+    const env = inferenceEnv.inherit("string-contains-pred");
     const [hit] = await exec('(string-contains? "research-Alloy.docx" "Alloy")', { env });
     const [miss] = await exec('(string-contains? "spoolsv.exe" "Alloy")', { env });
     expect(js(hit)).toBe(true);
@@ -37,7 +37,7 @@ describe("string-contains? — boolean predicate", () => {
 
   it("carries the provenance of the searched string (grounded decision)", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("string-contains-pred-prov");
+    const env = inferenceEnv.inherit("string-contains-pred-prov");
     env.set("name", stamped("Alloy.exe", 7));
     const [r] = await exec('(string-contains? name "Alloy")', { env });
     expect(r).toBeInstanceOf(AValue);
@@ -48,7 +48,7 @@ describe("string-contains? — boolean predicate", () => {
 describe("string-contains — SRFI-13 index-or-#f", () => {
   it("returns the index of the first occurrence", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("string-contains-idx");
+    const env = inferenceEnv.inherit("string-contains-idx");
     const [r] = await exec('(string-contains "abcAlloy" "Alloy")', { env });
     expect(r).toBeInstanceOf(SchemeExact);
     expect(js(r)).toBe(3);
@@ -56,7 +56,7 @@ describe("string-contains — SRFI-13 index-or-#f", () => {
 
   it("returns #f when absent (still truthy-correct: 0 is a real index)", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("string-contains-miss");
+    const env = inferenceEnv.inherit("string-contains-miss");
     const [miss] = await exec('(string-contains "abc" "Alloy")', { env });
     const [zero] = await exec('(string-contains "Alloy" "Alloy")', { env });
     expect(js(miss)).toBe(false);

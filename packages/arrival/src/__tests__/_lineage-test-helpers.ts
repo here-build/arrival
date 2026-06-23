@@ -20,7 +20,7 @@
  */
 import { initBridge } from "../bridge.js";
 import { exec } from "../stdlib.js";
-import { sandboxedEnv } from "../sandbox-env.js";
+import { inferenceEnv } from "../inference-env.js";
 import { SchemeString } from "../values/SchemeString.js";
 import { AValue } from "../values/AValue.js";
 import { provOf } from "../values/lineage-shadow.js";
@@ -48,7 +48,7 @@ export async function runRaw(
   setup?: EnvSetup,
 ): Promise<unknown> {
   await initBridge();
-  const env = sandboxedEnv.inherit(`lin-test-${seq++}`);
+  const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   setup?.(env);
   for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
   const [r] = await exec(src, { env });

@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { parse } from "../eval/generator-exec";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { SchemeVector } from "../values/SchemeVector";
 import { Pair } from "../values/Pair";
 import { AValue } from "../values/AValue";
@@ -92,7 +92,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
 
   it("A8-live: (length (map f xs)) runs f ZERO times — `f` THROWS, yet length resolves to the source count", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    const env = inferenceEnv.inherit(`la-${seq++}`);
     // If the map were eager, this fn runs and the whole exec rejects. It does not.
     env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
     env.set("xs", lazy([sStr("a", 100), sStr("b", 101), sStr("c", 102)], 7) as unknown as AValue);
@@ -114,7 +114,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
 
   it("A18c: `(lazy-seq ys)` introduces laziness from PURE scheme — (length (map boom (lazy-seq ys))) runs boom ZERO times", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    const env = inferenceEnv.inherit(`la-${seq++}`);
     env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
     // The Pair's OWN provenance (id 7) is the grouping fact lazy-seq lifts to the
     // collection level; the elements carry their own per-element provenance.
@@ -134,7 +134,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
 
   it("A18d: an un-forced lazy-seq at a non-recognizing egress FAILS LOUD — never a silent nil/empty", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit(`la-${seq++}`);
+    const env = inferenceEnv.inherit(`la-${seq++}`);
     const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101)], false);
     env.set("ys", ys as unknown as AValue);
     // Without the guard, `first` returns nil and `sort` returns '() — both silent
@@ -219,11 +219,11 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
       isOpaque: () => false,
     };
     const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
-      const [ast] = await parse(src, sandboxedEnv);
+      const [ast] = await parse(src, inferenceEnv);
       return fullCone(classify(ast, C), b);
     };
     // `if` → a `mux` (not a mis-read application); predicate ∪ taken arm.
-    const [ifAst] = await parse(`(if (< 0 x) v -1)`, sandboxedEnv);
+    const [ifAst] = await parse(`(if (< 0 x) v -1)`, inferenceEnv);
     expect(classify(ifAst, C).kind).toBe("mux");
     expect(await cone(`(if (< 0 x) v -1)`, { x: [7], v: [5] })).toEqual([5, 7]);
     // `let` → transparent: same cone as the inlined form.
@@ -238,7 +238,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
     // application). classify() handles that surface shape rather than requiring a
     // macro-expanded input — so the original "must run on macro-expanded ast"
     // assumption is resolved by surface handling, not by adding an expander.
-    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, sandboxedEnv);
+    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, inferenceEnv);
     expect((ast as { car?: { valueOf?: () => unknown } })?.car?.valueOf?.()).toBe("let"); // surface form, unexpanded
     expect(fullCone(classify(ast, C), { v1: [100] })).toEqual([100]); // transparent on the surface form
   });
@@ -301,7 +301,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     const mkVec = () => new SchemeVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
-      const env = sandboxedEnv.inherit(`la-${seq++}`);
+      const env = inferenceEnv.inherit(`la-${seq++}`);
       env.set("xs", mkVec() as unknown as AValue);
       const [r] = await exec(src, { env });
       return summary(r);

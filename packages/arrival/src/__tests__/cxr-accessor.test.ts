@@ -3,7 +3,7 @@
  *
  * Before, the family was a hand-maintained list: a bounded bootstrap loop in
  * `global_env` (2–5 inner letters) and an even narrower, incomplete allowlist
- * copied into `sandboxedEnv` (SAFE_BUILTINS — missing the `cd*` 4-letter words
+ * copied into `inferenceEnv` (SAFE_BUILTINS — missing the `cd*` 4-letter words
  * and everything 5+). A chain the sweet lens fused to a deep accessor — `caddddr`,
  * `cadddddr`, `caddadar` — fell through to an "unbound symbol" error.
  *
@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cxrAccessor, exec, global_env } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { schemeToJs } from "../rosetta";
 
 const evalIn = (env: typeof global_env) => async (expr: string): Promise<unknown> =>
@@ -38,8 +38,8 @@ describe("cxrAccessor — pure synthesis", () => {
 });
 
 // Run the SAME expressions through both roots. global_env carries the eager loop
-// + resolver; sandboxedEnv carries only the (incomplete) allowlist + resolver.
-for (const [label, env] of [["global_env", global_env], ["sandboxedEnv", sandboxedEnv]] as const) {
+// + resolver; inferenceEnv carries only the (incomplete) allowlist + resolver.
+for (const [label, env] of [["global_env", global_env], ["inferenceEnv", inferenceEnv]] as const) {
   describe(`c[ad]+r evaluation in ${label}`, () => {
     const run = evalIn(env);
 

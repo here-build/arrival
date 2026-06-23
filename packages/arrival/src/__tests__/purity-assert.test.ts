@@ -22,7 +22,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { Pair } from "../values/Pair";
 import { SchemeVector } from "../values/SchemeVector";
 import { SchemeString } from "../values/SchemeString";
@@ -175,14 +175,14 @@ describe("G5 confluence guard — purity doors stay closed", () => {
       delay: `(delay 1)`,
     };
     for (const [verb, src] of Object.entries(probes)) {
-      const env = sandboxedEnv.inherit(`door-${verb}`);
+      const env = inferenceEnv.inherit(`door-${verb}`);
       await expect(exec(src, { env }), `${verb} must remain doored`).rejects.toThrow(verb);
     }
   });
 
   it("probePurityDoors: a clean env reports ALL doors closed (macros / unbound → not a reopened callable)", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("doors-clean");
+    const env = inferenceEnv.inherit("doors-clean");
     const verdicts = await probePurityDoors(env);
     expect(verdicts.map((v) => v.verb)).toEqual([...PURITY_DOOR_VERBS]);
     expect(verdicts.every((v) => v.closed)).toBe(true);
@@ -191,7 +191,7 @@ describe("G5 confluence guard — purity doors stay closed", () => {
 
   it("REOPENED door is CAUGHT: re-binding `set-car!` to a working fn trips the probe + assertion", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("doors-reopened");
+    const env = inferenceEnv.inherit("doors-reopened");
     // Simulate the regression the guard exists to catch: someone re-binds a door
     // to a callable that does NOT throw (a working mutator). The probe must flag it.
     env.set("set-car!", (() => "I MUTATE NOW") as unknown as never);

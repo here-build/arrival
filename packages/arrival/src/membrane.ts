@@ -195,7 +195,7 @@ const entryCaches = new WeakMap<SchemeJSObject, Map<string, AValue>>();
  * Thin wrapper for JS objects. Lazy property access — entries box on
  * demand through `jsToScheme` (rosetta.ts), carrying the wrapper's provenance.
  *
- * All property access is sandboxed - see sandbox-boundary.ts for security model.
+ * All property access is sandboxed - see interop-access.ts for security model.
  *
  * War story (Option C — 2026-05-28): `get(key)` used to call `fromJS(result)`,
  * which passed JS primitives through unboxed and threw away any chance of

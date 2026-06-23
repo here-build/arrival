@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest";
 import { collapseProvenance } from "../provenance-collapse";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { SchemeString } from "../values/SchemeString";
 import { SchemeVector } from "../values/SchemeVector";
 import { Pair } from "../values/Pair";
@@ -62,7 +62,7 @@ describe("collapseProvenance — sound over every structured carrier", () => {
 describe("string-append / join carry deep collapse-provenance end-to-end", () => {
   it("join over a list of stamped values keeps every point", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("collapse-prov-join");
+    const env = inferenceEnv.inherit("collapse-prov-join");
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
     const [r] = await exec(`(join "," (list a b))`, { env });
@@ -72,7 +72,7 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
 
   it("string-append over a nested collapse keeps every point", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("collapse-prov-append");
+    const env = inferenceEnv.inherit("collapse-prov-append");
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
     const [r] = await exec(`(string-append "x:" (join "," (list a b)))`, { env });

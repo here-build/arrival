@@ -22,11 +22,11 @@
 import { describe, expect, it } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import {
-  SANDBOX_BOUNDARY,
-  isSandboxBoundary,
-} from "../sandbox-boundary";
+  INTEROP_BOUNDARY,
+  isInteropBoundary,
+} from "../interop-access";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -55,11 +55,11 @@ describe("CRITICAL: sandbox escape vectors", () => {
    */
   it("eval defaults to sandbox env, NOT global, when no env arg", async () => {
     await initBridge();
-    // `+` is NOT in sandboxedEnv directly (sandbox uses scheme arithmetic).
+    // `+` is NOT in inferenceEnv directly (sandbox uses scheme arithmetic).
     // eval no longer exists at all — the host-language sweep deleted it from
     // wrappedOps — so the eval-escape path is closed at the source; the throw is
     // Unbound on `eval` itself, not on `+`.
-    await expect(exec("(eval (quote +))", { env: sandboxedEnv })).rejects.toThrow(/Unbound/);
+    await expect(exec("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**
@@ -74,7 +74,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // eval site — eval no longer exists, so the very first form `(eval ...)`
     // fails to resolve.
     await expect(
-      exec(`((eval (quote +)) 2 3)`, { env: sandboxedEnv })
+      exec(`((eval (quote +)) 2 3)`, { env: inferenceEnv })
     ).rejects.toThrow(/Unbound/);
   });
 
@@ -93,7 +93,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // invariant ("host-language verb not reachable") holds doubly.
     for (const forbidden of ["load", "set-obj!", "new", "instanceof"]) {
       await expect(
-        exec(`(eval (quote ${forbidden}))`, { env: sandboxedEnv }),
+        exec(`(eval (quote ${forbidden}))`, { env: inferenceEnv }),
         `${forbidden} must not be reachable via eval-escape`
       ).rejects.toThrow(/Unbound/);
     }
@@ -112,19 +112,19 @@ describe("CRITICAL: sandbox escape vectors", () => {
    *
    * Secure invariant: SchemeString (and other AValue subtypes that graft
    * built-in proto methods) must be marked as sandbox boundaries so the
-   * prototype-chain walk in sandboxedAccess stops at them.
+   * prototype-chain walk in accessMember stops at them.
    */
   it("SchemeString is marked as a sandbox boundary", async () => {
     const { SchemeString } = await import("../values/SchemeString");
     // Direct check, two ways the marker can be present:
     const protoMarked =
-      Object.prototype.hasOwnProperty.call(SchemeString.prototype, SANDBOX_BOUNDARY) &&
-      (SchemeString.prototype as Record<symbol, unknown>)[SANDBOX_BOUNDARY] === true;
+      Object.prototype.hasOwnProperty.call(SchemeString.prototype, INTEROP_BOUNDARY) &&
+      (SchemeString.prototype as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
     const ctorMarked =
-      Object.prototype.hasOwnProperty.call(SchemeString, SANDBOX_BOUNDARY) &&
-      (SchemeString as unknown as Record<symbol, unknown>)[SANDBOX_BOUNDARY] === true;
+      Object.prototype.hasOwnProperty.call(SchemeString, INTEROP_BOUNDARY) &&
+      (SchemeString as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
     expect(protoMarked || ctorMarked).toBe(true);
-    expect(isSandboxBoundary(SchemeString.prototype)).toBe(true);
+    expect(isInteropBoundary(SchemeString.prototype)).toBe(true);
   });
 });
 
@@ -151,15 +151,15 @@ describe("CRITICAL: sandbox escape vectors", () => {
 describe("CRITICAL: accessor isolation leaks", () => {
   it(":keyword plucking 'constructor' off a lambda does not leak Function", async () => {
     await initBridge();
-    const [fromLambda] = await exec("(:constructor (lambda (x) x))", { env: sandboxedEnv });
+    const [fromLambda] = await exec("(:constructor (lambda (x) x))", { env: inferenceEnv });
     // Pre-fix: === Function (RCE primitive). Post-fix: nil.
     expect(fromLambda).not.toBe(Function);
   });
 
   it(":keyword plucking '__proto__' / 'prototype' off a lambda is blocked", async () => {
     await initBridge();
-    const [proto] = await exec("(:prototype (lambda (x) x))", { env: sandboxedEnv });
-    const [dunder] = await exec("(:__proto__ (lambda (x) x))", { env: sandboxedEnv });
+    const [proto] = await exec("(:prototype (lambda (x) x))", { env: inferenceEnv });
+    const [dunder] = await exec("(:__proto__ (lambda (x) x))", { env: inferenceEnv });
     expect(proto).not.toBe(Function.prototype);
     // __proto__ must not hand back Function.prototype (→ chains to constructor).
     expect(dunder).not.toBe(Object.getPrototypeOf(() => {}));
@@ -169,7 +169,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
     // `get` is the dot-notation property accessor (`foo.bar` → get(foo, "bar"),
     // routed via Environment.get's dotted resolution). On a raw function its
     // `else` branch used to do `object[name]` — so get(fn, "constructor") handed
-    // back the Function constructor (RCE). It now routes through sandboxedAccess.
+    // back the Function constructor (RCE). It now routes through accessMember.
     const { get } = await import("../stdlib");
     const fn = (x: number) => x;
     expect(get(fn, "constructor")).toBeUndefined();
@@ -189,8 +189,8 @@ describe("CRITICAL: accessor isolation leaks", () => {
     await initBridge();
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
-    sandboxedEnv.set("__probe_obj", { name: "maya", nested: { city: "lisbon" } });
-    const [byKeyword] = await exec("(:name __probe_obj)", { env: sandboxedEnv });
+    inferenceEnv.set("__probe_obj", { name: "maya", nested: { city: "lisbon" } });
+    const [byKeyword] = await exec("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
 });
@@ -221,7 +221,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     const start = Date.now();
     let caught = false;
     try {
-      await exec("(make-string 100000000 #\\x)", { env: sandboxedEnv });
+      await exec("(make-string 100000000 #\\x)", { env: inferenceEnv });
     } catch {
       caught = true;
     }
@@ -244,7 +244,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     const start = Date.now();
     let caught = false;
     try {
-      await exec("(make-vector 100000000 #f)", { env: sandboxedEnv });
+      await exec("(make-vector 100000000 #f)", { env: inferenceEnv });
     } catch {
       caught = true;
     }
@@ -283,7 +283,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // `(let loop () (loop))` is now flat under TCO (task #46), so the budget
     // fires cleanly instead of the loop blowing the JS stack first.
     await expect(
-      gexec("(let loop () (loop))", { env: sandboxedEnv, budgetMs: 150 }),
+      gexec("(let loop () (loop))", { env: inferenceEnv, budgetMs: 150 }),
     ).rejects.toThrow(/budget/i);
     // Bounded to ~one yield cadence past the 150ms deadline.
     expect(Date.now() - start).toBeLessThan(2000);
@@ -335,7 +335,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
     let err: Error | undefined;
     try {
-      await exec(deep, { env: sandboxedEnv });
+      await exec(deep, { env: inferenceEnv });
     } catch (e) {
       err = e as Error;
     }
@@ -364,13 +364,13 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     a.self = a;
     const b: Record<string, unknown> = {};
     b.self = b;
-    sandboxedEnv.set("__cyc_a", a);
-    sandboxedEnv.set("__cyc_b", b);
+    inferenceEnv.set("__cyc_a", a);
+    inferenceEnv.set("__cyc_b", b);
 
     let err: Error | undefined;
     let result: unknown;
     try {
-      [result] = await exec("(equal? __cyc_a __cyc_b)", { env: sandboxedEnv });
+      [result] = await exec("(equal? __cyc_a __cyc_b)", { env: inferenceEnv });
     } catch (e) {
       err = e as Error;
     }
@@ -407,7 +407,7 @@ describe("registry poisoning vectors", () => {
    */
   it("AValue is NOT reachable from sandbox via direct lookup", async () => {
     await initBridge();
-    await expect(exec("AValue", { env: sandboxedEnv })).rejects.toThrow(/Unbound/);
+    await expect(exec("AValue", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**
@@ -416,7 +416,7 @@ describe("registry poisoning vectors", () => {
    */
   it("AValue is NOT reachable from sandbox via (eval (quote AValue))", async () => {
     await initBridge();
-    await expect(exec("(eval (quote AValue))", { env: sandboxedEnv })).rejects.toThrow(/Unbound/);
+    await expect(exec("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**
@@ -446,9 +446,9 @@ describe("registry poisoning vectors", () => {
 // CRITICAL: write-side prototype pollution (S6)
 // ============================================================================
 //
-// Audit finding (S6): the READ side (sandboxedAccess) is boundary-guarded, but
+// Audit finding (S6): the READ side (accessMember) is boundary-guarded, but
 // the WRITE side was RAW. Two holes:
-//   - sandbox-boundary.ts sandboxedSet: `data[keyStr] = value` walks the proto
+//   - sandbox-boundary.ts accessSet: `data[keyStr] = value` walks the proto
 //     chain and fires inherited setters → defineProperty installs OWN only.
 //   - SchemeSymbol.ts `SchemeSymbol.list` was a plain `{}` (inherits Object.proto),
 //     so `(string->symbol "__proto__")` could pollute Object.prototype.
@@ -471,15 +471,15 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
   });
 
   it("sandboxedSet('__proto__', ...) is rejected as a blocked key", async () => {
-    const { sandboxedSet, SandboxViolationError } = await import("../sandbox-boundary");
+    const { accessSet, InteropAccessError } = await import("../interop-access");
     const target: Record<string, unknown> = {};
-    expect(() => sandboxedSet(target, "__proto__", { evil: true })).toThrow(SandboxViolationError);
-    expect(() => sandboxedSet(target, "constructor", 1)).toThrow(SandboxViolationError);
-    expect(() => sandboxedSet(target, "prototype", 1)).toThrow(SandboxViolationError);
+    expect(() => accessSet(target, "__proto__", { evil: true })).toThrow(InteropAccessError);
+    expect(() => accessSet(target, "constructor", 1)).toThrow(InteropAccessError);
+    expect(() => accessSet(target, "prototype", 1)).toThrow(InteropAccessError);
   });
 
   it("sandboxedSet installs an OWN data property without firing inherited setters", async () => {
-    const { sandboxedSet } = await import("../sandbox-boundary");
+    const { accessSet } = await import("../interop-access");
     let setterFired = false;
     // A poisoned setter on a prototype must NOT fire on assignment.
     const proto = {};
@@ -490,7 +490,7 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
       configurable: true,
     });
     const target: Record<string, unknown> = Object.create(proto);
-    sandboxedSet(target, "danger", 42);
+    accessSet(target, "danger", 42);
     expect(setterFired).toBe(false);
     // The value landed as an OWN data property on the target.
     expect(Object.prototype.hasOwnProperty.call(target, "danger")).toBe(true);
@@ -498,8 +498,8 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
   });
 
   it("SANDBOX_BOUNDARY sentinel is not forgeable from the global Symbol registry", async () => {
-    const { SANDBOX_BOUNDARY } = await import("../sandbox-boundary");
+    const { INTEROP_BOUNDARY } = await import("../interop-access");
     // A module-local Symbol() is never equal to a registry symbol of any key.
-    expect(SANDBOX_BOUNDARY).not.toBe(Symbol.for("scheme:sandbox-boundary"));
+    expect(INTEROP_BOUNDARY).not.toBe(Symbol.for("scheme:sandbox-boundary"));
   });
 });

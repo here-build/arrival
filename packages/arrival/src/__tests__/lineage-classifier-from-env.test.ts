@@ -8,13 +8,13 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type LineageNode } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
 import { SchemeJSFunction } from "../membrane";
 
 let seq = 0;
-const env = () => sandboxedEnv.inherit(`cfe-${seq++}`);
+const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
 const node = async (src: string, e: ReturnType<typeof env>, sources: Iterable<string> = []): Promise<LineageNode> =>
   classify((await parse(src, e))[0], classifierFromEnv(e, new Set(sources)));
 

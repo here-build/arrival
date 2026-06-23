@@ -4,10 +4,10 @@
 
 import { describe, expect, it } from "vitest";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { jsToScheme, schemeToJs } from "../rosetta";
 
-async function execOne(expr: string, env = sandboxedEnv): Promise<any> {
+async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }
@@ -27,7 +27,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
   it("should test if bare :keyword works as getter", async () => {
     const result = await execOne(
       "(:pasword obj)",
-      sandboxedEnv.inherit("keyword-test", {
+      inferenceEnv.inherit("keyword-test", {
         obj: { pasword: "swordfish" },
       }),
     );
@@ -46,7 +46,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
 
   it("should test what Claude's actual query needs", async () => {
     const testObj = { name: "test-value", id: "test-id" };
-    sandboxedEnv.set("project", testObj);
+    inferenceEnv.set("project", testObj);
 
     // Try different syntaxes
     const tests = [
@@ -69,7 +69,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
   it("should test quotations", async () => {
     const result = await execOne(
       `(list |24|)`,
-      sandboxedEnv.inherit("quotation-test", {
+      inferenceEnv.inherit("quotation-test", {
         "24": "unqouted",
       }),
     );
@@ -84,7 +84,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
       { id: "3", name: "Charlie" },
     ];
     // Scheme map expects pair chains, not JS arrays
-    sandboxedEnv.set("users", jsToScheme(users));
+    inferenceEnv.set("users", jsToScheme(users));
 
     expect(schemeToJs(await execOne(`(map :name users)`))).toEqual(["Alice", "Bob", "Charlie"]);
   });
@@ -96,7 +96,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
       { active: true, name: "Item 3" },
     ];
     // Scheme filter expects pair chains, not JS arrays
-    sandboxedEnv.set("items", jsToScheme(items));
+    inferenceEnv.set("items", jsToScheme(items));
 
     // Filter using keyword extractor
     const filtered = schemeToJs(await execOne(`(filter :active items)`));
@@ -108,7 +108,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
 
   it("should handle missing keys gracefully", async () => {
     const obj = { name: "test" };
-    sandboxedEnv.set("obj", obj);
+    inferenceEnv.set("obj", obj);
 
     const result = await execOne(`(:missing obj)`);
     expect(result.constructor.name).toBe("Nil");

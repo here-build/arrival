@@ -80,10 +80,3 @@ registerCxrResolver(inferenceEnv);
 // base too, so a `:`-prefixed symbol resolves to its `@`-alias pluck.
 inferenceEnv.registerResolver(keywordAccessorResolver);
 
-/**
- * @deprecated Renamed to {@link inferenceEnv}. This was never a security sandbox —
- * it is the inference-plane base env. The `sandboxedEnv` spelling is kept as an
- * alias for cross-package consumers (arrival-mcp / -chain / -inference / -sampler)
- * through the migration window; it is removed once every consumer is codemodded.
- */
-export const sandboxedEnv = inferenceEnv;

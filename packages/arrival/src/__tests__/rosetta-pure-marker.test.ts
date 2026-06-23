@@ -9,13 +9,13 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type Classifier } from "../values/lineage";
 
 describe("rosetta pure marker", () => {
   it("round-trips onto the env (sibling to __rosettaTypes__), default is NOT pure", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("pure-marker-roundtrip");
+    const env = inferenceEnv.inherit("pure-marker-roundtrip");
     env.defineRosetta("dedent", { fn: (s: string) => s, pure: true });
     env.defineRosetta("infer-x", { fn: (p: unknown) => p }); // default → source
     expect(env.__rosettaPure__.has("dedent")).toBe(true);
@@ -24,7 +24,7 @@ describe("rosetta pure marker", () => {
 
   it("drives classification: a pure rosetta is a PIPE (propagates); the default is a SOURCE (mints)", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("pure-marker-classify");
+    const env = inferenceEnv.inherit("pure-marker-classify");
     env.defineRosetta("dedent", { fn: (s: string) => s, pure: true });
     env.defineRosetta("infer-x", { fn: (p: unknown) => p });
 

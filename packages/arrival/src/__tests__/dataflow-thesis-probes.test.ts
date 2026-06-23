@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { exec } from "../stdlib";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { initBridge } from "../bridge";
 import { SchemeString } from "../values/SchemeString";
 import { AValue } from "../values/AValue";
@@ -22,7 +22,7 @@ const provOf = (v: unknown): number[] =>
 describe("PROBE — DROP: does (length (map f xs)) compute f today?", () => {
   it("BASELINE: map dispatches eagerly, so f runs once per element — the work the flip must elide", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("probe-drop-baseline");
+    const env = inferenceEnv.inherit("probe-drop-baseline");
     let calls = 0;
     env.defineRosetta("ftick", { fn: (x: unknown) => (calls++, x) });
     const [n] = await exec(`(length (map ftick (list 1 2 3 4 5)))`, { env });
@@ -32,7 +32,7 @@ describe("PROBE — DROP: does (length (map f xs)) compute f today?", () => {
 
   it.fails("TARGET (slice 1 — the Fantasy Land flip): length through a lazy map runs f ZERO times", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit("probe-drop-target");
+    const env = inferenceEnv.inherit("probe-drop-target");
     let calls = 0;
     env.defineRosetta("ftick", { fn: (x: unknown) => (calls++, x) });
     const [n] = await exec(`(length (map ftick (list 1 2 3 4 5)))`, { env });
@@ -50,7 +50,7 @@ describe("PROBE — ATTRIBUTION: does a count's provenance depend on which eleme
   // live interpreter exhibits; the conflict is V's call before the spike commits.
   async function countProv(ids: [number, number, number]): Promise<number[]> {
     await initBridge();
-    const env = sandboxedEnv.inherit(`probe-attr-${ids.join("-")}`);
+    const env = inferenceEnv.inherit(`probe-attr-${ids.join("-")}`);
     env.set("a", stamped("a", ids[0]));
     env.set("b", stamped("b", ids[1]));
     env.set("c", stamped("c", ids[2]));

@@ -33,7 +33,7 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec, parse } from "../eval/generator-exec";
-import { sandboxedEnv } from "../sandbox-env";
+import { inferenceEnv } from "../inference-env";
 import { SchemeString } from "../values/SchemeString";
 import { AValue } from "../values/AValue";
 import { classify, fullCone } from "../values/lineage";
@@ -57,7 +57,7 @@ const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) })
  */
 async function shadow(src: string, binds: Record<string, unknown>): Promise<{ staticCone: number[]; eager: number[] }> {
   await initBridge();
-  const env = sandboxedEnv.inherit(`shadow-${seq++}`);
+  const env = inferenceEnv.inherit(`shadow-${seq++}`);
   for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
 
   // exec under the flag: this is the in-engine shadow assert (slices 2+3). If the
@@ -211,7 +211,7 @@ describe("SHADOW — `when` / `unless` mux (one-armed if) == eager golden", () =
 describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () => {
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-fan-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
     const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
@@ -222,7 +222,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   });
   it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-fan-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
     const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
@@ -243,7 +243,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
 describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict, not swallowed)", () => {
   async function runFlagged(src: string, binds: Record<string, unknown>): Promise<void> {
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-bound-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
     for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
     await exec(src, { env, irLineage: true });
   }
@@ -273,7 +273,7 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // The A13 leak (golden-prov-fan): length touches each element and unions their
     // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-bound-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
     const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
@@ -293,7 +293,7 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // A `(:keyword …)` head is a where-provenance projection with no static node
     // (v0.2/B2). exec under the flag must not throw — the form is recorded uncovered.
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-skip-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-skip-${seq++}`);
     env.set("a", sStr("hello", 100));
     // `(:length a)` resolves via the keyword-accessor membrane pluck; whatever its
     // value/cone, shadow abstains because the head starts with ':'.
@@ -308,7 +308,7 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // via the macro-head branch instead of the ':'-prefix one. Guards that a
     // macro-headed top-level form does not throw under the flag.
     await initBridge();
-    const env = sandboxedEnv.inherit(`shadow-skip-${seq++}`);
+    const env = inferenceEnv.inherit(`shadow-skip-${seq++}`);
     await expect(exec(`(define z 5)`, { env, irLineage: true })).resolves.toBeDefined();
   });
 });
