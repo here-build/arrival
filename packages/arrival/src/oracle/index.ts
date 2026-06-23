@@ -24,7 +24,7 @@ export type {
 export { scan, structuralScanner, makeSigmaScanner, validNextClasses } from "./scanner.js";
 export { computeValidSymbols, scanScope } from "./sigma.js";
 export type { OracleEnvΣ, ScopeState } from "./sigma.js";
-export { makeOracleEnv } from "./env.js";
+export { makeOracleEnv, oracleEnvFromBindings } from "./env.js";
 
 import { structuralScanner, makeSigmaScanner } from "./scanner.js";
 import { makeOracleEnv } from "./env.js";

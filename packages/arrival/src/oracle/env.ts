@@ -13,7 +13,7 @@
 //
 // `signatureOf` is T (O3) — not modelled here yet; it returns null (graceful per the contract).
 
-import type { Environment, EnvironmentValue } from "../Environment.js";
+import type { Environment } from "../Environment.js";
 import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
@@ -21,7 +21,7 @@ import type { OracleEnvΣ } from "./sigma.js";
  *  primitive and every user lambda; the Macro/Syntax classes cover special-form heads (`if`, `let`,
  *  `quote`, syntax-rules macros). We match those by walking the prototype chain's constructor names
  *  so we needn't import the class (and so a subclass like Syntax-extends-Macro is caught too). */
-function isCallableValue(value: EnvironmentValue | undefined): boolean {
+function isCallableValue(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "function") return true;
   // Walk the constructor-name chain for Macro / Syntax (special-form heads).
@@ -65,6 +65,34 @@ export function makeOracleEnv(env: Environment): OracleEnvΣ {
     }
     return false;
   };
+
+  const signatureOf: OracleEnv["signatureOf"] = (_id: string) => null;
+
+  return { boundSymbols, isCallable, signatureOf };
+}
+
+/**
+ * Build an {@link OracleEnvΣ} straight off a flat record of grant bindings — the platonic,
+ * scope-node-free form of `makeOracleEnv(new Environment(_, bindings, null))`. A toy grant ("these
+ * symbols are callable") is exactly an OracleEnvΣ: it never inherits, sets, or is looked-up through —
+ * it is enumerated and probed for callability, then handed to {@link makeOracle} and discarded. So it
+ * needs the Σ INTERFACE, not a runtime scope-node.
+ *
+ * Byte-identical to the single-frame `Environment` it replaces: that env's `__env__` IS the record
+ * verbatim (the constructor assigns it untouched) and its parent is `null`, so the chain has one
+ * frame. `boundSymbols()` = the record's own string keys; `isCallable(id)` = the same structural
+ * {@link isCallableValue} predicate over `bindings[id]` (typeof function, or a Macro/Syntax head);
+ * `signatureOf` is T (O3), not modelled — null per the contract.
+ *
+ * Intent-over-materialization: the caller declares "these symbols are callable grants", not
+ * "construct a scope-node". The grant boundary (spec §A2) is enforced for free — an unbound name is
+ * ungeneratable — exactly as the Environment-backed path enforced it.
+ */
+export function oracleEnvFromBindings(bindings: Record<string, unknown>): OracleEnvΣ {
+  const boundSymbols = (): ReadonlySet<string> => new Set(Object.keys(bindings));
+
+  const isCallable = (id: string): boolean =>
+    Object.hasOwn(bindings, id) ? isCallableValue(bindings[id]) : false;
 
   const signatureOf: OracleEnv["signatureOf"] = (_id: string) => null;
 
