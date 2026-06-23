@@ -89,6 +89,46 @@ export function quote(value: SchemeValue): SchemeValue {
 }
 
 // ----------------------------------------------------------------------
+// :: box — lift a raw JS primitive to its Scheme value-type so member reads
+// :: return Scheme-typed values, not bare JS. Only strings/bigints/numbers
+// :: need boxing; objects/arrays are handled by the membrane at access time,
+// :: so they pass through. Relocated here (the value-representation leaf, next
+// :: to `quote`) from stdlib so `patch_value` — and Environment's member walk —
+// :: can reach it without importing the stdlib monolith (the legacy cycle).
+// ----------------------------------------------------------------------
+export function box(object: unknown): SchemeValue {
+  switch (typeof object) {
+    case "string":
+      return new SchemeString(object);
+    case "bigint":
+      return new SchemeExact(object);
+    case "number":
+      if (Number.isNaN(object)) return new SchemeInexact(Number.NaN);
+      // Safe integers become exact, floats become inexact.
+      if (Number.isSafeInteger(object)) {
+        return new SchemeExact(BigInt(object));
+      }
+      return new SchemeInexact(object);
+  }
+  return object as SchemeValue;
+}
+
+// ----------------------------------------------------------------------
+// :: patch_value — settle a value read out of a binding/member for handing
+// :: back to Scheme: a Pair is cycle-marked then quoted (so the evaluator
+// :: treats it as data, not a call); everything else is boxed. Relocated here
+// :: from stdlib alongside `box`/`quote` so Environment.get can settle members
+// :: through this leaf instead of the deferred stdlib runtime slot.
+// ----------------------------------------------------------------------
+export function patch_value(value: unknown): SchemeValue {
+  if (is_pair(value)) {
+    value.mark_cycles();
+    return quote(value);
+  }
+  return box(value);
+}
+
+// ----------------------------------------------------------------------
 // :: an atom is any self-evaluating leaf (symbol, string, nil, char,
 // :: number, boolean) — i.e., not a compound pair/structure.
 // ----------------------------------------------------------------------

@@ -1,13 +1,6 @@
 import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
 import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/EOF.js";
-import type {
-  doc as DocFn,
-  get as GetFn,
-  get_props as GetPropsFn,
-  parse as ParseFn,
-  patch_value as PatchValueFn,
-} from "./stdlib.js";
 import { SchemeString } from "./values/SchemeString.js";
 import { SchemeSymbol } from "./values/SchemeSymbol.js";
 import type { Macro } from "./eval/Macro.js";
@@ -19,9 +12,11 @@ import { createRosettaWrapper } from "./rosetta.js";
 import { trim_lines } from "./utils/trim-lines.js";
 import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
-import type { QuotedPromise } from "./values/QuotedPromise.js";
+import { QuotedPromise } from "./values/QuotedPromise.js";
 import invariant from "tiny-invariant";
-import { fromJS, isSchemeValue } from "./membrane.js";
+import { fromJS, isSchemeValue, SchemeJSObject } from "./membrane.js";
+import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
+import { patch_value } from "./reader/values-repr.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -31,14 +26,6 @@ import { fromJS, isSchemeValue } from "./membrane.js";
  * same key (project.ts).
  */
 export const KEYWORD_ACCESSOR_FIELD = Symbol.for("@here.build/arrival/keyword-accessor-field");
-
-// -------------------------------------------------------------------------
-// :: Runtime dependencies - deferred loading to break circular dependency
-// :: These functions are only called at runtime, never during module init.
-// :: We defer the actual import until first use.
-// -------------------------------------------------------------------------
-
-// Type imports are fine - they're erased at runtime
 
 // -------------------------------------------------------------------------
 // :: Type definitions for Environment bindings
@@ -65,41 +52,62 @@ export interface LipsFunction extends Function {
  */
 export type EnvironmentValue = SchemeValue | LipsFunction | Macro | Syntax | QuotedPromise | EOF | Environment | RegExp;
 
-// Runtime module cache - populated on first access
-let _runtime: {
-  doc: typeof DocFn;
-  get_props: typeof GetPropsFn;
-  patch_value: typeof PatchValueFn;
-  get: typeof GetFn;
-  parse: typeof ParseFn;
-  global_env: Environment;
-} | null = null;
+// -------------------------------------------------------------------------
+// :: Member access — formerly reached up into the stdlib monolith through a
+// :: deferred runtime slot (the last LIPS-era DI channel). Both pieces are pure
+// :: functions of leaf values, so Environment now owns them directly:
+// ::   • own-keys enumeration (string keys + symbols, matching what clone()
+// ::     preserves) for list();
+// ::   • the dot-notation member walk (foo.bar.baz) for get(), which had no other
+// ::     caller in the package.
+// -------------------------------------------------------------------------
 
-// Setter function to allow stdlib to register itself
-export function setSchemeRuntime(runtime: typeof _runtime) {
-  _runtime = runtime;
-}
-
-function getSchemeRuntime() {
-  invariant(
-    _runtime,
-    `scheme runtime not yet loaded. This usually means a method was called during module initialization before circular dependencies resolved. Make sure to import from the main entry point (index.ts) before using Environment.`,
-  );
-  return _runtime!;
+/** Own string keys + own symbols of a binding record (what `clone()` preserves). */
+function ownProps(obj: object): (string | symbol)[] {
+  return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
 
-// Wrapper functions that defer to the scheme runtime
-function doc(...args: Parameters<typeof DocFn>): ReturnType<typeof DocFn> {
-  return getSchemeRuntime().doc(...args);
-}
-function get_props(obj: object): (string | symbol)[] {
-  return getSchemeRuntime().get_props(obj);
-}
-function patch_value(value: unknown): EnvironmentValue {
-  return getSchemeRuntime().patch_value(value) as EnvironmentValue;
-}
-function get(obj: unknown, ...keys: unknown[]): EnvironmentValue {
-  return getSchemeRuntime().get(obj, ...keys) as EnvironmentValue;
+/**
+ * Walk a chain of (string) member keys off a base value, settling each step for
+ * Scheme via `patch_value` (a Pair is cycle-marked + quoted, primitives boxed).
+ * A foreign value routes through its membrane proxy (`SchemeJSObject.get`); any
+ * other value reads through `accessMember`, so blocked names and members past an
+ * interop boundary surface as a miss, never as host-internal leakage. A miss
+ * yields `undefined`, and only the final key may miss (mid-chain miss throws —
+ * "get X from undefined"), preserving the stdlib accessor's contract exactly.
+ */
+function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefined {
+  let object: unknown = base;
+  let value: EnvironmentValue | undefined;
+  const remaining = [...keys];
+  while (remaining.length > 0) {
+    const name = remaining.shift()!;
+    // `then` on a QuotedPromise must yield the prototype's lazy `then` (instance
+    // `then` is `false` to keep real-promise resolution from firing, see #153).
+    if (name === "then" && object instanceof QuotedPromise) {
+      value = QuotedPromise.prototype.then as unknown as EnvironmentValue;
+    } else if (object instanceof SchemeJSObject) {
+      value = object.get(name) as EnvironmentValue;
+    } else {
+      try {
+        const accessed = accessMember(object, name);
+        value = accessed === NOT_FOUND ? undefined : (accessed as EnvironmentValue);
+      } catch (error) {
+        if (error instanceof InteropAccessError) {
+          value = undefined;
+        } else {
+          throw error;
+        }
+      }
+    }
+    if (value === undefined) {
+      invariant(remaining.length === 0, () => `Try to get ${remaining[0]} from undefined`);
+      return value;
+    }
+    value = patch_value(value) as EnvironmentValue;
+    object = value;
+  }
+  return value;
 }
 // -------------------------------------------------------------------------
 export class Environment {
@@ -251,7 +259,7 @@ export class Environment {
   }
 
   list(): (string | symbol)[] {
-    return get_props(this.__env__);
+    return ownProps(this.__env__);
   }
 
   fs(): EnvironmentValue {
@@ -390,7 +398,7 @@ export class Environment {
       const baseValue = this._lookupWithResolvers(first);
       if (baseValue !== undefined) {
         // Access nested properties
-        return get(baseValue, ...rest);
+        return walkMembers(baseValue, rest) as EnvironmentValue;
       }
       // Base not found - fall through to error handling
     }

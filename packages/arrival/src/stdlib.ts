@@ -6,7 +6,7 @@
  */
 import invariant from "tiny-invariant";
 import { withInputProvenance } from "./values/op-helpers.js";
-import { Environment, KEYWORD_ACCESSOR_FIELD, setSchemeRuntime } from "./Environment.js";
+import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/EOF.js";
 import { HalfBaked, is_half_baked } from "./values/HalfBaked.js";
@@ -31,7 +31,7 @@ import {
 import { SchemeSymbol } from "./values/SchemeSymbol.js";
 import { eq, eqv } from "./values/structural-equal.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { gensym, quote } from "./reader/values-repr.js";
+import { box, gensym, patch_value, quote } from "./reader/values-repr.js";
 import {
   complex_bare_re,
   complex_re,
@@ -727,24 +727,8 @@ function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args
 // ----------------------------------------------------------------------
 // :: Function utilities
 // ----------------------------------------------------------------------
-function box(object) {
-  // We only need to box lips data and arrays. Object don't need
-  // to be boxed, but values from objects will be boxed when accessed.
-  switch (typeof object) {
-    case "string":
-      return new SchemeString(object);
-    case "bigint":
-      return new SchemeExact(object);
-    case "number":
-      if (Number.isNaN(object)) return nan;
-      // Safe integers become exact, floats become inexact
-      if (Number.isSafeInteger(object)) {
-        return new SchemeExact(BigInt(object));
-      }
-      return new SchemeInexact(object);
-  }
-  return object;
-}
+// box() relocated to reader/values-repr.ts (the value-representation leaf,
+// alongside quote/patch_value); imported above. Re-exported below for the barrel.
 
 // ----------------------------------------------------------------------
 function map_object(object, fn) {
@@ -786,13 +770,9 @@ function unbox(object) {
 }
 
 // ----------------------------------------------------------------------
-export function patch_value(value) {
-  if (is_pair(value)) {
-    value.mark_cycles();
-    return quote(value);
-  }
-  return box(value);
-}
+// patch_value relocated to reader/values-repr.ts; re-exported to preserve the
+// public barrel surface (mirrors the quote re-export below).
+export { box, patch_value } from "./reader/values-repr.js";
 
 // ----------------------------------------------------------------------
 // :: Stub macros for let/let*/letrec - generator evaluator handles these as special forms
@@ -813,9 +793,8 @@ const native_lambda = _parse(
                                         (throw "Invalid Invocation"))`),
 )[0];
 // -------------------------------------------------------------------------------
-// Native property accessor — interpreter infrastructure below the membrane, wired
-// into the runtime via setSchemeRuntime and used by Environment for member
-// resolution. NOT a Scheme-facing builtin: the `.` / `get` verbs that exposed this
+// Native property accessor — interpreter infrastructure below the membrane. NOT a
+// Scheme-facing builtin: the `.` / `get` verbs that exposed this
 // to Scheme code were removed (the host-language sweep) — Scheme reaches host data
 // only through the blessed `@` / `@?` / `@keys` membrane accessors now. Access still
 // routes through accessMember / SchemeJSObject.get so the membrane is enforced.
@@ -1852,11 +1831,3 @@ export const parse = async (arg: SchemeValue, env?: Environment, source?: string
 
 // Additional exports needed by Environment.ts
 export { eof } from "./values/EOF.js";
-setSchemeRuntime({
-  doc,
-  get_props,
-  patch_value,
-  get,
-  parse,
-  global_env,
-});
