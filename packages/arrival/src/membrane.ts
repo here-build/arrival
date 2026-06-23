@@ -748,10 +748,10 @@ export class Operator<
 }
 
 // ============================================================================
-// Environment Registry
+// Operator Registry
 // ============================================================================
 
-export class Environment {
+export class OperatorRegistry {
   private readonly operators = new Map<string, Operator<any, any, any>>();
 
   constructor(readonly name: string = "default") {}
@@ -793,8 +793,8 @@ export class Environment {
   }
 
   /** Create a child environment that inherits from this one */
-  extend(name: string): Environment {
-    const child = new Environment(name);
+  extend(name: string): OperatorRegistry {
+    const child = new OperatorRegistry(name);
     // Copy all operators from parent
     for (const [key, op] of this.operators) {
       child.operators.set(key, op);
@@ -803,8 +803,8 @@ export class Environment {
   }
 
   /** Create a restricted environment with only specified operators */
-  restrict(name: string, allowList: string[]): Environment {
-    const restricted = new Environment(name);
+  restrict(name: string, allowList: string[]): OperatorRegistry {
+    const restricted = new OperatorRegistry(name);
     for (const key of allowList) {
       const op = this.operators.get(key);
       if (op) {

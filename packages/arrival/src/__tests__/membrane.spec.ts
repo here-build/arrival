@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { SchemeExact, SchemeInexact } from "../values/numbers";
 import {
   AnyNum,
-  Environment,
+  OperatorRegistry,
   Int,
   Operator,
   Real,
@@ -282,9 +282,9 @@ describe("Bitwise", () => {
   });
 });
 
-describe("Environment", () => {
+describe("OperatorRegistry", () => {
   it("registers and retrieves operators", () => {
-    const env = new Environment("test");
+    const env = new OperatorRegistry("test");
     env.register(add);
 
     expect(env.has("+")).toBe(true);
@@ -292,18 +292,18 @@ describe("Environment", () => {
   });
 
   it("calls operators by name", () => {
-    const env = new Environment("test").registerAll(add, mul);
+    const env = new OperatorRegistry("test").registerAll(add, mul);
 
     expect(env.call("+", [new SchemeExact(1n), new SchemeExact(2n)])).toEqual(new SchemeExact(3n));
   });
 
   it("throws on unknown operator", () => {
-    const env = new Environment("test");
+    const env = new OperatorRegistry("test");
     expect(() => env.call("unknown", [])).toThrow("unknown operator");
   });
 
   it("extends environment", () => {
-    const parent = new Environment("parent").register(add);
+    const parent = new OperatorRegistry("parent").register(add);
     const child = parent.extend("child").register(mul);
 
     expect(child.has("+")).toBe(true);
@@ -312,7 +312,7 @@ describe("Environment", () => {
   });
 
   it("restricts environment", () => {
-    const full = new Environment("full").registerAll(add, mul, div);
+    const full = new OperatorRegistry("full").registerAll(add, mul, div);
     const restricted = full.restrict("restricted", ["+", "*"]);
 
     expect(restricted.has("+")).toBe(true);

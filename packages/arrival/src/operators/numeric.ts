@@ -6,7 +6,7 @@
  */
 
 import type { Codec } from "../membrane.js";
-import { AnyNum, Bool, Environment, Int, Num, Operator, SafeInt } from "../membrane.js";
+import { AnyNum, Bool, OperatorRegistry, Int, Num, Operator, SafeInt } from "../membrane.js";
 import type { SchemeNumeric } from "../values/numbers.js";
 import { bigintISqrt, schemeCompare, SchemeExact, SchemeInexact, toReal } from "../values/numbers.js";
 import invariant from "tiny-invariant";
@@ -1170,10 +1170,10 @@ export const numericOperators = [
 // ============================================================================
 
 /** Full numeric environment - all operators */
-export const fullNumericEnv = new Environment("numeric:full").registerAll(...numericOperators);
+export const fullNumericEnv = new OperatorRegistry("numeric:full").registerAll(...numericOperators);
 
 /** Rosetta environment - JS-compatible, no bigint-specific ops */
-export const rosettaNumericEnv = new Environment("numeric:rosetta").registerAll(
+export const rosettaNumericEnv = new OperatorRegistry("numeric:rosetta").registerAll(
   add,
   sub,
   mul,
