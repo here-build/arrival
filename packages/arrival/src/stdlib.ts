@@ -276,7 +276,7 @@ async function* _parse(arg: SchemeValue, env?: Environment, source?: string) {
 }
 
 // Re-export unpromise from utils/promises
-export { unpromise as unpromise };
+export { unpromise } from "./utils/promises.js";
 
 // ----------------------------------------------------------------------
 // :: Function that return matcher function that match string against string
@@ -902,7 +902,7 @@ function filter_fn_names(name) {
 // :: Quote function used to pause evaluation from Macro
 // -------------------------------------------------------------------------
 // quote moved to values-repr.ts; re-exported here to preserve the public barrel.
-export { quote };
+export { quote } from "./reader/values-repr.js";
 
 // -------------------------------------------------------------------------------
 const native_lambda = _parse(
@@ -1990,7 +1990,7 @@ export const parse = async (arg: SchemeValue, env?: Environment, source?: string
 };
 
 // Additional exports needed by Environment.ts
-export { eof as eof };
+export { eof } from "./values/EOF.js";
 setSchemeRuntime({
   doc,
   get_props,

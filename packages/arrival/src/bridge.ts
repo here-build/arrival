@@ -16,7 +16,7 @@ import type { EvalSchemeInto, SchemeEnv } from "./env/scheme-env.js";
 import { HalfBaked, type Interval, is_half_baked } from "./values/HalfBaked.js";
 import type { Environment } from "./Environment.js";
 import { schemeFalse, schemeTrue } from "./values/SchemeBool.js";
-import { coerceNumeric, type FLOrd, getAllocationLimit, isOrd, isSchemeNumber, ORD_REL, setAllocationLimit } from "./values/op-helpers.js";
+import { coerceNumeric, type FLOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
 // They are no longer spread into `wrappedOps`: `initBridge` ASSEMBLES them onto
@@ -45,7 +45,7 @@ import "./errors.js";
 // stamp (withInputProvenance) now live in the leaf `op-helpers.ts` — shared with
 // the value-domain cluster packs. Re-exported below for the external importers
 // (evaluator, tests) that still reach for them via `bridge.js`.
-export { coerceNumeric, getAllocationLimit, isSchemeNumber, setAllocationLimit };
+export { coerceNumeric } from "./values/op-helpers.js";
 
 // ============================================================================
 // R7RS Error Types (Section 6.11)

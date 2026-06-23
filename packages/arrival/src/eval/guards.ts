@@ -24,7 +24,8 @@ import { nil } from "../values/types.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
-import {
+import { is_function, is_nil } from "../values/value-guards.js";
+export {
   has_own_symbol,
   is_function,
   is_instance,
@@ -34,7 +35,6 @@ import {
   is_pair,
   is_plain_object,
 } from "../values/value-guards.js";
-export { has_own_symbol, is_function, is_instance, is_iterator, is_native, is_nil, is_pair, is_plain_object };
 
 // Import directly from source files to avoid circular dependency with lips.ts
 

@@ -14,7 +14,7 @@
 // `signatureOf` is T (O3) — not modelled here yet; it returns null (graceful per the contract).
 
 import type { Environment, EnvironmentValue } from "../Environment.js";
-import type { OracleEnv, TypeTag } from "./contract.js";
+import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
 /** The structural shape of "this bound value can be a form head". A JS function covers every arrival
@@ -72,4 +72,3 @@ export function makeOracleEnv(env: Environment): OracleEnvΣ {
 }
 
 /** Re-export the type for the type tag used by `signatureOf` consumers (kept for symmetry with O3). */
-export type { TypeTag };

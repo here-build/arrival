@@ -14,7 +14,6 @@
 import invariant from "tiny-invariant";
 
 import { AValue, unionProvenance } from "./AValue.js";
-import { schemeFalse, schemeTrue } from "./SchemeBool.js";
 import { SchemeBytevector } from "./SchemeBytevector.js";
 import { SchemeString } from "./SchemeString.js";
 import { SchemeVector } from "./SchemeVector.js";
@@ -265,4 +264,3 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
 
 // Re-export the provenance singletons cluster ops occasionally need for direct
 // boolean boxing, so a cluster need only import from this one leaf.
-export { schemeFalse, schemeTrue };
