@@ -2585,8 +2585,13 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
+      // __withCtx fns (all rosettas) read the env from the explicit trailing `ctx`, so
+      // env-as-`this` is redundant for them → pass undefined. The legacy arm KEEPS
+      // `ctx.env` as `this`: externally-registered native fns (exec(code,{env},{fns})) rely
+      // on that contract (a tested public extension ABI) — erasing it there is a separate
+      // native-extension-API decision, not this change.
       result = (fn as { __withCtx?: boolean }).__withCtx
-        ? fn.apply(ctx.env, [...wrappedArgs, ctx])
+        ? fn.apply(undefined, [...wrappedArgs, ctx])
         : fn.apply(ctx.env, wrappedArgs);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
