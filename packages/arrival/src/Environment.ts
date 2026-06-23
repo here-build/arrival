@@ -7,7 +7,6 @@ import type {
   get_props as GetPropsFn,
   parse as ParseFn,
   patch_value as PatchValueFn,
-  unbind as UnbindFn,
 } from "./stdlib.js";
 import { SchemeString } from "./values/SchemeString.js";
 import { SchemeSymbol } from "./values/SchemeSymbol.js";
@@ -72,7 +71,6 @@ let _runtime: {
   get_props: typeof GetPropsFn;
   patch_value: typeof PatchValueFn;
   get: typeof GetFn;
-  unbind: typeof UnbindFn;
   parse: typeof ParseFn;
   global_env: Environment;
 } | null = null;
@@ -97,14 +95,11 @@ function doc(...args: Parameters<typeof DocFn>): ReturnType<typeof DocFn> {
 function get_props(obj: object): (string | symbol)[] {
   return getSchemeRuntime().get_props(obj);
 }
-function patch_value(value: unknown, context: unknown): EnvironmentValue {
-  return getSchemeRuntime().patch_value(value, context) as EnvironmentValue;
+function patch_value(value: unknown): EnvironmentValue {
+  return getSchemeRuntime().patch_value(value) as EnvironmentValue;
 }
 function get(obj: unknown, ...keys: unknown[]): EnvironmentValue {
   return getSchemeRuntime().get(obj, ...keys) as EnvironmentValue;
-}
-function unbind(obj: unknown): unknown {
-  return getSchemeRuntime().unbind(obj);
 }
 // -------------------------------------------------------------------------
 export class Environment {
@@ -375,7 +370,7 @@ export class Environment {
     // First, try direct lookup for the literal symbol (handles names like %as.data)
     const directValue = this._lookupWithResolvers(name);
     if (directValue !== undefined) {
-      return patch_value(directValue, null);
+      return patch_value(directValue);
     }
 
     // Determine if this is a dot-notation symbol (e.g., foo.bar.baz)

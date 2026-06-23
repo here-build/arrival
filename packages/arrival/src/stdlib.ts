@@ -27,15 +27,12 @@ import {
   is_plain_object,
   is_promise,
   is_prototype,
-  is_raw_lambda,
 } from "./eval/guards.js";
 import { SchemeSymbol } from "./values/SchemeSymbol.js";
 import { eq, eqv } from "./values/structural-equal.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { gensym, hidden_prop, quote } from "./reader/values-repr.js";
+import { gensym, quote } from "./reader/values-repr.js";
 import {
-  __context__,
-  __fn__,
   complex_bare_re,
   complex_re,
   float_re,
@@ -454,17 +451,6 @@ for (const x of props) {
 }
 
 // ----------------------------------------------------------------------
-function is_array_method(x) {
-  x = unbind(x);
-  return array_methods.includes(x);
-}
-
-// ----------------------------------------------------------------------
-function is_scheme_function(x) {
-  return is_function(x) && (is_lambda(x) || x.__name__);
-}
-
-// ----------------------------------------------------------------------
 function user_repr(obj) {
   const constructor = obj.constructor || Object;
   const plain_object = is_plain_object(obj);
@@ -473,8 +459,7 @@ function user_repr(obj) {
   if (repr.has(constructor)) {
     fn = repr.get(constructor);
   } else {
-    for (let [key, value] of repr.entries()) {
-      key = unbind(key);
+    for (const [key, value] of repr.entries()) {
       // if key is Object it should only work for plain_object
       // because otherwise it will match every object
       // we don't use instanceof so it don't work for subclasses
@@ -800,98 +785,12 @@ function unbox(object) {
 }
 
 // ----------------------------------------------------------------------
-export function patch_value(value, context) {
+export function patch_value(value) {
   if (is_pair(value)) {
     value.mark_cycles();
     return quote(value);
   }
-  if (
-    is_function(value) && // original function can be restored using unbind function
-    // only real JS function require to be bound
-    context
-  ) {
-    return bind(value, context);
-  }
   return box(value);
-}
-
-// ----------------------------------------------------------------------
-// :: Function gets original function that was binded with props
-// ----------------------------------------------------------------------
-export function unbind(obj) {
-  if (is_bound(obj)) {
-    return obj[__fn__];
-  }
-  return obj;
-}
-
-// ----------------------------------------------------------------------
-// :: Function binds with context that can be optionally unbind
-// :: get original function with unbind
-// ----------------------------------------------------------------------
-function bind(fn, context) {
-  if (fn[Symbol.for("__bound__")]) {
-    return fn;
-  }
-  const bound = fn.bind(context);
-  const props = Object.getOwnPropertyNames(fn);
-  for (const prop of props) {
-    if (filter_fn_names(prop)) {
-      try {
-        bound[prop] = fn[prop];
-      } catch {
-        // ignore error from express.js while accessing bodyParser
-      }
-    }
-  }
-  hidden_prop(bound, "__fn__", fn);
-  hidden_prop(bound, "__context__", context);
-  hidden_prop(bound, "__bound__", true);
-  if (is_native_function(fn)) {
-    hidden_prop(bound, "__native__", true);
-  }
-  if (is_plain_object(context) && is_lambda(fn)) {
-    hidden_prop(bound, "__method__", true);
-  }
-  bound.valueOf = function () {
-    return fn;
-  };
-  return bound;
-}
-
-// ----------------------------------------------------------------------
-// Function used to check if function should not get unboxed arguments,
-// so you can call Object.getPrototypeOf for lips data types
-// this is case, see dir function and #73
-// ----------------------------------------------------------------------
-function is_object_bound(obj) {
-  return is_bound(obj) && obj[Symbol.for("__context__")] === Object;
-}
-
-// ----------------------------------------------------------------------
-function is_bound(obj) {
-  return !!(is_function(obj) && obj[__fn__]);
-}
-
-// ----------------------------------------------------------------------
-function is_runtime_bound_context(obj) {
-  if (is_function(obj)) {
-    const context = obj[__context__];
-    if (context && context.constructor?.__class__) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// ----------------------------------------------------------------------
-// :: Function bind fn with context but it also move all props
-// :: mostly used for Object function
-// ----------------------------------------------------------------------
-const exluded_names = new Set(["name", "length", "caller", "callee", "arguments", "prototype"]);
-
-function filter_fn_names(name) {
-  return !exluded_names.has(name);
 }
 
 // ----------------------------------------------------------------------
@@ -921,12 +820,7 @@ const native_lambda = _parse(
 // routes through accessMember / SchemeJSObject.get so the membrane is enforced.
 export const get = doc("get", function get(object, ...args) {
   let value;
-  const len = args.length;
   while (args.length > 0) {
-    // if arg is symbol someone probably want to get __fn__ from binded function
-    if (is_function(object) && typeof args[0] !== "symbol") {
-      object = unbind(object);
-    }
     const arg = args.shift();
     const name = unbox(arg);
     // the value was set to false to prevent resolving
@@ -961,7 +855,7 @@ export const get = doc("get", function get(object, ...args) {
       invariant(args.length === 0, () => `Try to get ${args[0]} from undefined`);
       return value;
     } else {
-      value = patch_value(value, args.length - 1 < len ? object : undefined);
+      value = patch_value(value);
     }
     object = value;
   }
@@ -1632,7 +1526,7 @@ export const global_env = new Environment(
       const last = args.pop();
       typecheck("apply", last, ["pair", "nil"], args.length + 2);
       args = args.concat(listToArray.call(this, last));
-      return fn.apply(this, prepare_fn_args(fn, args));
+      return fn.apply(this, args);
     }),
     // ------------------------------------------------------------------
     length: speculative(
@@ -1932,42 +1826,6 @@ registerCxrResolver(global_env);
 global_env.registerResolver(keywordAccessorResolver);
 
 // -------------------------------------------------------------------------
-// prepare_fn_args is the one survivor of the deleted legacy `evaluate` cluster —
-// it's still used by the stdlib `apply` builtin to unbox callback args (#76).
-function prepare_fn_args(fn: SchemeValue, args: SchemeValue[]): SchemeValue[] {
-  if (is_bound(fn) && !is_object_bound(fn) && !is_runtime_bound_context(fn)) {
-    args = args.map(unbox);
-  }
-  if (!is_raw_lambda(fn) && args.some(is_scheme_function) && !is_scheme_function(fn) && !is_array_method(fn)) {
-    // we unbox values from callback functions #76
-    // calling map on array should not unbox the value
-    const result: SchemeValue[] = [];
-    let i = args.length;
-    while (i--) {
-      const arg = args[i];
-      if (is_scheme_function(arg)) {
-        const wrapper = function (this: SchemeValue, ...args: SchemeValue[]) {
-          return unpromise(arg.apply(this, args), unbox);
-        };
-        // make wrapper work like output of bind
-        hidden_prop(wrapper, "__bound__", true);
-        hidden_prop(wrapper, "__fn__", arg);
-        // copy prototype from function to wrapper
-        // so this work when calling new from JavaScript
-        // case of Preact that pass LIPS class as argument
-        // to h function
-        wrapper.prototype = arg.prototype;
-        result[i] = wrapper;
-      } else {
-        result[i] = arg;
-      }
-    }
-    args = result;
-  }
-  return args;
-}
-
-// -------------------------------------------------------------------------
 // `exec` is the single canonical generator-trampoline entry — it lives in
 // eval/generator-exec.ts (one bootstrap gate + budget/heap/signal bounds + the
 // audit-#42 wrapOperator/TypeError surfacing, all in one place). The old
@@ -1998,7 +1856,6 @@ setSchemeRuntime({
   get_props,
   patch_value,
   get,
-  unbind,
   parse,
   global_env,
 });

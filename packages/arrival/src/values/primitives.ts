@@ -106,8 +106,6 @@ export const type_constants = new Map([
 // ----------------------------------------------------------------------
 // Hidden props
 // ----------------------------------------------------------------------
-export const __context__ = Symbol.for("__context__");
-export const __fn__ = Symbol.for("__fn__");
 export const __data__ = Symbol.for("__data__");
 export const __ref__ = Symbol.for("__ref__");
 export const __cycles__ = Symbol.for("__cycles__");

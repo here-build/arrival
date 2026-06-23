@@ -152,13 +152,15 @@ const EXPECTED_FAILURES: { pattern: string | RegExp; reason: string }[] = [
     reason: "Local define-syntax + set! inside the rewrite — pre-L1 hygiene gap",
   },
   // -----------------------------------------------------------------------
-  // Function identity — pre-L1, `prepare_fn_args` rewraps lambdas per call,
-  // so `(eq? p p)` compares two fresh wrappers; `unbind` peels one layer
-  // but the original `p` is itself a re-bound copy from env lookup.
+  // Function identity — pre-L1, evaluating `p` twice through the lookup/eval
+  // path yields distinct closures, so `(eq? p p)` sees two objects. (This is
+  // NOT the old LIPS bind/unbind machinery — that whole cluster was removed
+  // 2026-06 once the membrane subsumed it; the failure is unchanged by the
+  // removal, confirming the cause lives in evaluation/lookup, not binding.)
   // -----------------------------------------------------------------------
   {
     pattern: "(let ((p (lambda (x) x))) (eq? p p))",
-    reason: "Lambda identity — env lookup re-binds, eq? sees two wrappers — pre-L1",
+    reason: "Lambda identity — lookup/eval yields distinct closures, eq? sees two objects — pre-L1",
   },
   {
     pattern: "(let ((g (gen-counter))) (eqv? g g))",
