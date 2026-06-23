@@ -6,8 +6,6 @@ import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { Syntax } from "./Syntax.js";
 import {
   __lambda__,
-  __method__,
-  __prototype__,
   char_re,
   complex_re,
   directives,
@@ -23,6 +21,7 @@ import { nil } from "../values/types.js";
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
 import { is_function, is_nil } from "../values/value-guards.js";
+
 export {
   has_own_symbol,
   is_function,
@@ -204,15 +203,6 @@ export function is_lambda(obj: unknown): boolean {
 }
 
 // ----------------------------------------------------------------------
-function is_method(obj: unknown): boolean {
-  return obj != null && typeof obj === "object" && __method__ in obj && !!(obj as Record<symbol, unknown>)[__method__];
-}
-
-// ----------------------------------------------------------------------
-export function is_raw_lambda(fn: unknown): boolean {
-  return is_lambda(fn) && !(fn as Record<symbol, unknown>)[__prototype__] && !is_method(fn);
-}
-
 export function is_native_function(fn: unknown): boolean {
   const native = Symbol.for("__native__");
   if (!is_function(fn)) return false;
@@ -222,4 +212,3 @@ export function is_native_function(fn: unknown): boolean {
     ((f.name.match(/^bound /) && f[native] === true) || (!f.name.startsWith("bound ") && !f[native]))
   );
 }
-

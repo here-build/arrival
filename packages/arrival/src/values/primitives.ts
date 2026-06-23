@@ -109,7 +109,6 @@ export const type_constants = new Map([
 export const __data__ = Symbol.for("__data__");
 export const __ref__ = Symbol.for("__ref__");
 export const __cycles__ = Symbol.for("__cycles__");
-export const __method__ = Symbol.for("__method__");
 export const __prototype__ = Symbol.for("__prototype__");
 export const __lambda__ = Symbol.for("__lambda__");
 export const __location__ = Symbol.for("__location__");
