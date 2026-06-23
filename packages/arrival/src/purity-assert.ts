@@ -15,10 +15,11 @@
 //       not write through to an input it shares. JS purity is undecidable, so the
 //       marker is an author assertion; this is the cheap, SOUND runtime check on it.
 //
-// This module owns only the DETECTION primitives + the typed throw. It is additive
-// and isolated: the door-closure probe is a function a test/guard invokes (not on
-// the hot path), and the mutation check is dev-flagged (PURITY_ASSERT_ENABLED) so
-// production pays nothing. Sibling to purity.ts, which owns the DOOR throw itself.
+// This module owns the typed throw (PurityViolation) + the (2) mutation check. The
+// (1) door-closure PROBE — test-only, never on a runtime path — lives inline in the
+// test (`__tests__/purity-assert.test.ts`) and imports PurityViolation from here. The
+// mutation check is dev-flagged (PURITY_ASSERT_ENABLED) so production pays nothing.
+// Sibling to purity.ts, which owns the DOOR throw itself.
 
 import { ArrivalError } from "./ArrivalError.js";
 import { AValue } from "./values/AValue.js";
@@ -44,127 +45,6 @@ export class PurityViolation extends ArrivalError {
     public readonly verb: string,
   ) {
     super(message);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// (1) Door-closure probe — the doors stay closed.
-// ---------------------------------------------------------------------------
-
-/**
- * The mutation/dynamics doors that env/core.ts macro-expands to `%purity-door`.
- * SINGLE SOURCE caveat: core.ts owns the canonical list (with reasons + the
- * %purity-door throw); this mirror is the NAMES the closure-probe verifies still
- * route to a throw. A door added to core.ts but not here is simply un-probed (a
- * gap the probe under-reports), never a false alarm — so the mirror is sound by
- * construction. Kept in core.ts's source order for eyeball cross-checking.
- */
-export const PURITY_DOOR_VERBS: readonly string[] = [
-  // writing methods
-  "set-car!",
-  "set-cdr!",
-  "append!",
-  "vector-set!",
-  "vector-fill!",
-  "vector-copy!",
-  "string-set!",
-  "string-fill!",
-  "string-copy!",
-  "bytevector-u8-set!",
-  "bytevector-copy!",
-  // dynamics
-  "call/cc",
-  "call-with-current-continuation",
-  "dynamic-wind",
-  "make-parameter",
-  "parameterize",
-  "delay",
-  "force",
-  "make-promise",
-  "delay-force",
-];
-
-/**
- * The shape the probe needs from an Environment: a binding lookup that does not
- * throw on a missing name (it must be able to observe an UNBOUND door — that is
- * the closed state). Duck-typed so the probe stays import-light (no Environment
- * dep) and runs against any env-like surface (incl. test POJOs).
- */
-export interface DoorProbeEnv {
-  /** Does the env (or its chain) bind this name at all? */
-  has?(name: string): boolean;
-  /** Look the name up; may return undefined / a macro / a wrapper. */
-  get?(name: string, ...rest: unknown[]): unknown;
-}
-
-/** One door's verdict: it is closed iff invoking it throws (the %purity-door route). */
-export interface DoorVerdict {
-  readonly verb: string;
-  /** true = invoking the door throws (closed); false = it resolved to a callable that did NOT throw (REOPENED). */
-  readonly closed: boolean;
-  /** Present when !closed — what the reopened door returned (for the failure message). */
-  readonly leak?: unknown;
-}
-
-/**
- * Probe every door against a live env by actually invoking its binding with a
- * dummy arg and asserting it throws. This is the SOUND check: a door is "closed"
- * iff calling it raises (it routes to %purity-door / PurityError). A door that is
- * unbound is vacuously closed (the name resolves to nothing callable). A door that
- * resolves to a callable which returns WITHOUT throwing is REOPENED — the one
- * failure we report.
- *
- * Not on the hot path — a guard/test calls this once against the assembled env.
- * Async because a reopened rosetta-style door could return a promise; we await to
- * see whether it settles or rejects.
- */
-export async function probePurityDoors(env: DoorProbeEnv): Promise<DoorVerdict[]> {
-  const verdicts: DoorVerdict[] = [];
-  for (const verb of PURITY_DOOR_VERBS) {
-    // A door is a macro: in a real env `get` returns the Macro/expander, which is
-    // not directly callable as a fn. We treat "not a plain callable" as closed —
-    // only a *function that returns without throwing* counts as reopened. This is
-    // deliberately conservative: the live closure is also re-checked end-to-end via
-    // exec() in the test (which exercises the macro-expansion path %purity-door).
-    let binding: unknown;
-    try {
-      binding = env.get?.(verb);
-    } catch {
-      // Lookup itself threw (some envs throw on unbound) → unbound → closed.
-      verdicts.push({ verb, closed: true });
-      continue;
-    }
-    if (typeof binding !== "function") {
-      // Unbound, or bound to a macro/non-callable → not a reopened mutator.
-      verdicts.push({ verb, closed: true });
-      continue;
-    }
-    // Bound to a callable. The ONLY closed outcome for a callable door is: it throws.
-    try {
-      const r = await (binding as (...a: unknown[]) => unknown)();
-      verdicts.push({ verb, closed: false, leak: r });
-    } catch {
-      verdicts.push({ verb, closed: true });
-    }
-  }
-  return verdicts;
-}
-
-/**
- * Assert that EVERY purity door is closed against `env`, throwing a
- * {@link PurityViolation} naming the first reopened verb. The teeth behind G5's
- * "a reopened purity-door is CAUGHT." Returns void on success.
- */
-export async function assertPurityDoorsClosed(env: DoorProbeEnv): Promise<void> {
-  const reopened = (await probePurityDoors(env)).filter((v) => !v.closed);
-  if (reopened.length > 0) {
-    const verb = reopened[0].verb;
-    throw new PurityViolation(
-      `purity door "${verb}" is REOPENED — it resolved to a callable that did not throw. ` +
-        `Mutation/dynamics doors must route to %purity-door (env/core.ts); a working binding ` +
-        `silently unsounds the lineage model (design §3, the confluence invariant).`,
-      verb,
-    );
   }
 }
 
