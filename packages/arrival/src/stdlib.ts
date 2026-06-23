@@ -70,8 +70,6 @@ import {
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
 import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
 
-// Declare jQuery for browser environments
-declare const jQuery: { fn: { init: new (...args: unknown[]) => object } } | undefined;
 
 const SyntaxParameter = Syntax.Parameter;
 
@@ -626,9 +624,6 @@ function get_native_types() {
 
 // ----------------------------------------------------------------------
 function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args: unknown[]): string {
-  if (typeof jQuery !== "undefined" && obj instanceof jQuery.fn.init) {
-    return `#<jQuery(${(obj as { length: number }).length})>`;
-  }
   if (str_mapping.has(obj)) {
     return str_mapping.get(obj);
   }
