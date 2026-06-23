@@ -74,7 +74,7 @@ export interface ExecOptions {
    * When true, producers (filter/map) may emit a lazy `HalfBaked` carrier so
    * control-flow over a still-filling promise fan can collapse early. With the
    * flag off, evaluation is byte-identical to the eager path. See
-   * docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md.
+   * docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
    */
   speculate?: boolean;
   /**

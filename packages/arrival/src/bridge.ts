@@ -193,7 +193,7 @@ export function wrapOperator<In extends any[], InRest extends Codec<any, any> | 
 
 // ════════════════════════════════════════════════════════════════════════════
 // Tier 2 speculative comparison against a HalfBaked cardinality interval.
-// See docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md.
+// See docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
 // ════════════════════════════════════════════════════════════════════════════
 
 /** The comparison ops that can decide early against a narrowing interval. */

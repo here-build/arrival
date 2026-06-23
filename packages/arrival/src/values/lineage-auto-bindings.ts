@@ -1,6 +1,6 @@
 /**
  * v02-G0 FEASIBILITY SPIKE — the AUTO-BINDING runtime leaf-stamp (design
- * docs/working-proposals/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
+ * docs/package-specific/arrival-provenance/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
  * §"v02-G0 feasibility verdict + design"). ADDITIVE + flag-gated + fully reversible.
  *
  * THE PROBLEM IT SOLVES. The v02-G1 shadow (lineage-field-shadow.test.ts) proves the

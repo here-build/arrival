@@ -6,7 +6,7 @@ builtin `.d.ts` leaves declaration-merge into, so arrival-chain Scheme programs
 back to their `.scm` spans).
 
 This package owns **Wave A** of the
-[Scheme→TS type-lens DAG](../../../docs/working-proposals/scheme-ts-type-lens-dag-2026-06-10.md):
+[Scheme→TS type-lens DAG](../../../docs/package-specific/arrival-type-lens/scheme-ts-type-lens-dag-2026-06-10.md):
 the package scaffold + the `PRE` prelude + the reference leaf. The 34-way builtin
 fan-out (Wave B) and the emitter/Volar plumbing (Waves C–E) build on top of it.
 

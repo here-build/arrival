@@ -51,7 +51,7 @@ import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS }
 import type { EvalTrace } from "./trace.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT
- *  (docs/working-proposals/provenance-region-model-plan-2026-06-02.md, Stage 2).
+ *  (docs/package-specific/arrival-provenance/provenance-region-model-plan-2026-06-02.md, Stage 2).
  *  Keyed by the producer's STRUCTURAL scope-id, NOT per-value: a `map`/loop body that
  *  runs N times emits ONE port per structural producer (one dataflow), matching the
  *  `leaf.scope` contract. This is what makes each container a hermetic mini-chart with

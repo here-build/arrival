@@ -2,7 +2,7 @@
  * HalfBaked — the lazy carrier core, in isolation (no evaluator wiring yet).
  *
  * Pins the three load-bearing behaviours the speculative-evaluation design
- * (docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md)
+ * (docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md)
  * rests on:
  *   1. the cardinality interval NARROWS from both ends as slots settle;
  *   2. `decide` resolves EARLY — the instant the interval is decisive, with

@@ -1,6 +1,6 @@
 /**
  * Slices 2–3 of wiring the static lineage classifier (W3 — SHADOW MODE; design
- * docs/working-proposals/provenance-static-lineage-finalization-v0.1-2026-06-19.md
+ * docs/package-specific/arrival-provenance/provenance-static-lineage-finalization-v0.1-2026-06-19.md
  * §8 "W3 wiring design — SHADOW MODE"). Builds a per-form skeleton at load and,
  * behind the `irLineage` flag, ASSERTS that the static `fullCone` reproduces the
  * UNTAPPED eager `result.provenance`.

@@ -20,7 +20,7 @@
  *      discriminating test: same source, opposite termination, the difference
  *      is exactly the early-collapse behaviour.
  *
- * See docs/working-proposals/speculative-evaluation-promise-functor-2026-06-05.md.
+ * See docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
  */
 import { beforeAll, describe, expect, it } from "vitest";
 

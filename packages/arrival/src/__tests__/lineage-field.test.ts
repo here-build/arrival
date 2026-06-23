@@ -1,6 +1,6 @@
 /**
  * v0.2 — the FIELD / lens carrier (design
- * docs/working-proposals/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
+ * docs/package-specific/arrival-provenance/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
  * §"The carrier", §"The viz constraint", "Decisions resolved"). Proves the new
  * `field` LineageNode — the static form of trace.ts's runtime field-point — and
  * that it:
