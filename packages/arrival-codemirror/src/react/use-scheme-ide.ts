@@ -32,7 +32,7 @@ const LS_OPTIONS = { compilerOptions: { noImplicitAny: false } };
 // arrival env binding (`infer`, `require`, `http/*`) and every scheme-prelude
 // helper (`field`, `values-of`, `take`) reads as an unresolved name. Both
 // rosters are DERIVED from the env's single source of truth — `host` from
-// `assembleHostPrelude([...env.__rosettaTypes__])`, `schemePrelude` is the
+// `assembleHostPrelude([...rosettaTypesOf(env)])`, `schemePrelude` is the
 // `BUILTIN_PREAMBLE` source string — and threaded in here. Plain data, so they
 // cross the worker boundary in the init options as-is.
 let hostConfig: { host?: { prelude: string; members: readonly string[] }; schemePrelude?: string } = {};

@@ -11,7 +11,7 @@
  * THE PREDICATES, and how much each is genuinely env-derived:
  *  - isRosettaIn (THE load-bearing cut — `classify` keys source-vs-pure on it):
  *    a Rosetta source MINTS provenance. The env has NO registry of source names
- *    today — `__rosettaPure__` records the PURE ones, and `infer` registers via a
+ *    today — the pure registry (`rosettaPureOf`) records the PURE ones, and `infer` registers via a
  *    wrapper (infer-kernel) that leaves no env-queryable mint marker. So sources
  *    are passed in EXPLICITLY (the documented seam). A pure rosetta is never a
  *    source even if mis-listed (the `&& !pure` guard). The follow-up that closes
@@ -27,9 +27,10 @@
  *    currently consult it — any op that is not source/opaque/fan falls through to
  *    the pure-application path (combine), so an unlisted pure op is still handled
  *    correctly. Kept honest + minimal rather than chasing builtin-list completeness
- *    (the SAFE_BUILTINS-staleness trap); `__rosettaPure__` carries the pure ROSETTAS.
+ *    (the SAFE_BUILTINS-staleness trap); the pure registry carries the pure ROSETTAS.
  */
 import { Environment } from "../Environment.js";
+import { rosettaPureOf } from "../env-registries.js";
 import { SchemeJSFunction } from "../membrane.js";
 import type { Classifier } from "./lineage.js";
 
@@ -37,7 +38,7 @@ import type { Classifier } from "./lineage.js";
 const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
 
 /** Pure builtins for the (currently unused) isPure predicate — the curated
- *  "author assertion" (Environment.ts:128): builtins carry no structural purity
+ *  "author assertion" (env-registries.ts): builtins carry no structural purity
  *  flag. Deliberately minimal; the pure-application fallthrough in classify()
  *  handles anything omitted, so this list need not be exhaustive. */
 const PURE_BUILTINS: ReadonlySet<string> = new Set([
@@ -46,10 +47,10 @@ const PURE_BUILTINS: ReadonlySet<string> = new Set([
 ]);
 
 /** True iff `op` is a pure rosetta registered anywhere up the env chain
- *  (`__rosettaPure__` is per-env, not chained — Environment.ts:131). */
+ *  (the pure registry is per-env; this walk supplies the chaining — env-registries.ts). */
 function isPureRosettaInChain(env: Environment, op: string): boolean {
   for (let e: Environment | null = env; e; e = e.__parent__) {
-    if (e.__rosettaPure__.has(op)) return true;
+    if (rosettaPureOf(e).has(op)) return true;
   }
   return false;
 }

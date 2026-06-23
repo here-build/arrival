@@ -11,15 +11,16 @@ import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type Classifier } from "../values/lineage";
+import { rosettaPureOf } from "../env-registries";
 
 describe("rosetta pure marker", () => {
-  it("round-trips onto the env (sibling to __rosettaTypes__), default is NOT pure", async () => {
+  it("round-trips into the pure registry (sibling to the type registry), default is NOT pure", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("pure-marker-roundtrip");
     env.defineRosetta("dedent", { fn: (s: string) => s, pure: true });
     env.defineRosetta("infer-x", { fn: (p: unknown) => p }); // default → source
-    expect(env.__rosettaPure__.has("dedent")).toBe(true);
-    expect(env.__rosettaPure__.has("infer-x")).toBe(false);
+    expect(rosettaPureOf(env).has("dedent")).toBe(true);
+    expect(rosettaPureOf(env).has("infer-x")).toBe(false);
   });
 
   it("drives classification: a pure rosetta is a PIPE (propagates); the default is a SOURCE (mints)", async () => {
@@ -28,10 +29,10 @@ describe("rosetta pure marker", () => {
     env.defineRosetta("dedent", { fn: (s: string) => s, pure: true });
     env.defineRosetta("infer-x", { fn: (p: unknown) => p });
 
-    // The op-taxonomy reads the env's pure set — exactly how the real classifier will.
+    // The op-taxonomy reads the env's pure registry — exactly how the real classifier will.
     const C: Classifier = {
-      isPure: (op) => env.__rosettaPure__.has(op) || ["string-append", "+"].includes(op),
-      isRosettaIn: (op) => !env.__rosettaPure__.has(op) && ["infer-x", "infer"].includes(op),
+      isPure: (op) => rosettaPureOf(env).has(op) || ["string-append", "+"].includes(op),
+      isRosettaIn: (op) => !rosettaPureOf(env).has(op) && ["infer-x", "infer"].includes(op),
       isFan: () => false,
       isOpaque: () => false,
     };

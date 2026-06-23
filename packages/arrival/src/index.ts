@@ -72,6 +72,13 @@ export { EOF as EOF } from "./values/EOF.js";
 // stays exported: arrival-chain's `dict` (project.ts) reads the same registered symbol.
 export { KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 
+// Invocation-context metadata registries (the docs / rosetta-type / rosetta-purity
+// side-tables that used to be fields on the concrete `Environment`, now held OFF the
+// scope-node, keyed by env). `rosettaTypesOf` is the type-lens harvest seam — studio
+// derives its lens roster from `[...rosettaTypesOf(env)]` (was `[...env.__rosettaTypes__]`).
+// `rosettaPureOf`/`docsOf` round out the trio for external readers.
+export { docsOf, rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
+
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `Environment` class). Re-surfaced on the barrel from its real home
 // (`./env/scheme-env.ts`, also reachable via the `@here.build/arrival/scheme-env`

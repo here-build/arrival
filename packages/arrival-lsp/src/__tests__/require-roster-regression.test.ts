@@ -5,7 +5,7 @@
 // The earlier `require-shape.test.ts` proves the lens works when handed a
 // HAND-BUILT roster (`[["require", "(specifier: SStr): unknown"]]`). That green
 // test hid the real bug: in studio the roster is DERIVED from the live runtime
-// env (`assembleHostPrelude([...env.__rosettaTypes__])`), and if `require` is
+// env (`assembleHostPrelude([...rosettaTypesOf(env)])`), and if `require` is
 // missing from that derivation the emitter lowers `(require "x.json")` to a BARE
 // `require(...)` (Node's global → `any`), the ArrShape overload is never
 // consulted, and the editor shows `unknown` with no error and no crash —
@@ -20,7 +20,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { buildArrivalEnv, loaderFromResolver, resolveRequireType } from "@here.build/arrival-chain";
+import { buildArrivalEnv, loaderFromResolver, resolveRequireType, rosettaTypesOf } from "@here.build/arrival-chain";
 
 import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";
@@ -34,7 +34,7 @@ const FILES: Record<string, string> = {
 const stubInfer = (async () => [""]) as unknown as Parameters<typeof buildArrivalEnv>[0]["infer"];
 const stubLoader = loaderFromResolver((p) => FILES[p] ?? null);
 
-/** The runtime env — its `__rosettaTypes__` is the SINGLE SOURCE OF TRUTH that
+/** The runtime env — its rosetta-type registry (`rosettaTypesOf(env)`) is the SINGLE SOURCE OF TRUTH that
  *  studio derives the lens roster from. Built async (eval has no sync path). */
 let env: Awaited<ReturnType<typeof buildArrivalEnv>>;
 beforeAll(async () => {
@@ -50,17 +50,17 @@ const resolveReqType = (p: string): string | null =>
 describe("require roster reaches the lens (the codemirror-plugin bug)", () => {
   it("the runtime env registers `require` in its rosetta-type roster", () => {
     // The invariant that, when violated, manifested as `requireIsHostMember=false`.
-    expect(env.__rosettaTypes__.has("require")).toBe(true);
+    expect(rosettaTypesOf(env).has("require")).toBe(true);
   });
 
   it("the studio-derived host roster carries `require` as a member", () => {
-    const host = assembleHostPrelude([...env.__rosettaTypes__]);
+    const host = assembleHostPrelude([...rosettaTypesOf(env)]);
     // Without this, the emitter writes bare `require(...)` and the shape is lost.
     expect(host.members).toContain("require");
   });
 
   it("a lens built from the REAL env roster resolves (require) to its shape", () => {
-    const host = assembleHostPrelude([...env.__rosettaTypes__]);
+    const host = assembleHostPrelude([...rosettaTypesOf(env)]);
     const ls = createSchemeLanguageService({
       compilerOptions: { noImplicitAny: false },
       host,

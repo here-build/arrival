@@ -3,7 +3,7 @@
 // THE SINGLE-SOURCE SEAM. A host (sift) registers each evidence tool with a TS
 // signature string: `defineRosetta("ip/external-c2-candidate?", { fn, type: "(ip:
 // SchemeIP): SBool" })`. Arrival records those strings on the env
-// (`Environment.__rosettaTypes__`). This function turns that registry into the two
+// (the env's rosetta-type registry, `rosettaTypesOf(env)`). This function turns that registry into the two
 // coupled artifacts the type-lens needs — both derived from the ONE registration,
 // so the type knowledge lives WITH the rosetta and cannot drift into a parallel
 // hand-maintained `.d.ts`:
@@ -44,7 +44,7 @@ export interface AssembleHostPreludeOptions {
 
 /**
  * Build the `{ prelude, members }` host option from `[name, type]` rosetta entries
- * (e.g. `[...env.__rosettaTypes__]`). Order-independent; duplicate names keep the
+ * (e.g. `[...rosettaTypesOf(env)]`). Order-independent; duplicate names keep the
  * last entry (a re-registration overrides). Names are emitted as quoted member keys
  * so any scheme name (`memory/netscan`, `ip/external-c2-candidate?`) is legal.
  */

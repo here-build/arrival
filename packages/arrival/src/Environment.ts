@@ -17,6 +17,7 @@ import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue, SchemeJSObject } from "./membrane.js";
 import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
 import { patch_value } from "./reader/values-repr.js";
+import { docsOf, rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -112,27 +113,7 @@ function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefine
 // -------------------------------------------------------------------------
 export class Environment {
   static __class__ = "environment";
-  __docs__: Map<string | symbol, string> = new Map();
   __resolvers__: FallbackResolver[] = [];
-  /**
-   * Harvest surface for the type-lens: the TS signature string each rosetta was
-   * registered with (`defineRosetta(name, { type })`). Inert at runtime; read only
-   * by `arrival-chain`'s rosetta-type harvester to assemble the `ArrShape` leaf.
-   * Keyed by the registered name; populated on each `defineRosetta` that carries a
-   * `type`. Local to the env the rosetta was defined on (not chained).
-   */
-  __rosettaTypes__: Map<string, string> = new Map();
-
-  /**
-   * Provenance-role harvest surface, sibling to `__rosettaTypes__`: the set of
-   * rosetta names registered with `pure: true` — fns that PROPAGATE their inputs'
-   * provenance (a pipe, like `string-append`) rather than MINT a fresh source.
-   * Inert at runtime today; read by the lineage classifier's op-taxonomy (a pure
-   * rosetta classifies like a pure builtin, not a Rosetta-in source). Default
-   * (absent) = source/mint, the conservative direction. Local to the defining env.
-   */
-  __rosettaPure__: Set<string> = new Set();
-
   /**
    * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
    * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
@@ -254,8 +235,8 @@ export class Environment {
   defineRosetta(name: string, config: RosettaFunction): void {
     const wrapper = createRosettaWrapper(config);
     this.set(name, wrapper);
-    if (config.type !== undefined) this.__rosettaTypes__.set(name, config.type);
-    if (config.pure) this.__rosettaPure__.add(name);
+    if (config.type !== undefined) rosettaTypesOf(this).set(name, config.type);
+    if (config.pure) rosettaPureOf(this).add(name);
   }
 
   list(): (string | symbol)[] {
@@ -295,11 +276,12 @@ export class Environment {
     }
     if (value) {
       const finalValue = dump ? value : trim_lines(value);
-      this.__docs__.set(key, finalValue);
+      docsOf(this).set(key, finalValue);
       return this;
     }
-    if (this.__docs__.has(key)) {
-      return this.__docs__.get(key);
+    const own = docsOf(this);
+    if (own.has(key)) {
+      return own.get(key);
     }
     if (this.__parent__) {
       return this.__parent__.doc(name) as string | undefined;

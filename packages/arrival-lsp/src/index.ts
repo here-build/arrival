@@ -52,7 +52,7 @@ export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 // the lens. The node-side runner composes `narrowByType(sigmaScanner, ls)`; the sampler is unchanged.
 export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
 // The single-source seam — assemble the `host` option from a rosetta type registry
-// (`[...env.__rosettaTypes__]`) so injected tools narrow both the candidate and slot sides.
+// (`[...rosettaTypesOf(env)]`) so injected tools narrow both the candidate and slot sides.
 export { assembleHostPrelude, type HostPrelude, type AssembleHostPreludeOptions } from "./host-prelude.js";
 // The require scanner (reader-true, spans included) — for hosts building
 // resolveModule plumbing or dependency graphs.

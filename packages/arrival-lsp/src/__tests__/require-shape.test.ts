@@ -25,7 +25,7 @@ const FILES: Record<string, string> = {
 const loader = loaderFromResolver((p) => FILES[p] ?? null);
 // `require` must be a HOST MEMBER for the emitter to lower `(require …)` →
 // `__arr.require(…)` (a bare `require` would resolve to Node's global → any).
-// In studio this comes from `env.__rosettaTypes__`; here a one-entry roster.
+// In studio this comes from `rosettaTypesOf(env)`; here a one-entry roster.
 const host = assembleHostPrelude([["require", "(specifier: SStr): unknown"]]);
 const ls = createSchemeLanguageService({
   compilerOptions: { noImplicitAny: false },
