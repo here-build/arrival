@@ -31,6 +31,11 @@ export interface RosettaSpec {
   withContext?: boolean;
   /** Rosetta options (e.g. `{ argProvenance: true }`) — passed through verbatim. */
   options?: unknown;
+  /** PURE (provenance-PROPAGATING) rosetta — forwards its inputs' provenance instead of
+   *  minting a fresh source point (mirrors `RosettaFunction.pure`; `mintsPoint = pure !== true`).
+   *  Absent ⇒ source/mint (the conservative default). Carried here so a cross-package pack
+   *  declaring a pure verb (`(approve …)`, `(expose …)`) types against this surface. */
+  pure?: boolean;
 }
 
 /** A catchall resolver contribution, mirroring arrival-scheme's `FallbackResolver`
@@ -53,6 +58,15 @@ export interface SchemeEnv {
   inherit(name?: string, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). */
   registerResolver(resolver: ResolverSpec): void;
+  /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
+   *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope
+   *  names (e.g. inspecting a freshly-`inherit`ed child) reads this directly. */
+  list(): (string | symbol)[];
+  /** Every name bound anywhere up this scope's `__parent__` chain, de-duplicated
+   *  (a closer layer's name appears once). Encapsulates the chain-walk so a consumer
+   *  reflecting the full vocabulary (the MCP discovery schema) never pokes the
+   *  internal `__parent__`/`list` machinery itself. Unsorted — the caller orders. */
+  allBoundNames(): (string | symbol)[];
 }
 
 /** Evaluate scheme `source` into `env`. arrival-scheme's `exec(source, { env })`

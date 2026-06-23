@@ -18,7 +18,7 @@ import {
   parseGenerator as parse,
   AValue,
   schemeToJs,
-  type Environment,
+  type EvalContext,
 } from "@here.build/arrival";
 
 import { buildSlice, writeForm, defineNameOf, lastTopLevelForm } from "./slice.js";
@@ -59,7 +59,10 @@ export interface UnevalContainer {
  *  selector's step records, and the slice can read the whole lineage). `source` is the original
  *  program text (the v1 program render). */
 export function buildUneval(opts: {
-  env: Environment;
+  // The post-run scope. Typed via the public `EvalContext` ('s `.env`) — the internal
+  // scope-node `parse`/`execExpr` accept — so this never names the package-internal
+  // `Environment` class while still being the concrete env a selector re-evaluates in.
+  env: EvalContext["env"];
   result: unknown;
   trace: EvalTrace;
   source: string;

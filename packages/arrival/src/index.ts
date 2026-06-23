@@ -67,7 +67,20 @@ void initBridge();
 
 // Classes that may be needed for type checking or extension
 export { EOF as EOF } from "./values/EOF.js";
-export { Environment as Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
+// Environment is INTERNAL-ONLY — the concrete scope-node is not part of the public
+// surface (consumers type against the structural `SchemeEnv` below). `KEYWORD_ACCESSOR_FIELD`
+// stays exported: arrival-chain's `dict` (project.ts) reads the same registered symbol.
+export { KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
+
+// The structural env contract cross-package packs/consumers type against (never the
+// concrete `Environment` class). Re-surfaced on the barrel from its real home
+// (`./env/scheme-env.ts`, also reachable via the `@here.build/arrival/scheme-env`
+// subpath) so barrel-style consumers (arrival-chain, arrival-mcp) name the interface.
+export {
+  type SchemeEnv,
+  type RosettaSpec,
+  type ResolverSpec,
+} from "./env/scheme-env.js";
 
 // Number system - SchemeExact (rationals) and SchemeInexact (floats/complex)
 export {

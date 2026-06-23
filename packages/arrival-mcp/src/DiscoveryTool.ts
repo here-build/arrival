@@ -14,7 +14,7 @@
 //                  the eval membrane — a run can't reach it, so session/other-call state stays out.
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
-import { type Environment, exec, jsToScheme, sandboxedEnv, schemeToJs, tokenize } from "@here.build/arrival";
+import { type SchemeEnv, exec, jsToScheme, sandboxedEnv, schemeToJs, tokenize } from "@here.build/arrival";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -255,7 +255,7 @@ export class DiscoveryTool {
 
   // ── env assembly: config from the actor args, resources armed by the capability ──
 
-  private environment(args: DiscoveryArgs): Promise<Environment> {
+  private environment(args: DiscoveryArgs): Promise<SchemeEnv> {
     // The base is the constant safe floor (SAFE_BUILTINS) — vocabulary is added ONLY by the
     // capability's deps (the audited grant), never by swapping the base out from under it.
     const base = sandboxedEnv.inherit(this.name, {});
@@ -264,7 +264,7 @@ export class DiscoveryTool {
         config: this.config(args),
         evalScheme: (e, src) => execSerialized(src, { env: e }),
       }),
-    ]).then(({ env }) => env as Environment);
+    ]).then(({ env }) => env as SchemeEnv);
   }
 
   /** The capability's `configuration` fields, picked out of the call args (validated by `lower`). */
@@ -344,11 +344,10 @@ export class DiscoveryTool {
   /** The base env's full symbol set (chain-walked, sorted) — advertised in the schema in place of a
    *  hardcoded builtin constant, so the docs are FAITHFUL to the real env `environment()` assembles. */
   private baseEnvSymbols(): string[] {
-    const names = new Set<string>();
-    for (let e: Environment | null = sandboxedEnv.inherit(this.name, {}); e; e = e.__parent__) {
-      for (const k of e.list()) if (typeof k === "string") names.add(k);
-    }
-    return [...names].toSorted((a, b) => a.localeCompare(b));
+    // The scope-node owns its chain-walk (`allBoundNames`); we keep only the
+    // string-name filter + sort the schema advertises. No `__parent__`/`list` poking.
+    const names = sandboxedEnv.inherit(this.name, {}).allBoundNames();
+    return names.filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
   }
 
   /** The verb catalog reflected off the capability's dep-closure annotations. A STATIC `inputSchema`

@@ -262,6 +262,21 @@ export class Environment {
     return ownProps(this.__env__);
   }
 
+  /**
+   * Every name bound anywhere up the `__parent__` chain from this scope, de-duplicated
+   * (a name shadowed by a closer layer appears once). The chain-walk that was formerly
+   * open-coded by the MCP discovery tool (poking `__parent__`/`list` from outside);
+   * encapsulated here so the scope-node owns its own traversal and consumers type against
+   * the `SchemeEnv` contract. Unsorted — the caller imposes any ordering/filtering.
+   */
+  allBoundNames(): (string | symbol)[] {
+    const names = new Set<string | symbol>();
+    for (let env: Environment | null = this; env; env = env.__parent__) {
+      for (const name of env.list()) names.add(name);
+    }
+    return [...names];
+  }
+
   inherit(
     name: string = `child of ${this.__name__ || "unknown"}`,
     obj: Record<string, EnvironmentValue> = {},
