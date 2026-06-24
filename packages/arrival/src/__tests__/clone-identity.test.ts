@@ -291,7 +291,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   it("chainPair(f, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:120)", () => {    const calls: unknown[] = [];
     const p = new APair(1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["fantasy-land/chain"]((x: unknown) => {
+    (p as any)["arrival/tagless-final/chain"]((x: unknown) => {
       calls.push(x);
       return new APair(x, nil);
     });

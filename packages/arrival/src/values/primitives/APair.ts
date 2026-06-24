@@ -747,7 +747,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // Semigroup below; there is no `global_env.get("append")` back-edge (the
   // require("./stdlib") hack the monkey-patch carried existed ONLY because the
   // method lived outside the class — see plan wave 2).
-  ["fantasy-land/chain"](f: (x: unknown) => APair | ANil): APair | ANil {
+  ["arrival/tagless-final/chain"](f: (x: unknown) => APair | ANil): APair | ANil {
     return chainPair(f, this);
   }
 
