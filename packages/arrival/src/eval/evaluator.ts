@@ -256,10 +256,11 @@ export interface EvalContext {
    * today's behavior. Propagated structurally like `tail`/`speculate` (the
    * `{ ...ctx }` spreads carry it into every child context).
    *
-   * SCAFFOLDING: no evaluator path reads this yet, so it is behavior-neutral —
-   * the car/cdr dispatch will read `ctx.strict` in a later step. Optional (like
-   * `speculate`) so the few `EvalContext` literals that omit the run-level
-   * options stay valid; the sole origin is `exec()` in generator-exec.ts.
+   * Published at the apply boundary into the run-scoped `_currentStrict` holder
+   * (read via `isStrict()`); the inference-plane `car`/`cdr` (env/fl-interop.ts)
+   * consult it. Optional (like `speculate`) so the few `EvalContext` literals that
+   * omit the run-level options stay valid; the sole origin is `exec()` in
+   * generator-exec.ts.
    */
   strict?: boolean;
 }
@@ -374,6 +375,13 @@ let _currentRunEnv: Environment | undefined = undefined;
 /** The run's current env at apply time. Read by `to_array`'s heap-meter lookup
  *  (stdlib.ts) in place of the erased env-as-`this`. */
 export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
+
+let _currentStrict = false;
+/** The run's nil-tolerance mode at apply time (ExecOptions.strict -> EvalContext.strict).
+ *  Read by the inference-plane projection ops (env/fl-interop.ts car/cdr): strict => a nil/null
+ *  projection throws (R7RS-faithful); default => it resolves tolerantly to nil. Published at the
+ *  apply boundary, not threaded through every native impl's arity — mirrors `currentRunEnv`. */
+export const isStrict = (): boolean => _currentStrict;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda passed as
@@ -2611,6 +2619,8 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     _speculate = ctx.speculate === true;
     const __savedRunEnv = _currentRunEnv;
     _currentRunEnv = ctx.env;
+    const __savedStrict = _currentStrict;
+    _currentStrict = ctx.strict === true;
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
@@ -2629,6 +2639,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       _canBounce = __savedCanBounce;
       _speculate = __savedSpeculate;
       _currentRunEnv = __savedRunEnv;
+      _currentStrict = __savedStrict;
     }
 
     // Bounce result — the callee was a Scheme lambda speaking the protocol

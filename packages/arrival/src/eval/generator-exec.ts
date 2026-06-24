@@ -88,10 +88,12 @@ export interface ExecOptions {
    * This is the interpreter mode that replaces fantasy-land's scattered
    * env-overlay nil guards (the `if (x == null) return nil` pattern in
    * fl-interop): nil-tolerance becomes a real evaluation mode threaded through
-   * `EvalContext.strict`, not an env decoration. SCAFFOLDING ONLY for now — this
-   * flag is plumbed end-to-end (ExecOptions → EvalContext) but NO consumer reads
-   * it yet, so flag-on is currently byte-identical to flag-off. The car/cdr
-   * dispatch starts reading `ctx.strict` in a later step.
+   * `EvalContext.strict`, not an env decoration. The inference-plane `car`/`cdr` (env/fl-interop.ts)
+   * read this via the run-scoped `isStrict()` (evaluator.ts): default ⇒ a nil/null
+   * projection yields nil, strict ⇒ the R7RS throw. A wrong-TYPE arg (car of a number/
+   * string) throws in BOTH modes — tolerance is scoped to absence. The base `user_env`
+   * car/cdr are unaffected (always R7RS-strict); `first`/`second`/… and the cxr
+   * accessors are a later parity step.
    */
   strict?: boolean;
   /**

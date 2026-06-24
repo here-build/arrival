@@ -44,7 +44,7 @@ import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/primitives/
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
-import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
+import { currentRunEnv, isStrict, SchemeError } from "../eval/evaluator.js";
 
 // ── Arrival sequence-op protocol surface ─────────────────────────────────────
 // The list/seq primitives (APair, AVector) carry their OWN async-aware sequence ops
@@ -239,6 +239,12 @@ export default new EnvCapability("scheme/fl-interop", {
       (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
+        // Nil-tolerance mode (EvalContext.strict, read run-scoped). An ABSENT value (null/nil)
+        // projects to nil by default — a multi-leaf proof grounds its OTHER leaves instead of
+        // crashing on one absent read; strict => the R7RS pair typecheck throw (builtinCar). A
+        // non-list non-nil arg (a number, a string) is a TYPE error, not absence, so it throws
+        // in BOTH modes via the builtinCar fall-through below.
+        if (list == null || is_nil(list)) return isStrict() ? builtinCar!(list) : nil;
         if (list instanceof APair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
         return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
       },
@@ -248,6 +254,7 @@ export default new EnvCapability("scheme/fl-interop", {
       (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
+        if (list == null || is_nil(list)) return isStrict() ? builtinCdr!(list) : nil; // nil-tolerance (see car)
         if (list instanceof APair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
         return list instanceof SchemeJSArray
           ? list.length <= 1
