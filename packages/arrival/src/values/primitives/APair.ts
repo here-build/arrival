@@ -842,18 +842,18 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
   // recursive unwind exactly: same of-call count/order (base `of(nil)` first, then one
   // wrap per element from last to first), same ap-vs-leaf branch per node, and the same
   // single phantom step on an improper/non-Pair tail (no sentinel guard, as before).
-  const heads: ({ ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined)[] = [];
+  const heads: ({ ["arrival/tagless-final/ap"]?: (m: unknown) => unknown } | undefined)[] = [];
   let node: unknown = pair;
   while (node && !(node instanceof ANil)) {
     const p = node as APair;
-    heads.push(f(p.car) as { ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined);
+    heads.push(f(p.car) as { ["arrival/tagless-final/ap"]?: (m: unknown) => unknown } | undefined);
     node = p.cdr;
   }
   let acc = of(nil);
   for (let i = heads.length; i--; ) {
     const mappedCar = heads[i];
-    acc = mappedCar?.["fantasy-land/ap"]
-      ? mappedCar["fantasy-land/ap"](acc)
+    acc = mappedCar?.["arrival/tagless-final/ap"]
+      ? mappedCar["arrival/tagless-final/ap"](acc)
       : of(new APair(mappedCar, acc));
   }
   return acc;

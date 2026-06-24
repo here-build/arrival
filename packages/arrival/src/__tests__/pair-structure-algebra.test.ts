@@ -167,11 +167,11 @@ describe("Pair — Traversable (traverse)", () => {
     expect(ofCalls.some((v) => v instanceof ANil)).toBe(true);
   });
   it("traverse over an applicative (array) sequences effects", () => {
-    // mappedCar carries fantasy-land/ap → traverse uses ap to combine.
-    // Use a minimal Identity-like applicative: { value, 'fantasy-land/ap' }.
+    // mappedCar carries arrival/tagless-final/ap → traverse uses ap to combine.
+    // Use a minimal Identity-like applicative: { value, 'arrival/tagless-final/ap' }.
     const Id = (value: unknown) => ({
       value,
-      ["fantasy-land/ap"](other: any) {
+      ["arrival/tagless-final/ap"](other: any) {
         // this holds a function-or-value; for traverse, `this` wraps the head
         // and `other` wraps the rest — combine into a Pair.
         return Id(new APair((this as any).value, other.value));
