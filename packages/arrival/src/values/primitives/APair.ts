@@ -759,7 +759,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   // Monoid — the empty list is the identity for list-concat.
-  static ["fantasy-land/empty"](): ANil {
+  static ["arrival/tagless-final/empty"](): ANil {
     return nil;
   }
 

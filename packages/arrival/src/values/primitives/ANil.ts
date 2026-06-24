@@ -72,7 +72,7 @@ export class ANil extends AValue {
   }
 
   // Monoid empty — the identity is Nil itself (the canonical singleton).
-  static ["fantasy-land/empty"](): ANil {
+  static ["arrival/tagless-final/empty"](): ANil {
     return nil;
   }
 }

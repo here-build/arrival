@@ -22,7 +22,7 @@ const REDUCE = "fantasy-land/reduce";
 const TRAVERSE = "arrival/tagless-final/traverse";
 const CHAIN = "arrival/tagless-final/chain";
 const CONCAT = "fantasy-land/concat";
-const EMPTY = "fantasy-land/empty";
+const EMPTY = "arrival/tagless-final/empty";
 const OF = "arrival/tagless-final/of";
 
 type FL = Record<string, any>;
@@ -85,7 +85,7 @@ describe("Pair — Semigroup (list-append)", () => {
 describe("Pair — Monoid (nil identity)", () => {
   const concat = (a: FL, b: FL) => a[CONCAT](b);
   const empty = () => (APair as FL)[EMPTY]() as ANil;
-  it("Pair['fantasy-land/empty']() is nil", () => {
+  it("Pair['arrival/tagless-final/empty']() is nil", () => {
     expect(empty()).toBe(nil);
   });
   it("right identity: a ⋄ empty ≡ a", () => {

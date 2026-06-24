@@ -123,7 +123,7 @@ export class AString extends AValue {
   }
 
   // Monoid (Fantasy Land) — the empty string is the identity for append.
-  static ["fantasy-land/empty"](): AString {
+  static ["arrival/tagless-final/empty"](): AString {
     return new AString("");
   }
 
