@@ -145,4 +145,24 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect(out.toJs()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
+
+  it("pure: true FORWARDS input provenance even WITH a ctx invocation (transform, not source — never mints)", async () => {
+    // The contrast to the mint test above: SAME ctx.currentInvocation(42) + SAME tagged input {99},
+    // but `pure: true` makes it a TRANSFORM — the output carries the FORWARDED input union {99},
+    // NOT pointProvenance(42), and the invocation is NOT marked a point. (Minting here would
+    // fabricate a fresh origin — the seal-laundering class of bug `pure` exists to prevent.)
+    const def = symbol.rosetta`echo: identity string`(
+      { input: [z.string], output: [z.string], pure: true },
+      (s) => s,
+    );
+    const verb = await wireRosetta(def);
+
+    const { ctx, marked } = ctxWithInvocation(42);
+    const tagged = new SchemeString("x", new Set([99]));
+    const out = (await verb(tagged, ctx)) as SchemeString;
+    expect(out.toJs()).toBe("x");
+    expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
+    expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point
+    expect(ctx.currentInvocation.isProvenancePoint).toBe(false);
+  });
 });

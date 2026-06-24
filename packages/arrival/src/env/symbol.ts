@@ -78,6 +78,11 @@ export type MaybePromise<T> = T | Promise<T>;
 export interface Contract<I extends VectorSpec, O extends VectorSpec> {
   input: I;
   output: O;
+  /** ROSETTA-ONLY. `pure: true` makes the rosetta a TRANSFORM, not a source: it FORWARDS the
+   *  union of its inputs' provenance instead of minting a fresh point at the call site (mirrors
+   *  legacy defineRosetta `pure: true`). Strict `=== true` — undefined/false = source (the
+   *  default, mints). Ignored by `symbol.native` (native ops never mint). */
+  readonly pure?: boolean;
 }
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
@@ -120,6 +125,8 @@ export interface RosettaSymbolDef {
    *  see bakeRosetta). Tagged `__withCtx` so EnvCapability.lower() can bind it directly and the
    *  evaluator appends ctx as the trailing arg; a direct-JS caller (no ctx) is duck-type-safe. */
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+  /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
+  readonly pure?: boolean;
 }
 
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
@@ -217,6 +224,9 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
   const inSchema = normalizeVector(input.contract.input);
   const outSchema = normalizeVector(input.contract.output);
   const singleOut = isSingleOutput(input.contract.output);
+  // `pure: true` → TRANSFORM (forward input provenance); default → SOURCE (mint). Strict
+  // `=== true` so only an explicit opt-out forwards (undefined/false stay sources).
+  const pure = input.contract.pure === true;
   // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
   // for the trust model + future use; see the decode note below for why it currently
   // can't be a no-op for the codec family. Default from bake opts.
@@ -272,16 +282,16 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     // 2. RUN the (ctx-free) impl. async is implicit.
     const result = await input.impl(...decodedArgs);
 
-    // 3. PROVENANCE MINT (resolves the former TODO) — the SAME spine as
-    //    createRosettaWrapper: a non-pure rosetta is a Rosetta-IN SOURCE, so its result
-    //    MINTS a fresh point off ctx.currentInvocation; with no invocation (direct-JS) it
-    //    falls back to the input union. SymbolDef rosettas are always sources here (no
-    //    `pure` opt-out on the contract API yet — a pure/transform variant is a clean
-    //    follow-up; see capability.ts wiring note).
+    // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A SOURCE rosetta (default)
+    //    MINTS a fresh point off ctx.currentInvocation; a PURE rosetta (`pure: true`) is a
+    //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta
+    //    `pure: true`). With no invocation in ctx (direct-JS) a source also falls back to the
+    //    input union. ★The forward-vs-mint choice is provenance-load-bearing: a pure rosetta
+    //    that minted would fabricate a fresh origin (the seal-laundering class of bug).
     const inv = (ctx as { currentInvocation?: { id?: number; isProvenancePoint?: boolean; markProvenancePoint?(): void } } | undefined)
       ?.currentInvocation;
     let resultProvenance = inputProvenance;
-    if (inv && typeof inv.id === "number") {
+    if (!pure && inv && typeof inv.id === "number") {
       if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
       else inv.isProvenancePoint = true;
       resultProvenance = pointProvenance(inv.id);
@@ -319,6 +329,7 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     out: outSchema,
     impl: input.impl,
     run,
+    pure,
   };
 }
 
