@@ -39,8 +39,8 @@ export function exact(num: number | bigint, denom: number | bigint = 1): SchemeE
 }
 
 /**
- * Create an inexact number (floating point, optionally complex)
+ * Create an inexact number (floating point real — arrival is reals-only)
  */
-export function inexact(real: number, imag: number = 0): SchemeInexact {
-  return new SchemeInexact(real, imag);
+export function inexact(real: number): SchemeInexact {
+  return new SchemeInexact(real);
 }

@@ -3,27 +3,51 @@
  *
  * ARCHITECTURAL INVARIANTS:
  * 1. ExactNumber class always exists - minimum capability is integers (denom=1)
- * 2. InexactNumber class always exists - minimum capability is reals (imag=0)
+ * 2. InexactNumber class always exists - it is a boxed IEEE-754 real
  * 3. Classes are constants, behaviors are variables
- * 4. Tower predicates check values, not types: integer ⊂ rational ⊂ real ⊂ complex
+ * 4. Tower predicates check values, not types: integer ⊂ rational ⊂ real
  *
  * Two fundamental classes based on exactness:
  * - ExactNumber: arbitrary precision (bigint num/denom), represents integers AND rationals
- * - InexactNumber: floating point (number real/imag), represents reals AND complex
+ * - InexactNumber: floating point (number real), represents reals
+ *
+ * COMPLEX SUBSETTING (R7RS § 6.2.3 explicitly permits omitting complex): arrival is
+ * reals-only. The inexact tower carries NO imaginary axis. sqrt of a negative,
+ * make-rectangular / make-polar, and a "3+4i" literal are DOORED (recognized and
+ * rejected with a teaching message via complexDoor), never silently misparsed.
+ * real-part / imag-part / magnitude / angle are likewise doored. complex? still
+ * answers #t for every real (real ⊂ complex by spec — the predicate stays total;
+ * only the imaginary axis is gone).
  *
  * Behaviors control what OPERATIONS produce, not what values can exist:
  * - IntegerExact: 1/3 → InexactNumber (demotes non-integer results)
  * - RationalExact: 1/3 → ExactNumber(1n,3n) (keeps exact fractions)
- * - RealInexact: sqrt(-4) → error (rejects complex results)
- * - ComplexInexact: sqrt(-4) → InexactNumber(0,2) (allows complex)
+ * - RealInexact: sqrt(-4) → door (complex not supported)
  *
- * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real ⊂ complex,
- * exact/inexact); inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
+ * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real, exact/inexact);
+ * inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
  */
 import { CLASS } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
+
+// ============================================================================
+// Complex-subsetting door (errors-as-doors)
+// ============================================================================
+
+/**
+ * The single teaching message for every complex-number rejection. arrival omits
+ * the complex tower entirely (R7RS § 6.2.3 permits this); the door RECOGNIZES the
+ * omitted feature and explains the real-only alternative, rather than silently
+ * misparsing or returning a wrong value. Matches arrival's %purity-door discipline.
+ */
+export const COMPLEX_DOOR_MESSAGE =
+  "complex numbers are not supported in arrival — inexact reals only; pass real/imag as separate values";
+
+export function complexDoor(): never {
+  throw new Error(COMPLEX_DOOR_MESSAGE);
+}
 
 // ============================================================================
 // Type Definitions
@@ -88,7 +112,7 @@ export class SchemeExact extends AValue {
   }
 
   get isComplex(): boolean {
-    return true; // all reals are complex
+    return true; // all reals are complex (real ⊂ complex; predicate stays total)
   }
 
   // Exactness
@@ -293,7 +317,7 @@ export class SchemeExact extends AValue {
 }
 
 // ============================================================================
-// InexactNumber - Floating Point (reals and complex)
+// InexactNumber - Floating Point (reals only; complex axis omitted, see header)
 // ============================================================================
 
 export class SchemeInexact extends AValue {
@@ -301,35 +325,31 @@ export class SchemeInexact extends AValue {
   readonly kind = "number" as const;
 
   readonly real: number;
-  readonly imag: number;
 
-  constructor(real: number, imag: number = 0, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+  constructor(real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(provenance);
     this.real = real;
-    this.imag = imag;
   }
 
   // Tower predicates - check mathematical properties
   get isInteger(): boolean {
-    return this.imag === 0 && Number.isInteger(this.real);
+    return Number.isInteger(this.real);
   }
 
   get isRational(): boolean {
     // R7RS: All finite real numbers are rational (representable as ratio of integers)
     // IEEE 754 floats are by definition dyadic fractions
-    return this.imag === 0 && Number.isFinite(this.real);
+    return Number.isFinite(this.real);
   }
 
-  // DEVIATION from R7RS: We treat zero imaginary as real, regardless of whether
-  // it was exact (0i) or inexact (0.0i). R7RS says -2.5+0.0i should NOT be real
-  // because the imaginary part is inexact. We consider this complexity not worth
-  // the implementation cost. Zero is zero.
+  // Reals-only tower: every inexact value IS real (the imaginary axis is gone).
+  // The old `-2.5+0.0i` deviation dissolves — there is no imaginary part to test.
   get isReal(): boolean {
-    return this.imag === 0;
+    return true;
   }
 
   get isComplex(): boolean {
-    return true; // all numbers are complex
+    return true; // all reals are complex (real ⊂ complex; predicate stays total)
   }
 
   // Exactness
@@ -339,32 +359,23 @@ export class SchemeInexact extends AValue {
 
   // Value checks
   get isZero(): boolean {
-    return this.real === 0 && this.imag === 0;
+    return this.real === 0;
   }
 
   get isPositive(): boolean {
-    return this.imag === 0 && this.real > 0;
+    return this.real > 0;
   }
 
   get isNegative(): boolean {
-    return this.imag === 0 && this.real < 0;
+    return this.real < 0;
   }
 
   get isNaN(): boolean {
-    return Number.isNaN(this.real) || Number.isNaN(this.imag);
+    return Number.isNaN(this.real);
   }
 
   get isFinite(): boolean {
-    return Number.isFinite(this.real) && Number.isFinite(this.imag);
-  }
-
-  // Magnitude and angle for complex
-  get magnitude(): number {
-    return Math.hypot(this.real, this.imag);
-  }
-
-  get angle(): number {
-    return Math.atan2(this.imag, this.real);
+    return Number.isFinite(this.real);
   }
 
   private static floatToRational(x: number, tolerance: number = 1e-10): SchemeExact {
@@ -387,71 +398,40 @@ export class SchemeInexact extends AValue {
 
   // Conversion to JS
   valueOf(): number {
-    invariant(this.imag === 0, "Complex number cannot be converted to real");
     return this.real;
   }
 
   toJS(): number {
-    return this.valueOf();
+    return this.real;
   }
 
-  /**
-   * Can't reuse `valueOf` here — it throws on complex. AValue.toJs must always
-   * serialize; mirrors `schemeToJs` rosetta path.
-   */
-  toJs(): number | { real: number; imag: number } {
-    return this.imag === 0 ? this.real : { real: this.real, imag: this.imag };
+  /** AValue contract; mirrors the `schemeToJs` rosetta path (reals-only). */
+  toJs(): number {
+    return this.real;
   }
 
   withProvenance(p: ReadonlySet<number>): SchemeInexact {
-    return new SchemeInexact(this.real, this.imag, p);
+    return new SchemeInexact(this.real, p);
   }
 
-  // String representation
+  // String representation. Reals-only — emit the Scheme inexact form with a
+  // decimal point, and the chibi-compatible markers for the non-finite values.
   toString(): string {
-    if (this.imag === 0) {
-      // Format as Scheme inexact: include decimal point
-      if (Number.isInteger(this.real)) {
-        return `${this.real}.0`;
-      }
-      if (Number.isNaN(this.real)) return "+nan.0";
-      if (this.real === Infinity) return "+inf.0";
-      if (this.real === -Infinity) return "-inf.0";
-      return this.real.toString();
+    if (Number.isInteger(this.real)) {
+      return `${this.real}.0`;
     }
-    // Complex format. A component may be NaN/±Infinity (e.g. from a genuine
-    // complex operation); format those R7RS-style (+nan.0/+inf.0/-inf.0) instead
-    // of JS "NaN"/"Infinity". Finite components keep their JS toString — preserving
-    // existing output like "1+2i" (reals here are NOT suffixed ".0", unlike the
-    // pure-real branch above).
-    const fmtComplexReal = (x: number): string =>
-      Number.isNaN(x) ? "+nan.0" : x === Infinity ? "+inf.0" : x === -Infinity ? "-inf.0" : x.toString();
-    if (this.real === 0) {
-      if (this.imag === 1) return "+i";
-      if (this.imag === -1) return "-i";
-      return `${fmtComplexReal(this.imag)}i`;
-    }
-    const rStr = fmtComplexReal(this.real);
-    let iStr: string;
-    if (this.imag === 1) {
-      iStr = "+i";
-    } else if (this.imag === -1) {
-      iStr = "-i";
-    } else {
-      const m = fmtComplexReal(this.imag);
-      // nan/inf carry their own leading sign; add one for finite positives.
-      iStr = m[0] === "+" || m[0] === "-" ? `${m}i` : `${this.imag >= 0 ? "+" : ""}${m}i`;
-    }
-    return `${rStr}${iStr}`;
+    if (Number.isNaN(this.real)) return "+nan.0";
+    if (this.real === Infinity) return "+inf.0";
+    if (this.real === -Infinity) return "-inf.0";
+    return this.real.toString();
   }
 
-  // Comparison (only valid for reals). Returns NaN when either operand is a
-  // NaN inexact: R7RS § 6.2.6 — every numeric comparison against +nan.0 is #f,
-  // so callers using `cmp(b) === 0` / `< 0` / `> 0` all correctly yield #f
-  // (NaN compares false against every relation), instead of the old `return 0`
-  // which made `(= +nan.0 x)` spuriously #t.
+  // Comparison. Returns NaN when either operand is a NaN inexact: R7RS § 6.2.6 —
+  // every numeric comparison against +nan.0 is #f, so callers using
+  // `cmp(b) === 0` / `< 0` / `> 0` all correctly yield #f (NaN compares false
+  // against every relation), instead of the old `return 0` which made
+  // `(= +nan.0 x)` spuriously #t.
   cmp(other: SchemeInexact): -1 | 0 | 1 | number {
-    invariant(this.imag === 0 && other.imag === 0, "Cannot compare complex numbers");
     if (this.real < other.real) return -1;
     if (this.real > other.real) return 1;
     if (this.real === other.real) return 0;
@@ -459,16 +439,14 @@ export class SchemeInexact extends AValue {
   }
 
   equals(other: SchemeInexact): boolean {
-    return this.real === other.real && this.imag === other.imag;
+    return this.real === other.real;
   }
 
   // Setoid (Fantasy Land). Inexact ≡ inexact ONLY. Object.is (not ===) so
   // reflexivity holds for NaN (`(eqv? +nan.0 +nan.0)` ⇒ #t) and ±0 stay
   // distinct — matching the legacy `equal` number-branch semantics.
   ["fantasy-land/equals"](other: unknown): boolean {
-    return (
-      other instanceof SchemeInexact && Object.is(this.real, other.real) && Object.is(this.imag, other.imag)
-    );
+    return other instanceof SchemeInexact && Object.is(this.real, other.real);
   }
 
   // Ord (Fantasy Land, extends Setoid). NUMERIC value comparison via schemeCompare
@@ -483,78 +461,46 @@ export class SchemeInexact extends AValue {
     );
   }
 
-  // Same-type arithmetic
+  // Same-type arithmetic (reals-only)
   add(other: SchemeInexact): SchemeInexact {
-    return new SchemeInexact(this.real + other.real, this.imag + other.imag);
+    return new SchemeInexact(this.real + other.real);
   }
 
   sub(other: SchemeInexact): SchemeInexact {
-    return new SchemeInexact(this.real - other.real, this.imag - other.imag);
+    return new SchemeInexact(this.real - other.real);
   }
 
   mul(other: SchemeInexact): SchemeInexact {
-    // Real fast-path: the complex formula's cross-terms (a*d, b*c) evaluate to
-    // `inf*0`/`0*inf` = NaN when a real operand is ±Infinity, leaking a spurious
-    // NaN imaginary part. Pure-real mul stays real. (R7RS: +inf.0 * 0.0 = +nan.0.)
-    if (this.imag === 0 && other.imag === 0) {
-      return new SchemeInexact(this.real * other.real, 0);
-    }
-    // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-    return new SchemeInexact(
-      this.real * other.real - this.imag * other.imag,
-      this.real * other.imag + this.imag * other.real,
-    );
+    return new SchemeInexact(this.real * other.real);
   }
 
   div(other: SchemeInexact): SchemeInexact {
-    // Real fast-path: the complex formula divides by (c²+d²), so a real zero
-    // denominator makes BOTH parts 0/0 = NaN (the "NaNNaNi" bug). Pure-real div
-    // uses IEEE division directly: 1.0/0.0 = +inf.0, -1.0/0.0 = -inf.0, 0.0/0.0 = +nan.0.
-    if (this.imag === 0 && other.imag === 0) {
-      return new SchemeInexact(this.real / other.real, 0);
-    }
-    // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c² + d²)
-    const denom = other.real * other.real + other.imag * other.imag;
-    return new SchemeInexact(
-      (this.real * other.real + this.imag * other.imag) / denom,
-      (this.imag * other.real - this.real * other.imag) / denom,
-    );
+    // IEEE division directly: 1.0/0.0 = +inf.0, -1.0/0.0 = -inf.0, 0.0/0.0 = +nan.0.
+    return new SchemeInexact(this.real / other.real);
   }
 
   neg(): SchemeInexact {
-    return new SchemeInexact(-this.real, -this.imag);
+    return new SchemeInexact(-this.real);
   }
 
   abs(): SchemeInexact {
-    if (this.imag === 0) {
-      return new SchemeInexact(Math.abs(this.real));
-    }
-    // Magnitude of complex number
-    return new SchemeInexact(Math.hypot(this.real, this.imag));
+    return new SchemeInexact(Math.abs(this.real));
   }
 
-  conjugate(): SchemeInexact {
-    return new SchemeInexact(this.real, -this.imag);
-  }
-
-  // Floor, ceiling, truncate, round (only for reals)
+  // Floor, ceiling, truncate, round
   floor(): SchemeInexact {
-    invariant(this.imag === 0,"floor requires real number");
     return new SchemeInexact(Math.floor(this.real));
   }
 
   ceiling(): SchemeInexact {
-    invariant(this.imag === 0,"ceiling requires real number");
     return new SchemeInexact(Math.ceil(this.real));
   }
 
   truncate(): SchemeInexact {
-    invariant(this.imag === 0,"truncate requires real number");
     return new SchemeInexact(Math.trunc(this.real));
   }
 
   round(): SchemeInexact {
-    invariant(this.imag === 0,"round requires real number");
     // Scheme rounds to even on ties
     const floored = Math.floor(this.real);
     const diff = this.real - floored;
@@ -565,70 +511,49 @@ export class SchemeInexact extends AValue {
     return new SchemeInexact(floored + 1);
   }
 
-  // Transcendental functions
+  // Transcendental functions (reals-only). sqrt of a negative DOORS — complex
+  // results are not representable (see header / complexDoor).
   sqrt(): SchemeInexact {
-    if (this.imag === 0 && this.real >= 0) {
-      return new SchemeInexact(Math.sqrt(this.real));
-    }
-    // Complex sqrt
-    const r = this.magnitude;
-    const theta = this.angle;
-    return new SchemeInexact(Math.sqrt(r) * Math.cos(theta / 2), Math.sqrt(r) * Math.sin(theta / 2));
+    if (this.real < 0) complexDoor();
+    return new SchemeInexact(Math.sqrt(this.real));
   }
 
   exp(): SchemeInexact {
-    // e^(a+bi) = e^a * (cos(b) + i*sin(b))
-    const ea = Math.exp(this.real);
-    return new SchemeInexact(ea * Math.cos(this.imag), ea * Math.sin(this.imag));
+    return new SchemeInexact(Math.exp(this.real));
   }
 
   log(): SchemeInexact {
-    // log(a+bi) = log(|z|) + i*arg(z)
-    return new SchemeInexact(Math.log(this.magnitude), this.angle);
+    return new SchemeInexact(Math.log(this.real));
   }
 
   sin(): SchemeInexact {
-    if (this.imag === 0) {
-      return new SchemeInexact(Math.sin(this.real));
-    }
-    // sin(a+bi) = sin(a)cosh(b) + i*cos(a)sinh(b)
-    return new SchemeInexact(Math.sin(this.real) * Math.cosh(this.imag), Math.cos(this.real) * Math.sinh(this.imag));
+    return new SchemeInexact(Math.sin(this.real));
   }
 
   cos(): SchemeInexact {
-    if (this.imag === 0) {
-      return new SchemeInexact(Math.cos(this.real));
-    }
-    // cos(a+bi) = cos(a)cosh(b) - i*sin(a)sinh(b)
-    return new SchemeInexact(Math.cos(this.real) * Math.cosh(this.imag), -Math.sin(this.real) * Math.sinh(this.imag));
+    return new SchemeInexact(Math.cos(this.real));
   }
 
   tan(): SchemeInexact {
-    return this.sin().div(this.cos());
+    return new SchemeInexact(Math.tan(this.real));
   }
 
   pow(exponent: SchemeInexact): SchemeInexact {
-    // z^w = e^(w * log(z))
     if (this.isZero) {
       // R7RS § 6.2.6: 0^0 = 1; 0^positive = 0; 0^negative is undefined
-      // (division by zero). The old guard had the direction inverted, erroring
-      // on the well-defined positive case and silently returning 0 for the
-      // error case.
+      // (division by zero).
       if (exponent.isZero) return new SchemeInexact(1);
       invariant(exponent.real > 0, "expt: 0 raised to a negative power (division by zero)");
       return new SchemeInexact(0);
     }
-    return exponent.mul(this.log()).exp();
+    return new SchemeInexact(Math.pow(this.real, exponent.real));
   }
 
   // Convert to exact (if possible)
   toExact(): SchemeExact {
-    invariant(this.imag === 0, "Complex number cannot be converted to exact");
     invariant(Number.isFinite(this.real), "Infinite number cannot be converted to exact");
-    // todo double-check - isFinite should guard it already
     invariant(!Number.isNaN(this.real), "NaN cannot be converted to exact");
     // Convert float to rational
-    // Use continued fraction approximation for better results
     return SchemeInexact.floatToRational(this.real);
   }
 }
@@ -638,16 +563,15 @@ export class SchemeInexact extends AValue {
 // ============================================================================
 
 /**
- * Get real value from SchemeNumeric. Throws if complex with non-zero imaginary.
+ * Get real value from SchemeNumeric. (Reals-only — every inexact is real.)
  *
  * Lives in the value layer (not operators/numeric.ts) so the number classes' own
  * `fantasy-land/lte` Ord can compute by-value without the operators→numbers cycle.
  */
-export function toReal(n: SchemeNumeric, opName: string): number {
+export function toReal(n: SchemeNumeric, _opName: string): number {
   if (n instanceof SchemeExact) {
     return Number(n.num) / Number(n.denom);
   }
-  TypeError.invariant(n.imag === 0, `${opName}: not a real number`);
   return n.real;
 }
 
@@ -700,10 +624,9 @@ export const RationalExact: ExactBehavior = {
   },
 
   sqrt(a: SchemeExact): SchemeNumeric {
-    // Check if perfect square
+    // sqrt of a negative is complex → doored (complex not supported).
     if (a.isNegative) {
-      // Return inexact complex (will be handled by inexact behavior)
-      return a.toInexact().sqrt();
+      complexDoor();
     }
     if (a.isInteger) {
       const n = a.num;
@@ -732,7 +655,7 @@ export const IntegerExact: ExactBehavior = {
 
   sqrt(a: SchemeExact): SchemeNumeric {
     if (a.isNegative) {
-      return a.toInexact().sqrt();
+      complexDoor();
     }
     if (a.isInteger) {
       const n = a.num;
@@ -746,21 +669,11 @@ export const IntegerExact: ExactBehavior = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Complex-enabled inexact behavior: allow imaginary results
-// ─────────────────────────────────────────────────────────────────────────────
-export const ComplexInexact: InexactBehavior = {
-  sqrtNegative(a: SchemeInexact): SchemeNumeric {
-    // sqrt of negative real returns complex
-    return new SchemeInexact(0, Math.sqrt(-a.real));
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Real-only inexact behavior: error on complex results
+// Real-only inexact behavior: complex results are doored (the only behavior now)
 // ─────────────────────────────────────────────────────────────────────────────
 export const RealInexact: InexactBehavior = {
   sqrtNegative(_a: SchemeInexact): SchemeNumeric {
-    throw new Error("sqrt of negative number requires complex support");
+    return complexDoor();
   },
 };
 
@@ -775,7 +688,7 @@ export interface NumberConfig {
 
 export const SchemeConfig: NumberConfig = {
   exact: RationalExact,
-  inexact: ComplexInexact,
+  inexact: RealInexact,
 };
 
 export const RosettaConfig: NumberConfig = {
@@ -807,12 +720,15 @@ export class NumberRegistry {
     return new SchemeInexact(n);
   }
 
+  /**
+   * Constructing a number with an imaginary part is DOORED — arrival is reals-only
+   * (complexDoor). A zero imaginary part is just the real number.
+   */
   fromComplex(real: number, imag: number): SchemeNumeric {
     if (imag === 0) {
       return new SchemeInexact(real);
     }
-    invariant(this.config.inexact !== RealInexact, "Complex numbers not supported in this environment");
-    return new SchemeInexact(real, imag);
+    return complexDoor();
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -888,7 +804,7 @@ export class NumberRegistry {
     if (a instanceof SchemeExact) {
       return this.config.exact.sqrt(a);
     }
-    if (a.real < 0 && a.imag === 0) {
+    if (a.real < 0) {
       return this.config.inexact.sqrtNegative(a);
     }
     return a.sqrt();
@@ -1009,13 +925,18 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
   if (str === "-inf.0") return new SchemeInexact(-Infinity);
   if (str === "+nan.0" || str === "-nan.0") return new SchemeInexact(Number.NaN);
 
-  // Handle complex (a+bi or a-bi)
+  // Complex literals (a+bi / a-bi) are DOORED — recognize the shape, reject with
+  // the teaching message (complex not supported), never silently misparse.
   const complexMatch = str.match(/^([+-]?[\d.]+)?([+-][\d.]*)?i$/);
   if (complexMatch) {
-    const real = complexMatch[1] ? Number.parseFloat(complexMatch[1]) : 0;
-    let imag = complexMatch[2] || "+1";
-    if (imag === "+" || imag === "-") imag += "1";
-    return registry.fromComplex(real, Number.parseFloat(imag));
+    const imag = complexMatch[2] === undefined ? 1 : Number.parseFloat(complexMatch[2] || "+1");
+    // A genuinely-zero imaginary part is just the real number; only a nonzero
+    // imaginary axis is unrepresentable.
+    if (imag === 0) {
+      const real = complexMatch[1] ? Number.parseFloat(complexMatch[1]) : 0;
+      return new SchemeInexact(real);
+    }
+    return complexDoor();
   }
 
   // Handle rational (a/b)
@@ -1080,7 +1001,7 @@ export function isNativeNumber(n: unknown): n is number | bigint {
 /** Check if value is a float (inexact real) */
 export function isFloat(n: unknown): boolean {
   if (n instanceof SchemeInexact) {
-    return n.imag === 0;
+    return true;
   }
   if (n instanceof SchemeExact) {
     return false;
@@ -1088,15 +1009,12 @@ export function isFloat(n: unknown): boolean {
   return typeof n === "number" && n % 1 !== 0;
 }
 
-/** Check if value is complex (has non-zero imaginary part) */
-export function isComplex(n: unknown): boolean {
-  if (n instanceof SchemeInexact) {
-    return n.imag !== 0;
-  }
-  // Duck typing for legacy {re, im} objects
-  if (n && typeof n === "object" && "re" in n && "im" in n) {
-    return true;
-  }
+/**
+ * Check if value is complex (has a non-zero imaginary part). arrival is reals-only,
+ * so no representable value is ever complex — always #f. (Kept as a total guard so
+ * callers don't need to special-case its removal.)
+ */
+export function isComplex(_n: unknown): boolean {
   return false;
 }
 
@@ -1143,7 +1061,7 @@ AValue.registerBoxer("bigint", (v, p) => new SchemeExact(v as bigint, 1n, p));
 // arithmetic. Anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
 AValue.registerBoxer("number", (v, p) => {
   const n = v as number;
-  return Number.isSafeInteger(n) ? new SchemeExact(BigInt(n), 1n, p) : new SchemeInexact(n, 0, p);
+  return Number.isSafeInteger(n) ? new SchemeExact(BigInt(n), 1n, p) : new SchemeInexact(n, p);
 });
 
 // ============================================================================
@@ -1156,7 +1074,7 @@ AValue.registerBoxer("number", (v, p) => {
 // step creates a fresh instance. Symbol-to-field auto-resolution means each
 // number is a potential probe point into the host numeric tower.
 // Boundary-marking restricts interop member-access to own properties (num/denom for
-// exact, real/imag for inexact) which are the intended data surface; the
+// exact, real for inexact) which are the intended data surface; the
 // methods (which expose tower internals and host-side bigint helpers) become
 // blocked. The arithmetic ops scheme code actually uses (`+`, `*`, `floor`,
 // …) live in the env bindings, not on these prototypes.

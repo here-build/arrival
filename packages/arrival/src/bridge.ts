@@ -481,7 +481,6 @@ export const wrappedOps = {
     const n = coerceNumeric(z);
     if (n instanceof SchemeExact) return n;
     const inexact = n;
-    invariant(inexact.imag === 0, "Cannot convert complex number with non-zero imaginary part to exact");
     const real = inexact.real;
     TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
     if (Number.isInteger(real)) return new SchemeExact(BigInt(real));
@@ -537,11 +536,6 @@ export const wrappedOps = {
     // JS Number formatter is the only realistic option.
     if (base === 10) {
       return inexact.toString();
-    }
-    if (inexact.imag !== 0) {
-      const realPart = inexact.real.toString(base);
-      const imagPart = inexact.imag >= 0 ? `+${inexact.imag.toString(base)}i` : `${inexact.imag.toString(base)}i`;
-      return realPart + imagPart;
     }
     return inexact.real.toString(base);
   },

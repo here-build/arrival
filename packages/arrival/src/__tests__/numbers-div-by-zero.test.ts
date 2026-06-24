@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { SchemeInexact } from "../values/numbers.js";
 
-const inx = (real: number, imag = 0) => new SchemeInexact(real, imag);
+const inx = (real: number) => new SchemeInexact(real);
 
 describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')", () => {
   it("1.0 / 0.0 → +inf.0", () => {
@@ -25,12 +25,8 @@ describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')
     expect(inx(2).div(inx(4)).toString()).toBe("0.5");
   });
 
-  // The toString complex branch must also survive a GENUINE complex with a
+  // (Complex toString tests removed — arrival is reals-only, no imaginary axis.)
+  // The original "must also survive a GENUINE complex with a
   // NaN/Infinity component (not collapse to "NaN...").
-  it("complex with +inf.0 imaginary prints inf, not garbage", () => {
-    expect(inx(1, Infinity).toString()).toContain("inf.0");
-  });
-  it("complex with +nan.0 imaginary prints nan, not 'NaN'", () => {
-    expect(inx(1, NaN).toString()).toContain("nan.0");
-  });
+
 });

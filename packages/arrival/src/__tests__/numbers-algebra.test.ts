@@ -21,7 +21,7 @@ const inexactArb = fc
   .map((real) => new SchemeInexact(real));
 
 setoidLaws("SchemeExact", { arb: exactArb, equalClone: (a) => new SchemeExact(a.num, a.denom) });
-setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new SchemeInexact(a.real, a.imag) });
+setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new SchemeInexact(a.real) });
 
 describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => {
   it("exact 1 is NOT fantasy-land/equals inexact 1.0 (both directions)", () => {

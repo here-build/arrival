@@ -2,22 +2,18 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
-import { is_exact, is_inexact, is_int } from "../eval/guards.js";
+import { is_inexact, is_int } from "../eval/guards.js";
 import { schemeFalse, schemeTrue } from "../values/SchemeBool.js";
 import { SchemeString } from "../values/SchemeString.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { complexDoor, SchemeExact, SchemeInexact } from "../values/numbers.js";
 import {
   char_re,
-  complex_bare_match_re,
-  complex_list_re,
   complex_re,
   float_re,
-  int_bare_re,
   int_re,
   parsable_contants,
   pre_num_parse_re,
-  rational_bare_re,
   rational_re,
   re_re,
 } from "../values/primitives.js";
@@ -204,74 +200,14 @@ export function parse_float(arg: string): SchemeExact | SchemeInexact {
 }
 
 // ----------------------------------------------------------------------
-export function parse_complex(arg: string, radix = 10): SchemeExact | SchemeInexact {
-  const parse = num_pre_parse(arg);
-  radix = parse.radix || radix;
-
-  function parse_num(n: string): SchemeExact | SchemeInexact {
-    let value: SchemeExact | SchemeInexact;
-    if (n === "+") {
-      value = new SchemeExact(1n);
-    } else if (n === "-") {
-      value = new SchemeExact(-1n);
-    } else if (n.match(int_bare_re)) {
-      value = new SchemeExact(parseBigInt(n, radix));
-    } else if (n.match(rational_bare_re)) {
-      const parts = n.split("/");
-      value = new SchemeExact(parseBigInt(parts[0], radix), parseBigInt(parts[1], radix));
-    } else if (float_re.test(n)) {
-      const float = parse_float(n);
-      if (parse.exact && is_inexact(float)) {
-        // Convert to exact rational
-        const floatVal = float.real;
-        if (Number.isInteger(floatVal)) {
-          return new SchemeExact(BigInt(Math.round(floatVal)));
-        }
-        const str = floatVal.toString();
-        const decimalIndex = str.indexOf(".");
-        if (decimalIndex !== -1) {
-          const decimals = str.length - decimalIndex - 1;
-          const denom = 10n ** BigInt(decimals);
-          const num = BigInt(str.replace(".", "").replace("-", ""));
-          const sign = floatVal < 0 ? -1n : 1n;
-          return new SchemeExact(sign * num, denom);
-        }
-        return new SchemeExact(BigInt(Math.round(floatVal)));
-      }
-      return float;
-    } else if (/nan.0$/.test(n)) {
-      return new SchemeInexact(Number.NaN);
-    } else if (/inf.0$/.test(n)) {
-      return new SchemeInexact(n[0] === "-" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
-    } else {
-      throw new Error( `Internal Parser Error at: ${n}`);
-    }
-    if (parse.inexact) {
-      return new SchemeInexact(value.valueOf());
-    }
-    return value;
-  }
-
-  let parts;
-  const bare_match = parse.number!.match(complex_bare_match_re);
-  parts = radix !== 10 && bare_match ? bare_match : parse.number!.match(complex_list_re[radix]);
-  let re: SchemeExact | SchemeInexact;
-  let im: SchemeExact | SchemeInexact;
-  im = parse_num(parts![2]);
-  if (parts![1]) {
-    re = parse_num(parts![1]);
-  } else if (is_inexact(im)) {
-    re = new SchemeInexact(0);
-  } else {
-    re = new SchemeExact(0n);
-  }
-  // If imaginary part is zero and exact, return just the real part
-  const imVal = im.valueOf();
-  if (imVal === 0 && is_exact(im)) {
-    return re;
-  }
-  // Return complex number as InexactNumber with imaginary part
-  return new SchemeInexact(re.valueOf(), im.valueOf());
+export function parse_complex(_arg: string, _radix = 10): SchemeExact | SchemeInexact {
+  // Complex literals are DOORED — arrival is reals-only (R7RS § 6.2.3 permits
+  // omitting complex). The reader recognized the complex shape upstream (complex_re);
+  // here we reject it with the teaching message instead of building a complex value.
+  // Even a zero-imaginary literal (3+0i) is complex-tower notation we don't support —
+  // write the real (3). `string->number` catches this and returns #f per R7RS
+  // "not a number"; a literal in source surfaces the door.
+  return complexDoor();
 }
 
 // ----------------------------------------------------------------------

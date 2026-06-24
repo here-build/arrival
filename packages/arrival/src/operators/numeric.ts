@@ -8,7 +8,7 @@
 import type { Codec } from "../membrane.js";
 import { AnyNum, Bool, OperatorRegistry, Int, Num, Operator, SafeInt } from "../membrane.js";
 import type { SchemeNumeric } from "../values/numbers.js";
-import { bigintISqrt, schemeCompare, SchemeExact, SchemeInexact, toReal } from "../values/numbers.js";
+import { bigintISqrt, complexDoor, schemeCompare, SchemeExact, SchemeInexact, toReal } from "../values/numbers.js";
 import invariant from "tiny-invariant";
 
 // ============================================================================
@@ -46,13 +46,11 @@ const Any: Codec<unknown, unknown> = {
  * Helper to add two SchemeNumbers preserving exactness
  */
 function schemeAdd(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
-  // If either is inexact, result is inexact
+  // If either is inexact, result is inexact (reals-only)
   if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
     const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
     const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    const aImag = a instanceof SchemeInexact ? a.imag : 0;
-    const bImag = b instanceof SchemeInexact ? b.imag : 0;
-    return new SchemeInexact(aVal + bVal, aImag + bImag);
+    return new SchemeInexact(aVal + bVal);
   }
   // Both exact
   return (a as SchemeExact).add(b as SchemeExact);
@@ -76,9 +74,7 @@ function schemeSub(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
   if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
     const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
     const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    const aImag = a instanceof SchemeInexact ? a.imag : 0;
-    const bImag = b instanceof SchemeInexact ? b.imag : 0;
-    return new SchemeInexact(aVal - bVal, aImag - bImag);
+    return new SchemeInexact(aVal - bVal);
   }
   return (a as SchemeExact).sub(b as SchemeExact);
 }
@@ -88,7 +84,7 @@ function schemeSub(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
  */
 function schemeNegate(a: SchemeNumeric): SchemeNumeric {
   if (a instanceof SchemeInexact) {
-    return new SchemeInexact(-a.real, -a.imag);
+    return new SchemeInexact(-a.real);
   }
   return new SchemeExact(-a.num, a.denom);
 }
@@ -100,10 +96,7 @@ function schemeMul(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
   if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
     const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
     const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    const aImag = a instanceof SchemeInexact ? a.imag : 0;
-    const bImag = b instanceof SchemeInexact ? b.imag : 0;
-    // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-    return new SchemeInexact(aVal * bVal - aImag * bImag, aVal * bImag + aImag * bVal);
+    return new SchemeInexact(aVal * bVal);
   }
   return (a as SchemeExact).mul(b as SchemeExact);
 }
@@ -115,11 +108,7 @@ function schemeDiv(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
   if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
     const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
     const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    const aImag = a instanceof SchemeInexact ? a.imag : 0;
-    const bImag = b instanceof SchemeInexact ? b.imag : 0;
-    // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c² + d²)
-    const denom = bVal * bVal + bImag * bImag;
-    return new SchemeInexact((aVal * bVal + aImag * bImag) / denom, (aImag * bVal - aVal * bImag) / denom);
+    return new SchemeInexact(aVal / bVal);
   }
   // Both exact - returns inexact if not evenly divisible
   // If result is a non-integer rational, keep exact. Otherwise convert to inexact for consistency
@@ -171,7 +160,7 @@ function toInteger(n: SchemeNumeric, opName: string): { value: bigint | number; 
     TypeError.invariant(n.denom === 1n, `${opName}: not an integer`);
     return { value: n.num, exact: true };
   } else {
-    TypeError.invariant(n.imag === 0 && Number.isInteger(n.real), `${opName}: not an integer`);
+    TypeError.invariant(Number.isInteger(n.real), `${opName}: not an integer`);
     return { value: n.real, exact: false };
   }
 }
@@ -417,14 +406,12 @@ function schemeNumEq(a: SchemeNumeric, b: SchemeNumeric): boolean {
   }
   // Both inexact
   if (a instanceof SchemeInexact && b instanceof SchemeInexact) {
-    return a.real === b.real && a.imag === b.imag;
+    return a.real === b.real;
   }
   // Mixed: compare as inexact (convert exact to float)
   const aReal = a instanceof SchemeExact ? Number(a.num) / Number(a.denom) : a.real;
   const bReal = b instanceof SchemeExact ? Number(b.num) / Number(b.denom) : b.real;
-  const aImag = a instanceof SchemeInexact ? a.imag : 0;
-  const bImag = b instanceof SchemeInexact ? b.imag : 0;
-  return aReal === bReal && aImag === bImag;
+  return aReal === bReal;
 }
 
 /** (= n1 n2 ...) - Returns #t if all numbers are equal. */
@@ -749,7 +736,7 @@ export const numerator = new Operator("numerator", {
     if (x instanceof SchemeExact) {
       return new SchemeExact(x.num);
     }
-    invariant(x instanceof SchemeInexact && x.imag === 0, "numerator requires a rational number");
+    invariant(x instanceof SchemeInexact, "numerator requires a rational number");
     // For inexact, convert to rational and return inexact numerator
     const { num } = floatToRational(x.real);
     return new SchemeInexact(Number(num));
@@ -765,7 +752,7 @@ export const denominator = new Operator("denominator", {
       return new SchemeExact(x.denom);
     }
     // For inexact, convert to rational and return inexact denominator
-    invariant(x instanceof SchemeInexact && x.imag === 0, "denominator requires a rational number");
+    invariant(x instanceof SchemeInexact, "denominator requires a rational number");
     const { denom } = floatToRational(x.real);
     return new SchemeInexact(Number(denom));
   },
@@ -775,83 +762,54 @@ export const denominator = new Operator("denominator", {
 // Complex Number Operations
 // ============================================================================
 
-/** (make-rectangular x y) - Returns a complex number with real part x and imaginary part y. */
+// Complex constructors AND the complex accessors are DOORED — arrival is reals-only
+// (R7RS § 6.2.3 permits omitting complex). make-rectangular / make-polar can only
+// produce a complex value, so they always door. real-part / imag-part / magnitude /
+// angle have trivial real-only definitions (real-part = id, imag-part = 0,
+// magnitude = abs, angle = 0|π), but are doored for a clean cut — the whole complex
+// surface rejects with one teaching message rather than half-supporting it. (See the
+// numbers.ts header + complexDoor.)
+
+/** (make-rectangular x y) - DOORED: complex numbers are not supported. */
 export const makeRectangular = new Operator("make-rectangular", {
   in: [Num, Num],
   out: SchemeNum,
-  fn: (re, im): SchemeNumeric => new SchemeInexact(re, im),
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
-/** (make-polar magnitude angle) - Returns a complex number with the given magnitude and angle. */
+/** (make-polar magnitude angle) - DOORED: complex numbers are not supported. */
 export const makePolar = new Operator("make-polar", {
   in: [Num, Num],
   out: SchemeNum,
-  fn: (magnitude, angle): SchemeNumeric => {
-    const re = magnitude * Math.cos(angle);
-    const im = magnitude * Math.sin(angle);
-    return new SchemeInexact(re, im);
-  },
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
-/** (real-part z) - Returns the real part of the complex number z. */
+/** (real-part z) - DOORED: complex numbers are not supported. */
 export const realPart = new Operator("real-part", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      return x;
-    }
-    // For complex numbers, return the real part
-    // If it's an integer, return exact
-    if (Number.isInteger(x.real) && Number.isSafeInteger(x.real)) {
-      return new SchemeExact(BigInt(x.real));
-    }
-    return new SchemeInexact(x.real);
-  },
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
-/** (imag-part z) - Returns the imaginary part of the complex number z. */
+/** (imag-part z) - DOORED: complex numbers are not supported. */
 export const imagPart = new Operator("imag-part", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      return new SchemeExact(0n);
-    }
-    // Return the imaginary part
-    if (Number.isInteger(x.imag) && Number.isSafeInteger(x.imag)) {
-      return new SchemeExact(BigInt(x.imag));
-    }
-    return new SchemeInexact(x.imag);
-  },
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
-/** (magnitude z) - Returns the magnitude (absolute value) of the complex number z. */
+/** (magnitude z) - DOORED: complex numbers are not supported. */
 export const magnitude = new Operator("magnitude", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      const val = x.valueOf();
-      return new SchemeInexact(Math.abs(val));
-    }
-    // |a + bi| = sqrt(a^2 + b^2)
-    const mag = Math.hypot(x.real, x.imag);
-    return new SchemeInexact(mag);
-  },
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
-/** (angle z) - Returns the angle (argument) of the complex number z. */
+/** (angle z) - DOORED: complex numbers are not supported. */
 export const angle = new Operator("angle", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      const val = x.valueOf();
-      return new SchemeInexact(val >= 0 ? 0 : Math.PI);
-    }
-    return new SchemeInexact(Math.atan2(x.imag, x.real));
-  },
+  fn: (): SchemeNumeric => complexDoor(),
 });
 
 // ============================================================================
@@ -866,31 +824,20 @@ export const sqrt = new Operator("sqrt", {
     // Get the real value
     const val = x instanceof SchemeExact ? x.valueOf() : x.real;
 
-    // For negative real numbers, return complex result (0 + sqrt(-x)i)
-    if (x instanceof SchemeExact || (x instanceof SchemeInexact && x.imag === 0)) {
-      if (val < 0) {
-        return new SchemeInexact(0, Math.sqrt(-val));
-      }
-      // For exact non-negative integers that are perfect squares, return exact.
-      // Use a bigint integer sqrt so squares ≥ 2^53 (where Math.sqrt(Number(n))
-      // loses precision and misclassifies) are detected exactly.
-      if (x instanceof SchemeExact && x.denom === 1n && x.num >= 0n) {
-        const r = bigintISqrt(x.num);
-        if (r * r === x.num) {
-          return new SchemeExact(r);
-        }
-      }
-      return new SchemeInexact(Math.sqrt(val));
+    // sqrt of a negative real is complex → DOORED (complex not supported).
+    if (val < 0) {
+      complexDoor();
     }
-
-    // For complex numbers, use the formula: sqrt(a+bi) = sqrt((r+a)/2) + i*sign(b)*sqrt((r-a)/2)
-    // where r = |z| = sqrt(a^2 + b^2)
-    const a = x.real;
-    const b = x.imag;
-    const r = Math.hypot(a, b);
-    const re = Math.sqrt((r + a) / 2);
-    const im = (b >= 0 ? 1 : -1) * Math.sqrt((r - a) / 2);
-    return new SchemeInexact(re, im);
+    // For exact non-negative integers that are perfect squares, return exact.
+    // Use a bigint integer sqrt so squares ≥ 2^53 (where Math.sqrt(Number(n))
+    // loses precision and misclassifies) are detected exactly.
+    if (x instanceof SchemeExact && x.denom === 1n && x.num >= 0n) {
+      const r = bigintISqrt(x.num);
+      if (r * r === x.num) {
+        return new SchemeExact(r);
+      }
+    }
+    return new SchemeInexact(Math.sqrt(val));
   },
 });
 

@@ -157,11 +157,7 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   }
 
   if (value instanceof SchemeInexact) {
-    // InexactNumber is always a JS float, just return real part (or complex handling if needed)
-    if (value.imag !== 0) {
-      // For complex numbers, return as object or just real part depending on use case
-      return { real: value.real, imag: value.imag };
-    }
+    // InexactNumber is always a JS float (reals-only — complex axis omitted).
     return value.real;
   }
 

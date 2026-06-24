@@ -58,41 +58,19 @@ describe("InexactNumber", () => {
   it("creates reals", () => {
     const n = new SchemeInexact(3.14);
     expect(n.real).toBe(3.14);
-    expect(n.imag).toBe(0);
     expect(n.isReal).toBe(true);
     expect(n.isExact).toBe(false);
   });
 
-  it("creates complex", () => {
-    const n = new SchemeInexact(3, 4);
-    expect(n.real).toBe(3);
-    expect(n.imag).toBe(4);
-    expect(n.isReal).toBe(false);
-    expect(n.magnitude).toBe(5);
-  });
-
-  it("performs complex arithmetic", () => {
-    const a = new SchemeInexact(3, 4);
-    const b = new SchemeInexact(1, 2);
-
-    const sum = a.add(b);
-    expect(sum.real).toBe(4);
-    expect(sum.imag).toBe(6);
-
-    const prod = a.mul(b);
-    expect(prod.real).toBe(-5); // 3*1 - 4*2
-    expect(prod.imag).toBe(10); // 3*2 + 4*1
-  });
+  // Complex construction / arithmetic removed: arrival is reals-only (complex tower
+  // omitted, R7RS § 6.2.3). SchemeInexact has no imaginary axis.
 
   it("has tower predicates", () => {
     const real = new SchemeInexact(3.0);
     expect(real.isInteger).toBe(true);
     expect(real.isRational).toBe(true); // R7RS: finite reals are rational
     expect(real.isReal).toBe(true);
-
-    const complex = new SchemeInexact(3, 4);
-    expect(complex.isReal).toBe(false);
-    expect(complex.isComplex).toBe(true);
+    expect(real.isComplex).toBe(true); // real ⊂ complex — predicate stays total
   });
 
   it("rounds to even on ties", () => {
@@ -119,11 +97,9 @@ describe("NumberRegistry - Scheme mode", () => {
     expect(result.toString()).toBe("1/2");
   });
 
-  it("produces complex from sqrt of negative", () => {
+  it("doors on sqrt of negative (complex not supported)", () => {
     const n = new SchemeInexact(-4);
-    const result = reg.sqrt(n);
-    expect(result).toBeInstanceOf(SchemeInexact);
-    expect((result as SchemeInexact).imag).toBe(2);
+    expect(() => reg.sqrt(n)).toThrow("complex");
   });
 
   it("coerces exact + inexact → inexact", () => {
@@ -152,7 +128,7 @@ describe("NumberRegistry - Rosetta mode", () => {
   });
 
   it("throws on complex creation", () => {
-    expect(() => reg.fromComplex(3, 4)).toThrow("Complex");
+    expect(() => reg.fromComplex(3, 4)).toThrow("complex");
   });
 });
 

@@ -106,7 +106,7 @@ describe("Codecs", () => {
   describe("Real", () => {
     it("matches only real inexact numbers", () => {
       expect(Real.match(new SchemeInexact(3.14))).toBe(true);
-      expect(Real.match(new SchemeInexact(0, 1))).toBe(false); // complex
+      // (No complex case: arrival is reals-only — every SchemeInexact IS real.)
       expect(Real.match(new SchemeExact(42n))).toBe(false);
     });
   });

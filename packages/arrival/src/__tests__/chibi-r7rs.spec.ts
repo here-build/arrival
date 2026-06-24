@@ -35,6 +35,31 @@ import { initBridge } from "../bridge";
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
 /**
+ * Complex-number test signatures. arrival omits the complex tower (R7RS § 6.2.3),
+ * so these forms are excluded. This list is the SINGLE source: it is spread into
+ * EXCLUDED_TESTS (post-run filter) and also drives the pre-parse line strip in the
+ * runner (because a complex literal doors at READ-time, aborting its whole section
+ * before any per-name filtering could apply). The literal-shape regexes match a
+ * complex datum (a+bi / a-bi / +bi / -bi / +i / -i); the strings match the complex
+ * constructors / accessors. A real number test never carries a bare
+ * "<digit-or-dot><sign>…i" or a leading "[+-]i".
+ */
+const COMPLEX_READ_TIME_PATTERNS: (string | RegExp)[] = [
+  "make-rectangular",
+  "make-polar",
+  "real-part",
+  "imag-part",
+  "magnitude",
+  "angle",
+  // Complex literal as a bare datum: a±bi (real present) or ±bi / ±i (pure
+  // imaginary). Bounded by S-expression delimiters ( [ whitespace / start … ) ]
+  // whitespace / end so a pipe-quoted symbol like |+i| or a substring inside a
+  // string is NOT mistaken for a complex datum.
+  /(?<=[([\s]|^)[+-]?[0-9][0-9.]*(?:\/[0-9]+)?[+-](?:[0-9][0-9.]*(?:\/[0-9]+)?|inf\.0|nan\.0)?i(?=[)\]\s]|$)/,
+  /(?<=[([\s]|^)[+-](?:[0-9][0-9.]*(?:\/[0-9]+)?|inf\.0|nan\.0)?i(?=[)\]\s]|$)/,
+];
+
+/**
  * Tests to completely exclude - features we don't support by design.
  * Format: test name substring or regex pattern
  */
@@ -98,6 +123,17 @@ const EXCLUDED_TESTS: (string | RegExp)[] = [
 
   // Record types
   "define-record-type",
+
+  // Complex numbers — OMITTED by design (R7RS § 6.2.3 permits omitting the complex
+  // tower). arrival is reals-only. UNLIKE every other excluded feature, complex
+  // fails at READ-time: a literal like 3+4i doors in the reader (see
+  // values/numbers.ts + complexDoor), so its `(test …)` form throws during PARSE and
+  // would abort the whole section — losing the ~190 real number tests that share
+  // "6.2 Numbers". The runner therefore strips these lines BEFORE parsing, using the
+  // same COMPLEX_READ_TIME_PATTERNS spread in here. make-rectangular / make-polar /
+  // real-part / imag-part / magnitude / angle door at eval; their literal-free forms
+  // are caught here post-run.
+  ...COMPLEX_READ_TIME_PATTERNS,
 
   // eval/environment reification — omitted by design (arrival is pure dataflow;
   // env-as-value reaches the interpreter host, which the membrane forbids)
@@ -517,6 +553,68 @@ function preprocessTestFile(content: string): string {
   return content;
 }
 
+/**
+ * Drop every COMPLETE top-level form whose source text carries a complex literal or
+ * a complex constructor/accessor, returning the section with those forms removed.
+ *
+ * WHY a splitter and not a line filter: a complex literal (3+4i) doors in the reader
+ * at PARSE time, so leaving the form in aborts the entire section (and the ~190 real
+ * number tests sharing "6.2 Numbers"). One `test-numeric-syntax` form spans two
+ * lines, so a per-line drop would orphan its closing parens. We therefore split into
+ * whole top-level forms (paren depth, string- / line-comment- / char-literal-aware)
+ * and drop a form iff COMPLEX_READ_TIME_PATTERNS matches its text. Eval-time
+ * exclusions (call/cc, ports, …) are left untouched and filtered post-run.
+ */
+function stripComplexForms(section: string): string {
+  const isComplexForm = (form: string): boolean =>
+    COMPLEX_READ_TIME_PATTERNS.some((p) => (typeof p === "string" ? form.includes(p) : p.test(form)));
+
+  let out = "";
+  let i = 0;
+  const len = section.length;
+  while (i < len) {
+    // Pass through whitespace and line comments between forms verbatim.
+    const ch = section[i];
+    if (ch === ";") {
+      const nl = section.indexOf("\n", i);
+      const end = nl === -1 ? len : nl + 1;
+      out += section.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch !== "(" && ch !== "[") {
+      out += ch;
+      i++;
+      continue;
+    }
+    // Start of a top-level form — scan to its matching close, tracking strings,
+    // line comments and #\char literals so brackets inside them don't count.
+    const start = i;
+    let depth = 0;
+    let inString = false;
+    for (; i < len; i++) {
+      const c = section[i];
+      if (inString) {
+        if (c === "\\") i++; // skip escaped char
+        else if (c === '"') inString = false;
+        continue;
+      }
+      if (c === '"') { inString = true; continue; }
+      if (c === ";") { const nl = section.indexOf("\n", i); i = nl === -1 ? len : nl; continue; }
+      if (c === "#" && section[i + 1] === "\\") { i += 2; continue; } // #\x char literal
+      if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") {
+        depth--;
+        if (depth === 0) { i++; break; }
+      }
+    }
+    const form = section.slice(start, i);
+    if (!isComplexForm(form)) out += form;
+    // else: drop the whole form (a read-time-dooring complex form).
+  }
+  return out;
+}
+
 describe("Chibi R7RS Official Tests", () => {
   beforeAll(async () => {
     // AWAIT initBridge: it returns the bootstrap promise whose `.then` lazily
@@ -560,9 +658,19 @@ describe("Chibi R7RS Official Tests", () => {
       if (!section.trim()) continue;
       const sectionMatch = section.match(/\(test-begin\s+"([^"]+)"\)/);
       const sectionName = sectionMatch?.[1] ?? "(preamble)";
+      // Strip complex-literal / complex-procedure lines BEFORE parsing. A complex
+      // literal (3+4i) doors at READ-time (arrival is reals-only — see
+      // values/numbers.ts), so leaving it in would throw during parse and abort the
+      // WHOLE section, losing every sibling test. We drop exactly the lines whose
+      // text `isExcluded` already recognizes (the complex patterns added to
+      // EXCLUDED_TESTS) — same list, applied one phase earlier because the failure
+      // is at read-time, not eval-time. Eval-time exclusions (call/cc, etc.) still
+      // run and are filtered post-hoc as before; only read-time-failing lines are
+      // removed here.
+      const safeSection = stripComplexForms(section);
       if (trace) process.stderr.write(`[chibi] → ${sectionName}\n`);
       try {
-        await exec(section, { env });
+        await exec(safeSection, { env });
       } catch (e) {
         // Record error and continue
         console.error(`Error in section "${sectionName}":`, (e as Error).message?.slice(0, 100));
