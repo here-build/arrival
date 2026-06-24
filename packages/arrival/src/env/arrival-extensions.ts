@@ -7,7 +7,7 @@
 //   • pair utilities (pair-map / nth-pair)
 //   • type predicates (regex? / key? / …)
 //   • aliases (string-join / string-split) · symbol-append
-//   • arrival safe head accessors (first? / first-or) + the Ramda-override remove
+//   • arrival safe head accessors (first? / first-or) + a standalone SRFI-1 remove
 //
 // The truly-irreducible core (essential constants, the purity doors, the
 // syntax-binding macros, the --> / .. interop macros and their helpers) stays
@@ -137,12 +137,13 @@ export default new EnvCapability("arrival/core-extensions", {
        (string->symbol (apply string-append (map symbol->string rest))))
     
     ;; -----------------------------------------------------------------------------
-    ;; Arrival safe head accessors + Ramda-override remove (core residents)
+    ;; Arrival safe head accessors + SRFI-1 remove (core residents)
     ;; -----------------------------------------------------------------------------
     ;; The dominant avoidable crash in generated Scheme is (car (filter …)) on an empty
     ;; match — (car '()) throws. These give a head accessor that CANNOT crash. The rest
     ;; of the SRFI-1 surface now lives in env/srfi/srfi-1.ts; these stay in core because
-    ;; they are arrival-specific (crash-avoidance) or exist to shadow the Ramda spread.
+    ;; they are arrival-specific (crash-avoidance) or, for remove, were authored here to
+    ;; supply the SRFI-1 binding directly.
     ;;
     ;; first? — head of a list, or #f when empty. (first? '()) => #f, never a crash. The
     ;; blessed safe accessor that makes (car (filter …)) unnecessary.
@@ -150,9 +151,10 @@ export default new EnvCapability("arrival/core-extensions", {
     ;; first-or — head of a list, or a supplied default when empty.
     (define (first-or xs default) (if (pair? xs) (car xs) default))
     
-    ;; remove — SRFI-1: keep elements that DON'T satisfy pred. Defined (and whitelisted) so
-    ;; it overrides the Ramda remove spread into the sandbox env, whose curried semantics
-    ;; returned null for this call shape.
+    ;; remove — SRFI-1: keep elements that DON'T satisfy pred. The base sandbox carries no
+    ;; external collection library, so this is the sole remove binding (it once existed to
+    ;; override a curried Ramda remove that returned null for this call shape; Ramda is now
+    ;; gone entirely, leaving this plain SRFI-1 definition).
     (define (remove pred xs)
       (filter (lambda (x) (not (pred x))) xs))
 `,

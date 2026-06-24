@@ -726,13 +726,13 @@ export function initBridge(): Promise<void> {
   //     procedures. first?/first-or make (car (filter …)) on an empty match — the
   //     dominant avoidable crash in generated Scheme — unnecessary. `remove` is now
   //     the SOLE source of `remove` in the inference plane (it used to shadow a broken Ramda
-  //     `remove`; Ramda has since been evicted, so this copy is what supplies it).
+  //     `remove`; Ramda has since been removed entirely, so this copy is what supplies it).
   //   • Composition + quantifiers compose/comp/pipe/flow (polyglot) and some/every
   //     (SRFI-1). The inference plane (inferenceEnv) is the totalic env where models
   //     author Scheme; this composition/quantifier vocabulary used to reach it via the
-  //     Ramda spread. Ramda is now evicted into @here.build/arrival-scheme-env-ramda
-  //     (opt-in), so copying the bootstrap definitions over is what keeps the plane's
-  //     compose/pipe/some/every — sourced from pure Scheme. Pure, capability-free.
+  //     Ramda spread. Ramda has since been removed entirely, so copying the bootstrap
+  //     definitions over is what keeps the plane's compose/pipe/some/every — sourced from
+  //     pure Scheme. Pure, capability-free.
   // Assemble the native foundation (value-domain clusters + numbers + exceptions) onto
   // global_env FIRST (symbol-only, no prelude — `lower()` needs no evalScheme), THEN the
   // .scm base packs onto user_env. Order matters: a base-pack prelude may call a native

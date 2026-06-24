@@ -7,9 +7,9 @@
 // set (take-while … length+) and the "missing third" + parallel-list utilities
 // (iota, delete-duplicates, filter-map, count, append-map, some/every, zip,
 // list-index, unfold). The arrival safe-accessors (first?/first-or) and the
-// Ramda-override `remove` deliberately stay in core (`core.ts`): the
-// accessors are arrival-specific crash-avoidance, and `remove` exists to
-// override the Ramda spread into the sandbox.
+// SRFI-1 `remove` deliberately stay in core (`core.ts`): the accessors are
+// arrival-specific crash-avoidance, and `remove` is authored there directly
+// (it once shadowed a Ramda `remove`, since removed entirely).
 import { EnvCapability } from "../capability.js";
 
 export const SRFI1_SCM = `

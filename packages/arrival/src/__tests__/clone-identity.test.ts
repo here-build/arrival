@@ -341,9 +341,9 @@ describe("META — provenance clones break identity-equality systematically", ()
   // immediately what is going on.
   it("documents 15 known sites where `=== nil` would silently misroute a Nil clone", () => {
     // ramda-functions.ts (polymorphicMap/filter/reduce, 5 sites) was deleted when
-    // Ramda was evicted from the sandbox into @here.build/arrival-scheme-env-ramda;
-    // those wrappers were already overridden by sandbox-env's hardened map/filter/
-    // reduce, so the sites left with the code. The remaining 15 stand.
+    // Ramda was removed from the sandbox; those wrappers were already overridden by
+    // sandbox-env's hardened map/filter/reduce, so the sites left with the code. The
+    // remaining 15 stand.
     const sites = [
       "membrane.ts:71  — isSchemeValue",
       "membrane.ts:326 — toJS",
