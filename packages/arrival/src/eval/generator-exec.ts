@@ -78,6 +78,21 @@ export interface ExecOptions {
    */
   speculate?: boolean;
   /**
+   * Interpreter-level NIL-TOLERANCE mode. When `true`, projection ops
+   * (`car`/`cdr` and friends) applied to `null`/nil THROW instead of resolving
+   * tolerantly to `nil`. Default (`undefined`/`false`) is TOLERANT — today's
+   * behavior, where projecting nil yields nil.
+   *
+   * This is the interpreter mode that replaces fantasy-land's scattered
+   * env-overlay nil guards (the `if (x == null) return nil` pattern in
+   * fl-interop): nil-tolerance becomes a real evaluation mode threaded through
+   * `EvalContext.strict`, not an env decoration. SCAFFOLDING ONLY for now — this
+   * flag is plumbed end-to-end (ExecOptions → EvalContext) but NO consumer reads
+   * it yet, so flag-on is currently byte-identical to flag-off. The car/cdr
+   * dispatch starts reading `ctx.strict` in a later step.
+   */
+  strict?: boolean;
+  /**
    * Internal: set by the bootstrap's own prelude evals (bridge.initBridge's
    * `evalScheme`) to bypass the bootstrap-completion gate below — awaiting it
    * there would deadlock (the prelude eval IS part of the bootstrap it would be
@@ -146,6 +161,7 @@ export async function exec(
     budgetMs,
     heapBudget,
     speculate,
+    strict,
     skipBootstrapWait,
     irLineage,
     irLineageSources,
@@ -225,6 +241,9 @@ export async function exec(
             nodeFilter,
             signal,
             speculate,
+            // Default false ⇒ today's tolerant nil-projection. No consumer reads
+            // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
+            strict: strict ?? false,
           }),
           { signal, budgetMs: remaining },
         );

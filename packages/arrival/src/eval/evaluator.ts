@@ -249,6 +249,19 @@ export interface EvalContext {
    * effects. Propagated structurally like `tail`.
    */
   speculate?: boolean;
+  /**
+   * Interpreter-level NIL-TOLERANCE mode (carried from `ExecOptions.strict`).
+   * When `true`, projection ops (`car`/`cdr` and friends) applied to `null`/nil
+   * THROW instead of resolving tolerantly to `nil`. Absent/`false` ⇒ TOLERANT,
+   * today's behavior. Propagated structurally like `tail`/`speculate` (the
+   * `{ ...ctx }` spreads carry it into every child context).
+   *
+   * SCAFFOLDING: no evaluator path reads this yet, so it is behavior-neutral —
+   * the car/cdr dispatch will read `ctx.strict` in a later step. Optional (like
+   * `speculate`) so the few `EvalContext` literals that omit the run-level
+   * options stay valid; the sole origin is `exec()` in generator-exec.ts.
+   */
+  strict?: boolean;
 }
 
 /** Options for the trampoline runner (`run`). */
