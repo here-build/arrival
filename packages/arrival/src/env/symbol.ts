@@ -1,0 +1,379 @@
+// symbol — the `arrival.symbol*` EnvCapability symbol-definition API.
+//
+// One zod contract, read (eventually) four ways: runtime validation (z.parse), static
+// impl types (z.infer via the generics here), the harvested .d.ts (printed from the
+// schema — a SEPARATE follow-up, needs zod-to-ts), and the JS↔Scheme membrane (each
+// schema is the per-arg codec). This file builds the AUTHORED-extension layer:
+//
+//   const symbol = { native, rosetta, notImplemented }
+//
+// so `import * as arrival from "./symbol.js"` →  arrival.symbol.native`name: doc`(…)
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// THE RUNTIME MODEL (the interpretive call) — confirmed against the live interpreter
+// (src/rosetta.ts createRosettaWrapper, and the `{ value }` env.set path):
+//
+//   symbol.native    — schemas are SCHEME-IDENTITY; impl works on SCHEME VALUES
+//                       (Pair, SchemeString, …), exactly like today's { value: fn }
+//                       ops. bake.native attaches { impl, in, out } with NO runtime
+//                       validation and NO codec — "zod for TYPES purely" (the schema
+//                       is there for static inference + the future .d.ts harvest). The
+//                       baked .impl IS the binding (≈ today's { value } + type metadata).
+//
+//   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). bake.rosetta
+//                       produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
+//                       skippable/gated) → impl(decodedArgs) → await (async implicit) →
+//                       encode return (codec) → build the scheme values-list. This mirrors
+//                       createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
+//                       the codecs standing in for the generic schemeToJs/jsToScheme.
+//                       The impl is CTX-FREE: (decodedArgs) => result. withContext /
+//                       argProvenance are DROPPED here — the impl never receives ctx.
+//                       PROVENANCE MINTING (createRosettaWrapper's currentInvocation
+//                       point) is the wrapper's job, but lower()/ctx are NOT wired for
+//                       this step → a clearly-marked TODO call-site is left (see bake).
+//
+//   symbol.notImplemented — no contract/impl, just `name: reason`. bake → a door:
+//                       { kind: "door", name, reason } (the %purity-door story).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import * as z from "./scheme-zod.js";
+import type { Pair } from "../values/Pair.js";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. The args-vector spec + decoded-type inference
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** An args/return vector: a bare tuple of schemas (positional sugar) OR an array-ish
+ *  schema (`z.array` variadic / `z.tuple` / `z.union` overload). */
+export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
+
+/** Decoded arg TYPES for the impl (the codec OUTPUT side). A bare tuple maps each
+ *  element's `z.output`; an array-ish schema yields its element-array (variadic). */
+export type DecodedArgs<S extends VectorSpec> = S extends readonly z.ZodTypeAny[]
+  ? { -readonly [K in keyof S]: z.output<S[K] & z.ZodTypeAny> }
+  : S extends z.ZodTypeAny
+    ? z.output<S> extends readonly unknown[]
+      ? z.output<S>
+      : [z.output<S>]
+    : never;
+
+/** Decoded RETURN type: a single value when the output is a 1-tuple, else the
+ *  values-vector (multiple-values). */
+export type DecodedReturn<O extends VectorSpec> = O extends readonly [z.ZodTypeAny]
+  ? z.output<O[0] & z.ZodTypeAny>
+  : O extends readonly z.ZodTypeAny[]
+    ? { -readonly [K in keyof O]: z.output<O[K] & z.ZodTypeAny> }
+    : O extends z.ZodTypeAny
+      ? z.output<O>
+      : never;
+
+/** async is implicit — bake awaits. */
+export type MaybePromise<T> = T | Promise<T>;
+
+/** A symbol's input/output contract. */
+export interface Contract<I extends VectorSpec, O extends VectorSpec> {
+  input: I;
+  output: O;
+}
+
+/** The impl a contract demands: decoded args in, decoded return (or a promise) out.
+ *  `DecodedArgs` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
+ *  contract tuple becomes a MUTABLE positional param list the impl can declare. */
+export type Impl<I extends VectorSpec, O extends VectorSpec> = (
+  ...args: DecodedArgs<I>
+) => MaybePromise<DecodedReturn<O>>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. SymbolDef — the baked, discriminated union
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AnyFn = (...args: any[]) => unknown;
+
+/** A native symbol: impl over SCHEME VALUES, no validation. Carries the (identity)
+ *  schemas for the future .d.ts harvest. */
+export interface NativeSymbolDef {
+  readonly kind: "native";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  readonly impl: AnyFn;
+}
+
+/** A rosetta symbol: impl in JS-land. `in`/`out` are the (codec) schemas; `run` is the
+ *  decode→validate→impl→encode wrapper produced by bake. */
+export interface RosettaSymbolDef {
+  readonly kind: "rosetta";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  /** The raw JS-land impl (decoded args → result). Kept for the harvest / inspection. */
+  readonly impl: AnyFn;
+  /** The interpretive wrapper: (…schemeArgs) => Promise<schemeValuesList>. Decodes +
+   *  (optionally) validates inputs, runs the impl, awaits, encodes the output. */
+  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+}
+
+/** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
+export interface DoorSymbolDef {
+  readonly kind: "door";
+  readonly name: string;
+  readonly reason: string;
+}
+
+export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | DoorSymbolDef;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. Internals — name/doc parsing + vector normalization
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Parse `"name: human description"` from a tagged-template. Substitutions are
+ *  interpolated first (so a `${verb}: …` template works), then split on the FIRST
+ *  colon. No colon ⇒ the whole string is the name (doc undefined). */
+function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
+  let raw = "";
+  for (let i = 0; i < tpl.length; i++) {
+    raw += tpl[i];
+    if (i < sub.length) raw += String(sub[i]);
+  }
+  const colon = raw.indexOf(":");
+  if (colon === -1) return { name: raw.trim() };
+  return { name: raw.slice(0, colon).trim(), doc: raw.slice(colon + 1).trim() };
+}
+
+/** Normalize a VectorSpec to ONE zod schema describing the whole args/return vector:
+ *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses
+ *  the decoded-args array against (and what the harvest will print from). */
+function normalizeVector(spec: VectorSpec): z.ZodTypeAny {
+  if (Array.isArray(spec)) {
+    // z.tuple wants a non-empty tuple type; an empty contract ([]) is the 0-arg case.
+    return spec.length === 0
+      ? (z.tuple([]) as unknown as z.ZodTypeAny)
+      : (z.tuple(spec as [z.ZodTypeAny, ...z.ZodTypeAny[]]) as unknown as z.ZodTypeAny);
+  }
+  return spec as z.ZodTypeAny;
+}
+
+/** Did the author give a 1-tuple output? Then the impl returns a SINGLE value (we wrap
+ *  it as a 1-element values-list); otherwise it returns the values-vector already. */
+function isSingleOutput(output: VectorSpec): boolean {
+  return Array.isArray(output) && output.length === 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. bake — the three constructors' shared runtime
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface NativeInput {
+  kind: "native";
+  name: string;
+  doc?: string;
+  contract: Contract<VectorSpec, VectorSpec>;
+  impl: AnyFn;
+}
+interface RosettaInput {
+  kind: "rosetta";
+  name: string;
+  doc?: string;
+  contract: Contract<VectorSpec, VectorSpec>;
+  impl: AnyFn;
+}
+interface DoorInput {
+  kind: "door";
+  name: string;
+  reason: string;
+}
+
+/** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
+ *  `exec(src, { typecheck })` — see the decode note in bakeRosetta for the current
+ *  fused-transform caveat. */
+export interface BakeRuntimeOpts {
+  /** Run zod validation on decoded args + encoded output. Default true. */
+  validate?: boolean;
+}
+
+function bakeNative(input: NativeInput): NativeSymbolDef {
+  return {
+    kind: "native",
+    name: input.name,
+    doc: input.doc,
+    in: normalizeVector(input.contract.input),
+    out: normalizeVector(input.contract.output),
+    // NO runtime validation, NO codec — the impl works on scheme values directly.
+    // "zod for types purely": the schemas live on the def for inference + the harvest.
+    impl: input.impl,
+  };
+}
+
+function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSymbolDef {
+  const inSchema = normalizeVector(input.contract.input);
+  const outSchema = normalizeVector(input.contract.output);
+  const singleOut = isSingleOutput(input.contract.output);
+  // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
+  // for the trust model + future use; see the decode note below for why it currently
+  // can't be a no-op for the codec family. Default from bake opts.
+  const defaultValidate = opts.validate !== false;
+
+  // The interpretive wrapper. Mirrors createRosettaWrapper's spine
+  // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
+  // generic conversions and zod doing the (gated) validation.
+  const run = async (...schemeArgs: unknown[]): Promise<unknown> => {
+    // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
+    //    crossing) and its input-side VALIDATION are FUSED inside `decode` — you can't
+    //    run the transform without the instanceof/refinement guard. The membrane is
+    //    structural (not optional), so decode always runs. For the primitive codec
+    //    family the only validation BEYOND the transform is `z.integer`'s safe-int check
+    //    (itself part of the boundary contract, not skippable noise) — so `validate`
+    //    is effectively always-on here. The flag stays on the API to track trust and to
+    //    host a real split once a schema carries skippable refinements; the no-op path
+    //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
+    //    when a contract gains refinements a trusted caller may skip.
+    void defaultValidate;
+    const decodedArgs = z.decode(inSchema, schemeArgs) as readonly unknown[];
+
+    // 2. RUN the (ctx-free) impl. async is implicit.
+    const result = await input.impl(...decodedArgs);
+
+    // 3. PROVENANCE MINT — the wrapper's job, per the design (ctx.currentInvocation
+    //    point, mirroring createRosettaWrapper's markProvenancePoint + pointProvenance).
+    //    TODO(provenance-mint): lower()/EvalContext are NOT wired for this step. When
+    //    EnvCapability.lower() threads ctx into the wrapper, mint a fresh point here
+    //    (non-pure rosetta = source) and deep-stamp the encoded output with it — see
+    //    src/rosetta.ts createRosettaWrapper (resultProvenance / jsToScheme stamp).
+    //    For now the encode below carries the scheme values WITHOUT a minted origin.
+
+    // 4. ENCODE the output via the output codecs (codec encode = z.encode).
+    if (singleOut) {
+      // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
+      const encoded = z.encode(outSchema, [result]) as readonly unknown[];
+      return encoded[0];
+    }
+    // multiple-values / array-ish output: the impl returned the values-vector already.
+    return z.encode(outSchema, result);
+  };
+
+  return {
+    kind: "rosetta",
+    name: input.name,
+    doc: input.doc,
+    in: inSchema,
+    out: outSchema,
+    impl: input.impl,
+    run,
+  };
+}
+
+function bakeDoor(input: DoorInput): DoorSymbolDef {
+  return { kind: "door", name: input.name, reason: input.reason };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. The three constructors (tagged-template → curry → generics)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The tagged template carries `name: human description`; it returns a GENERIC fn so
+// TS infers the contract first, then checks the impl against the DECODED types. A
+// wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
+
+/** Native host fn over SCHEME VALUES (no ctx, no validation). The schemas are
+ *  scheme-identity; the impl receives the terms. */
+function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return <const I extends VectorSpec, const O extends VectorSpec>(
+    contract: Contract<I, O>,
+    impl: Impl<I, O>,
+  ): NativeSymbolDef => bakeNative({ kind: "native", name, doc, contract, impl: impl as AnyFn });
+}
+
+/** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step. */
+function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return <const I extends VectorSpec, const O extends VectorSpec>(
+    contract: Contract<I, O>,
+    impl: Impl<I, O>,
+    opts?: BakeRuntimeOpts,
+  ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl: impl as AnyFn }, opts);
+}
+
+/** errors-as-doors — an OMITTED verb. No contract/impl, just the teaching reason. */
+function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbolDef {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return bakeDoor({ kind: "door", name, reason: doc ?? "" });
+}
+
+/** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
+ *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
+export const symbol = { native, rosetta, notImplemented };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.
+//
+// These live HERE (not in *.test.ts) because both tsconfigs EXCLUDE `src/**/*.test.ts`
+// — the test file's `@ts-expect-error` lines are NOT compiled by `pnpm typecheck`. The
+// generic inference is the whole point of the API, so its proof must sit where tsc runs.
+// Entirely type-level + a dead-code block: ZERO runtime cost, not exported, tree-shaken.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type _Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type _Expect<T extends true> = T;
+
+// native: an identity-schema tuple infers the impl arg as the SCHEME TERM.
+type _NativeArgs = DecodedArgs<[typeof z.pair]>;
+type _NativeArgsProof = _Expect<_Equal<_NativeArgs, [Pair]>>;
+
+// rosetta: a codec tuple infers the impl arg as the DECODED JS value.
+type _RosettaArgs = DecodedArgs<[typeof z.string]>;
+type _RosettaArgsProof = _Expect<_Equal<_RosettaArgs, [string]>>;
+
+// the number family decodes to the codec's declared JS type.
+type _NumArgs = DecodedArgs<[typeof z.number]>;
+type _NumProof = _Expect<_Equal<_NumArgs, [number]>>;
+type _BigIntArgs = DecodedArgs<[typeof z.bigint]>;
+type _BigIntProof = _Expect<_Equal<_BigIntArgs, [bigint]>>;
+
+// a 1-tuple output → a single decoded return.
+type _SingleRet = DecodedReturn<[typeof z.number]>;
+type _SingleRetProof = _Expect<_Equal<_SingleRet, number>>;
+
+// variadic: z.array input → the element-array as the impl's rest params.
+type _VariadicArgs = DecodedArgs<ReturnType<typeof z.array<typeof z.number>>>;
+type _VariadicProof = _Expect<_Equal<_VariadicArgs, number[]>>;
+
+// Exercise the negative direction: a wrong-typed impl must be a COMPILE error. Guarded
+// by a `false` const so it never runs; each `@ts-expect-error` asserts the line below
+// it does NOT typecheck.
+const __RUN_TYPE_PROOFS__ = false;
+function __typeProofs__(): void {
+  if (__RUN_TYPE_PROOFS__) {
+    // native: impl receives a Pair (identity), not a string.
+    symbol.native`p: proof`(
+      { input: [z.pair], output: [z.pair] },
+      // @ts-expect-error — arg is Pair, annotating it string is wrong
+      (p: string) => p as unknown as Pair,
+    );
+    // rosetta: impl receives a decoded string, not a Pair.
+    symbol.rosetta`r: proof`(
+      { input: [z.string], output: [z.number] },
+      // @ts-expect-error — arg is string, annotating it Pair is wrong
+      (s: Pair) => 1,
+    );
+    // rosetta return: output codec wants number; returning a string is wrong.
+    symbol.rosetta`rr: proof`(
+      { input: [z.string], output: [z.number] },
+      // @ts-expect-error — return must be number, not string
+      (s) => s,
+    );
+  }
+}
+
+// Keep the proof aliases "used" so noUnusedLocals (if ever on) stays quiet; type-only.
+void __typeProofs__;
+export type __SymbolTypeProofs = [
+  _NativeArgsProof,
+  _RosettaArgsProof,
+  _NumProof,
+  _BigIntProof,
+  _SingleRetProof,
+  _VariadicProof,
+];
