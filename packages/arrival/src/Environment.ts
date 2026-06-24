@@ -18,7 +18,6 @@ import { fromJS, isSchemeValue, SchemeJSObject } from "./membrane.js";
 import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
 import { patch_value } from "./reader/values-repr.js";
 import { docsOf, rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
-import { exec } from "./eval/generator-exec.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -474,27 +473,6 @@ export class Environment {
   async init(): Promise<void> {
     const { initBridge } = await import("./bridge.js");
     await initBridge();
-  }
-
-  // -------------------------------------------------------------------------
-  // :: Evaluation API
-  // -------------------------------------------------------------------------
-
-  /**
-   * Parse and evaluate Scheme code in this environment.
-   * Returns the result of the last expression.
-   *
-   * @example
-   * ```typescript
-   * const env = Environment.fromModules([pureScheme]);
-   * const result = await env.eval('(+ 1 2 3)'); // => 6
-   * ```
-   */
-  async eval(code: string): Promise<SchemeValue> {
-    // Generator path (run(evaluate(...))) rather than the legacy lips.evaluate.
-    // exec throws on error by default, matching the old re-throwing handler.
-    const results = await exec(code, { env: this });
-    return results.length > 0 ? results[results.length - 1] : nil;
   }
 
 }

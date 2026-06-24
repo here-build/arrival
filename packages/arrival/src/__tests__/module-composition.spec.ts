@@ -13,9 +13,9 @@
 import { describe, expect, it } from "vitest";
 import { Environment } from "../Environment";
 import type { EnvironmentModule, FallbackResolver } from "../bindings";
-// Side-effect import: ensure the stdlib runtime module is loaded (was three in-body
-// `await import("../stdlib")` warm-ups; env.eval self-bootstraps, so once at load suffices).
-import "../stdlib";
+// `exec` is stdlib's re-export of the generator trampoline; importing it also loads the
+// stdlib runtime module (was three in-body `await import("../stdlib")` warm-ups).
+import { exec } from "../stdlib";
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);
@@ -406,7 +406,7 @@ describe("Environment Module Composition", () => {
     });
   });
 
-  describe("Environment.eval()", () => {
+  describe("eval over a fromModules env", () => {
     it("should evaluate simple expressions", async () => {
       const module: EnvironmentModule = {
         id: "test",
@@ -419,7 +419,7 @@ describe("Environment Module Composition", () => {
       // Providing our own + binding
       const env = Environment.fromModules([module]);
 
-      const result = await env.eval("(+ 1 2)");
+      const result = (await exec("(+ 1 2)", { env })).at(-1);
       expect((result as { valueOf(): number }).valueOf()).toBe(3);
     });
 
@@ -435,7 +435,7 @@ describe("Environment Module Composition", () => {
       const env = Environment.fromModules([module]);
       env.set("x", 10);
 
-      const result = await env.eval("(+ 1 2) (+ x 5)");
+      const result = (await exec("(+ 1 2) (+ x 5)", { env })).at(-1);
       // Should return result of last expression
       expect((result as { valueOf(): number }).valueOf()).toBe(15);
     });
@@ -452,7 +452,7 @@ describe("Environment Module Composition", () => {
       const env = Environment.fromModules([module]);
       env.set("my-value", 42);
 
-      const result = await env.eval("(+ my-value 1)");
+      const result = (await exec("(+ my-value 1)", { env })).at(-1);
       expect((result as { valueOf(): number }).valueOf()).toBe(43);
     });
   });
