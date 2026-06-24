@@ -1,11 +1,10 @@
 // Leaf value-kernel predicates.
 //
 // These four type guards depend ONLY on the value kernel (Pair, Nil, the
-// native scalar wrappers) — never on Environment / Macro / Continuation /
-// Syntax. They were carved out of guards.ts so that Pair.ts can import the
+// native scalar wrappers) — never on Environment / Macro / Syntax. They were carved out of guards.ts so that Pair.ts can import the
 // predicates it needs without transitively dragging the entire evaluator
 // world into the value kernel (guards.ts is a *false leaf*: it imports
-// Environment, Macro, Continuation, …).
+// Environment, Macro, …).
 //
 // guards.ts re-exports all four for backward compatibility — every existing
 // call site that imports them from "../eval/guards.js" keeps working unchanged.

@@ -607,7 +607,7 @@ export const isComplex = new Operator("complex?", {
   fn: (x) => isNum(x) && x.isComplex,
 });
 
-/** real? - true for numbers with zero imaginary part, #f for non-numbers. */
+/** real? - true for numbers (reals-only tower — every inexact value is real), #f for non-numbers. */
 export const isReal = new Operator("real?", {
   in: [Any],
   out: Bool,
