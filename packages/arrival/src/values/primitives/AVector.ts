@@ -113,7 +113,7 @@ export class AVector extends AValue {
 
   // Semigroup (Fantasy Land) — element concatenation. Associative; equality via
   // the Setoid above.
-  ["fantasy-land/concat"](other: AVector): AVector {
+  ["arrival/tagless-final/concat"](other: AVector): AVector {
     return new AVector([...this.__vector__, ...other.__vector__]);
   }
 

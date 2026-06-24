@@ -67,7 +67,7 @@ export class ANil extends AValue {
   // Semigroup so the algebra is total over all lists (wave 2,
   // plan-2026-06-10-algebras-in-entities.md). Returns `other` as-is — the
   // identity does not allocate.
-  ["fantasy-land/concat"]<T>(other: T): T {
+  ["arrival/tagless-final/concat"]<T>(other: T): T {
     return other;
   }
 

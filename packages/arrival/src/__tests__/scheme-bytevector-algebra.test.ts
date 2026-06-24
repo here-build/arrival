@@ -11,7 +11,7 @@ import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
 const LTE = "arrival/tagless-final/lte";
-const CONCAT = "fantasy-land/concat";
+const CONCAT = "arrival/tagless-final/concat";
 
 // Small byte arrays + edge cases: empty, prefixes, collisions on a small domain.
 const arb = fc

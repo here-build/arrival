@@ -118,7 +118,7 @@ export class AString extends AValue {
 
   // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
   // two underlying strings. Associative; equality via the Setoid above.
-  ["fantasy-land/concat"](other: AString): AString {
+  ["arrival/tagless-final/concat"](other: AString): AString {
     return new AString(this.__string__ + other.valueOf());
   }
 

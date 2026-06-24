@@ -11,7 +11,7 @@ import { AString } from "../values/primitives/AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
 
 const MAP = "fantasy-land/map";
-const CONCAT = "fantasy-land/concat";
+const CONCAT = "arrival/tagless-final/concat";
 const EMPTY = "arrival/tagless-final/empty";
 const OF = "arrival/tagless-final/of";
 

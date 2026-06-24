@@ -9,7 +9,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
-const CONCAT = "fantasy-land/concat";
+const CONCAT = "arrival/tagless-final/concat";
 const MAP = "fantasy-land/map";
 
 // Small element domain + edge cases: empty, singletons, collisions.

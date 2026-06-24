@@ -154,7 +154,7 @@ export class ABytevector extends AValue {
 
   // Semigroup (Fantasy Land) — byte concatenation. Associative; equality via the
   // Setoid above.
-  ["fantasy-land/concat"](other: ABytevector): ABytevector {
+  ["arrival/tagless-final/concat"](other: ABytevector): ABytevector {
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     const result = new Uint8Array(a.length + b.length);

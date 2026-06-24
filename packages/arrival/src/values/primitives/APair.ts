@@ -754,7 +754,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // Semigroup — list append. `this ⋄ other` = the elements of this list
   // followed by the elements of `other`. Pure: builds a fresh spine, never
   // mutates either operand (unlike the in-place `append` method above).
-  ["fantasy-land/concat"](other: APair | ANil): APair | ANil {
+  ["arrival/tagless-final/concat"](other: APair | ANil): APair | ANil {
     return concatPair(this, other);
   }
 

@@ -21,7 +21,7 @@ const FILTER = "fantasy-land/filter";
 const REDUCE = "fantasy-land/reduce";
 const TRAVERSE = "arrival/tagless-final/traverse";
 const CHAIN = "arrival/tagless-final/chain";
-const CONCAT = "fantasy-land/concat";
+const CONCAT = "arrival/tagless-final/concat";
 const EMPTY = "arrival/tagless-final/empty";
 const OF = "arrival/tagless-final/of";
 
@@ -92,7 +92,7 @@ describe("Pair — Monoid (nil identity)", () => {
     fc.assert(fc.property(intList, (a) => eq(concat(a as FL, empty() as FL), a)));
   });
   it("left identity: empty ⋄ a ≡ a (nil's own concat is the identity)", () => {
-    // nil['fantasy-land/concat'](a) === a — Nil is the list-monoid identity
+    // nil['arrival/tagless-final/concat'](a) === a — Nil is the list-monoid identity
     // (declared in types.ts alongside Pair's list-append).
     fc.assert(fc.property(intList, (a) => eq(concat(empty() as FL, a as FL), a)));
   });

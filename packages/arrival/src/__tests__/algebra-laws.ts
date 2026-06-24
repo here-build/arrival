@@ -14,7 +14,7 @@ import { describe, it } from "vitest";
 
 const EQ = "fantasy-land/equals";
 const LTE = "arrival/tagless-final/lte";
-const CONCAT = "fantasy-land/concat";
+const CONCAT = "arrival/tagless-final/concat";
 const MAP = "fantasy-land/map";
 
 type FL = Record<string, any>;
