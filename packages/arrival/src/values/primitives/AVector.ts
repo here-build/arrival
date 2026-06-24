@@ -60,14 +60,6 @@ export class AVector extends AValue {
     return this.__vector__[i];
   }
 
-  set(i: number, v: SchemeValue): void {
-    this.__vector__[i] = v;
-  }
-
-  fill(v: SchemeValue, start = 0, end = this.__vector__.length): void {
-    for (let i = start; i < end; i++) this.__vector__[i] = v;
-  }
-
   copy(start = 0, end = this.__vector__.length): AVector {
     return new AVector(this.__vector__.slice(start, end));
   }

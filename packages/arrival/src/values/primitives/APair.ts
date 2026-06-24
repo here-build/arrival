@@ -457,19 +457,6 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return result;
   }
 
-  reverse(): APair | ANil {
-    invariant(!this.have_cycles(), "You can't reverse list that have cycles");
-    let node: APair | unknown = this;
-    let prev: APair | ANil = nil;
-    while (!is_nil(node) && is_pair(node)) {
-      const next = node.cdr;
-      node.cdr = prev;
-      prev = node;
-      node = next;
-    }
-    return prev;
-  }
-
   transform(fn: (val: unknown) => unknown): APair {
     const visited: APair[] = [];
 
@@ -570,39 +557,6 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       parts.push(")");
     }
     return parts.join("");
-  }
-
-  set(prop: "car" | "cdr", value: unknown): void {
-    (this as APair)[prop] = value;
-    if (is_pair(value)) {
-      this.mark_cycles();
-    }
-  }
-
-  append(arg: unknown): this {
-    if (Array.isArray(arg)) {
-      return this.append(APair.fromArray(arg));
-    }
-    const self = this as APair;
-    let p: APair = self;
-    if (p.car === undefined) {
-      if (is_pair(arg)) {
-        self.car = arg.car;
-        self.cdr = arg.cdr;
-      } else {
-        self.car = arg;
-      }
-    } else if (!is_nil(arg)) {
-      while (true) {
-        if (is_pair(p) && is_pair(p.cdr)) {
-          p = p.cdr;
-        } else {
-          break;
-        }
-      }
-      (p as APair).cdr = arg;
-    }
-    return this;
   }
 
   serialize(): [unknown, unknown] {
@@ -855,7 +809,7 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
 // recursive base `return b ?? nil` did — purity: a's spine is fresh, b untouched).
 // An improper `a` still contributes its phantom `undefined` car before the non-Pair
 // tail ends the walk, matching the recursive form.
-function concatPair(a: unknown, b: unknown): APair | ANil {
+export function concatPair(a: unknown, b: unknown): APair | ANil {
   const cars: unknown[] = [];
   let node: unknown = a;
   while (node && !(node instanceof ANil)) {

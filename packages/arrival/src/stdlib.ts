@@ -54,7 +54,7 @@ import { Values } from "./values/primitives/Values.js";
 import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
-import { isCircularList, APair } from "./values/primitives/APair.js";
+import { isCircularList, APair, concatPair } from "./values/primitives/APair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
 import { compose, curry, fold, pipe } from "./utils/functional.js";
 
@@ -1308,7 +1308,7 @@ export const global_env = new Environment(
         if (is_null(item)) {
           return acc;
         }
-        return acc.append(item);
+        return concatPair(acc, item);
       }, nil);
     }),
     // ------------------------------------------------------------------

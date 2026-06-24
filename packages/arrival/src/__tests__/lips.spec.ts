@@ -1,7 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { env as global_environment, exec, parse } from "../stdlib";
-import { nil } from "../values/primitives/ANil.js";
-import { APair } from "../values/primitives/APair.js";
+import { env as global_environment, exec } from "../stdlib";
 import { initBridge } from "../bridge";
 import { AExact } from "../values/numbers";
 
@@ -85,40 +83,3 @@ describe("scope", function () {
   // Dynamic scope tests removed - dynamic scoping is a legacy feature not used in standard Scheme
 });
 // __doc__ support has been removed - documentation is no longer attached to functions
-const str2list = async (code) => (await parse(code))[0];
-
-describe("lists", function () {
-  describe("append", function () {
-    it.each([
-      ["(1 2 3)", "(1 2 3 10)"],
-      ["((1 2 3))", "((1 2 3) 10)"],
-      ["(1 2 (3) 4)", "(1 2 (3) 4 10)"],
-      ["(1 2 3 (4))", "(1 2 3 (4) 10)"],
-    ])("should to %s into %s (append pair)", async (code, expected) => {
-      const input = await str2list(code);
-      const pairToAppend = new APair(new AExact(10n), nil);
-      input.append(pairToAppend);
-      expect(input).toEqual(await str2list(expected));
-    });
-    it.each([
-      ["(1 2 3)", "(1 2 3 . 10)"],
-      ["((1 2 3))", "((1 2 3) . 10)"],
-      ["(1 2 (3) 4)", "(1 2 (3) 4 . 10)"],
-      ["(1 2 3 (4))", "(1 2 3 (4) . 10)"],
-    ])("should to %s into %s (append value)", async (code, expectedCode) => {
-      const input = await str2list(code);
-      const expected = await str2list(expectedCode);
-      input.append(new AExact(10n));
-      expect(input).toEqual(expected);
-    });
-
-    it.each([["(1 2 3)", "((1 2 3))", "(1 2 (3) 4)", "(1 2 3 (4))", "(1 . 2)", "((1 . 2))"]])(
-      "should not append nil to %s",
-      async (code) => {
-        var input = await str2list(code);
-        input.append(nil);
-        expect(input).toEqual(await str2list(code));
-      },
-    );
-  });
-});

@@ -11,7 +11,6 @@ import { typecheck } from "../../utils/typecheck.js";
 
 type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
-type CharLike = string | ACharacter | { valueOf(): string };
 
 export class AString extends AValue {
   static [CLASS] = "string";
@@ -142,29 +141,8 @@ export class AString extends AValue {
     return new AString(this.__string__.toUpperCase());
   }
 
-  set(n: NumberLike, char: CharLike): void {
-    typecheck("SchemeString::set", n, "number");
-    typecheck("SchemeString::set", char, ["string", "character"]);
-    const idx = typeof n === "number" ? n : n.valueOf();
-    const charValue = char instanceof ACharacter ? char.__char__ : char.valueOf();
-    // Rebuild by code point, not UTF-16 unit, so replacing index k in a string
-    // containing astral chars doesn't split a surrogate pair (R7RS § 6.7).
-    const codepoints = [...this.__string__];
-    codepoints[idx] = charValue;
-    this.__string__ = codepoints.join("");
-  }
-
   clone(): AString {
     return new AString(this.valueOf());
-  }
-
-  fill(char: CharLike): void {
-    typecheck("SchemeString::fill", char, ["string", "character"]);
-    const charValue = char instanceof ACharacter ? char.valueOf() : char.valueOf();
-    // Fill must preserve the code-point length, not the UTF-16 unit length —
-    // a string of N astral chars stays N chars after string-fill! (R7RS § 6.7).
-    const len = [...this.__string__].length;
-    this.__string__ = charValue.repeat(len);
   }
 
   valueOf(): string {

@@ -88,10 +88,6 @@ export class ABytevector extends AValue {
     return this.__bytevector__[i];
   }
 
-  set(i: number, byte: number): void {
-    this.__bytevector__[i] = byte;
-  }
-
   copy(start = 0, end = this.__bytevector__.byteLength): ABytevector {
     return new ABytevector(this.__bytevector__.slice(start, end));
   }

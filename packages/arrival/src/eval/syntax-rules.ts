@@ -19,7 +19,7 @@ import { Environment } from "../Environment.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
-import { APair } from "../values/primitives/APair.js";
+import { APair, concatPair } from "../values/primitives/APair.js";
 import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { Syntax } from "./Syntax.js";
 import { is_nil, is_pair } from "./guards.js";
@@ -261,7 +261,10 @@ export function extract_patterns(
             const array_head = count > 0 ? code.slice(0, count) : code;
             const as_list = APair.fromArray(array_head, false);
             if (bindings["..."].symbols[name]) {
-              bindings["..."].symbols[name].append(new APair(as_list, nil));
+              bindings["..."].symbols[name] = concatPair(
+                bindings["..."].symbols[name],
+                new APair(as_list, nil),
+              );
             } else {
               bindings["..."].symbols[name] = new APair(as_list, nil);
             }
@@ -338,7 +341,9 @@ export function extract_patterns(
           if (ellipsis) {
             if (bindings["..."].symbols[name]) {
               let node = bindings["..."].symbols[name];
-              node = is_nil(node) ? new APair(nil, new APair(code, nil)) : node.append(new APair(code, nil));
+              node = is_nil(node)
+                ? new APair(nil, new APair(code, nil))
+                : concatPair(node, new APair(code, nil));
               bindings["..."].symbols[name] = node;
             } else {
               bindings["..."].symbols[name] = new APair(code, nil);
@@ -374,7 +379,7 @@ export function extract_patterns(
             pattern_names.push(name);
             if (bindings["..."].symbols[name]) {
               const node = bindings["..."].symbols[name];
-              bindings["..."].symbols[name] = node.append(new APair(code, nil));
+              bindings["..."].symbols[name] = concatPair(node, new APair(code, nil));
             } else {
               bindings["..."].symbols[name] = new APair(code, nil);
             }
@@ -688,7 +693,7 @@ export function transform_syntax(options: SchemeValue = {}) {
                 if (is_array) {
                   return (car as SchemeValue).concat(rest);
                 } else if (is_pair(car)) {
-                  return car.append(rest);
+                  return concatPair(car, rest);
                 } else {
                 }
               }
@@ -835,7 +840,7 @@ export function transform_syntax(options: SchemeValue = {}) {
                     } else {
                     }
                   } else {
-                    result = is_nil(result) ? car : result.append(car);
+                    result = is_nil(result) ? car : concatPair(result, car);
                   }
                 } else if (is_array) {
                   result.push(car);
@@ -846,7 +851,7 @@ export function transform_syntax(options: SchemeValue = {}) {
               bind = new_bind;
             }
             if (!is_nil(result) && !is_spread && !is_array) {
-              result = result.reverse();
+              result = APair.fromArray(result.to_array(false).reverse(), false);
             }
             // case of (list) ... (rest code)
             if (is_array) {
@@ -858,7 +863,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             }
             if (!is_nil(exprVal.cdr.cdr) && !ASymbol.is(exprVal.cdr.cdr.car, ellipsis_symbol)) {
               const rest = traverse(exprVal.cdr.cdr, { disabled });
-              return result.append(rest);
+              return concatPair(result, rest);
             }
             return result;
           } else {
@@ -905,7 +910,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             bind = new_bind;
           }
           if (!is_nil(result) && !is_array) {
-            result = result.reverse();
+            result = APair.fromArray(result.to_array(false).reverse(), false);
           }
           // case if (x ... y ...) second spread is not processed
           // and (??? . x) last symbol
@@ -919,7 +924,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             if (is_nil(result)) {
               result = node;
             } else {
-              result.append(node);
+              result = concatPair(result, node);
             }
           }
           return result;
