@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
 
-const MAP = "fantasy-land/map";
+const MAP = "arrival/tagless-final/map";
 const CONCAT = "arrival/tagless-final/concat";
 const EMPTY = "arrival/tagless-final/empty";
 const OF = "arrival/tagless-final/of";

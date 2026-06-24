@@ -108,11 +108,13 @@ export class AString extends AValue {
     return other instanceof AString && this.__string__ <= other.__string__;
   }
 
-  // Functor (Fantasy Land) — map over the characters. Iterates by code point
-  // (spread), so astral chars map as single graphemes. `f` receives and returns
-  // a string char; the result is the joined string. (Migrated from the
-  // fantasy-land.ts monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2.)
-  ["fantasy-land/map"](f: (char: string) => string): AString {
+  // Functor — map over the characters. Iterates by code point (spread), so astral
+  // chars map as single graphemes. `f` receives and returns a string char; the result
+  // is the joined string. SYNC (a pure char-map) and present WITHOUT reduce/filter, so
+  // the fl-interop overlay never routes a string through its async sequence dispatch —
+  // this is the borrowed-protocol rename only. (Migrated from the fantasy-land.ts
+  // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
+  ["arrival/tagless-final/map"](f: (char: string) => string): AString {
     return new AString([...this.__string__].map(f).join(""));
   }
 

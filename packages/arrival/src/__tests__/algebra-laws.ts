@@ -15,7 +15,7 @@ import { describe, it } from "vitest";
 const EQ = "arrival/tagless-final/equals";
 const LTE = "arrival/tagless-final/lte";
 const CONCAT = "arrival/tagless-final/concat";
-const MAP = "fantasy-land/map";
+const MAP = "arrival/tagless-final/map";
 
 type FL = Record<string, any>;
 const equals = (a: FL, b: FL): boolean => Boolean(a[EQ](b));
@@ -134,17 +134,19 @@ export interface FunctorArbs<T, A> {
 }
 
 export function functorLaws<T, A>(name: string, { arb, f, g, eq }: FunctorArbs<T, A>): void {
-  const map = (x: FL, fn: (a: A) => A): FL => x[MAP](fn);
+  // map may be async (APair/AVector await the user fn) or sync (AString char-map); await
+  // covers both. eqF stays sync — it compares the already-materialized structures.
+  const map = async (x: FL, fn: (a: A) => A): Promise<FL> => await x[MAP](fn);
   const eqF = eq ?? ((a: T, b: T) => equals(a as FL, b as FL));
   describe(`${name} — Functor`, () => {
-    it("identity: map(id) ≡ id", () => {
-      fc.assert(fc.property(arb, (a) => eqF(map(a as FL, (x) => x) as T, a)));
+    it("identity: map(id) ≡ id", async () => {
+      await fc.assert(fc.asyncProperty(arb, async (a) => eqF((await map(a as FL, (x) => x)) as T, a)));
     });
-    it("composition: map(f∘g) ≡ map(f)∘map(g)", () => {
-      fc.assert(
-        fc.property(arb, (a) => {
-          const lhs = map(a as FL, (x) => f(g(x)));
-          const rhs = map(map(a as FL, g), f);
+    it("composition: map(f∘g) ≡ map(f)∘map(g)", async () => {
+      await fc.assert(
+        fc.asyncProperty(arb, async (a) => {
+          const lhs = await map(a as FL, (x) => f(g(x)));
+          const rhs = await map(await map(a as FL, g), f);
           return eqF(lhs as T, rhs as T);
         }),
       );

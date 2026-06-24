@@ -16,6 +16,7 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { is_false, is_nil } from "../../eval/guards.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
@@ -117,25 +118,52 @@ export class AVector extends AValue {
     return new AVector([...this.__vector__, ...other.__vector__]);
   }
 
-  // Functor (Fantasy Land) — map over elements into a fresh vector. (The N-ary
-  // vector-map builtin is a separate, non-Functor observation — like
-  // C-Semigroup's append, it carries arity the bare Functor underfits.)
-  ["fantasy-land/map"](f: (x: SchemeValue) => SchemeValue): AVector {
-    return new AVector(this.__vector__.map(f));
+  // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A
+  // vector crosses OUT to a foreign Functor, so each mapped element is UNWRAPPED to
+  // its raw JS value (a SchemeString/SchemeExact/ASymbol/ANil → string/number/string/
+  // null) — the DR4 box-strip, pinned GOLDEN by coercion-soundness's "SchemeVector ·
+  // map STRIPS element boxes". This is DELIBERATELY the opposite of APair's box-PRESERVING
+  // map (a Pair stays an arrival list, never crossing out). `fn` is awaited per element
+  // (live LIPS lambdas return Promises). (The N-ary vector-map builtin is a separate,
+  // non-Functor observation — it carries arity the bare Functor underfits.)
+  async ["arrival/tagless-final/map"](
+    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
+  ): Promise<AVector> {
+    const out: SchemeValue[] = [];
+    for (const v of this.__vector__) out.push(unwrapForeign(await fn(v)) as SchemeValue);
+    return new AVector(out);
   }
 
-  // Filterable (Fantasy Land) — keep elements satisfying the predicate, into a
-  // fresh vector. Mirrors Pair's fantasy-land/filter so the polymorphic `filter`
-  // builtin works over a vector.
-  ["fantasy-land/filter"](predicate: (x: SchemeValue) => unknown): AVector {
-    return new AVector(this.__vector__.filter((x) => !!predicate(x)));
+  // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a
+  // fresh vector. PRESERVES every kept element's box (no unwrap — coercion-soundness's
+  // "SchemeVector · filter preserves every element's box"). A RegExp arg is adapted the
+  // way the eager builtin's matcher does (regex → `String(x).match`); the canonical
+  // keep-rule is the scheme `filter` rule — Scheme-truthy (`!is_false`) AND nil dropped
+  // (`!is_nil`), IDENTICAL to APair's TF filter. `pred` is awaited per element.
+  async ["arrival/tagless-final/filter"](
+    arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
+  ): Promise<AVector> {
+    const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
+    const out: SchemeValue[] = [];
+    for (const v of this.__vector__) {
+      const verdict = await pred(v);
+      if (!is_false(verdict) && !is_nil(verdict)) out.push(v);
+    }
+    return new AVector(out);
   }
 
-  // Foldable (Fantasy Land) — left fold over the elements. Mirrors Pair's
-  // fantasy-land/reduce so the polymorphic `reduce`/`fold` builtins work over a
-  // vector.
-  ["fantasy-land/reduce"]<Acc>(f: (acc: Acc, x: SchemeValue) => Acc, initial: Acc): Acc {
-    return this.__vector__.reduce(f, initial);
+  // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
+  // `fn(element, acc)` (accumulator LAST), left fold, head-to-tail. Threads the
+  // accumulator with `await` (live LIPS lambdas return Promises). Reproduces the eager
+  // scheme `reduce` over a vector exactly — `(reduce - 100 (vector 1 2 3 4 5))` = -97,
+  // NOT the FL acc-first 85. IDENTICAL convention to APair's TF reduce.
+  async ["arrival/tagless-final/reduce"]<Acc>(
+    fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
+    initial: Acc,
+  ): Promise<Acc> {
+    let acc = initial;
+    for (const v of this.__vector__) acc = await fn(v, acc);
+    return acc;
   }
 
   // A boxed vector is iterable from JS — spread / for-of / Array.from yield its
@@ -145,6 +173,23 @@ export class AVector extends AValue {
   [Symbol.iterator](): Iterator<SchemeValue> {
     return this.__vector__[Symbol.iterator]();
   }
+}
+
+// Box-strip for a vector crossing OUT to a foreign Functor (the DR4 strip). Unwraps a
+// LIPS internal box to its raw JS value so the foreign Functor stores JS-natives, not
+// arrival internals; a non-box passes through unchanged. Was fl-interop's
+// `unwrapLipsValue`; relocated here as AVector is the sole owner of this strip after the
+// fantasy-land/* sequence-op dissolution. Constructor-name dispatch (not `instanceof`)
+// keeps this off the value-class import graph, like `[TO_JS]` above.
+function unwrapForeign(v: unknown): unknown {
+  if (v == null || typeof v !== "object") return v;
+  const box = v as { constructor?: { name?: string }; valueOf(): unknown; __string__?: unknown; __name__?: unknown };
+  const name = box.constructor?.name;
+  if (name === "AExact" || name === "AInexact") return box.valueOf();
+  if (name === "AString") return box.__string__;
+  if (name === "ASymbol") return String(box.__name__);
+  if (name === "ANil") return null;
+  return v;
 }
 
 // NOTE: producer-minted (#(...) literal / make-vector / vector / vector-copy /

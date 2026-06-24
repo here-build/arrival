@@ -219,12 +219,12 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // `nil-clone.car` (undefined for Nil) and `nil-clone.cdr` (undefined).
   // `f(undefined)` is called, then recursion runs on `undefined` and hits
   // `!pair` returning nil — but a phantom undefined was passed through `f`.
-  it("mapPair(f, Pair(1, nil-clone)) — should produce (1) only, fn called once (fantasy-land-lips.ts:89)", () => {
+  it("mapPair(f, Pair(1, nil-clone)) — should produce (1) only, fn called once (fantasy-land-lips.ts:89)", async () => {
     // mapPair is not exported; invoke via the FL protocol installed on Pair.prototype.
     const calls: unknown[] = [];
     const p = new APair(1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = (p as any)["fantasy-land/map"]((x: unknown) => {
+    const result = await (p as any)["arrival/tagless-final/map"]((x: unknown) => {
       calls.push(x);
       return x;
     });
@@ -236,10 +236,10 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // fantasy-land-lips.ts:94 — same shape as 89 but for `filterPair`. The
   // base case misses on a clone, leading to predicate being called with
   // undefined and a phantom Pair node being added to the result.
-  it("filterPair(_, Pair(1, nil-clone)) — predicate called once (fantasy-land-lips.ts:94)", () => {    let predCalls = 0;
+  it("filterPair(_, Pair(1, nil-clone)) — predicate called once (fantasy-land-lips.ts:94)", async () => {    let predCalls = 0;
     const p = new APair(1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["fantasy-land/filter"](() => {
+    await (p as any)["arrival/tagless-final/filter"](() => {
       predCalls++;
       return true;
     });
@@ -252,10 +252,11 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // undefined, hitting the `!pair` branch — so the bug is "one phantom
   // f-invocation with `undefined`." Expected: f called once with the
   // genuine element only.
-  it("reducePair(f, init, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:102)", () => {    const collected: unknown[] = [];
+  it("reducePair(f, init, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:102)", async () => {    const collected: unknown[] = [];
     const p = new APair(1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["fantasy-land/reduce"]((acc: unknown[], v: unknown) => {
+    // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
+    await (p as any)["arrival/tagless-final/reduce"]((v: unknown, acc: unknown[]) => {
       collected.push(v);
       return [...(acc as unknown[]), v];
     }, [] as unknown[]);

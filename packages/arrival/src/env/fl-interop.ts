@@ -1,31 +1,33 @@
 /**
- * FL / array-interop overlay — the genuine interop members of the inference-plane
- * base env (`inferenceEnv`), carved out of the hand-built overlay in
- * `inference-env.ts`. These are the members with NO equivalent in the assembled
- * base: the SchemeJSArray-aware `car`/`cdr` and the Fantasy-Land-dispatching,
- * nil-tolerant `filter`/`map`/`reduce`.
+ * Array-interop overlay — the genuine interop members of the inference-plane base
+ * env (`inferenceEnv`), carved out of the hand-built overlay in `inference-env.ts`.
+ * These are the members with NO equivalent in the assembled base: the SchemeJSArray-
+ * aware `car`/`cdr` and the term-dispatching, nil-tolerant `filter`/`map`/`reduce`.
  *
- * Why a separate capability and not an inline spread: this overlay is a real pack
- * that bridges two impedance mismatches the base env does NOT —
- *   1. Lazy JS-array wrappers (`SchemeJSArray`) that must unwrap before LIPS car/cdr.
- *   2. External Fantasy-Land structures whose FL methods are SYNC while LIPS lambdas
- *      are ASYNC (the asyncFL* helpers bridge collect→apply→reconstruct).
+ * Why a separate capability and not an inline spread: this overlay bridges interop
+ * mismatches the base env does NOT — lazy JS-array wrappers (`SchemeJSArray`) that
+ * must unwrap before LIPS car/cdr, and the nil/LazySeq tolerance the sequence ops
+ * need at the inference boundary.
+ *
+ * SEQUENCE OPS ARE ON THE TERM. `filter`/`map`/`reduce` no longer DISPATCH a borrowed
+ * Fantasy-Land algebra through a collect→apply→reconstruct bridge: each arrival sequence
+ * primitive (APair, AVector) carries its OWN async-aware `arrival/tagless-final/{map,
+ * filter,reduce}` method (provenance-aware, awaiting the user fn — live LIPS lambdas
+ * return Promises), and this overlay is a thin program that delegates to it, blind to
+ * which term implements it (Carette, Kiselyov & Shan, "Finally Tagless, Partially
+ * Evaluated", 2009). A Pair's map PRESERVES element boxes (it stays an arrival list); a
+ * SchemeVector's map STRIPS them (it crosses OUT to a foreign Functor — the DR4 box-strip).
+ * The box discipline lives on each term, not here.
  *
  * LAZY BUILTIN CAPTURE (load-order discipline): the `car`/`cdr`/`filter`/`map`/
- * `reduce` it overrides delegate to the assembled base versions (`builtinCar` …).
- * Those are read from `global_env` LAZILY — at first symbol invocation, never
- * eagerly at module top-level. Eager `global_env.get("car")` at module load races
- * the async assembly of the value-domain clusters onto global_env: a load-order
- * miss captures `undefined` (the exact bug a prior `SAFE_BUILTINS` eager snapshot
- * hit). At call time global_env is fully assembled, so the read is safe — and this
- * pack is assembled onto inferenceEnv only AFTER global_env's native assembly + the
- * base packs, so the builtins are live before any symbol here can fire.
- *
- * Lineage: the Fantasy Land algebra (fantasyland/fantasy-land) used as a
- * tagless-final encoding — the polymorphic map/filter/reduce dispatch to a value's
- * `fantasy-land/*` instance, so the builtins are programs over the algebra, blind
- * to the instance (Carette, Kiselyov & Shan, "Finally Tagless, Partially
- * Evaluated", 2009).
+ * `reduce` it overrides delegate (in their fallback arm) to the assembled base versions
+ * (`builtinCar` …). Those are read from `global_env` LAZILY — at first symbol invocation,
+ * never eagerly at module top-level. Eager `global_env.get("car")` at module load races
+ * the async assembly of the value-domain clusters onto global_env: a load-order miss
+ * captures `undefined` (the exact bug a prior `SAFE_BUILTINS` eager snapshot hit). At call
+ * time global_env is fully assembled, so the read is safe — and this pack is assembled onto
+ * inferenceEnv only AFTER global_env's native assembly + the base packs, so the builtins are
+ * live before any symbol here can fire.
  */
 
 import { EnvCapability } from "./capability.js";
@@ -41,24 +43,21 @@ import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
-import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
-import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
 
-// ── FL protocol surface ──────────────────────────────────────────────────────
-// Fantasy-Land structures are opaque carriers — we only ever touch their FL
-// methods, never their internals. Model them as that minimal interface, not `any`.
-interface FantasyLand {
-  "fantasy-land/reduce"<A>(f: (acc: A, val: unknown) => A, init: A): A;
-  "fantasy-land/map"(f: (val: unknown) => unknown): unknown;
-  "fantasy-land/filter"(p: (val: unknown) => unknown): unknown;
-}
-
-// Arrival's canonical reduce protocol method — present on every arrival list term
-// (Pair, via Pair.ts). It carries the scheme/SRFI fold convention `fn(element, acc)`
-// (accumulator LAST), the opposite arg order of the FL Foldable it delegates to. The
-// overlay routes any value bearing this method (and any FL Foldable) through the
-// element-first async fold below, so a Pair reduces in scheme convention.
-interface ArrivalFoldable {
+// ── Arrival sequence-op protocol surface ─────────────────────────────────────
+// The list/seq primitives (APair, AVector) carry their OWN async-aware sequence ops
+// ON the value, dispatched by the term — the dissolution of the borrowed fantasy-land/*
+// algebra into arrival/tagless-final/* (per-primitive, async-aware, provenance-aware).
+// The overlay below is a program over this protocol, blind to which term implements it
+// (Carette, Kiselyov & Shan, "Finally Tagless, Partially Evaluated", 2009). Each method
+// is async: it awaits the user fn (live LIPS lambdas always return Promises). `reduce`
+// carries the scheme/SRFI fold convention `fn(element, acc)` (accumulator LAST). Honest
+// named type — we only ever touch these methods, never the term's internals, so model
+// them, not `any`. A term may carry any subset (AString has only `map`, and it is sync —
+// it is never routed here because the overlay's map branch checks for APair/AVector first).
+interface ArrivalSequenceOps {
+  "arrival/tagless-final/map"(fn: (val: unknown) => unknown): unknown;
+  "arrival/tagless-final/filter"(arg: ((val: unknown) => unknown) | RegExp): unknown;
   "arrival/tagless-final/reduce"<A>(fn: (element: unknown, acc: A) => A, init: A): A;
 }
 
@@ -144,138 +143,6 @@ function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): u
   return verdict;
 }
 
-// ── FL async-dispatch helpers (module-private) ───────────────────────────────
-
-/**
- * Collect all leaf values from an FL Foldable using fantasy-land/reduce.
- * Returns values in traversal order (same order as map visits them).
- *
- * Charges the per-run heap meter per collected element — the SAME mechanism
- * `to_array` uses (stdlib.ts): the compute-by-fl refactor re-routed filter/map/
- * reduce over Pairs through HERE instead of `to_array`, so the allocation bound
- * was orphaned off this path; every FL collection op funnels through this single
- * chokepoint, so the O(K²)-churn runaway (a list re-materialized once per loop
- * iteration) is caught here exactly as it was in `to_array`. The run env comes
- * from the evaluator's run-scoped `currentRunEnv()`; meter looked up ONCE
- * (O(depth)), then a bare int compare per element. Undefined ⇒ no budget ⇒ no
- * overhead beyond the lookup.
- */
-function flCollectValues(structure: FantasyLand): unknown[] {
-  const meter = findHeapMeter(currentRunEnv() ?? null);
-  const values: unknown[] = [];
-  structure["fantasy-land/reduce"]((acc: null, val: unknown) => {
-    values.push(val);
-    if (meter !== undefined && ++meter.used > meter.max) {
-      throw new SchemeError(heapBudgetMessage(meter.max), []);
-    }
-    return acc;
-  }, null);
-  return values;
-}
-
-/**
- * Unwrap LIPS internal types to JS equivalents for FL interop.
- * When LIPS lambdas produce SchemeExact/SchemeString/etc, FL structures
- * should store JS-native values, not LIPS internals.
- */
-function unwrapLipsValue(v: unknown): unknown {
-  if (v == null || typeof v !== "object") return v;
-  const box = v as { constructor?: { name?: string }; valueOf(): unknown; __string__?: unknown; __name__?: unknown };
-  const name = box.constructor?.name;
-  if (name === "AExact" || name === "AInexact") return box.valueOf();
-  if (name === "AString") return box.__string__;
-  if (name === "ASymbol") return String(box.__name__);
-  if (name === "ANil") return null;
-  return v;
-}
-
-/**
- * FL dispatch helpers for async LIPS lambdas.
- *
- * LIPS lambdas always return Promises. FL methods are synchronous.
- * Strategy: collect values via FL reduce, apply async fn, cache results
- * by value identity, then reconstruct via FL method using cached lookups.
- * Value-based caching is order-independent (filter visits bottom-up,
- * reduce visits top-down — both get correct results from cache).
- */
-async function asyncFLMap(fn: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
-  const values = flCollectValues(structure);
-  const cache = new Map<unknown, unknown>();
-  await Promise.all(
-    values.map(async (v) => {
-      if (!cache.has(v)) {
-        cache.set(v, unwrapLipsValue(await fn(v)));
-      }
-    }),
-  );
-  return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
-}
-
-// Box-PRESERVING map twin of asyncFLMap — for OUR OWN containers (a LIPS Pair), which
-// are NOT crossing out to a foreign Functor, so their element boxes (SchemeString /
-// SchemeExact) and provenance sets must survive. The ONLY difference from asyncFLMap is
-// that the cache stores the RAW `await fn(v)` result instead of `unwrapLipsValue(...)`:
-// asyncFLMap strips boxes (external FL structures want raw JS values — pinned GOLDEN by
-// coercion-soundness's SchemeVector case), but a Pair mapped here reproduces the eager
-// scheme `map` builtin's box-preserving `Pair.fromArray(results)` semantics. Same
-// value-identity cache as asyncFLMap (FL visit-order independence — all `cache.has`
-// checks run before any `await` populates it, so no fn-call dedup is observable), same
-// rebuild via the structure's own `fantasy-land/map` (mapPair builds a fresh spine,
-// dropping the container box exactly as the eager builtin does — stratum-2 parity).
-async function asyncArrivalMap(fn: (v: unknown) => unknown, structure: FantasyLand): Promise<unknown> {
-  const values = flCollectValues(structure);
-  const cache = new Map<unknown, unknown>();
-  await Promise.all(
-    values.map(async (v) => {
-      if (!cache.has(v)) {
-        cache.set(v, await fn(v)); // RAW result — NO unwrapLipsValue (preserve element box + provenance)
-      }
-    }),
-  );
-  return structure["fantasy-land/map"]((v: unknown) => cache.get(v));
-}
-
-async function asyncFLFilter(arg: ((v: unknown) => unknown) | RegExp, structure: FantasyLand): Promise<unknown> {
-  // Adapt a regex arg the same way the eager builtin's `matcher` does (regex →
-  // `String(x).match(arg)`, a fn passes through). `String(x)` sees the same raw
-  // boxed element `flCollectValues` collects as `listToArray` fed the builtin.
-  const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
-  const values = flCollectValues(structure);
-  const cache = new Map<unknown, unknown>();
-  await Promise.all(
-    values.map(async (v) => {
-      if (!cache.has(v)) {
-        cache.set(v, await pred(v));
-      }
-    }),
-  );
-  // Canonical keep-rule — IDENTICAL to the eager scheme `filter` builtin: Scheme-truthy
-  // (`!is_false`) AND nil dropped (`!is_nil`, arrival's nil-as-false rule for a #f/void/nil
-  // predicate result). FL `filterPair` is JS-truthy on the predicate, so it gets a Boolean.
-  return structure["fantasy-land/filter"]((v: unknown) => !is_false(cache.get(v)) && !is_nil(cache.get(v)));
-}
-
-// Arrival-convention async fold — the SCHEME/SRFI fold `fn(element, acc)` (element
-// FIRST), left fold, head-to-tail.
-// This is the async-aware twin of the term's `arrival/tagless-final/reduce` method:
-// LIPS lambdas return Promises while the FL Foldable is sync, so we collect the
-// elements (same traversal order fantasy-land/reduce visits them) then thread the
-// accumulator sequentially with `await`. Reproduces the eager scheme `reduce` builtin
-// EXACTLY — `(reduce - 100 '(1 2 3 4 5))` = 1-(...)=-97 — so a Pair list folds in
-// scheme convention through the overlay, not the FL acc-first convention.
-async function asyncArrivalReduce(
-  fn: (acc: unknown, val: unknown) => unknown,
-  init: unknown,
-  structure: FantasyLand,
-): Promise<unknown> {
-  const values = flCollectValues(structure);
-  let acc = init;
-  for (const element of values) {
-    // element FIRST (scheme convention), acc threaded.
-    acc = await fn(element, acc);
-  }
-  return acc;
-}
 
 // ── LazySeq egress ────────────────────────────────────────────────────────────
 // reduce is a full-egress observation (no `Observation` of its own in the first
@@ -360,12 +227,11 @@ export default new EnvCapability("scheme/fl-interop", {
           : builtinCdr!(list);
       },
     ),
-    // FL-dispatch: any FL entity — INCLUDING a LIPS Pair (filterPair preserves spine
-    // order; the coercion-soundness suite pins per-element-box order) — computes by its
-    // own fantasy-land/filter, so this no longer reaches the env-resolved scheme builtin.
-    // (map/reduce below still route Pairs to the builtin — only filter is flipped here.)
-    // LIPS lambdas are async; FL methods are sync. asyncFL* bridges this gap.
-    filter: symbol.native`filter: keep elements matching a pred/regex — FL-dispatch, nil-tolerant`(
+    // Term-delegation: an arrival sequence (a LIPS Pair OR a SchemeVector) computes by its
+    // OWN async-aware arrival/tagless-final/filter — spine/array-walk, the canonical keep-rule
+    // (`!is_false && !is_nil`), regex-arg adaptation — so this no longer reaches the
+    // env-resolved scheme builtin. The convention lives ON the term, not in a helper.
+    filter: symbol.native`filter: keep elements matching a pred/regex — term-dispatch, nil-tolerant`(
       { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
       function filter(this: unknown, arg: any, list: unknown) {
         captureBuiltins();
@@ -375,32 +241,29 @@ export default new EnvCapability("scheme/fl-interop", {
         // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
         // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
         if (list == null || is_false(list)) return nil;
-        // Empty/nil list → nil, like the eager builtin. asyncFLFilter on a Nil (which
-        // lacks fantasy-land/filter) would misbehave, so guard it before the FL route.
+        // Empty/nil list → nil, like the eager builtin. A Nil carries no
+        // arrival/tagless-final/filter, so guard it before the term route.
         if (is_nil(list)) return nil;
-        // LazySeq fast-path — BEFORE the FL/asyncFL collect: extend the plan, run
-        // nothing. The Scheme-truthiness adaptation (await + is_false) lives here, at
-        // the interop boundary, so the carrier stays a generic async-aware pipe. A regex
-        // arg never reaches a LazySeq in practice; cast to the fn form for the await.
+        // LazySeq fast-path — BEFORE materializing: extend the plan, run nothing. The
+        // Scheme-truthiness adaptation (await + is_false) lives here, at the interop
+        // boundary, so the carrier stays a generic async-aware pipe. A regex arg never
+        // reaches a LazySeq in practice; cast to the fn form for the await.
         if (is_lazy_seq(list))
           return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
-        // A LIPS Pair filters by its OWN async-aware arrival/tagless-final/filter (spine-walk,
-        // canonical keep-rule `!is_false && !is_nil`, regex-arg adaptation, box-preserving) —
-        // the convention lives on the term, not in a helper. Byte-identical to the prior
-        // asyncFLFilter-over-a-Pair VALUE semantics.
-        if (list instanceof APair) {
-          return list["arrival/tagless-final/filter"](arg as ((x: unknown) => unknown) | RegExp);
+        // An arrival sequence (Pair: box-preserving spine-walk; Vector: box-preserving array
+        // filter) filters by its OWN async-aware term method — byte-identical to the prior
+        // overlay's filter-over-the-term VALUE semantics, now expressed on the term itself.
+        if (list instanceof APair || list instanceof AVector) {
+          return (list as ArrivalSequenceOps)["arrival/tagless-final/filter"](
+            arg as ((x: unknown) => unknown) | RegExp,
+          );
         }
-        // A non-Pair FL structure (a SchemeVector) still computes by its fantasy-land/filter
-        // through asyncFLFilter (the foreign keep-rule + regex adapt).
-        if (list && typeof list === "object" && (list as Partial<FantasyLand>)["fantasy-land/filter"]) {
-          return asyncFLFilter(arg, list as FantasyLand);
-        }
-        // Final fallback — any input that implements neither LazySeq nor fantasy-land/filter.
+        // Final fallback — any input that is neither a LazySeq nor an arrival sequence
+        // (a SchemeJSArray, a raw input): builtinFilter typechecks pair|nil and folds/throws.
         return builtinFilter!.call(this, arg, list);
       },
     ),
-    map: symbol.native`map: apply fn over one list (FL-dispatch) or zip over several — nil-tolerant`(
+    map: symbol.native`map: apply fn over one list (term-dispatch) or zip over several — nil-tolerant`(
       { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
       function map(this: unknown, fn: any, ...lists: unknown[]) {
         captureBuiltins();
@@ -409,32 +272,23 @@ export default new EnvCapability("scheme/fl-interop", {
         // provenance of its own, so its op-prov is empty; the source's grouping
         // provenance and the elements' provenance ride the carrier).
         if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
-        // FL-dispatch — NOW INCLUDING a single-list LIPS Pair, which computes by its OWN
-        // fantasy-land/map (mapPair) here instead of reaching the env-resolved scheme builtin
-        // (mirrors filter/reduce). asyncArrivalMap is the box-PRESERVING twin (no unwrapLipsValue),
-        // so per-element boxes + provenance survive — byte-identical to the eager builtin's
-        // `Pair.fromArray(results)` (coercion-soundness "Pair · map preserves every element's
-        // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
-        // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
-        if (lists.length === 1 && lists[0] instanceof APair) {
-          return lists[0]["arrival/tagless-final/map"](fn);
+        // Term-delegation — a SINGLE-LIST arrival sequence computes by its OWN async-aware
+        // arrival/tagless-final/map instead of reaching the env-resolved scheme builtin. The
+        // box discipline lives ON the term: a Pair PRESERVES every element's box (it stays an
+        // arrival list — coercion-soundness "Pair · map preserves every element's box"; lineage
+        // A13/A18b), a SchemeVector STRIPS element boxes (it crosses OUT to a foreign Functor —
+        // the DR4 box-strip, GOLDEN-pinned by "SchemeVector · map STRIPS element boxes"). A
+        // multi-list map (lists.length > 1) is a ZIP, not a Functor op, so it stays on
+        // builtinMap below.
+        if (lists.length === 1 && (lists[0] instanceof APair || lists[0] instanceof AVector)) {
+          return (lists[0] as ArrivalSequenceOps)["arrival/tagless-final/map"](fn);
         }
-        // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
-        // crossing out, so asyncFLMap's unwrapLipsValue strips boxes to raw JS values (the DR4
-        // box-strip, pinned GOLDEN for SchemeVector). UNCHANGED.
-        if (
-          lists.length === 1 &&
-          !(lists[0] instanceof APair) &&
-          (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]
-        ) {
-          return asyncFLMap(fn, lists[0] as FantasyLand);
-        }
-        // Fallback — multi-list (zip), or a non-FL input (a SchemeJSArray: builtinMap
+        // Fallback — multi-list (zip), or a non-sequence input (a SchemeJSArray: builtinMap
         // typechecks pair|nil and THROWS, the coercion-soundness pin).
         return builtinMap!.call(this, fn, ...lists);
       },
     ),
-    reduce: symbol.native`reduce: left fold in scheme convention fn(element, acc) — FL-dispatch`(
+    reduce: symbol.native`reduce: left fold in scheme convention fn(element, acc) — term-dispatch`(
       { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.unknown()] },
       function reduce(
         this: unknown,
@@ -444,29 +298,20 @@ export default new EnvCapability("scheme/fl-interop", {
       ) {
         captureBuiltins();
         if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
-        // FL-Foldable dispatch — NOW INCLUDING LIPS Pairs — folds in ARRIVAL/SCHEME
-        // convention (`fn(element, acc)`, element first), the opposite of the FL Foldable's
-        // own acc-first order. A Pair carries `arrival/tagless-final/reduce` (Pair.ts) which
-        // is exactly `fantasy-land/reduce` with the args swapped; rather than re-fold by hand
-        // we run that same element-first fold async-aware here (asyncArrivalReduce), so the
-        // overlay reduce over a Pair is byte-identical to the eager scheme `reduce` builtin —
-        // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85. Routing on
-        // `fantasy-land/reduce` keeps the branch total over every arrival Foldable (Pair +
-        // SchemeVector); the `arrival/tagless-final/reduce` carrier names the convention on
-        // the term. A SchemeJSArray has neither method, so it still falls through to
-        // builtinReduce, whose pair|nil typecheck throws (the coercion-soundness DR4 pin).
-        if (collection && typeof collection === "object" && (collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"]) {
-          // The term names the scheme/SRFI convention `fn(element, acc)` on itself (Pair) —
-          // fold by its own async-aware method, element-first, head-to-tail.
-          return (collection as ArrivalFoldable)["arrival/tagless-final/reduce"](fn as (element: unknown, acc: unknown) => unknown, init);
+        // Term-delegation — an arrival sequence (a LIPS Pair OR a SchemeVector) folds by its
+        // OWN async-aware arrival/tagless-final/reduce, in ARRIVAL/SCHEME convention
+        // (`fn(element, acc)`, element FIRST), head-to-tail — byte-identical to the eager
+        // scheme `reduce` builtin (`(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first
+        // 85). The convention lives ON the term. A SchemeJSArray carries no such method, so it
+        // falls through to builtinReduce, whose pair|nil typecheck throws (coercion-soundness DR4).
+        if (collection instanceof APair || collection instanceof AVector) {
+          return (collection as ArrivalSequenceOps)["arrival/tagless-final/reduce"](
+            fn as (element: unknown, acc: unknown) => unknown,
+            init,
+          );
         }
-        if (collection && typeof collection === "object" && (collection as Partial<FantasyLand>)["fantasy-land/reduce"]) {
-          // A Foldable carrying only the FL acc-first reduce (a SchemeVector) folds in
-          // arrival/scheme convention via the async element-first adapter over its leaves.
-          return asyncArrivalReduce(fn, init, collection as FantasyLand);
-        }
-        // Fallback — neither LazySeq nor an FL/arrival Foldable (a SchemeJSArray, a raw
-        // input). builtinReduce typechecks pair|nil and folds (or throws for a non-list).
+        // Fallback — neither LazySeq nor an arrival sequence (a SchemeJSArray, a raw input).
+        // builtinReduce typechecks pair|nil and folds (or throws for a non-list).
         return builtinReduce!.call(this, fn, init, collection);
       },
     ),

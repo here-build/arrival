@@ -208,13 +208,14 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
       }
       return out;
     }
-    // Check for Fantasy Land entities BEFORE converting to plain objects
+    // Check for arrival sequence-op terms BEFORE converting to plain objects — a value
+    // carrying its own map/filter/reduce is a structure to preserve, not deep-unwrap.
     if (
-      value["fantasy-land/map"] !== undefined ||
-      value["fantasy-land/filter"] !== undefined ||
-      value["fantasy-land/reduce"] !== undefined
+      value["arrival/tagless-final/map"] !== undefined ||
+      value["arrival/tagless-final/filter"] !== undefined ||
+      value["arrival/tagless-final/reduce"] !== undefined
     ) {
-      // Preserve Fantasy Land entities as-is
+      // Preserve sequence-op terms as-is
       return value;
     }
 

@@ -188,15 +188,15 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     expect(provOf(await force(ops.filter(keepAll, mkPair())))).toEqual([]);
   });
 
-  it("SchemeVector · map STRIPS element boxes [CONTESTED: asyncFLMap unwrapLipsValue — DR4]", async () => {
-    // The overlay `map` routes a SchemeVector (it has fantasy-land/map) through
-    // `asyncFLMap`, whose `unwrapLipsValue` strips a SchemeString → raw JS string,
-    // DROPPING its provenance. This is the DR4 box-strip; it is NOT eager parity
-    // with the proper `vector-map` (stdlib, which preserves element boxes), so it
-    // is a candidate G6 fix — but touching it risks the FL-interop contract with
-    // foreign FL structures (they may require raw values). Pinned as the current
-    // reality + escalated. (`filter` over a vector uses fantasy-land/filter, no
-    // unwrap, so it is sound — see stratum 1.)
+  it("SchemeVector · map STRIPS element boxes [CONTESTED: AVector TF-map unwrapForeign — DR4]", async () => {
+    // The overlay `map` delegates a SchemeVector to its OWN arrival/tagless-final/map,
+    // whose `unwrapForeign` (the relocated box-strip) turns a SchemeString → raw JS
+    // string, DROPPING its provenance — a vector crosses OUT to a foreign Functor. This
+    // is the DR4 box-strip; it is NOT eager parity with the proper `vector-map` (stdlib,
+    // which preserves element boxes), so it is a candidate G6 fix — but flipping it would
+    // change the documented cross-out contract. Pinned as the current reality + escalated.
+    // (`filter` over a vector — the term's arrival/tagless-final/filter — does NOT unwrap,
+    // so it is sound — see stratum 1.)
     const r = await force(ops.map(idSync, mkVec()));
     expect(elemProvs(r)).toEqual([[], []]); // boxes dropped — the bug, captured
   });

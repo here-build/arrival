@@ -10,7 +10,7 @@ import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "arrival/tagless-final/equals";
 const CONCAT = "arrival/tagless-final/concat";
-const MAP = "fantasy-land/map";
+const MAP = "arrival/tagless-final/map";
 
 // Small element domain + edge cases: empty, singletons, collisions.
 const arb = fc
@@ -58,9 +58,9 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
     expect(c.__vector__).toEqual([1, 2, 3]);
   });
 
-  it("map produces a fresh vector, leaves the source untouched", () => {
+  it("map produces a fresh vector, leaves the source untouched", async () => {
     const a = new AVector([1, 2, 3]);
-    const mapped = (a as never)[MAP]((x: number) => x * 10) as AVector;
+    const mapped = (await (a as never)[MAP]((x: number) => x * 10)) as AVector;
     expect(mapped.__vector__).toEqual([10, 20, 30]);
     expect(a.__vector__).toEqual([1, 2, 3]);
   });

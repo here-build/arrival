@@ -689,30 +689,15 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   // ----------------------------------------------------------------------
-  // Fantasy Land structure-algebras (migrated from the fantasy-land.ts
-  // monkey-patch into the class body — plan-2026-06-10-algebras-in-entities.md
-  // wave 2). A Pair is the free monoid + Functor + Foldable + Traversable +
-  // Chain over a list. The recursors below TERMINATE on `instanceof Nil`, not
-  // `=== nil`: after the AValue refactor `nil.withProvenance(p)` mints fresh
-  // Nil clones (types.ts), so reference-equality would recurse past a
-  // provenance-bearing list end and crash on `<Nil-clone>.cdr`. Mirrors
-  // value-guards.ts:is_nil.
+  // Structure-algebras on the term (arrival/tagless-final/*). A Pair is the free
+  // monoid + Functor + Foldable + Traversable + Chain over a list. The recursors
+  // TERMINATE on `instanceof Nil`, not `=== nil`: after the AValue refactor
+  // `nil.withProvenance(p)` mints fresh Nil clones (types.ts), so reference-equality
+  // would recurse past a provenance-bearing list end and crash on `<Nil-clone>.cdr`.
+  // Mirrors value-guards.ts:is_nil. (The map/filter/reduce sequence-ops were dissolved
+  // out of the borrowed fantasy-land/* protocol into the async-aware methods below —
+  // plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
   // ----------------------------------------------------------------------
-
-  // Functor — map each element, preserving the list spine.
-  ["fantasy-land/map"](f: (x: unknown) => unknown): APair | ANil {
-    return mapPair(f, this);
-  }
-
-  // Filterable — keep elements satisfying the predicate.
-  ["fantasy-land/filter"](predicate: (x: unknown) => unknown): APair | ANil {
-    return filterPair(predicate, this);
-  }
-
-  // Foldable — left fold over the elements.
-  ["fantasy-land/reduce"]<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc): Acc {
-    return reducePair(f, initial, this);
-  }
 
   // Arrival's async-aware Functor — `map` that PRESERVES every element's box and
   // provenance. Walks the cdr-spine DIRECTLY (not via fantasy-land/reduce collect),
@@ -826,69 +811,17 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 }
 
-// Structure-algebra recursors for the Fantasy Land methods above. They terminate
-// on `instanceof Nil`, not `=== nil` — see the class-body comment for why.
+// Structure-algebra recursors for the term methods above. They terminate on
+// `instanceof Nil`, not `=== nil` — see the class-body comment for why.
 
 // The empty-list sentinel: `new Pair()` (no args) yields `Pair(undefined, nil)`,
 // the shape arrival uses for "empty list" wherever a bare Pair is constructed.
-// EVERY Pair recursor must honor it (the ramda pack's own recursors do too), else
-// delegating through `fantasy-land/*` would fold a phantom `undefined` element.
-// `instanceof Nil` (not `=== nil`) catches provenance clones in the cdr.
+// EVERY Pair recursor must honor it, else folding through it would yield a phantom
+// `undefined` element. `instanceof Nil` (not `=== nil`) catches provenance clones in
+// the cdr. (Shared by the surviving traverse/chain recursors AND the async-aware
+// map/filter/reduce methods on the class body above.)
 function isEmptyPairSentinel(p: APair): boolean {
   return p.car === undefined && p.cdr instanceof ANil;
-}
-
-function mapPair(f: (x: unknown) => unknown, pair: unknown): APair | ANil {
-  // Iterative spine-walk (was self-recursive on the cdr → O(depth) host stack →
-  // overflow on a long list via fantasy-land/map). Builds into a JS array then
-  // re-conses shallow via Pair.fromArray(arr, false) — the exact form the eager
-  // builtins use, freshening the spine and terminating in the canonical `nil`.
-  // Behavior-preserving: same per-element f order, same empty-sentinel/Nil-clone
-  // termination, and an improper tail still folds ONE phantom `f(undefined)` (the
-  // non-Pair tail is read as a node with `.car === undefined`, exactly as before).
-  const out: unknown[] = [];
-  let node: unknown = pair;
-  while (node && !(node instanceof ANil)) {
-    const p = node as APair;
-    if (isEmptyPairSentinel(p)) break;
-    out.push(f(p.car));
-    node = p.cdr;
-  }
-  return APair.fromArray(out, false) as APair | ANil;
-}
-
-function filterPair(predicate: (x: unknown) => unknown, pair: unknown): APair | ANil {
-  // Iterative spine-walk (was self-recursive → O(depth) host stack). JS-truthy on
-  // the predicate (unchanged); kept elements are re-consed shallow in order via
-  // Pair.fromArray(arr, false). Behavior-preserving: same empty-sentinel/Nil-clone
-  // termination, all-false → nil, and an improper tail still tests `predicate(undefined)`
-  // for the phantom node exactly as the recursive base case did.
-  const out: unknown[] = [];
-  let node: unknown = pair;
-  while (node && !(node instanceof ANil)) {
-    const p = node as APair;
-    if (isEmptyPairSentinel(p)) break;
-    if (predicate(p.car)) out.push(p.car);
-    node = p.cdr;
-  }
-  return APair.fromArray(out, false) as APair | ANil;
-}
-
-function reducePair<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc, pair: unknown): Acc {
-  // Iterative left fold (was self-recursive on the cdr → O(depth) host stack →
-  // the ~6000-frame overflow on `(filter … (range 50000))` that isContainment()
-  // misread as a budget hit). Behavior-preserving: same left-to-right fold, same
-  // empty-sentinel/Nil-clone termination, and an improper tail still folds ONE
-  // phantom `f(acc, undefined)` before the non-Pair cdr ends the walk.
-  let acc = initial;
-  let node: unknown = pair;
-  while (node && !(node instanceof ANil)) {
-    const p = node as APair;
-    if (isEmptyPairSentinel(p)) break;
-    acc = f(acc, p.car);
-    node = p.cdr;
-  }
-  return acc;
 }
 
 function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {

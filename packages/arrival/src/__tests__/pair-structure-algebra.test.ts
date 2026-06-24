@@ -16,9 +16,9 @@ import { nil, ANil } from "../values/primitives/ANil.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { functorLaws } from "./algebra-laws.js";
 
-const MAP = "fantasy-land/map";
-const FILTER = "fantasy-land/filter";
-const REDUCE = "fantasy-land/reduce";
+const MAP = "arrival/tagless-final/map";
+const FILTER = "arrival/tagless-final/filter";
+const REDUCE = "arrival/tagless-final/reduce";
 const TRAVERSE = "arrival/tagless-final/traverse";
 const CHAIN = "arrival/tagless-final/chain";
 const CONCAT = "arrival/tagless-final/concat";
@@ -102,19 +102,22 @@ describe("Pair — Monoid (nil identity)", () => {
 // Foldable — behavioral. reduce sums a list; empty folds to the seed.
 // ----------------------------------------------------------------------
 describe("Pair — Foldable (reduce)", () => {
-  it("reduce sums elements left-to-right", () => {
+  it("reduce sums elements left-to-right", async () => {
     const list = APair.fromArray([1, 2, 3, 4], false) as APair;
-    const sum = (list as FL)[REDUCE]((acc: number, x: number) => acc + x, 0);
+    // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
+    const sum = await (list as FL)[REDUCE]((x: number, acc: number) => acc + x, 0);
     expect(sum).toBe(10);
   });
-  it("reduce collects in order", () => {
+  it("reduce collects in order", async () => {
     const list = APair.fromArray([1, 2, 3], false) as APair;
-    const collected = (list as FL)[REDUCE]((acc: number[], x: number) => [...acc, x], [] as number[]);
+    // element-FIRST fn(element, acc): append the element onto the accumulator, in order.
+    const collected = await (list as FL)[REDUCE]((x: number, acc: number[]) => [...acc, x], [] as number[]);
     expect(collected).toEqual([1, 2, 3]);
   });
-  it("reduce on empty-pair sentinel returns the seed (no phantom element)", () => {
+  it("reduce on empty-pair sentinel returns the seed (no phantom element)", async () => {
     let calls = 0;
-    const r = (new APair(undefined, nil) as FL)[REDUCE]((acc: string) => {
+    // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
+    const r = await (new APair(undefined, nil) as FL)[REDUCE]((_element: unknown, acc: string) => {
       calls++;
       return acc;
     }, "SEED");
@@ -127,19 +130,19 @@ describe("Pair — Foldable (reduce)", () => {
 // Filterable — behavioral. keeps evens; sentinel short-circuits.
 // ----------------------------------------------------------------------
 describe("Pair — Filterable (filter)", () => {
-  it("filter keeps evens", () => {
+  it("filter keeps evens", async () => {
     const list = APair.fromArray([1, 2, 3, 4, 5, 6], false) as APair;
-    const evens = (list as FL)[FILTER]((x: number) => x % 2 === 0) as APair;
+    const evens = (await (list as FL)[FILTER]((x: number) => x % 2 === 0)) as APair;
     expect(evens.to_array()).toEqual([2, 4, 6]);
   });
-  it("filter all-false yields nil", () => {
+  it("filter all-false yields nil", async () => {
     const list = APair.fromArray([1, 3, 5], false) as APair;
-    const r = (list as FL)[FILTER](() => false);
+    const r = await (list as FL)[FILTER](() => false);
     expect(r).toBe(nil);
   });
-  it("filter on empty-pair sentinel does not call the predicate", () => {
+  it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
-    (new APair(undefined, nil) as FL)[FILTER](() => {
+    await (new APair(undefined, nil) as FL)[FILTER](() => {
       calls++;
       return true;
     });
@@ -223,18 +226,18 @@ describe("Pair — Applicative (static of)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — recursors terminate on Nil clones (provenance)", () => {
   const cloneNil = () => nil.withProvenance(new Set<number>([42]));
-  it("map(Pair(1, nil-clone)) → (1), fn called once", () => {
+  it("map(Pair(1, nil-clone)) → (1), fn called once", async () => {
     const calls: unknown[] = [];
-    const r = (new APair(1, cloneNil()) as FL)[MAP]((x: unknown) => {
+    const r = (await (new APair(1, cloneNil()) as FL)[MAP]((x: unknown) => {
       calls.push(x);
       return x;
-    }) as APair;
+    })) as APair;
     expect(calls).toEqual([1]);
     expect(r.car).toBe(1);
     expect(r.cdr).toBeInstanceOf(ANil);
   });
-  it("reduce(Pair(1, nil-clone)) folds one element", () => {
-    const r = (new APair(1, cloneNil()) as FL)[REDUCE]((acc: number, x: number) => acc + x, 0);
+  it("reduce(Pair(1, nil-clone)) folds one element", async () => {
+    const r = await (new APair(1, cloneNil()) as FL)[REDUCE]((x: number, acc: number) => acc + x, 0);
     expect(r).toBe(1);
   });
 });
