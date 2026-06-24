@@ -15,10 +15,17 @@ import { SchemeVector } from "../values/SchemeVector.js";
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
-// declaration site). These packs are all the record form of `spec.symbols`.
+// declaration site). DUAL-ACCEPT the symbol shape (mirrors EnvCapability.lower()'s
+// dispatch): a BAKED `symbol.native` def exposes the host fn as `.impl`; the legacy
+// `{ value: fn }` form exposes it as `.value`. Reading either keeps this raw-symbol
+// harness valid across the per-pack native migration regardless of order.
+const opFn = (v: { kind?: string; impl?: (...a: any[]) => any; value?: (...a: any[]) => any }) =>
+  v && v.kind === "native" ? v.impl! : v.value!;
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+    Object.entries(cap.spec.symbols as Record<string, { kind?: string; impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>).map(
+      ([k, v]) => [k, opFn(v)],
+    ),
   );
 // The vector/bytevector primitives now live in their value-domain cluster packs
 // (carved out of the old `wrappedOps` monolith); these are the exact fns assembled

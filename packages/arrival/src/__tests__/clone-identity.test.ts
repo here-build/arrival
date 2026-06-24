@@ -51,7 +51,11 @@ const cloneNil = (origin = 42) => nil.withProvenance(new Set<number>([origin]));
 // declaration site). These packs are all the record form of `spec.symbols`.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+    // Migrated packs expose `symbol.native` defs (`{ kind: "native", impl }`); the legacy
+    // `{ value }` form is the fallback for any entry not yet on the symbol.* API.
+    Object.entries(
+      cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
+    ).map(([k, v]) => [k, v.impl ?? v.value]),
   );
 const LIST_OPS = opsOf(listsCap);
 const COMBINATOR_OPS = opsOf(combinatorsCap);

@@ -9,10 +9,20 @@
  * omitted under the purity invariant and doored in bootstrap. Bodies are
  * reproduced verbatim from `bridge.ts`; the only change is sourcing shared
  * helpers via `../op-helpers.js`.
+ *
+ * MIGRATED to the `symbol.native` API: each op declares a SCHEME-IDENTITY zod
+ * contract (no codec, no validation — "zod for TYPES purely") and an impl bound
+ * raw, exactly as the old `{ value }` form was. Native means the schema choice
+ * cannot change runtime behavior; the bodies are reproduced byte-for-byte. The
+ * bytevector args declare `z.sbytevector` (the op's semantic domain); the raw-binary
+ * polymorphism stays a runtime property of `asBytevector`, unaffected by the types-only
+ * schema. `bytevector?` keeps `z.unknown()` since it deliberately classifies ANY value.
  */
 
 import "../errors.js";
 
+import * as z from "./scheme-zod.js";
+import { symbol } from "./symbol.js";
 import { SchemeBytevector } from "../values/SchemeBytevector.js";
 import { SchemeString } from "../values/SchemeString.js";
 import {
@@ -25,8 +35,9 @@ import { EnvCapability } from "./capability.js";
 
 export default new EnvCapability("scheme/bytevectors", {
   symbols: {
-    "bytevector?": {
-      value(obj: unknown): boolean {
+    "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (obj: unknown): boolean => {
         // Polymorphic by design (NOT a transition shim): scheme producers mint
         // SchemeBytevector, but raw binary legitimately flows from FFI through the
         // membrane unboxed (membrane preserves Uint8Array identity), and a raw
@@ -42,56 +53,62 @@ export default new EnvCapability("scheme/bytevectors", {
           (typeof Buffer !== "undefined" && obj instanceof Buffer)
         );
       },
-    },
+    ),
 
-    "make-bytevector": {
-      value(k: unknown, byte?: unknown): SchemeBytevector {
+    "make-bytevector": symbol.native`make-bytevector: a bytevector of length k filled with byte`(
+      { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.sbytevector] },
+      (k: unknown, byte?: unknown): SchemeBytevector => {
         const arr = new Uint8Array(toIndex(k));
         if (byte !== undefined) {
           arr.fill(toIndex(byte));
         }
         return withInputProvenance([byte], new SchemeBytevector(arr));
       },
-    },
+    ),
 
-    bytevector: {
-      value(...bytes: unknown[]): SchemeBytevector {
+    bytevector: symbol.native`bytevector: a bytevector built from the byte arguments`(
+      { input: z.array(z.unknown()), output: [z.sbytevector] },
+      (...bytes: unknown[]): SchemeBytevector => {
         const result = new Uint8Array(bytes.length);
         for (const [i, b] of bytes.entries()) {
           result[i] = toIndex(b);
         }
         return withInputProvenance(bytes, new SchemeBytevector(result));
       },
-    },
+    ),
 
-    "bytevector-length": {
-      value(bv: unknown): number {
+    "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
+      { input: [z.sbytevector], output: [z.number] },
+      (bv: unknown): number => {
         const view = asBytevector(bv, "bytevector-length");
         return view.byteLength;
       },
-    },
+    ),
 
-    "bytevector-u8-ref": {
-      value(bv: unknown, k: unknown): number {
+    "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
+      { input: [z.sbytevector, z.schemeNumber], output: [z.number] },
+      (bv: unknown, k: unknown): number => {
         const view = asBytevector(bv, "bytevector-u8-ref");
         return view[toIndex(k)];
       },
-    },
+    ),
 
     // bytevector-u8-set! / bytevector-copy! — OMITTED by the purity invariant
     // (frozen entities); doored in core.ts. Non-mutating bytevector-copy stays.
 
-    "bytevector-copy": {
-      value(bv: unknown, start?: unknown, end?: unknown): SchemeBytevector {
+    "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
+      { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
+      (bv: unknown, start?: unknown, end?: unknown): SchemeBytevector => {
         const view = asBytevector(bv, "bytevector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
         return withInputProvenance([bv], new SchemeBytevector(view.slice(s, e)));
       },
-    },
+    ),
 
-    "bytevector-append": {
-      value(...bvs: unknown[]): SchemeBytevector {
+    "bytevector-append": symbol.native`bytevector-append: concatenation of all bytevector arguments`(
+      { input: z.array(z.unknown()), output: [z.sbytevector] },
+      (...bvs: unknown[]): SchemeBytevector => {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));
         const totalLen = views.reduce((sum, v) => sum + v.byteLength, 0);
         const result = new Uint8Array(totalLen);
@@ -102,24 +119,26 @@ export default new EnvCapability("scheme/bytevectors", {
         }
         return withInputProvenance(bvs, new SchemeBytevector(result));
       },
-    },
+    ),
 
-    "utf8->string": {
-      value(bv: unknown, start?: unknown, end?: unknown): SchemeString {
+    "utf8->string": symbol.native`utf8->string: decode a bytevector slice as UTF-8`(
+      { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.schemeString] },
+      (bv: unknown, start?: unknown, end?: unknown): SchemeString => {
         const view = asBytevector(bv, "utf8->string");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
         return withInputProvenance([bv], new SchemeString(new TextDecoder("utf-8").decode(view.subarray(s, e))));
       },
-    },
+    ),
 
-    "string->utf8": {
-      value(str: unknown, start?: unknown, end?: unknown): SchemeBytevector {
+    "string->utf8": symbol.native`string->utf8: encode a string slice as UTF-8 bytes`(
+      { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
+      (str: unknown, start?: unknown, end?: unknown): SchemeBytevector => {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? s_str.length : toIndex(end);
         return withInputProvenance([str], new SchemeBytevector(new TextEncoder().encode(s_str.slice(s, e))));
       },
-    },
+    ),
   },
 });
