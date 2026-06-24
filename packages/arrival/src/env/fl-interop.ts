@@ -384,12 +384,15 @@ export default new EnvCapability("scheme/fl-interop", {
         // arg never reaches a LazySeq in practice; cast to the fn form for the await.
         if (is_lazy_seq(list))
           return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
-        // FL-dispatch — NOW INCLUDING LIPS Pairs. A Pair implements fantasy-land/filter
-        // (filterPair walks the spine, preserving element boxes), so it computes by FL
-        // here instead of reaching the env-resolved scheme builtin. asyncFLFilter applies
-        // the canonical keep-rule and adapts a regex arg, so this is byte-identical to the
-        // eager builtin's VALUE semantics (the heap-meter charge listToArray did is the one
-        // resource-accounting difference; no value-level behavior changes).
+        // A LIPS Pair filters by its OWN async-aware arrival/tagless-final/filter (spine-walk,
+        // canonical keep-rule `!is_false && !is_nil`, regex-arg adaptation, box-preserving) —
+        // the convention lives on the term, not in a helper. Byte-identical to the prior
+        // asyncFLFilter-over-a-Pair VALUE semantics.
+        if (list instanceof APair) {
+          return list["arrival/tagless-final/filter"](arg as ((x: unknown) => unknown) | RegExp);
+        }
+        // A non-Pair FL structure (a SchemeVector) still computes by its fantasy-land/filter
+        // through asyncFLFilter (the foreign keep-rule + regex adapt).
         if (list && typeof list === "object" && (list as Partial<FantasyLand>)["fantasy-land/filter"]) {
           return asyncFLFilter(arg, list as FantasyLand);
         }
@@ -414,7 +417,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
         // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
         if (lists.length === 1 && lists[0] instanceof APair) {
-          return asyncArrivalMap(fn, lists[0] as unknown as FantasyLand);
+          return lists[0]["arrival/tagless-final/map"](fn);
         }
         // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
         // crossing out, so asyncFLMap's unwrapLipsValue strips boxes to raw JS values (the DR4
@@ -452,12 +455,14 @@ export default new EnvCapability("scheme/fl-interop", {
         // SchemeVector); the `arrival/tagless-final/reduce` carrier names the convention on
         // the term. A SchemeJSArray has neither method, so it still falls through to
         // builtinReduce, whose pair|nil typecheck throws (the coercion-soundness DR4 pin).
-        if (
-          collection &&
-          typeof collection === "object" &&
-          ((collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"] ||
-            (collection as Partial<FantasyLand>)["fantasy-land/reduce"])
-        ) {
+        if (collection && typeof collection === "object" && (collection as Partial<ArrivalFoldable>)["arrival/tagless-final/reduce"]) {
+          // The term names the scheme/SRFI convention `fn(element, acc)` on itself (Pair) —
+          // fold by its own async-aware method, element-first, head-to-tail.
+          return (collection as ArrivalFoldable)["arrival/tagless-final/reduce"](fn as (element: unknown, acc: unknown) => unknown, init);
+        }
+        if (collection && typeof collection === "object" && (collection as Partial<FantasyLand>)["fantasy-land/reduce"]) {
+          // A Foldable carrying only the FL acc-first reduce (a SchemeVector) folds in
+          // arrival/scheme convention via the async element-first adapter over its leaves.
           return asyncArrivalReduce(fn, init, collection as FantasyLand);
         }
         // Fallback — neither LazySeq nor an FL/arrival Foldable (a SchemeJSArray, a raw

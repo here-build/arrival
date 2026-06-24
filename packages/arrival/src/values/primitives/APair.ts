@@ -19,6 +19,7 @@ import { withInputProvenance } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
+import { is_false } from "../../eval/guards.js";
 import { ABytevector } from "./ABytevector.js";
 import { AString } from "./AString.js";
 import { AVector } from "./AVector.js";
@@ -713,14 +714,70 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return reducePair(f, initial, this);
   }
 
-  // Arrival's canonical reduce — the scheme/SRFI fold convention `fn(element, acc)`
-  // (accumulator last), head-to-tail. PASSES THE CALL TO FL: delegates to the FL
-  // Foldable `fantasy-land/reduce` (acc-first) with the argument order adapted, so the
-  // arrival convention lives on the term in one place and the borrowed FL algebra stays
-  // pure FL-spec underneath. The scheme `reduce` builtin + fl-interop dispatch to THIS.
-  ["arrival/tagless-final/reduce"]<Acc>(fn: (element: unknown, acc: Acc) => Acc, initial: Acc): Acc {
-    return (this as { ["fantasy-land/reduce"]: (f: (acc: Acc, x: unknown) => Acc, init: Acc) => Acc })
-      ["fantasy-land/reduce"]((acc, element) => fn(element, acc), initial);
+  // Arrival's async-aware Functor — `map` that PRESERVES every element's box and
+  // provenance. Walks the cdr-spine DIRECTLY (not via fantasy-land/reduce collect),
+  // awaiting `fn` per element (live LIPS lambdas always return Promises), then rebuilds
+  // a fresh APair spine via Pair.fromArray(_, false) — the exact form the eager scheme
+  // `map` builtin uses (freshening the spine, dropping the container box, terminating in
+  // the canonical nil). The element results are kept RAW (no unwrap), so a SchemeString /
+  // SchemeExact element keeps its box: coercion-soundness's "Pair · map preserves every
+  // element's box" + lineage A13/A18b are the pins. Honors the empty-pair sentinel
+  // (`Pair(undefined, nil)`) and a Nil-clone tail exactly as mapPair did.
+  async ["arrival/tagless-final/map"](fn: (x: unknown) => unknown | Promise<unknown>): Promise<APair | ANil> {
+    const out: unknown[] = [];
+    let node: unknown = this;
+    while (node && !(node instanceof ANil)) {
+      const p = node as APair;
+      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      out.push(await fn(p.car));
+      node = p.cdr;
+    }
+    return APair.fromArray(out, false) as APair | ANil;
+  }
+
+  // Arrival's async-aware Filterable — `filter` that PRESERVES every kept element's box.
+  // Spine-walk + the canonical keep-rule IDENTICAL to the eager scheme `filter` builtin:
+  // Scheme-truthy (`!is_false`) AND nil dropped (`!is_nil`). `pred` is awaited per element.
+  // A RegExp arg is adapted the way the eager builtin's matcher does (regex →
+  // `String(x).match`); a fn passes through. Kept elements are re-consed shallow in order
+  // via Pair.fromArray(_, false), so element boxes survive and the container box drops —
+  // byte-identical to the overlay's prior asyncFLFilter-over-a-Pair VALUE semantics.
+  async ["arrival/tagless-final/filter"](
+    arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
+  ): Promise<APair | ANil> {
+    const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
+    const out: unknown[] = [];
+    let node: unknown = this;
+    while (node && !(node instanceof ANil)) {
+      const p = node as APair;
+      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      const verdict = await pred(p.car);
+      if (!is_false(verdict) && !is_nil(verdict)) out.push(p.car);
+      node = p.cdr;
+    }
+    return APair.fromArray(out, false) as APair | ANil;
+  }
+
+  // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
+  // `fn(element, acc)` (accumulator last), left fold, head-to-tail. Walks the spine
+  // DIRECTLY and threads the accumulator with `await` (live LIPS lambdas return
+  // Promises), absorbing the overlay's prior asyncArrivalReduce helper. Reproduces the
+  // eager scheme `reduce` builtin EXACTLY — `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the
+  // FL acc-first 85. Honors the empty-pair sentinel + a Nil-clone tail (no phantom fold).
+  // The scheme `reduce` builtin + fl-interop dispatch to THIS.
+  async ["arrival/tagless-final/reduce"]<Acc>(
+    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
+    initial: Acc,
+  ): Promise<Acc> {
+    let acc = initial;
+    let node: unknown = this;
+    while (node && !(node instanceof ANil)) {
+      const p = node as APair;
+      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      acc = await fn(p.car, acc);
+      node = p.cdr;
+    }
+    return acc;
   }
 
   // Arrival's canonical car/cdr — the head/tail PROJECTIONS. They mirror the scheme
