@@ -120,6 +120,9 @@ describe("SHADOW — arithmetic: literals / pipes / merges == eager golden", () 
 // design and are covered as eager goldens + boundary below.)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("SHADOW — string-collapse & cons-union == eager golden", () => {
+  it("(string-length a) — cardinality propagates its one source (DR2/B1 resolved: fullCone)", async () => {
+    await expectCone(`(string-length a)`, strs(), [100]);
+  });
   it("(string-append a b) — two stamped strings union", async () => {
     await expectCone(`(string-append a b)`, strs(), [100, 200]);
   });
@@ -251,11 +254,6 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // §5.3 element-vs-container projection: the static tree has no projection node
     // (car is treated as a pure op → operand union). Out of v0.1 scope.
     await expect(runFlagged(`(car (cons a b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
-  });
-  it("cardinality drop: (string-length a) — static pipes {100}, eager drops to {}", async () => {
-    // The documented cardinality asymmetry (golden-prov-arithmetic §"documented
-    // asymmetries"). fullCone vs countCone — the v0.2 minimal-cone tension (DR2/B1).
-    await expect(runFlagged(`(string-length a)`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
   });
   it("spine rebuild: (append (list a) (list b)) — static unions {100,200}, eager drops to {}", async () => {
     // append rebuilds an unstamped spine. Out of v0.1 scope (spine-vs-element).

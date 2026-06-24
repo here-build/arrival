@@ -67,7 +67,7 @@ export default new EnvCapability("scheme/strings", {
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.schemeString], output: [z.schemeExact] },
       (str: unknown): SchemeExact => {
-        return new SchemeExact(BigInt([...stringValue(str)].length));
+        return withInputProvenance([str], new SchemeExact(BigInt([...stringValue(str)].length)));
       },
     ),
 
@@ -75,7 +75,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.schemeString, z.schemeNumber], output: [z.schemeChar] },
       (str: unknown, k: unknown): SchemeCharacter => {
         const idx = Number(coerceNumeric(k).valueOf());
-        return new SchemeCharacter([...stringValue(str)][idx]);
+        return withInputProvenance([str, k], new SchemeCharacter([...stringValue(str)][idx]));
       },
     ),
 
@@ -86,9 +86,12 @@ export default new EnvCapability("scheme/strings", {
     "string=?": symbol.native`string=?: typed equivalence over strings`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
-        if (strs.length < 2) return true;
-        const first = stringValue(strs[0]);
-        return strs.slice(1).every((s) => stringValue(s) === first);
+        let verdict = true;
+        if (strs.length >= 2) {
+          const first = stringValue(strs[0]);
+          verdict = strs.slice(1).every((s) => stringValue(s) === first);
+        }
+        return withInputProvenance(strs, verdict);
       },
     ),
 
@@ -115,49 +118,68 @@ export default new EnvCapability("scheme/strings", {
     "string-ci=?": symbol.native`string-ci=?: case-insensitive string equivalence`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
-        if (strs.length < 2) return true;
-        const first = stringValue(strs[0]).toLowerCase();
-        return strs.slice(1).every((s) => stringValue(s).toLowerCase() === first);
+        let verdict = true;
+        if (strs.length >= 2) {
+          const first = stringValue(strs[0]).toLowerCase();
+          verdict = strs.slice(1).every((s) => stringValue(s).toLowerCase() === first);
+        }
+        return withInputProvenance(strs, verdict);
       },
     ),
 
     "string-ci<?": symbol.native`string-ci<?: case-insensitive strictly-increasing order`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
+        let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() >= stringValue(strs[i + 1]).toLowerCase()) return false;
+          if (stringValue(strs[i]).toLowerCase() >= stringValue(strs[i + 1]).toLowerCase()) {
+            verdict = false;
+            break;
+          }
         }
-        return true;
+        return withInputProvenance(strs, verdict);
       },
     ),
 
     "string-ci>?": symbol.native`string-ci>?: case-insensitive strictly-decreasing order`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
+        let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() <= stringValue(strs[i + 1]).toLowerCase()) return false;
+          if (stringValue(strs[i]).toLowerCase() <= stringValue(strs[i + 1]).toLowerCase()) {
+            verdict = false;
+            break;
+          }
         }
-        return true;
+        return withInputProvenance(strs, verdict);
       },
     ),
 
     "string-ci<=?": symbol.native`string-ci<=?: case-insensitive non-decreasing order`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
+        let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() > stringValue(strs[i + 1]).toLowerCase()) return false;
+          if (stringValue(strs[i]).toLowerCase() > stringValue(strs[i + 1]).toLowerCase()) {
+            verdict = false;
+            break;
+          }
         }
-        return true;
+        return withInputProvenance(strs, verdict);
       },
     ),
 
     "string-ci>=?": symbol.native`string-ci>=?: case-insensitive non-increasing order`(
       { input: z.array(z.unknown()), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
+        let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() < stringValue(strs[i + 1]).toLowerCase()) return false;
+          if (stringValue(strs[i]).toLowerCase() < stringValue(strs[i + 1]).toLowerCase()) {
+            verdict = false;
+            break;
+          }
         }
-        return true;
+        return withInputProvenance(strs, verdict);
       },
     ),
 

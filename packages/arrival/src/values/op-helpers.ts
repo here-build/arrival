@@ -168,10 +168,16 @@ export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: FLOrd, b: FLOrd) => bo
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => boolean {
   const rel = ORD_REL[sym];
   return (...args: unknown[]): boolean => {
+    let verdict = true;
     for (let i = 0; i < args.length - 1; i++) {
-      if (!rel(args[i] as FLOrd, args[i + 1] as FLOrd)) return false;
+      if (!rel(args[i] as FLOrd, args[i + 1] as FLOrd)) {
+        verdict = false;
+        break;
+      }
     }
-    return true;
+    // Plumbing: the ordering verdict carries its operands' provenance (forward, never
+    // mint) — the same grounding string-contains? and the numeric comparisons give a bool.
+    return withInputProvenance(args, verdict);
   };
 }
 

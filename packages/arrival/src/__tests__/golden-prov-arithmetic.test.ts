@@ -60,6 +60,17 @@ describe("GOLDEN — pure ops over literals mint NOTHING (empty provenance)", ()
 //     operand passes its ids straight through (the lineage "pipe" node).
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GOLDEN — pure ops over ONE source propagate it (pipe)", () => {
+  it("(string-length a) — a cardinality observation propagates its one source", async () => {
+    // length is a fact ABOUT the string, so it carries the string's source — the
+    // same treatment list-length gets. (Was a documented eager DROP; DR2/B1 resolved
+    // toward fullCone — the count is attributed to the string it measured.)
+    expect(await run(`(string-length a)`, strs())).toMatchInlineSnapshot(`
+      [
+        100,
+      ]
+    `);
+  });
+
   it("(* x x) — one source used twice, still just its id", async () => {
     expect(await run(`(* x x)`, { x: sNum(7, 200) })).toMatchInlineSnapshot(`
       [
@@ -274,13 +285,6 @@ describe("GOLDEN — list element-vs-container provenance (car / cdr / cons)", (
 // gate must catch it. (A separate Wave-R gate file pins the flag-on intent.)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GOLDEN — documented asymmetries the eager path exhibits TODAY", () => {
-  it("(string-length a) — a cardinality observation DROPS its source provenance", async () => {
-    // length-shaped read returns a bare number with empty provenance — the count
-    // is not (today) attributed to the string it measured. Contrast §5's minimal-
-    // cone thesis; this is the eager reality the oracle freezes.
-    expect(await run(`(string-length a)`, strs())).toMatchInlineSnapshot(`[]`);
-  });
-
   it("(cdr (list a b)) — cdr of a proper list returns the SPINE, which carries nothing", async () => {
     // The tail is the next cons cell (a Pair), not the element `b`. That cons cell
     // was built unstamped, so its provenance is empty — unlike (cdr (cons a b)),
