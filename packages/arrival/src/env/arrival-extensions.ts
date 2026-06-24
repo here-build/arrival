@@ -18,6 +18,10 @@
 import { EnvCapability } from "./capability.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { typecheck } from "../utils/typecheck.js";
+import * as z from "./scheme-zod.js";
+import { symbol } from "./symbol.js";
+import { SchemeString } from "../values/SchemeString.js";
+import { stringValue, withInputProvenance } from "../values/op-helpers.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
 // types directly, so they live in TS rather than reaching back across the membrane
@@ -27,25 +31,30 @@ import { typecheck } from "../utils/typecheck.js";
 
 export default new EnvCapability("arrival/core-extensions", {
   symbols: {
-    "symbol->string": {
-      fn(s: unknown): string {
+    // All three are provenance PLUMBING (transforms in a pipe), not edges: they forward
+    // their input's provenance via withInputProvenance — never mint. (The prior { fn, type }
+    // form was defineRosetta-bound, which minted; that was a legacy accident, not intent —
+    // the comment above already called them "native, below the membrane".)
+    "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
+      { input: [z.symbol], output: [z.schemeString] },
+      (s: unknown): SchemeString => {
         typecheck("symbol->string", s, "symbol");
         const name = (s as SchemeSymbol).__name__;
-        return typeof name === "string" ? name : (name as symbol).toString();
+        const str = typeof name === "string" ? name : (name as symbol).toString();
+        return withInputProvenance([s], new SchemeString(str));
       },
-      type: "(s: symbol): SStr",
-    },
-    "string->symbol": {
-      fn(s: unknown): SchemeSymbol {
+    ),
+    "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
+      { input: [z.schemeString], output: [z.symbol] },
+      (s: unknown): SchemeSymbol => {
         typecheck("string->symbol", s, "string");
-        return new SchemeSymbol(String(s));
+        return withInputProvenance([s], new SchemeSymbol(stringValue(s)));
       },
-      type: "(s: SStr): symbol",
-    },
-    "regex?": {
-      fn: (x: unknown): boolean => x instanceof RegExp,
-      type: "(x: unknown): boolean",
-    },
+    ),
+    "regex?": symbol.native`regex?: #t iff x is a host regular expression`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (x: unknown): boolean => withInputProvenance([x], x instanceof RegExp),
+    ),
   },
   prelude: `
     ;; symbol->string / string->symbol are native (below the membrane) — see the

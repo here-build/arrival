@@ -10,6 +10,9 @@
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../capability.js";
 import { SchemeSymbol } from "../../values/SchemeSymbol.js";
+import * as z from "../scheme-zod.js";
+import { symbol } from "../symbol.js";
+import { withInputProvenance } from "../../values/op-helpers.js";
 
 // Native: recognise a literal `else` clause head — matches the interned `else`
 // symbol or any gensym whose literal name is "else". Lives in TS because it reads
@@ -83,11 +86,13 @@ export const CONDITIONALS_SCM = `
 
 export default new EnvCapability("scheme/r7rs/conditionals", {
   symbols: {
-    "%else-literal?": {
-      fn: (obj: unknown): boolean =>
-        obj instanceof SchemeSymbol && (SchemeSymbol.is(obj, "else") || obj.literal() === "else"),
-      type: "(obj: unknown): boolean",
-    },
+    // Plumbing (a structural predicate in the cond/case pipe), not an edge: the verdict
+    // forwards the operand's provenance via withInputProvenance, never mints.
+    "%else-literal?": symbol.native`%else-literal?: #t iff obj is the literal else symbol`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (obj: unknown): boolean =>
+        withInputProvenance([obj], obj instanceof SchemeSymbol && (SchemeSymbol.is(obj, "else") || obj.literal() === "else")),
+    ),
   },
   prelude: CONDITIONALS_SCM,
 });
