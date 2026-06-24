@@ -7,7 +7,6 @@ import CodeMirror from "@uiw/react-codemirror";
 
 import { paramHintsExtension, schemeIde, schemeStructural, schemeSweet, sweetIdeBackend } from "../index.js";
 import { useSchemeIde } from "./use-scheme-ide.js";
-import { useSchemeRanker, type SchemeRankerConfig } from "./use-scheme-ranker.js";
 
 // JetBrains Mono — the WRITING font (the reading fonts live in the popup; see
 // @here.build/editor-theme's fonts.css for the writing/reading split).
@@ -33,11 +32,6 @@ export interface SchemeEditorProps {
   /** Reports the sweet buffer's parse state up so the studio can show the
    *  "⚠ unsaved" marker next to the switch (null = parses / not in sweet). */
   onSweetError?: (err: string | null) => void;
-  /** OPT-IN neural completion: an on-device model (default SmolLM2-360M
-   *  q4f16, ~273MB one-time download — the measured quant-study winner) re-ranks the type-lens's proven
-   *  candidates by its top-p nucleus. `true` = defaults; an object overrides
-   *  model/dtype/device. Proof always wins — the model only orders within it. */
-  neural?: boolean | SchemeRankerConfig;
   /** Cross-file goto-def: Cmd/Ctrl-click on a `require`d name lands here —
    *  `(path, span-in-that-file)`. The studio wires its file switcher. */
   onNavigate?: (path: string, span: { start: number; length: number }) => void;
@@ -72,7 +66,6 @@ export function SchemeEditor({
   readOnly,
   view = "scheme",
   onSweetError,
-  neural,
   onNavigate,
   classicExtensions,
   onCreateEditor,
@@ -147,7 +140,6 @@ export function SchemeEditor({
   // backend answers in classic scheme coordinates; the sweet lens mounts the
   // SAME backend through `sweetIdeBackend` (the sweet↔classic span aligner).
   const ide = useSchemeIde(true);
-  const ranker = useSchemeRanker(neural !== undefined && neural !== false ? (neural === true ? {} : neural) : null);
 
   const classicExt = useMemo<Extension[]>(
     // Parameter inlay hints + structural (paredit) editing are .scm-only, and
@@ -165,19 +157,16 @@ export function SchemeEditor({
         ? []
         : [
             schemeIde(ide, {
-              ...(ranker === null ? {} : { ranker }),
               ...(onNavigate === undefined ? {} : { openFile: onNavigate }),
             }),
           ]),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ide, ranker, onNavigate],
+    [ide, onNavigate],
   );
   // The sweet lens always shows a .scm, so it always gets the (sweet) hints —
-  // plus the full IDE through the sweet↔classic aligner. No neural ranker here:
-  // the ghost model ranks over CLASSIC prefixes, and a sweet prefix would skew
-  // its probabilities (structural ops likewise stay classic-only — sweet
-  // indentation is semantic).
+  // plus the full IDE through the sweet↔classic aligner. (Structural ops stay
+  // classic-only — sweet indentation is semantic.)
   const sweetExt = useMemo<Extension[]>(
     () => [
       schemeSweet(),

@@ -6,4 +6,3 @@ export {
   setSchemeIdeRequireTypes,
   configureSchemeIdeHost,
 } from "./use-scheme-ide.js";
-export { useSchemeRanker, type SchemeRankerConfig } from "./use-scheme-ranker.js";
