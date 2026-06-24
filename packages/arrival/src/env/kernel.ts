@@ -275,6 +275,7 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   const applied = new Map<string, Promise<void>>();
   const disposers: Array<() => void | Promise<void>> = [];
 
+  // todo replace with DefaultedMap
   const applyOne = (name: string, pack: EnvPack<E>, order: readonly string[]): Promise<void> => {
     const existing = applied.get(name);
     if (existing) return existing; // idempotent + single-flight (no await between get and set below)
@@ -290,21 +291,22 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
     return p;
   };
 
-  const require = async (pack: EnvPack<E>): Promise<void> => {
-    const { order, byName } = linearize([pack]);
-    // Apply least-precedence (deps) first, matching construction's last-write-wins order.
-    for (const name of order.toReversed()) await applyOne(name, byName.get(name)!, order);
-  };
-
-  const dispose = async (): Promise<void> => {
-    for (let i = disposers.length - 1; i >= 0; i--) {
-      try {
-        await disposers[i]();
-      } catch {
-        /* best-effort teardown */
+  return {
+    require: async (pack: EnvPack<E>): Promise<void> => {
+      const { order, byName } = linearize([pack]);
+      // Apply least-precedence (deps) first, matching construction's last-write-wins order.
+      for (const name of order.toReversed()) {
+        await applyOne(name, byName.get(name)!, order);
       }
-    }
+    },
+    dispose: async (): Promise<void> => {
+      for (let i = disposers.length - 1; i >= 0; i--) {
+        try {
+          await disposers[i]();
+        } catch {
+          /* best-effort teardown */
+        }
+      }
+    },
   };
-
-  return { require, dispose };
 }
