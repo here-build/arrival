@@ -18,9 +18,9 @@
 // last :state). The reads are NOT in this prelude because they are native
 // member-access primitives — `@` is a base binding, a `:`-prefixed symbol resolves
 // to a pluck closure in `Environment.get` — but both bottom out in the same
-// membrane core. This pack is their conceptual home; lifting the *definition* onto
-// the capability is the open mechanical question (a membrane primitive can't be
-// rosetta-wrapped), tracked with the sandbox→pack migration.
+// membrane core. This pack is their conceptual home; the definition is lifted onto
+// the capability via `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so the
+// membrane primitive is not routed through the membrane it implements.
 //
 // Wiring-only (no resources) → pause-trivial. NOTE: scoped to the self-contained
 // idiom family — cut/cute (which need gensym + JS interop) ship as SRFI-26 instead.
@@ -29,12 +29,14 @@
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 
 import { EnvCapability } from "./capability.js";
+import { symbol } from "./symbol.js";
+import * as z from "./scheme-zod.js";
 import { hasMember, keywordAccessorResolver, memberKeys, readMember } from "../membrane.js";
 
 /** The polyglot idiom pack — the full member-access surface plus the threading family:
- *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. RAW `{ value }` bindings
- *     (env.set, NOT defineRosetta): they are membrane PRIMITIVES and must not be routed
- *     through the membrane they implement.
+ *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. `symbol.native` bindings
+ *     (raw env.set, no codec — the typed equivalent of the old `{ value }`): they are
+ *     membrane PRIMITIVES and must not be routed through the membrane they implement.
  *   • `:key` — the keyword accessor, the `@`-alias, contributed as a catchall `resolver`.
  *   • `-> / ->> / compose / pipe / …` — threading & composition (prelude).
  *  Module-singleton capability; `@`/`:key` bottom out in one `readMember` (membrane.ts). */
@@ -102,8 +104,17 @@ export default new EnvCapability("scheme/polyglot", {
 `,
   resolvers: [{ id: "keyword-accessor", resolve: (name: string) => keywordAccessorResolver.resolve(name) }],
   symbols: () => ({
-    "@": { value: readMember },
-    "@?": { value: hasMember },
-    "@keys": { value: memberKeys },
+    "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      readMember,
+    ),
+    "@?": symbol.native`@?: #t iff obj has the member key`(
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      hasMember,
+    ),
+    "@keys": symbol.native`@keys: the own member keys of obj`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      memberKeys,
+    ),
   }),
 });
