@@ -16,7 +16,6 @@ import { EnvCapability } from "../capability.js";
 export const EXCEPTIONS_SCM = `    ;; -----------------------------------------------------------------------------
     ;; R7RS Exception Handling
     ;; -----------------------------------------------------------------------------
-    (define *current-exception-handlers* '())
     
     ;; R7RS §6.11: raise invokes the current handler in the dynamic environment of
     ;; the call to raise, except that the current exception handler is the one that
@@ -26,11 +25,11 @@ export const EXCEPTIONS_SCM = `    ;; ------------------------------------------
     ;; handler returns, a secondary exception is raised in the handler's dynamic
     ;; environment (the popped stack still in place).
     (define (raise obj)
-      (if (null? *current-exception-handlers*)
+      (if (null? (%current-handlers))
           (%raise obj)
-          (let ((handler (car *current-exception-handlers*))
-                (rest (cdr *current-exception-handlers*)))
-            (set! *current-exception-handlers* rest)
+          (let ((handler (car (%current-handlers)))
+                (rest (cdr (%current-handlers))))
+            (%set-handlers! rest)
             (handler obj)
             ;; handler returned for a non-continuable exception → secondary raise,
             ;; still with the popped stack (rest) in place.
@@ -41,15 +40,15 @@ export const EXCEPTIONS_SCM = `    ;; ------------------------------------------
     ;; returned to the call site of raise-continuable. Restore the stack on the way
     ;; out so the value flows back into the original dynamic environment.
     (define (raise-continuable obj)
-      (if (null? *current-exception-handlers*)
+      (if (null? (%current-handlers))
           (%raise obj)
-          (let ((handler (car *current-exception-handlers*))
-                (rest *current-exception-handlers*))
-            (set! *current-exception-handlers* (cdr rest))
+          (let ((handler (car (%current-handlers)))
+                (rest (%current-handlers)))
+            (%set-handlers! (cdr rest))
             (try
               (handler obj)
               (finally
-                (set! *current-exception-handlers* rest))))))
+                (%set-handlers! rest))))))
     
     ;; with-exception-handler installs handler for the duration of thunk and removes
     ;; it on the way out — via finally, which restores the stack whether thunk
@@ -57,12 +56,12 @@ export const EXCEPTIONS_SCM = `    ;; ------------------------------------------
     ;; through guard's catch). No catch+re-raise here: re-raising would re-deliver an
     ;; exception the inner handler already saw to the outer handler (double delivery).
     (define (with-exception-handler handler thunk)
-      (let ((old-handlers *current-exception-handlers*))
-        (set! *current-exception-handlers* (cons handler old-handlers))
+      (let ((old-handlers (%current-handlers)))
+        (%set-handlers! (cons handler old-handlers))
         (try
           (thunk)
           (finally
-            (set! *current-exception-handlers* old-handlers)))))
+            (%set-handlers! old-handlers)))))
     
     (define (error message . irritants)
       (raise (apply make-error-object message irritants)))

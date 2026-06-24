@@ -317,6 +317,14 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
   return fn;
 }
 
+// The R7RS exception handler stack — a module-level holder (the dynamic-holder family,
+// alongside the evaluator's _dynamicCallSite/_currentRunEnv). Replaces the old set!'d
+// `*current-exception-handlers*` scheme cell: the R7RS exception forms push/pop it via the
+// `%current-handlers`/`%set-handlers!` primitives below, so NO scheme `set!` remains.
+// Process-global like the cell was (same dynamic visibility, so a deep `raise` sees it);
+// per-run isolation lands later when the dynamic holders thread per-run through the trampoline.
+let currentHandlers: unknown = nil;
+
 export const wrappedOps = {
   "+": wrapOperator(ops.add),
   "-": wrapOperator(ops.sub),
@@ -615,6 +623,17 @@ export const wrappedOps = {
   "%raise"(obj: unknown): never {
     throw obj;
   },
+
+  // Read / replace the handler stack (machinery; the R7RS forms push/pop through these
+  // instead of mutating a scheme binding with `set!`).
+  "%current-handlers"(): unknown {
+    return currentHandlers;
+  },
+
+  "%set-handlers!"(handlers: unknown): unknown {
+    currentHandlers = handlers;
+    return nil;
+  },
 };
 
 // ============================================================================
@@ -640,6 +659,8 @@ const EXCEPTION_VERBS = new Set([
   "raised-exception-value",
   "raised-exception-continuable?",
   "%raise",
+  "%current-handlers",
+  "%set-handlers!",
 ]);
 
 const symbolsFrom = (entries: [string, unknown][]) => Object.fromEntries(entries.map(([k, v]) => [k, { value: v }]));
