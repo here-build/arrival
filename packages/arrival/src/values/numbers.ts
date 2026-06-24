@@ -20,6 +20,7 @@
  * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real ⊂ complex,
  * exact/inexact); inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
  */
+import { CLASS } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
@@ -54,7 +55,7 @@ export function bigintISqrt(n: bigint): bigint {
 // ============================================================================
 
 export class SchemeExact extends AValue {
-  static __class__ = "number";
+  static [CLASS] = "number";
   readonly kind = "number" as const;
 
   readonly num: bigint;
@@ -296,7 +297,7 @@ export class SchemeExact extends AValue {
 // ============================================================================
 
 export class SchemeInexact extends AValue {
-  static __class__ = "number";
+  static [CLASS] = "number";
   readonly kind = "number" as const;
 
   readonly real: number;

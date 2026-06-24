@@ -1,3 +1,4 @@
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 
@@ -8,7 +9,7 @@ import { markInteropBoundary } from "../interop-access.js";
  * pattern.
  */
 export class SchemeBool extends AValue {
-  static __class__ = "boolean";
+  static [CLASS] = "boolean";
   readonly kind = "bool" as const;
 
   constructor(

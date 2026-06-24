@@ -1,6 +1,7 @@
 // Scheme source pretty-printer / re-indenter. Works purely off the tokenizer's metadata (col/line per
 // token) — the indentation model follows the community Scheme style guide and GNU Emacs scheme-mode,
 // encoded as the token-pattern `rules` table. Originates from the LIPS formatter.
+import { CLASS } from "../well-known-symbols.js";
 import { is_special, is_symbol_string } from "../eval/guards.js";
 import { tokenize } from "../stdlib.js";
 import { SchemeString } from "../values/SchemeString.js";
@@ -94,7 +95,7 @@ function lineIndent(tokens: TokenMeta[]): number {
 // :: it rely on meta data from tokenizer function
 // ----------------------------------------------------------------------
 export class Formatter {
-  static __class__ = "formatter";
+  static [CLASS] = "formatter";
 
   static readonly defaults = {
     offset: 0,
@@ -119,7 +120,7 @@ export class Formatter {
     }
   */
   static Pattern = class Pattern {
-    static __class__ = "pattern";
+    static [CLASS] = "pattern";
 
     patterns: PatternElement[];
     flag: PatternFlag;
@@ -142,7 +143,7 @@ export class Formatter {
   // ----------------------------------------------------------------------
   static sexp = new Formatter.Pattern([p_o, glob, p_e], "+");
   static Ahead = class Ahead {
-    static __class__ = "ahead";
+    static [CLASS] = "ahead";
 
     constructor(
       public readonly pattern: {

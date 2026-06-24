@@ -17,7 +17,7 @@ import { is_promise } from "../eval/guards.js";
 import { SchemeString } from "../values/SchemeString.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { __data__ } from "../values/primitives.js";
+import { DATA } from "../well-known-symbols.js";
 import { SchemeCharacter } from "../values/types.js";
 import type { SchemeValue } from "../values/types.js";
 import { is_nil, is_pair } from "../values/value-guards.js";
@@ -83,7 +83,7 @@ export function quote(value: SchemeValue): SchemeValue {
     return value.then(quote);
   }
   if (is_pair(value) || value instanceof SchemeSymbol) {
-    (value as SchemeValue)[__data__] = true;
+    (value as SchemeValue)[DATA] = true;
   }
   return value;
 }

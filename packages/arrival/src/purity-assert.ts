@@ -21,6 +21,7 @@
 // mutation check is dev-flagged (PURITY_ASSERT_ENABLED) so production pays nothing.
 // Sibling to purity.ts, which owns the DOOR throw itself.
 
+import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";
 import { AValue } from "./values/AValue.js";
 import { Pair } from "./values/Pair.js";
@@ -35,7 +36,7 @@ import { SchemeVector } from "./values/SchemeVector.js";
  * mirroring PurityError.feature.
  */
 export class PurityViolation extends ArrivalError {
-  static __class__ = "purity-violation";
+  static [CLASS] = "purity-violation";
   readonly owner = "owned-by/purity-invariant";
   public readonly name = "PurityViolation";
 

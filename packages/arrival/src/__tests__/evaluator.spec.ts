@@ -304,7 +304,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const code = list(sym("define"), list(sym("add"), sym("a"), sym("b")), list(sym("+"), sym("a"), sym("b")));
         await exec(code, { env });
         const add = env._lookupWithResolvers("add");
-        // Scheme lambdas are JS functions with __lambda__ marker
+        // Scheme lambdas are JS functions with the LAMBDA-symbol marker
         expect(typeof add).toBe("function");
         expect((add as { __name__?: string }).__name__).toBe("add");
       });
@@ -334,7 +334,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const code = list(sym("lambda"), list(sym("x")), sym("x"));
         const fn = (await exec(code, { env })) as Function;
         expect(typeof fn).toBe("function");
-        expect((fn as { __lambda__?: boolean }).__lambda__).toBe(true);
+        expect((fn as { [k: symbol]: unknown })[Symbol.for("arrival/lambda")]).toBe(true);
       });
 
       it("should execute lambda with arguments", async () => {

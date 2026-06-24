@@ -18,7 +18,7 @@
 import { is_promise } from "./guards.js";
 import { LambdaContext } from "./LambdaContext.js";
 import { Pair } from "../values/Pair.js";
-import { __data__ } from "../values/primitives.js";
+import { DATA } from "../well-known-symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";
 import { is_pair } from "../values/value-guards.js";
@@ -70,8 +70,8 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
       node.have_cycles("car") ? node.car : await resolve(node.car),
       node.have_cycles("cdr") ? node.cdr : await resolve(node.cdr),
     );
-    if (node[__data__]) {
-      pair[__data__] = true;
+    if (node[DATA]) {
+      pair[DATA] = true;
     }
     return pair;
   }

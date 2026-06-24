@@ -5,7 +5,6 @@ import { Macro } from "./Macro.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { Syntax } from "./Syntax.js";
 import {
-  __lambda__,
   char_re,
   complex_re,
   directives,
@@ -15,6 +14,7 @@ import {
   re_re,
 } from "../values/primitives.js";
 import { QuotedPromise } from "../values/QuotedPromise.js";
+import { CLASS, LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
 import { nil } from "../values/types.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
@@ -173,7 +173,7 @@ function is_js_function_wrapper(o: unknown): boolean {
     typeof o === "object" &&
     "source" in o &&
     typeof (o as { source: unknown }).source === "function" &&
-    (o as { constructor?: { __class__?: string } }).constructor?.__class__ === "js-function"
+    (o as { constructor?: { [CLASS]?: string } }).constructor?.[CLASS] === "js-function"
   );
 }
 
@@ -194,12 +194,9 @@ export function is_inexact(o: unknown): o is SchemeInexact {
 
 // ----------------------------------------------------------------------
 export function is_lambda(obj: unknown): boolean {
-  // A Scheme lambda is a FUNCTION carrying the __lambda__ marker. The evaluator
-  // sets the STRING property "__lambda__" (evaluator.ts), older LIPS used the
-  // SYMBOL — check both, mirroring membrane.ts isSchemeValue. (Was dead: it gated
-  // on `typeof obj === "object"`, but functions are typeof "function", and only
-  // read the symbol key — the same symbol-vs-string class as is_data_marked.)
-  return typeof obj === "function" && ("__lambda__" in obj || __lambda__ in obj);
+  // A Scheme lambda is a FUNCTION carrying the well-known LAMBDA brand. The evaluator
+  // stamps every lambda it creates/wraps with it; the membrane mirrors this check.
+  return typeof obj === "function" && LAMBDA in obj;
 }
 
 // ----------------------------------------------------------------------

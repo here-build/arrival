@@ -2,6 +2,7 @@
 // code-point view, with provenance and Fantasy Land algebras on the instance.
 // Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { SchemeNumeric } from "./numbers.js";
 import { markInteropBoundary } from "../interop-access.js";
@@ -13,7 +14,7 @@ type NumberLike = number | SchemeNumeric | { valueOf(): number };
 type CharLike = string | SchemeCharacter | { valueOf(): string };
 
 export class SchemeString extends AValue {
-  static __class__ = "string";
+  static [CLASS] = "string";
   readonly kind = "string" as const;
 
   __string__: string;

@@ -1,3 +1,4 @@
+import { CLASS } from "../well-known-symbols.js";
 import { trim_lines } from "../utils/trim-lines.js";
 import { typecheck } from "../utils/typecheck.js";
 
@@ -19,7 +20,7 @@ export interface MacroInvokeContext {
  * function application", 2010).
  */
 export class Macro {
-  static __class__ = "macro";
+  static [CLASS] = "macro";
 
   __name__: string;
   __fn__: Function;

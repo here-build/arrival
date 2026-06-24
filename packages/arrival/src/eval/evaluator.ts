@@ -42,7 +42,7 @@ import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { SchemeVector } from "../values/SchemeVector.js";
 import { Macro } from "./Macro.js";
 import { Pair } from "../values/Pair.js";
-import { __data__, __location__ } from "../values/primitives.js";
+import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
 import { nil, type SchemeValue } from "../values/types.js";
 
 // ============================================================================
@@ -90,8 +90,8 @@ export class SchemeError extends ArrivalError {
 }
 
 function getLocation(code: SchemeValue): SourceLocation | undefined {
-  if (code && typeof code === "object" && __location__ in code) {
-    return code[__location__] as SourceLocation;
+  if (code && typeof code === "object" && LOCATION in code) {
+    return code[LOCATION] as SourceLocation;
   }
   return undefined;
 }
@@ -376,7 +376,7 @@ function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): S
   let out: SchemeValue[] | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (typeof a === "function" && (a as { __lambda__?: boolean }).__lambda__) {
+    if (typeof a === "function" && (a as { [LAMBDA]?: boolean })[LAMBDA]) {
       if (!out) out = [...args];
       out[i] = wrapLambda(a as LambdaFunction, dynSite);
     }
@@ -420,7 +420,7 @@ function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): La
       _dynamicCallSite = saved;
     }
   };
-  wrapped.__lambda__ = true;
+  wrapped[LAMBDA] = true;
   if (lambda.__name__) wrapped.__name__ = lambda.__name__;
   if (lambda.__params__) wrapped.__params__ = lambda.__params__;
   return wrapped;
@@ -434,11 +434,11 @@ function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): La
  * Every other callable receives forced, settled values — force-on-unknown-boundary.
  */
 interface SpeculationAware {
-  __speculate__?: boolean;
+  [SPECULATE]?: boolean;
 }
 
 interface LambdaFunction {
-  __lambda__?: boolean;
+  [LAMBDA]?: boolean;
   __name__?: string;
   /**
    * Positional parameter names captured at lambda creation. Empty for
@@ -453,20 +453,20 @@ interface LambdaFunction {
 
 /** Interface for macro expansion result */
 interface DataMarked {
-  [__data__]?: boolean;
+  [DATA]?: boolean;
 }
 
 /** Type guard for DataMarked objects */
 function is_data_marked(o: unknown): o is DataMarked {
   if (o === null || typeof o !== "object") return false;
   // The data mark is the `__data__` SYMBOL (Symbol.for("__data__")), set by
-  // quote() and read by legacy evaluate_macro as `value?.[__data__]`. The earlier
+  // quote() and read by legacy evaluate_macro as `value?.[DATA]`. The earlier
   // string-key check ("__data__" in o) never matched the symbol — invisible for
   // any normal (quote x) because that hits evalQuote (a special form) and skips
   // this macro path, but a hygiene-gensym'd `#:quote` resolves to the quote Macro
   // and DOES take this path, so the mismatch made the generator re-evaluate
   // quoted data inside syntax-rules expansions.
-  return (o as Record<symbol, unknown>)[__data__] === true;
+  return (o as Record<symbol, unknown>)[DATA] === true;
 }
 
 /** Type guard for LambdaFunction */
@@ -1436,7 +1436,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   };
 
   // Mark as lambda for identification
-  lambda.__lambda__ = true;
+  lambda[LAMBDA] = true;
 
   // Stash positional parameter names so tracers can correlate symbol uses
   // inside the body to the parameter slot they bind. Variadic-only
@@ -1602,7 +1602,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         signal: ctx.signal,
       });
     };
-    loopFn.__lambda__ = true;
+    loopFn[LAMBDA] = true;
     loopFn.__name__ = symbol_name(name);
     loopFn.__params__ = params.map((p) => symbol_name(p));
 
@@ -1844,7 +1844,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 
   // Lambdas (and named-let loop fns) speak the bounce protocol; route them
   // through the trampoline so a tail `=>` collapses instead of overflowing.
-  if (is_function(proc) && (proc as LambdaFunction).__lambda__ === true) {
+  if (is_function(proc) && (proc as LambdaFunction)[LAMBDA] === true) {
     const dynSite = ctx.currentInvocation;
     const __savedDynamicCallSite = _dynamicCallSite;
     _dynamicCallSite = dynSite;
@@ -2459,7 +2459,7 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Tap: fire enter/exit for parsed Pairs (those carrying __location__).
   // Atoms above and macro-expansion-constructed Pairs (no location) are skipped.
   const tap = ctx.tap;
-  if (tap && __location__ in code && (!ctx.nodeFilter || ctx.nodeFilter(code))) {
+  if (tap && LOCATION in code && (!ctx.nodeFilter || ctx.nodeFilter(code))) {
     const inv = tap.enter(code, ctx.currentInvocation ?? null, ctx.tail === true);
     const childCtx: EvalContext = { ...ctx, currentInvocation: inv };
     return yield {
@@ -2560,7 +2560,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     // This is the single chokepoint the force-on-unknown-boundary contract rides
     // on. Gated on `ctx.speculate`, so default-off runs pay nothing and no
     // HalfBaked can even exist (producers are gated on the same flag).
-    if (ctx.speculate && (fn as SpeculationAware).__speculate__ !== true) {
+    if (ctx.speculate && (fn as SpeculationAware)[SPECULATE] !== true) {
       for (let i = 0; i < args.length; i++) {
         if (is_half_baked(args[i])) {
           args[i] = yield (args[i] as HalfBaked).force();
@@ -2592,7 +2592,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     const __savedDynamicCallSite = _dynamicCallSite;
     _dynamicCallSite = dynSite;
     const __savedCanBounce = _canBounce;
-    _canBounce = (fn as LambdaFunction).__lambda__ === true;
+    _canBounce = (fn as LambdaFunction)[LAMBDA] === true;
     const __savedSpeculate = _speculate;
     _speculate = ctx.speculate === true;
     const __savedRunEnv = _currentRunEnv;

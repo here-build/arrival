@@ -12,6 +12,7 @@
  * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
  * cycle detection is Floyd's tortoise-and-hare.
  */
+import { CLASS } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "./op-helpers.js";
@@ -23,15 +24,15 @@ import { SchemeString } from "./SchemeString.js";
 import { SchemeVector } from "./SchemeVector.js";
 import { SchemeSymbol } from "./SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { __cycles__, __data__, __location__, __ref__ } from "./primitives.js";
+import { CYCLES, DATA, LOCATION, REF } from "../well-known-symbols.js";
 import { markInteropBoundary } from "../interop-access.js";
 import { type PairLike } from "./types.js";
 import { Nil, nil, setPairConstructor } from "./types.js";
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends Pair<Car, Cdr> {
-  [__cycles__]?: { car?: string | Pair; cdr?: string | Pair };
-  [__ref__]?: string;
-  [__location__]?: SourceLocation;
+  [CYCLES]?: { car?: string | Pair; cdr?: string | Pair };
+  [REF]?: string;
+  [LOCATION]?: SourceLocation;
 }
 
 // Trampoline thunk: `mark_cycles` walks arbitrarily deep lists, so it bounces
@@ -119,10 +120,10 @@ function mark_cycles(pair: Pair): void {
       if (!refs.includes(child)) {
         refs.push(child);
       }
-      if (!node[__cycles__]) {
-        node[__cycles__] = {};
+      if (!node[CYCLES]) {
+        node[CYCLES] = {};
       }
-      node[__cycles__][type] = child;
+      node[CYCLES][type] = child;
       if (!cycles.includes(node)) {
         cycles.push(node);
       }
@@ -134,8 +135,8 @@ function mark_cycles(pair: Pair): void {
   const detect = trampoline(function detect_thunk(pair: unknown, parents: Pair[]): Thunk | void {
     if (is_pair(pair)) {
       const pairWithCycles = pair as PairWithMetadata;
-      delete pairWithCycles[__ref__];
-      delete pairWithCycles[__cycles__];
+      delete pairWithCycles[REF];
+      delete pairWithCycles[CYCLES];
       visit(pair);
       parents.push(pair);
       const car = set(pairWithCycles, "car", pair.car, parents);
@@ -152,7 +153,7 @@ function mark_cycles(pair: Pair): void {
   });
 
   function mark_node(node: PairWithMetadata, type: "car" | "cdr"): void {
-    const cycleData = node[__cycles__];
+    const cycleData = node[CYCLES];
     if (cycleData && is_pair(cycleData[type])) {
       const count = ref_nodes.indexOf(cycleData[type]);
       cycleData[type] = `#${count}#`;
@@ -162,7 +163,7 @@ function mark_cycles(pair: Pair): void {
   detect(pair, []);
   const ref_nodes = seen_pairs.filter((node) => refs.includes(node));
   for (const [i, node] of ref_nodes.entries()) {
-    (node as PairWithMetadata)[__ref__] = `#${i}=`;
+    (node as PairWithMetadata)[REF] = `#${i}=`;
   }
   for (const node of cycles) {
     mark_node(node, "car");
@@ -233,10 +234,10 @@ function stringifyValue(obj: unknown, quote?: boolean): string {
 }
 
 export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLike<Car, Cdr> {
-  static __class__ = "pair";
+  static [CLASS] = "pair";
   readonly kind = "pair" as const;
-  [__data__]?: boolean;
-  [__location__]?: SourceLocation;
+  [DATA]?: boolean;
+  [LOCATION]?: SourceLocation;
 
   car: Car;
   cdr: Cdr;
@@ -264,7 +265,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   static fromArray(array: unknown, deep = true, quote = false): Pair | Nil | unknown[] {
     if (
       is_pair(array) ||
-      (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[__data__])
+      (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[DATA])
     ) {
       return array as Pair | unknown[];
     }
@@ -307,12 +308,12 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
 
   /** Returns this for chaining. */
   setLocation(loc: SourceLocation): this {
-    this[__location__] = loc;
+    this[LOCATION] = loc;
     return this;
   }
 
   getLocation(): SourceLocation | undefined {
-    return this[__location__];
+    return this[LOCATION];
   }
 
   // Instance methods
@@ -349,7 +350,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
         visited.set(node, pair);
         pair.car = deep ? cloneNode(node.car) : node.car;
         pair.cdr = cloneNode(node.cdr);
-        pair[__cycles__] = (node as PairWithMetadata)[__cycles__];
+        pair[CYCLES] = (node as PairWithMetadata)[CYCLES];
         return pair;
       }
       return node;
@@ -508,7 +509,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     if (!name) {
       return this.have_cycles("car") || this.have_cycles("cdr");
     }
-    return !!(this as PairWithMetadata)[__cycles__]?.[name];
+    return !!(this as PairWithMetadata)[CYCLES]?.[name];
   }
 
   is_cycle(): boolean {
@@ -520,8 +521,8 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     const thisWithCycles = this as PairWithMetadata;
 
     // Opening paren (with ref marker if present)
-    if (thisWithCycles[__ref__]) {
-      parts.push(`${thisWithCycles[__ref__]}(`);
+    if (thisWithCycles[REF]) {
+      parts.push(`${thisWithCycles[REF]}(`);
     } else if (!nested) {
       parts.push("(");
     }
@@ -533,7 +534,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     while (is_pair(node)) {
       const nodeWithCycles = node as PairWithMetadata;
       if (!first) {
-        if (nodeWithCycles[__ref__]) {
+        if (nodeWithCycles[REF]) {
           // Shared structure in cdr position - print as dotted pair with full notation
           parts.push(" . ", node.toString(quote));
           node = nil as unknown as Pair;
@@ -544,14 +545,14 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
       first = false;
 
       // Car value (recursive for nested structures - usually shallow)
-      const carValue = nodeWithCycles[__cycles__]?.car ?? stringifyValue(node.car, quote);
+      const carValue = nodeWithCycles[CYCLES]?.car ?? stringifyValue(node.car, quote);
       if (carValue !== undefined) {
         parts.push(String(carValue));
       }
 
       // Check for cdr cycle marker
-      if (nodeWithCycles[__cycles__]?.cdr) {
-        parts.push(" . ", String(nodeWithCycles[__cycles__].cdr));
+      if (nodeWithCycles[CYCLES]?.cdr) {
+        parts.push(" . ", String(nodeWithCycles[CYCLES].cdr));
         break;
       }
 
@@ -564,7 +565,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     }
 
     // Closing paren
-    if (!nested || thisWithCycles[__ref__]) {
+    if (!nested || thisWithCycles[REF]) {
       parts.push(")");
     }
     return parts.join("");
@@ -647,9 +648,9 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     const copy = new Pair<Car, Cdr>(this.car, this.cdr, p);
     const src = this as PairWithMetadata<Car, Cdr>;
     const dst = copy as PairWithMetadata<Car, Cdr>;
-    if (src[__location__] !== undefined) dst[__location__] = src[__location__];
-    if (src[__cycles__] !== undefined) dst[__cycles__] = src[__cycles__];
-    if (src[__ref__] !== undefined) dst[__ref__] = src[__ref__];
+    if (src[LOCATION] !== undefined) dst[LOCATION] = src[LOCATION];
+    if (src[CYCLES] !== undefined) dst[CYCLES] = src[CYCLES];
+    if (src[REF] !== undefined) dst[REF] = src[REF];
     return copy;
   }
 

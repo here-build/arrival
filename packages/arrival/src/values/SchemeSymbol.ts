@@ -1,3 +1,4 @@
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 import type { SchemeStringLike } from "./types.js";
@@ -18,7 +19,7 @@ type SchemeSymbolName = string | symbol;
 const UNINTERNED = Symbol("UNINTERNED");
 
 export class SchemeSymbol extends AValue {
-  static __class__ = "symbol";
+  static [CLASS] = "symbol";
   readonly kind = "symbol" as const;
   // Interning table for string-named symbols.
   // `Object.create(null)` (NOT `{}`): a plain object inherits Object.prototype,

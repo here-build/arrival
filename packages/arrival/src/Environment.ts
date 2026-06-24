@@ -1,3 +1,4 @@
+import { CLASS } from "./well-known-symbols.js";
 import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
 import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/EOF.js";
@@ -112,8 +113,8 @@ function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefine
 }
 // -------------------------------------------------------------------------
 export class Environment {
-  static __class__ = "environment";
-  __resolvers__: FallbackResolver[] = [];
+  static [CLASS] = "environment";
+  private __resolvers__: FallbackResolver[] = [];
   /**
    * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
    * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling

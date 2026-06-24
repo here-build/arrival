@@ -20,6 +20,7 @@
  * Truffle's InteropLibrary (Würthinger et al. 2013/2017) — see interop-access.ts.
  */
 
+import { CLASS } from "./well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./values/AValue.js";
 import { SchemeBool } from "./values/SchemeBool.js";
@@ -35,7 +36,7 @@ import { SchemeSymbol } from "./values/SchemeSymbol.js";
 import { Macro } from "./eval/Macro.js";
 import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./values/numbers.js";
 import { Pair } from "./values/Pair.js";
-import { __lambda__ } from "./values/primitives.js";
+import { LAMBDA } from "./well-known-symbols.js";
 import { QuotedPromise } from "./values/QuotedPromise.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
 // rosetta.ts statically imports `SchemeJSObject` from this file. ES module
@@ -126,8 +127,8 @@ export function isSchemeValue(value: unknown): boolean {
     case value instanceof LambdaContext:
     case value instanceof SchemeEnvironment:
 
-    // Scheme lambda: new evaluator uses string "__lambda__", old LIPS uses Symbol
-    case typeof value === "function" && ("__lambda__" in value || __lambda__ in value):
+    // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
+    case typeof value === "function" && LAMBDA in value:
       return true;
 
     default:
@@ -156,7 +157,7 @@ export function isBytevectorLike(value: unknown): boolean {
  * NOT a Pair — consumers must check explicitly with `instanceof SchemeJSArray`.
  */
 export class SchemeJSArray {
-  static __class__ = "js-array";
+  static [CLASS] = "js-array";
 
   constructor(readonly source: readonly unknown[]) {}
 
@@ -209,7 +210,7 @@ const entryCaches = new WeakMap<SchemeJSObject, Map<string, AValue>>();
  * `(eq? (@ obj :x) (@ obj :x))` holds.
  */
 export class SchemeJSObject extends AValue {
-  static __class__ = "js-object";
+  static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
   constructor(
@@ -365,7 +366,7 @@ export class SchemeJSObject extends AValue {
  * Wrapper for JS functions. Handles boundary crossing on invocation.
  */
 export class SchemeJSFunction extends AValue {
-  static __class__ = "js-function";
+  static [CLASS] = "js-function";
   readonly kind = "procedure" as const;
 
   constructor(

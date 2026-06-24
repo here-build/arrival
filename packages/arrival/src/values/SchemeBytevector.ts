@@ -12,6 +12,7 @@
  * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
  * Fantasy Land (fantasyland/fantasy-land).
  */
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 
@@ -54,7 +55,7 @@ function toUint8(source: BytevectorSource): Uint8Array {
 }
 
 export class SchemeBytevector extends AValue {
-  static __class__ = "bytevector";
+  static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 
   /** Mutable raw payload — bytevector-u8-set!/copy! write through this. */

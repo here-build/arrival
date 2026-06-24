@@ -42,6 +42,7 @@ import {
   rational_bare_re,
   rational_re,
 } from "./values/primitives.js";
+import { CLASS, SPECULATE } from "./well-known-symbols.js";
 import { nil, SchemeCharacter } from "./values/types.js";
 import * as specials from "./reader/specials.js";
 import { call_function } from "./eval/call-function.js";
@@ -312,7 +313,7 @@ export function doc(name: string | null, fn: SchemeValue, docstring?: string) {
  * comparison ops are marked; everything else gets force-on-unknown-boundary.
  */
 function speculative<T>(fn: T): T {
-  (fn as { __speculate__?: boolean }).__speculate__ = true;
+  (fn as { [SPECULATE]?: boolean })[SPECULATE] = true;
   return fn;
 }
 
@@ -671,8 +672,8 @@ function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args
       constructor = Object;
     }
     let name;
-    if (typeof (constructor as SchemeValue).__class__ === "string") {
-      name = (constructor as SchemeValue).__class__;
+    if (typeof (constructor as SchemeValue)[CLASS] === "string") {
+      name = (constructor as SchemeValue)[CLASS];
     } else {
       const fn = user_repr(obj);
       if (fn) {

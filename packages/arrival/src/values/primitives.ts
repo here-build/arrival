@@ -106,9 +106,5 @@ export const type_constants = new Map([
 // ----------------------------------------------------------------------
 // Hidden props
 // ----------------------------------------------------------------------
-export const __data__ = Symbol.for("__data__");
-export const __ref__ = Symbol.for("__ref__");
-export const __cycles__ = Symbol.for("__cycles__");
-export const __prototype__ = Symbol.for("__prototype__");
-export const __lambda__ = Symbol.for("__lambda__");
-export const __location__ = Symbol.for("__location__");
+// Cross-cutting brand symbols (__data__/__ref__/__cycles__/__lambda__/__location__/
+// __prototype__) moved to ../well-known-symbols.ts — see that module.

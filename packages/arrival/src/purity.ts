@@ -15,10 +15,11 @@
 // feature as an internal routing/telemetry key (errors-as-doors Rule 3/5) — so
 // the language owns the list and the host owns the structured error.
 
+import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";
 
 export class PurityError extends ArrivalError {
-  static __class__ = "purity-error";
+  static [CLASS] = "purity-error";
   public readonly owner = "owned-by/purity-invariant";
   public readonly name = "PurityError";
 

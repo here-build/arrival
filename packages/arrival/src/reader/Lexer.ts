@@ -79,9 +79,10 @@ export class Lexer {
     valid: false,
     rules: null,
   };
-  // Instance fields are installed via Object.defineProperty in the constructor (non-enumerable, so
-  // they stay hidden from Scheme-side introspection of this object).
-  __input__!: string;
+  // Class-internal: the source text being lexed. Installed via Object.defineProperty
+  // in the constructor. `private` is compile-time only (the defineProperty + runtime
+  // shape are unchanged); it just blocks cross-module reads, of which there are none.
+  private __input__!: string;
 
   // Last token's meta, snapshotted on peek() — a parser extension reads it to recover source position.
   __token__?: { token: string; col: number; offset: number; line: number };

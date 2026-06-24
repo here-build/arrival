@@ -15,6 +15,7 @@
  * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 import { structuralEqual, type SeenMap } from "./structural-equal.js";
@@ -26,7 +27,7 @@ import type { SchemeValue } from "./types.js";
 const TO_JS = Symbol.for("scheme.toJS");
 
 export class SchemeVector extends AValue {
-  static __class__ = "vector";
+  static [CLASS] = "vector";
   readonly kind = "vector" as const;
 
   /** Mutable raw payload — vector-set!/fill!/copy! write through this. */

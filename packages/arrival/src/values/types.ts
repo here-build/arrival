@@ -2,6 +2,7 @@
  * Core Scheme types extracted from lips.ts
  * These are the fundamental data types for the Scheme implementation.
  */
+import { CLASS } from "../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 import invariant from "tiny-invariant";
@@ -50,7 +51,7 @@ export function setPairConstructor(ctor: new (car: unknown, cdr: unknown) => Pai
 }
 
 export class Nil extends AValue {
-  static __class__ = "nil";
+  static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
   constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
@@ -164,7 +165,7 @@ const characters: Record<string, string> = {
 export { characters };
 
 export class SchemeCharacter extends AValue {
-  static __class__ = "character";
+  static [CLASS] = "character";
   readonly kind = "character" as const;
   // Named character mappings
   static readonly __names__: Record<string, string> = characters;

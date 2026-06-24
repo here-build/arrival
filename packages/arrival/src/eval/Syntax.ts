@@ -1,4 +1,5 @@
 // TODO: Syntax shouldn't extend Macro — syntax transformers aren't runtime values.
+import { CLASS } from "../well-known-symbols.js";
 import { Macro, MacroInvokeContext } from "./Macro.js";
 
 // Type for syntax object (can be Syntax or Function)
@@ -15,11 +16,11 @@ type SyntaxLike = Syntax | Function;
  * parameters.
  */
 export class Syntax extends Macro {
-  static __class__ = "syntax";
+  static [CLASS] = "syntax";
   static __merge_env__ = Symbol.for("merge");
   // SRFI-139
   static Parameter = class SyntaxParameter {
-    static __class__ = "syntax-parameter";
+    static [CLASS] = "syntax-parameter";
 
     _syntax!: SyntaxLike; // Definite assignment - set via Object.defineProperty
     constructor(syntax: SyntaxLike) {

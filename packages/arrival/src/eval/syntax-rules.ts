@@ -24,7 +24,7 @@ import { QuotedPromise } from "../values/QuotedPromise.js";
 import { Syntax } from "./Syntax.js";
 import { is_nil, is_pair } from "./guards.js";
 import { isNumeric, SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { __data__ } from "../values/primitives.js";
+import { DATA } from "../well-known-symbols.js";
 import { eqv } from "../values/structural-equal.js";
 import { nil, type SchemeValue } from "../values/types.js";
 import { type } from "../utils/typecheck.js";
@@ -123,7 +123,7 @@ export function macro_expand(): SchemeFunction {
 
     async function traverse(node: SchemeValue, n: number, env: Environment): Promise<SchemeValue> {
       if (is_pair(node) && node.car instanceof SchemeSymbol) {
-        if (node[__data__]) {
+        if (node[DATA]) {
           return node;
         }
         const name = node.car.valueOf();

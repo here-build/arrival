@@ -7,6 +7,7 @@
  * 3. Drop-in replacements for global_env numeric operations
  */
 
+import { SPECULATE } from "./well-known-symbols.js";
 import { AValue, unionProvenance } from "./values/AValue.js";
 import { isBridgeInitialized, markBridgeInitialized, setBootstrapComplete } from "./boot.js";
 import { EnvCapability } from "./env/capability.js";
@@ -187,7 +188,7 @@ export function wrapOperator<In extends any[], InRest extends Codec<any, any> | 
   // Mark the comparison ops so the dispatch choke leaves their HalfBaked args
   // unforced — this wrapper reads the interval instead of a settled value.
   if (SPECULATIVE_OPS.has(op.name)) {
-    (fn as { __speculate__?: boolean }).__speculate__ = true;
+    (fn as { [SPECULATE]?: boolean })[SPECULATE] = true;
   }
   Object.defineProperty(fn, "name", { value: op.name });
   return fn;
@@ -311,7 +312,7 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
   // Preserve the speculation marker + operator name from the wrapped op so the evaluator's
   // speculative-eval path still engages (it forces HalfBaked args unless __speculate__ is set,
   // and keys early-collapse on op.name).
-  (fn as { __speculate__?: boolean }).__speculate__ = (numeric as { __speculate__?: boolean }).__speculate__;
+  (fn as { [SPECULATE]?: boolean })[SPECULATE] = (numeric as { [SPECULATE]?: boolean })[SPECULATE];
   Object.defineProperty(fn, "name", { value: sym });
   return fn;
 }

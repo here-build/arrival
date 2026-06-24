@@ -2,10 +2,11 @@
 // Arrival Exception — base class for error function and Scheme-level errors
 // -------------------------------------------------------------------------
 
+import { CLASS } from "./well-known-symbols.js";
 import type { SchemeValue } from "./values/types.js";
 
 export abstract class ArrivalError extends Error {
-  static __class__ = "arrival-error";
+  static [CLASS] = "arrival-error";
 
   public abstract readonly name: string;
 

@@ -6,6 +6,7 @@ import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { Pair } from "../values/Pair.js";
 import { type_constants } from "../values/primitives.js";
+import { CLASS } from "../well-known-symbols.js";
 // NOTE: Macro/Syntax are intentionally NOT imported. They are evaluator-world
 // classes; importing them here created an ESM init cycle (Macro → typecheck →
 // Syntax-extends-Macro) that resolved only by load-order luck. Their `typeOf`
@@ -101,9 +102,9 @@ export function type(obj): string {
       return "instance";
     }
     if (obj.constructor) {
-      if (obj.constructor.__class__) {
+      if (obj.constructor[CLASS]) {
         // Treat js-function as function for type checking (membrane wrapper)
-        const cls = obj.constructor.__class__;
+        const cls = obj.constructor[CLASS];
         return cls === "js-function" ? "function" : cls;
       }
       if (obj.constructor === Object) {
