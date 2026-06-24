@@ -19,7 +19,7 @@ import { functorLaws } from "./algebra-laws.js";
 const MAP = "fantasy-land/map";
 const FILTER = "fantasy-land/filter";
 const REDUCE = "fantasy-land/reduce";
-const TRAVERSE = "fantasy-land/traverse";
+const TRAVERSE = "arrival/tagless-final/traverse";
 const CHAIN = "fantasy-land/chain";
 const CONCAT = "fantasy-land/concat";
 const EMPTY = "fantasy-land/empty";

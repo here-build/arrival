@@ -280,7 +280,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     };
     const p = new APair(1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["fantasy-land/traverse"](of, (x: unknown) => x);
+    (p as any)["arrival/tagless-final/traverse"](of, (x: unknown) => x);
     expect(ofCalls.length).toBe(1);
     expect(is_nil(ofCalls[0])).toBe(true);
   });

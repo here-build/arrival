@@ -739,7 +739,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   // Traversable — effectful traversal; `of` lifts into the applicative.
-  ["fantasy-land/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
+  ["arrival/tagless-final/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
     return traversePair(of, f, this);
   }
 
