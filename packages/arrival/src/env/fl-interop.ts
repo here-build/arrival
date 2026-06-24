@@ -43,6 +43,8 @@ import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
+import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
+import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
 
 // ── Arrival sequence-op protocol surface ─────────────────────────────────────
 // The list/seq primitives (APair, AVector) carry their OWN async-aware sequence ops
@@ -200,6 +202,33 @@ function unforcedLazyEgress(op: string): never {
   );
 }
 
+// Per-run allocation bound for the term-delegated sequence ops. The heap meter (heap-budget.ts)
+// is charged per element at `to_array` for append/join/reverse/…; map/filter/reduce USED to be
+// charged at the now-dissolved `flCollectValues`, but they now delegate to the term's OWN
+// arrival/tagless-final method, which walks the spine/array DIRECTLY (bypassing to_array). A
+// native sequence pass emits no trampoline TICK, so the wall-clock budget can't preempt it —
+// without a charge here a `(map f huge)` / O(K²) churn loop would run unbounded. Charge by input
+// element count HERE, at the env-layer dispatch (which may read currentRunEnv), NOT on the value
+// term (the value classes stay evaluator-free — the import cycle AVector/APair forbid). A vector
+// counts O(1); a pair by a spine walk (the term re-walks to map — the same O(2K) profile the old
+// collect→rebuild had). Undefined meter ⇒ no budget ⇒ a single O(depth) lookup, nothing more.
+function chargeSequenceHeap(collection: unknown): void {
+  const meter = findHeapMeter(currentRunEnv() ?? null);
+  if (meter === undefined) return;
+  let count = 0;
+  if (collection instanceof AVector) {
+    count = collection.__vector__.length;
+  } else {
+    let cur: unknown = collection;
+    while (cur instanceof APair) {
+      count++;
+      cur = cur.cdr;
+    }
+  }
+  meter.used += count;
+  if (meter.used > meter.max) throw new SchemeError(heapBudgetMessage(meter.max), []);
+}
+
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
 export default new EnvCapability("scheme/fl-interop", {
@@ -254,6 +283,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // filter) filters by its OWN async-aware term method — byte-identical to the prior
         // overlay's filter-over-the-term VALUE semantics, now expressed on the term itself.
         if (list instanceof APair || list instanceof AVector) {
+          chargeSequenceHeap(list);
           return (list as ArrivalSequenceOps)["arrival/tagless-final/filter"](
             arg as ((x: unknown) => unknown) | RegExp,
           );
@@ -281,6 +311,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // multi-list map (lists.length > 1) is a ZIP, not a Functor op, so it stays on
         // builtinMap below.
         if (lists.length === 1 && (lists[0] instanceof APair || lists[0] instanceof AVector)) {
+          chargeSequenceHeap(lists[0]);
           return (lists[0] as ArrivalSequenceOps)["arrival/tagless-final/map"](fn);
         }
         // Fallback — multi-list (zip), or a non-sequence input (a SchemeJSArray: builtinMap
@@ -305,6 +336,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // 85). The convention lives ON the term. A SchemeJSArray carries no such method, so it
         // falls through to builtinReduce, whose pair|nil typecheck throws (coercion-soundness DR4).
         if (collection instanceof APair || collection instanceof AVector) {
+          chargeSequenceHeap(collection);
           return (collection as ArrivalSequenceOps)["arrival/tagless-final/reduce"](
             fn as (element: unknown, acc: unknown) => unknown,
             init,

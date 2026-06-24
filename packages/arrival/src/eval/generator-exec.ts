@@ -62,7 +62,9 @@ export interface ExecOptions {
   budgetMs?: number;
   /**
    * Per-run ALLOCATION budget — the memory analogue of `budgetMs`. Caps the cumulative number of list
-   * cells materialized through `to_array` (the choke point every collection op funnels through). The
+   * cells materialized through the two collection-op choke points — `to_array` (append/join/reverse/…) and the
+   * fl-interop sequence-op dispatch (filter/map/reduce over a Pair/Vector, charged at the dispatch
+   * since the term walk bypasses to_array). The
    * wall-clock budget is checked at trampoline TICKs, which a single native list pass (`filter`/
    * `append` over a large list) never hits — so an O(K²)-churn loop runs uninterruptibly until it
    * stack-overflows. This bound IS checked inside that loop. Undefined ⇒ unbounded (the default; only

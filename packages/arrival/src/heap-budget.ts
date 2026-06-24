@@ -10,13 +10,17 @@
 // pass (materialize a 1M list a handful of times) stays well under a generous cap. Monotonic, like the
 // EvalTrace entry cap: we bound cumulative work, not live heap.
 //
-// WHERE the charge happens: every native collection op funnels its element materialization through ONE
-// of two chokepoints, and BOTH charge the meter per element — `to_array` (stdlib.ts, the eager
-// list->array path used by append/join/reverse/…) and `flCollectValues` (env/fl-interop.ts, the
-// compute-by-fl path filter/map/reduce over a Pair were re-routed onto via the Fantasy-Land term
-// algebra). The fl path was originally uncharged — the budget was attached to `to_array` alone on the
-// premise it was the sole materialization point — which orphaned the bound once filter/map/reduce
-// stopped going through it; charging both closes that gap.
+// WHERE the charge happens: native collection ops charge the meter per element at ONE of two
+// chokepoints — `to_array` (stdlib.ts, the eager list->array path used by append/join/reverse/…)
+// and the sequence-op dispatch in `env/fl-interop.ts` (`chargeSequenceHeap`, covering filter/map/
+// reduce). History: filter/map/reduce over a Pair were once re-routed through a `flCollectValues`
+// collect→apply→reconstruct bridge that charged the meter; the Fantasy-Land→tagless-final dissolution
+// replaced that bridge with delegation to each term's OWN arrival/tagless-final method, which walks
+// the spine/array DIRECTLY (bypassing to_array AND the deleted flCollectValues). The charge moved to
+// the env-layer dispatch — counted by input element BEFORE delegating — because the value terms must
+// stay evaluator-free (no currentRunEnv import; the meter is run-scoped env state, not a value-algebra
+// concern). `to_array` alone was once the sole point, which orphaned the bound when the ops left it;
+// charging at both points closes that gap.
 //
 // The meter lives on the RUN's environment (installed by `exec`), found by walking the parent chain
 // from the run-scoped `currentRunEnv()` — so it is run-scoped and safe against async interleaving of
@@ -25,7 +29,8 @@
 import type { Environment } from "./Environment.js";
 
 /** A run's cumulative allocation meter. `used` counts elements materialized through `to_array` OR
- *  `flCollectValues` (the two collection-op chokepoints); once it passes `max` the run is contained. */
+ *  the fl-interop sequence-op dispatch (the two collection-op chokepoints); once it passes `max` the
+ *  run is contained. */
 export interface HeapMeter {
   used: number;
   max: number;
@@ -41,7 +46,7 @@ export function installHeapMeter(env: Environment, max: number): void {
 }
 
 /** Walk the env parent chain for the nearest installed meter (nearest = this run's). O(depth), called
- *  once per `to_array` / `flCollectValues` pass (not per element). Returns undefined when no budget
+ *  once per `to_array` / sequence-op-dispatch pass (not per element). Returns undefined when no budget
  *  was requested. */
 export function findHeapMeter(env: Environment | null): HeapMeter | undefined {
   for (let e = env; e; e = e.__parent__) {
