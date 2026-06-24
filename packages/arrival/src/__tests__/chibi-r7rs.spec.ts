@@ -565,11 +565,12 @@ function preprocessTestFile(content: string): string {
  * and drop a form iff COMPLEX_READ_TIME_PATTERNS matches its text. Eval-time
  * exclusions (call/cc, ports, …) are left untouched and filtered post-run.
  */
-function stripComplexForms(section: string): string {
+function stripComplexForms(section: string): { text: string; stripped: string[] } {
   const isComplexForm = (form: string): boolean =>
     COMPLEX_READ_TIME_PATTERNS.some((p) => (typeof p === "string" ? form.includes(p) : p.test(form)));
 
   let out = "";
+  const stripped: string[] = [];
   let i = 0;
   const len = section.length;
   while (i < len) {
@@ -609,10 +610,10 @@ function stripComplexForms(section: string): string {
       }
     }
     const form = section.slice(start, i);
-    if (!isComplexForm(form)) out += form;
-    // else: drop the whole form (a read-time-dooring complex form).
+    if (isComplexForm(form)) stripped.push(form.trim());
+    else out += form; // non-complex form passes through; a complex form is collected (read-time-dooring).
   }
-  return out;
+  return { text: out, stripped };
 }
 
 describe("Chibi R7RS Official Tests", () => {
@@ -654,6 +655,7 @@ describe("Chibi R7RS Official Tests", () => {
     // this way, 2026-05-31.)
     const trace = process.env.CHIBI_TRACE !== "0";
     const sections = testContent.split(/(?=\(test-begin\s+")/);
+    const complexExcluded: string[] = [];
     for (const section of sections) {
       if (!section.trim()) continue;
       const sectionMatch = section.match(/\(test-begin\s+"([^"]+)"\)/);
@@ -667,7 +669,8 @@ describe("Chibi R7RS Official Tests", () => {
       // is at read-time, not eval-time. Eval-time exclusions (call/cc, etc.) still
       // run and are filtered post-hoc as before; only read-time-failing lines are
       // removed here.
-      const safeSection = stripComplexForms(section);
+      const { text: safeSection, stripped } = stripComplexForms(section);
+      complexExcluded.push(...stripped);
       if (trace) process.stderr.write(`[chibi] → ${sectionName}\n`);
       try {
         await exec(safeSection, { env });
@@ -694,6 +697,7 @@ describe("Chibi R7RS Official Tests", () => {
     console.log(`Failed: ${unexpectedFailures.length}`);
     console.log(`Expected failures: ${expectedFailures.length}`);
     console.log(`Excluded: ${testResults.length - includedResults.length}`);
+    console.log(`Complex forms excluded (read-time, reals-only): ${complexExcluded.length}`);
 
     if (expectedFailures.length > 0) {
       console.log(`\n--- Expected Failures (documented deviations) ---`);
