@@ -14,8 +14,8 @@
 import type { EnvCapability } from "./capability.js";
 import core from "./core.js";
 import polyglot from "./polyglot.js";
-import r7rs from "./r7rs.js";
+import { allR7rs } from "./r7rs/index.js";
 import arrivalExtensions from "./arrival-extensions.js";
 import { allSrfi } from "./srfi/index.js";
 
-export const BASE_PACKS: readonly EnvCapability[] = [core, polyglot, r7rs, arrivalExtensions, ...allSrfi];
+export const BASE_PACKS: readonly EnvCapability[] = [core, polyglot, ...allR7rs, arrivalExtensions, ...allSrfi];
