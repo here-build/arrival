@@ -28,9 +28,11 @@
 //                       the codecs standing in for the generic schemeToJs/jsToScheme.
 //                       The impl is CTX-FREE: (decodedArgs) => result. withContext /
 //                       argProvenance are DROPPED here — the impl never receives ctx.
-//                       PROVENANCE MINTING (createRosettaWrapper's currentInvocation
-//                       point) is the wrapper's job, but lower()/ctx are NOT wired for
-//                       this step → a clearly-marked TODO call-site is left (see bake).
+//                       PROVENANCE MINTING is RESOLVED: the run-wrapper is `__withCtx` at the
+//                       binding level (lower() binds it raw; the evaluator appends ctx), so it
+//                       reads ctx.currentInvocation and mints/deep-stamps EXACTLY as
+//                       createRosettaWrapper does (a non-pure rosetta SymbolDef = a source). The
+//                       IMPL stays ctx-free — the wrapper strips ctx before decode.
 //
 //   symbol.notImplemented — no contract/impl, just `name: reason`. bake → a door:
 //                       { kind: "door", name, reason } (the %purity-door story).
@@ -38,6 +40,8 @@
 
 import * as z from "./scheme-zod.js";
 import type { Pair } from "../values/Pair.js";
+import { AValue, pointProvenance, unionProvenance } from "../values/AValue.js";
+import { jsToScheme } from "../rosetta.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -110,9 +114,12 @@ export interface RosettaSymbolDef {
   readonly out: z.ZodTypeAny;
   /** The raw JS-land impl (decoded args → result). Kept for the harvest / inspection. */
   readonly impl: AnyFn;
-  /** The interpretive wrapper: (…schemeArgs) => Promise<schemeValuesList>. Decodes +
-   *  (optionally) validates inputs, runs the impl, awaits, encodes the output. */
-  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+  /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
+   *  + (optionally) validates inputs, runs the (ctx-free) impl, awaits, encodes the output,
+   *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
+   *  see bakeRosetta). Tagged `__withCtx` so EnvCapability.lower() can bind it directly and the
+   *  evaluator appends ctx as the trailing arg; a direct-JS caller (no ctx) is duck-type-safe. */
+  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
 }
 
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
@@ -217,8 +224,38 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
 
   // The interpretive wrapper. Mirrors createRosettaWrapper's spine
   // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
-  // generic conversions and zod doing the (gated) validation.
-  const run = async (...schemeArgs: unknown[]): Promise<unknown> => {
+  // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
+  // provenance mint at the end. Tagged `__withCtx` (below) so the evaluator appends
+  // EvalContext as the trailing arg; a direct-JS caller (tests) passes a scheme value
+  // there instead — duck-typed so it is NOT mis-stripped (mirrors createRosettaWrapper).
+  const run = async (...args: unknown[]): Promise<unknown> => {
+    // Strip the evaluator-appended ctx iff the trailing arg LOOKS like one. By the time
+    // the wrapper runs under the evaluator the scheme DATA args are already scheme values
+    // (AValue subclasses / raw arrays-primitives); the genuine EvalContext is the only raw
+    // plain object carrying env/currentInvocation/tap/signal that reaches here. Same probe
+    // as createRosettaWrapper's looksLikeEvalContext.
+    let ctx: unknown = undefined;
+    let schemeArgs = args;
+    const last = args[args.length - 1];
+    if (
+      args.length > 0 &&
+      last != null &&
+      typeof last === "object" &&
+      !(last instanceof AValue) &&
+      !Array.isArray(last) &&
+      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+    ) {
+      ctx = last;
+      schemeArgs = args.slice(0, -1);
+    }
+
+    // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
+    // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
+    // when no invocation is in ctx (direct-JS calls) is this input union — exactly
+    // createRosettaWrapper's behavior.
+    const inputAValues = schemeArgs.filter((a): a is AValue => a instanceof AValue);
+    const inputProvenance = unionProvenance(inputAValues);
+
     // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
     //    crossing) and its input-side VALIDATION are FUSED inside `decode` — you can't
     //    run the transform without the instanceof/refinement guard. The membrane is
@@ -235,23 +272,44 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     // 2. RUN the (ctx-free) impl. async is implicit.
     const result = await input.impl(...decodedArgs);
 
-    // 3. PROVENANCE MINT — the wrapper's job, per the design (ctx.currentInvocation
-    //    point, mirroring createRosettaWrapper's markProvenancePoint + pointProvenance).
-    //    TODO(provenance-mint): lower()/EvalContext are NOT wired for this step. When
-    //    EnvCapability.lower() threads ctx into the wrapper, mint a fresh point here
-    //    (non-pure rosetta = source) and deep-stamp the encoded output with it — see
-    //    src/rosetta.ts createRosettaWrapper (resultProvenance / jsToScheme stamp).
-    //    For now the encode below carries the scheme values WITHOUT a minted origin.
+    // 3. PROVENANCE MINT (resolves the former TODO) — the SAME spine as
+    //    createRosettaWrapper: a non-pure rosetta is a Rosetta-IN SOURCE, so its result
+    //    MINTS a fresh point off ctx.currentInvocation; with no invocation (direct-JS) it
+    //    falls back to the input union. SymbolDef rosettas are always sources here (no
+    //    `pure` opt-out on the contract API yet — a pure/transform variant is a clean
+    //    follow-up; see capability.ts wiring note).
+    const inv = (ctx as { currentInvocation?: { id?: number; isProvenancePoint?: boolean; markProvenancePoint?(): void } } | undefined)
+      ?.currentInvocation;
+    let resultProvenance = inputProvenance;
+    if (inv && typeof inv.id === "number") {
+      if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
+      else inv.isProvenancePoint = true;
+      resultProvenance = pointProvenance(inv.id);
+    }
 
-    // 4. ENCODE the output via the output codecs (codec encode = z.encode).
+    // 4. ENCODE the output via the output codecs (codec encode = z.encode), then DEEP-STAMP
+    //    with the minted provenance. The codec builds the scheme value(s) with EMPTY
+    //    provenance, so the stamp is a separate re-walk (vs. createRosettaWrapper, which
+    //    stamps DURING jsToScheme construction). `jsToScheme(v, {}, prov)` is the canonical
+    //    re-stamp: given an already-AValue with a fresh provenance it deep-clones the
+    //    Pair/vector spine + leaves with that provenance (rosetta.ts jsToScheme AValue
+    //    branch), reaching every constructed value in one pass. CONTAINER-AWARE: the
+    //    multiple-values case is a RAW JS ARRAY (the scheme values-vector) — stamp each
+    //    ELEMENT and keep the JS array, because jsToScheme over a JS array would (correctly,
+    //    for data) build a Pair-chain, which is the WRONG shape for a values-vector.
     if (singleOut) {
       // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
-      const encoded = z.encode(outSchema, [result]) as readonly unknown[];
-      return encoded[0];
+      const encoded = (z.encode(outSchema, [result]) as readonly unknown[])[0];
+      return jsToScheme(encoded, {}, resultProvenance);
     }
     // multiple-values / array-ish output: the impl returned the values-vector already.
-    return z.encode(outSchema, result);
+    const encoded = z.encode(outSchema, result) as unknown[];
+    return encoded.map((v) => jsToScheme(v, {}, resultProvenance));
   };
+  // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
+  // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS
+  // calls (no ctx) safe.
+  (run as { __withCtx?: boolean }).__withCtx = true;
 
   return {
     kind: "rosetta",

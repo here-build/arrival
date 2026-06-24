@@ -17,6 +17,8 @@ import { z } from "zod";
 import type { EnvPack } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
+import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
+import { PurityError } from "../purity.js";
 import invariant from "tiny-invariant";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
@@ -41,10 +43,32 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
 
 type Fn = (...args: any[]) => unknown;
 
-/** A symbol is a bare fn, a rosetta config (`withContext`/`type`/`options`), or a raw
- *  value binding (`{ value }`, e.g. a sentinel constant). Fn forms read `this`. */
-export type SymbolDef = Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
+/** A symbol is, during the symbol.* migration window, one of TWO families:
+ *
+ *  • the BAKED `SymbolDef` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" }`)
+ *    — the target form, dispatched by `kind` in apply();
+ *  • a LEGACY form — a bare fn, a rosetta config (`withContext`/`type`/`options`), or a raw
+ *    value binding (`{ value }`) — the shape unmigrated packs still use. Fn forms read `this`.
+ *
+ *  ─── TRANSITIONAL (deletion gate) ───────────────────────────────────────────────────────
+ *  Accepting BOTH is a MIGRATION scaffold, not a permanent compat layer. The legacy arm
+ *  (`isValueDef` / `isSymbolSpec` / the bare-Fn fallback below) is DELETED in Phase 2, once
+ *  every pack is migrated to `symbol.native` / `symbol.rosetta` / `symbol.notImplemented`.
+ *  `equality.ts` is the Phase-1 pilot; the rest of NATIVE_PACKS + the rosetta packs follow.
+ *  Until then this union is open on both sides and apply() routes by shape. */
+export type SymbolDef = BakedSymbolDef | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
 
+/** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
+ *  target form from every legacy shape. */
+const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
+  typeof m === "object" &&
+  m !== null &&
+  "kind" in m &&
+  ((m as { kind: unknown }).kind === "native" ||
+    (m as { kind: unknown }).kind === "rosetta" ||
+    (m as { kind: unknown }).kind === "door");
+
+// ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
 const isValueDef = (m: SymbolDef): m is { value: unknown } => typeof m === "object" && m !== null && "value" in m;
 const isSymbolSpec = (m: SymbolDef): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
@@ -161,6 +185,50 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         const prefix = spec.symbolPrefix ?? "";
         for (const [name, def] of Object.entries(symbolsRec)) {
           const verb = prefix + name;
+
+          // ── BAKED symbol.* forms — dispatch by kind (the target path). ──────────────
+          if (isBakedDef(def)) {
+            switch (def.kind) {
+              case "native":
+                // The impl works on SCHEME VALUES, no codec, no validation — bind it raw,
+                // exactly like the legacy `{ value: fn }` path (and provenance-transparent:
+                // a native value-op is a pure transform, never a source).
+                env.set(verb, def.impl);
+                break;
+              case "rosetta": {
+                // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper, already
+                // tagged `__withCtx` (so the evaluator appends ctx and the wrapper mints
+                // provenance — same spine as createRosettaWrapper; see symbol.ts bakeRosetta).
+                // Bind it via `set`, NOT defineRosetta — routing it through defineRosetta would
+                // double-wrap the membrane (a second schemeToJs/jsToScheme over the codec output).
+                // Resource pre-spawning still applies if the capability owns cells.
+                const runFn = def.run as Fn & { __withCtx?: boolean };
+                const gatedRun =
+                  cellList.length === 0
+                    ? runFn
+                    : Object.assign(
+                        async (...args: unknown[]) => {
+                          await ensureSpawned();
+                          return runFn(...args);
+                        },
+                        { __withCtx: runFn.__withCtx },
+                      );
+                env.set(verb, gatedRun);
+                break;
+              }
+              case "door":
+                // errors-as-doors: an OMITTED verb. Bind a throw carrying the teaching
+                // reason; the door's `name` is its omitted-set membership (PurityError.feature
+                // — the routing/telemetry key, mirroring core.ts's %purity-door → PurityError).
+                env.set(verb, () => {
+                  throw new PurityError(`${def.name} is not available.\n  Why: ${def.reason}`, def.name);
+                });
+                break;
+            }
+            continue;
+          }
+
+          // ── LEGACY forms (deleted with this arm in Phase 2) ─────────────────────────
           if (isValueDef(def)) {
             env.set(verb, def.value); // raw binding (e.g. a sentinel constant)
             continue;

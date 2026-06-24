@@ -7,10 +7,22 @@
  * recursion delegated to `structuralEqual`, the single representation-blind
  * equality home), and the `procedure?` type predicate. Op bodies are
  * reproduced byte-for-byte — this is a behavior-preserving mechanical
- * extraction. Wired into the env as a capability whose symbols are set raw
- * (`{ value }`), bypassing rosetta wrapping.
+ * extraction.
+ *
+ * MIGRATED (Phase-1 pilot) to the `symbol.native` API: each op declares a zod
+ * contract and an impl, replacing the inline `{ value }` form. Native means the
+ * schemas are SCHEME-IDENTITY (no codec, no validation) — the impl IS the binding,
+ * bound raw exactly as `{ value }` was, so the runtime behavior is unchanged. These
+ * predicates are REPRESENTATION-BLIND by design (they accept a boxed SchemeBool /
+ * SchemeSymbol OR a raw JS value that arrived via rosetta unwrapping — see
+ * equality-representation.test.ts), so the honest input term is `z.unknown()`, and the
+ * honest output is the `z.boolean` codec (DECODED type `boolean`) — the impl returns a JS
+ * boolean, which native binds
+ * and returns raw — downstream `structuralEqual` treats `true ≡ SchemeBool(true)`).
  */
 
+import * as z from "./scheme-zod.js";
+import { symbol } from "./symbol.js";
 import { SchemeBool } from "../values/SchemeBool.js";
 import { SchemeSymbol } from "../values/SchemeSymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
@@ -20,8 +32,9 @@ import { is_callable, is_macro } from "../eval/guards.js";
 export default new EnvCapability("scheme/equality", {
   symbols: {
     // R7RS 6.3 Booleans
-    "boolean=?": {
-      value(...bools: unknown[]): boolean {
+    "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
+      { input: z.array(z.unknown()), output: [z.boolean] },
+      (...bools: unknown[]): boolean => {
         if (bools.length < 2) return true;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
@@ -36,31 +49,34 @@ export default new EnvCapability("scheme/equality", {
         if (first === undefined) return false;
         return bools.every((b) => unwrap(b) === first);
       },
-    },
+    ),
 
     // R7RS 6.5 Symbols
-    "symbol=?": {
-      value(...syms: unknown[]): boolean {
+    "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
+      { input: z.array(z.unknown()), output: [z.boolean] },
+      (...syms: unknown[]): boolean => {
         if (syms.length < 2) return true;
         const first = syms[0];
         if (!(first instanceof SchemeSymbol)) return false;
         const firstName = first.__name__;
         return syms.every((s) => s instanceof SchemeSymbol && s.__name__ === firstName);
       },
-    },
+    ),
 
-    "procedure?": {
+    "procedure?": symbol.native`procedure?: callable, excluding macros`(
+      { input: [z.unknown()], output: [z.boolean] },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
-      value(obj: unknown): boolean {
+      (obj: unknown): boolean => {
         return is_callable(obj) && !is_macro(obj);
       },
-    },
+    ),
 
-    "equal?": {
-      value(a: unknown, b: unknown): boolean {
+    "equal?": symbol.native`equal?: representation-blind structural equality`(
+      { input: [z.unknown(), z.unknown()], output: [z.boolean] },
+      (a: unknown, b: unknown): boolean => {
         return structuralEqual(a, b);
       },
-    },
+    ),
   },
 });
