@@ -13,7 +13,7 @@ import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
 const MAP = "fantasy-land/map";
 const CONCAT = "fantasy-land/concat";
 const EMPTY = "fantasy-land/empty";
-const OF = "fantasy-land/of";
+const OF = "arrival/tagless-final/of";
 
 type FL = Record<string, any>;
 

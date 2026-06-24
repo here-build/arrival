@@ -23,7 +23,7 @@ const TRAVERSE = "arrival/tagless-final/traverse";
 const CHAIN = "arrival/tagless-final/chain";
 const CONCAT = "fantasy-land/concat";
 const EMPTY = "fantasy-land/empty";
-const OF = "fantasy-land/of";
+const OF = "arrival/tagless-final/of";
 
 type FL = Record<string, any>;
 

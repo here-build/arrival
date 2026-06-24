@@ -128,7 +128,7 @@ export class AString extends AValue {
   }
 
   // Applicative (Fantasy Land) — lift a value into a SchemeString.
-  static ["fantasy-land/of"](value: unknown): AString {
+  static ["arrival/tagless-final/of"](value: unknown): AString {
     return new AString(String(value));
   }
 

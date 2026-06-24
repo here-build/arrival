@@ -764,7 +764,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   // Applicative — single-element list.
-  static ["fantasy-land/of"](value: unknown): APair {
+  static ["arrival/tagless-final/of"](value: unknown): APair {
     return new APair(value, nil);
   }
 }
