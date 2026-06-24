@@ -25,7 +25,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../values/primitives/AValue.js";
 import { initBridge } from "../bridge.js";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { ABool } from "../values/primitives/ABool.js";
 import { exec } from "./exec-adapter.js";
 
 // exec-adapter only imports lips.ts (not index.ts), so wrappedOps don't get
@@ -121,14 +121,14 @@ describe("fuzz — provenance algebra invariants at depth", () => {
         ),
         (leafSets) => {
           // Round-trip 1: union all leaves at once.
-          const flatLeaves = leafSets.map((ids) => new SchemeBool(true, new Set(ids)));
+          const flatLeaves = leafSets.map((ids) => new ABool(true, new Set(ids)));
           const flatResult = unionProvenance(flatLeaves);
 
           // Round-trip 2: pairwise-fold through wrapped AValues.
-          let acc: AValue = new SchemeBool(true, EMPTY_PROVENANCE);
+          let acc: AValue = new ABool(true, EMPTY_PROVENANCE);
           for (const ids of leafSets) {
-            const leaf = new SchemeBool(false, new Set(ids));
-            acc = new SchemeBool(false, unionProvenance([acc, leaf]));
+            const leaf = new ABool(false, new Set(ids));
+            acc = new ABool(false, unionProvenance([acc, leaf]));
           }
 
           // Both routes must agree on membership — associativity is what
@@ -146,9 +146,9 @@ describe("fuzz — provenance algebra invariants at depth", () => {
       fc.property(
         fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 6 }),
         (ids) => {
-          const seed = new SchemeBool(true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
+          const seed = new ABool(true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
           const once = unionProvenance([seed]);
-          const twice = unionProvenance([new SchemeBool(true, once), new SchemeBool(true, once)]);
+          const twice = unionProvenance([new ABool(true, once), new ABool(true, once)]);
           expect(new Set(twice)).toEqual(new Set(once));
         },
       ),

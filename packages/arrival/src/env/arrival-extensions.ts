@@ -16,11 +16,11 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `ARRIVAL_EXTENSIONS_SCM`
 // and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "./capability.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { typecheck } from "../utils/typecheck.js";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import { stringValue, withInputProvenance } from "../values/op-helpers.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
@@ -37,18 +37,18 @@ export default new EnvCapability("arrival/core-extensions", {
     // the comment above already called them "native, below the membrane".)
     "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
       { input: [z.symbol], output: [z.schemeString] },
-      (s: unknown): SchemeString => {
+      (s: unknown): AString => {
         typecheck("symbol->string", s, "symbol");
-        const name = (s as SchemeSymbol).__name__;
+        const name = (s as ASymbol).__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
-        return withInputProvenance([s], new SchemeString(str));
+        return withInputProvenance([s], new AString(str));
       },
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
       { input: [z.schemeString], output: [z.symbol] },
-      (s: unknown): SchemeSymbol => {
+      (s: unknown): ASymbol => {
         typecheck("string->symbol", s, "string");
-        return withInputProvenance([s], new SchemeSymbol(stringValue(s)));
+        return withInputProvenance([s], new ASymbol(stringValue(s)));
       },
     ),
     "regex?": symbol.native`regex?: #t iff x is a host regular expression`(

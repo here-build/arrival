@@ -4,23 +4,23 @@
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
 import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import type { SchemeNumeric } from "../numbers.js";
+import type { ANumeric } from "../numbers.js";
 import { markInteropBoundary } from "../../interop-access.js";
-import { SchemeCharacter } from "./SchemeCharacter.js";
+import { ACharacter } from "./ACharacter.js";
 import { typecheck } from "../../utils/typecheck.js";
 
-type StringLike = string | SchemeString | { valueOf(): string };
-type NumberLike = number | SchemeNumeric | { valueOf(): number };
-type CharLike = string | SchemeCharacter | { valueOf(): string };
+type StringLike = string | AString | { valueOf(): string };
+type NumberLike = number | ANumeric | { valueOf(): number };
+type CharLike = string | ACharacter | { valueOf(): string };
 
-export class SchemeString extends AValue {
+export class AString extends AValue {
   static [CLASS] = "string";
   readonly kind = "string" as const;
 
   __string__: string;
 
   constructor(
-    string: SchemeCharacter[] | StringLike,
+    string: ACharacter[] | StringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
     super(provenance);
@@ -40,14 +40,14 @@ export class SchemeString extends AValue {
     return [...this.__string__].length;
   }
 
-  static isString(x: unknown): x is SchemeString | string {
-    return x instanceof SchemeString || typeof x === "string";
+  static isString(x: unknown): x is AString | string {
+    return x instanceof AString || typeof x === "string";
   }
 
   *[Symbol.iterator]() {
     const chars = [...this.__string__];
     for (const char of chars) {
-      yield new SchemeCharacter(char);
+      yield new ACharacter(char);
     }
   }
 
@@ -57,7 +57,7 @@ export class SchemeString extends AValue {
 
   freeze(): void {
     const string = this.__string__;
-    delete (this as Partial<SchemeString>).__string__;
+    delete (this as Partial<AString>).__string__;
     Object.defineProperty(this, "__string__", {
       value: string,
       // Non-configurable + non-writable so a later re-defineProperty or
@@ -98,53 +98,53 @@ export class SchemeString extends AValue {
   // content and a non-string `other` (number/object) fall through to #f. structuralEqual consults the
   // Setoid before its valueOf check, so this is THE place string equality is decided.
   ["fantasy-land/equals"](other: unknown): boolean {
-    return this.__string__ === (other instanceof SchemeString ? other.__string__ : other);
+    return this.__string__ === (other instanceof AString ? other.__string__ : other);
   }
 
   // Ord (Fantasy Land, extends Setoid). Lexicographic via JS `<=`, a total
   // code-unit order (totality/antisymmetry/transitivity/consistency-with-equals
   // all hold against the Setoid above). Non-SchemeString → false.
   ["fantasy-land/lte"](other: unknown): boolean {
-    return other instanceof SchemeString && this.__string__ <= other.__string__;
+    return other instanceof AString && this.__string__ <= other.__string__;
   }
 
   // Functor (Fantasy Land) — map over the characters. Iterates by code point
   // (spread), so astral chars map as single graphemes. `f` receives and returns
   // a string char; the result is the joined string. (Migrated from the
   // fantasy-land.ts monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2.)
-  ["fantasy-land/map"](f: (char: string) => string): SchemeString {
-    return new SchemeString([...this.__string__].map(f).join(""));
+  ["fantasy-land/map"](f: (char: string) => string): AString {
+    return new AString([...this.__string__].map(f).join(""));
   }
 
   // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
   // two underlying strings. Associative; equality via the Setoid above.
-  ["fantasy-land/concat"](other: SchemeString): SchemeString {
-    return new SchemeString(this.__string__ + other.valueOf());
+  ["fantasy-land/concat"](other: AString): AString {
+    return new AString(this.__string__ + other.valueOf());
   }
 
   // Monoid (Fantasy Land) — the empty string is the identity for append.
-  static ["fantasy-land/empty"](): SchemeString {
-    return new SchemeString("");
+  static ["fantasy-land/empty"](): AString {
+    return new AString("");
   }
 
   // Applicative (Fantasy Land) — lift a value into a SchemeString.
-  static ["fantasy-land/of"](value: unknown): SchemeString {
-    return new SchemeString(String(value));
+  static ["fantasy-land/of"](value: unknown): AString {
+    return new AString(String(value));
   }
 
-  lower(): SchemeString {
-    return new SchemeString(this.__string__.toLowerCase());
+  lower(): AString {
+    return new AString(this.__string__.toLowerCase());
   }
 
-  upper(): SchemeString {
-    return new SchemeString(this.__string__.toUpperCase());
+  upper(): AString {
+    return new AString(this.__string__.toUpperCase());
   }
 
   set(n: NumberLike, char: CharLike): void {
     typecheck("SchemeString::set", n, "number");
     typecheck("SchemeString::set", char, ["string", "character"]);
     const idx = typeof n === "number" ? n : n.valueOf();
-    const charValue = char instanceof SchemeCharacter ? char.__char__ : char.valueOf();
+    const charValue = char instanceof ACharacter ? char.__char__ : char.valueOf();
     // Rebuild by code point, not UTF-16 unit, so replacing index k in a string
     // containing astral chars doesn't split a surrogate pair (R7RS § 6.7).
     const codepoints = [...this.__string__];
@@ -152,13 +152,13 @@ export class SchemeString extends AValue {
     this.__string__ = codepoints.join("");
   }
 
-  clone(): SchemeString {
-    return new SchemeString(this.valueOf());
+  clone(): AString {
+    return new AString(this.valueOf());
   }
 
   fill(char: CharLike): void {
     typecheck("SchemeString::fill", char, ["string", "character"]);
-    const charValue = char instanceof SchemeCharacter ? char.valueOf() : char.valueOf();
+    const charValue = char instanceof ACharacter ? char.valueOf() : char.valueOf();
     // Fill must preserve the code-point length, not the UTF-16 unit length —
     // a string of N astral chars stays N chars after string-fill! (R7RS § 6.7).
     const len = [...this.__string__].length;
@@ -177,12 +177,12 @@ export class SchemeString extends AValue {
     return this.__string__;
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeString {
-    return new SchemeString(this.__string__, p);
+  withProvenance(p: ReadonlySet<number>): AString {
+    return new AString(this.__string__, p);
   }
 }
 
-AValue.registerBoxer("string", (v, p) => new SchemeString(v as string, p));
+AValue.registerBoxer("string", (v, p) => new AString(v as string, p));
 
 // Dynamically wrap all String.prototype methods
 {
@@ -191,11 +191,11 @@ AValue.registerBoxer("string", (v, p) => new SchemeString(v as string, p));
     return !ignore.has(name);
   });
   const wrap = (fn: (...args: unknown[]) => unknown) =>
-    function (this: SchemeString, ...args: unknown[]) {
+    function (this: AString, ...args: unknown[]) {
       return fn.apply(this.__string__, args);
     };
   for (const key of _keys) {
-    const proto = SchemeString.prototype as unknown as Record<string, unknown>;
+    const proto = AString.prototype as unknown as Record<string, unknown>;
     const strProto = String.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
     proto[key] = wrap(strProto[key]);
   }
@@ -221,4 +221,4 @@ AValue.registerBoxer("string", (v, p) => new SchemeString(v as string, p));
 // own, so the boundary only blocks future inherited additions, not the
 // current intended API. Defense-in-depth via the AValue base marker.
 // ============================================================================
-markInteropBoundary(SchemeString);
+markInteropBoundary(AString);

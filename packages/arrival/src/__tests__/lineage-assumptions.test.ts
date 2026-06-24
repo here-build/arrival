@@ -11,10 +11,10 @@ import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { LazySeq, is_lazy_seq } from "../values/primitives/LazySeq.js";
+import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { classify, fullCone, type Classifier } from "../values/lineage";
 import { provOf } from "../values/lineage-shadow";
 import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers";
@@ -67,7 +67,7 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
 
 describe("ASSUMPTION — a count is identity-entangled today (teleological); the tree must serve both queries (§5)", () => {
   it("A13: (length (map identity xs)) carries every element's provenance (over-attributes through map)", async () => {
-    const xs = Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+    const xs = APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) xs))`, { xs: xs as unknown as AValue })).toMatchInlineSnapshot(`
       [
         100,
@@ -82,7 +82,7 @@ describe("ASSUMPTION — a count is identity-entangled today (teleological); the
 describe("ASSUMPTION — the demand cone is the provenance cone, through the live builtins (§5, Step 2)", () => {
   // A bare JS source value carries no provenance; the GROUPING fact (id 7) is the
   // collection-level provenance — the only thing a pure-map length should depend on.
-  const lazy = (els: AValue[], groupId: number) => new LazySeq(els, [], new Set([groupId]));
+  const lazy = (els: AValue[], groupId: number) => new ALazySeq(els, [], new Set([groupId]));
 
   it("A18: (map f xs) over a LazySeq hits the fast-path — returns a LazySeq (extend), NOT an eager collect", async () => {
     const xs = lazy([sStr("a", 100), sStr("b", 101)], 7);
@@ -108,7 +108,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
     // The fast-paths are guarded on `is_lazy_seq`; a plain Pair is untouched, so
     // the pre-flip behavior (A13) is preserved exactly. This is the speculate
     // discipline: laziness changes nothing it doesn't explicitly touch.
-    const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+    const ys = APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
   });
 
@@ -118,7 +118,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
     env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
     // The Pair's OWN provenance (id 7) is the grouping fact lazy-seq lifts to the
     // collection level; the elements carry their own per-element provenance.
-    const ys = (Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
+    const ys = (APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
     env.set("ys", ys);
 
     // (map boom (lazy-seq ys)) over a plain Pair, lifted lazy from user code, EXTENDS
@@ -135,7 +135,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
   it("A18d: an un-forced lazy-seq at a non-recognizing egress FAILS LOUD — never a silent nil/empty", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`la-${seq++}`);
-    const ys = Pair.fromArray([sStr("a", 100), sStr("b", 101)], false);
+    const ys = APair.fromArray([sStr("a", 100), sStr("b", 101)], false);
     env.set("ys", ys as unknown as AValue);
     // Without the guard, `first` returns nil and `sort` returns '() — both silent
     // wrong answers. The first cut hasn't taught these to force, so they throw.
@@ -152,7 +152,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
 // pinned too. Numbers are provenance-stamped (id 0) so the lazy path exercises the
 // real AValue arithmetic, not a bare-JS shortcut.
 describe("CAPABILITY — lazy ≡ eager confluence (forcing yields identical results)", () => {
-  const nums = () => Pair.fromArray([1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
+  const nums = () => APair.fromArray([1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
   const jsVal = (r: unknown): unknown => (r instanceof AValue ? r.toJs() : r);
 
   // Run `chain` with the collection slot filled eager (xs) and lazy (lazy-seq xs).
@@ -298,7 +298,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
 
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; count/convert ops drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     await initBridge();
-    const mkVec = () => new SchemeVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
+    const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
       const env = inferenceEnv.inherit(`la-${seq++}`);
@@ -333,19 +333,19 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
           "prov": [],
         },
         "vectorMap": {
-          "ctor": "SchemeVector",
+          "ctor": "AVector",
           "prov": [
             7,
           ],
         },
         "vectorMapTwice": {
-          "ctor": "SchemeVector",
+          "ctor": "AVector",
           "prov": [
             7,
           ],
         },
         "vectorToList": {
-          "ctor": "Pair",
+          "ctor": "APair",
           "prov": [],
         },
       }

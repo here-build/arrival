@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env as global_environment, exec, parse } from "../stdlib";
-import { nil } from "../values/primitives/Nil.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { nil } from "../values/primitives/ANil.js";
+import { APair } from "../values/primitives/APair.js";
 import { initBridge } from "../bridge";
-import { SchemeExact } from "../values/numbers";
+import { AExact } from "../values/numbers";
 
 const execSimple = async (string: string, env?: object, dynamic_env?: object) => {
   return exec(string, { env, dynamic_env, use_dynamic: !!dynamic_env });
@@ -60,26 +60,26 @@ describe("scope", function () {
   describe("lexical", function () {
     it("should evaluate let", async function () {
       const result = await execScope(`(define x 10) (let ((x 10)) x)`);
-      expect(result).toEqual([undefined, new SchemeExact(10n)]);
+      expect(result).toEqual([undefined, new AExact(10n)]);
     });
     it("should evaluate let over let", async function () {
       var code = `(define x 10)
                         (let ((x 20)) (let ((x 30)) x))`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new SchemeExact(30n)]);
+      expect(result).toEqual([undefined, new AExact(30n)]);
     });
     it("should evaluate lambda", async function () {
       var code = `(define x 10)
                         ((let ((x 20)) (lambda () x)))`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new SchemeExact(20n)]);
+      expect(result).toEqual([undefined, new AExact(20n)]);
     });
     it("sould create closure", async function () {
       var code = `(define fn (let ((x 10))
                                       (let ((y 20)) (lambda () (+ x y)))))
                         (fn)`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new SchemeExact(30n)]);
+      expect(result).toEqual([undefined, new AExact(30n)]);
     });
   });
   // Dynamic scope tests removed - dynamic scoping is a legacy feature not used in standard Scheme
@@ -96,7 +96,7 @@ describe("lists", function () {
       ["(1 2 3 (4))", "(1 2 3 (4) 10)"],
     ])("should to %s into %s (append pair)", async (code, expected) => {
       const input = await str2list(code);
-      const pairToAppend = new Pair(new SchemeExact(10n), nil);
+      const pairToAppend = new APair(new AExact(10n), nil);
       input.append(pairToAppend);
       expect(input).toEqual(await str2list(expected));
     });
@@ -108,7 +108,7 @@ describe("lists", function () {
     ])("should to %s into %s (append value)", async (code, expectedCode) => {
       const input = await str2list(code);
       const expected = await str2list(expectedCode);
-      input.append(new SchemeExact(10n));
+      input.append(new AExact(10n));
       expect(input).toEqual(expected);
     });
 

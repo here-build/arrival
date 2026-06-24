@@ -32,9 +32,9 @@ import "@here.build/error-invariant";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { withInputProvenance } from "../values/op-helpers.js";
-import { isCircularList, Pair } from "../values/primitives/Pair.js";
+import { isCircularList, APair } from "../values/primitives/APair.js";
 import { eqv, structuralEqual } from "../values/structural-equal.js";
-import { Nil, nil } from "../values/primitives/Nil.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { is_false } from "../eval/guards.js";
 import { EnvCapability } from "./capability.js";
 
@@ -48,7 +48,7 @@ export default new EnvCapability("scheme/lists", {
         const value = fill === undefined ? false : fill;
         let result: unknown = nil;
         for (let i = 0; i < count; i++) {
-          result = new Pair(value, result);
+          result = new APair(value, result);
         }
         // Stamp the head Pair only — internal cons cells share the same lineage
         // by definition; downstream traversal reads provenance off whichever pair
@@ -63,7 +63,7 @@ export default new EnvCapability("scheme/lists", {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         let current = list;
         for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof Pair, `list-tail: list too short`);
+          TypeError.invariant(current instanceof APair, `list-tail: list too short`);
           current = current.cdr;
         }
         return current;
@@ -76,10 +76,10 @@ export default new EnvCapability("scheme/lists", {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         let current = list;
         for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof Pair, `list-ref: list too short`);
+          TypeError.invariant(current instanceof APair, `list-ref: list too short`);
           current = current.cdr;
         }
-        TypeError.invariant(current instanceof Pair, `list-ref: index out of bounds`);
+        TypeError.invariant(current instanceof APair, `list-ref: index out of bounds`);
         return current.car;
       },
     ),
@@ -90,10 +90,10 @@ export default new EnvCapability("scheme/lists", {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         let current = list;
         for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof Pair, `list-set!: list too short`);
+          TypeError.invariant(current instanceof APair, `list-set!: list too short`);
           current = current.cdr;
         }
-        TypeError.invariant(current instanceof Pair, `list-set!: index out of bounds`);
+        TypeError.invariant(current instanceof APair, `list-set!: index out of bounds`);
         current.car = obj;
       },
     ),
@@ -107,16 +107,16 @@ export default new EnvCapability("scheme/lists", {
         // line, and aliased the input by reference — violating R7RS list-copy's
         // fresh-allocation contract. \`instanceof Nil\` keeps the freshness story
         // intact for both the singleton and any clones.
-        if (list instanceof Nil) return nil;
-        if (!(list instanceof Pair)) return list;
+        if (list instanceof ANil) return nil;
+        if (!(list instanceof APair)) return list;
         TypeError.invariant(!isCircularList(list), "list-copy: circular list");
         // Deep copy the spine of the list
         const copy = (lst: unknown): unknown => {
           // Same clone-aware check at the recursion base: a Nil clone in the cdr
           // would otherwise be preserved as an improper-list tail.
-          if (lst instanceof Nil) return nil;
-          if (!(lst instanceof Pair)) return lst; // improper list tail
-          return new Pair(lst.car, copy(lst.cdr));
+          if (lst instanceof ANil) return nil;
+          if (!(lst instanceof APair)) return lst; // improper list tail
+          return new APair(lst.car, copy(lst.cdr));
         };
         // Copy is a fresh allocation but semantically the same lineage as \`list\`.
         return withInputProvenance([list], copy(list));
@@ -129,7 +129,7 @@ export default new EnvCapability("scheme/lists", {
       (obj: unknown, list: unknown): unknown => {
         let current = list;
         TypeError.invariant(!isCircularList(list), "memq: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           // eq? comparison (object identity)
           if (current.car === obj) return current;
           current = current.cdr;
@@ -143,7 +143,7 @@ export default new EnvCapability("scheme/lists", {
       (obj: unknown, list: unknown): unknown => {
         let current = list;
         TypeError.invariant(!isCircularList(list), "memv: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           if (eqv(current.car, obj)) return current;
           current = current.cdr;
         }
@@ -156,9 +156,9 @@ export default new EnvCapability("scheme/lists", {
       (obj: unknown, alist: unknown): unknown => {
         let current = alist;
         TypeError.invariant(!isCircularList(alist), "assq: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           const pair = current.car;
-          if (pair instanceof Pair && pair.car === obj) return pair;
+          if (pair instanceof APair && pair.car === obj) return pair;
           current = current.cdr;
         }
         return false;
@@ -170,9 +170,9 @@ export default new EnvCapability("scheme/lists", {
       (obj: unknown, alist: unknown): unknown => {
         let current = alist;
         TypeError.invariant(!isCircularList(alist), "assv: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           const pair = current.car;
-          if (pair instanceof Pair && eqv(pair.car, obj)) return pair;
+          if (pair instanceof APair && eqv(pair.car, obj)) return pair;
           current = current.cdr;
         }
         return false;
@@ -189,7 +189,7 @@ export default new EnvCapability("scheme/lists", {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
         let current = list;
         TypeError.invariant(!isCircularList(list), "member: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           // \`cmp\` may be a user-supplied Scheme predicate whose result is a boxed
           // SchemeBool post-L1 (a truthy JS object); route through is_false.
           if (!is_false(cmp(obj, current.car))) return current;
@@ -209,10 +209,10 @@ export default new EnvCapability("scheme/lists", {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
         let current = alist;
         TypeError.invariant(!isCircularList(alist), "assoc: circular list");
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           const pair = current.car;
           // \`cmp\` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
-          if (pair instanceof Pair && !is_false(cmp(obj, pair.car))) return pair;
+          if (pair instanceof APair && !is_false(cmp(obj, pair.car))) return pair;
           current = current.cdr;
         }
         return false;

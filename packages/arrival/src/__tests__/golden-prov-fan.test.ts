@@ -36,7 +36,7 @@
  * (unwrap-to-JS) and `triple` (Pair fixture) wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow";
 import { sStr, runRaw } from "./_lineage-test-helpers";
@@ -53,7 +53,7 @@ async function value(src: string, binds: Record<string, unknown> = {}): Promise<
 }
 
 // a Pair-backed source of three provenance-stamped strings, ids 100/101/102.
-const triple = () => Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
+const triple = () => APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
 
 // ============================================================================
 // GOLDEN — runnable NOW. These go GREEN and become the gate-G2 equivalence

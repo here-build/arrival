@@ -34,9 +34,9 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec, parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
 import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
@@ -44,7 +44,7 @@ import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
 let seq = 0;
 
 /** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
-const sStr = (s: string, p: number) => new SchemeString(s, new Set([p]));
+const sStr = (s: string, p: number) => new AString(s, new Set([p]));
 const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
 
 const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
@@ -216,7 +216,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]); // eager spine
     const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
@@ -226,7 +226,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]);
     const [ast] = await parse(`(filter (lambda (e) (not (string=? e "b"))) xs)`, env);
@@ -271,7 +271,7 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
-    env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
       /PROVENANCE-SHADOW-DIVERGENCE/,
     );

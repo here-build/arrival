@@ -30,19 +30,19 @@ import { Lexer } from "./Lexer.js";
 // These deps form an import cycle with the value/eval modules; ES6 live bindings
 // resolve it, since they're referenced only inside methods, not at module-eval time.
 import { call_function } from "../eval/call-function.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { unpromise } from "../stdlib.js";
 import { exec as generatorExec } from "../eval/evaluator.js";
 import { parse_argument } from "../utils/parsing.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "../eval/Macro.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import type { SchemeValue } from "../values/types.js";
-import type { Nil } from "../values/primitives/Nil.js";
-import { nil } from "../values/primitives/Nil.js";
+import type { ANil } from "../values/primitives/ANil.js";
+import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
 
 // Nesting-depth cap — rejects a deeply-nested input at PARSE time before it can
@@ -145,8 +145,8 @@ export class Parser {
     });
   }
 
-  parse(arg: string | SchemeString) {
-    if (arg instanceof SchemeString) {
+  parse(arg: string | AString) {
+    if (arg instanceof AString) {
       arg = arg.toString();
     }
     Object.defineProperty(this, "__lexer__", {
@@ -290,9 +290,9 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(): Promise<Pair | Nil> {
-    let head: Pair | typeof nil = nil;
-    let prev: Pair | typeof nil = head;
+  async read_list(): Promise<APair | ANil> {
+    let head: APair | typeof nil = nil;
+    let prev: APair | typeof nil = head;
     let dot = false;
     while (true) {
       const token = await this.peek();
@@ -308,19 +308,19 @@ export class Parser {
       const loc = this._getLocation();
       if (token === "." && !is_nil(head)) {
         this.skip();
-        (prev as Pair).cdr = await this._read_object();
+        (prev as APair).cdr = await this._read_object();
         dot = true;
       } else {
         invariant(!dot, "Parser: syntax error more than one element after dot");
         const node = await this._read_object();
-        const cur = new Pair(node, nil);
+        const cur = new APair(node, nil);
         if (loc) {
           cur.setLocation(loc);
         }
         if (is_nil(head)) {
           head = cur;
         } else {
-          (prev as Pair).cdr = cur;
+          (prev as APair).cdr = cur;
         }
         prev = cur;
       }
@@ -429,7 +429,7 @@ export class Parser {
     return object;
   }
 
-  async _resolve_pair(pair: Pair): Promise<Pair> {
+  async _resolve_pair(pair: APair): Promise<APair> {
     if (is_pair(pair)) {
       if (pair.car instanceof DatumReference) {
         pair.car = await pair.car.valueOf();
@@ -470,7 +470,7 @@ export class Parser {
         // Convert list to a boxed vector (#(...) literal producer). R7RS literals
         // are immutable → freeze, so a later vector-set!/fill! on the literal is
         // an error (else it would corrupt the shared parsed AST node persistently).
-        const litVec = is_nil(list) ? new SchemeVector([]) : new SchemeVector(list.to_array(false));
+        const litVec = is_nil(list) ? new AVector([]) : new AVector(list.to_array(false));
         litVec.freeze();
         return litVec;
       }
@@ -481,12 +481,12 @@ export class Parser {
         const list = await this.read_list();
         // Convert list to a boxed bytevector (#u8(...) literal producer). R7RS
         // literals are immutable → freeze (see the #(...) case above).
-        let litBv: SchemeBytevector;
+        let litBv: ABytevector;
         if (is_nil(list)) {
-          litBv = new SchemeBytevector(new Uint8Array(0));
+          litBv = new ABytevector(new Uint8Array(0));
         } else {
           const arr = list.to_array(false) as number[];
-          litBv = new SchemeBytevector(new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
+          litBv = new ABytevector(new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
         }
         litBv.freeze();
         return litBv;
@@ -525,10 +525,10 @@ export class Parser {
       }
       if (is_literal(token)) {
         invariant(!was_close_paren, "Parse Error: expecting datum");
-        expr = new Pair(special.symbol, new Pair(object, nil));
+        expr = new APair(special.symbol, new APair(object, nil));
         if (loc) expr.setLocation(loc);
       } else {
-        expr = new Pair(special.symbol, object);
+        expr = new APair(special.symbol, object);
         if (loc) expr.setLocation(loc);
       }
       // Built-in parser extensions just expand into lists like 'x ==> (quote x)
@@ -539,8 +539,8 @@ export class Parser {
       const result = await this.evaluate(expr);
       // Quote the macro's result: the parser's output is evaluated again by the
       // interpreter, so a bare pair/symbol would be (re-)evaluated unintentionally.
-      if (is_pair(result) || result instanceof SchemeSymbol) {
-        const quoted = Pair.fromArray([new SchemeSymbol("quote"), result]) as Pair;
+      if (is_pair(result) || result instanceof ASymbol) {
+        const quoted = APair.fromArray([new ASymbol("quote"), result]) as APair;
         if (loc) quoted.setLocation(loc);
         return quoted;
       }

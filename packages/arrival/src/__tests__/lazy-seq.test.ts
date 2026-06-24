@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
-import { LazySeq } from "../values/primitives/LazySeq.js";
+import { ALazySeq } from "../values/primitives/ALazySeq.js";
 
 // A minimal provenance-bearing element: a number that carries a provenance set,
 // so the carrier's `provOf` sees it exactly as it would a boxed AValue.
@@ -53,7 +53,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       return new ProvNum(x.n * 2, EMPTY_PROVENANCE);
     };
 
-    const xs = new LazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
+    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const mapped = xs.map(f, pointProvenance(2)); // op id 2 (f's introduction)
 
     const r = (await mapped.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
@@ -73,7 +73,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       return x.n % 2 === 0;
     };
 
-    const xs = new LazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
+    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const filtered = xs.filter(pred, pointProvenance(3)); // op id 3
 
     const r = (await filtered.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
@@ -102,7 +102,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       return new ProvNum(x.n * 10, EMPTY_PROVENANCE);
     };
 
-    const xs = new LazySeq(provSource(5, 100), [], pointProvenance(1));
+    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1));
     const plan = xs
       .map(f, pointProvenance(2)) // before the filter → MUST run
       .filter(pred, pointProvenance(3)) // last length-changing op
@@ -127,7 +127,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       fCalls++;
       return new ProvNum(x.n * 2, EMPTY_PROVENANCE);
     };
-    const xs = new LazySeq(provSource(3, 100), [], pointProvenance(1));
+    const xs = new ALazySeq(provSource(3, 100), [], pointProvenance(1));
     const r = (await xs.map(f, pointProvenance(2)).refine({ kind: "iterate" })) as {
       items: ProvNum[];
       provenance: ReadonlySet<number>;
@@ -139,7 +139,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
 
   it("pipe runs nothing: building a plan never calls fn", () => {
     let calls = 0;
-    const xs = new LazySeq(provSource(1000, 0), [], EMPTY_PROVENANCE);
+    const xs = new ALazySeq(provSource(1000, 0), [], EMPTY_PROVENANCE);
     xs.map(() => (calls++, 0))
       .filter(() => (calls++, true))
       .map(() => (calls++, 0));

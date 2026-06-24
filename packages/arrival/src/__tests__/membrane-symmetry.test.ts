@@ -27,15 +27,15 @@
 import { describe, expect, it } from "vitest";
 import { AValue } from "../values/primitives/AValue.js";
 import { is_nil } from "../eval/guards";
-import { fromJS, isSchemeValue, SchemeJSFunction, SchemeJSObject, toJS } from "../membrane";
+import { fromJS, isSchemeValue, AJSFunction, AJSObject, toJS } from "../membrane";
 import { jsToScheme, schemeToJs } from "../rosetta";
-import { SchemeBool, schemeFalse, schemeTrue } from "../values/primitives/SchemeBool.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/primitives/Pair.js";
-import { Nil, nil } from "../values/primitives/Nil";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter";
+import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers";
+import { APair } from "../values/primitives/APair.js";
+import { ANil, nil } from "../values/primitives/ANil";
+import { ACharacter } from "../values/primitives/ACharacter";
 import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 
 // =========================================================================
@@ -46,30 +46,30 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // Boxer registry resolution: typeof string → "string" boxer (SchemeString.ts:139)
   it("string → SchemeString", () => {
     const result = AValue.fromJs("hello");
-    expect(result).toBeInstanceOf(SchemeString);
-    expect((result as SchemeString).valueOf()).toBe("hello");
+    expect(result).toBeInstanceOf(AString);
+    expect((result as AString).valueOf()).toBe("hello");
   });
 
   // typeof 42 === "number" — registered in operators/index.ts (via the
   // numbers module). Safe integer path → SchemeExact with bigint num.
   it("number (safe integer) → SchemeExact", () => {
     const result = AValue.fromJs(42);
-    expect(result).toBeInstanceOf(SchemeExact);
-    expect((result as SchemeExact).num).toBe(42n);
+    expect(result).toBeInstanceOf(AExact);
+    expect((result as AExact).num).toBe(42n);
   });
 
   // Non-integer float → SchemeInexact (real part).
   it("number (float) → SchemeInexact", () => {
     const result = AValue.fromJs(3.14);
-    expect(result).toBeInstanceOf(SchemeInexact);
-    expect((result as SchemeInexact).real).toBe(3.14);
+    expect(result).toBeInstanceOf(AInexact);
+    expect((result as AInexact).real).toBe(3.14);
   });
 
   // typeof 1n === "bigint" → SchemeExact regardless of size.
   it("bigint → SchemeExact", () => {
     const result = AValue.fromJs(123n);
-    expect(result).toBeInstanceOf(SchemeExact);
-    expect((result as SchemeExact).num).toBe(123n);
+    expect(result).toBeInstanceOf(AExact);
+    expect((result as AExact).num).toBe(123n);
   });
 
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
@@ -82,9 +82,9 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   it("boolean (non-empty provenance) → fresh SchemeBool with provenance", () => {
     const prov = new Set<number>([99]);
     const result = AValue.fromJs(true, prov);
-    expect(result).toBeInstanceOf(SchemeBool);
+    expect(result).toBeInstanceOf(ABool);
     expect(result).not.toBe(schemeTrue);
-    expect((result as SchemeBool).value).toBe(true);
+    expect((result as ABool).value).toBe(true);
     expect([...result.provenance]).toEqual([99]);
   });
 
@@ -93,13 +93,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // — withProvenance always allocates). This is exactly the clone-leak shape.
   it("null → Nil instance", () => {
     const result = AValue.fromJs(null);
-    expect(result).toBeInstanceOf(Nil);
+    expect(result).toBeInstanceOf(ANil);
     expect(is_nil(result)).toBe(true);
   });
 
   it("undefined → Nil instance", () => {
     const result = AValue.fromJs(undefined);
-    expect(result).toBeInstanceOf(Nil);
+    expect(result).toBeInstanceOf(ANil);
     expect(is_nil(result)).toBe(true);
   });
 
@@ -107,37 +107,37 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // plain objects wrap as SchemeJSObject.
   it("array → Pair chain", () => {
     const result = AValue.fromJs([1, 2, 3]);
-    expect(result).toBeInstanceOf(Pair);
-    const p = result as Pair;
-    expect((p.car as SchemeExact).num).toBe(1n);
+    expect(result).toBeInstanceOf(APair);
+    const p = result as APair;
+    expect((p.car as AExact).num).toBe(1n);
   });
 
   it("plain object → SchemeJSObject wrapper", () => {
     const obj = { foo: 1 };
     const result = AValue.fromJs(obj);
-    expect(result).toBeInstanceOf(SchemeJSObject);
-    expect((result as SchemeJSObject).source).toBe(obj);
+    expect(result).toBeInstanceOf(AJSObject);
+    expect((result as AJSObject).source).toBe(obj);
   });
 
   it("function → SchemeJSFunction wrapper", () => {
     const fn = () => 42;
     const result = AValue.fromJs(fn);
-    expect(result).toBeInstanceOf(SchemeJSFunction);
-    expect((result as SchemeJSFunction).source).toBe(fn);
+    expect(result).toBeInstanceOf(AJSFunction);
+    expect((result as AJSFunction).source).toBe(fn);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.
   it("AValue input (empty provenance) is returned by identity", () => {
-    const orig = new SchemeString("x");
+    const orig = new AString("x");
     expect(AValue.fromJs(orig)).toBe(orig);
   });
 
   it("AValue input (with non-empty provenance) is cloned via withProvenance", () => {
-    const orig = new SchemeString("x");
+    const orig = new AString("x");
     const prov = new Set<number>([7]);
     const result = AValue.fromJs(orig, prov);
     expect(result).not.toBe(orig);
-    expect(result).toBeInstanceOf(SchemeString);
+    expect(result).toBeInstanceOf(AString);
     expect([...result.provenance]).toEqual([7]);
   });
 });
@@ -153,7 +153,7 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // Closes the shape divergence the membrane symmetry audit flagged.
   it("string is wrapped through jsToScheme into SchemeString", () => {
     const lipsified = jsToScheme("hello");
-    expect(lipsified).toBeInstanceOf(SchemeString);
+    expect(lipsified).toBeInstanceOf(AString);
   });
 
   // String pass-through round trips by accident — raw in, raw out.
@@ -215,23 +215,23 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   // chain. Each test asserts the chain has a branch for the subtype.
 
   it("SchemeString → true", () => {
-    expect(isSchemeValue(new SchemeString("x"))).toBe(true);
+    expect(isSchemeValue(new AString("x"))).toBe(true);
   });
 
   it("SchemeSymbol → true", () => {
-    expect(isSchemeValue(new SchemeSymbol("foo"))).toBe(true);
+    expect(isSchemeValue(new ASymbol("foo"))).toBe(true);
   });
 
   it("SchemeCharacter → true", () => {
-    expect(isSchemeValue(new SchemeCharacter("a"))).toBe(true);
+    expect(isSchemeValue(new ACharacter("a"))).toBe(true);
   });
 
   it("SchemeExact → true", () => {
-    expect(isSchemeValue(new SchemeExact(42n))).toBe(true);
+    expect(isSchemeValue(new AExact(42n))).toBe(true);
   });
 
   it("SchemeInexact → true", () => {
-    expect(isSchemeValue(new SchemeInexact(3.14))).toBe(true);
+    expect(isSchemeValue(new AInexact(3.14))).toBe(true);
   });
 
   it("SchemeBool (singletons) → true", () => {
@@ -240,7 +240,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("Pair → true", () => {
-    expect(isSchemeValue(new Pair(1, nil))).toBe(true);
+    expect(isSchemeValue(new APair(1, nil))).toBe(true);
   });
 
   it("nil singleton → true (via the `=== nil` short-circuit)", () => {
@@ -248,11 +248,11 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("SchemeJSObject → true", () => {
-    expect(isSchemeValue(new SchemeJSObject({}))).toBe(true);
+    expect(isSchemeValue(new AJSObject({}))).toBe(true);
   });
 
   it("SchemeJSFunction → true", () => {
-    expect(isSchemeValue(new SchemeJSFunction(() => 1))).toBe(true);
+    expect(isSchemeValue(new AJSFunction(() => 1))).toBe(true);
   });
 
   it("QuotedPromise → true", () => {
@@ -319,14 +319,14 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
   it("object round-trips through SchemeJSObject (same source reference)", () => {
     const obj = { a: 1 };
     const wrapped = fromJS(obj);
-    expect(wrapped).toBeInstanceOf(SchemeJSObject);
+    expect(wrapped).toBeInstanceOf(AJSObject);
     expect(toJS(wrapped)).toBe(obj);
   });
 
   it("function round-trips through SchemeJSFunction (same source reference)", () => {
     const fn = () => 42;
     const wrapped = fromJS(fn);
-    expect(wrapped).toBeInstanceOf(SchemeJSFunction);
+    expect(wrapped).toBeInstanceOf(AJSFunction);
     expect(toJS(wrapped)).toBe(fn);
   });
 

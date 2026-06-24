@@ -10,10 +10,10 @@ import run, { exec } from "../eval/evaluator";
 // cross-`run()` recursion shape and needs real `if`/`=`/`-` rather than the
 // minimal hand-rolled `env` above.
 import { exec as execSource } from "../eval/generator-exec";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/primitives/Pair.js";
-import { nil } from "../values/primitives/Nil";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers";
+import { APair } from "../values/primitives/APair.js";
+import { nil } from "../values/primitives/ANil";
 import { list, num, sym } from "./helpers";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
@@ -27,9 +27,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         let result = 0n;
         let hasInexact = false;
         for (const arg of args) {
-          if (arg instanceof SchemeExact) {
+          if (arg instanceof AExact) {
             result += arg.num;
-          } else if (arg instanceof SchemeInexact) {
+          } else if (arg instanceof AInexact) {
             hasInexact = true;
             result += BigInt(Math.floor(arg.real));
           } else if (typeof arg === "number") {
@@ -39,60 +39,60 @@ describe("Generator Evaluator with Real LIPS Types", () => {
             result += arg;
           }
         }
-        return hasInexact ? new SchemeInexact(Number(result)) : new SchemeExact(result);
+        return hasInexact ? new AInexact(Number(result)) : new AExact(result);
       },
       "-": (...args: unknown[]) => {
-        if (args.length === 0) return new SchemeExact(0n);
-        let result = args[0] instanceof SchemeExact ? args[0].num : BigInt(args[0] as number);
-        if (args.length === 1) return new SchemeExact(-result);
+        if (args.length === 0) return new AExact(0n);
+        let result = args[0] instanceof AExact ? args[0].num : BigInt(args[0] as number);
+        if (args.length === 1) return new AExact(-result);
         for (let i = 1; i < args.length; i++) {
           const arg = args[i];
-          result -= arg instanceof SchemeExact ? arg.num : BigInt(arg as number);
+          result -= arg instanceof AExact ? arg.num : BigInt(arg as number);
         }
-        return new SchemeExact(result);
+        return new AExact(result);
       },
       "*": (...args: unknown[]) => {
         let result = 1n;
         for (const arg of args) {
-          result *= arg instanceof SchemeExact ? arg.num : BigInt(arg as number);
+          result *= arg instanceof AExact ? arg.num : BigInt(arg as number);
         }
-        return new SchemeExact(result);
+        return new AExact(result);
       },
       "/": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? Number(a.num) : (a as number);
-        const bVal = b instanceof SchemeExact ? Number(b.num) : (b as number);
-        return new SchemeInexact(aVal / bVal);
+        const aVal = a instanceof AExact ? Number(a.num) : (a as number);
+        const bVal = b instanceof AExact ? Number(b.num) : (b as number);
+        return new AInexact(aVal / bVal);
       },
       "<": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof SchemeExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
+        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal < bVal;
       },
       ">": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof SchemeExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
+        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal > bVal;
       },
       "<=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof SchemeExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
+        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal <= bVal;
       },
       ">=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof SchemeExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
+        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal >= bVal;
       },
       "=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof SchemeExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof SchemeExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
+        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal === bVal;
       },
-      list: (...args: unknown[]) => Pair.fromArray(args, false),
-      car: (pair: Pair) => pair.car,
-      cdr: (pair: Pair) => pair.cdr,
-      cons: (a: unknown, b: unknown) => new Pair(a, b),
-      "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as Nil).toString?.() === "()"),
+      list: (...args: unknown[]) => APair.fromArray(args, false),
+      car: (pair: APair) => pair.car,
+      cdr: (pair: APair) => pair.cdr,
+      cons: (a: unknown, b: unknown) => new APair(a, b),
+      "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as ANil).toString?.() === "()"),
       not: (x: unknown) => x === false || x === nil,
       "#t": true,
       "#f": false,
@@ -139,8 +139,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     it("should look up symbols in environment", async () => {
       env.set("x", num(10));
       env.set("y", num(20));
-      expect(await exec(new SchemeSymbol("x"), { env })).toEqual(num(10));
-      expect(await exec(new SchemeSymbol("y"), { env })).toEqual(num(20));
+      expect(await exec(new ASymbol("x"), { env })).toEqual(num(10));
+      expect(await exec(new ASymbol("y"), { env })).toEqual(num(20));
     });
 
     it("should evaluate simple function calls", async () => {
@@ -176,15 +176,15 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return its argument unevaluated", async () => {
         // (quote (1 2 3))
         const code = list(sym("quote"), list(num(1), num(2), num(3)));
-        const result = (await exec(code, { env })) as Pair;
+        const result = (await exec(code, { env })) as APair;
         expect(result.car).toEqual(num(1));
-        expect((result.cdr as Pair).car).toEqual(num(2));
+        expect((result.cdr as APair).car).toEqual(num(2));
       });
 
       it("should quote a symbol", async () => {
         // (quote x)
         const code = list(sym("quote"), sym("x"));
-        const result = (await exec(code, { env })) as SchemeSymbol;
+        const result = (await exec(code, { env })) as ASymbol;
         expect(result.__name__).toBe("x");
       });
     });
@@ -193,7 +193,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return simple list unevaluated", async () => {
         // `(1 2 3)
         const code = list(sym("quasiquote"), list(num(1), num(2), num(3)));
-        const result = (await exec(code, { env })) as Pair;
+        const result = (await exec(code, { env })) as APair;
         expect(result.car).toEqual(num(1));
       });
 
@@ -201,10 +201,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // `(1 ,(+ 1 1) 3)
         env.set("x", num(10));
         const code = list(sym("quasiquote"), list(num(1), list(sym("unquote"), sym("x")), num(3)));
-        const result = (await exec(code, { env })) as Pair;
+        const result = (await exec(code, { env })) as APair;
         expect(result.car).toEqual(num(1));
-        expect((result.cdr as Pair).car).toEqual(num(10));
-        expect(((result.cdr as Pair).cdr as Pair).car).toEqual(num(3));
+        expect((result.cdr as APair).car).toEqual(num(10));
+        expect(((result.cdr as APair).cdr as APair).car).toEqual(num(3));
       });
 
       it("should handle unquote-splicing", async () => {
@@ -214,7 +214,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           list(num(1), list(sym("unquote-splicing"), list(sym("list"), num(2), num(3))), num(4)),
         );
         const result = await exec(code, { env });
-        const arr = (result as Pair).to_array();
+        const arr = (result as APair).to_array();
         expect(arr.length).toBe(4);
       });
     });
@@ -273,7 +273,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         let sideEffect = 0;
         env.set("inc!", () => {
           sideEffect++;
-          return new SchemeExact(BigInt(sideEffect));
+          return new AExact(BigInt(sideEffect));
         });
 
         // (begin (inc!) (inc!) (inc!))
@@ -360,7 +360,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should handle rest parameters", async () => {
         // ((lambda args args) 1 2 3)
         const code = list(list(sym("lambda"), sym("args"), sym("args")), num(1), num(2), num(3));
-        const result = (await exec(code, { env })) as Pair;
+        const result = (await exec(code, { env })) as APair;
         expect(result.to_array()).toEqual([num(1), num(2), num(3)]);
       });
     });
@@ -497,7 +497,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           list(list(sym("<"), num(1), num(2)), list(sym("quote"), sym("yes"))),
           list(sym("else"), list(sym("quote"), sym("no"))),
         );
-        const result = (await exec(code, { env })) as SchemeSymbol;
+        const result = (await exec(code, { env })) as ASymbol;
         expect(result.__name__).toBe("yes");
       });
 
@@ -508,7 +508,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           list(list(sym(">"), num(1), num(2)), list(sym("quote"), sym("no"))),
           list(sym("else"), list(sym("quote"), sym("yes"))),
         );
-        const result = (await exec(code, { env })) as SchemeSymbol;
+        const result = (await exec(code, { env })) as ASymbol;
         expect(result.__name__).toBe("yes");
       });
 
@@ -538,7 +538,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           list(list(num(2)), list(sym("quote"), sym("two"))),
           list(sym("else"), list(sym("quote"), sym("other"))),
         );
-        const result = (await exec(code, { env })) as SchemeSymbol;
+        const result = (await exec(code, { env })) as ASymbol;
         expect(result.__name__).toBe("two");
       });
 
@@ -551,7 +551,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           list(list(num(2)), list(sym("quote"), sym("two"))),
           list(sym("else"), list(sym("quote"), sym("other"))),
         );
-        const result = (await exec(code, { env })) as SchemeSymbol;
+        const result = (await exec(code, { env })) as ASymbol;
         expect(result.__name__).toBe("other");
       });
     });
@@ -619,7 +619,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // Then: (my-when #t 1 2 3)
         const defineMacro = list(
           sym("define-macro"),
-          new Pair(sym("my-when"), new Pair(sym("test"), sym("body"))),
+          new APair(sym("my-when"), new APair(sym("test"), sym("body"))),
           list(
             sym("quasiquote"),
             list(
@@ -664,7 +664,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   describe("performance - deep recursion", () => {
     it("should handle deep recursion without stack overflow", async () => {
       // Create a deeply nested expression: (+ 1 (+ 1 (+ 1 ... (+ 1 0)...)))
-      let code: Pair | typeof nil = list(sym("+"), num(1), num(0));
+      let code: APair | typeof nil = list(sym("+"), num(1), num(0));
 
       // 10,000 levels of nesting
       for (let i = 0; i < 10000; i++) {
@@ -703,6 +703,6 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 });
 
 // Type for Nil
-interface Nil {
+interface ANil {
   toString(): string;
 }

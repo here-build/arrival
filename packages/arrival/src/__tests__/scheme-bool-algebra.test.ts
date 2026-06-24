@@ -3,10 +3,10 @@
 // collide naturally — exactly the dense-collision regime that exercises the
 // Setoid laws hardest.
 import fc from "fast-check";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { ABool } from "../values/primitives/ABool.js";
 import { setoidLaws } from "./algebra-laws.js";
 
-const arb = fc.boolean().map((b) => new SchemeBool(b));
-const equalClone = (b: SchemeBool) => new SchemeBool(b.value);
+const arb = fc.boolean().map((b) => new ABool(b));
+const equalClone = (b: ABool) => new ABool(b.value);
 
 setoidLaws("SchemeBool", { arb, equalClone });

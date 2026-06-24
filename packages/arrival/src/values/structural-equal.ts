@@ -1,8 +1,8 @@
-import { SchemeBool } from "./primitives/SchemeBool.js";
-import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { Nil } from "./primitives/Nil.js";
-import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
+import { ABool } from "./primitives/ABool.js";
+import { ASymbol } from "./primitives/ASymbol.js";
+import { AExact, AInexact } from "./numbers.js";
+import { ANil } from "./primitives/ANil.js";
+import { ACharacter } from "./primitives/ACharacter.js";
 import type { SchemeValue } from "./types.js";
 
 /**
@@ -152,15 +152,15 @@ export function eq(x: SchemeValue, y: SchemeValue): boolean {
   // term (the Setoid's ternary reads `other.value` when `other` IS a SchemeBool).
   if (x === y) return true;
   if (
-    x instanceof SchemeSymbol ||
-    x instanceof Nil ||
-    x instanceof SchemeCharacter ||
-    x instanceof SchemeExact ||
-    x instanceof SchemeInexact
+    x instanceof ASymbol ||
+    x instanceof ANil ||
+    x instanceof ACharacter ||
+    x instanceof AExact ||
+    x instanceof AInexact
   ) {
     return x["fantasy-land/equals"](y);
   }
-  if (x instanceof SchemeBool) return y instanceof SchemeBool && x["fantasy-land/equals"](y);
+  if (x instanceof ABool) return y instanceof ABool && x["fantasy-land/equals"](y);
   // Everything else (Pair, vector/Array, SchemeString, plain objects) keeps
   // strict pointer-grade — distinct heap instances answer #f (the === above is
   // the only true case).

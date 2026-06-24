@@ -26,7 +26,7 @@ import type { SchemeValue } from "../types.js";
 // cycle since [TO_JS]() is a computed key).
 const TO_JS = Symbol.for("scheme.toJS");
 
-export class SchemeVector extends AValue {
+export class AVector extends AValue {
   static [CLASS] = "vector";
   readonly kind = "vector" as const;
 
@@ -47,8 +47,8 @@ export class SchemeVector extends AValue {
     this.frozen = true;
   }
 
-  static isVector(x: unknown): x is SchemeVector {
-    return x instanceof SchemeVector;
+  static isVector(x: unknown): x is AVector {
+    return x instanceof AVector;
   }
 
   get length(): number {
@@ -67,8 +67,8 @@ export class SchemeVector extends AValue {
     for (let i = start; i < end; i++) this.__vector__[i] = v;
   }
 
-  copy(start = 0, end = this.__vector__.length): SchemeVector {
-    return new SchemeVector(this.__vector__.slice(start, end));
+  copy(start = 0, end = this.__vector__.length): AVector {
+    return new AVector(this.__vector__.slice(start, end));
   }
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
@@ -85,8 +85,8 @@ export class SchemeVector extends AValue {
     return this.__vector__;
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeVector {
-    const v = new SchemeVector(this.__vector__, p);
+  withProvenance(p: ReadonlySet<number>): AVector {
+    const v = new AVector(this.__vector__, p);
     // The copy shares the payload by reference, so a frozen literal stays frozen
     // (else re-stamping a literal's provenance would yield a mutable alias of it).
     if (this.frozen) v.freeze();
@@ -101,7 +101,7 @@ export class SchemeVector extends AValue {
   // was removed (B2). Elements recurse through structuralEqual threading the SAME map
   // (handles nested AValues/Pairs/vectors). Non-SchemeVector → false.
   ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
-    if (!(other instanceof SchemeVector)) return false;
+    if (!(other instanceof AVector)) return false;
     const a = this.__vector__;
     const b = other.__vector__;
     if (a.length !== b.length) return false;
@@ -113,22 +113,22 @@ export class SchemeVector extends AValue {
 
   // Semigroup (Fantasy Land) — element concatenation. Associative; equality via
   // the Setoid above.
-  ["fantasy-land/concat"](other: SchemeVector): SchemeVector {
-    return new SchemeVector([...this.__vector__, ...other.__vector__]);
+  ["fantasy-land/concat"](other: AVector): AVector {
+    return new AVector([...this.__vector__, ...other.__vector__]);
   }
 
   // Functor (Fantasy Land) — map over elements into a fresh vector. (The N-ary
   // vector-map builtin is a separate, non-Functor observation — like
   // C-Semigroup's append, it carries arity the bare Functor underfits.)
-  ["fantasy-land/map"](f: (x: SchemeValue) => SchemeValue): SchemeVector {
-    return new SchemeVector(this.__vector__.map(f));
+  ["fantasy-land/map"](f: (x: SchemeValue) => SchemeValue): AVector {
+    return new AVector(this.__vector__.map(f));
   }
 
   // Filterable (Fantasy Land) — keep elements satisfying the predicate, into a
   // fresh vector. Mirrors Pair's fantasy-land/filter so the polymorphic `filter`
   // builtin works over a vector.
-  ["fantasy-land/filter"](predicate: (x: SchemeValue) => unknown): SchemeVector {
-    return new SchemeVector(this.__vector__.filter((x) => !!predicate(x)));
+  ["fantasy-land/filter"](predicate: (x: SchemeValue) => unknown): AVector {
+    return new AVector(this.__vector__.filter((x) => !!predicate(x)));
   }
 
   // Foldable (Fantasy Land) — left fold over the elements. Mirrors Pair's
@@ -157,4 +157,4 @@ export class SchemeVector extends AValue {
 // ============================================================================
 // Same rationale as SchemeString/SchemeBytevector: block inherited-method
 // exposure when interop symbol-to-field resolution walks the prototype chain.
-markInteropBoundary(SchemeVector);
+markInteropBoundary(AVector);

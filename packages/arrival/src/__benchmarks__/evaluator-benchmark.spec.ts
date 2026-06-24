@@ -5,9 +5,9 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { exec as lipsExec, env as lipsEnv, parse } from "../stdlib";
-import { nil } from "../values/primitives/Nil.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { nil } from "../values/primitives/ANil.js";
+import { APair } from "../values/primitives/APair.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { initBridge } from "../bridge";
 import { exec as genExec } from "../eval/evaluator";
 import type { SchemeValue } from "../values/types";
@@ -35,7 +35,7 @@ describe("Evaluator Benchmarks", () => {
     it("benchmark: many simple calls via pre-parsed AST", async () => {
       // Pre-parse the expression once
       const parsed = await parse("(+ 1 2)");
-      const ast = parsed[0] as Pair;
+      const ast = parsed[0] as APair;
 
       const iterations = 1000;
       const start = performance.now();
@@ -70,15 +70,15 @@ describe("Evaluator Benchmarks", () => {
   });
 
   describe("Generator (flat trampoline) performance", () => {
-    function sym(name: string): SchemeSymbol {
-      return new SchemeSymbol(name);
+    function sym(name: string): ASymbol {
+      return new ASymbol(name);
     }
 
-    function listLips(...items: SchemeValue[]): Pair | typeof nil {
+    function listLips(...items: SchemeValue[]): APair | typeof nil {
       if (items.length === 0) return nil;
-      let result: Pair | typeof nil = nil;
+      let result: APair | typeof nil = nil;
       for (let i = items.length - 1; i >= 0; i--) {
-        result = new Pair(items[i], result);
+        result = new APair(items[i], result);
       }
       return result;
     }
@@ -140,12 +140,12 @@ describe("Evaluator Benchmarks", () => {
     it("compare: simple arithmetic", async () => {
       // Parse once for LIPS
       const parsed = await parse("(+ 1 2 3 4 5)");
-      const lipsAst = parsed[0] as Pair;
+      const lipsAst = parsed[0] as APair;
 
       // Create equivalent AST for generator
-      const genAst = new Pair(
-        new SchemeSymbol("+"),
-        new Pair(1, new Pair(2, new Pair(3, new Pair(4, new Pair(5, nil))))),
+      const genAst = new APair(
+        new ASymbol("+"),
+        new APair(1, new APair(2, new APair(3, new APair(4, new APair(5, nil))))),
       );
 
       const iterations = 1000;
@@ -181,14 +181,14 @@ describe("Evaluator Benchmarks", () => {
     it("compare: nested function calls", async () => {
       // (+ (* 2 3) (* 4 5))
       const parsed = await parse("(+ (* 2 3) (* 4 5))");
-      const lipsAst = parsed[0] as Pair;
+      const lipsAst = parsed[0] as APair;
 
       // Create equivalent AST for generator
-      const genAst = new Pair(
-        new SchemeSymbol("+"),
-        new Pair(
-          new Pair(new SchemeSymbol("*"), new Pair(2, new Pair(3, nil))),
-          new Pair(new Pair(new SchemeSymbol("*"), new Pair(4, new Pair(5, nil))), nil),
+      const genAst = new APair(
+        new ASymbol("+"),
+        new APair(
+          new APair(new ASymbol("*"), new APair(2, new APair(3, nil))),
+          new APair(new APair(new ASymbol("*"), new APair(4, new APair(5, nil))), nil),
         ),
       );
 

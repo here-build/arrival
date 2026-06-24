@@ -2,12 +2,12 @@ import { CLASS } from "./well-known-symbols.js";
 import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
 import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/primitives/EOF.js";
-import { SchemeString } from "./values/primitives/SchemeString.js";
-import { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
+import { AString } from "./values/primitives/AString.js";
+import { ASymbol } from "./values/primitives/ASymbol.js";
 import type { Macro } from "./eval/Macro.js";
-import { SchemeExact, SchemeInexact } from "./values/numbers.js";
+import { AExact, AInexact } from "./values/numbers.js";
 import type { SchemeValue } from "./values/types.js";
-import { nil } from "./values/primitives/Nil.js";
+import { nil } from "./values/primitives/ANil.js";
 import type { RosettaFunction } from "./rosetta.js";
 import { createRosettaWrapper } from "./rosetta.js";
 import { trim_lines } from "./utils/trim-lines.js";
@@ -15,7 +15,7 @@ import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import invariant from "tiny-invariant";
-import { fromJS, isSchemeValue, SchemeJSObject } from "./membrane.js";
+import { fromJS, isSchemeValue, AJSObject } from "./membrane.js";
 import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
 import { patch_value } from "./reader/values-repr.js";
 import { docsOf, rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
@@ -37,7 +37,7 @@ export const KEYWORD_ACCESSOR_FIELD = Symbol.for("@here.build/arrival/keyword-ac
  * A name that can be used to look up values in an environment.
  * Supports strings, symbols (both primitive and SchemeSymbol), and SchemeString.
  */
-export type BindingName = string | symbol | SchemeSymbol | SchemeString;
+export type BindingName = string | symbol | ASymbol | AString;
 
 /**
  * A function with optional LIPS metadata.
@@ -88,7 +88,7 @@ function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefine
     // `then` is `false` to keep real-promise resolution from firing, see #153).
     if (name === "then" && object instanceof QuotedPromise) {
       value = QuotedPromise.prototype.then as unknown as EnvironmentValue;
-    } else if (object instanceof SchemeJSObject) {
+    } else if (object instanceof AJSObject) {
       value = object.get(name) as EnvironmentValue;
     } else {
       try {
@@ -268,9 +268,9 @@ export class Environment {
 
   doc(name: BindingName, value: string | null = null, dump: boolean = false): this | string | undefined {
     let key: string | symbol;
-    if (name instanceof SchemeSymbol) {
+    if (name instanceof ASymbol) {
       key = name.__name__;
-    } else if (name instanceof SchemeString) {
+    } else if (name instanceof AString) {
       key = name.valueOf();
     } else {
       key = name;
@@ -335,7 +335,7 @@ export class Environment {
 
     // Normalize to string/symbol name
     let name: string | symbol = symbol as string | symbol;
-    if (symbol instanceof SchemeSymbol || symbol instanceof SchemeString) {
+    if (symbol instanceof ASymbol || symbol instanceof AString) {
       name = symbol.valueOf();
     }
 
@@ -348,9 +348,9 @@ export class Environment {
     // Determine if this is a dot-notation symbol (e.g., foo.bar.baz)
     // Only try dot-notation if direct lookup failed
     let parts: string[] | undefined;
-    if (symbol instanceof SchemeSymbol && (symbol as unknown as { [key: symbol]: string[] })[SchemeSymbol.object]) {
+    if (symbol instanceof ASymbol && (symbol as unknown as { [key: symbol]: string[] })[ASymbol.object]) {
       // dot notation symbols from syntax-rules that are gensyms
-      parts = (symbol as unknown as { [key: symbol]: string[] })[SchemeSymbol.object];
+      parts = (symbol as unknown as { [key: symbol]: string[] })[ASymbol.object];
     } else if (typeof name === "string" && name.includes(".")) {
       parts = name.split(".").filter(Boolean);
     }
@@ -382,12 +382,12 @@ export class Environment {
     // Numbers get special handling (convert to SchemeExact/SchemeInexact for typed numeric ops)
     if (typeof value === "number") {
       if (Number.isNaN(value)) {
-        storedValue = new SchemeInexact(value);
+        storedValue = new AInexact(value);
       } else {
-        storedValue = Number.isSafeInteger(value) ? new SchemeExact(BigInt(value)) : new SchemeInexact(value);
+        storedValue = Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
       }
     } else if (typeof value === "bigint") {
-      storedValue = new SchemeExact(value);
+      storedValue = new AExact(value);
     }
     // Already a Scheme value - pass through
     else if (isSchemeValue(value)) {
@@ -411,9 +411,9 @@ export class Environment {
     }
 
     let key: string | symbol;
-    if (name instanceof SchemeSymbol) {
+    if (name instanceof ASymbol) {
       key = name.__name__;
-    } else if (name instanceof SchemeString) {
+    } else if (name instanceof AString) {
       key = name.valueOf();
     } else {
       key = name;

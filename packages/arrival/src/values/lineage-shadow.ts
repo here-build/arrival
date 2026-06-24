@@ -36,11 +36,11 @@
  * a divergence outside the two skip categories is a THROW, never a silent pass.
  */
 import { is_pair } from "./value-guards.js";
-import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
+import { ASymbol } from "./primitives/ASymbol.js";
 import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
-import type { Pair } from "./primitives/Pair.js";
+import type { APair } from "./primitives/APair.js";
 import type { SchemeValue } from "./types.js";
 
 /** Provenance ids on a value, sorted — `[]` for a non-AValue. Mirrors the
@@ -61,8 +61,8 @@ export type ShadowSkip =
  *  are recognised from the SURFACE head, before any expansion. */
 export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
   if (!is_pair(form)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
-  const head = (form as Pair).car;
-  if (!(head instanceof SchemeSymbol)) return null; // computed operator — fall through (classify stringifies it)
+  const head = (form as APair).car;
+  if (!(head instanceof ASymbol)) return null; // computed operator — fall through (classify stringifies it)
   const op = String(head.valueOf());
 
   // `(:field x)` — a keyword projection (where-provenance). No static lineage node.

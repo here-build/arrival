@@ -14,12 +14,12 @@
 import invariant from "tiny-invariant";
 
 import { AValue, unionProvenance } from "./primitives/AValue.js";
-import { SchemeBytevector } from "./primitives/SchemeBytevector.js";
-import { SchemeString } from "./primitives/SchemeString.js";
-import { SchemeVector } from "./primitives/SchemeVector.js";
-import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./numbers.js";
+import { ABytevector } from "./primitives/ABytevector.js";
+import { AString } from "./primitives/AString.js";
+import { AVector } from "./primitives/AVector.js";
+import { AExact, AInexact, type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
-import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
+import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
 
 // ============================================================================
@@ -81,17 +81,17 @@ export function assertAllocatable(len: number, fnName: string): void {
 
 /** Extract character value from SchemeCharacter */
 export function charValue(char: unknown): string {
-  return (char as SchemeCharacter).__char__;
+  return (char as ACharacter).__char__;
 }
 
 /** Extract string value from SchemeString or convert to string */
 export function stringValue(str: unknown): string {
-  return str instanceof SchemeString ? str.valueOf() : String(str);
+  return str instanceof AString ? str.valueOf() : String(str);
 }
 
 /** Convert unknown to index number (for vector/string operations) */
 export function toIndex(v: unknown): number {
-  return typeof v === "number" ? v : Number((v as SchemeExact).valueOf());
+  return typeof v === "number" ? v : Number((v as AExact).valueOf());
 }
 
 /**
@@ -101,7 +101,7 @@ export function toIndex(v: unknown): number {
  * until S7 producers + S10 tighten). Throws on anything else.
  */
 export function asVector(obj: unknown, fnName: string, forMutation = false): SchemeValue[] {
-  if (obj instanceof SchemeVector) {
+  if (obj instanceof AVector) {
     TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable vector literal`);
     return obj.__vector__;
   } else if (Array.isArray(obj)) {
@@ -118,7 +118,7 @@ export function asVector(obj: unknown, fnName: string, forMutation = false): Sch
  */
 export function asBytevector(obj: unknown, fnName: string, forMutation = false): Uint8Array {
   switch (true) {
-    case obj instanceof SchemeBytevector:
+    case obj instanceof ABytevector:
       // Unwrap by reference so in-place mutators (bytevector-u8-set!,
       // bytevector-copy!) write through to the boxed payload.
       TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable bytevector literal`);
@@ -186,24 +186,24 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
 // Numeric coercion into the SchemeExact / SchemeInexact tower
 // ============================================================================
 
-export function coerceNumeric(value: unknown): SchemeNumeric {
+export function coerceNumeric(value: unknown): ANumeric {
   switch (true) {
-    case value instanceof SchemeExact:
-    case value instanceof SchemeInexact:
+    case value instanceof AExact:
+    case value instanceof AInexact:
       return value;
     case typeof value === "bigint":
-      return new SchemeExact(value);
+      return new AExact(value);
     // Safe integers become exact (likely from Scheme integer literals)
     // Non-safe integers and floats become inexact
     case typeof value === "number":
-      return Number.isSafeInteger(value) ? new SchemeExact(BigInt(value)) : new SchemeInexact(value);
+      return Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
       switch (true) {
         case typeof val === "bigint":
-          return new SchemeExact(val);
+          return new AExact(val);
         case typeof val === "number":
-          return Number.isSafeInteger(val) ? new SchemeExact(BigInt(val)) : new SchemeInexact(val);
+          return Number.isSafeInteger(val) ? new AExact(BigInt(val)) : new AInexact(val);
         default:
           throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }
@@ -217,8 +217,8 @@ export function coerceNumeric(value: unknown): SchemeNumeric {
 /** Check if a value can be converted to SchemeNumeric (without throwing) */
 export function isSchemeNumber(value: unknown): boolean {
   switch (true) {
-    case value instanceof SchemeExact:
-    case value instanceof SchemeInexact:
+    case value instanceof AExact:
+    case value instanceof AInexact:
       return true;
     case typeof value === "bigint":
     case typeof value === "number":

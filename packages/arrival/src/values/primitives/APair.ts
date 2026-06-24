@@ -19,18 +19,18 @@ import { withInputProvenance } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
-import { SchemeBytevector } from "./SchemeBytevector.js";
-import { SchemeString } from "./SchemeString.js";
-import { SchemeVector } from "./SchemeVector.js";
-import { SchemeSymbol } from "./SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../numbers.js";
+import { ABytevector } from "./ABytevector.js";
+import { AString } from "./AString.js";
+import { AVector } from "./AVector.js";
+import { ASymbol } from "./ASymbol.js";
+import { AExact, AInexact } from "../numbers.js";
 import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { markInteropBoundary } from "../../interop-access.js";
-import { type PairLike } from "../types.js";
-import { Nil, nil, setPairConstructor } from "./Nil.js";
+import { type APairLike } from "../types.js";
+import { ANil, nil, setPairConstructor } from "./ANil.js";
 
-interface PairWithMetadata<Car = unknown, Cdr = unknown> extends Pair<Car, Cdr> {
-  [CYCLES]?: { car?: string | Pair; cdr?: string | Pair };
+interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
+  [CYCLES]?: { car?: string | APair; cdr?: string | APair };
   [REF]?: string;
   [LOCATION]?: SourceLocation;
 }
@@ -52,10 +52,10 @@ class Thunk {
 }
 
 // ----------------------------------------------------------------------
-type TrampolineFn = (pair: unknown, parents: Pair[]) => Thunk | void;
+type TrampolineFn = (pair: unknown, parents: APair[]) => Thunk | void;
 
-function trampoline(fn: TrampolineFn): (pair: unknown, parents: Pair[]) => void {
-  return function (pair: unknown, parents: Pair[]): void {
+function trampoline(fn: TrampolineFn): (pair: unknown, parents: APair[]) => void {
+  return function (pair: unknown, parents: APair[]): void {
     unwind(fn(pair, parents));
   };
 }
@@ -86,7 +86,7 @@ export function isCircularList(head: unknown): boolean {
   let slow: unknown = head;
   let fast: unknown = head;
   while (is_pair(fast) && is_pair(fast.cdr)) {
-    slow = (slow as Pair).cdr;
+    slow = (slow as APair).cdr;
     fast = fast.cdr.cdr;
     if (slow === fast) return true;
   }
@@ -104,18 +104,18 @@ function is_cycle(pair: unknown): boolean {
 }
 
 // ----------------------------------------------------------------------
-function mark_cycles(pair: Pair): void {
-  const seen_pairs: Pair[] = [];
+function mark_cycles(pair: APair): void {
+  const seen_pairs: APair[] = [];
   const cycles: PairWithMetadata[] = [];
-  const refs: Pair[] = [];
+  const refs: APair[] = [];
 
-  function visit(pair: Pair): void {
+  function visit(pair: APair): void {
     if (!seen_pairs.includes(pair)) {
       seen_pairs.push(pair);
     }
   }
 
-  function set(node: PairWithMetadata, type: "car" | "cdr", child: unknown, parents: Pair[]): boolean {
+  function set(node: PairWithMetadata, type: "car" | "cdr", child: unknown, parents: APair[]): boolean {
     if (is_pair(child) && parents.includes(child)) {
       if (!refs.includes(child)) {
         refs.push(child);
@@ -132,7 +132,7 @@ function mark_cycles(pair: Pair): void {
     return false;
   }
 
-  const detect = trampoline(function detect_thunk(pair: unknown, parents: Pair[]): Thunk | void {
+  const detect = trampoline(function detect_thunk(pair: unknown, parents: APair[]): Thunk | void {
     if (is_pair(pair)) {
       const pairWithCycles = pair as PairWithMetadata;
       delete pairWithCycles[REF];
@@ -210,10 +210,10 @@ function stringifyValue(obj: unknown, quote?: boolean): string {
     // correctly. Without this they fall through to the generic #<ctor.name>
     // ("#<SchemeVector>") below — the nested-in-a-list repr leak. (The stdlib
     // toString path is handled symmetrically via get_instances.)
-    if (obj instanceof SchemeVector) {
+    if (obj instanceof AVector) {
       return `#(${obj.__vector__.map((el) => stringifyValue(el, quote)).join(" ")})`;
     }
-    if (obj instanceof SchemeBytevector) {
+    if (obj instanceof ABytevector) {
       return `#u8(${Array.from(obj.__bytevector__).join(" ")})`;
     }
     // Objects with custom toString
@@ -233,7 +233,7 @@ function stringifyValue(obj: unknown, quote?: boolean): string {
   return String(obj);
 }
 
-export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLike<Car, Cdr> {
+export class APair<Car = unknown, Cdr = unknown> extends AValue implements APairLike<Car, Cdr> {
   static [CLASS] = "pair";
   readonly kind = "pair" as const;
   [DATA]?: boolean;
@@ -249,61 +249,61 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   }
 
   // Static methods
-  static match(obj: unknown, item: string | RegExp | SchemeSymbol): boolean {
-    if (obj instanceof SchemeSymbol) {
-      return SchemeSymbol.is(obj, item);
+  static match(obj: unknown, item: string | RegExp | ASymbol): boolean {
+    if (obj instanceof ASymbol) {
+      return ASymbol.is(obj, item);
     } else if (is_pair(obj)) {
-      return Pair.match(obj.car, item) || Pair.match(obj.cdr, item);
+      return APair.match(obj.car, item) || APair.match(obj.cdr, item);
     } else if (Array.isArray(obj)) {
-      return obj.some((x) => Pair.match(x, item));
+      return obj.some((x) => APair.match(x, item));
     } else if (is_plain_object(obj)) {
-      return Object.values(obj).some((x) => Pair.match(x, item));
+      return Object.values(obj).some((x) => APair.match(x, item));
     }
     return false;
   }
 
-  static fromArray(array: unknown, deep = true, quote = false): Pair | Nil | unknown[] {
+  static fromArray(array: unknown, deep = true, quote = false): APair | ANil | unknown[] {
     if (
       is_pair(array) ||
       (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[DATA])
     ) {
-      return array as Pair | unknown[];
+      return array as APair | unknown[];
     }
     const arr = Array.isArray(array) ? array : [...(array as Iterable<unknown>)];
     if (deep === false) {
-      let list: Pair | Nil = nil;
+      let list: APair | ANil = nil;
       for (let i = arr.length; i--; ) {
-        list = new Pair(arr[i], list);
+        list = new APair(arr[i], list);
       }
       return list;
     }
-    let result: Pair | Nil = nil;
+    let result: APair | ANil = nil;
     let i = arr.length;
     while (i--) {
       let car: unknown = arr[i];
       if (Array.isArray(car)) {
-        car = Pair.fromArray(car, deep, quote);
+        car = APair.fromArray(car, deep, quote);
       } else if (typeof car === "string") {
-        car = new SchemeString(car);
+        car = new AString(car);
       } else if (typeof car === "number" && !Number.isNaN(car)) {
-        car = Number.isSafeInteger(car) ? new SchemeExact(BigInt(car)) : new SchemeInexact(car);
+        car = Number.isSafeInteger(car) ? new AExact(BigInt(car)) : new AInexact(car);
       } else if (typeof car === "bigint") {
-        car = new SchemeExact(car);
+        car = new AExact(car);
       }
-      result = new Pair(car, result);
+      result = new APair(car, result);
     }
     return result;
   }
 
-  static fromPairs(array: [string, unknown][]): Pair | Nil {
-    return array.reduce<Pair | Nil>((list, pair) => {
-      return new Pair(new Pair(new SchemeSymbol(pair[0]), pair[1]), list);
+  static fromPairs(array: [string, unknown][]): APair | ANil {
+    return array.reduce<APair | ANil>((list, pair) => {
+      return new APair(new APair(new ASymbol(pair[0]), pair[1]), list);
     }, nil);
   }
 
-  static fromObject(obj: Record<string, unknown>): Pair | Nil {
+  static fromObject(obj: Record<string, unknown>): APair | ANil {
     const array = Object.keys(obj).map((key) => [key, obj[key]] as [string, unknown]);
-    return Pair.fromPairs(array);
+    return APair.fromPairs(array);
   }
 
   /** Returns this for chaining. */
@@ -317,13 +317,13 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   }
 
   // Instance methods
-  flatten(): Pair | Nil | unknown[] {
-    return Pair.fromArray(this.to_array().flat(Infinity));
+  flatten(): APair | ANil | unknown[] {
+    return APair.fromArray(this.to_array().flat(Infinity));
   }
 
   length(): number {
     let len = 0;
-    let node: Pair | unknown = this;
+    let node: APair | unknown = this;
     while (true) {
       if (!node || is_nil(node) || !is_pair(node) || node.have_cycles("cdr")) {
         break;
@@ -334,19 +334,19 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     return len;
   }
 
-  find(item: string | RegExp | SchemeSymbol): boolean {
-    return Pair.match(this, item);
+  find(item: string | RegExp | ASymbol): boolean {
+    return APair.match(this, item);
   }
 
-  clone(deep = true): Pair {
-    const visited = new Map<Pair, Pair>();
+  clone(deep = true): APair {
+    const visited = new Map<APair, APair>();
 
     function cloneNode(node: unknown): unknown {
       if (is_pair(node)) {
         if (visited.has(node)) {
           return visited.get(node);
         }
-        const pair = new Pair() as PairWithMetadata;
+        const pair = new APair() as PairWithMetadata;
         visited.set(node, pair);
         pair.car = deep ? cloneNode(node.car) : node.car;
         pair.cdr = cloneNode(node.cdr);
@@ -356,11 +356,11 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
       return node;
     }
 
-    return cloneNode(this) as Pair;
+    return cloneNode(this) as APair;
   }
 
-  last_pair(): Pair | undefined {
-    let node: Pair = this;
+  last_pair(): APair | undefined {
+    let node: APair = this;
     while (true) {
       if (!is_pair(node.cdr)) {
         return node;
@@ -392,10 +392,10 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
         // But preserve SchemeSymbol, SchemeString, and number types even in deep mode
         // as they are Scheme values that should remain wrapped
         if (
-          car instanceof SchemeSymbol ||
-          car instanceof SchemeString ||
-          car instanceof SchemeExact ||
-          car instanceof SchemeInexact
+          car instanceof ASymbol ||
+          car instanceof AString ||
+          car instanceof AExact ||
+          car instanceof AInexact
         ) {
           result.push(car);
         } else {
@@ -412,16 +412,16 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   }
 
   to_object(literal = false): Record<string, unknown> {
-    let node: Pair | unknown = this;
+    let node: APair | unknown = this;
     const result: Record<string, unknown> = {};
     while (true) {
       if (is_pair(node) && is_pair(node.car)) {
         const pair = node.car;
         let name: unknown = pair.car;
-        if (name instanceof SchemeSymbol) {
+        if (name instanceof ASymbol) {
           name = name.__name__;
         }
-        if (name instanceof SchemeString) {
+        if (name instanceof AString) {
           name = name.valueOf();
         }
         let cdr: unknown = pair.cdr;
@@ -440,9 +440,9 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     return result;
   }
 
-  reduce<T>(fn: (acc: T | Nil, val: unknown) => T): T | Nil {
-    let node: Pair | unknown = this;
-    let result: T | Nil = nil;
+  reduce<T>(fn: (acc: T | ANil, val: unknown) => T): T | ANil {
+    let node: APair | unknown = this;
+    let result: T | ANil = nil;
     while (true) {
       if (is_nil(node)) {
         break;
@@ -456,10 +456,10 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     return result;
   }
 
-  reverse(): Pair | Nil {
+  reverse(): APair | ANil {
     invariant(!this.have_cycles(), "You can't reverse list that have cycles");
-    let node: Pair | unknown = this;
-    let prev: Pair | Nil = nil;
+    let node: APair | unknown = this;
+    let prev: APair | ANil = nil;
     while (!is_nil(node) && is_pair(node)) {
       const next = node.cdr;
       node.cdr = prev;
@@ -469,35 +469,35 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     return prev;
   }
 
-  transform(fn: (val: unknown) => unknown): Pair {
-    const visited: Pair[] = [];
+  transform(fn: (val: unknown) => unknown): APair {
+    const visited: APair[] = [];
 
     function recur(pair: unknown): unknown {
       if (is_pair(pair)) {
-        if ((pair as Pair & { replace?: boolean }).replace) {
-          delete (pair as Pair & { replace?: boolean }).replace;
+        if ((pair as APair & { replace?: boolean }).replace) {
+          delete (pair as APair & { replace?: boolean }).replace;
           return pair;
         }
         let car = fn(pair.car);
         if (is_pair(car)) {
           car = recur(car);
-          visited.push(car as Pair);
+          visited.push(car as APair);
         }
         let cdr = fn(pair.cdr);
         if (is_pair(cdr)) {
           cdr = recur(cdr);
-          visited.push(cdr as Pair);
+          visited.push(cdr as APair);
         }
-        return new Pair(car, cdr);
+        return new APair(car, cdr);
       }
       return pair;
     }
 
-    return recur(this) as Pair;
+    return recur(this) as APair;
   }
 
-  map(fn: (val: unknown) => unknown): Pair | Nil {
-    return this.car === undefined ? nil : new Pair(fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as Pair).map(fn));
+  map(fn: (val: unknown) => unknown): APair | ANil {
+    return this.car === undefined ? nil : new APair(fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
   }
 
   mark_cycles(): this {
@@ -527,7 +527,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
       parts.push("(");
     }
 
-    let node: Pair = this;
+    let node: APair = this;
     let first = true;
 
     // Iterate through cdr chain (no recursion on cdr = no stack overflow on long lists)
@@ -537,7 +537,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
         if (nodeWithCycles[REF]) {
           // Shared structure in cdr position - print as dotted pair with full notation
           parts.push(" . ", node.toString(quote));
-          node = nil as unknown as Pair;
+          node = nil as unknown as APair;
           continue;
         }
         parts.push(" ");
@@ -556,7 +556,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
         break;
       }
 
-      node = node.cdr as Pair;
+      node = node.cdr as APair;
     }
 
     // Improper list tail (non-nil, non-pair cdr)
@@ -572,7 +572,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   }
 
   set(prop: "car" | "cdr", value: unknown): void {
-    (this as Pair)[prop] = value;
+    (this as APair)[prop] = value;
     if (is_pair(value)) {
       this.mark_cycles();
     }
@@ -580,10 +580,10 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
 
   append(arg: unknown): this {
     if (Array.isArray(arg)) {
-      return this.append(Pair.fromArray(arg));
+      return this.append(APair.fromArray(arg));
     }
-    const self = this as Pair;
-    let p: Pair = self;
+    const self = this as APair;
+    let p: APair = self;
     if (p.car === undefined) {
       if (is_pair(arg)) {
         self.car = arg.car;
@@ -599,7 +599,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
           break;
         }
       }
-      (p as Pair).cdr = arg;
+      (p as APair).cdr = arg;
     }
     return this;
   }
@@ -619,7 +619,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
     // mutation between top-level call and a deeper recursive toJs (e.g. a
     // nested Pair's car being mutated by a side-effecting toJs override). Cheap
     // — one Set add per pair traversed.
-    const seen = new Set<Pair>();
+    const seen = new Set<APair>();
     const list: unknown[] = [];
     let node: unknown = this;
     while (true) {
@@ -644,8 +644,8 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
    * Parser/macro-attached metadata (`__location__`, `__cycles__`, `__ref__`) must
    * survive — losing it breaks stack traces and reader-cycle reconstruction.
    */
-  withProvenance(p: ReadonlySet<number>): Pair<Car, Cdr> {
-    const copy = new Pair<Car, Cdr>(this.car, this.cdr, p);
+  withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
+    const copy = new APair<Car, Cdr>(this.car, this.cdr, p);
     const src = this as PairWithMetadata<Car, Cdr>;
     const dst = copy as PairWithMetadata<Car, Cdr>;
     if (src[LOCATION] !== undefined) dst[LOCATION] = src[LOCATION];
@@ -655,7 +655,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   }
 
   [Symbol.iterator](): Iterator<unknown> {
-    let node: Pair | Nil | unknown = this;
+    let node: APair | ANil | unknown = this;
     return {
       next(): IteratorResult<unknown> {
         const cur = node;
@@ -681,7 +681,7 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   // Setoid forces it. Mirrors SchemeVector's seen-threaded Setoid.)
   ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
     return (
-      other instanceof Pair &&
+      other instanceof APair &&
       structuralEqual(this.car, other.car, seen) &&
       structuralEqual(this.cdr, other.cdr, seen)
     );
@@ -699,12 +699,12 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   // ----------------------------------------------------------------------
 
   // Functor — map each element, preserving the list spine.
-  ["fantasy-land/map"](f: (x: unknown) => unknown): Pair | Nil {
+  ["fantasy-land/map"](f: (x: unknown) => unknown): APair | ANil {
     return mapPair(f, this);
   }
 
   // Filterable — keep elements satisfying the predicate.
-  ["fantasy-land/filter"](predicate: (x: unknown) => unknown): Pair | Nil {
+  ["fantasy-land/filter"](predicate: (x: unknown) => unknown): APair | ANil {
     return filterPair(predicate, this);
   }
 
@@ -747,25 +747,25 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
   // Semigroup below; there is no `global_env.get("append")` back-edge (the
   // require("./stdlib") hack the monkey-patch carried existed ONLY because the
   // method lived outside the class — see plan wave 2).
-  ["fantasy-land/chain"](f: (x: unknown) => Pair | Nil): Pair | Nil {
+  ["fantasy-land/chain"](f: (x: unknown) => APair | ANil): APair | ANil {
     return chainPair(f, this);
   }
 
   // Semigroup — list append. `this ⋄ other` = the elements of this list
   // followed by the elements of `other`. Pure: builds a fresh spine, never
   // mutates either operand (unlike the in-place `append` method above).
-  ["fantasy-land/concat"](other: Pair | Nil): Pair | Nil {
+  ["fantasy-land/concat"](other: APair | ANil): APair | ANil {
     return concatPair(this, other);
   }
 
   // Monoid — the empty list is the identity for list-concat.
-  static ["fantasy-land/empty"](): Nil {
+  static ["fantasy-land/empty"](): ANil {
     return nil;
   }
 
   // Applicative — single-element list.
-  static ["fantasy-land/of"](value: unknown): Pair {
-    return new Pair(value, nil);
+  static ["fantasy-land/of"](value: unknown): APair {
+    return new APair(value, nil);
   }
 }
 
@@ -777,11 +777,11 @@ export class Pair<Car = unknown, Cdr = unknown> extends AValue implements PairLi
 // EVERY Pair recursor must honor it (the ramda pack's own recursors do too), else
 // delegating through `fantasy-land/*` would fold a phantom `undefined` element.
 // `instanceof Nil` (not `=== nil`) catches provenance clones in the cdr.
-function isEmptyPairSentinel(p: Pair): boolean {
-  return p.car === undefined && p.cdr instanceof Nil;
+function isEmptyPairSentinel(p: APair): boolean {
+  return p.car === undefined && p.cdr instanceof ANil;
 }
 
-function mapPair(f: (x: unknown) => unknown, pair: unknown): Pair | Nil {
+function mapPair(f: (x: unknown) => unknown, pair: unknown): APair | ANil {
   // Iterative spine-walk (was self-recursive on the cdr → O(depth) host stack →
   // overflow on a long list via fantasy-land/map). Builds into a JS array then
   // re-conses shallow via Pair.fromArray(arr, false) — the exact form the eager
@@ -791,16 +791,16 @@ function mapPair(f: (x: unknown) => unknown, pair: unknown): Pair | Nil {
   // non-Pair tail is read as a node with `.car === undefined`, exactly as before).
   const out: unknown[] = [];
   let node: unknown = pair;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     if (isEmptyPairSentinel(p)) break;
     out.push(f(p.car));
     node = p.cdr;
   }
-  return Pair.fromArray(out, false) as Pair | Nil;
+  return APair.fromArray(out, false) as APair | ANil;
 }
 
-function filterPair(predicate: (x: unknown) => unknown, pair: unknown): Pair | Nil {
+function filterPair(predicate: (x: unknown) => unknown, pair: unknown): APair | ANil {
   // Iterative spine-walk (was self-recursive → O(depth) host stack). JS-truthy on
   // the predicate (unchanged); kept elements are re-consed shallow in order via
   // Pair.fromArray(arr, false). Behavior-preserving: same empty-sentinel/Nil-clone
@@ -808,13 +808,13 @@ function filterPair(predicate: (x: unknown) => unknown, pair: unknown): Pair | N
   // for the phantom node exactly as the recursive base case did.
   const out: unknown[] = [];
   let node: unknown = pair;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     if (isEmptyPairSentinel(p)) break;
     if (predicate(p.car)) out.push(p.car);
     node = p.cdr;
   }
-  return Pair.fromArray(out, false) as Pair | Nil;
+  return APair.fromArray(out, false) as APair | ANil;
 }
 
 function reducePair<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc, pair: unknown): Acc {
@@ -825,8 +825,8 @@ function reducePair<Acc>(f: (acc: Acc, x: unknown) => Acc, initial: Acc, pair: u
   // phantom `f(acc, undefined)` before the non-Pair cdr ends the walk.
   let acc = initial;
   let node: unknown = pair;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     if (isEmptyPairSentinel(p)) break;
     acc = f(acc, p.car);
     node = p.cdr;
@@ -844,8 +844,8 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
   // single phantom step on an improper/non-Pair tail (no sentinel guard, as before).
   const heads: ({ ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined)[] = [];
   let node: unknown = pair;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     heads.push(f(p.car) as { ["fantasy-land/ap"]?: (m: unknown) => unknown } | undefined);
     node = p.cdr;
   }
@@ -854,7 +854,7 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
     const mappedCar = heads[i];
     acc = mappedCar?.["fantasy-land/ap"]
       ? mappedCar["fantasy-land/ap"](acc)
-      : of(new Pair(mappedCar, acc));
+      : of(new APair(mappedCar, acc));
   }
   return acc;
 }
@@ -865,17 +865,17 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
 // recursive base `return b ?? nil` did — purity: a's spine is fresh, b untouched).
 // An improper `a` still contributes its phantom `undefined` car before the non-Pair
 // tail ends the walk, matching the recursive form.
-function concatPair(a: unknown, b: unknown): Pair | Nil {
+function concatPair(a: unknown, b: unknown): APair | ANil {
   const cars: unknown[] = [];
   let node: unknown = a;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     cars.push(p.car);
     node = p.cdr;
   }
-  let result: Pair | Nil = (b ?? nil) as Pair | Nil;
+  let result: APair | ANil = (b ?? nil) as APair | ANil;
   for (let i = cars.length; i--; ) {
-    result = new Pair(cars[i], result);
+    result = new APair(cars[i], result);
   }
   return result;
 }
@@ -886,15 +886,15 @@ function concatPair(a: unknown, b: unknown): Pair | Nil {
 // (preserving f-call order), then concat from the right onto `nil` — the same right-
 // associated fold the recursion produced, so the flattened result is identical
 // (concat is associative). An improper tail still maps its phantom `f(undefined)`.
-function chainPair(f: (x: unknown) => Pair | Nil, pair: unknown): Pair | Nil {
-  const parts: (Pair | Nil)[] = [];
+function chainPair(f: (x: unknown) => APair | ANil, pair: unknown): APair | ANil {
+  const parts: (APair | ANil)[] = [];
   let node: unknown = pair;
-  while (node && !(node instanceof Nil)) {
-    const p = node as Pair;
+  while (node && !(node instanceof ANil)) {
+    const p = node as APair;
     parts.push(f(p.car));
     node = p.cdr;
   }
-  let result: Pair | Nil = nil;
+  let result: APair | ANil = nil;
   for (let i = parts.length; i--; ) {
     result = concatPair(parts[i], result);
   }
@@ -902,11 +902,11 @@ function chainPair(f: (x: unknown) => Pair | Nil, pair: unknown): Pair | Nil {
 }
 
 // Register Pair constructor with types.ts for Nil.append
-setPairConstructor(Pair);
+setPairConstructor(APair);
 
 // Interop boundary. A cons cell's rich prototype (`match`/`fromArray`/`toArray`,
 // the cycle/ref-tracking helpers) and metadata symbols (`__data__`, `__location__`)
 // are reachable from any held Pair via symbol-to-field auto-resolution; the
 // ref-tracking helpers in particular would leak host-side identity comparisons.
 // This marker stops the prototype-chain walk at Pair before any helper is reached.
-markInteropBoundary(Pair);
+markInteropBoundary(APair);

@@ -16,7 +16,7 @@ import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";
 import { provOf } from "../values/lineage-shadow";
 import { sStr } from "./_lineage-test-helpers";
@@ -78,7 +78,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   async function eagerProvSize(n: number): Promise<number> {
     await initBridge();
     const env = inferenceEnv.inherit(`lin-scale-${n}`);
-    const xs = Pair.fromArray(
+    const xs = APair.fromArray(
       Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),
       false,
     );

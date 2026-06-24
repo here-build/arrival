@@ -7,25 +7,25 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execExpr, parse } from "../eval/generator-exec";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact } from "../values/numbers";
-import { Pair } from "../values/primitives/Pair.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact } from "../values/numbers";
+import { APair } from "../values/primitives/APair.js";
 
 describe("generator-exec", () => {
   describe("exec() - basic operations", () => {
     it("should evaluate simple arithmetic", async () => {
       const [result] = await exec("(+ 1 2 3)");
-      expect(result).toBeInstanceOf(SchemeExact);
-      expect((result as SchemeExact).num).toBe(6n);
+      expect(result).toBeInstanceOf(AExact);
+      expect((result as AExact).num).toBe(6n);
     });
 
     it("should evaluate multiple expressions and return all results", async () => {
       const results = await exec("1 2 3");
       expect(results).toHaveLength(3);
-      expect((results[0] as SchemeExact).num).toBe(1n);
-      expect((results[1] as SchemeExact).num).toBe(2n);
-      expect((results[2] as SchemeExact).num).toBe(3n);
+      expect((results[0] as AExact).num).toBe(1n);
+      expect((results[1] as AExact).num).toBe(2n);
+      expect((results[2] as AExact).num).toBe(3n);
     });
 
     it("should handle define and use defined values", async () => {
@@ -34,39 +34,39 @@ describe("generator-exec", () => {
       // define returns undefined
       expect(results[0]).toBeUndefined();
       // x + 8 = 50
-      expect((results[1] as SchemeExact).num).toBe(50n);
+      expect((results[1] as AExact).num).toBe(50n);
     });
 
     it("should evaluate lambdas", async () => {
       const [result] = await exec("((lambda (x) (+ x 1)) 5)");
-      expect((result as SchemeExact).num).toBe(6n);
+      expect((result as AExact).num).toBe(6n);
     });
 
     it("should handle nested expressions", async () => {
       const [result] = await exec("(+ (* 2 3) (- 10 4))");
       // 2*3 + (10-4) = 6 + 6 = 12
-      expect((result as SchemeExact).num).toBe(12n);
+      expect((result as AExact).num).toBe(12n);
     });
   });
 
   describe("exec() - special forms", () => {
     it("should handle if expressions", async () => {
       const [result1] = await exec("(if #t 1 2)");
-      expect((result1 as SchemeExact).num).toBe(1n);
+      expect((result1 as AExact).num).toBe(1n);
 
       const [result2] = await exec("(if #f 1 2)");
-      expect((result2 as SchemeExact).num).toBe(2n);
+      expect((result2 as AExact).num).toBe(2n);
     });
 
     it("should handle let bindings", async () => {
       const [result] = await exec("(let ((x 3) (y 4)) (+ x y))");
-      expect((result as SchemeExact).num).toBe(7n);
+      expect((result as AExact).num).toBe(7n);
     });
 
     it("should handle let* bindings", async () => {
       const [result] = await exec("(let* ((x 3) (y (+ x 1))) (+ x y))");
       // x=3, y=4, x+y=7
-      expect((result as SchemeExact).num).toBe(7n);
+      expect((result as AExact).num).toBe(7n);
     });
 
     it("should handle letrec for recursion", async () => {
@@ -77,26 +77,26 @@ describe("generator-exec", () => {
                              (* n (fact (- n 1)))))))
           (fact 5))
       `);
-      expect((result as SchemeExact).num).toBe(120n);
+      expect((result as AExact).num).toBe(120n);
     });
 
     it("should handle begin", async () => {
       const [result] = await exec("(begin 1 2 3)");
-      expect((result as SchemeExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3n);
     });
 
     it("should handle and/or", async () => {
       const [and1] = await exec("(and #t #t)");
-      expect((and1 as SchemeBool).valueOf()).toBe(true);
+      expect((and1 as ABool).valueOf()).toBe(true);
 
       const [and2] = await exec("(and #t #f)");
-      expect((and2 as SchemeBool).valueOf()).toBe(false);
+      expect((and2 as ABool).valueOf()).toBe(false);
 
       const [or1] = await exec("(or #f #t)");
-      expect((or1 as SchemeBool).valueOf()).toBe(true);
+      expect((or1 as ABool).valueOf()).toBe(true);
 
       const [or2] = await exec("(or #f #f)");
-      expect((or2 as SchemeBool).valueOf()).toBe(false);
+      expect((or2 as ABool).valueOf()).toBe(false);
     });
 
     it("should handle cond", async () => {
@@ -106,7 +106,7 @@ describe("generator-exec", () => {
           (#t 2)
           (else 3))
       `);
-      expect((result as SchemeExact).num).toBe(2n);
+      expect((result as AExact).num).toBe(2n);
     });
 
     it("should handle case", async () => {
@@ -116,31 +116,31 @@ describe("generator-exec", () => {
           ((2) 'two)
           (else 'other))
       `);
-      expect(result).toBeInstanceOf(SchemeSymbol);
-      expect((result as SchemeSymbol).__name__).toBe("two");
+      expect(result).toBeInstanceOf(ASymbol);
+      expect((result as ASymbol).__name__).toBe("two");
     });
   });
 
   describe("exec() - data structures", () => {
     it("should handle quote", async () => {
       const [result] = await exec("'(1 2 3)");
-      expect(result).toBeInstanceOf(Pair);
+      expect(result).toBeInstanceOf(APair);
     });
 
     it("should handle quasiquote with unquote", async () => {
       const [result] = await exec("(let ((x 42)) `(a ,x c))");
-      expect(result).toBeInstanceOf(Pair);
-      const list = result as Pair;
-      expect((list.car as SchemeSymbol).__name__).toBe("a");
-      expect(((list.cdr as Pair).car as SchemeExact).num).toBe(42n);
+      expect(result).toBeInstanceOf(APair);
+      const list = result as APair;
+      expect((list.car as ASymbol).__name__).toBe("a");
+      expect(((list.cdr as APair).car as AExact).num).toBe(42n);
     });
 
     it("should handle cons/car/cdr", async () => {
       const [carResult] = await exec("(car '(1 2 3))");
-      expect((carResult as SchemeExact).num).toBe(1n);
+      expect((carResult as AExact).num).toBe(1n);
 
       const [cdrResult] = await exec("(cdr '(1 2 3))");
-      expect(cdrResult).toBeInstanceOf(Pair);
+      expect(cdrResult).toBeInstanceOf(APair);
     });
   });
 
@@ -152,7 +152,7 @@ describe("generator-exec", () => {
               acc
               (loop (- n 1) (* acc n))))
       `);
-      expect((result as SchemeExact).num).toBe(120n);
+      expect((result as AExact).num).toBe(120n);
     });
   });
 
@@ -164,7 +164,7 @@ describe("generator-exec", () => {
             \`(if ,test (begin ,@body)))
           (when #t 1 2 3))
       `);
-      expect((result as SchemeExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3n);
     });
   });
 
@@ -176,7 +176,7 @@ describe("generator-exec", () => {
             ((>= i 5) sum))
       `);
       // sum of 0+1+2+3+4 = 10
-      expect((result as SchemeExact).num).toBe(10n);
+      expect((result as AExact).num).toBe(10n);
     });
   });
 
@@ -184,7 +184,7 @@ describe("generator-exec", () => {
     it("should parse code without evaluating", async () => {
       const parsed = await parse("(+ 1 2)");
       expect(parsed).toHaveLength(1);
-      expect(parsed[0]).toBeInstanceOf(Pair);
+      expect(parsed[0]).toBeInstanceOf(APair);
     });
 
     it("should parse multiple expressions", async () => {
@@ -197,7 +197,7 @@ describe("generator-exec", () => {
     it("should evaluate a single parsed expression", async () => {
       const [parsed] = await parse("(+ 1 2)");
       const result = await execExpr(parsed);
-      expect((result as SchemeExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3n);
     });
   });
 
@@ -219,7 +219,7 @@ describe("generator-exec", () => {
           (+ a b)))
         (async-add 1 2)
       `);
-      expect((results[1] as SchemeExact).num).toBe(3n);
+      expect((results[1] as AExact).num).toBe(3n);
     });
   });
 
@@ -230,7 +230,7 @@ describe("generator-exec", () => {
           42
           (catch (e) 0))
       `);
-      expect((result as SchemeExact).num).toBe(42n);
+      expect((result as AExact).num).toBe(42n);
     });
 
     it("should catch exceptions in body", async () => {
@@ -239,7 +239,7 @@ describe("generator-exec", () => {
           (raise "error!")
           (catch (e) 99))
       `);
-      expect((result as SchemeExact).num).toBe(99n);
+      expect((result as AExact).num).toBe(99n);
     });
 
     // Skip this test until we improve error object handling
@@ -265,7 +265,7 @@ describe("generator-exec", () => {
         x
       `);
       // x should be 11 (1 + 10 from finally)
-      expect((results[2] as SchemeExact).num).toBe(11n);
+      expect((results[2] as AExact).num).toBe(11n);
     });
 
     it("should run finally clause after catch", async () => {
@@ -278,7 +278,7 @@ describe("generator-exec", () => {
         x
       `);
       // x should be 111 (1 + 100 from catch + 10 from finally)
-      expect((results[2] as SchemeExact).num).toBe(111n);
+      expect((results[2] as AExact).num).toBe(111n);
     });
   });
 
@@ -289,7 +289,7 @@ describe("generator-exec", () => {
           (#t 42))
           (raise "error"))
       `);
-      expect((result as SchemeExact).num).toBe(42n);
+      expect((result as AExact).num).toBe(42n);
     });
 
     it("should return body value when no exception", async () => {
@@ -298,7 +298,7 @@ describe("generator-exec", () => {
           (#t 0))
           (+ 1 2))
       `);
-      expect((result as SchemeExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3n);
     });
 
     // Skip until error-object? works correctly with generator evaluator
@@ -321,7 +321,7 @@ describe("generator-exec", () => {
         (my-param)
       `);
       // my-param returns 10
-      expect((results[1] as SchemeExact).num).toBe(10n);
+      expect((results[1] as AExact).num).toBe(10n);
     });
 
     it("should allow parameterize to rebind values", async () => {
@@ -331,7 +331,7 @@ describe("generator-exec", () => {
           (my-param))
       `);
       // Inside parameterize, my-param returns 42
-      expect((results[1] as SchemeExact).num).toBe(42n);
+      expect((results[1] as AExact).num).toBe(42n);
     });
 
     it("should restore parameter values after parameterize", async () => {
@@ -342,8 +342,8 @@ describe("generator-exec", () => {
         (my-param)
       `);
       // After parameterize, my-param returns 10 again
-      expect((results[1] as SchemeExact).num).toBe(42n);
-      expect((results[2] as SchemeExact).num).toBe(10n);
+      expect((results[1] as AExact).num).toBe(42n);
+      expect((results[2] as AExact).num).toBe(10n);
     });
   });
 });

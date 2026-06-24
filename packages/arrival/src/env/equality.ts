@@ -23,8 +23,8 @@
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { EnvCapability } from "./capability.js";
 import { is_callable, is_macro } from "../eval/guards.js";
@@ -42,7 +42,7 @@ export default new EnvCapability("scheme/equality", {
         // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
         const unwrap = (b: unknown): boolean | undefined => {
           if (typeof b === "boolean") return b;
-          if (b instanceof SchemeBool) return b.value;
+          if (b instanceof ABool) return b.value;
           return undefined;
         };
         const first = unwrap(bools[0]);
@@ -57,9 +57,9 @@ export default new EnvCapability("scheme/equality", {
       (...syms: unknown[]): boolean => {
         if (syms.length < 2) return true;
         const first = syms[0];
-        if (!(first instanceof SchemeSymbol)) return false;
+        if (!(first instanceof ASymbol)) return false;
         const firstName = first.__name__;
-        return syms.every((s) => s instanceof SchemeSymbol && s.__name__ === firstName);
+        return syms.every((s) => s instanceof ASymbol && s.__name__ === firstName);
       },
     ),
 

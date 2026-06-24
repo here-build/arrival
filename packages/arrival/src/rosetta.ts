@@ -13,13 +13,13 @@
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
-import { SchemeBool } from "./values/primitives/SchemeBool.js";
-import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
-import { SchemeVector } from "./values/primitives/SchemeVector.js";
-import { SchemeJSArray, SchemeJSObject } from "./membrane.js";
-import { SchemeExact, SchemeInexact } from "./values/numbers.js";
-import { Pair } from "./values/primitives/Pair.js";
-import { Nil, nil } from "./values/primitives/Nil.js";
+import { ABool } from "./values/primitives/ABool.js";
+import { ABytevector } from "./values/primitives/ABytevector.js";
+import { AVector } from "./values/primitives/AVector.js";
+import { SchemeJSArray, AJSObject } from "./membrane.js";
+import { AExact, AInexact } from "./values/numbers.js";
+import { APair } from "./values/primitives/APair.js";
+import { ANil, nil } from "./values/primitives/ANil.js";
 
 interface RosettaOptions {
   forceBigInt?: boolean;
@@ -120,7 +120,7 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   // mints fresh Nil clones (types.ts:87) — reference-equality misses them and would
   // leak the clone back into the JS caller. Mirrors guards.ts:is_nil (the Tier-1 fix
   // in 5f7f9e46a) which adopted the same class-based check.
-  if (value == null || value instanceof Nil) return value;
+  if (value == null || value instanceof ANil) return value;
 
   // Handle JS arrays (convert elements recursively)
   if (Array.isArray(value)) {
@@ -132,15 +132,15 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   // {kind,__vector__/__bytevector__,provenance} object shape to JS callers
   // (the MCP/trace serialization path). Mirrors the raw-array branch above and
   // the raw-Uint8Array fall-through.
-  if (value instanceof SchemeVector) {
+  if (value instanceof AVector) {
     return value.__vector__.map((record) => schemeToJs(record, options));
   }
-  if (value instanceof SchemeBytevector) {
+  if (value instanceof ABytevector) {
     return value.__bytevector__;
   }
 
   // Handle ExactNumber and InexactNumber
-  if (value instanceof SchemeExact) {
+  if (value instanceof AExact) {
     const val = value.valueOf();
     if (options.forceBigInt) {
       return typeof val === "bigint" ? val : BigInt(Math.round(val as number));
@@ -156,13 +156,13 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
     return val;
   }
 
-  if (value instanceof SchemeInexact) {
+  if (value instanceof AInexact) {
     // InexactNumber is always a JS float (reals-only — complex axis omitted).
     return value.real;
   }
 
   // Unwrap SchemeJSObject to source object
-  if (value instanceof SchemeJSObject) {
+  if (value instanceof AJSObject) {
     return schemeToJs(value.source, options);
   }
 
@@ -172,7 +172,7 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   }
 
   // Unwrap SchemeBool to JS primitive
-  if (value instanceof SchemeBool) {
+  if (value instanceof ABool) {
     return value.value;
   }
 
@@ -188,7 +188,7 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
       const tail = schemeToJs(value.cdr, options) ?? [];
       if (Array.isArray(tail)) {
         return [head, ...tail];
-      } else if (tail instanceof Nil) {
+      } else if (tail instanceof ANil) {
         // Class check, not `=== nil`: a provenance-bearing Nil clone (see Nil import note above)
         // must still terminate the list — otherwise the tail leaks as `[head, <Nil-clone>]`.
         return [head];
@@ -261,7 +261,7 @@ export function jsToScheme(
   seen: WeakSet<object> = new WeakSet(),
 ): any {
   if (value === null || value === undefined) {
-    return provenance === EMPTY_PROVENANCE ? nil : new Nil(provenance);
+    return provenance === EMPTY_PROVENANCE ? nil : new ANil(provenance);
   }
 
   // Cycle in JS-side input — return as-is. The caller's outer wrapper already
@@ -274,17 +274,17 @@ export function jsToScheme(
   // level `withProvenance` (entries of SchemeJSObject stay lazy via `.get`).
   if (value instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === value.provenance) return value;
-    if (value instanceof Pair) {
-      return new Pair(
+    if (value instanceof APair) {
+      return new APair(
         jsToScheme(value.car, options, provenance, seen),
         jsToScheme(value.cdr, options, provenance, seen),
         provenance,
       );
     }
-    if (value instanceof SchemeVector) {
+    if (value instanceof AVector) {
       // Deep-stamp elements (parallel to Pair), keep it a vector. The container
       // also carries the provenance via the constructor arg.
-      return new SchemeVector(
+      return new AVector(
         value.__vector__.map((el) => jsToScheme(el, options, provenance, seen)),
         provenance,
       );
@@ -294,9 +294,9 @@ export function jsToScheme(
 
   // JS array → Pair-chain, each cons + each leaf stamped on the way down.
   if (Array.isArray(value)) {
-    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new Nil(provenance);
+    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(provenance);
     for (let i = value.length - 1; i >= 0; i--) {
-      list = new Pair(jsToScheme(value[i], options, provenance, seen), list, provenance);
+      list = new APair(jsToScheme(value[i], options, provenance, seen), list, provenance);
     }
     return list;
   }
@@ -306,7 +306,7 @@ export function jsToScheme(
     typeof value === "object" &&
     (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
   ) {
-    return new SchemeJSObject(value as object, provenance);
+    return new AJSObject(value as object, provenance);
   }
 
   // JS primitives → AValue.fromJs (boxer registry handles bool/number/string/bigint).

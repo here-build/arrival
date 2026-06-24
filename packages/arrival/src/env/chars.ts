@@ -21,8 +21,8 @@ import invariant from "tiny-invariant";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { charValue, coerceNumeric, deriveOrd } from "../values/op-helpers.js";
-import { SchemeExact } from "../values/numbers.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { AExact } from "../values/numbers.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import { EnvCapability } from "./capability.js";
 
 export default new EnvCapability("scheme/chars", {
@@ -30,7 +30,7 @@ export default new EnvCapability("scheme/chars", {
     "char?": symbol.native`char?: #t iff the object is a character`(
       { input: [z.unknown()], output: [z.boolean] },
       (obj: unknown): boolean => {
-        return obj instanceof SchemeCharacter;
+        return obj instanceof ACharacter;
       },
     ),
 
@@ -195,21 +195,21 @@ export default new EnvCapability("scheme/chars", {
     // Case conversion
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.schemeChar], output: [z.schemeChar] },
-      (char: unknown): SchemeCharacter => {
-        return new SchemeCharacter(charValue(char).toUpperCase());
+      (char: unknown): ACharacter => {
+        return new ACharacter(charValue(char).toUpperCase());
       },
     ),
 
     "char-downcase": symbol.native`char-downcase: lowercase form of the character`(
       { input: [z.schemeChar], output: [z.schemeChar] },
-      (char: unknown): SchemeCharacter => {
-        return new SchemeCharacter(charValue(char).toLowerCase());
+      (char: unknown): ACharacter => {
+        return new ACharacter(charValue(char).toLowerCase());
       },
     ),
 
     "char-foldcase": symbol.native`char-foldcase: case-folded form of the character`(
       { input: [z.schemeChar], output: [z.schemeChar] },
-      (char: unknown): SchemeCharacter => {
+      (char: unknown): ACharacter => {
         const c = charValue(char);
         const folded = foldCase(c);
         // R7RS § 6.6: char-foldcase returns a character (single Unicode scalar).
@@ -217,7 +217,7 @@ export default new EnvCapability("scheme/chars", {
         // sigma, etc.), there is no single-char result, so the operation MUST
         // return the input unchanged. Truncating to `folded[0]` produces a
         // different character (ß → s) which violates the round-trip identity.
-        return [...folded].length === 1 ? new SchemeCharacter(folded) : (char as SchemeCharacter);
+        return [...folded].length === 1 ? new ACharacter(folded) : (char as ACharacter);
       },
     ),
 
@@ -228,8 +228,8 @@ export default new EnvCapability("scheme/chars", {
     // `codePointAt(0)` reads a full surrogate pair when present.
     "char->integer": symbol.native`char->integer: Unicode scalar value of the character`(
       { input: [z.schemeChar], output: [z.schemeExact] },
-      (char: unknown): SchemeExact => {
-        return new SchemeExact(BigInt(charValue(char).codePointAt(0)!));
+      (char: unknown): AExact => {
+        return new AExact(BigInt(charValue(char).codePointAt(0)!));
       },
     ),
 
@@ -240,15 +240,15 @@ export default new EnvCapability("scheme/chars", {
     // are NOT Unicode scalars per the standard; reject explicitly.
     "integer->char": symbol.native`integer->char: character for a Unicode scalar value`(
       { input: [z.schemeNumber], output: [z.schemeChar] },
-      (n: unknown): SchemeCharacter => {
+      (n: unknown): ACharacter => {
         const num = coerceNumeric(n);
-        const code = num instanceof SchemeExact ? Number(num.num) : Math.floor(num.real);
+        const code = num instanceof AExact ? Number(num.num) : Math.floor(num.real);
         invariant(code >= 0 && code <= 0x10_ff_ff, `integer->char: code point ${code} out of Unicode range`);
         invariant(
           code < 0xd8_00 || code > 0xdf_ff,
           `integer->char: surrogate code point ${code.toString(16)} is not a Unicode scalar`,
         );
-        return new SchemeCharacter(String.fromCodePoint(code));
+        return new ACharacter(String.fromCodePoint(code));
       },
     ),
   },

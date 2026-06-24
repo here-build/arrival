@@ -53,8 +53,8 @@
  * the backward pass — v0.2 is "populate the adjoint table," not "flip a mode").
  */
 import { is_pair } from "./value-guards.js";
-import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
-import type { Pair } from "./primitives/Pair.js";
+import { ASymbol } from "./primitives/ASymbol.js";
+import type { APair } from "./primitives/APair.js";
 import type { SchemeValue } from "./types.js";
 
 /** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes
@@ -166,14 +166,14 @@ export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
 ]);
 
 /** Surface-form heads dispatched by SPECIAL_FORMS, recognised by name. */
-const isSym = (x: SchemeValue, name: string): boolean => x instanceof SchemeSymbol && opName(x) === name;
+const isSym = (x: SchemeValue, name: string): boolean => x instanceof ASymbol && opName(x) === name;
 
 /** A datum that is neither a variable (SchemeSymbol) nor an application (Pair). */
 function isLiteral(x: SchemeValue): boolean {
-  return !(x instanceof SchemeSymbol) && !is_pair(x);
+  return !(x instanceof ASymbol) && !is_pair(x);
 }
 
-function operands(app: Pair): SchemeValue[] {
+function operands(app: APair): SchemeValue[] {
   const out: SchemeValue[] = [];
   let n: SchemeValue = app.cdr;
   while (is_pair(n)) {
@@ -189,7 +189,7 @@ const isProvBearing = (n: LineageNode): boolean => n.kind !== "literal";
  *  index must be a self-evaluating exact integer; a variable index (`(vector-ref
  *  x n)`) leaves the form a plain op (no static field — the key isn't known). */
 function literalIndex(x: SchemeValue): number | null {
-  if (x instanceof SchemeSymbol || is_pair(x)) return null;
+  if (x instanceof ASymbol || is_pair(x)) return null;
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
   return typeof v === "number" && Number.isInteger(v) ? v : null;
 }
@@ -207,7 +207,7 @@ function literalIndex(x: SchemeValue): number | null {
  * no-lookahead property the sampler relies on lives at this canonical level.
  */
 function memberRead(head: SchemeValue, args: SchemeValue[]): { step: PathStep; argExpr: SchemeValue } | null {
-  if (!(head instanceof SchemeSymbol)) return null;
+  if (!(head instanceof ASymbol)) return null;
   const name = opName(head);
 
   // (:foo x) — keyword accessor. Head is `:foo`; a bare `:` (no field) is not one.
@@ -219,11 +219,11 @@ function memberRead(head: SchemeValue, args: SchemeValue[]): { step: PathStep; a
   // is the SECOND operand: a `:foo` keyword symbol, a "foo" string, or a literal int.
   if (name === "@" && args.length >= 2) {
     const key = args[1];
-    const keyName = key instanceof SchemeSymbol ? opName(key) : null;
+    const keyName = key instanceof ASymbol ? opName(key) : null;
     if (keyName !== null && keyName.length > 1 && keyName.startsWith(":")) {
       return { step: { field: keyName.slice(1) }, argExpr: args[0] };
     }
-    if (!(key instanceof SchemeSymbol) && !is_pair(key)) {
+    if (!(key instanceof ASymbol) && !is_pair(key)) {
       const kv = (key as { valueOf?: () => unknown })?.valueOf?.();
       if (typeof kv === "string") return { step: { field: kv }, argExpr: args[0] };
       const ki = literalIndex(key);
@@ -251,7 +251,7 @@ function lambdaParams(formals: SchemeValue): string[] {
   const out: string[] = [];
   let n: SchemeValue = formals;
   while (is_pair(n)) {
-    if (n.car instanceof SchemeSymbol) out.push(opName(n.car));
+    if (n.car instanceof ASymbol) out.push(opName(n.car));
     n = n.cdr;
   }
   return out;
@@ -317,17 +317,17 @@ export function classify(ast: SchemeValue, c: Classifier): LineageNode {
 
 function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNode {
   if (isLiteral(ast)) return { kind: "literal" };
-  if (ast instanceof SchemeSymbol) {
+  if (ast instanceof ASymbol) {
     const slot = opName(ast);
     return subst.get(slot) ?? { kind: "leaf", slot };
   }
 
-  const head = (ast as Pair).car;
+  const head = (ast as APair).car;
 
   // ── Special forms (dispatched directly by the evaluator; surface Pairs) ──
-  if (head instanceof SchemeSymbol) {
+  if (head instanceof ASymbol) {
     const form = opName(head);
-    const rest = (ast as Pair).cdr;
+    const rest = (ast as APair).cdr;
     switch (form) {
       case "if":
         return classifyIf(rest, c, subst);
@@ -349,7 +349,7 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
         // the operands (or #t/#f), so the cone is the union of operand cones.
         return combine(
           form,
-          operands(ast as Pair).map((a) => classifyWith(a, c, subst)),
+          operands(ast as APair).map((a) => classifyWith(a, c, subst)),
         );
       case "lambda":
         // A lambda literal is a value that carries no provenance at its
@@ -365,7 +365,7 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
   // application: (op . args). A computed operator `((f a) b)` stringifies via
   // opName — a step-2+ HOF hole (tracked in lineage-assumptions A21).
   const op = opName(head);
-  const args = operands(ast as Pair);
+  const args = operands(ast as APair);
 
   // ── WHERE-PROVENANCE: a member-read, NORMALIZED to a canonical field node ──
   // Recognized across all its surface syntaxes (keyword/`@`/`car`/`vector-ref`);
@@ -504,7 +504,7 @@ function classifyLet(rest: SchemeValue, c: Classifier, subst: Subst, sequential:
   if (!is_pair(rest)) return { kind: "literal" };
 
   // Named let: (let name (bindings) body…) — recursion ⇒ opaque (not inlineable).
-  if (rest.car instanceof SchemeSymbol) {
+  if (rest.car instanceof ASymbol) {
     const afterName = rest.cdr;
     if (!is_pair(afterName)) return { kind: "literal" };
     const rhss = letBindingValues(afterName.car).map((v) => classifyWith(v, c, subst));
@@ -522,7 +522,7 @@ function classifyLet(rest: SchemeValue, c: Classifier, subst: Subst, sequential:
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
     bindNode = bindNode.cdr;
-    if (!is_pair(binding) || !(binding.car instanceof SchemeSymbol)) continue;
+    if (!is_pair(binding) || !(binding.car instanceof ASymbol)) continue;
     const name = opName(binding.car);
     const rhsExpr = is_pair(binding.cdr) ? binding.cdr.car : undefined;
     const rhsSubst = sequential ? extended : subst; // let* sees prior bindings; let does not

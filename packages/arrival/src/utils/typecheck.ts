@@ -1,10 +1,10 @@
 // -------------------------------------------------------------------------
 import { EOF } from "../values/primitives/EOF.js";
 import { is_function, is_instance, is_iterator, is_pair } from "../values/value-guards.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
 import { type_constants } from "../values/primitives.js";
 import { CLASS } from "../well-known-symbols.js";
 // NOTE: Macro/Syntax are intentionally NOT imported. They are evaluator-world
@@ -12,8 +12,8 @@ import { CLASS } from "../well-known-symbols.js";
 // Syntax-extends-Macro) that resolved only by load-order luck. Their `typeOf`
 // is derived from the `constructor.__class__` brand fallback below ("macro" /
 // "syntax"), which keeps this module a leaf the value kernel can depend on.
-import { Nil } from "../values/primitives/Nil.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import { Values } from "../values/primitives/Values.js";
 import invariant from "tiny-invariant";
 
@@ -76,19 +76,19 @@ export function type(obj): string {
   }
   if (typeof obj === "object") {
     // Check for number types first (no common base class)
-    if (obj instanceof SchemeExact || obj instanceof SchemeInexact) {
+    if (obj instanceof AExact || obj instanceof AInexact) {
       return "number";
     }
     const typeMapping = {
-      pair: Pair,
-      symbol: SchemeSymbol,
+      pair: APair,
+      symbol: ASymbol,
       array: Array,
-      nil: Nil,
-      character: SchemeCharacter,
+      nil: ANil,
+      character: ACharacter,
       values: Values,
       regex: RegExp,
       eof: EOF,
-      string: SchemeString,
+      string: AString,
       "native-symbol": Symbol,
     };
     for (const [key, value] of Object.entries(typeMapping)) {
@@ -137,9 +137,9 @@ export function typecheck_args(fn, args, expected) {
   }
 } // -------------------------------------------------------------------------
 // Type for Scheme numbers that have __type__ property
-type SchemeNumeric = { __type__: string; valueOf(): unknown };
+type ANumeric = { __type__: string; valueOf(): unknown };
 
-export function typecheck_number(fn: Valuable, arg: SchemeNumeric, expected: Valuable, position: number | null = null) {
+export function typecheck_number(fn: Valuable, arg: ANumeric, expected: Valuable, position: number | null = null) {
   typecheck(fn, arg, "number", position);
   const arg_type = arg.__type__;
   let match = false;

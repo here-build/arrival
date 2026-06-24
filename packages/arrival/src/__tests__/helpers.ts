@@ -2,46 +2,46 @@
  * Shared test helpers for arrival-scheme tests
  */
 
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/primitives/Pair.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers";
+import { APair } from "../values/primitives/APair.js";
 import { type SchemeValue } from "../values/types";
-import { nil } from "../values/primitives/Nil";
+import { nil } from "../values/primitives/ANil";
 
 /**
  * Create a Scheme list from JS values
  */
-export function list(...items: SchemeValue[]): Pair | typeof nil {
-  return Pair.fromArray(items, false) as Pair | typeof nil;
+export function list(...items: SchemeValue[]): APair | typeof nil {
+  return APair.fromArray(items, false) as APair | typeof nil;
 }
 
 /**
  * Create a Scheme symbol
  */
-export function sym(name: string): SchemeSymbol {
-  return new SchemeSymbol(name);
+export function sym(name: string): ASymbol {
+  return new ASymbol(name);
 }
 
 /**
  * Create a Scheme number (exact for integers, inexact for floats)
  */
-export function num(n: number | bigint): SchemeExact | SchemeInexact {
+export function num(n: number | bigint): AExact | AInexact {
   if (typeof n === "bigint") {
-    return new SchemeExact(n);
+    return new AExact(n);
   }
-  return Number.isInteger(n) ? new SchemeExact(BigInt(n)) : new SchemeInexact(n);
+  return Number.isInteger(n) ? new AExact(BigInt(n)) : new AInexact(n);
 }
 
 /**
  * Create an exact number (rational)
  */
-export function exact(num: number | bigint, denom: number | bigint = 1): SchemeExact {
-  return new SchemeExact(BigInt(num), BigInt(denom));
+export function exact(num: number | bigint, denom: number | bigint = 1): AExact {
+  return new AExact(BigInt(num), BigInt(denom));
 }
 
 /**
  * Create an inexact number (floating point real — arrival is reals-only)
  */
-export function inexact(real: number): SchemeInexact {
-  return new SchemeInexact(real);
+export function inexact(real: number): AInexact {
+  return new AInexact(real);
 }

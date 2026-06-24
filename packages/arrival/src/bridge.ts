@@ -14,9 +14,9 @@ import { EnvCapability } from "./env/capability.js";
 import { assembleEnv } from "./env/kernel.js";
 import { BASE_PACKS } from "./env/base-packs.js";
 import type { EvalSchemeInto, SchemeEnv } from "./env/scheme-env.js";
-import { HalfBaked, type Interval, is_half_baked } from "./values/primitives/HalfBaked.js";
+import { AHalfBaked, type Interval, is_half_baked } from "./values/primitives/AHalfBaked.js";
 import type { Environment } from "./Environment.js";
-import { schemeFalse, schemeTrue } from "./values/primitives/SchemeBool.js";
+import { schemeFalse, schemeTrue } from "./values/primitives/ABool.js";
 import { coerceNumeric, type FLOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
@@ -28,14 +28,14 @@ import { NATIVE_PACKS } from "./env/native-packs.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
 import { inferenceEnv } from "./inference-env.js";
 import flInterop from "./env/fl-interop.js";
-import { SchemeString } from "./values/primitives/SchemeString.js";
+import { AString } from "./values/primitives/AString.js";
 import type { Codec, Operator } from "./membrane.js";
-import type { SchemeNumeric } from "./values/numbers.js";
-import { SchemeExact, SchemeInexact } from "./values/numbers.js";
+import type { ANumeric } from "./values/numbers.js";
+import { AExact, AInexact } from "./values/numbers.js";
 import * as ops from "./operators/index.js";
 // Import directly from source files to avoid circular dependency during init
-import { Pair } from "./values/primitives/Pair.js";
-import { nil } from "./values/primitives/Nil.js";
+import { APair } from "./values/primitives/APair.js";
+import { nil } from "./values/primitives/ANil.js";
 import { type } from "./utils/typecheck.js";
 import { Values } from "./values/primitives/Values.js";
 import invariant from "tiny-invariant";
@@ -143,7 +143,7 @@ export function wrapOperator<In extends any[], InRest extends Codec<any, any> | 
   // or after forcing a HalfBaked carrier.
   const applyNumeric = (callArgs: unknown[]): unknown => {
     const provenance = unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue));
-    let converted: SchemeNumeric[];
+    let converted: ANumeric[];
     try {
       converted = callArgs.map(coerceNumeric);
     } catch (cause) {
@@ -252,7 +252,7 @@ function speculativeCompare(name: string, args: unknown[]): unknown | undefined 
   const aHB = is_half_baked(a);
   const bHB = is_half_baked(b);
   if (aHB === bHB) return undefined; // need exactly one HalfBaked operand
-  const hb = (aHB ? a : b) as HalfBaked;
+  const hb = (aHB ? a : b) as AHalfBaked;
   const k = toNumber(aHB ? b : a);
   if (k === undefined) return undefined;
   // Normalize so the interval is on the left of the operator.
@@ -267,7 +267,7 @@ function speculativeCompare(name: string, args: unknown[]): unknown | undefined 
 /**
  * Create a type predicate that doesn't throw on non-numbers
  */
-function makeTypePredicate(name: string, predicate: (n: SchemeNumeric) => boolean): unknown {
+function makeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): unknown {
   const fn = (value: unknown): boolean => {
     if (!isSchemeNumber(value)) {
       return false;
@@ -333,24 +333,24 @@ export const wrappedOps = {
   "floor/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof SchemeExact ? a : new SchemeExact(BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof SchemeExact ? b : new SchemeExact(BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(BigInt(Math.trunc(b.real)));
     const q = ops.floorQuotient.call([aExact, bExact]);
     const r = ops.floorRemainder.call([aExact, bExact]);
-    const qNum = q instanceof SchemeExact ? q : new SchemeExact(q as unknown as bigint);
-    const rNum = r instanceof SchemeExact ? r : new SchemeExact(r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
   "truncate/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof SchemeExact ? a : new SchemeExact(BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof SchemeExact ? b : new SchemeExact(BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(BigInt(Math.trunc(b.real)));
     const q = ops.truncateQuotient.call([aExact, bExact]);
     const r = ops.truncateRemainder.call([aExact, bExact]);
-    const qNum = q instanceof SchemeExact ? q : new SchemeExact(q as unknown as bigint);
-    const rNum = r instanceof SchemeExact ? r : new SchemeExact(r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
@@ -365,22 +365,22 @@ export const wrappedOps = {
   abs: wrapOperator(ops.abs),
   gcd: wrapOperator(ops.gcd),
 
-  lcm(...args: unknown[]): SchemeNumeric {
-    if (args.length === 0) return new SchemeExact(1n);
+  lcm(...args: unknown[]): ANumeric {
+    if (args.length === 0) return new AExact(1n);
     let hasInexact = false;
-    const exactArgs: SchemeExact[] = [];
+    const exactArgs: AExact[] = [];
     for (const arg of args) {
       const n = coerceNumeric(arg);
-      if (n instanceof SchemeInexact) {
+      if (n instanceof AInexact) {
         hasInexact = true;
-        exactArgs.push(new SchemeExact(BigInt(Math.trunc(n.real))));
+        exactArgs.push(new AExact(BigInt(Math.trunc(n.real))));
       } else {
-        exactArgs.push(new SchemeExact(n.num / n.denom));
+        exactArgs.push(new AExact(n.num / n.denom));
       }
     }
     const result = ops.lcm.call(exactArgs);
-    const resultBigint = result instanceof SchemeExact ? result.num : (result as bigint);
-    return hasInexact ? new SchemeInexact(Number(resultBigint)) : new SchemeExact(resultBigint);
+    const resultBigint = result instanceof AExact ? result.num : (result as bigint);
+    return hasInexact ? new AInexact(Number(resultBigint)) : new AExact(resultBigint);
   },
 
   expt: wrapOperator(ops.expt),
@@ -437,15 +437,15 @@ export const wrappedOps = {
 
   "**": wrapOperator(ops.expt),
 
-  "1+"(n: unknown): SchemeNumeric {
+  "1+"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new SchemeExact(1n);
+    const one = new AExact(1n);
     return ops.add.call([converted, one]);
   },
 
-  "1-"(n: unknown): SchemeNumeric {
+  "1-"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new SchemeExact(1n);
+    const one = new AExact(1n);
     return ops.sub.call([converted, one]);
   },
 
@@ -455,13 +455,13 @@ export const wrappedOps = {
   "&": wrapOperator(ops.bitwiseAnd),
   "~": wrapOperator(ops.bitwiseNot),
 
-  ">>"(a: unknown, b: unknown): SchemeNumeric {
+  ">>"(a: unknown, b: unknown): ANumeric {
     const aNum = coerceNumeric(a);
     const bNum = coerceNumeric(b);
     return ops.arithmeticShift.call([aNum, bNum]);
   },
 
-  "<<"(a: unknown, b: unknown): SchemeNumeric {
+  "<<"(a: unknown, b: unknown): ANumeric {
     const aNum = coerceNumeric(a);
     const bNum = coerceNumeric(b);
     const negB = ops.sub.call([bNum]);
@@ -469,21 +469,21 @@ export const wrappedOps = {
   },
 
   // R7RS exactness conversion
-  inexact(z: unknown): SchemeInexact {
+  inexact(z: unknown): AInexact {
     const n = coerceNumeric(z);
-    if (n instanceof SchemeInexact) return n;
+    if (n instanceof AInexact) return n;
     const exact = n;
-    if (exact.denom === 1n) return new SchemeInexact(Number(exact.num));
-    return new SchemeInexact(Number(exact.num) / Number(exact.denom));
+    if (exact.denom === 1n) return new AInexact(Number(exact.num));
+    return new AInexact(Number(exact.num) / Number(exact.denom));
   },
 
-  exact(z: unknown): SchemeExact {
+  exact(z: unknown): AExact {
     const n = coerceNumeric(z);
-    if (n instanceof SchemeExact) return n;
+    if (n instanceof AExact) return n;
     const inexact = n;
     const real = inexact.real;
     TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-    if (Number.isInteger(real)) return new SchemeExact(BigInt(real));
+    if (Number.isInteger(real)) return new AExact(BigInt(real));
     // JS Number.toString picks between fixed (`0.5`) and exponential (`1e-10`,
     // `1e+21`) notations based on magnitude. The fixed-notation path uses the
     // decimal-place count to derive the denominator. The exponential path was
@@ -502,27 +502,27 @@ export const wrappedOps = {
       const mantissa = BigInt(`${sign}${digits}`);
       const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
       if (netExp >= 0) {
-        return new SchemeExact(mantissa * 10n ** BigInt(netExp));
+        return new AExact(mantissa * 10n ** BigInt(netExp));
       }
       const denomBig = 10n ** BigInt(-netExp);
       const absNum = mantissa < 0n ? -mantissa : mantissa;
       const g = gcd(absNum, denomBig);
-      return new SchemeExact(mantissa / g, denomBig / g);
+      return new AExact(mantissa / g, denomBig / g);
     }
     const decimalIndex = str.indexOf(".");
-    if (decimalIndex === -1) return new SchemeExact(BigInt(real));
+    if (decimalIndex === -1) return new AExact(BigInt(real));
     const decimals = str.length - decimalIndex - 1;
     const scale = 10n ** BigInt(decimals);
     const num = BigInt(Math.round(real * Number(scale)));
     const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
     const g = gcd(num < 0n ? -num : num, scale);
-    return new SchemeExact(num / g, scale / g);
+    return new AExact(num / g, scale / g);
   },
 
   "number->string"(z: unknown, radix?: unknown): string {
     const n = coerceNumeric(z);
     const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
-    if (n instanceof SchemeExact) {
+    if (n instanceof AExact) {
       if (n.denom === 1n) return n.num.toString(base);
       return `${n.num.toString(base)}/${n.denom.toString(base)}`;
     }
@@ -564,7 +564,7 @@ export const wrappedOps = {
       // Convert JS array to Scheme list
       let result: unknown = nil;
       for (let i = err.irritants.length - 1; i >= 0; i--) {
-        result = new Pair(err.irritants[i], result);
+        result = new APair(err.irritants[i], result);
       }
       return result;
     }
@@ -580,7 +580,7 @@ export const wrappedOps = {
   },
 
   "make-error-object"(message: unknown, ...irritants: unknown[]): R7RSError {
-    const msg = message instanceof SchemeString ? message.valueOf() : String(message);
+    const msg = message instanceof AString ? message.valueOf() : String(message);
     return new R7RSError(msg, ...irritants);
   },
 

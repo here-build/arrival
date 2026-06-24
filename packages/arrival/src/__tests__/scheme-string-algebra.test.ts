@@ -5,7 +5,7 @@
 // contract a bare `===` would miss.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
@@ -17,22 +17,22 @@ const arb = fc
     fc.constantFrom("", "a", "b", "ab", "🦄", "🦄a", "naïve", "Z"),
     fc.string({ maxLength: 4 }),
   )
-  .map((s) => new SchemeString(s));
+  .map((s) => new AString(s));
 
-const equalClone = (s: SchemeString) => new SchemeString(s.valueOf());
+const equalClone = (s: AString) => new AString(s.valueOf());
 
 setoidLaws("SchemeString", { arb, equalClone });
 ordLaws("SchemeString", arb);
 
 describe("SchemeString Setoid/Ord — totality boundaries", () => {
   it("value equality over distinct heap instances", () => {
-    const a = new SchemeString("🦄");
-    const b = new SchemeString("🦄");
+    const a = new AString("🦄");
+    const b = new AString("🦄");
     expect((a as never)[FL](b)).toBe(true);
   });
 
   it("equals is representation-blind (plain string matches by content); lte stays type-strict", () => {
-    const a = new SchemeString("a");
+    const a = new AString("a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
     // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
     expect((a as never)[FL]("a")).toBe(true); // plain string, equal content → equal (was false)
@@ -45,8 +45,8 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
   });
 
   it("lexicographic lte agrees with JS string order", () => {
-    const a = new SchemeString("ab");
-    const b = new SchemeString("b");
+    const a = new AString("ab");
+    const b = new AString("b");
     expect((a as never)[LTE](b)).toBe(true);
     expect((b as never)[LTE](a)).toBe(false);
   });

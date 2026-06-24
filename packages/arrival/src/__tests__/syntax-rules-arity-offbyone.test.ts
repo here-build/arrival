@@ -17,7 +17,7 @@
 // matcher/expander, not just the off-by-one). docs/plan-2026-06-10-boxing-track.md.
 import { describe, expect, it } from "vitest";
 import { initBridge } from "../bridge.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { env, exec } from "../stdlib.js";
 
 await initBridge();
@@ -73,7 +73,7 @@ describe("syntax-rules VECTOR patterns (boxing S9 — needs the matcher fix AND 
 
   it.fails("vector template emits a vector: ((_ a b) #(a b)) on (m 5 6) → #(5 6)", async () => {
     const out = await run(`(let-syntax ((m (syntax-rules () ((_ a b) #(a b))))) (m 5 6))`);
-    expect(out).toBeInstanceOf(SchemeVector);
-    expect((out as SchemeVector).__vector__.map(String)).toEqual(["5", "6"]);
+    expect(out).toBeInstanceOf(AVector);
+    expect((out as AVector).__vector__.map(String)).toEqual(["5", "6"]);
   });
 });

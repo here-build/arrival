@@ -11,8 +11,8 @@
 // structuralEqual.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Pair } from "../values/primitives/Pair.js";
-import { nil, Nil } from "../values/primitives/Nil.js";
+import { APair } from "../values/primitives/APair.js";
+import { nil, ANil } from "../values/primitives/ANil.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { functorLaws } from "./algebra-laws.js";
 
@@ -32,20 +32,20 @@ type FL = Record<string, any>;
 // list (nil) and length up to 4 so associativity has something to bite on.
 const intList = fc
   .array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 })
-  .map((arr) => Pair.fromArray(arr, false) as Pair | Nil);
+  .map((arr) => APair.fromArray(arr, false) as APair | ANil);
 
 // Non-empty variant for tests that need a Pair head (Functor laws map over a
 // Pair; nil has its own trivial behavior covered separately).
 const nonEmptyIntList = fc
   .array(fc.integer({ min: -5, max: 5 }), { minLength: 1, maxLength: 4 })
-  .map((arr) => Pair.fromArray(arr, false) as Pair);
+  .map((arr) => APair.fromArray(arr, false) as APair);
 
 const eq = (a: unknown, b: unknown) => structuralEqual(a, b);
 
 // ----------------------------------------------------------------------
 // Functor — identity + composition, equality via structuralEqual.
 // ----------------------------------------------------------------------
-functorLaws<Pair, number>("Pair", {
+functorLaws<APair, number>("Pair", {
   arb: nonEmptyIntList,
   f: (x) => x + 1,
   g: (x) => x * 2,
@@ -69,13 +69,13 @@ describe("Pair — Semigroup (list-append)", () => {
     );
   });
   it("concat preserves element order and is pure (operands untouched)", () => {
-    const a = Pair.fromArray([1, 2], false) as Pair;
-    const b = Pair.fromArray([3, 4], false) as Pair;
+    const a = APair.fromArray([1, 2], false) as APair;
+    const b = APair.fromArray([3, 4], false) as APair;
     const r = (a as FL)[CONCAT](b);
-    expect((r as Pair).to_array()).toEqual([1, 2, 3, 4]);
+    expect((r as APair).to_array()).toEqual([1, 2, 3, 4]);
     // purity: a and b unchanged
-    expect((a as Pair).to_array()).toEqual([1, 2]);
-    expect((b as Pair).to_array()).toEqual([3, 4]);
+    expect((a as APair).to_array()).toEqual([1, 2]);
+    expect((b as APair).to_array()).toEqual([3, 4]);
   });
 });
 
@@ -84,7 +84,7 @@ describe("Pair — Semigroup (list-append)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Monoid (nil identity)", () => {
   const concat = (a: FL, b: FL) => a[CONCAT](b);
-  const empty = () => (Pair as FL)[EMPTY]() as Nil;
+  const empty = () => (APair as FL)[EMPTY]() as ANil;
   it("Pair['fantasy-land/empty']() is nil", () => {
     expect(empty()).toBe(nil);
   });
@@ -103,18 +103,18 @@ describe("Pair — Monoid (nil identity)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Foldable (reduce)", () => {
   it("reduce sums elements left-to-right", () => {
-    const list = Pair.fromArray([1, 2, 3, 4], false) as Pair;
+    const list = APair.fromArray([1, 2, 3, 4], false) as APair;
     const sum = (list as FL)[REDUCE]((acc: number, x: number) => acc + x, 0);
     expect(sum).toBe(10);
   });
   it("reduce collects in order", () => {
-    const list = Pair.fromArray([1, 2, 3], false) as Pair;
+    const list = APair.fromArray([1, 2, 3], false) as APair;
     const collected = (list as FL)[REDUCE]((acc: number[], x: number) => [...acc, x], [] as number[]);
     expect(collected).toEqual([1, 2, 3]);
   });
   it("reduce on empty-pair sentinel returns the seed (no phantom element)", () => {
     let calls = 0;
-    const r = (new Pair(undefined, nil) as FL)[REDUCE]((acc: string) => {
+    const r = (new APair(undefined, nil) as FL)[REDUCE]((acc: string) => {
       calls++;
       return acc;
     }, "SEED");
@@ -128,18 +128,18 @@ describe("Pair — Foldable (reduce)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Filterable (filter)", () => {
   it("filter keeps evens", () => {
-    const list = Pair.fromArray([1, 2, 3, 4, 5, 6], false) as Pair;
-    const evens = (list as FL)[FILTER]((x: number) => x % 2 === 0) as Pair;
+    const list = APair.fromArray([1, 2, 3, 4, 5, 6], false) as APair;
+    const evens = (list as FL)[FILTER]((x: number) => x % 2 === 0) as APair;
     expect(evens.to_array()).toEqual([2, 4, 6]);
   });
   it("filter all-false yields nil", () => {
-    const list = Pair.fromArray([1, 3, 5], false) as Pair;
+    const list = APair.fromArray([1, 3, 5], false) as APair;
     const r = (list as FL)[FILTER](() => false);
     expect(r).toBe(nil);
   });
   it("filter on empty-pair sentinel does not call the predicate", () => {
     let calls = 0;
-    (new Pair(undefined, nil) as FL)[FILTER](() => {
+    (new APair(undefined, nil) as FL)[FILTER](() => {
       calls++;
       return true;
     });
@@ -159,12 +159,12 @@ describe("Pair — Traversable (traverse)", () => {
       ofCalls.push(v);
       return v;
     };
-    const list = Pair.fromArray([1, 2], false) as Pair;
+    const list = APair.fromArray([1, 2], false) as APair;
     (list as FL)[TRAVERSE](of, (x: number) => x);
     // base case of(nil) + one of(new Pair(...)) per element (leaf path) = 1 + 2.
     expect(ofCalls.length).toBe(3);
     // last-built base case wrapped nil
-    expect(ofCalls.some((v) => v instanceof Nil)).toBe(true);
+    expect(ofCalls.some((v) => v instanceof ANil)).toBe(true);
   });
   it("traverse over an applicative (array) sequences effects", () => {
     // mappedCar carries fantasy-land/ap → traverse uses ap to combine.
@@ -174,12 +174,12 @@ describe("Pair — Traversable (traverse)", () => {
       ["fantasy-land/ap"](other: any) {
         // this holds a function-or-value; for traverse, `this` wraps the head
         // and `other` wraps the rest — combine into a Pair.
-        return Id(new Pair((this as any).value, other.value));
+        return Id(new APair((this as any).value, other.value));
       },
     });
-    const list = Pair.fromArray([1, 2, 3], false) as Pair;
+    const list = APair.fromArray([1, 2, 3], false) as APair;
     const result = (list as FL)[TRAVERSE]((v: unknown) => Id(v), (x: number) => Id(x)) as any;
-    expect((result.value as Pair).to_array()).toEqual([1, 2, 3]);
+    expect((result.value as APair).to_array()).toEqual([1, 2, 3]);
   });
 });
 
@@ -188,17 +188,17 @@ describe("Pair — Traversable (traverse)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Chain (flatten via pure concat)", () => {
   it("chain duplicates each element (x → (x x))", () => {
-    const list = Pair.fromArray([1, 2, 3], false) as Pair;
-    const r = (list as FL)[CHAIN]((x: number) => Pair.fromArray([x, x], false)) as Pair;
+    const list = APair.fromArray([1, 2, 3], false) as APair;
+    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray([x, x], false)) as APair;
     expect(r.to_array()).toEqual([1, 1, 2, 2, 3, 3]);
   });
   it("chain with single-element results equals map", () => {
-    const list = Pair.fromArray([1, 2, 3], false) as Pair;
-    const r = (list as FL)[CHAIN]((x: number) => Pair.fromArray([x + 10], false)) as Pair;
+    const list = APair.fromArray([1, 2, 3], false) as APair;
+    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray([x + 10], false)) as APair;
     expect(r.to_array()).toEqual([11, 12, 13]);
   });
   it("chain flattening empties drops them (nil result)", () => {
-    const list = Pair.fromArray([1, 2], false) as Pair;
+    const list = APair.fromArray([1, 2], false) as APair;
     const r = (list as FL)[CHAIN](() => nil);
     expect(r).toBe(nil);
   });
@@ -209,8 +209,8 @@ describe("Pair — Chain (flatten via pure concat)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Applicative (static of)", () => {
   it("of(x) is a one-element list (x)", () => {
-    const p = (Pair as FL)[OF](42) as Pair;
-    expect(p).toBeInstanceOf(Pair);
+    const p = (APair as FL)[OF](42) as APair;
+    expect(p).toBeInstanceOf(APair);
     expect(p.car).toBe(42);
     expect(p.cdr).toBe(nil);
   });
@@ -225,16 +225,16 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
   const cloneNil = () => nil.withProvenance(new Set<number>([42]));
   it("map(Pair(1, nil-clone)) → (1), fn called once", () => {
     const calls: unknown[] = [];
-    const r = (new Pair(1, cloneNil()) as FL)[MAP]((x: unknown) => {
+    const r = (new APair(1, cloneNil()) as FL)[MAP]((x: unknown) => {
       calls.push(x);
       return x;
-    }) as Pair;
+    }) as APair;
     expect(calls).toEqual([1]);
     expect(r.car).toBe(1);
-    expect(r.cdr).toBeInstanceOf(Nil);
+    expect(r.cdr).toBeInstanceOf(ANil);
   });
   it("reduce(Pair(1, nil-clone)) folds one element", () => {
-    const r = (new Pair(1, cloneNil()) as FL)[REDUCE]((acc: number, x: number) => acc + x, 0);
+    const r = (new APair(1, cloneNil()) as FL)[REDUCE]((acc: number, x: number) => acc + x, 0);
     expect(r).toBe(1);
   });
 });

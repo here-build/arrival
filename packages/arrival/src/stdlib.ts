@@ -9,7 +9,7 @@ import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/primitives/EOF.js";
-import { HalfBaked, is_half_baked } from "./values/primitives/HalfBaked.js";
+import { AHalfBaked, is_half_baked } from "./values/primitives/AHalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
 import { purityDoor } from "./purity.js";
 import { Parser } from "./reader/Parser.js";
@@ -28,7 +28,7 @@ import {
   is_promise,
   is_prototype,
 } from "./eval/guards.js";
-import { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
+import { ASymbol } from "./values/primitives/ASymbol.js";
 import { eq, eqv } from "./values/structural-equal.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { box, gensym, patch_value, quote } from "./reader/values-repr.js";
@@ -43,31 +43,31 @@ import {
   rational_re,
 } from "./values/primitives.js";
 import { CLASS, SPECULATE } from "./well-known-symbols.js";
-import { nil } from "./values/primitives/Nil.js";
-import { SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
+import { nil } from "./values/primitives/ANil.js";
+import { ACharacter } from "./values/primitives/ACharacter.js";
 import * as specials from "./reader/specials.js";
 import { call_function } from "./eval/call-function.js";
-import { SchemeExact, SchemeInexact } from "./values/numbers.js";
+import { AExact, AInexact } from "./values/numbers.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
 import { Values } from "./values/primitives/Values.js";
 import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
-import { isCircularList, Pair } from "./values/primitives/Pair.js";
+import { isCircularList, APair } from "./values/primitives/APair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
 import { compose, curry, fold, pipe } from "./utils/functional.js";
 
-import { SchemeBool } from "./values/primitives/SchemeBool.js";
-import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
-import { SchemeString } from "./values/primitives/SchemeString.js";
-import { SchemeVector } from "./values/primitives/SchemeVector.js";
+import { ABool } from "./values/primitives/ABool.js";
+import { ABytevector } from "./values/primitives/ABytevector.js";
+import { AString } from "./values/primitives/AString.js";
+import { AVector } from "./values/primitives/AVector.js";
 import {
   keywordAccessorResolver,
   NOT_FOUND,
   accessMember,
   InteropAccessError,
-  SchemeJSObject,
+  AJSObject,
 } from "./membrane.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
 import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
@@ -141,7 +141,7 @@ function escape_regex(str: SchemeValue): SchemeValue {
 
 // ----------------------------------------------------------------------
 function tokens(str: SchemeValue): SchemeValue[] {
-  if (str instanceof SchemeString) {
+  if (str instanceof AString) {
     str = str.valueOf();
   }
   const lexer = new Lexer(str, { whitespace: true });
@@ -158,8 +158,8 @@ function tokens(str: SchemeValue): SchemeValue[] {
 }
 
 // ----------------------------------------------------------------------
-export function tokenize(str: string | SchemeString, meta = false) {
-  if (str instanceof SchemeString) {
+export function tokenize(str: string | AString, meta = false) {
+  if (str instanceof AString) {
     str = str.toString();
   }
   if (meta) {
@@ -233,7 +233,7 @@ function hygienic_begin(envs, expr) {
   for (const env of envs) {
     env.set(g_begin, begin);
   }
-  return new Pair(g_begin, expr);
+  return new APair(g_begin, expr);
 }
 
 // ----------------------------------------------------------------------
@@ -375,7 +375,7 @@ const listToArray = to_array("list->array");
 
 function arrayToList(array: SchemeValue): SchemeValue {
   typecheck("array->list", array, "array");
-  return Pair.fromArray(array);
+  return APair.fromArray(array);
 }
 
 function isProperList(obj: SchemeValue): SchemeValue {
@@ -435,14 +435,14 @@ function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
   // length/comparison (the values stay lazy; only the count is surfaced).
   if (hasPromises && isSpeculating()) {
     const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-    return HalfBaked.collection(slots, () => [1, 1]);
+    return AHalfBaked.collection(slots, () => [1, 1]);
   }
   if (hasPromises) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      Pair.fromArray(resolved as SchemeValue[]),
+      APair.fromArray(resolved as SchemeValue[]),
     );
   }
-  return Pair.fromArray(results);
+  return APair.fromArray(results);
 }
 
 // Old Pair prototype methods are now in the Pair class above
@@ -557,8 +557,8 @@ function get_instances() {
         },
       ],
       [
-        Pair,
-        function (pair: Pair, { quote, skip_cycles, pair_args }: any) {
+        APair,
+        function (pair: APair, { quote, skip_cycles, pair_args }: any) {
           // make sure that repr directly after update set the cycle ref
           if (!skip_cycles) {
             pair.mark_cycles();
@@ -567,8 +567,8 @@ function get_instances() {
         },
       ],
       [
-        SchemeCharacter,
-        function (chr: SchemeCharacter, { quote }: any) {
+        ACharacter,
+        function (chr: ACharacter, { quote }: any) {
           if (quote) {
             return chr.toString();
           }
@@ -576,8 +576,8 @@ function get_instances() {
         },
       ],
       [
-        SchemeString,
-        function (str: SchemeString, { quote }: any) {
+        AString,
+        function (str: AString, { quote }: any) {
           const strVal = str.toString();
           if (quote) {
             return JSON.stringify(strVal).replaceAll(String.raw`\n`, "\n");
@@ -598,14 +598,14 @@ function get_instances() {
         // #<__class__> / #<JS-class-name> garbage — the only user-facing stringify
         // in the MCP bridge env. Cyclic vectors are not datum-labeled here; repr
         // of a runtime-cyclic vector is a known gap, as for cyclic data generally.)
-        SchemeVector,
-        function (vec: SchemeVector, { quote }: any) {
+        AVector,
+        function (vec: AVector, { quote }: any) {
           return `#(${vec.__vector__.map((el) => toString(el, quote)).join(" ")})`;
         },
       ],
       [
-        SchemeBytevector,
-        function (bv: SchemeBytevector) {
+        ABytevector,
+        function (bv: ABytevector) {
           return `#u8(${Array.from(bv.__bytevector__).join(" ")})`;
         },
       ],
@@ -619,7 +619,7 @@ function get_instances() {
 let _native_types: any[] | null = null;
 function get_native_types() {
   if (!_native_types) {
-    _native_types = [SchemeSymbol, Macro, Values, Environment, QuotedPromise];
+    _native_types = [ASymbol, Macro, Values, Environment, QuotedPromise];
   }
   return _native_types;
 }
@@ -645,7 +645,7 @@ function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args
       return (obj as SchemeValue).toString(quote);
     }
   }
-  if (obj instanceof SchemeExact || obj instanceof SchemeInexact) {
+  if (obj instanceof AExact || obj instanceof AInexact) {
     return obj.toString();
   }
   // constants
@@ -746,17 +746,17 @@ function map_object(object, fn) {
 // ----------------------------------------------------------------------
 function unbox(object) {
   const is_boxed_primitive =
-    object instanceof SchemeString ||
-    object instanceof SchemeCharacter ||
-    object instanceof SchemeExact ||
-    object instanceof SchemeInexact;
+    object instanceof AString ||
+    object instanceof ACharacter ||
+    object instanceof AExact ||
+    object instanceof AInexact;
   if (is_boxed_primitive) {
     return object.valueOf();
   }
-  if (object instanceof SchemeVector) {
+  if (object instanceof AVector) {
     return object.__vector__.map(unbox);
   }
-  if (object instanceof SchemeBytevector) {
+  if (object instanceof ABytevector) {
     return object.__bytevector__;
   }
   if (Array.isArray(object)) {
@@ -811,7 +811,7 @@ export const get = doc("get", function get(object, ...args) {
       value = QuotedPromise.prototype.then;
     } else if (name === "__code__" && is_function(object) && object.__code__ === undefined) {
       value = native_lambda;
-    } else if (object instanceof SchemeJSObject) {
+    } else if (object instanceof AJSObject) {
       // Use SchemeJSObject.get() for interop membrane access
       value = object.get(name);
     } else {
@@ -855,7 +855,7 @@ const internal_env = new Environment(
   undefined,
 );
 // ----------------------------------------------------------------------
-const nan = new SchemeInexact(Number.NaN);
+const nan = new AInexact(Number.NaN);
 const constants = {
   "#t": true,
   "#f": false,
@@ -879,7 +879,7 @@ const is_node = () => typeof process === "object" && !!process.env;
 // -------------------------------------------------------------------------
 function genMacroWrapper(name: string): Macro {
   return new Macro(name, function (this: Environment, code: SchemeValue, options: SchemeValue = {}) {
-    const form = new Pair(new SchemeSymbol(name), code);
+    const form = new APair(new ASymbol(name), code);
     const ctx: EvalContext = {
       env: this,
       dynamic_env: options.dynamic_env ?? this,
@@ -906,7 +906,7 @@ export const global_env = new Environment(
     undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
     cons: doc("cons", function cons(car, cdr) {
-      return withInputProvenance([car, cdr], new Pair(car, cdr));
+      return withInputProvenance([car, cdr], new APair(car, cdr));
     }),
     // ------------------------------------------------------------------
     // Spec §5.3 car/cdr element-only provenance.
@@ -1001,7 +1001,7 @@ export const global_env = new Environment(
       // the generator evaluator (genRun drives it to completion); the discarded
       // promise is why this is the simplest legacy-evaluate caller to migrate.
       const ctx: EvalContext = { env: this, dynamic_env: this, use_dynamic: options.use_dynamic };
-      genRun(genEvaluate(new Pair(new SchemeSymbol("begin"), code), ctx));
+      genRun(genEvaluate(new APair(new ASymbol("begin"), code), ctx));
     }),
     // ------------------------------------------------------------------
     // parameterize delegates to the generator evaluator (evalParameterize) via
@@ -1027,13 +1027,13 @@ export const global_env = new Environment(
         const name = code.car;
         const env = this;
         TypeError.invariant(
-          name instanceof SchemeSymbol,
+          name instanceof ASymbol,
           `define-syntax-parameter: invalid syntax expecting symbol got ${type(name)}`,
         );
         return unpromise(genRun(genEvaluate(code.cdr.car, { ...eval_args, env })), (syntax: SchemeValue) => {
           typecheck("define-syntax-parameter", syntax, "syntax", 2);
           syntax.__name__ = name.valueOf();
-          if (syntax.__name__ instanceof SchemeString) {
+          if (syntax.__name__ instanceof AString) {
             syntax.__name__ = syntax.__name__.valueOf();
           }
           env.set(code.car, new SyntaxParameter(syntax));
@@ -1050,7 +1050,7 @@ export const global_env = new Environment(
     "syntax-parameterize": doc(
       null,
       new Macro("syntax-parameterize", function (this: Environment, code: SchemeValue, eval_args: SchemeValue) {
-        const args = listToArray(code.car) as Pair[];
+        const args = listToArray(code.car) as APair[];
         const env = this.inherit("syntax-parameterize");
         // Each binding's transformer evaluates in `this` (NOT the accumulating
         // env), so the bindings are independent and pure (syntax-rules build a
@@ -1060,12 +1060,12 @@ export const global_env = new Environment(
         const self = this;
         for (const pair of args) {
           invariant(
-            is_pair(pair) && pair.car instanceof SchemeSymbol,
+            is_pair(pair) && pair.car instanceof ASymbol,
             `syntax-parameterize: invalid syntax for syntax-parameterize: ${toString(code, true)}`,
           );
         }
         return Promise.all(
-          args.map((pair) => genRun(genEvaluate((pair.cdr as Pair).car, { ...eval_args, env: self }))),
+          args.map((pair) => genRun(genEvaluate((pair.cdr as APair).car, { ...eval_args, env: self }))),
         ).then((syntaxes) => {
           args.forEach((pair, i) => {
             const syntax = syntaxes[i] as SchemeValue;
@@ -1073,13 +1073,13 @@ export const global_env = new Environment(
             typecheck("syntax-parameterize", syntax, ["syntax"]);
             typecheck("syntax-parameterize", name, "symbol");
             syntax.__name__ = name.valueOf();
-            if (syntax.__name__ instanceof SchemeString) {
+            if (syntax.__name__ instanceof AString) {
               syntax.__name__ = syntax.__name__.valueOf();
             }
             const parameter = new SyntaxParameter(syntax);
             // used inside syntax-rules
-            if ((name as SchemeSymbol).is_gensym()) {
-              const symbol = (name as SchemeSymbol).literal();
+            if ((name as ASymbol).is_gensym()) {
+              const symbol = (name as ASymbol).literal();
               const parent = self.get(symbol, { throwError: false });
               if (parent instanceof SyntaxParameter) {
                 // create anaphoric binding for literal symbol
@@ -1160,12 +1160,12 @@ export const global_env = new Environment(
       function validate_identifiers(node) {
         while (!is_nil(node)) {
           const x = node.car;
-          TypeError.invariant(x instanceof SchemeSymbol, "syntax-rules: wrong identifier");
+          TypeError.invariant(x instanceof ASymbol, "syntax-rules: wrong identifier");
           node = node.cdr;
         }
       }
 
-      if (macro.car instanceof SchemeSymbol) {
+      if (macro.car instanceof ASymbol) {
         validate_identifiers(macro.cdr.car);
       } else {
         validate_identifiers(macro.car);
@@ -1189,7 +1189,7 @@ export const global_env = new Environment(
         }
         const eval_args = { env: scope, dynamic_env, use_dynamic, error };
         let ellipsis, rules, symbols;
-        if (macro.car instanceof SchemeSymbol) {
+        if (macro.car instanceof ASymbol) {
           ellipsis = macro.car;
           symbols = get_identifiers(macro.cdr.car);
           rules = macro.cdr.cdr;
@@ -1337,7 +1337,7 @@ export const global_env = new Environment(
           if (!node.cdr || is_nil(node.cdr) || node.have_cycles("cdr")) {
             return nil;
           }
-          node = node.cdr as Pair;
+          node = node.cdr as APair;
           count++;
         }
         return node.car;
@@ -1349,7 +1349,7 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     list: doc("list", function list(...args) {
-      const result = args.reduceRight((list, item) => new Pair(item, list), nil);
+      const result = args.reduceRight((list, item) => new APair(item, list), nil);
       return withInputProvenance(args, result);
     }),
     // ------------------------------------------------------------------
@@ -1425,7 +1425,7 @@ export const global_env = new Environment(
     "function?": doc("function?", is_function),
     // ------------------------------------------------------------------
     "real?": doc("real?", function (value) {
-      if (value instanceof SchemeExact || value instanceof SchemeInexact) {
+      if (value instanceof AExact || value instanceof AInexact) {
         return value.isReal;
       }
       if (type(value) !== "number") {
@@ -1437,15 +1437,15 @@ export const global_env = new Environment(
     "number?": doc("number?", function (x) {
       return (
         Number.isNaN(x) ||
-        x instanceof SchemeExact ||
-        x instanceof SchemeInexact ||
+        x instanceof AExact ||
+        x instanceof AInexact ||
         typeof x === "number" ||
         typeof x === "bigint"
       );
     }),
     // ------------------------------------------------------------------
     "string?": doc("string?", function (obj) {
-      return SchemeString.isString(obj);
+      return AString.isString(obj);
     }),
     // ------------------------------------------------------------------
     "pair?": doc("pair?", is_pair),
@@ -1461,11 +1461,11 @@ export const global_env = new Environment(
     "boolean?": doc("boolean?", function (obj) {
       // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
       // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
-      return typeof obj === "boolean" || obj instanceof SchemeBool;
+      return typeof obj === "boolean" || obj instanceof ABool;
     }),
     // ------------------------------------------------------------------
     "symbol?": doc("symbol?", function (obj) {
-      return obj instanceof SchemeSymbol;
+      return obj instanceof ASymbol;
     }),
     // ------------------------------------------------------------------
     "array?": doc("array?", function (obj) {
@@ -1476,12 +1476,12 @@ export const global_env = new Environment(
       return (
         !is_nil(obj) &&
         obj !== null &&
-        !(obj instanceof SchemeCharacter) &&
+        !(obj instanceof ACharacter) &&
         !(obj instanceof RegExp) &&
-        !(obj instanceof SchemeString) &&
+        !(obj instanceof AString) &&
         !is_pair(obj) &&
-        !(obj instanceof SchemeExact) &&
-        !(obj instanceof SchemeInexact) &&
+        !(obj instanceof AExact) &&
+        !(obj instanceof AInexact) &&
         typeof obj === "object" &&
         !Array.isArray(obj)
       );
@@ -1621,7 +1621,7 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     pluck: doc("pluck", function pluck(...keys) {
       return function (obj) {
-        keys = keys.map((x) => (x instanceof SchemeSymbol ? x.__name__ : x));
+        keys = keys.map((x) => (x instanceof ASymbol ? x.__name__ : x));
         if (keys.length === 0) {
           return nil;
         } else if (keys.length === 1) {
@@ -1686,16 +1686,16 @@ export const global_env = new Environment(
           const keep = (verdict: unknown): SchemeValue[] => (!is_false(verdict) && !is_nil(verdict) ? [array[i]] : []);
           return is_promise(r) ? (r as Promise<unknown>).then(keep) : Promise.resolve(keep(r));
         });
-        return HalfBaked.collection(slots, () => [0, 1]);
+        return AHalfBaked.collection(slots, () => [0, 1]);
       }
       if (hasPromises) {
         return (promise_all(predicateResults) as Promise<unknown[]>).then((results) => {
           const filtered = array.filter((_, i) => !is_false(results[i]) && !is_nil(results[i]));
-          return Pair.fromArray(filtered);
+          return APair.fromArray(filtered);
         });
       }
       const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
-      return Pair.fromArray(filtered);
+      return APair.fromArray(filtered);
     }),
     // ------------------------------------------------------------------
     compose: doc(null, compose),

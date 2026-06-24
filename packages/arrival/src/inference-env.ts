@@ -1,7 +1,7 @@
 import { wrappedOps } from "./bridge.js";
 import { Environment } from "./Environment.js";
 import { env as userEnv, registerCxrResolver } from "./stdlib.js";
-import { nil } from "./values/primitives/Nil.js";
+import { nil } from "./values/primitives/ANil.js";
 import { keywordAccessorResolver } from "./membrane.js";
 
 // The inference-plane base env: the totalic environment where models author and

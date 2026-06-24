@@ -55,7 +55,7 @@ const characters: Record<string, string> = {
 
 export { characters };
 
-export class SchemeCharacter extends AValue {
+export class ACharacter extends AValue {
   static [CLASS] = "character";
   readonly kind = "character" as const;
   // Named character mappings
@@ -88,11 +88,11 @@ export class SchemeCharacter extends AValue {
       // this is a named character
       charValue = charValue.toLowerCase();
       // this should never happen - parser doesn't allow undefined named characters
-      invariant(SchemeCharacter.__names__[charValue], "Internal: Unknown named character");
+      invariant(ACharacter.__names__[charValue], "Internal: Unknown named character");
       name = charValue;
-      charValue = SchemeCharacter.__names__[charValue];
+      charValue = ACharacter.__names__[charValue];
     } else {
-      name = SchemeCharacter.__rev_names__[charValue];
+      name = ACharacter.__rev_names__[charValue];
     }
 
     this.__char__ = charValue;
@@ -101,12 +101,12 @@ export class SchemeCharacter extends AValue {
     }
   }
 
-  toUpperCase(): SchemeCharacter {
-    return new SchemeCharacter(this.__char__.toUpperCase());
+  toUpperCase(): ACharacter {
+    return new ACharacter(this.__char__.toUpperCase());
   }
 
-  toLowerCase(): SchemeCharacter {
-    return new SchemeCharacter(this.__char__.toLowerCase());
+  toLowerCase(): ACharacter {
+    return new ACharacter(this.__char__.toLowerCase());
   }
 
   toString(): string {
@@ -125,25 +125,25 @@ export class SchemeCharacter extends AValue {
     return this.__char__;
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeCharacter {
-    return new SchemeCharacter(this.__char__, p);
+  withProvenance(p: ReadonlySet<number>): ACharacter {
+    return new ACharacter(this.__char__, p);
   }
 
   // Setoid (Fantasy Land). Char ≡ char iff same grapheme. Matches the value
   // semantics of __char__. structuralEqual / equal? consult this first.
   // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
   ["fantasy-land/equals"](other: unknown): boolean {
-    return other instanceof SchemeCharacter && this.__char__ === other.__char__;
+    return other instanceof ACharacter && this.__char__ === other.__char__;
   }
 
   // Ord (Fantasy Land, extends Setoid). Ordered by code point.
   ["fantasy-land/lte"](other: unknown): boolean {
     return (
-      other instanceof SchemeCharacter &&
+      other instanceof ACharacter &&
       (this.__char__.codePointAt(0) ?? 0) <= (other.__char__.codePointAt(0) ?? 0)
     );
   }
 }
 
 // SchemeCharacter has no JS-primitive source — it only exists post-parse, so no boxer.
-markInteropBoundary(SchemeCharacter);
+markInteropBoundary(ACharacter);

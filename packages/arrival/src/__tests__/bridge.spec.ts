@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { SchemeExact, SchemeInexact } from "../values/numbers";
+import { AExact, AInexact } from "../values/numbers";
 import { coerceNumeric, wrapOperator, wrappedOps } from "../bridge";
 import { add, mul, sqrt, sub } from "../operators";
 
@@ -11,31 +11,31 @@ describe("coerceNumeric", () => {
   describe("primitive types", () => {
     it("converts bigint to ExactNumber", () => {
       const result = coerceNumeric(42n);
-      expect(result).toBeInstanceOf(SchemeExact);
-      expect((result as SchemeExact).num).toBe(42n);
+      expect(result).toBeInstanceOf(AExact);
+      expect((result as AExact).num).toBe(42n);
     });
 
     it("converts safe integer to ExactNumber", () => {
       const result = coerceNumeric(42);
-      expect(result).toBeInstanceOf(SchemeExact);
-      expect((result as SchemeExact).num).toBe(42n);
+      expect(result).toBeInstanceOf(AExact);
+      expect((result as AExact).num).toBe(42n);
     });
 
     it("converts float to InexactNumber", () => {
       const result = coerceNumeric(3.14);
-      expect(result).toBeInstanceOf(SchemeInexact);
-      expect((result as SchemeInexact).real).toBe(3.14);
+      expect(result).toBeInstanceOf(AInexact);
+      expect((result as AInexact).real).toBe(3.14);
     });
   });
 
   describe("passthrough", () => {
     it("passes through ExactNumber", () => {
-      const exact = new SchemeExact(42n);
+      const exact = new AExact(42n);
       expect(coerceNumeric(exact)).toBe(exact);
     });
 
     it("passes through InexactNumber", () => {
-      const inexact = new SchemeInexact(3.14);
+      const inexact = new AInexact(3.14);
       expect(coerceNumeric(inexact)).toBe(inexact);
     });
   });
@@ -44,22 +44,22 @@ describe("coerceNumeric", () => {
     it("converts object with bigint valueOf", () => {
       const obj = { valueOf: () => 12345678901234567890n };
       const result = coerceNumeric(obj);
-      expect(result).toBeInstanceOf(SchemeExact);
-      expect((result as SchemeExact).num).toBe(12345678901234567890n);
+      expect(result).toBeInstanceOf(AExact);
+      expect((result as AExact).num).toBe(12345678901234567890n);
     });
 
     it("converts object with number valueOf to exact for safe integers", () => {
       const obj = { valueOf: () => 42 };
       const result = coerceNumeric(obj);
-      expect(result).toBeInstanceOf(SchemeExact);
-      expect((result as SchemeExact).num).toBe(42n);
+      expect(result).toBeInstanceOf(AExact);
+      expect((result as AExact).num).toBe(42n);
     });
 
     it("converts object with number valueOf to inexact for floats", () => {
       const obj = { valueOf: () => 3.14 };
       const result = coerceNumeric(obj);
-      expect(result).toBeInstanceOf(SchemeInexact);
-      expect((result as SchemeInexact).real).toBe(3.14);
+      expect(result).toBeInstanceOf(AInexact);
+      expect((result as AInexact).real).toBe(3.14);
     });
   });
 
@@ -76,8 +76,8 @@ describe("wrapOperator", () => {
 
     // Should work with primitive numbers
     const result = wrappedAdd(1, 2, 3);
-    expect(result).toBeInstanceOf(SchemeExact);
-    expect((result as SchemeExact).num).toBe(6n);
+    expect(result).toBeInstanceOf(AExact);
+    expect((result as AExact).num).toBe(6n);
   });
 
   it("wraps sub operator", () => {
@@ -85,21 +85,21 @@ describe("wrapOperator", () => {
 
     // Unary negation
     const neg = wrappedSub(5);
-    expect(neg).toBeInstanceOf(SchemeExact);
-    expect((neg as SchemeExact).num).toBe(-5n);
+    expect(neg).toBeInstanceOf(AExact);
+    expect((neg as AExact).num).toBe(-5n);
 
     // Binary subtraction
     const diff = wrappedSub(10, 3);
-    expect(diff).toBeInstanceOf(SchemeExact);
-    expect((diff as SchemeExact).num).toBe(7n);
+    expect(diff).toBeInstanceOf(AExact);
+    expect((diff as AExact).num).toBe(7n);
   });
 
   it("wraps mul operator", () => {
     const wrappedMul = wrapOperator(mul);
 
     const result = wrappedMul(2, 3, 4);
-    expect(result).toBeInstanceOf(SchemeExact);
-    expect((result as SchemeExact).num).toBe(24n);
+    expect(result).toBeInstanceOf(AExact);
+    expect((result as AExact).num).toBe(24n);
   });
 
   it("wraps sqrt operator", () => {
@@ -107,15 +107,15 @@ describe("wrapOperator", () => {
 
     const result = wrappedSqrt(4);
     // sqrt(4) = 2, which is a safe integer, so ExactNumber
-    expect((result as SchemeExact).num).toBe(2n);
+    expect((result as AExact).num).toBe(2n);
   });
 
   it("handles mixed exact/inexact", () => {
     const wrappedAdd = wrapOperator(add);
 
     const result = wrappedAdd(1, 2.5);
-    expect(result).toBeInstanceOf(SchemeInexact);
-    expect((result as SchemeInexact).real).toBe(3.5);
+    expect(result).toBeInstanceOf(AInexact);
+    expect((result as AInexact).real).toBe(3.5);
   });
 
   it("handles objects with valueOf", () => {
@@ -126,33 +126,33 @@ describe("wrapOperator", () => {
 
     // 1/3 + 0.5 = 0.833... (inexact)
     const result = wrappedAdd(third, 0.5);
-    expect(result).toBeInstanceOf(SchemeInexact);
-    expect((result as SchemeInexact).real).toBeCloseTo(0.833, 2);
+    expect(result).toBeInstanceOf(AInexact);
+    expect((result as AInexact).real).toBeCloseTo(0.833, 2);
   });
 });
 
 describe("wrappedOps", () => {
   it("has + operator", () => {
     const result = (wrappedOps["+"] as Function)(1, 2, 3);
-    expect((result as SchemeExact).num).toBe(6n);
+    expect((result as AExact).num).toBe(6n);
   });
 
   it("has - operator", () => {
     const result = (wrappedOps["-"] as Function)(10, 3, 2);
-    expect((result as SchemeExact).num).toBe(5n);
+    expect((result as AExact).num).toBe(5n);
   });
 
   it("has * operator", () => {
     const result = (wrappedOps["*"] as Function)(2, 3);
-    expect((result as SchemeExact).num).toBe(6n);
+    expect((result as AExact).num).toBe(6n);
   });
 
   it("has / operator", () => {
     // R7RS: exact / exact = exact (rational 1/2)
     const result = (wrappedOps["/"] as Function)(1, 2);
-    expect(result).toBeInstanceOf(SchemeExact);
-    expect((result as SchemeExact).num).toBe(1n);
-    expect((result as SchemeExact).denom).toBe(2n);
+    expect(result).toBeInstanceOf(AExact);
+    expect((result as AExact).num).toBe(1n);
+    expect((result as AExact).denom).toBe(2n);
   });
 
   it("has zero? predicate", () => {
@@ -169,7 +169,7 @@ describe("wrappedOps", () => {
 
   it("has bitwise operators", () => {
     const result = (wrappedOps["bitwise-and"] as Function)(0b1100, 0b1010);
-    expect((result as SchemeExact).num).toBe(BigInt(0b1000));
+    expect((result as AExact).num).toBe(BigInt(0b1000));
   });
 
   it("has transcendentals", () => {
@@ -237,7 +237,7 @@ describe("R7RS type predicates", () => {
     expect((wrappedOps["exact-integer?"] as Function)(3.14)).toBe(false);
     // Note: In JS, 3.0 === 3 so we can't distinguish them
     // To test inexact integers, use InexactNumber directly
-    expect((wrappedOps["exact-integer?"] as Function)(new SchemeInexact(3))).toBe(false);
+    expect((wrappedOps["exact-integer?"] as Function)(new AInexact(3))).toBe(false);
   });
 
   it("finite?", () => {
@@ -268,7 +268,7 @@ describe("integration scenarios", () => {
     const b = sub(10, 5);
     const result = add(a, b);
 
-    expect((result as SchemeExact).num).toBe(11n);
+    expect((result as AExact).num).toBe(11n);
   });
 
   it("preserves exactness through operations", () => {
@@ -277,7 +277,7 @@ describe("integration scenarios", () => {
 
     // All exact: 1 + 2 * 3 (exact)
     const result = add(1, mul(2, 3));
-    expect(result).toBeInstanceOf(SchemeExact);
+    expect(result).toBeInstanceOf(AExact);
   });
 
   it("promotes to inexact when needed", () => {
@@ -285,8 +285,8 @@ describe("integration scenarios", () => {
 
     // With R7RS: exact + exact = exact, so 1 + 1/3 = 4/3 (exact)
     // To test inexact promotion, we need an actual inexact operand
-    const result = add(1, new SchemeInexact(0.5));
-    expect(result).toBeInstanceOf(SchemeInexact);
-    expect((result as SchemeInexact).real).toBe(1.5);
+    const result = add(1, new AInexact(0.5));
+    expect(result).toBeInstanceOf(AInexact);
+    expect((result as AInexact).real).toBe(1.5);
   });
 });

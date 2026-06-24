@@ -17,7 +17,7 @@
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
 import { LambdaContext } from "./LambdaContext.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";
@@ -66,7 +66,7 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
   }
 
   async function promise(node) {
-    const pair = new Pair(
+    const pair = new APair(
       node.have_cycles("car") ? node.car : await resolve(node.car),
       node.have_cycles("cdr") ? node.cdr : await resolve(node.cdr),
     );

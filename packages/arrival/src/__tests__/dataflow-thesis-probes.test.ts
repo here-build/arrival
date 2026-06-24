@@ -12,10 +12,10 @@ import { describe, it, expect } from "vitest";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import { initBridge } from "../bridge";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 
-const stamped = (s: string, ...pts: number[]) => new SchemeString(s, new Set(pts));
+const stamped = (s: string, ...pts: number[]) => new AString(s, new Set(pts));
 const provOf = (v: unknown): number[] =>
   v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
 

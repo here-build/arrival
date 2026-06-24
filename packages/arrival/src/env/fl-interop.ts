@@ -32,15 +32,15 @@ import { EnvCapability } from "./capability.js";
 import { symbol } from "./symbol.js";
 import * as z from "./scheme-zod.js";
 import { global_env } from "../stdlib.js";
-import { nil } from "../values/primitives/Nil.js";
+import { nil } from "../values/primitives/ANil.js";
 import { SchemeJSArray } from "../membrane.js";
-import { SchemeExact, SchemeInexact, type SchemeNumeric } from "../values/numbers.js";
+import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { is_false, is_nil } from "../eval/guards.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { APair } from "../values/primitives/APair.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
-import { schemeFalse, schemeTrue } from "../values/primitives/SchemeBool.js";
-import { LazySeq, is_lazy_seq } from "../values/primitives/LazySeq.js";
+import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
+import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
 import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
 
@@ -99,7 +99,7 @@ function captureBuiltins(): void {
 // be detected structurally. A null/undefined JS value or a Scheme Nil counts as the
 // "absent value" that should compare to #f rather than crash the whole proof.
 function isNilOperand(v: unknown): boolean {
-  return v == null || (v as { constructor?: { name?: string } })?.constructor?.name === "Nil";
+  return v == null || (v as { constructor?: { name?: string } })?.constructor?.name === "ANil";
 }
 
 // ── Numeric Ord chain (plane-local) ─────────────────────────────────────────
@@ -110,13 +110,13 @@ function isNilOperand(v: unknown): boolean {
 // can't be served by `lte` without diverging from the Operator's membrane type-error, so
 // it routes to the kept builtin (which IS that Operator — identical throw). nil is
 // short-circuited to #f first (the plane's nil-tolerance, see filter/map).
-const isNumberOperand = (v: unknown): v is SchemeNumeric =>
-  v instanceof SchemeExact || v instanceof SchemeInexact;
-const flLteNum = (a: SchemeNumeric, b: SchemeNumeric): boolean => a["fantasy-land/lte"](b);
+const isNumberOperand = (v: unknown): v is ANumeric =>
+  v instanceof AExact || v instanceof AInexact;
+const flLteNum = (a: ANumeric, b: ANumeric): boolean => a["fantasy-land/lte"](b);
 // Each relation of the (partial — NaN-incomparable) numeric order, from the single `lte`.
 // Strict </> use the CONJUNCTIVE form (`lte(a,b) && !lte(b,a)`), NOT `!lte(b,a)`: the
 // latter is the total-order shortcut and would wrongly yield #t for a NaN pair.
-const NUM_PAIR: Record<"=" | "<" | ">" | "<=" | ">=", (a: SchemeNumeric, b: SchemeNumeric) => boolean> = {
+const NUM_PAIR: Record<"=" | "<" | ">" | "<=" | ">=", (a: ANumeric, b: ANumeric) => boolean> = {
   "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
   "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
   ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
@@ -126,7 +126,7 @@ const NUM_PAIR: Record<"=" | "<" | ">" | "<=" | ">=", (a: SchemeNumeric, b: Sche
 // Adjacent-pair chain — matches the Operators' `prev`-walk. (`=`'s Operator is
 // first-vs-each, equivalent for an equivalence relation: with no NaN, transitivity makes
 // adjacent ≡ first-vs-each; with a NaN, both forms hit a failing pair → #f.)
-function numericChain(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[]): boolean {
+function numericChain(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): boolean {
   const rel = NUM_PAIR[sym];
   for (let i = 0; i < args.length - 1; i++) {
     if (!rel(args[i], args[i + 1])) return false;
@@ -136,7 +136,7 @@ function numericChain(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[])
 // Stamp the verdict with the operands' provenance union — byte-identical to bridge.ts's
 // wrapOperator (out: Bool): box to schemeTrue/schemeFalse ONLY when provenance is non-empty
 // (empty ⇒ raw bool, to keep the `!== false`/find landmine callers alive), else withProvenance.
-function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: SchemeNumeric[]): unknown {
+function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): unknown {
   const verdict = numericChain(sym, args);
   // Every operand is a SchemeExact/SchemeInexact (subtype of AValue), so union directly.
   const provenance = unionProvenance(args);
@@ -182,10 +182,10 @@ function unwrapLipsValue(v: unknown): unknown {
   if (v == null || typeof v !== "object") return v;
   const box = v as { constructor?: { name?: string }; valueOf(): unknown; __string__?: unknown; __name__?: unknown };
   const name = box.constructor?.name;
-  if (name === "SchemeExact" || name === "SchemeInexact") return box.valueOf();
-  if (name === "SchemeString") return box.__string__;
-  if (name === "SchemeSymbol") return String(box.__name__);
-  if (name === "Nil") return null;
+  if (name === "AExact" || name === "AInexact") return box.valueOf();
+  if (name === "AString") return box.__string__;
+  if (name === "ASymbol") return String(box.__name__);
+  if (name === "ANil") return null;
   return v;
 }
 
@@ -288,10 +288,10 @@ async function asyncArrivalReduce(
 async function reduceLazySeq(
   fn: (acc: unknown, val: unknown) => unknown,
   init: unknown,
-  ls: LazySeq,
+  ls: ALazySeq,
 ): Promise<unknown> {
   const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
-  return builtinReduce!(fn, init, Pair.fromArray([...items], false));
+  return builtinReduce!(fn, init, APair.fromArray([...items], false));
 }
 
 // Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
@@ -308,11 +308,11 @@ function collectElements(collection: any): unknown[] {
   const elements: unknown[] = [];
   if (collection && typeof collection === "object" && "car" in collection) {
     let current = collection; // LIPS list — walk the spine.
-    while (current?.constructor && current.constructor.name !== "Nil") {
+    while (current?.constructor && current.constructor.name !== "ANil") {
       elements.push(current.car);
       current = current.cdr;
     }
-  } else if (collection instanceof SchemeVector) {
+  } else if (collection instanceof AVector) {
     elements.push(...collection.__vector__); // boxed vector — its elements carry provenance
   } else if (collection instanceof SchemeJSArray) {
     elements.push(...collection.source); // lazy JS-array wrapper from `@`/membrane
@@ -343,7 +343,7 @@ export default new EnvCapability("scheme/fl-interop", {
       (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
-        if (list instanceof Pair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
+        if (list instanceof APair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
         return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
       },
     ),
@@ -352,7 +352,7 @@ export default new EnvCapability("scheme/fl-interop", {
       (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
-        if (list instanceof Pair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
+        if (list instanceof APair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
         return list instanceof SchemeJSArray
           ? list.length <= 1
             ? nil
@@ -413,7 +413,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // `Pair.fromArray(results)` (coercion-soundness "Pair · map preserves every element's
         // box"; lineage A13/A18b carry every element's provenance through map). A multi-list map
         // (lists.length > 1) is a ZIP, not a Functor op, so it stays on builtinMap below.
-        if (lists.length === 1 && lists[0] instanceof Pair) {
+        if (lists.length === 1 && lists[0] instanceof APair) {
           return asyncArrivalMap(fn, lists[0] as unknown as FantasyLand);
         }
         // External single-list FL entity (non-Pair: a SchemeVector, a foreign Functor) — it IS
@@ -421,7 +421,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // box-strip, pinned GOLDEN for SchemeVector). UNCHANGED.
         if (
           lists.length === 1 &&
-          !(lists[0] instanceof Pair) &&
+          !(lists[0] instanceof APair) &&
           (lists[0] as Partial<FantasyLand> | undefined)?.["fantasy-land/map"]
         ) {
           return asyncFLMap(fn, lists[0] as FantasyLand);
@@ -542,7 +542,7 @@ export default new EnvCapability("scheme/fl-interop", {
         if (is_lazy_seq(list)) unforcedLazyEgress("last");
         if (Array.isArray(list)) return list.at(-1) ?? nil;
         let current = list;
-        while (current?.cdr?.constructor?.name !== "Nil" && current?.cdr != null) {
+        while (current?.cdr?.constructor?.name !== "ANil" && current?.cdr != null) {
           current = current.cdr;
         }
         return current?.car ?? nil;
@@ -606,7 +606,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // `map`/`filter` reject ("Expecting pair or nil, got array") is an inconsistency. The elements
         // are already Scheme values (we just reordered them), so build the list shallow (no re-boxing);
         // an empty result is nil.
-        return Pair.fromArray(arr, false);
+        return APair.fromArray(arr, false);
       },
     ),
 
@@ -647,7 +647,7 @@ export default new EnvCapability("scheme/fl-interop", {
     "lazy-seq": symbol.native`lazy-seq: wrap a collection's elements into an un-run lazy plan`(
       { input: [z.unknown()], output: [z.unknown()] },
       (collection: any) =>
-        new LazySeq(
+        new ALazySeq(
           collectElements(collection),
           [],
           collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,

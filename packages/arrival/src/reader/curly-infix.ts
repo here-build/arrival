@@ -13,10 +13,10 @@
 
 import type { SourceLocation } from "../errors.js";
 import { ParseError } from "../errors.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { APair } from "../values/primitives/APair.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { type SchemeValue } from "../values/types.js";
-import { nil } from "../values/primitives/Nil.js";
+import { nil } from "../values/primitives/ANil.js";
 
 type Loc = SourceLocation | null | undefined;
 
@@ -40,7 +40,7 @@ export const FIXITY: Record<string, Fixity> = {
 
 /** The operator name of a value, or null if it isn't a symbol. */
 function opName(v: SchemeValue): string | null {
-  if (v instanceof SchemeSymbol) {
+  if (v instanceof ASymbol) {
     const n = v.__name__;
     return typeof n === "string" ? n : String(v.valueOf());
   }
@@ -54,7 +54,7 @@ function prec(v: SchemeValue): number {
 }
 
 function list(items: SchemeValue[]): SchemeValue {
-  return Pair.fromArray(items, false) as SchemeValue;
+  return APair.fromArray(items, false) as SchemeValue;
 }
 
 /** SRFI-105 element classifier. `E` is the flat sequence read between `{` and `}`. */
@@ -75,10 +75,10 @@ export function canonicalizeCurly(E: SchemeValue[], loc?: Loc): SchemeValue {
 /** True iff every odd-index element is the same SchemeSymbol (a homogeneous infix run). */
 function allSameOperator(E: SchemeValue[]): boolean {
   const op0 = E[1];
-  if (!(op0 instanceof SchemeSymbol)) return false;
+  if (!(op0 instanceof ASymbol)) return false;
   for (let i = 1; i < E.length; i += 2) {
     const op = E[i];
-    if (!(op instanceof SchemeSymbol) || !SchemeSymbol.is(op, op0)) return false;
+    if (!(op instanceof ASymbol) || !ASymbol.is(op, op0)) return false;
   }
   return true;
 }
@@ -136,11 +136,11 @@ function parseExpr(E: SchemeValue[], start: number, minPrec: number): [SchemeVal
   let lhs = E[start];
   let i = start + 1;
   while (i < n && prec(E[i]) >= minPrec) {
-    const op = E[i] as SchemeSymbol;
+    const op = E[i] as ASymbol;
     const opPrec = prec(op);
     const operands: SchemeValue[] = [lhs];
     // gather a maximal same-operator run at this precedence (left-assoc → n-ary node)
-    while (i < n && E[i] instanceof SchemeSymbol && SchemeSymbol.is(E[i], op)) {
+    while (i < n && E[i] instanceof ASymbol && ASymbol.is(E[i], op)) {
       i += 1; // consume the operator
       const [rhs, next] = parseExpr(E, i, opPrec + 1); // tighter operators bind first
       operands.push(rhs);

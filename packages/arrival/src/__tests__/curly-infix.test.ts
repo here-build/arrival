@@ -13,7 +13,7 @@ import { eof } from "../values/primitives/EOF.js";
 import { Lexer } from "../reader/Lexer.js";
 import { EOF } from "../values/primitives/EOF.js";
 import { Parser } from "../reader/Parser.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { canonicalizeCurly, FIXITY } from "../reader/curly-infix.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -229,7 +229,7 @@ describe("curly-infix — pure module is independently testable", () => {
     expect(FIXITY["*"].prec).toBeGreaterThan(FIXITY["+"].prec);
   });
   it("canonicalizeCurly escapes a single element", () => {
-    const sym = new SchemeSymbol("x");
+    const sym = new ASymbol("x");
     expect(canonicalizeCurly([sym])).toBe(sym);
   });
 });

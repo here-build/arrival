@@ -26,7 +26,7 @@
  * `docs/foundations/arrival-scheme/reference/provenance-model.md` — read it before changing
  * `computeProvenance`, the authoritative-set forwarding, or `accessorField`.
  */
-import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type Pair, type SchemeSymbol } from "@here.build/arrival";
+import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type APair, type ASymbol } from "@here.build/arrival";
 import { action, observable } from "mobx";
 import invariant from "tiny-invariant";
 
@@ -51,7 +51,7 @@ export type InvocationState = "running" | "resolved" | "rejected";
 /** If a form is a keyword-accessor application `(:field x)`, the bare field name
  *  (`"verdict"`), else null. The head is the keyword SchemeSymbol whose
  *  `__name__` is `":verdict"`; a head of exactly `":"` (no field) is not one. */
-function accessorField(node: Pair): string | null {
+function accessorField(node: APair): string | null {
   const head = (node as { car: unknown }).car;
   if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
   const name = (head as { __name__: unknown }).__name__;
@@ -139,7 +139,7 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
 
 export class Invocation {
   readonly id: number;
-  readonly node: Pair;
+  readonly node: APair;
   readonly parent: Invocation | null;
   /**
    * Child invocations spawned within this one's evaluation. Populated as
@@ -201,7 +201,7 @@ export class Invocation {
    */
   symbolContributions: Set<ReadonlySet<number>> | null = null;
 
-  constructor(id: number, node: Pair, parent: Invocation | null) {
+  constructor(id: number, node: APair, parent: Invocation | null) {
     this.id = id;
     this.node = node;
     this.parent = parent;
@@ -257,7 +257,7 @@ export class NodeRecord {
 export const DEFAULT_TRACE_CAP = 500_000;
 
 export class EvalTrace implements EvalTap {
-  readonly records = new Map<Pair, NodeRecord>();
+  readonly records = new Map<APair, NodeRecord>();
   /**
    * Task-creating invocations indexed by the task they produced. Stamped at
    * upsertTask time by rosettas that have access to currentInvocation. Lets
@@ -410,7 +410,7 @@ export class EvalTrace implements EvalTap {
    *  Pass an explicit `Infinity` for a deliberately-unbounded full-fidelity capture. */
   constructor(readonly maxEntries: number = DEFAULT_TRACE_CAP) {}
 
-  enter = action((node: Pair, parent: unknown, tailPosition?: boolean): Invocation => {
+  enter = action((node: APair, parent: unknown, tailPosition?: boolean): Invocation => {
     if (this.#nextId >= this.maxEntries) {
       // "budget exceeded" in the message so run-isolated's detector returns a partial handle.
       throw new Error(
@@ -539,7 +539,7 @@ export class EvalTrace implements EvalTap {
    */
   #symbolTapWarned = false;
 
-  onSymbolResolved = (invocation: Invocation | null, symbol: SchemeSymbol, value: unknown): void => {
+  onSymbolResolved = (invocation: Invocation | null, symbol: ASymbol, value: unknown): void => {
     try {
       if (!invocation) return;
       let map = this.symbolValues.get(invocation);

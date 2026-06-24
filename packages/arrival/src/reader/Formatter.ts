@@ -4,7 +4,7 @@
 import { CLASS } from "../well-known-symbols.js";
 import { is_special, is_symbol_string } from "../eval/guards.js";
 import { tokenize } from "../stdlib.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import {
   def_lambda_re,
   glob,
@@ -271,7 +271,7 @@ export class Formatter {
           if (!input[i].match(pattern[p])) {
             return -1;
           }
-        } else if (SchemeString.isString(pattern[p])) {
+        } else if (AString.isString(pattern[p])) {
           if (pattern[p].valueOf() !== input[i]) {
             return -1;
           }

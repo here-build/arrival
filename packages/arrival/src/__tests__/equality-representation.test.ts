@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers.js";
 import { structuralEqual } from "../values/structural-equal.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 
 // THE EQUALITY CONTRACT — representation-blindness (R7RS §6.1).
 //
@@ -27,18 +27,18 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // STRINGS — the confirmed closure.scm bug. A boxed SchemeString MUST equal a content-identical
   // plain JS string, in both argument orders, while differing content stays unequal.
   it("string: boxed ≡ unboxed, symmetric, content-discriminating", () => {
-    expect(eq(new SchemeString("f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
-    expect(eq("f|b", new SchemeString("f|b"))).toBe(true); // plain vs boxed (symmetry)
-    expect(eq(new SchemeString("f|b"), new SchemeString("f|b"))).toBe(true); // boxed vs boxed
-    expect(eq(new SchemeString("f|b"), "f|c")).toBe(false); // different content
-    expect(eq(new SchemeString("f|b"), 5)).toBe(false); // string vs non-string
+    expect(eq(new AString("f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
+    expect(eq("f|b", new AString("f|b"))).toBe(true); // plain vs boxed (symmetry)
+    expect(eq(new AString("f|b"), new AString("f|b"))).toBe(true); // boxed vs boxed
+    expect(eq(new AString("f|b"), "f|c")).toBe(false); // different content
+    expect(eq(new AString("f|b"), 5)).toBe(false); // string vs non-string
   });
 
   // BOOLEANS — same class (plain JS booleans appear via rosetta unwrapping).
   it("boolean: boxed ≡ unboxed, content-discriminating", () => {
-    expect(eq(new SchemeBool(true), true)).toBe(true);
-    expect(eq(true, new SchemeBool(true))).toBe(true);
-    expect(eq(new SchemeBool(true), false)).toBe(false);
+    expect(eq(new ABool(true), true)).toBe(true);
+    expect(eq(true, new ABool(true))).toBe(true);
+    expect(eq(new ABool(true), false)).toBe(false);
   });
 
   // NUMBERS — boxed ≡ boxed, and the exact/inexact GRADE must survive (R7RS: (equal? 1 1.0) ⇒ #f).
@@ -47,17 +47,17 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // SchemeExact(1) ≡ plain-1 ≡ SchemeInexact(1.0) by transitivity, collapsing the grade. That's a
   // deferred design question (V). Strings/booleans have no grade, so they ARE representation-blind.
   it("number: boxed ≡ boxed, exact ≠ inexact (grade survives)", () => {
-    expect(eq(new SchemeExact(1n, 1n), new SchemeExact(1n, 1n))).toBe(true);
-    expect(eq(new SchemeExact(1n, 1n), new SchemeExact(2n, 1n))).toBe(false);
-    expect(eq(new SchemeExact(1n, 1n), new SchemeInexact(1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
+    expect(eq(new AExact(1n, 1n), new AExact(1n, 1n))).toBe(true);
+    expect(eq(new AExact(1n, 1n), new AExact(2n, 1n))).toBe(false);
+    expect(eq(new AExact(1n, 1n), new AInexact(1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
   });
 
   // CHARACTERS & SYMBOLS — always boxed in practice (no plain-JS counterpart), so boxed-vs-boxed
   // is the live case; assert it stays correct (regression guard for the Setoid change).
   it("character & symbol: boxed ≡ boxed, content-discriminating", () => {
-    expect(eq(new SchemeCharacter("a"), new SchemeCharacter("a"))).toBe(true);
-    expect(eq(new SchemeCharacter("a"), new SchemeCharacter("b"))).toBe(false);
-    expect(eq(SchemeSymbol.is ? new SchemeSymbol("x") : new SchemeSymbol("x"), new SchemeSymbol("x"))).toBe(true);
-    expect(eq(new SchemeSymbol("x"), new SchemeSymbol("y"))).toBe(false);
+    expect(eq(new ACharacter("a"), new ACharacter("a"))).toBe(true);
+    expect(eq(new ACharacter("a"), new ACharacter("b"))).toBe(false);
+    expect(eq(ASymbol.is ? new ASymbol("x") : new ASymbol("x"), new ASymbol("x"))).toBe(true);
+    expect(eq(new ASymbol("x"), new ASymbol("y"))).toBe(false);
   });
 });

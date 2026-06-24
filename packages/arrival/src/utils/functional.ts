@@ -2,7 +2,7 @@
 // :: Functional programming utilities
 // -------------------------------------------------------------------------
 import { is_null } from "../eval/guards.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { AExact, AInexact } from "../values/numbers.js";
 import { typecheck } from "./typecheck.js";
 
 type AnyFunction = (...args: unknown[]) => unknown;
@@ -40,10 +40,10 @@ export function fold(
     typecheck(name, fn, "function");
     if (lists.some(is_null)) {
       if (typeof init === "number") {
-        return Number.isSafeInteger(init) ? new SchemeExact(BigInt(init)) : new SchemeInexact(init);
+        return Number.isSafeInteger(init) ? new AExact(BigInt(init)) : new AInexact(init);
       }
       if (typeof init === "bigint") {
-        return new SchemeExact(init);
+        return new AExact(init);
       }
       return init;
     } else {

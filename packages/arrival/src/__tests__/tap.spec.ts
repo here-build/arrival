@@ -15,11 +15,11 @@
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec";
 import { env as userEnv } from "../stdlib";
-import type { Pair } from "../values/primitives/Pair.js";
+import type { APair } from "../values/primitives/APair.js";
 
 interface TestInv {
   id: number;
-  node: Pair;
+  node: APair;
   parent: TestInv | null;
 }
 
@@ -35,7 +35,7 @@ function recorder() {
   const events: Event[] = [];
   let nextId = 0;
   const tap = {
-    enter(node: Pair, parent: TestInv | null): TestInv {
+    enter(node: APair, parent: TestInv | null): TestInv {
       const inv: TestInv = { id: nextId++, node, parent };
       events.push({ kind: "enter", inv });
       return inv;
@@ -97,7 +97,7 @@ describe("evaluation tap", () => {
     await exec("(map (lambda (x) (* x x)) '(1 2 3))", { tap });
 
     // Group invocations by node identity.
-    const byNode = new Map<Pair, TestInv[]>();
+    const byNode = new Map<APair, TestInv[]>();
     for (const e of enters(events)) {
       const arr = byNode.get(e.inv.node) ?? [];
       arr.push(e.inv);
@@ -186,7 +186,7 @@ describe("evaluation tap", () => {
   it("nodeFilter off-switch: no events when filter rejects everything", async () => {
     const events: Event[] = [];
     const tap = {
-      enter(node: Pair, parent: TestInv | null): TestInv {
+      enter(node: APair, parent: TestInv | null): TestInv {
         const inv: TestInv = { id: 0, node, parent };
         events.push({ kind: "enter", inv });
         return inv;

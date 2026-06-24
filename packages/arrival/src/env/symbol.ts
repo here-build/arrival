@@ -39,7 +39,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "./scheme-zod.js";
-import type { Pair } from "../values/primitives/Pair.js";
+import type { APair } from "../values/primitives/APair.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 
@@ -389,7 +389,7 @@ type _Expect<T extends true> = T;
 
 // native: an identity-schema tuple infers the impl arg as the SCHEME TERM.
 type _NativeArgs = DecodedArgs<[typeof z.pair]>;
-type _NativeArgsProof = _Expect<_Equal<_NativeArgs, [Pair]>>;
+type _NativeArgsProof = _Expect<_Equal<_NativeArgs, [APair]>>;
 
 // rosetta: a codec tuple infers the impl arg as the DECODED JS value.
 type _RosettaArgs = DecodedArgs<[typeof z.string]>;
@@ -419,13 +419,13 @@ function __typeProofs__(): void {
     symbol.native`p: proof`(
       { input: [z.pair], output: [z.pair] },
       // @ts-expect-error — arg is Pair, annotating it string is wrong
-      (p: string) => p as unknown as Pair,
+      (p: string) => p as unknown as APair,
     );
     // rosetta: impl receives a decoded string, not a Pair.
     symbol.rosetta`r: proof`(
       { input: [z.string], output: [z.number] },
       // @ts-expect-error — arg is string, annotating it Pair is wrong
-      (s: Pair) => 1,
+      (s: APair) => 1,
     );
     // rosetta return: output codec wants number; returning a string is wrong.
     symbol.rosetta`rr: proof`(

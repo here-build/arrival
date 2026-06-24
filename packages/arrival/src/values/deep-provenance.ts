@@ -14,7 +14,7 @@
  */
 import { AValue } from "./primitives/AValue.js";
 import { is_pair } from "./value-guards.js";
-import { SchemeVector } from "./primitives/SchemeVector.js";
+import { AVector } from "./primitives/AVector.js";
 
 export function deepProvenance(value: unknown): ReadonlySet<number> {
   const acc = new Set<number>();
@@ -28,7 +28,7 @@ export function deepProvenance(value: unknown): ReadonlySet<number> {
       if (is_pair(v)) {
         walk(v.car);
         walk(v.cdr);
-      } else if (v instanceof SchemeVector) {
+      } else if (v instanceof AVector) {
         for (const el of v.__vector__) walk(el);
       }
     } else if (Array.isArray(v)) {

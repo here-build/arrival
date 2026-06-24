@@ -111,6 +111,6 @@ describe("LIPS Keyword Syntax Investigation", () => {
     inferenceEnv.set("obj", obj);
 
     const result = await execOne(`(:missing obj)`);
-    expect(result.constructor.name).toBe("Nil");
+    expect(result.constructor.name).toBe("ANil");
   });
 });

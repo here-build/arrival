@@ -30,7 +30,7 @@
  * `traceToRegions` does. Absorbing those live reads into the snapshot mirror is a
  * deferred Phase-2 concern (the worker boundary); see `trace-snapshot.ts`'s header.
  */
-import { schemeToJs, type Pair } from "@here.build/arrival";
+import { schemeToJs, type APair } from "@here.build/arrival";
 
 import type { PlainInv } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
@@ -496,7 +496,7 @@ export class TraceRegionFold {
   }
 
   /** Head name of a live Pair (the snapshot's `headName` helper, inlined). */
-  #headName(node: Pair | undefined): string | undefined {
+  #headName(node: APair | undefined): string | undefined {
     const car = (node as { car?: unknown } | undefined)?.car;
     const n = (car as { __name__?: unknown } | undefined)?.__name__;
     return typeof n === "string" ? n : undefined;

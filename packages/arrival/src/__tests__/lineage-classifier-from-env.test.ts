@@ -11,7 +11,7 @@ import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type LineageNode } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
-import { SchemeJSFunction } from "../membrane";
+import { AJSFunction } from "../membrane";
 
 let seq = 0;
 const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
@@ -73,7 +73,7 @@ describe("classifierFromEnv — reproduces the hand-built classifier from live e
   it("isOpaque: a name bound to a SchemeJSFunction (foreign call) → opaque black box", async () => {
     await initBridge();
     const e = env();
-    e.set("ext-call", new SchemeJSFunction((...xs: unknown[]) => xs) as unknown as never);
+    e.set("ext-call", new AJSFunction((...xs: unknown[]) => xs) as unknown as never);
     const n = await node("(ext-call a b)", e);
     expect(n.kind).toBe("opaque");
     expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // holistic merge of inputs

@@ -17,71 +17,71 @@
 
 import { describe, expect, it } from "vitest";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
-import { schemeFalse, schemeTrue } from "../values/primitives/SchemeBool.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeJSObject } from "../membrane";
-import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/primitives/Pair.js";
+import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
+import { AString } from "../values/primitives/AString.js";
+import { AJSObject } from "../membrane";
+import { AExact, AInexact } from "../values/numbers";
+import { APair } from "../values/primitives/APair.js";
 import { jsToScheme } from "../rosetta";
 import { inferenceEnv } from "../inference-env";
 import { exec } from "../stdlib";
-import { Nil, nil } from "../values/primitives/Nil";
+import { ANil, nil } from "../values/primitives/ANil";
 
 const PROV = new Set<number>([42]);
 
 describe("jsToScheme deep-stamps every constructed AValue", () => {
   it("array → Pair-chain — each cons has provenance, each leaf SchemeString has provenance", () => {
     const result = jsToScheme(["a", "b"], {}, PROV);
-    expect(result).toBeInstanceOf(Pair);
-    const pair = result as Pair;
+    expect(result).toBeInstanceOf(APair);
+    const pair = result as APair;
     expect([...pair.provenance]).toEqual([42]);
     // Leaf strings boxed via boxer registry — SchemeString with provenance.
-    expect(pair.car).toBeInstanceOf(SchemeString);
-    expect([...(pair.car as SchemeString).provenance]).toEqual([42]);
-    const second = pair.cdr as Pair;
-    expect(second).toBeInstanceOf(Pair);
+    expect(pair.car).toBeInstanceOf(AString);
+    expect([...(pair.car as AString).provenance]).toEqual([42]);
+    const second = pair.cdr as APair;
+    expect(second).toBeInstanceOf(APair);
     expect([...second.provenance]).toEqual([42]);
-    expect(second.car).toBeInstanceOf(SchemeString);
-    expect([...(second.car as SchemeString).provenance]).toEqual([42]);
+    expect(second.car).toBeInstanceOf(AString);
+    expect([...(second.car as AString).provenance]).toEqual([42]);
     // Tail Nil also carries provenance.
-    expect(second.cdr).toBeInstanceOf(Nil);
-    expect([...(second.cdr as Nil).provenance]).toEqual([42]);
+    expect(second.cdr).toBeInstanceOf(ANil);
+    expect([...(second.cdr as ANil).provenance]).toEqual([42]);
   });
 
   it("nested array deep-stamps recursively", () => {
-    const result = jsToScheme([[1], [2, 3]], {}, PROV) as Pair;
+    const result = jsToScheme([[1], [2, 3]], {}, PROV) as APair;
     expect([...result.provenance]).toEqual([42]);
-    const inner = result.car as Pair;
-    expect(inner).toBeInstanceOf(Pair);
+    const inner = result.car as APair;
+    expect(inner).toBeInstanceOf(APair);
     expect([...inner.provenance]).toEqual([42]);
-    expect(inner.car).toBeInstanceOf(SchemeExact);
-    expect([...(inner.car as SchemeExact).provenance]).toEqual([42]);
+    expect(inner.car).toBeInstanceOf(AExact);
+    expect([...(inner.car as AExact).provenance]).toEqual([42]);
   });
 
   it("plain object → SchemeJSObject with provenance; entries lazy-boxed", () => {
     const result = jsToScheme({ name: "claude" }, {}, PROV);
-    expect(result).toBeInstanceOf(SchemeJSObject);
-    expect([...(result as SchemeJSObject).provenance]).toEqual([42]);
+    expect(result).toBeInstanceOf(AJSObject);
+    expect([...(result as AJSObject).provenance]).toEqual([42]);
     // Entry surfaces through `.get` — boxed lazily with the wrapper's provenance.
-    const name = (result as SchemeJSObject).get("name");
-    expect(name).toBeInstanceOf(SchemeString);
-    expect([...(name as SchemeString).provenance]).toEqual([42]);
+    const name = (result as AJSObject).get("name");
+    expect(name).toBeInstanceOf(AString);
+    expect([...(name as AString).provenance]).toEqual([42]);
   });
 
   it("primitive string → SchemeString boxed via AValue.fromJs with provenance", () => {
     const result = jsToScheme("hello", {}, PROV);
-    expect(result).toBeInstanceOf(SchemeString);
-    expect([...(result as SchemeString).provenance]).toEqual([42]);
+    expect(result).toBeInstanceOf(AString);
+    expect([...(result as AString).provenance]).toEqual([42]);
   });
 
   it("primitive number → SchemeExact (safe int) or SchemeInexact with provenance", () => {
     const intResult = jsToScheme(42, {}, PROV);
-    expect(intResult).toBeInstanceOf(SchemeExact);
-    expect([...(intResult as SchemeExact).provenance]).toEqual([42]);
+    expect(intResult).toBeInstanceOf(AExact);
+    expect([...(intResult as AExact).provenance]).toEqual([42]);
 
     const floatResult = jsToScheme(3.14, {}, PROV);
-    expect(floatResult).toBeInstanceOf(SchemeInexact);
-    expect([...(floatResult as SchemeInexact).provenance]).toEqual([42]);
+    expect(floatResult).toBeInstanceOf(AInexact);
+    expect([...(floatResult as AInexact).provenance]).toEqual([42]);
   });
 
   it("with EMPTY_PROVENANCE preserves backward-compatible no-stamp behavior", () => {
@@ -90,13 +90,13 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
     // allocates (no singleton); SchemeBool reuses schemeTrue/schemeFalse.
     expect(jsToScheme(true, {}, EMPTY_PROVENANCE)).toBe(schemeTrue);
     expect(jsToScheme(false, {}, EMPTY_PROVENANCE)).toBe(schemeFalse);
-    const str = jsToScheme("x", {}, EMPTY_PROVENANCE) as SchemeString;
-    expect(str).toBeInstanceOf(SchemeString);
+    const str = jsToScheme("x", {}, EMPTY_PROVENANCE) as AString;
+    expect(str).toBeInstanceOf(AString);
     expect(str.provenance.size).toBe(0);
   });
 
   it("with already-AValue same provenance returns input unchanged (identity fast path)", () => {
-    const orig = new SchemeString("x", PROV);
+    const orig = new AString("x", PROV);
     expect(jsToScheme(orig, {}, PROV)).toBe(orig);
     // Empty-provenance argument also short-circuits — input is preserved.
     expect(jsToScheme(orig, {}, EMPTY_PROVENANCE)).toBe(orig);
@@ -124,7 +124,7 @@ describe("jsToScheme WeakSet cycle protection", () => {
 
 describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   it("(eq? (@ obj :x) (@ obj :x)) returns #t — cached AValue reused", () => {
-    const obj = new SchemeJSObject({ x: 42 }, PROV);
+    const obj = new AJSObject({ x: 42 }, PROV);
     const a = obj.get("x");
     const b = obj.get("x");
     // Identity: the cache returns the same AValue instance on repeat reads.
@@ -132,21 +132,21 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   });
 
   it("entry carries the wrapper's provenance", () => {
-    const obj = new SchemeJSObject({ greeting: "hi" }, PROV);
-    const greeting = obj.get("greeting") as SchemeString;
-    expect(greeting).toBeInstanceOf(SchemeString);
+    const obj = new AJSObject({ greeting: "hi" }, PROV);
+    const greeting = obj.get("greeting") as AString;
+    expect(greeting).toBeInstanceOf(AString);
     expect([...greeting.provenance]).toEqual([42]);
   });
 
   it("missing key returns nil", () => {
-    const obj = new SchemeJSObject({ x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     expect(obj.get("nope")).toBe(nil);
   });
 
   it("rejects writes — set is banned (pure-dataflow sandbox), source unchanged", () => {
     const source: { x: unknown } = { x: 1 };
-    const obj = new SchemeJSObject(source, PROV);
-    const first = obj.get("x") as SchemeExact;
+    const obj = new AJSObject(source, PROV);
+    const first = obj.get("x") as AExact;
     expect(first.valueOf()).toBe(1);
     // Writing the foreign peer is not dataflow — the membrane is read-only.
     expect(() => obj.set("x", 99)).toThrow(/writes are banned/);
@@ -156,19 +156,19 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   });
 
   it("withProvenance returns a wrapper with empty cache", () => {
-    const obj = new SchemeJSObject({ x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     obj.get("x"); // populate cache
     const clone = obj.withProvenance(new Set<number>([99]));
     // Clone holds the same source but boxes entries fresh with the new
     // provenance — identity does NOT cross-talk between provenance variants.
-    const xViaClone = clone.get("x") as SchemeExact;
+    const xViaClone = clone.get("x") as AExact;
     expect([...xViaClone.provenance]).toEqual([99]);
   });
 
   it("blocked key (sandboxedAccess NOT_FOUND) returns nil", () => {
     // Object.prototype methods are filtered by the sandbox boundary —
     // `.get("toString")` resolves to NOT_FOUND for plain-object sources.
-    const obj = new SchemeJSObject({ x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     expect(obj.get("toString")).toBe(nil);
   });
 });
@@ -179,7 +179,7 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // targets — the wrapper's cache makes the two surfaces return the same
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
     const env = inferenceEnv.inherit("test");
-    const wrapper = new SchemeJSObject({ x: "hello" });
+    const wrapper = new AJSObject({ x: "hello" });
     env.set("obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });
     const [viaColon] = await exec("(:x obj)", { env });

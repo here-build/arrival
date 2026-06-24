@@ -18,8 +18,8 @@ import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
-import { SchemeString } from "../../values/primitives/SchemeString.js";
-import { SchemeExact, SchemeInexact } from "../../values/numbers.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AExact, AInexact } from "../../values/numbers.js";
 import { AValue } from "../../values/primitives/AValue.js";
 
 type WithCtxFn = ((...a: unknown[]) => unknown) & { __withCtx?: boolean };
@@ -78,16 +78,16 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // No ctx (a direct/test call) — proves the codec membrane in isolation.
-    const out = await verb(new SchemeString("hello"));
-    expect(out).toBeInstanceOf(SchemeInexact); // z.number encode → inexact
-    expect((out as SchemeInexact).real).toBe(5);
+    const out = await verb(new AString("hello"));
+    expect(out).toBeInstanceOf(AInexact); // z.number encode → inexact
+    expect((out as AInexact).real).toBe(5);
   });
 
   it("rejects a bad arg via the input codec (errors-as-doors) through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(verb(new SchemeExact(3n))).rejects.toThrow();
+    await expect(verb(new AExact(3n))).rejects.toThrow();
   });
 
   it("MINTS provenance off ctx.currentInvocation — marks the point + stamps the output", async () => {
@@ -96,9 +96,9 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
 
     const { ctx, marked } = ctxWithInvocation(42);
     // The evaluator appends ctx as the trailing arg for a __withCtx fn — replicate that here.
-    const out = (await verb(new SchemeString("hello"), ctx)) as SchemeInexact;
+    const out = (await verb(new AString("hello"), ctx)) as AInexact;
 
-    expect(out).toBeInstanceOf(SchemeInexact);
+    expect(out).toBeInstanceOf(AInexact);
     expect(out.real).toBe(5);
     // THE MINT: the output carries pointProvenance(42), and the invocation was marked a point.
     expect([...out.provenance]).toEqual([42]);
@@ -116,7 +116,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { ctx } = ctxWithInvocation(7);
-    const out = (await verb(new SchemeString("ab"), ctx)) as AValue;
+    const out = (await verb(new AString("ab"), ctx)) as AValue;
     // Walk the spine: every reachable AValue must carry {7}.
     const seen: number[][] = [];
     const walk = (v: unknown): void => {
@@ -140,8 +140,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     // An input string carrying a known origin; no ctx → resultProvenance falls back to the input union.
-    const tagged = new SchemeString("x", new Set([99]));
-    const out = (await verb(tagged)) as SchemeString;
+    const tagged = new AString("x", new Set([99]));
+    const out = (await verb(tagged)) as AString;
     expect(out.toJs()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
@@ -158,8 +158,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { ctx, marked } = ctxWithInvocation(42);
-    const tagged = new SchemeString("x", new Set([99]));
-    const out = (await verb(tagged, ctx)) as SchemeString;
+    const tagged = new AString("x", new Set([99]));
+    const out = (await verb(tagged, ctx)) as AString;
     expect(out.toJs()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
     expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point

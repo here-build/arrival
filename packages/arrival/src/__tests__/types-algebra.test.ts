@@ -4,8 +4,8 @@
 // / antisymmetry actually bite.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Nil, nil } from "../values/primitives/Nil.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import { setoidLaws, ordLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
@@ -15,47 +15,47 @@ const LTE = "fantasy-land/lte";
 // the symmetric/transitive/antisymmetric branches; one astral char for unicode.
 const charArb = fc
   .constantFrom(...["a", "b", "X", "Y", "Z", "0", "1", "2", "!", "@", "\u{1F600}"])
-  .map((c) => new SchemeCharacter(c));
+  .map((c) => new ACharacter(c));
 
 setoidLaws("SchemeCharacter", {
   arb: charArb,
-  equalClone: (c) => new SchemeCharacter(c.__char__),
+  equalClone: (c) => new ACharacter(c.__char__),
 });
 ordLaws("SchemeCharacter", charArb);
 
 // Nil: bare singleton + provenance clones — all observably equal.
-const nilArb = fc.constantFrom(nil, new Nil(), new Nil(new Set([1, 2])));
-setoidLaws("Nil", { arb: nilArb, equalClone: () => new Nil() });
+const nilArb = fc.constantFrom(nil, new ANil(), new ANil(new Set([1, 2])));
+setoidLaws("Nil", { arb: nilArb, equalClone: () => new ANil() });
 
 describe("SchemeCharacter Setoid/Ord — value semantics", () => {
   it("equal iff same grapheme", () => {
-    expect((new SchemeCharacter("a") as never)[FL](new SchemeCharacter("a"))).toBe(true);
-    expect((new SchemeCharacter("a") as never)[FL](new SchemeCharacter("b"))).toBe(false);
+    expect((new ACharacter("a") as never)[FL](new ACharacter("a"))).toBe(true);
+    expect((new ACharacter("a") as never)[FL](new ACharacter("b"))).toBe(false);
   });
 
   it("totality across the codepoint ordering", () => {
-    const lo = new SchemeCharacter("a");
-    const hi = new SchemeCharacter("b");
+    const lo = new ACharacter("a");
+    const hi = new ACharacter("b");
     expect((lo as never)[LTE](hi)).toBe(true);
     expect((hi as never)[LTE](lo)).toBe(false);
   });
 
   it("FL methods are total — non-char input returns false", () => {
-    expect((new SchemeCharacter("a") as never)[FL](42)).toBe(false);
-    expect((new SchemeCharacter("a") as never)[FL](nil)).toBe(false);
-    expect((new SchemeCharacter("a") as never)[LTE]("a")).toBe(false);
+    expect((new ACharacter("a") as never)[FL](42)).toBe(false);
+    expect((new ACharacter("a") as never)[FL](nil)).toBe(false);
+    expect((new ACharacter("a") as never)[LTE]("a")).toBe(false);
   });
 });
 
 describe("Nil Setoid — every Nil is equal", () => {
   it("singleton, fresh, and provenance-clone Nils all compare equal", () => {
-    expect((nil as never)[FL](new Nil())).toBe(true);
-    expect((new Nil() as never)[FL](nil)).toBe(true);
-    expect((new Nil(new Set([7])) as never)[FL](new Nil())).toBe(true);
+    expect((nil as never)[FL](new ANil())).toBe(true);
+    expect((new ANil() as never)[FL](nil)).toBe(true);
+    expect((new ANil(new Set([7])) as never)[FL](new ANil())).toBe(true);
   });
 
   it("FL method is total — non-Nil input returns false", () => {
-    expect((nil as never)[FL](new SchemeCharacter("a"))).toBe(false);
+    expect((nil as never)[FL](new ACharacter("a"))).toBe(false);
     expect((nil as never)[FL](null)).toBe(false);
   });
 });

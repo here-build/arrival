@@ -35,16 +35,16 @@ import {
   is_promise,
   is_syntax,
 } from "./guards.js";
-import { HalfBaked, is_half_baked } from "../values/primitives/HalfBaked.js";
-import { SchemeJSFunction } from "../membrane.js";
+import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
+import { AJSFunction } from "../membrane.js";
 import { ArrivalError } from "../ArrivalError.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { APair } from "../values/primitives/APair.js";
 import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
 import { type SchemeValue } from "../values/types.js";
-import { nil } from "../values/primitives/Nil.js";
+import { nil } from "../values/primitives/ANil.js";
 
 // ============================================================================
 // Error Handling with Stack Traces
@@ -105,7 +105,7 @@ function formatCode(code: SchemeValue, maxLen = 60): string {
   // bearing list-terminator would format as "[object Object]" in stack traces.
   // Tier-1 fix context: 5f7f9e46a.
   if (is_nil(code)) return "()";
-  if (code instanceof SchemeSymbol) return symbol_name(code);
+  if (code instanceof ASymbol) return symbol_name(code);
   if (typeof code === "string") return JSON.stringify(code);
   if (typeof code === "number" || typeof code === "bigint") return String(code);
   if (typeof code === "boolean") return code ? "#t" : "#f";
@@ -159,7 +159,7 @@ export interface EvalTap {
    * computes for the trampoline. Optional for backward-compat with taps that
    * don't care.
    */
-  enter(node: Pair, parent: Invocation | null, tailPosition?: boolean): Invocation;
+  enter(node: APair, parent: Invocation | null, tailPosition?: boolean): Invocation;
   /**
    * Returning a value-shaped result substitutes the evaluator's outgoing value
    * for the invocation. Used by provenance plumbing: the tap stamps the result
@@ -187,7 +187,7 @@ export interface EvalTap {
    * one path that doesn't fire enter/exit, so without this method the
    * resolved value never reaches the tap.
    */
-  onSymbolResolved?(invocation: Invocation | null, symbol: SchemeSymbol, value: SchemeValue): void;
+  onSymbolResolved?(invocation: Invocation | null, symbol: ASymbol, value: SchemeValue): void;
 }
 
 /** Evaluation context passed through the evaluator */
@@ -204,7 +204,7 @@ export interface EvalContext {
    * Optional filter — when present, returning false skips tap firing for a node
    * (atoms and macro-expansion-constructed Pairs are always skipped regardless).
    */
-  nodeFilter?: (node: Pair) => boolean;
+  nodeFilter?: (node: APair) => boolean;
   /** Current dynamic-stack invocation; sub-evaluations receive this as parent. */
   currentInvocation?: Invocation;
   /**
@@ -633,7 +633,7 @@ export function is_scheme_promise(o: unknown): o is SchemePromise {
 // Symbol name extraction
 // ============================================================================
 
-function symbol_name(sym: SchemeSymbol): string {
+function symbol_name(sym: ASymbol): string {
   const name = sym.__name__;
   return typeof name === "symbol" ? name.description || "" : name;
 }
@@ -647,7 +647,7 @@ function symbol_name(sym: SchemeSymbol): string {
  * This uses _lookupWithResolvers directly to avoid patch_value.
  * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
  */
-function env_get(env: Environment, sym: SchemeSymbol): SchemeValue {
+function env_get(env: Environment, sym: ASymbol): SchemeValue {
   const name = sym.__name__;
 
   // Handle keyword symbols (e.g., :name, :projects) — delegate to env.get()
@@ -666,7 +666,7 @@ function env_get(env: Environment, sym: SchemeSymbol): SchemeValue {
   // resolved by Environment.get's property-splitting path, which _lookupWithResolvers
   // does not implement. Delegate ONLY after the direct miss (matching Environment.get's
   // "dot notation only after direct lookup fails" ordering), so the hot path is unchanged.
-  const hasObjectParts = (sym as unknown as { [key: symbol]: unknown })[SchemeSymbol.object] != null;
+  const hasObjectParts = (sym as unknown as { [key: symbol]: unknown })[ASymbol.object] != null;
   invariant(hasObjectParts || (typeof name === "string" && name.includes(".")), `Unbound variable \`${String(name)}'`);
   return env.get(sym);
 }
@@ -1133,14 +1133,14 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // list-element loop below without the tail-threading.
   // Vector template: a boxed SchemeVector (a `#(...) literal) or, defensively, a
   // raw array. Build a fresh boxed vector so the result is a proper vector value.
-  if (expr instanceof SchemeVector || Array.isArray(expr)) {
-    const items = expr instanceof SchemeVector ? expr.__vector__ : expr;
+  if (expr instanceof AVector || Array.isArray(expr)) {
+    const items = expr instanceof AVector ? expr.__vector__ : expr;
     const out: SchemeValue[] = [];
     for (const item of items) {
       if (
         level === 1 &&
         is_pair(item) &&
-        item.car instanceof SchemeSymbol &&
+        item.car instanceof ASymbol &&
         symbol_name(item.car) === "unquote-splicing"
       ) {
         invariant(is_pair(item.cdr), "unquote-splicing: missing argument");
@@ -1161,7 +1161,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       }
       out.push(yield { call: processQuasiquote(item, ctx, level) });
     }
-    return new SchemeVector(out);
+    return new AVector(out);
   }
 
   // Atoms are returned as-is
@@ -1173,7 +1173,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   const first = expr.car;
 
   // Check for unquote
-  if (first instanceof SchemeSymbol && symbol_name(first) === "unquote") {
+  if (first instanceof ASymbol && symbol_name(first) === "unquote") {
     if (level === 1) {
       // Evaluate the unquoted expression
       invariant(is_pair(expr.cdr), "unquote: missing argument");
@@ -1182,24 +1182,24 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       // Nested quasiquote - decrease level and recurse
       invariant(is_pair(expr.cdr), "unquote: missing argument");
       const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-      return new Pair(new SchemeSymbol("unquote"), new Pair(processed, nil));
+      return new APair(new ASymbol("unquote"), new APair(processed, nil));
     }
   }
 
   // Check for unquote-splicing at top level of list
-  if (first instanceof SchemeSymbol && symbol_name(first) === "unquote-splicing") {
+  if (first instanceof ASymbol && symbol_name(first) === "unquote-splicing") {
     // This shouldn't happen at top level - splicing needs context
     invariant(level > 1, "unquote-splicing: invalid context");
     invariant(is_pair(expr.cdr), "unquote-splicing: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-    return new Pair(new SchemeSymbol("unquote-splicing"), new Pair(processed, nil));
+    return new APair(new ASymbol("unquote-splicing"), new APair(processed, nil));
   }
 
   // Check for nested quasiquote
-  if (first instanceof SchemeSymbol && symbol_name(first) === "quasiquote") {
+  if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
     invariant(is_pair(expr.cdr), "quasiquote: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level + 1) };
-    return new Pair(new SchemeSymbol("quasiquote"), new Pair(processed, nil));
+    return new APair(new ASymbol("quasiquote"), new APair(processed, nil));
   }
 
   // Process list elements, handling unquote-splicing
@@ -1220,7 +1220,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     // as normal elements via the regular-element branch below.
     if (
       level === 1 &&
-      node.car instanceof SchemeSymbol &&
+      node.car instanceof ASymbol &&
       symbol_name(node.car) === "unquote" &&
       is_pair(node.cdr) &&
       is_nil(node.cdr.cdr)
@@ -1236,7 +1236,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     // Check for unquote-splicing in list
     if (
       is_pair(item) &&
-      item.car instanceof SchemeSymbol &&
+      item.car instanceof ASymbol &&
       symbol_name(item.car) === "unquote-splicing" &&
       level === 1
     ) {
@@ -1278,7 +1278,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // Pair.fromArray always nil-terminates, so fold manually onto `tail`.
   let result: SchemeValue = tail;
   for (let i = results.length; i--; ) {
-    result = new Pair(results[i], result);
+    result = new APair(results[i], result);
   }
   return result;
 }
@@ -1296,10 +1296,10 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const name = first.car;
     const args = first.cdr;
 
-    invariant(name instanceof SchemeSymbol, "define: expected symbol for function name");
+    invariant(name instanceof ASymbol, "define: expected symbol for function name");
 
     // Create lambda expression
-    const value = yield { call: evalLambda(new Pair(args, valueRest), ctx) };
+    const value = yield { call: evalLambda(new APair(args, valueRest), ctx) };
 
     // Set the function's name
     if (is_lambda_function(value)) {
@@ -1311,7 +1311,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Simple definition: (define name value)
-  invariant(first instanceof SchemeSymbol, "define: expected symbol");
+  invariant(first instanceof ASymbol, "define: expected symbol");
   invariant(is_pair(valueRest), "define: missing value");
 
   // NOT tail position — the value must return HERE so we can bind it. If we
@@ -1336,7 +1336,7 @@ function* evalSet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   invariant(is_pair(rest), "set!: missing name");
 
   const name = rest.car;
-  invariant(name instanceof SchemeSymbol, "set!: expected symbol");
+  invariant(name instanceof ASymbol, "set!: expected symbol");
 
   const valueRest = rest.cdr;
   invariant(is_pair(valueRest), "set!: missing value");
@@ -1384,7 +1384,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Handle proper list of args
     while (is_pair(argNode)) {
       const argName = argNode.car;
-      if (argName instanceof SchemeSymbol) {
+      if (argName instanceof ASymbol) {
         callEnv.set(argName, values[i]);
       }
       i++;
@@ -1392,9 +1392,9 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     // Handle rest arg: (lambda (a b . rest) ...)
-    if (argNode instanceof SchemeSymbol) {
+    if (argNode instanceof ASymbol) {
       // Rest of args go into this symbol as a list
-      callEnv.set(argNode, Pair.fromArray(values.slice(i), false));
+      callEnv.set(argNode, APair.fromArray(values.slice(i), false));
     }
 
     // Pick up the dynamic call site if evaluatePair set it just before
@@ -1446,7 +1446,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let walk: SchemeValue = args;
   while (is_pair(walk)) {
     const p = walk.car;
-    if (p instanceof SchemeSymbol) params.push(symbol_name(p));
+    if (p instanceof ASymbol) params.push(symbol_name(p));
     walk = walk.cdr;
   }
   lambda.__params__ = params;
@@ -1463,7 +1463,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   const name = first.car;
   const args = first.cdr;
-  invariant(name instanceof SchemeSymbol, "define-macro: expected symbol for name");
+  invariant(name instanceof ASymbol, "define-macro: expected symbol for name");
 
   const body = rest.cdr;
 
@@ -1478,7 +1478,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     while (is_pair(argNode)) {
       const argName = argNode.car;
-      if (argName instanceof SchemeSymbol) {
+      if (argName instanceof ASymbol) {
         const value = is_pair(codeNode) ? codeNode.car : nil;
         macroEnv.set(argName, value);
       }
@@ -1490,7 +1490,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     // Handle rest arg
-    if (argNode instanceof SchemeSymbol) {
+    if (argNode instanceof ASymbol) {
       macroEnv.set(argNode, codeNode);
     }
 
@@ -1521,10 +1521,10 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   let bindings: SchemeValue;
   let body: SchemeValue;
-  let name: SchemeSymbol | null = null;
+  let name: ASymbol | null = null;
 
   // Check for named let: (let name ((var val) ...) body...)
-  if (rest.car instanceof SchemeSymbol) {
+  if (rest.car instanceof ASymbol) {
     name = rest.car;
     const afterName = rest.cdr;
     invariant(is_pair(afterName), "let: missing bindings after name");
@@ -1541,11 +1541,11 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // For named let, we need to create a recursive function
   if (name) {
     // Collect parameter names
-    const params: SchemeSymbol[] = [];
+    const params: ASymbol[] = [];
     let bindNode: SchemeValue = bindings;
     while (is_pair(bindNode)) {
       const binding = bindNode.car;
-      if (is_pair(binding) && binding.car instanceof SchemeSymbol) {
+      if (is_pair(binding) && binding.car instanceof ASymbol) {
         params.push(binding.car);
       }
       bindNode = bindNode.cdr;
@@ -1614,7 +1614,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Binding RHS expressions are non-tail (their values feed into the
   // letEnv; only the body is tail w.r.t. the let's parent).
   const values: SchemeValue[] = [];
-  const names: SchemeSymbol[] = [];
+  const names: ASymbol[] = [];
   const bindingCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   let bindNode: SchemeValue = bindings;
@@ -1623,7 +1623,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(is_pair(binding), "let: invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof SchemeSymbol, "let: expected symbol in binding");
+    invariant(varName instanceof ASymbol, "let: expected symbol in binding");
 
     names.push(varName);
 
@@ -1671,7 +1671,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(is_pair(binding), "let*: invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof SchemeSymbol, "let*: expected symbol in binding");
+    invariant(varName instanceof ASymbol, "let*: expected symbol in binding");
 
     const bindingCdr = binding.cdr;
     invariant(is_pair(bindingCdr), "let*: missing value in binding");
@@ -1705,14 +1705,14 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const letrecEnv = ctx.env.inherit("letrec");
 
   // First pass: bind all names to undefined
-  const bindingList: Array<{ name: SchemeSymbol; expr: SchemeValue }> = [];
+  const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
     invariant(is_pair(binding), "letrec: invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof SchemeSymbol, "letrec: expected symbol in binding");
+    invariant(varName instanceof ASymbol, "letrec: expected symbol in binding");
 
     const bindingCdr = binding.cdr;
     invariant(is_pair(bindingCdr), "letrec: missing value in binding");
@@ -1879,7 +1879,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 
   // Builtins / SchemeJSFunction: direct apply (no Scheme body to tail into).
   let result: SchemeValue;
-  if (proc instanceof SchemeJSFunction) {
+  if (proc instanceof AJSFunction) {
     result = proc.call(arg);
   } else {
     invariant(is_function(proc), "=> requires a procedure");
@@ -1907,7 +1907,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Check for else clause. Matched-clause body inherits cond's tail flag
     // and is pass-through (tail-collapsible).
-    if (test instanceof SchemeSymbol && symbol_name(test) === "else") {
+    if (test instanceof ASymbol && symbol_name(test) === "else") {
       return yield { call: evalBegin(exprs, ctx), tail: ctx.tail === true };
     }
 
@@ -1925,7 +1925,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // as `onResolve` (pass-through, same as the non-`=>` arms below).
       if (is_pair(exprs)) {
         const firstExpr = exprs.car;
-        if (firstExpr instanceof SchemeSymbol && symbol_name(firstExpr) === "=>") {
+        if (firstExpr instanceof ASymbol && symbol_name(firstExpr) === "=>") {
           const exprsCdr = exprs.cdr;
           invariant(is_pair(exprsCdr), "cond: missing procedure after =>");
           const procExpr = exprsCdr.car;
@@ -1984,7 +1984,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const exprs = clause.cdr;
 
     // Check for else clause — pass-through (tail-collapsible).
-    if (datums instanceof SchemeSymbol && symbol_name(datums) === "else") {
+    if (datums instanceof ASymbol && symbol_name(datums) === "else") {
       // R7RS §6.3 also allows `(else => proc)`: apply proc to the key in tail
       // position (mirrors cond's `=>`).
       const arrowProc = yield* evalCaseArrowProc(exprs, nonTailCtx);
@@ -2046,7 +2046,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* evalCaseArrowProc(exprs: SchemeValue, nonTailCtx: EvalContext): EvalGenerator {
   if (!is_pair(exprs)) return undefined;
   const first = exprs.car;
-  if (!(first instanceof SchemeSymbol) || symbol_name(first) !== "=>") return undefined;
+  if (!(first instanceof ASymbol) || symbol_name(first) !== "=>") return undefined;
   const exprsCdr = exprs.cdr;
   invariant(is_pair(exprsCdr), "case: missing procedure after =>");
   let proc = yield { call: evaluate(exprsCdr.car, nonTailCtx) };
@@ -2121,7 +2121,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Create environment and collect bindings
   const doEnv = ctx.env.inherit("do");
-  const vars: Array<{ name: SchemeSymbol; step: SchemeValue | null }> = [];
+  const vars: Array<{ name: ASymbol; step: SchemeValue | null }> = [];
 
   // do's structural tail-position: ONLY the result-expression(s) are tail.
   // Bindings, test, step, body all evaluate as side-effects/predicates and
@@ -2138,7 +2138,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(is_pair(binding), "do: invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof SchemeSymbol, "do: expected symbol");
+    invariant(varName instanceof ASymbol, "do: expected symbol");
 
     const bindingCdr = binding.cdr;
     let initExpr: SchemeValue = undefined;
@@ -2262,7 +2262,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const clause = clauseNode.car;
     if (is_pair(clause)) {
       const clauseHead = clause.car;
-      if (clauseHead instanceof SchemeSymbol) {
+      if (clauseHead instanceof ASymbol) {
         const name = symbol_name(clauseHead);
         if (name === "catch") {
           catchClause = clause;
@@ -2301,14 +2301,14 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Handle catch clause if there was an error
     if (caughtError && catchClause) {
       // (catch (var) handler...)
-      const catchCdr = (catchClause as Pair).cdr;
+      const catchCdr = (catchClause as APair).cdr;
       invariant(is_pair(catchCdr), "try: invalid catch syntax");
 
       const varSpec = catchCdr.car;
       invariant(is_pair(varSpec), "try: catch requires (var)");
 
       const varName = varSpec.car;
-      invariant(varName instanceof SchemeSymbol, "try: catch variable must be a symbol");
+      invariant(varName instanceof ASymbol, "try: catch variable must be a symbol");
 
       const handlers = catchCdr.cdr;
 
@@ -2368,7 +2368,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // bounded too; aborts in finally propagate per JS semantics where any
     // exception would (this catch swallows them, matching the old behavior).
     if (finallyClause) {
-      const finallyCdr = (finallyClause as Pair).cdr;
+      const finallyCdr = (finallyClause as APair).cdr;
       try {
         await run(evalBegin(finallyCdr, { ...ctx, tail: false }), { signal: ctx.signal });
       } catch {
@@ -2446,7 +2446,7 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Symbol lookup
-  if (code instanceof SchemeSymbol) {
+  if (code instanceof ASymbol) {
     const value = env_get(ctx.env, code);
     ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value as SchemeValue);
     return value;
@@ -2489,7 +2489,7 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
   return yield* evaluatePair(code, ctx);
 }
 
-function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
+function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   // It's a pair - function application or special form
   const first = code.car;
   const rest = code.cdr;
@@ -2498,7 +2498,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
   const frame: StackFrame = {
     code,
     env_name: ctx.env.__name__,
-    procedure: first instanceof SchemeSymbol ? symbol_name(first) : undefined,
+    procedure: first instanceof ASymbol ? symbol_name(first) : undefined,
   };
 
   // Tail-position context for sub-expressions of THIS call. The call head
@@ -2510,7 +2510,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   // Check for special forms first (before evaluation)
-  if (first instanceof SchemeSymbol) {
+  if (first instanceof ASymbol) {
     const name = symbol_name(first);
     const specialHandler = SPECIAL_FORMS[name];
     if (specialHandler) {
@@ -2531,7 +2531,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     if (is_promise(fn)) {
       fn = yield fn;
     }
-  } else if (first instanceof SchemeSymbol) {
+  } else if (first instanceof ASymbol) {
     fn = env_get(ctx.env, first);
     // Fire the tap here too — this is the call-head fast path that bypasses
     // `evaluate()`. Without this, tracers miss the resolved value of every
@@ -2564,7 +2564,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
     if (ctx.speculate && (fn as SpeculationAware)[SPECULATE] !== true) {
       for (let i = 0; i < args.length; i++) {
         if (is_half_baked(args[i])) {
-          args[i] = yield (args[i] as HalfBaked).force();
+          args[i] = yield (args[i] as AHalfBaked).force();
         }
       }
     }
@@ -2714,7 +2714,7 @@ function* evaluatePair(code: Pair, ctx: EvalContext): EvalGenerator {
   }
 
   // Handle SchemeJSFunction - wrapped JS functions from membrane
-  if (fn instanceof SchemeJSFunction) {
+  if (fn instanceof AJSFunction) {
     // Evaluate args then call via the wrapper's apply method
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");

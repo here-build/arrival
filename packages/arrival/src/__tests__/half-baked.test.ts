@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { HalfBaked, is_half_baked, type Interval } from "../values/primitives/HalfBaked.js";
+import { AHalfBaked, is_half_baked, type Interval } from "../values/primitives/AHalfBaked.js";
 import { is_promise } from "../eval/guards.js";
 
 /** A promise plus its resolver, so a test can settle slots one at a time. */
@@ -32,7 +32,7 @@ const mapBounds = (): [number, number] => [1, 1];
 describe("HalfBaked — cardinality interval", () => {
   it("filter: interval is [0, N] up front, narrows from both ends as slots settle", async () => {
     const d = [deferred<number[]>(), deferred<number[]>(), deferred<number[]>()];
-    const hb = HalfBaked.collection(
+    const hb = AHalfBaked.collection(
       d.map((x) => x.promise),
       filterBounds,
     );
@@ -55,7 +55,7 @@ describe("HalfBaked — cardinality interval", () => {
 
   it("map/list: length is known exactly up front (interval is a point)", () => {
     const d = [deferred<number[]>(), deferred<number[]>()];
-    const hb = HalfBaked.collection(
+    const hb = AHalfBaked.collection(
       d.map((x) => x.promise),
       mapBounds,
     );
@@ -67,7 +67,7 @@ describe("HalfBaked — cardinality interval", () => {
 describe("HalfBaked — early decision (the (>= … 2) collapse)", () => {
   it("decide resolves the instant lo >= k, with slots still pending", async () => {
     const d = [deferred<number[]>(), deferred<number[]>(), deferred<number[]>(), deferred<number[]>()];
-    const list = HalfBaked.collection(
+    const list = AHalfBaked.collection(
       d.map((x) => x.promise),
       filterBounds,
     );
@@ -93,7 +93,7 @@ describe("HalfBaked — early decision (the (>= … 2) collapse)", () => {
 
   it("decide resolves false early when hi drops below k (all-dropped)", async () => {
     const d = [deferred<number[]>(), deferred<number[]>(), deferred<number[]>()];
-    const list = HalfBaked.collection(
+    const list = AHalfBaked.collection(
       d.map((x) => x.promise),
       filterBounds,
     );
@@ -109,7 +109,7 @@ describe("HalfBaked — early decision (the (>= … 2) collapse)", () => {
 
   it("a correct verdict always resolves once the fan fully settles (no early signal)", async () => {
     const d = [deferred<number[]>(), deferred<number[]>()];
-    const list = HalfBaked.collection(
+    const list = AHalfBaked.collection(
       d.map((x) => x.promise),
       filterBounds,
     );
@@ -123,7 +123,7 @@ describe("HalfBaked — early decision (the (>= … 2) collapse)", () => {
 
 describe("HalfBaked — force / refine fold", () => {
   it("collection force folds slot payloads (flattened) into a Pair", async () => {
-    const list = HalfBaked.collection(
+    const list = AHalfBaked.collection(
       [Promise.resolve([10]), Promise.resolve([]), Promise.resolve([30])],
       filterBounds,
     );
@@ -135,13 +135,13 @@ describe("HalfBaked — force / refine fold", () => {
   });
 
   it("number force folds to the settled count", async () => {
-    const list = HalfBaked.collection([Promise.resolve([1]), Promise.resolve([]), Promise.resolve([3])], filterBounds);
+    const list = AHalfBaked.collection([Promise.resolve([1]), Promise.resolve([]), Promise.resolve([3])], filterBounds);
     const len = list.toCardinalityNumber();
     expect(await len.force()).toBe(2);
   });
 
   it("force is memoized — same promise instance at repeated boundaries", () => {
-    const list = HalfBaked.collection([Promise.resolve([1])], filterBounds);
+    const list = AHalfBaked.collection([Promise.resolve([1])], filterBounds);
     expect(list.force()).toBe(list.force());
     expect(list.refine()).toBe(list.force());
   });
@@ -149,7 +149,7 @@ describe("HalfBaked — force / refine fold", () => {
 
 describe("HalfBaked — invisibility contract", () => {
   it("is_half_baked recognizes it; is_promise does NOT (so evaluateArgs passes it through)", () => {
-    const hb = HalfBaked.collection([Promise.resolve([1])], filterBounds);
+    const hb = AHalfBaked.collection([Promise.resolve([1])], filterBounds);
     expect(is_half_baked(hb)).toBe(true);
     // The whole point: a HalfBaked is not a thenable, so the arg-await in
     // evaluateArgs (`if (is_promise(arg)) arg = yield arg`) skips it.

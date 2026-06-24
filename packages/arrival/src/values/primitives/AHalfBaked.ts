@@ -43,8 +43,8 @@
 
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
-import { Pair } from "./Pair.js";
-import { nil } from "./Nil.js";
+import { APair } from "./APair.js";
+import { nil } from "./ANil.js";
 
 // Loose, like the rest of the interpreter — SchemeValue is `any` in types.ts.
 type SchemeValue = any;
@@ -82,7 +82,7 @@ type SettleListener = () => void;
  *  - `"number"` — a narrowing integer interval derived from a collection's
  *    cardinality (what `length` returns). `force()` folds to a settled count.
  */
-export class HalfBaked extends AValue {
+export class AHalfBaked extends AValue {
   readonly kind = "halfbaked" as const;
 
   private readonly domain: "collection" | "number";
@@ -92,7 +92,7 @@ export class HalfBaked extends AValue {
   private readonly records: SlotRecord[];
 
   // shared settle machinery (collection owns it; number domain delegates)
-  private readonly source: HalfBaked; // self for collection, the list for number
+  private readonly source: AHalfBaked; // self for collection, the list for number
   private readonly listeners: Set<SettleListener>;
 
   // ── memoized collapse ──────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export class HalfBaked extends AValue {
     domain: "collection" | "number",
     slots: readonly Promise<SchemeValue[]>[],
     records: SlotRecord[],
-    source: HalfBaked | null,
+    source: AHalfBaked | null,
     provenance: Provenance,
   ) {
     super(provenance);
@@ -123,12 +123,12 @@ export class HalfBaked extends AValue {
     slots: readonly Promise<SchemeValue[]>[],
     cardBounds: (index: number) => [number, number],
     provenance: Provenance = EMPTY_PROVENANCE,
-  ): HalfBaked {
+  ): AHalfBaked {
     const records: SlotRecord[] = slots.map((_, i) => {
       const [cardLo, cardHi] = cardBounds(i);
       return { cardLo, cardHi, settled: false, items: [] };
     });
-    const hb = new HalfBaked("collection", slots, records, null, provenance);
+    const hb = new AHalfBaked("collection", slots, records, null, provenance);
     // The single benign `.then` per slot: it ONLY updates the record and
     // notifies listeners. It fires no Scheme work — settlement is driven by the
     // slot promises (already dispatched), the lattice merely OBSERVES status.
@@ -180,9 +180,9 @@ export class HalfBaked extends AValue {
    * settle stream. Reading its interval is the early-collapse signal; forcing it
    * folds to the real count.
    */
-  toCardinalityNumber(provenance: Provenance = this.provenance): HalfBaked {
+  toCardinalityNumber(provenance: Provenance = this.provenance): AHalfBaked {
     if (this.domain !== "collection") return this;
-    return new HalfBaked("number", this.slots, this.records, this, provenance);
+    return new AHalfBaked("number", this.slots, this.records, this, provenance);
   }
 
   /**
@@ -266,16 +266,16 @@ export class HalfBaked extends AValue {
   }
 
   withProvenance(p: Provenance): AValue {
-    return new HalfBaked(this.domain, this.slots, this.records, this.source, p);
+    return new AHalfBaked(this.domain, this.slots, this.records, this.source, p);
   }
 }
 
-markInteropBoundary(HalfBaked);
+markInteropBoundary(AHalfBaked);
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 function arrayToPair(items: SchemeValue[], provenance: Provenance): SchemeValue {
-  const pair = items.length === 0 ? nil : Pair.fromArray(items);
+  const pair = items.length === 0 ? nil : APair.fromArray(items);
   return provenance && provenance.size > 0 && pair instanceof AValue ? pair.withProvenance(provenance) : pair;
 }
 
@@ -286,6 +286,6 @@ function pairLength(pair: SchemeValue): number {
 }
 
 /** Type guard mirroring `is_promise`'s shape — used by force-on-unknown-boundary. */
-export function is_half_baked(o: unknown): o is HalfBaked {
-  return o instanceof HalfBaked;
+export function is_half_baked(o: unknown): o is AHalfBaked {
+  return o instanceof AHalfBaked;
 }

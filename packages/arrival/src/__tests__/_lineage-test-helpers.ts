@@ -21,13 +21,13 @@
 import { initBridge } from "../bridge.js";
 import { exec } from "../stdlib.js";
 import { inferenceEnv } from "../inference-env.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). */
-export const sStr = (s: string, p: number): SchemeString => new SchemeString(s, new Set([p]));
+export const sStr = (s: string, p: number): AString => new AString(s, new Set([p]));
 
 /** Stamp a single source-id onto a number input (the scalar arithmetic carrier). */
 export const sNum = (n: number, p: number): AValue => AValue.fromJs(n, new Set([p]));

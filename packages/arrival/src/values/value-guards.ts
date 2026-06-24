@@ -14,11 +14,11 @@
 // dependency graph stays acyclic. ESM resolves it because instanceof is
 // evaluated at call time, never at module-init.
 // ----------------------------------------------------------------------
-import { SchemeString } from "./primitives/SchemeString.js";
-import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { Pair } from "./primitives/Pair.js";
-import { Nil } from "./primitives/Nil.js";
-import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
+import { AString } from "./primitives/AString.js";
+import { AExact, AInexact } from "./numbers.js";
+import { APair } from "./primitives/APair.js";
+import { ANil } from "./primitives/ANil.js";
+import { ACharacter } from "./primitives/ACharacter.js";
 
 // ----------------------------------------------------------------------
 export function is_plain_object(object: unknown): object is Record<string, unknown> {
@@ -38,21 +38,21 @@ export function is_plain_object(object: unknown): object is Record<string, unkno
  * which provenance set it's carrying. Spec §5.3 + the doc comment over
  * `restrictControlFlowProvenance` explain the mechanism.
  */
-export function is_nil(value: unknown): value is Nil {
-  return value instanceof Nil;
+export function is_nil(value: unknown): value is ANil {
+  return value instanceof ANil;
 }
 
 // ----------------------------------------------------------------------
-export function is_pair(o: unknown): o is Pair {
-  return o instanceof Pair;
+export function is_pair(o: unknown): o is APair {
+  return o instanceof APair;
 }
 
 // ----------------------------------------------------------------------
-export const is_native = (obj: unknown): obj is SchemeString | SchemeCharacter | SchemeExact | SchemeInexact =>
-  obj instanceof SchemeString ||
-  obj instanceof SchemeCharacter ||
-  obj instanceof SchemeExact ||
-  obj instanceof SchemeInexact;
+export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | AInexact =>
+  obj instanceof AString ||
+  obj instanceof ACharacter ||
+  obj instanceof AExact ||
+  obj instanceof AInexact;
 
 // ----------------------------------------------------------------------
 // Pure structural predicates (no value-kernel deps at all). They live here

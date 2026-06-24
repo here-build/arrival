@@ -23,19 +23,19 @@
 import { CLASS } from "./well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
-import { SchemeBool } from "./values/primitives/SchemeBool.js";
-import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
-import { SchemeVector } from "./values/primitives/SchemeVector.js";
-import { LazySeq } from "./values/primitives/LazySeq.js";
+import { ABool } from "./values/primitives/ABool.js";
+import { ABytevector } from "./values/primitives/ABytevector.js";
+import { AVector } from "./values/primitives/AVector.js";
+import { ALazySeq } from "./values/primitives/ALazySeq.js";
 import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import type { ResolverSpec } from "./env/scheme-env.js";
 import { SchemePromise } from "./eval/evaluator.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
-import { SchemeString } from "./values/primitives/SchemeString.js";
-import { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
+import { AString } from "./values/primitives/AString.js";
+import { ASymbol } from "./values/primitives/ASymbol.js";
 import { Macro } from "./eval/Macro.js";
-import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./values/numbers.js";
-import { Pair } from "./values/primitives/Pair.js";
+import { AExact, AInexact, type ANumeric } from "./values/numbers.js";
+import { APair } from "./values/primitives/APair.js";
 import { LAMBDA } from "./well-known-symbols.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
@@ -54,8 +54,8 @@ import {
 } from "./interop-access.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
-import { Nil, nil } from "./values/primitives/Nil.js";
-import { SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
+import { ANil, nil } from "./values/primitives/ANil.js";
+import { ACharacter } from "./values/primitives/ACharacter.js";
 
 // Re-export the interop-access primitives for consumers.
 export {
@@ -101,27 +101,27 @@ export const TO_JS = Symbol.for("scheme.toJS");
  */
 export function isSchemeValue(value: unknown): boolean {
   switch (true) {
-    case value instanceof Nil:
+    case value instanceof ANil:
       return true;
     case value === null || value === undefined:
     case typeof value !== "object" && typeof value !== "function":
       return false;
 
     // Wrapper classes first
-    case value instanceof SchemeJSObject:
-    case value instanceof SchemeJSFunction:
+    case value instanceof AJSObject:
+    case value instanceof AJSFunction:
 
     // Native Scheme types
-    case value instanceof Pair:
-    case value instanceof SchemeSymbol:
-    case value instanceof SchemeString:
-    case value instanceof SchemeBytevector:
-    case value instanceof SchemeVector:
-    case value instanceof LazySeq:
-    case value instanceof SchemeCharacter:
-    case value instanceof SchemeExact:
-    case value instanceof SchemeInexact:
-    case value instanceof SchemeBool:
+    case value instanceof APair:
+    case value instanceof ASymbol:
+    case value instanceof AString:
+    case value instanceof ABytevector:
+    case value instanceof AVector:
+    case value instanceof ALazySeq:
+    case value instanceof ACharacter:
+    case value instanceof AExact:
+    case value instanceof AInexact:
+    case value instanceof ABool:
     case value instanceof QuotedPromise:
     case value instanceof SchemePromise:
     case value instanceof Macro:
@@ -192,7 +192,7 @@ const jsToWrapper = new WeakMap<object, SchemeValue>();
  * `importHelpers: true` triggers on TS6 `#`-private slots in this build.
  * GC-correct: cache entry disappears with the wrapper.
  */
-const entryCaches = new WeakMap<SchemeJSObject, Map<string, AValue>>();
+const entryCaches = new WeakMap<AJSObject, Map<string, AValue>>();
 
 /**
  * Thin wrapper for JS objects. Lazy property access — entries box on
@@ -211,7 +211,7 @@ const entryCaches = new WeakMap<SchemeJSObject, Map<string, AValue>>();
  * module-level cache: the same `.get("x")` twice returns the same AValue, so
  * `(eq? (@ obj :x) (@ obj :x))` holds.
  */
-export class SchemeJSObject extends AValue {
+export class AJSObject extends AValue {
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
@@ -231,11 +231,11 @@ export class SchemeJSObject extends AValue {
     return this.source as Record<string, unknown>;
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeJSObject {
+  withProvenance(p: ReadonlySet<number>): AJSObject {
     // New wrapper = new identity = empty cache. Provenance-variant entries
     // would otherwise leak between wrappers; cleaner to let each lineage
     // build its own cache the first time it's queried.
-    return new SchemeJSObject(this.source, p);
+    return new AJSObject(this.source, p);
   }
 
   /**
@@ -352,7 +352,7 @@ export class SchemeJSObject extends AValue {
   // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
   // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
   ["fantasy-land/equals"](other: unknown): boolean {
-    return other instanceof SchemeJSObject && this.source === other.source;
+    return other instanceof AJSObject && this.source === other.source;
   }
 
   toString(): string {
@@ -367,7 +367,7 @@ export class SchemeJSObject extends AValue {
 /**
  * Wrapper for JS functions. Handles boundary crossing on invocation.
  */
-export class SchemeJSFunction extends AValue {
+export class AJSFunction extends AValue {
   static [CLASS] = "js-function";
   readonly kind = "procedure" as const;
 
@@ -388,8 +388,8 @@ export class SchemeJSFunction extends AValue {
     throw new Error("SchemeJSFunction: not serializable");
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeJSFunction {
-    return new SchemeJSFunction(this.source, p);
+  withProvenance(p: ReadonlySet<number>): AJSFunction {
+    return new AJSFunction(this.source, p);
   }
 
   /** Invoke the wrapped function with Scheme values. */
@@ -409,7 +409,7 @@ export class SchemeJSFunction extends AValue {
   // (reference identity); functions have no structural equality. The abstract AValue
   // Setoid forces this; reference compare is faithful, minimal, and matches pre-B2 equal?.
   ["fantasy-land/equals"](other: unknown): boolean {
-    return other instanceof SchemeJSFunction && this.source === other.source;
+    return other instanceof AJSFunction && this.source === other.source;
   }
 
   toString(): string {
@@ -436,8 +436,8 @@ export class SchemeJSFunction extends AValue {
 // prototype chain stops here — only own sandbox-safe properties on the
 // wrapped value flow through.
 // ============================================================================
-markInteropBoundary(SchemeJSObject);
-markInteropBoundary(SchemeJSFunction);
+markInteropBoundary(AJSObject);
+markInteropBoundary(AJSFunction);
 
 /**
  * Convert a JavaScript value to a Scheme value.
@@ -478,9 +478,9 @@ export function fromJS(value: unknown): SchemeValue {
   // Create appropriate wrapper
   let wrapper: SchemeValue;
   if (typeof value === "function") {
-    wrapper = new SchemeJSFunction(value as (...args: unknown[]) => unknown);
+    wrapper = new AJSFunction(value as (...args: unknown[]) => unknown);
   } else {
-    wrapper = new SchemeJSObject(value as object);
+    wrapper = new AJSObject(value as object);
   }
 
   jsToWrapper.set(value as object, wrapper);
@@ -501,13 +501,13 @@ export function toJS(value: unknown): unknown {
   // `instanceof Nil`: see isSchemeValue above — provenance-bearing Nil clones must
   // also project to JS null at the boundary, otherwise they leak into the JS caller
   // as opaque Scheme objects.
-  if (value instanceof Nil) return null;
+  if (value instanceof ANil) return null;
 
   // Native Scheme types with valueOf
-  if (value instanceof SchemeString) return value.valueOf();
-  if (value instanceof SchemeCharacter) return value.valueOf();
-  if (value instanceof SchemeExact) return value.valueOf();
-  if (value instanceof SchemeInexact) return value.valueOf();
+  if (value instanceof AString) return value.valueOf();
+  if (value instanceof ACharacter) return value.valueOf();
+  if (value instanceof AExact) return value.valueOf();
+  if (value instanceof AInexact) return value.valueOf();
   if (value instanceof QuotedPromise) return value.valueOf();
 
   // SchemeSymbol stays as-is (JS can call .toString() if needed)
@@ -548,13 +548,13 @@ export interface Codec<S, J> {
 // ============================================================================
 
 /** Any Scheme number ↔ JS number/bigint */
-export const AnyNum: Codec<SchemeNumeric, number | bigint> = {
-  match(v): v is SchemeNumeric {
-    return v instanceof SchemeExact || v instanceof SchemeInexact;
+export const AnyNum: Codec<ANumeric, number | bigint> = {
+  match(v): v is ANumeric {
+    return v instanceof AExact || v instanceof AInexact;
   },
 
   toJS(v) {
-    if (v instanceof SchemeExact) {
+    if (v instanceof AExact) {
       if (v.isInteger && v.num >= BigInt(Number.MIN_SAFE_INTEGER) && v.num <= BigInt(Number.MAX_SAFE_INTEGER)) {
         return Number(v.num);
       }
@@ -566,63 +566,63 @@ export const AnyNum: Codec<SchemeNumeric, number | bigint> = {
 
   fromJS(v) {
     if (typeof v === "bigint") {
-      return new SchemeExact(v);
+      return new AExact(v);
     }
     if (Number.isSafeInteger(v)) {
-      return new SchemeExact(BigInt(v));
+      return new AExact(BigInt(v));
     }
-    return new SchemeInexact(v);
+    return new AInexact(v);
   },
 };
 
 /** Exact integers ↔ JS bigint */
-export const Int: Codec<SchemeExact, bigint> = {
-  match(v): v is SchemeExact {
-    return v instanceof SchemeExact && v.isInteger;
+export const Int: Codec<AExact, bigint> = {
+  match(v): v is AExact {
+    return v instanceof AExact && v.isInteger;
   },
   toJS: (v) => v.num,
-  fromJS: (v) => new SchemeExact(v),
+  fromJS: (v) => new AExact(v),
 };
 
 /** Safe integers ↔ JS number (for bitwise ops etc.) */
-export const SafeInt: Codec<SchemeExact, number> = {
-  match(v): v is SchemeExact {
+export const SafeInt: Codec<AExact, number> = {
+  match(v): v is AExact {
     return (
-      v instanceof SchemeExact &&
+      v instanceof AExact &&
       v.isInteger &&
       v.num >= BigInt(Number.MIN_SAFE_INTEGER) &&
       v.num <= BigInt(Number.MAX_SAFE_INTEGER)
     );
   },
   toJS: (v) => Number(v.num),
-  fromJS: (v) => new SchemeExact(BigInt(v)),
+  fromJS: (v) => new AExact(BigInt(v)),
 };
 
 /** Inexact reals ↔ JS number */
-export const Real: Codec<SchemeInexact, number> = {
-  match(v): v is SchemeInexact {
-    return v instanceof SchemeInexact && v.isReal;
+export const Real: Codec<AInexact, number> = {
+  match(v): v is AInexact {
+    return v instanceof AInexact && v.isReal;
   },
   toJS: (v) => v.real,
-  fromJS: (v) => new SchemeInexact(v),
+  fromJS: (v) => new AInexact(v),
 };
 
 /** Any number as JS number (lossy for bigints and rationals) */
-export const Num: Codec<SchemeNumeric, number> = {
-  match(v): v is SchemeNumeric {
-    return v instanceof SchemeExact || v instanceof SchemeInexact;
+export const Num: Codec<ANumeric, number> = {
+  match(v): v is ANumeric {
+    return v instanceof AExact || v instanceof AInexact;
   },
   toJS(v) {
-    if (v instanceof SchemeExact) {
+    if (v instanceof AExact) {
       return Number(v.num) / Number(v.denom);
     }
     return v.real;
   },
   fromJS(v) {
     if (Number.isSafeInteger(v)) {
-      return new SchemeExact(BigInt(v));
+      return new AExact(BigInt(v));
     }
-    return new SchemeInexact(v);
+    return new AInexact(v);
   },
 };
 
@@ -826,14 +826,14 @@ AValue.registerBoxer("object", (v, p) => {
   if (Array.isArray(v)) {
     let list: AValue = nil;
     for (let i = v.length - 1; i >= 0; i--) {
-      list = new Pair(AValue.fromJs(v[i]), list) as unknown as AValue;
+      list = new APair(AValue.fromJs(v[i]), list) as unknown as AValue;
     }
     return p === EMPTY_PROVENANCE ? list : list.withProvenance(p);
   }
-  return new SchemeJSObject(v as object, p);
+  return new AJSObject(v as object, p);
 });
 
-AValue.registerBoxer("function", (v, p) => new SchemeJSFunction(v as (...args: unknown[]) => unknown, p));
+AValue.registerBoxer("function", (v, p) => new AJSFunction(v as (...args: unknown[]) => unknown, p));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).
@@ -863,12 +863,12 @@ AValue.registerBoxer("function", (v, p) => new SchemeJSFunction(v as (...args: u
 export function readMember(obj: unknown, key: unknown): SchemeValue {
   if (obj == null) return nil;
   const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
-  if (rawKey == null || rawKey instanceof Nil) return nil;
+  if (rawKey == null || rawKey instanceof ANil) return nil;
   // keyword-style member: a leading `:` is the accessor sigil, not part of the name.
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
   // membrane-exposed foreign value (lazy proxy) → provenance-cached read.
-  if (obj instanceof SchemeJSObject) return obj.get(keyStr);
+  if (obj instanceof AJSObject) return obj.get(keyStr);
   try {
     const source = obj instanceof SchemeJSArray ? obj.source : obj;
     // Only a native dict (a plain record) or an array exposes members. A scheme
@@ -895,17 +895,17 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
 export function hasMember(obj: unknown, key: unknown): boolean {
   if (obj == null) return false;
   const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
-  if (rawKey == null || rawKey instanceof Nil) return false;
+  if (rawKey == null || rawKey instanceof ANil) return false;
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
-  const source = obj instanceof SchemeJSObject ? obj.source : obj;
+  const source = obj instanceof AJSObject ? obj.source : obj;
   return accessHas(source, keyStr);
 }
 
 /** `memberKeys(obj)` — the polyglot value's own member names. */
 export function memberKeys(obj: unknown): string[] {
   if (obj == null) return [];
-  const source = obj instanceof SchemeJSObject ? obj.source : obj;
+  const source = obj instanceof AJSObject ? obj.source : obj;
   return accessKeys(source);
 }
 

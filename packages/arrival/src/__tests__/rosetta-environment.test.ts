@@ -99,7 +99,7 @@ describe("Rosetta Environment", () => {
       console.log("JS array:", jsArray);
       console.log("LIPS list:", lipsList);
 
-      expect(lipsList.constructor.name).toBe("Pair");
+      expect(lipsList.constructor.name).toBe("APair");
 
       // Convert back to verify
       const backToJs = schemeToJs(lipsList, {});
@@ -113,7 +113,7 @@ describe("Rosetta Environment", () => {
       console.log("Empty JS array:", emptyArray);
       console.log("LIPS nil:", lipsList);
 
-      expect(lipsList.constructor.name).toBe("Nil");
+      expect(lipsList.constructor.name).toBe("ANil");
     });
 
     it("should convert nested JS arrays", () => {
@@ -141,10 +141,10 @@ describe("Rosetta Environment", () => {
       // Option C (2026-05-28): plain JS objects now wrap as SchemeJSObject —
       // entries box lazily through `.get(key)` carrying the wrapper's
       // provenance. Round-trip via `schemeToJs` reads `.source` and unwraps.
-      expect(lipsObject.constructor.name).toBe("SchemeJSObject");
+      expect(lipsObject.constructor.name).toBe("AJSObject");
       expect(lipsObject.get("name").valueOf()).toBe("test");
       expect(lipsObject.get("value").valueOf()).toBe(42);
-      expect(lipsObject.get("items").constructor.name).toBe("Pair"); // Array became LIPS list
+      expect(lipsObject.get("items").constructor.name).toBe("APair"); // Array became LIPS list
 
       // Convert back to verify
       const backToJs = schemeToJs(lipsObject, {});
@@ -168,7 +168,7 @@ describe("Rosetta Environment", () => {
       console.log("Rosetta result:", result);
 
       // Result should be LIPS list with doubled values
-      expect(result.constructor.name).toBe("Pair");
+      expect(result.constructor.name).toBe("APair");
       const jsResult = schemeToJs(result, {});
       expect(jsResult).toEqual([2, 4, 6, 8]);
     });

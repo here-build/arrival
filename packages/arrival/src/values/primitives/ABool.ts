@@ -8,7 +8,7 @@ import { markInteropBoundary } from "../../interop-access.js";
  * schemeFalse singletons on the empty-provenance fast path are the flyweight
  * pattern.
  */
-export class SchemeBool extends AValue {
+export class ABool extends AValue {
   static [CLASS] = "boolean";
   readonly kind = "bool" as const;
 
@@ -28,8 +28,8 @@ export class SchemeBool extends AValue {
   toJs(): boolean {
     return this.value;
   }
-  withProvenance(p: ReadonlySet<number>): SchemeBool {
-    return new SchemeBool(this.value, p);
+  withProvenance(p: ReadonlySet<number>): ABool {
+    return new ABool(this.value, p);
   }
 
   // Fantasy Land Setoid: REPRESENTATION-BLIND — a boxed SchemeBool equals another SchemeBool of the
@@ -37,16 +37,16 @@ export class SchemeBool extends AValue {
   // is the truth value alone; the chain plane boxes inconsistently, so equal? meets boxed vs plain.
   // `this.value === other` matches a plain-boolean `other` and rejects non-booleans (1, "true").
   ["fantasy-land/equals"](other: unknown): boolean {
-    return this.value === (other instanceof SchemeBool ? other.value : other);
+    return this.value === (other instanceof ABool ? other.value : other);
   }
 }
 
-export const schemeTrue = new SchemeBool(true);
-export const schemeFalse = new SchemeBool(false);
+export const schemeTrue = new ABool(true);
+export const schemeFalse = new ABool(false);
 
 // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
 AValue.registerBoxer("boolean", (v, p) =>
-  p === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new SchemeBool(v as boolean, p),
+  p === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(v as boolean, p),
 );
 
 // ============================================================================
@@ -58,4 +58,4 @@ AValue.registerBoxer("boolean", (v, p) =>
 // SchemeBool.prototype reaches every Boolean-valued response from the
 // inference plane. Mark now so the surface stays empty by default.
 // ============================================================================
-markInteropBoundary(SchemeBool);
+markInteropBoundary(ABool);

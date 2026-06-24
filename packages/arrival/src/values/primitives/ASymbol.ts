@@ -18,7 +18,7 @@ type SchemeSymbolName = string | symbol;
  */
 const UNINTERNED = Symbol("UNINTERNED");
 
-export class SchemeSymbol extends AValue {
+export class ASymbol extends AValue {
   static [CLASS] = "symbol";
   readonly kind = "symbol" as const;
   // Interning table for string-named symbols.
@@ -26,7 +26,7 @@ export class SchemeSymbol extends AValue {
   // so `(string->symbol "__proto__")` — string->symbol is inference-exposed —
   // would assign through the inherited setter and pollute Object.prototype.
   // A null-prototype map has no inherited keys/setters to walk into.
-  static readonly list: Record<string, SchemeSymbol> = Object.create(null);
+  static readonly list: Record<string, ASymbol> = Object.create(null);
   // Note: gensyms store their literal name at this[SchemeSymbol.literal]
   // We can't declare the index signature with esbuild
   // Special symbol markers
@@ -43,21 +43,21 @@ export class SchemeSymbol extends AValue {
     // Unwrap SchemeStringLike to plain string
     const unwrapped: SchemeSymbolName = isSchemeString(name) ? name.valueOf() : name;
 
-    if (intern !== UNINTERNED && typeof unwrapped === "string" && SchemeSymbol.list[unwrapped] instanceof SchemeSymbol) {
-      return SchemeSymbol.list[unwrapped];
+    if (intern !== UNINTERNED && typeof unwrapped === "string" && ASymbol.list[unwrapped] instanceof ASymbol) {
+      return ASymbol.list[unwrapped];
     }
 
     this.__name__ = unwrapped;
 
     if (intern !== UNINTERNED && typeof unwrapped === "string") {
-      SchemeSymbol.list[unwrapped] = this;
+      ASymbol.list[unwrapped] = this;
     }
   }
 
-  static is(symbol: unknown, name: string | SchemeSymbol | RegExp): boolean {
+  static is(symbol: unknown, name: string | ASymbol | RegExp): boolean {
     return (
-      symbol instanceof SchemeSymbol &&
-      ((name instanceof SchemeSymbol && symbol.__name__ === name.__name__) ||
+      symbol instanceof ASymbol &&
+      ((name instanceof ASymbol && symbol.__name__ === name.__name__) ||
         (typeof name === "string" && symbol.__name__ === name) ||
         (name instanceof RegExp && typeof symbol.__name__ === "string" && name.test(symbol.__name__)))
     );
@@ -77,7 +77,7 @@ export class SchemeSymbol extends AValue {
 
   literal(): string {
     if (this.is_gensym()) {
-      return (this as unknown as Record<symbol, string>)[SchemeSymbol.literal];
+      return (this as unknown as Record<symbol, string>)[ASymbol.literal];
     }
     // Non-gensyms always have string names
     return this.__name__ as string;
@@ -101,7 +101,7 @@ export class SchemeSymbol extends AValue {
   // Mirrors `SchemeSymbol.is` (which compares `__name__`), preserving
   // structuralEqual / equal? behavior. (algebras-in-entities migration.)
   ["fantasy-land/equals"](other: unknown): boolean {
-    return other instanceof SchemeSymbol && this.__name__ === other.__name__;
+    return other instanceof ASymbol && this.__name__ === other.__name__;
   }
 
   // Ord (Fantasy Land, extends Setoid). Lexicographic over STRING names.
@@ -109,7 +109,7 @@ export class SchemeSymbol extends AValue {
   // back to `String(...)` gives a STABLE total order within a run (Symbol
   // toString is stable), so totality/antisymmetry/transitivity still hold.
   ["fantasy-land/lte"](other: unknown): boolean {
-    return other instanceof SchemeSymbol && String(this.__name__) <= String(other.__name__);
+    return other instanceof ASymbol && String(this.__name__) <= String(other.__name__);
   }
 
   is_gensym(): boolean {
@@ -122,8 +122,8 @@ export class SchemeSymbol extends AValue {
   }
 
   /** See UNINTERNED sentinel doc. */
-  withProvenance(p: ReadonlySet<number>): SchemeSymbol {
-    return new SchemeSymbol(this.__name__, p, UNINTERNED);
+  withProvenance(p: ReadonlySet<number>): ASymbol {
+    return new ASymbol(this.__name__, p, UNINTERNED);
   }
 }
 
@@ -156,4 +156,4 @@ function is_gensym(symbol: unknown): boolean {
 // access via `(.AValue.list)` is already blocked separately by the AValue
 // non-export policy (see registry-poisoning tests in sandbox-escape.test.ts).
 // ============================================================================
-markInteropBoundary(SchemeSymbol);
+markInteropBoundary(ASymbol);

@@ -13,13 +13,13 @@ import { collapseProvenance } from "../provenance-collapse";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { AString } from "../values/primitives/AString.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { APair } from "../values/primitives/APair.js";
 import { SchemeJSArray } from "../membrane";
-import { nil } from "../values/primitives/Nil";
+import { nil } from "../values/primitives/ANil";
 
-const stamped = (s: string, ...points: number[]) => new SchemeString(s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 
 describe("collapseProvenance — sound over every structured carrier", () => {
@@ -28,12 +28,12 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("deep-walks a Pair list spine", () => {
-    const list = new Pair(stamped("a", 1), new Pair(stamped("b", 2), nil));
+    const list = new APair(stamped("a", 1), new APair(stamped("b", 2), nil));
     expect(sorted(collapseProvenance(list))).toEqual([1, 2]);
   });
 
   it("deep-walks a SchemeVector's elements (the gap a flat union missed)", () => {
-    const vec = new SchemeVector([stamped("a", 1), stamped("b", 2)]);
+    const vec = new AVector([stamped("a", 1), stamped("b", 2)]);
     expect(sorted(collapseProvenance(vec))).toEqual([1, 2]);
   });
 
@@ -47,7 +47,7 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("unions across multiple args and nested structures", () => {
-    const nested = new Pair(stamped("a", 1), new Pair(new SchemeVector([stamped("b", 2)]), nil));
+    const nested = new APair(stamped("a", 1), new APair(new AVector([stamped("b", 2)]), nil));
     expect(sorted(collapseProvenance(stamped("sep", 9), nested))).toEqual([1, 2, 9]);
   });
 
@@ -66,8 +66,8 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
     const [r] = await exec(`(join "," (list a b))`, { env });
-    expect(r).toBeInstanceOf(SchemeString);
-    expect(sorted((r as SchemeString).provenance as Set<number>)).toEqual([1, 2]);
+    expect(r).toBeInstanceOf(AString);
+    expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);
   });
 
   it("string-append over a nested collapse keeps every point", async () => {
@@ -76,7 +76,7 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
     const [r] = await exec(`(string-append "x:" (join "," (list a b)))`, { env });
-    expect(r).toBeInstanceOf(SchemeString);
-    expect(sorted((r as SchemeString).provenance as Set<number>)).toEqual([1, 2]);
+    expect(r).toBeInstanceOf(AString);
+    expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);
   });
 });

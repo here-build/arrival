@@ -23,8 +23,8 @@ import "../errors.js";
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AString } from "../values/primitives/AString.js";
 import {
   asBytevector,
   stringValue,
@@ -46,7 +46,7 @@ export default new EnvCapability("scheme/bytevectors", {
         // differ: a raw JS array is an R7RS list, not a vector, so vector? is
         // instanceof-only — see the boxing plan's (a)/(b) disambiguation.)
         return (
-          obj instanceof SchemeBytevector ||
+          obj instanceof ABytevector ||
           obj instanceof Uint8Array ||
           obj instanceof ArrayBuffer ||
           obj instanceof DataView ||
@@ -57,23 +57,23 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "make-bytevector": symbol.native`make-bytevector: a bytevector of length k filled with byte`(
       { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.sbytevector] },
-      (k: unknown, byte?: unknown): SchemeBytevector => {
+      (k: unknown, byte?: unknown): ABytevector => {
         const arr = new Uint8Array(toIndex(k));
         if (byte !== undefined) {
           arr.fill(toIndex(byte));
         }
-        return withInputProvenance([byte], new SchemeBytevector(arr));
+        return withInputProvenance([byte], new ABytevector(arr));
       },
     ),
 
     bytevector: symbol.native`bytevector: a bytevector built from the byte arguments`(
       { input: z.array(z.unknown()), output: [z.sbytevector] },
-      (...bytes: unknown[]): SchemeBytevector => {
+      (...bytes: unknown[]): ABytevector => {
         const result = new Uint8Array(bytes.length);
         for (const [i, b] of bytes.entries()) {
           result[i] = toIndex(b);
         }
-        return withInputProvenance(bytes, new SchemeBytevector(result));
+        return withInputProvenance(bytes, new ABytevector(result));
       },
     ),
 
@@ -98,17 +98,17 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
       { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
-      (bv: unknown, start?: unknown, end?: unknown): SchemeBytevector => {
+      (bv: unknown, start?: unknown, end?: unknown): ABytevector => {
         const view = asBytevector(bv, "bytevector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
-        return withInputProvenance([bv], new SchemeBytevector(view.slice(s, e)));
+        return withInputProvenance([bv], new ABytevector(view.slice(s, e)));
       },
     ),
 
     "bytevector-append": symbol.native`bytevector-append: concatenation of all bytevector arguments`(
       { input: z.array(z.unknown()), output: [z.sbytevector] },
-      (...bvs: unknown[]): SchemeBytevector => {
+      (...bvs: unknown[]): ABytevector => {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));
         const totalLen = views.reduce((sum, v) => sum + v.byteLength, 0);
         const result = new Uint8Array(totalLen);
@@ -117,27 +117,27 @@ export default new EnvCapability("scheme/bytevectors", {
           result.set(view, offset);
           offset += view.byteLength;
         }
-        return withInputProvenance(bvs, new SchemeBytevector(result));
+        return withInputProvenance(bvs, new ABytevector(result));
       },
     ),
 
     "utf8->string": symbol.native`utf8->string: decode a bytevector slice as UTF-8`(
       { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.schemeString] },
-      (bv: unknown, start?: unknown, end?: unknown): SchemeString => {
+      (bv: unknown, start?: unknown, end?: unknown): AString => {
         const view = asBytevector(bv, "utf8->string");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
-        return withInputProvenance([bv], new SchemeString(new TextDecoder("utf-8").decode(view.subarray(s, e))));
+        return withInputProvenance([bv], new AString(new TextDecoder("utf-8").decode(view.subarray(s, e))));
       },
     ),
 
     "string->utf8": symbol.native`string->utf8: encode a string slice as UTF-8 bytes`(
       { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
-      (str: unknown, start?: unknown, end?: unknown): SchemeBytevector => {
+      (str: unknown, start?: unknown, end?: unknown): ABytevector => {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? s_str.length : toIndex(end);
-        return withInputProvenance([str], new SchemeBytevector(new TextEncoder().encode(s_str.slice(s, e))));
+        return withInputProvenance([str], new ABytevector(new TextEncoder().encode(s_str.slice(s, e))));
       },
     ),
   },

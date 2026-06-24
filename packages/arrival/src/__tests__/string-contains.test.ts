@@ -15,11 +15,11 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeExact } from "../values/numbers";
+import { AString } from "../values/primitives/AString.js";
+import { AExact } from "../values/numbers";
 import { AValue } from "../values/primitives/AValue.js";
 
-const stamped = (s: string, ...points: number[]) => new SchemeString(s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // Literal-string args carry no provenance, so the result comes back raw (a JS boolean
 // or a bare SchemeExact); a provenanced input boxes it. Unwrap either shape.
@@ -50,7 +50,7 @@ describe("string-contains — SRFI-13 index-or-#f", () => {
     await initBridge();
     const env = inferenceEnv.inherit("string-contains-idx");
     const [r] = await exec('(string-contains "abcAlloy" "Alloy")', { env });
-    expect(r).toBeInstanceOf(SchemeExact);
+    expect(r).toBeInstanceOf(AExact);
     expect(js(r)).toBe(3);
   });
 

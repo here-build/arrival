@@ -14,7 +14,7 @@
 // changes.
 import { describe, expect, it } from "vitest";
 import { EOF } from "../values/primitives/EOF.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { Parser } from "../reader/Parser.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -86,8 +86,8 @@ describe("Parser — vectors & strings", () => {
     const [vec] = await readAll("#(1 2 3)");
     // Vectors are boxed into SchemeVector (boxing track): the raw element array
     // is the .__vector__ payload, not the value itself.
-    expect(vec).toBeInstanceOf(SchemeVector);
-    expect((vec as SchemeVector).__vector__.map((x) => String(x))).toEqual(["1", "2", "3"]);
+    expect(vec).toBeInstanceOf(AVector);
+    expect((vec as AVector).__vector__.map((x) => String(x))).toEqual(["1", "2", "3"]);
   });
 
   it("reads a string literal (content, unquoted)", async () => {

@@ -1,10 +1,10 @@
 import { is_undef } from "../eval/guards.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { nil } from "../values/primitives/Nil.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
+import { nil } from "../values/primitives/ANil.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 
 export function parseBigInt(str: string, radix: number = 10): bigint {
   str = str.trim();
@@ -26,17 +26,17 @@ export function parseBigInt(str: string, radix: number = 10): bigint {
 // SchemeString/SchemeCharacter are reached through getters so the live binding is read lazily —
 // referencing them eagerly here would form a module-init cycle with the types modules.
 const serialization_map = {
-  pair: ([car, cdr]) => new Pair(car, cdr),
+  pair: ([car, cdr]) => new APair(car, cdr),
   number(value) {
-    if (SchemeString.isString(value)) {
-      return new SchemeExact(parseBigInt(value.valueOf(), 10));
+    if (AString.isString(value)) {
+      return new AExact(parseBigInt(value.valueOf(), 10));
     }
     if (typeof value === "bigint") {
-      return new SchemeExact(value);
+      return new AExact(value);
     }
     if (typeof value === "number") {
       // Safe-integer JS numbers round-trip exactly as bigint; anything else stays inexact float.
-      return Number.isSafeInteger(value) ? new SchemeExact(BigInt(value)) : new SchemeInexact(value);
+      return Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
     }
     return value; // already a wrapped number
   },
@@ -47,17 +47,17 @@ const serialization_map = {
     return nil;
   },
   symbol(value) {
-    if (SchemeString.isString(value)) {
-      return new SchemeSymbol(value);
+    if (AString.isString(value)) {
+      return new ASymbol(value);
     } else if (Array.isArray(value)) {
-      return new SchemeSymbol(Symbol.for(value[0]));
+      return new ASymbol(Symbol.for(value[0]));
     }
   },
   get string() {
-    return SchemeString;
+    return AString;
   },
   get character() {
-    return SchemeCharacter;
+    return ACharacter;
   },
 };
 // Serialized tags are the class's INDEX into this array, not its name — a small-integer `@` keeps the

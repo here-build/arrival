@@ -32,12 +32,12 @@ export type BytevectorSource =
   | Uint8Array
   | ArrayBuffer
   | DataView
-  | SchemeBytevector
+  | ABytevector
   | readonly number[];
 
 function toUint8(source: BytevectorSource): Uint8Array {
   switch (true) {
-    case source instanceof SchemeBytevector:
+    case source instanceof ABytevector:
       return source.__bytevector__;
     case source instanceof Uint8Array:
       return source;
@@ -54,7 +54,7 @@ function toUint8(source: BytevectorSource): Uint8Array {
   }
 }
 
-export class SchemeBytevector extends AValue {
+export class ABytevector extends AValue {
   static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 
@@ -76,8 +76,8 @@ export class SchemeBytevector extends AValue {
     this.frozen = true;
   }
 
-  static isBytevector(x: unknown): x is SchemeBytevector {
-    return x instanceof SchemeBytevector;
+  static isBytevector(x: unknown): x is ABytevector {
+    return x instanceof ABytevector;
   }
 
   get length(): number {
@@ -92,8 +92,8 @@ export class SchemeBytevector extends AValue {
     this.__bytevector__[i] = byte;
   }
 
-  copy(start = 0, end = this.__bytevector__.byteLength): SchemeBytevector {
-    return new SchemeBytevector(this.__bytevector__.slice(start, end));
+  copy(start = 0, end = this.__bytevector__.byteLength): ABytevector {
+    return new ABytevector(this.__bytevector__.slice(start, end));
   }
 
   // Membrane unwrap (membrane.ts toJS, TO_JS protocol): a boxed bytevector
@@ -110,8 +110,8 @@ export class SchemeBytevector extends AValue {
     return this.__bytevector__;
   }
 
-  withProvenance(p: ReadonlySet<number>): SchemeBytevector {
-    const bv = new SchemeBytevector(this.__bytevector__, p);
+  withProvenance(p: ReadonlySet<number>): ABytevector {
+    const bv = new ABytevector(this.__bytevector__, p);
     if (this.frozen) bv.freeze();
     return bv;
   }
@@ -120,7 +120,7 @@ export class SchemeBytevector extends AValue {
   // fantasy-land/equals first, so (equal? (bytevector 1 2) (bytevector 1 2)) → #t.
   // Non-SchemeBytevector → false.
   ["fantasy-land/equals"](other: unknown): boolean {
-    if (!(other instanceof SchemeBytevector)) return false;
+    if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     if (a.length !== b.length) return false;
@@ -134,7 +134,7 @@ export class SchemeBytevector extends AValue {
   // A proper prefix is ≤ its extension; antisymmetry holds against the Setoid
   // above (equal iff same bytes AND same length). Non-SchemeBytevector → false.
   ["fantasy-land/lte"](other: unknown): boolean {
-    if (!(other instanceof SchemeBytevector)) return false;
+    if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     const n = Math.min(a.length, b.length);
@@ -154,13 +154,13 @@ export class SchemeBytevector extends AValue {
 
   // Semigroup (Fantasy Land) — byte concatenation. Associative; equality via the
   // Setoid above.
-  ["fantasy-land/concat"](other: SchemeBytevector): SchemeBytevector {
+  ["fantasy-land/concat"](other: ABytevector): ABytevector {
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     const result = new Uint8Array(a.length + b.length);
     result.set(a, 0);
     result.set(b, a.length);
-    return new SchemeBytevector(result);
+    return new ABytevector(result);
   }
 }
 
@@ -174,4 +174,4 @@ export class SchemeBytevector extends AValue {
 // Same rationale as SchemeString (SchemeString.ts): block inherited-method exposure
 // when interop symbol-to-field resolution walks the prototype chain. Own
 // properties (the algebra methods) remain the intended API.
-markInteropBoundary(SchemeBytevector);
+markInteropBoundary(ABytevector);

@@ -4,7 +4,7 @@
  * this table — and its `on`/`off`/`trigger` events — to recognize special syntax
  * at read time, before the evaluator ever sees a form. Derived from upstream LIPS.
  */
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 
 /** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
 export const LITERAL = Symbol.for("literal");
@@ -64,13 +64,13 @@ export let __events__: Record<string, Function[]> = {};
 export const __list__ = {};
 
 const defined_specials = [
-  ["'", new SchemeSymbol("quote"), LITERAL],
-  ["`", new SchemeSymbol("quasiquote"), LITERAL],
-  [",@", new SchemeSymbol("unquote-splicing"), LITERAL],
-  [",", new SchemeSymbol("unquote"), LITERAL],
-  ["'>", new SchemeSymbol("quote-promise"), LITERAL],
-  ["#(", new SchemeSymbol("vector"), LITERAL],
-  ["#u8(", new SchemeSymbol("bytevector"), LITERAL],
+  ["'", new ASymbol("quote"), LITERAL],
+  ["`", new ASymbol("quasiquote"), LITERAL],
+  [",@", new ASymbol("unquote-splicing"), LITERAL],
+  [",", new ASymbol("unquote"), LITERAL],
+  ["'>", new ASymbol("quote-promise"), LITERAL],
+  ["#(", new ASymbol("vector"), LITERAL],
+  ["#u8(", new ASymbol("bytevector"), LITERAL],
 ];
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));

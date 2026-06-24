@@ -32,11 +32,11 @@ import {
   withInputProvenance,
 } from "../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../provenance-collapse.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeExact } from "../values/numbers.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { nil } from "../values/primitives/Nil.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { AString } from "../values/primitives/AString.js";
+import { AExact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
+import { nil } from "../values/primitives/ANil.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import { is_promise } from "../eval/guards.js";
 import { promise_all } from "../utils/promises.js";
 import { EnvCapability } from "./capability.js";
@@ -45,7 +45,7 @@ export default new EnvCapability("scheme/strings", {
   symbols: {
     "make-string": symbol.native`make-string: a string of k copies of a fill character`(
       { input: [z.schemeNumber, z.schemeChar.optional()], output: [z.schemeString] },
-      (k: unknown, char?: unknown): SchemeString => {
+      (k: unknown, char?: unknown): AString => {
         const len = Number(coerceNumeric(k).valueOf());
         // O(1) cap check BEFORE `.repeat(len)` allocates — see assertAllocatable.
         assertAllocatable(len, "make-string");
@@ -53,30 +53,30 @@ export default new EnvCapability("scheme/strings", {
         // Both the length and (when present) the filling char contribute lineage —
         // `(make-string n user-char)` should remember user-char as a source even
         // though the length is what dictates the result's size.
-        return withInputProvenance(char === undefined ? [k] : [k, char], new SchemeString(c.repeat(len)));
+        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(c.repeat(len)));
       },
     ),
 
     string: symbol.native`string: a string built from the character arguments`(
       { input: z.array(z.unknown()), output: [z.schemeString] },
-      (...chars: unknown[]): SchemeString => {
+      (...chars: unknown[]): AString => {
         // Union of every character argument — same shape as `vector` below.
-        return withInputProvenance(chars, new SchemeString(chars.map(charValue).join("")));
+        return withInputProvenance(chars, new AString(chars.map(charValue).join("")));
       },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.schemeString], output: [z.schemeExact] },
-      (str: unknown): SchemeExact => {
-        return withInputProvenance([str], new SchemeExact(BigInt([...stringValue(str)].length)));
+      (str: unknown): AExact => {
+        return withInputProvenance([str], new AExact(BigInt([...stringValue(str)].length)));
       },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.schemeString, z.schemeNumber], output: [z.schemeChar] },
-      (str: unknown, k: unknown): SchemeCharacter => {
+      (str: unknown, k: unknown): ACharacter => {
         const idx = Number(coerceNumeric(k).valueOf());
-        return withInputProvenance([str, k], new SchemeCharacter([...stringValue(str)][idx]));
+        return withInputProvenance([str, k], new ACharacter([...stringValue(str)][idx]));
       },
     ),
 
@@ -192,9 +192,9 @@ export default new EnvCapability("scheme/strings", {
     // "this name contains 'Alloy'" decision over an evidence read stays grounded.
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f`(
       { input: [z.schemeString, z.schemeString], output: [z.union([z.schemeExact, z.boolean])] },
-      (str: unknown, sub: unknown): SchemeExact | boolean => {
+      (str: unknown, sub: unknown): AExact | boolean => {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i < 0 ? false : new SchemeExact(BigInt(i)));
+        return withInputProvenance([str, sub], i < 0 ? false : new AExact(BigInt(i)));
       },
     ),
 
@@ -207,7 +207,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
       { input: z.array(z.unknown()), output: [z.union([z.string, z.schemeString])] },
-      (...strs: unknown[]): string | SchemeString => {
+      (...strs: unknown[]): string | AString => {
         // Collapsing op: the result inherits lineage from every input — and DEEP, so a
         // nested structure (a list/vector/array of inference-stamped values) is hoisted,
         // not just the top-level AValue args. Without this, `(string-append prefix
@@ -223,33 +223,33 @@ export default new EnvCapability("scheme/strings", {
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
         let result: unknown = nil;
-        for (let i = endIdx - 1; i >= startIdx; i--) result = new Pair(new SchemeCharacter(chars[i]), result);
+        for (let i = endIdx - 1; i >= startIdx; i--) result = new APair(new ACharacter(chars[i]), result);
         return result;
       },
     ),
 
     "list->string": symbol.native`list->string: string built from a list of characters`(
       { input: [z.unknown()], output: [z.schemeString] },
-      (list: unknown): SchemeString => {
+      (list: unknown): AString => {
         const chars: string[] = [];
         let current = list;
-        while (current && current !== nil && current instanceof Pair) {
+        while (current && current !== nil && current instanceof APair) {
           chars.push(charValue(current.car));
           current = current.cdr;
         }
-        return new SchemeString(chars.join(""));
+        return new AString(chars.join(""));
       },
     ),
 
     "string-copy": symbol.native`string-copy: a fresh copy of the string (or slice)`(
       { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.schemeString] },
-      (str: unknown, start?: unknown, end?: unknown): SchemeString => {
+      (str: unknown, start?: unknown, end?: unknown): AString => {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
         // The copy is a fresh allocation but semantically the same lineage as `str`
         // (start/end indices don't carry meaning here, they shape the slice).
-        return withInputProvenance([str], new SchemeString(chars.slice(startIdx, endIdx).join("")));
+        return withInputProvenance([str], new AString(chars.slice(startIdx, endIdx).join("")));
       },
     ),
 
@@ -261,22 +261,22 @@ export default new EnvCapability("scheme/strings", {
     // result still traces to the original infer/query call.
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
-      (str: unknown): SchemeString => {
-        return withInputProvenance([str], new SchemeString(stringValue(str).toUpperCase()));
+      (str: unknown): AString => {
+        return withInputProvenance([str], new AString(stringValue(str).toUpperCase()));
       },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
-      (str: unknown): SchemeString => {
-        return withInputProvenance([str], new SchemeString(stringValue(str).toLowerCase()));
+      (str: unknown): AString => {
+        return withInputProvenance([str], new AString(stringValue(str).toLowerCase()));
       },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
-      (str: unknown): SchemeString => {
-        return withInputProvenance([str], new SchemeString(foldCase(stringValue(str))));
+      (str: unknown): AString => {
+        return withInputProvenance([str], new AString(foldCase(stringValue(str))));
       },
     ),
 
@@ -289,11 +289,11 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          results.push(proc(...strs.map((s) => new SchemeCharacter(s[i]))));
+          results.push(proc(...strs.map((s) => new ACharacter(s[i]))));
         }
         const join = (chars: unknown[]) =>
           chars
-            .map((c) => (c instanceof SchemeCharacter ? charValue(c) : typeof c === "string" ? c : String(c)))
+            .map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c)))
             .join("");
         // proc may be an async membrane callback → await before joining, so the result
         // is a real string, not "[object Promise][object Promise]…" (see vector-map).
@@ -313,7 +313,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = proc(...strs.map((s) => new SchemeCharacter(s[i])));
+          const ret = proc(...strs.map((s) => new ACharacter(s[i])));
           if (is_promise(ret)) pending.push(ret);
         }
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);

@@ -29,8 +29,8 @@ import {
   accessSet,
   isInteropBoundary,
 } from "../interop-access";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { exec as gexec } from "../eval/generator-exec";
 
@@ -123,13 +123,13 @@ describe("CRITICAL: sandbox escape vectors", () => {
   it("SchemeString is marked as a sandbox boundary", async () => {
     // Direct check, two ways the marker can be present:
     const protoMarked =
-      Object.prototype.hasOwnProperty.call(SchemeString.prototype, INTEROP_BOUNDARY) &&
-      (SchemeString.prototype as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
+      Object.prototype.hasOwnProperty.call(AString.prototype, INTEROP_BOUNDARY) &&
+      (AString.prototype as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
     const ctorMarked =
-      Object.prototype.hasOwnProperty.call(SchemeString, INTEROP_BOUNDARY) &&
-      (SchemeString as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
+      Object.prototype.hasOwnProperty.call(AString, INTEROP_BOUNDARY) &&
+      (AString as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
     expect(protoMarked || ctorMarked).toBe(true);
-    expect(isInteropBoundary(SchemeString.prototype)).toBe(true);
+    expect(isInteropBoundary(AString.prototype)).toBe(true);
   });
 });
 
@@ -308,13 +308,13 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * behavior pin.
    */
   it("DOCUMENTED: string->symbol of N distinct names creates N intern entries", async () => {
-    const before = Object.keys(SchemeSymbol.list).length;
+    const before = Object.keys(ASymbol.list).length;
     const N = 500;
     for (let i = 0; i < N; i++) {
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      new SchemeSymbol(`__test-intern-doc-${Date.now()}-${i}`);
+      new ASymbol(`__test-intern-doc-${Date.now()}-${i}`);
     }
-    const after = Object.keys(SchemeSymbol.list).length;
+    const after = Object.keys(ASymbol.list).length;
     // Current behavior: grows by N. When a bound exists, this should
     // become `expect(after - before).toBeLessThanOrEqual(BOUND)`.
     expect(after - before).toBe(N);
@@ -461,13 +461,13 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     // table as own keys — never reach Object.prototype.
     for (const name of ["__proto__", "constructor", "prototype"]) {
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      new SchemeSymbol(name);
+      new ASymbol(name);
     }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     // Object.prototype must remain a clean baseline (no foreign own keys added).
     expect(Object.prototype.hasOwnProperty.call(Object.prototype, "__proto__sentinel__")).toBe(false);
     // The intern table itself must have a null prototype (no inherited keys).
-    expect(Object.getPrototypeOf(SchemeSymbol.list)).toBeNull();
+    expect(Object.getPrototypeOf(ASymbol.list)).toBeNull();
   });
 
   it("sandboxedSet('__proto__', ...) is rejected as a blocked key", async () => {

@@ -35,29 +35,26 @@ export {
 // deletes the draft AValue there. Re-exports live here (not in AValue.ts) to
 // preserve the no-subtype-imports invariant — see the cycle note in AValue.ts.
 export {
-  SchemeBool as ABool,
-  SchemeBool,
+  ABool,
   schemeFalse as AFalse,
   schemeFalse,
   schemeTrue as ATrue,
   schemeTrue,
-} from "./values/primitives/SchemeBool.js";
-export { SchemeJSFunction as AProc, SchemeJSObject as AObject } from "./membrane.js";
-export { SchemeString as AString } from "./values/primitives/SchemeString.js";
-export { SchemeSymbol as ASymbol } from "./values/primitives/SchemeSymbol.js";
-export { Pair as APair } from "./values/primitives/Pair.js";
-export { Nil as ANil } from "./values/primitives/Nil.js";
-export { SchemeCharacter as AChar } from "./values/primitives/SchemeCharacter.js";
+} from "./values/primitives/ABool.js";
+export { AJSFunction as AProc, AJSObject as AObject } from "./membrane.js";
+// `AChar` is the legacy alias kept for cross-package consumers; `ACharacter` is
+// the canonical class name. Both spellings resolve to the same class.
+export { ACharacter, ACharacter as AChar } from "./values/primitives/ACharacter.js";
 
 // Canonical core-type re-exports. These used to ride the `export * from
 // "./stdlib.js"` barrel via a re-export block at the bottom of lips.ts; that
 // block was removed (barrel-ectomy) so these names are re-surfaced from their
 // real home modules to keep the public API identical.
-export { nil, Nil } from "./values/primitives/Nil.js";
-export { characters, SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
-export { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
-export { SchemeString } from "./values/primitives/SchemeString.js";
-export { Pair } from "./values/primitives/Pair.js";
+export { nil, ANil } from "./values/primitives/ANil.js";
+export { characters } from "./values/primitives/ACharacter.js";
+export { ASymbol } from "./values/primitives/ASymbol.js";
+export { AString } from "./values/primitives/AString.js";
+export { APair } from "./values/primitives/APair.js";
 
 // Scheme namespace - canonical API for Scheme types
 // Usage: import { Scheme } from 'arrival-scheme'
@@ -93,9 +90,9 @@ export {
 
 // Number system - SchemeExact (rationals) and SchemeInexact (floats/complex)
 export {
-  SchemeExact as SchemeExact,
-  SchemeInexact as SchemeInexact,
-  type SchemeNumeric as SchemeNumeric,
+  AExact,
+  AInexact,
+  type ANumeric,
   RosettaConfig as RosettaConfig,
   parseNumber as parseNumber,
 } from "./values/numbers.js";

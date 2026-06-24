@@ -21,12 +21,12 @@
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { AString } from "../values/primitives/AString.js";
 import { type SchemeValue } from "../values/types.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
-import type { SchemeExact } from "../values/numbers.js";
-import { Pair } from "../values/primitives/Pair.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
+import type { AExact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
 import { is_promise } from "../eval/guards.js";
 import { promise_all } from "../utils/promises.js";
 import invariant from "tiny-invariant";
@@ -45,8 +45,8 @@ export default new EnvCapability("scheme/vectors", {
   symbols: {
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
       { input: [z.schemeNumber, z.unknown().optional()], output: [z.svector] },
-      (k: unknown, fill?: unknown): SchemeVector => {
-        const len = Number(typeof k === "number" ? k : (k as SchemeExact).valueOf());
+      (k: unknown, fill?: unknown): AVector => {
+        const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
         // assertAllocatable. \`Array.from({length})\` on an oversized count is the
         // >10s hang the audit caught.
@@ -57,22 +57,22 @@ export default new EnvCapability("scheme/vectors", {
         }
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
-        return withInputProvenance([fill], new SchemeVector(arr));
+        return withInputProvenance([fill], new AVector(arr));
       },
     ),
 
     vector: symbol.native`vector: a vector of the given objects`(
       { input: z.array(z.unknown()), output: [z.svector] },
-      (...objs: unknown[]): SchemeVector => {
-        return withInputProvenance(objs, new SchemeVector([...objs] as SchemeValue[]));
+      (...objs: unknown[]): AVector => {
+        return withInputProvenance(objs, new AVector([...objs] as SchemeValue[]));
       },
     ),
 
     "vector-append": symbol.native`vector-append: concatenation of the given vectors`(
       { input: z.array(z.unknown()), output: [z.svector] },
-      (...vectors: unknown[]): SchemeVector => {
+      (...vectors: unknown[]): AVector => {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
-        return withInputProvenance(vectors, new SchemeVector(([] as SchemeValue[]).concat(...arrays)));
+        return withInputProvenance(vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
       },
     ),
 
@@ -84,7 +84,7 @@ export default new EnvCapability("scheme/vectors", {
         // polymorphic), a raw JS array is an R7RS *list* / FFI array at the membrane,
         // NOT a vector — so it correctly answers #f here. asVector still coerces a
         // raw array defensively for any value that bypasses producers.
-        return obj instanceof SchemeVector;
+        return obj instanceof AVector;
       },
     ),
 
@@ -99,7 +99,7 @@ export default new EnvCapability("scheme/vectors", {
       { input: [z.svector, z.schemeNumber], output: [z.unknown()] },
       (vec: unknown, k: unknown): unknown => {
         const arr = asVector(vec, "vector-ref");
-        const idx = typeof k === "number" ? k : (k as SchemeExact).valueOf();
+        const idx = typeof k === "number" ? k : (k as AExact).valueOf();
         return arr[idx as number];
       },
     ),
@@ -113,59 +113,59 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return Pair.fromArray(arr.slice(s, e));
+        return APair.fromArray(arr.slice(s, e));
       },
     ),
 
     "list->vector": symbol.native`list->vector: a vector of the list's elements`(
       { input: [z.union([z.pair, z.nil])], output: [z.svector] },
-      (list: unknown): SchemeVector => {
+      (list: unknown): AVector => {
         const result: SchemeValue[] = [];
         let current = list;
-        while (current instanceof Pair) {
+        while (current instanceof APair) {
           result.push(current.car);
           current = current.cdr;
         }
-        return withInputProvenance([list], new SchemeVector(result));
+        return withInputProvenance([list], new AVector(result));
       },
     ),
 
     "vector->string": symbol.native`vector->string: a string from vec's character elements in [start, end)`(
       { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.schemeString] },
-      (vec: unknown, start?: unknown, end?: unknown): SchemeString => {
+      (vec: unknown, start?: unknown, end?: unknown): AString => {
         const arr = asVector(vec, "vector->string");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
         let result = "";
         for (let i = s; i < e; i++) {
           const ch = arr[i];
-          result += ch instanceof SchemeCharacter ? charValue(ch) : String(ch);
+          result += ch instanceof ACharacter ? charValue(ch) : String(ch);
         }
-        return withInputProvenance([vec], new SchemeString(result));
+        return withInputProvenance([vec], new AString(result));
       },
     ),
 
     "string->vector": symbol.native`string->vector: a vector of str's characters in [start, end)`(
       { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.svector] },
-      (str: unknown, start?: unknown, end?: unknown): SchemeVector => {
+      (str: unknown, start?: unknown, end?: unknown): AVector => {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? s_str.length : toIndex(end);
         const result: SchemeValue[] = [];
         for (let i = s; i < e; i++) {
-          result.push(new SchemeCharacter(s_str[i]));
+          result.push(new ACharacter(s_str[i]));
         }
-        return withInputProvenance([str], new SchemeVector(result));
+        return withInputProvenance([str], new AVector(result));
       },
     ),
 
     "vector-copy": symbol.native`vector-copy: a fresh copy of vec over [start, end)`(
       { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.svector] },
-      (vec: unknown, start?: unknown, end?: unknown): SchemeVector => {
+      (vec: unknown, start?: unknown, end?: unknown): AVector => {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return withInputProvenance([vec], new SchemeVector(arr.slice(s, e)));
+        return withInputProvenance([vec], new AVector(arr.slice(s, e)));
       },
     ),
 
@@ -174,7 +174,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
       { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.unknown()), output: [z.svector] },
-      (proc: (...args: unknown[]) => SchemeValue, ...vectors: unknown[]): SchemeVector | Promise<SchemeVector> => {
+      (proc: (...args: unknown[]) => SchemeValue, ...vectors: unknown[]): AVector | Promise<AVector> => {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
@@ -189,10 +189,10 @@ export default new EnvCapability("scheme/vectors", {
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
         if (result.some(is_promise)) {
           return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
-            withInputProvenance(vectors, new SchemeVector(resolved)),
+            withInputProvenance(vectors, new AVector(resolved)),
           );
         }
-        return withInputProvenance(vectors, new SchemeVector(result));
+        return withInputProvenance(vectors, new AVector(result));
       },
     ),
 

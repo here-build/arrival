@@ -1,8 +1,8 @@
 import { Environment } from "../Environment.js";
 import { LambdaContext } from "./LambdaContext.js";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { ABool } from "../values/primitives/ABool.js";
 import { Macro } from "./Macro.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { AExact, AInexact } from "../values/numbers.js";
 import { Syntax } from "./Syntax.js";
 import {
   char_re,
@@ -16,7 +16,7 @@ import {
 import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { CLASS, LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
-import { nil } from "../values/primitives/Nil.js";
+import { nil } from "../values/primitives/ANil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
@@ -98,12 +98,12 @@ export function is_directive(token: unknown): boolean {
 }
 
 // ----------------------------------------------------------------------------
-export function is_false(o: unknown): o is false | null | SchemeBool {
+export function is_false(o: unknown): o is false | null | ABool {
   switch (true) {
     case o === false:
     case o === null:
       return true;
-    case o instanceof SchemeBool:
+    case o instanceof ABool:
       return o.value === false;
     default:
       return false;
@@ -178,18 +178,18 @@ function is_js_function_wrapper(o: unknown): boolean {
 }
 
 // ----------------------------------------------------------------------
-export function is_number(o: unknown): o is SchemeExact | SchemeInexact {
-  return o instanceof SchemeExact || o instanceof SchemeInexact;
+export function is_number(o: unknown): o is AExact | AInexact {
+  return o instanceof AExact || o instanceof AInexact;
 }
 
 // ----------------------------------------------------------------------
-export function is_exact(o: unknown): o is SchemeExact {
-  return o instanceof SchemeExact;
+export function is_exact(o: unknown): o is AExact {
+  return o instanceof AExact;
 }
 
 // ----------------------------------------------------------------------
-export function is_inexact(o: unknown): o is SchemeInexact {
-  return o instanceof SchemeInexact;
+export function is_inexact(o: unknown): o is AInexact {
+  return o instanceof AInexact;
 }
 
 // ----------------------------------------------------------------------

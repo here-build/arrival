@@ -12,10 +12,10 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import * as arrival from "../env/symbol.js";
 import * as z from "../env/scheme-zod.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { nil } from "../values/primitives/Nil.js";
+import { APair } from "../values/primitives/APair.js";
+import { AString } from "../values/primitives/AString.js";
+import { AExact, AInexact } from "../values/numbers.js";
+import { nil } from "../values/primitives/ANil.js";
 
 const { symbol } = arrival;
 
@@ -24,7 +24,7 @@ describe("symbol.native — scheme-identity, no validation", () => {
     const def = symbol.native`pair-id: identity on a pair`(
       { input: [z.pair], output: [z.pair] },
       (p) => {
-        expectTypeOf(p).toEqualTypeOf<Pair>();
+        expectTypeOf(p).toEqualTypeOf<APair>();
         return p;
       },
     );
@@ -36,19 +36,19 @@ describe("symbol.native — scheme-identity, no validation", () => {
   it("runs the impl on the raw scheme term with NO decode/validate", () => {
     const def = symbol.native`car-ish: first of a pair`(
       { input: [z.pair], output: [z.schemeString] },
-      (p) => p.car as SchemeString,
+      (p) => p.car as AString,
     );
-    const arg = new Pair(new SchemeString("hello"), nil);
+    const arg = new APair(new AString("hello"), nil);
     // native.impl is the binding itself — it receives the scheme value directly.
     const out = def.impl(arg);
-    expect(out).toBeInstanceOf(SchemeString);
-    expect((out as SchemeString).toJs()).toBe("hello");
+    expect(out).toBeInstanceOf(AString);
+    expect((out as AString).toJs()).toBe("hello");
   });
 
   it("does NOT reject a value the identity schema wouldn't accept (no runtime validation)", () => {
     const def = symbol.native`as-is: passthrough`({ input: [z.pair], output: [z.pair] }, (p) => p);
     // A NON-Pair would fail a zod parse, but native never parses — it just runs.
-    const notAPair = { car: 1, cdr: 2 } as unknown as Pair;
+    const notAPair = { car: 1, cdr: 2 } as unknown as APair;
     expect(() => def.impl(notAPair)).not.toThrow();
   });
 });
@@ -71,10 +71,10 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    const out = await def.run(new SchemeString("hello"));
+    const out = await def.run(new AString("hello"));
     // output codec is z.number → encode(number) = SchemeInexact (the chosen float type).
-    expect(out).toBeInstanceOf(SchemeInexact);
-    expect((out as SchemeInexact).real).toBe(5);
+    expect(out).toBeInstanceOf(AInexact);
+    expect((out as AInexact).real).toBe(5);
   });
 
   it("rejects a bad arg via the input codec (errors-as-doors)", async () => {
@@ -83,7 +83,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s.length,
     );
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(def.run(new SchemeExact(3n))).rejects.toThrow();
+    await expect(def.run(new AExact(3n))).rejects.toThrow();
   });
 
   it("can SKIP validation (trusted call site) but still runs the codec transform", async () => {
@@ -92,9 +92,9 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s,
       { validate: false },
     );
-    const out = await def.run(new SchemeString("x"));
-    expect(out).toBeInstanceOf(SchemeString);
-    expect((out as SchemeString).toJs()).toBe("x");
+    const out = await def.run(new AString("x"));
+    expect(out).toBeInstanceOf(AString);
+    expect((out as AString).toJs()).toBe("x");
   });
 
   it("awaits an async impl", async () => {
@@ -105,8 +105,8 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
         return s.toUpperCase();
       },
     );
-    const out = await def.run(new SchemeString("hi"));
-    expect((out as SchemeString).toJs()).toBe("HI");
+    const out = await def.run(new AString("hi"));
+    expect((out as AString).toJs()).toBe("HI");
   });
 });
 
@@ -114,36 +114,36 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
   describe("z.number ↔ JS number (encode → inexact)", () => {
     it("decodes a safe-integer exact and a float inexact to JS number", async () => {
       const def = symbol.rosetta`dbl: double`({ input: [z.number], output: [z.number] }, (n) => n * 2);
-      const fromExact = await def.run(new SchemeExact(21n));
-      expect((fromExact as SchemeInexact).real).toBe(42);
-      const fromInexact = await def.run(new SchemeInexact(1.5));
-      expect((fromInexact as SchemeInexact).real).toBe(3);
+      const fromExact = await def.run(new AExact(21n));
+      expect((fromExact as AInexact).real).toBe(42);
+      const fromInexact = await def.run(new AInexact(1.5));
+      expect((fromInexact as AInexact).real).toBe(3);
     });
 
     it("DOORS an over-range exact integer (no silent precision loss)", async () => {
       const def = symbol.rosetta`idn: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      const huge = new SchemeExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
+      const huge = new AExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
       await expect(def.run(huge)).rejects.toThrow(/safe-integer|faithful JS number/i);
     });
 
     it("DOORS a non-integer exact rational", async () => {
       const def = symbol.rosetta`idn2: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      await expect(def.run(new SchemeExact(1n, 3n))).rejects.toThrow(/faithful JS number|rational/i);
+      await expect(def.run(new AExact(1n, 3n))).rejects.toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.integer ↔ JS number constrained to safe ints (encode → exact)", () => {
     it("decodes a safe int and encodes the return as EXACT", async () => {
       const def = symbol.rosetta`inc: increment`({ input: [z.integer], output: [z.integer] }, (n) => n + 1);
-      const out = await def.run(new SchemeExact(41n));
-      expect(out).toBeInstanceOf(SchemeExact);
-      expect((out as SchemeExact).num).toBe(42n);
-      expect((out as SchemeExact).denom).toBe(1n);
+      const out = await def.run(new AExact(41n));
+      expect(out).toBeInstanceOf(AExact);
+      expect((out as AExact).num).toBe(42n);
+      expect((out as AExact).denom).toBe(1n);
     });
 
     it("DOORS a non-safe-integer inexact input", async () => {
       const def = symbol.rosetta`idi: identity int`({ input: [z.integer], output: [z.integer] }, (n) => n);
-      await expect(def.run(new SchemeInexact(1.5))).rejects.toThrow(/safe integer/i);
+      await expect(def.run(new AInexact(1.5))).rejects.toThrow(/safe integer/i);
     });
   });
 
@@ -151,9 +151,9 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
     it("decodes to bigint faithfully beyond safe-integer range", async () => {
       const def = symbol.rosetta`bigid: identity bigint`({ input: [z.bigint], output: [z.bigint] }, (n) => n + 1n);
       const big = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
-      const out = await def.run(new SchemeExact(big));
-      expect(out).toBeInstanceOf(SchemeExact);
-      expect((out as SchemeExact).num).toBe(big + 1n);
+      const out = await def.run(new AExact(big));
+      expect(out).toBeInstanceOf(AExact);
+      expect((out as AExact).num).toBe(big + 1n);
     });
 
     it("infers the impl arg as bigint", () => {
@@ -165,7 +165,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("round-trips bigint → scheme → bigint", async () => {
       const def = symbol.rosetta`bid: bigint identity`({ input: [z.bigint], output: [z.bigint] }, (n) => n);
-      const out = (await def.run(new SchemeExact(7n))) as SchemeExact;
+      const out = (await def.run(new AExact(7n))) as AExact;
       // re-decode the encoded scheme value through the same codec
       const back = z.decode(z.bigint, out);
       expect(back).toBe(7n);
@@ -179,8 +179,8 @@ describe("variadic + multiple values", () => {
       { input: z.array(z.number), output: [z.number] },
       (...ns: number[]) => ns.reduce((a, b) => a + b, 0),
     );
-    const out = await def.run(new SchemeExact(1n), new SchemeExact(2n), new SchemeExact(3n));
-    expect((out as SchemeInexact).real).toBe(6);
+    const out = await def.run(new AExact(1n), new AExact(2n), new AExact(3n));
+    expect((out as AInexact).real).toBe(6);
   });
 
   it("z.array output → multiple return values (a scheme values vector)", async () => {
@@ -188,10 +188,10 @@ describe("variadic + multiple values", () => {
       { input: [z.string], output: z.array(z.string) },
       (s) => [s, s],
     );
-    const out = await def.run(new SchemeString("a"));
+    const out = await def.run(new AString("a"));
     // encode of z.array(z.string) → a JS array of SchemeStrings (the values-vector).
     expect(Array.isArray(out)).toBe(true);
-    const vec = out as SchemeString[];
+    const vec = out as AString[];
     expect(vec).toHaveLength(2);
     expect(vec[0].toJs()).toBe("a");
   });
@@ -226,7 +226,7 @@ describe("type inference (compile-time)", () => {
     symbol.native`bad-native: wrong impl`(
       { input: [z.pair], output: [z.pair] },
       // @ts-expect-error — impl receives a Pair (identity), not a string
-      (p: string) => new Pair(p, nil),
+      (p: string) => new APair(p, nil),
     );
     expect(true).toBe(true);
   });
@@ -235,7 +235,7 @@ describe("type inference (compile-time)", () => {
     symbol.rosetta`bad-rosetta: wrong impl`(
       { input: [z.string], output: [z.number] },
       // @ts-expect-error — impl receives a decoded string, not a Pair
-      (s: Pair) => s as unknown as number,
+      (s: APair) => s as unknown as number,
     );
     expect(true).toBe(true);
   });

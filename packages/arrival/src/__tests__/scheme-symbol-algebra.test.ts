@@ -3,7 +3,7 @@
 // over STRING names (gensym ES6-symbol names are an impl edge handled by
 // `String(...)` fallback, not part of the law domain here).
 import fc from "fast-check";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
 // STRING-named symbols over a small domain so symmetry/transitivity bite, plus
@@ -13,11 +13,11 @@ const nameArb = fc.oneof(
   fc.string({ minLength: 0 }),
 );
 
-const symbolArb = nameArb.map((n) => new SchemeSymbol(n));
+const symbolArb = nameArb.map((n) => new ASymbol(n));
 
 setoidLaws("SchemeSymbol", {
   arb: symbolArb,
-  equalClone: (s) => new SchemeSymbol(s.__name__),
+  equalClone: (s) => new ASymbol(s.__name__),
 });
 
 ordLaws("SchemeSymbol", symbolArb);

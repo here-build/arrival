@@ -8,9 +8,9 @@ import { initBridge } from "../bridge.js";
 import bytevectorsCap from "../env/bytevectors.js";
 import vectorsCap from "../env/vectors.js";
 import type { EnvCapability } from "../env/capability.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AString } from "../values/primitives/AString.js";
+import { AVector } from "../values/primitives/AVector.js";
 
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
@@ -32,8 +32,8 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
 // onto global_env.
 const ops = { ...opsOf(vectorsCap), ...opsOf(bytevectorsCap) };
 const PROV = new Set<number>([42]);
-const provVec = (xs: any[]) => new SchemeVector(xs, PROV);
-const provBv = (xs: number[]) => new SchemeBytevector(Uint8Array.from(xs), PROV);
+const provVec = (xs: any[]) => new AVector(xs, PROV);
+const provBv = (xs: number[]) => new ABytevector(Uint8Array.from(xs), PROV);
 const prov = (r: unknown) => [...((r as { provenance: ReadonlySet<number> }).provenance ?? [])];
 
 describe("vector/bytevector builtins propagate input provenance (goal b)", () => {
@@ -48,7 +48,7 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
   });
   it("list->vector via vector(...) elements carries union provenance", () => {
     // `vector` unions its element provenance onto the container.
-    const el = new SchemeString("x", PROV);
+    const el = new AString("x", PROV);
     expect(prov(ops["vector"](el))).toEqual([42]);
   });
   it("bytevector-copy carries provenance", () => {
@@ -60,12 +60,12 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
 
   it("utf8->string returns a SchemeString (not a raw JS string) and carries provenance", () => {
     const r = ops["utf8->string"](provBv([104, 105]));
-    expect(r).toBeInstanceOf(SchemeString);
+    expect(r).toBeInstanceOf(AString);
     expect(r.valueOf()).toBe("hi");
     expect(prov(r)).toEqual([42]);
   });
   it("vector->string returns a SchemeString and carries provenance", () => {
-    const r = ops["vector->string"](provVec([new (SchemeString as any)("a")]));
-    expect(r).toBeInstanceOf(SchemeString);
+    const r = ops["vector->string"](provVec([new (AString as any)("a")]));
+    expect(r).toBeInstanceOf(AString);
   });
 });

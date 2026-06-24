@@ -14,11 +14,11 @@
 // QuotedPromise is itself repointed.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AExact, AInexact } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 import { is_nil, is_pair } from "../values/value-guards.js";
 
@@ -49,13 +49,13 @@ export const gensym = (function () {
   let count = 0;
 
   function with_props(name: SchemeValue, sym: symbol) {
-    const symbol = new SchemeSymbol(sym);
+    const symbol = new ASymbol(sym);
     hidden_prop(symbol, "__literal__", name);
     return symbol;
   }
 
   return function (name: SchemeValue = null) {
-    if (name instanceof SchemeSymbol) {
+    if (name instanceof ASymbol) {
       if (name.is_gensym()) {
         return name;
       }
@@ -63,7 +63,7 @@ export const gensym = (function () {
     }
     if (is_gensym(name)) {
       // don't do double gynsyms in nested syntax-rules
-      return new SchemeSymbol(name);
+      return new ASymbol(name);
     }
     // use ES6 symbol as name for lips symbol (they are unique)
     if (name !== null) {
@@ -82,7 +82,7 @@ export function quote(value: SchemeValue): SchemeValue {
   if (is_promise(value)) {
     return value.then(quote);
   }
-  if (is_pair(value) || value instanceof SchemeSymbol) {
+  if (is_pair(value) || value instanceof ASymbol) {
     (value as SchemeValue)[DATA] = true;
   }
   return value;
@@ -99,16 +99,16 @@ export function quote(value: SchemeValue): SchemeValue {
 export function box(object: unknown): SchemeValue {
   switch (typeof object) {
     case "string":
-      return new SchemeString(object);
+      return new AString(object);
     case "bigint":
-      return new SchemeExact(object);
+      return new AExact(object);
     case "number":
-      if (Number.isNaN(object)) return new SchemeInexact(Number.NaN);
+      if (Number.isNaN(object)) return new AInexact(Number.NaN);
       // Safe integers become exact, floats become inexact.
       if (Number.isSafeInteger(object)) {
-        return new SchemeExact(BigInt(object));
+        return new AExact(BigInt(object));
       }
-      return new SchemeInexact(object);
+      return new AInexact(object);
   }
   return object as SchemeValue;
 }
@@ -134,13 +134,13 @@ export function patch_value(value: unknown): SchemeValue {
 // ----------------------------------------------------------------------
 export function is_atom(obj: SchemeValue): boolean {
   return (
-    obj instanceof SchemeSymbol ||
-    SchemeString.isString(obj) ||
+    obj instanceof ASymbol ||
+    AString.isString(obj) ||
     is_nil(obj) ||
     obj === null ||
-    obj instanceof SchemeCharacter ||
-    obj instanceof SchemeExact ||
-    obj instanceof SchemeInexact ||
+    obj instanceof ACharacter ||
+    obj instanceof AExact ||
+    obj instanceof AInexact ||
     obj === true ||
     obj === false
   );

@@ -4,9 +4,9 @@
 // (numbers.ts:407-413) is NaN/Infinity-blind → prints garbage "NaNNaNi" instead
 // of the R7RS +inf.0 / -inf.0 / +nan.0.
 import { describe, expect, it } from "vitest";
-import { SchemeInexact } from "../values/numbers.js";
+import { AInexact } from "../values/numbers.js";
 
-const inx = (real: number) => new SchemeInexact(real);
+const inx = (real: number) => new AInexact(real);
 
 describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')", () => {
   it("1.0 / 0.0 → +inf.0", () => {

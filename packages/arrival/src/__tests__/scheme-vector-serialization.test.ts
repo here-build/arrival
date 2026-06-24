@@ -5,24 +5,24 @@
 // deepProvenance vector handling. (docs/plan-2026-06-10-boxing-track.md.)
 import { describe, expect, it } from "vitest";
 import { AValue } from "../values/primitives/AValue.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
 
 describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", () => {
   it("a boxed vector unwraps to a raw JS array (no object leak)", () => {
-    const v = new SchemeVector([1, 2, 3]);
+    const v = new AVector([1, 2, 3]);
     expect(schemeToJs(v)).toEqual([1, 2, 3]);
     expect(Array.isArray(schemeToJs(v))).toBe(true);
   });
 
   it("a nested boxed vector unwraps recursively", () => {
-    const v = new SchemeVector([new SchemeVector([1, 2]), 3]);
+    const v = new AVector([new AVector([1, 2]), 3]);
     expect(schemeToJs(v)).toEqual([[1, 2], 3]);
   });
 
   it("a boxed bytevector unwraps to its Uint8Array", () => {
-    const bv = new SchemeBytevector(Uint8Array.from([4, 5, 6]));
+    const bv = new ABytevector(Uint8Array.from([4, 5, 6]));
     const out = schemeToJs(bv);
     expect(out).toBeInstanceOf(Uint8Array);
     expect([...out]).toEqual([4, 5, 6]);
@@ -31,10 +31,10 @@ describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", (
 
 describe("boxed vector — provenance propagation (jsToScheme)", () => {
   it("deep-stamps element provenance, keeps it a vector", () => {
-    const v = new SchemeVector([1, 2, 3]);
+    const v = new AVector([1, 2, 3]);
     const prov = new Set<number>([42]);
-    const stamped = jsToScheme(v, {}, prov) as SchemeVector;
-    expect(stamped).toBeInstanceOf(SchemeVector);
+    const stamped = jsToScheme(v, {}, prov) as AVector;
+    expect(stamped).toBeInstanceOf(AVector);
     // Container carries provenance...
     expect([...stamped.provenance]).toEqual([42]);
     // ...and each element (now a boxed AValue) carries it too.

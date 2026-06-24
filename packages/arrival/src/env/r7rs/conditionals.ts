@@ -9,7 +9,7 @@
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../capability.js";
-import { SchemeSymbol } from "../../values/primitives/SchemeSymbol.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
 import * as z from "../scheme-zod.js";
 import { symbol } from "../symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
@@ -91,7 +91,7 @@ export default new EnvCapability("scheme/r7rs/conditionals", {
     "%else-literal?": symbol.native`%else-literal?: #t iff obj is the literal else symbol`(
       { input: [z.unknown()], output: [z.boolean] },
       (obj: unknown): boolean =>
-        withInputProvenance([obj], obj instanceof SchemeSymbol && (SchemeSymbol.is(obj, "else") || obj.literal() === "else")),
+        withInputProvenance([obj], obj instanceof ASymbol && (ASymbol.is(obj, "else") || obj.literal() === "else")),
     ),
   },
   prelude: CONDITIONALS_SCM,

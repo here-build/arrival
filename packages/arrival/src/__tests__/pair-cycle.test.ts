@@ -25,13 +25,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Pair } from "../values/primitives/Pair.js";
-import { nil } from "../values/primitives/Nil";
+import { APair } from "../values/primitives/APair.js";
+import { nil } from "../values/primitives/ANil";
 
 describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {
     // Construct: (1 . #0#) where #0 is the cell itself.
-    const p = new Pair(1, nil);
+    const p = new APair(1, nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any).cdr = p;
     // Note: `have_cycles` only returns true after `mark_cycles` has stamped
@@ -43,8 +43,8 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
 
   it("throws on a mutual cycle (two cells pointing at each other)", () => {
     // Construct: a → b → a (cdr cycle through both cells).
-    const a = new Pair(1, nil);
-    const b = new Pair(2, nil);
+    const a = new APair(1, nil);
+    const b = new APair(2, nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (a as any).cdr = b;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,7 +57,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     // top-level invariant trips before the watchdog Set is even allocated.
     // This is the cheaper path and is the one most callers hit, since
     // parser-produced cyclic lists are pre-marked.
-    const p = new Pair(1, nil);
+    const p = new APair(1, nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any).cdr = p;
     p.mark_cycles();
@@ -67,13 +67,13 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
 
   it("returns an array for a proper list", () => {
     // (1 2 3) → [1, 2, 3]; cdr-chain terminates at nil.
-    const p = Pair.fromArray([1, 2, 3], false) as Pair;
+    const p = APair.fromArray([1, 2, 3], false) as APair;
     expect(p.toJs()).toEqual([1, 2, 3]);
   });
 
   it("returns { __dotted__, list, tail } for a dotted (improper) pair", () => {
     // (1 . 2) — cdr is a non-nil non-pair, the improper-list branch.
-    const p = new Pair(1, 2);
+    const p = new APair(1, 2);
     const result = p.toJs() as { __dotted__: boolean; list: unknown[]; tail: unknown };
     expect(result.__dotted__).toBe(true);
     expect(result.list).toEqual([1]);
@@ -86,7 +86,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     // `is_nil(node)` check. The toJs result includes the undefined car.
     // (We avoid asserting on the singleton `nil` itself because Nil.toJs
     // returns `null` — different codepath, tested separately.)
-    const p = new Pair(1, nil);
+    const p = new APair(1, nil);
     expect(p.toJs()).toEqual([1]);
   });
 });
@@ -95,7 +95,7 @@ describe("Pair.toString cycle handling (uses ref-marker notation — fundamental
   it("does NOT throw on a self-cycle (renders via #0= / #0# markers)", () => {
     // Construct (1 . #0#) — self-cycle on cdr — then mark_cycles to
     // populate the __cycles__ / __ref__ metadata that toString reads.
-    const p = new Pair(1, nil);
+    const p = new APair(1, nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any).cdr = p;
     p.mark_cycles();
@@ -108,8 +108,8 @@ describe("Pair.toString cycle handling (uses ref-marker notation — fundamental
   });
 
   it("does NOT throw on a mutual cycle", () => {
-    const a = new Pair(1, nil);
-    const b = new Pair(2, nil);
+    const a = new APair(1, nil);
+    const b = new APair(2, nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (a as any).cdr = b;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

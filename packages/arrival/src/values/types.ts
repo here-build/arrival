@@ -31,7 +31,7 @@ export function isString(x: unknown): x is SchemeStringLike | string {
 
 // Forward declaration for Pair (implemented in lips.ts)
 // This allows Nil.append to return the right type without circular dependency
-export interface PairLike<Car = unknown, Cdr = unknown> {
+export interface APairLike<Car = unknown, Cdr = unknown> {
   car: Car;
   cdr: Cdr;
 }

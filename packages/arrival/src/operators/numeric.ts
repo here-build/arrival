@@ -7,8 +7,8 @@
 
 import type { Codec } from "../membrane.js";
 import { AnyNum, Bool, OperatorRegistry, Int, Num, Operator, SafeInt } from "../membrane.js";
-import type { SchemeNumeric } from "../values/numbers.js";
-import { bigintISqrt, complexDoor, schemeCompare, SchemeExact, SchemeInexact, toReal } from "../values/numbers.js";
+import type { ANumeric } from "../values/numbers.js";
+import { bigintISqrt, complexDoor, schemeCompare, AExact, AInexact, toReal } from "../values/numbers.js";
 import invariant from "tiny-invariant";
 
 // ============================================================================
@@ -19,9 +19,9 @@ import invariant from "tiny-invariant";
  * Passthrough profunctor - keeps SchemeNumeric without JS conversion
  * Used for type predicates that need to inspect the Scheme type directly
  */
-const SchemeNum: Codec<SchemeNumeric, SchemeNumeric> = {
-  match(v): v is SchemeNumeric {
-    return v instanceof SchemeExact || v instanceof SchemeInexact;
+const SchemeNum: Codec<ANumeric, ANumeric> = {
+  match(v): v is ANumeric {
+    return v instanceof AExact || v instanceof AInexact;
   },
   toJS: (v) => v,
   fromJS: (v) => v,
@@ -45,15 +45,15 @@ const Any: Codec<unknown, unknown> = {
 /**
  * Helper to add two SchemeNumbers preserving exactness
  */
-function schemeAdd(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
+function schemeAdd(a: ANumeric, b: ANumeric): ANumeric {
   // If either is inexact, result is inexact (reals-only)
-  if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
-    const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
-    const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    return new SchemeInexact(aVal + bVal);
+  if (a instanceof AInexact || b instanceof AInexact) {
+    const aVal = a instanceof AExact ? a.valueOf() : a.real;
+    const bVal = b instanceof AExact ? b.valueOf() : b.real;
+    return new AInexact(aVal + bVal);
   }
   // Both exact
-  return (a as SchemeExact).add(b as SchemeExact);
+  return (a as AExact).add(b as AExact);
 }
 
 /** (+ . numbers) - Sums all numbers. Returns 0 if no arguments. */
@@ -62,7 +62,7 @@ export const add = Operator.create("+", {
   inRest: SchemeNum,
   out: SchemeNum,
   fn: (...args) => {
-    if (args.length === 0) return new SchemeExact(0n);
+    if (args.length === 0) return new AExact(0n);
     return args.reduce(schemeAdd);
   },
 });
@@ -70,49 +70,49 @@ export const add = Operator.create("+", {
 /**
  * Helper to subtract two SchemeNumbers preserving exactness
  */
-function schemeSub(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
-  if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
-    const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
-    const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    return new SchemeInexact(aVal - bVal);
+function schemeSub(a: ANumeric, b: ANumeric): ANumeric {
+  if (a instanceof AInexact || b instanceof AInexact) {
+    const aVal = a instanceof AExact ? a.valueOf() : a.real;
+    const bVal = b instanceof AExact ? b.valueOf() : b.real;
+    return new AInexact(aVal - bVal);
   }
-  return (a as SchemeExact).sub(b as SchemeExact);
+  return (a as AExact).sub(b as AExact);
 }
 
 /**
  * Helper to negate a SchemeNumeric preserving exactness
  */
-function schemeNegate(a: SchemeNumeric): SchemeNumeric {
-  if (a instanceof SchemeInexact) {
-    return new SchemeInexact(-a.real);
+function schemeNegate(a: ANumeric): ANumeric {
+  if (a instanceof AInexact) {
+    return new AInexact(-a.real);
   }
-  return new SchemeExact(-a.num, a.denom);
+  return new AExact(-a.num, a.denom);
 }
 
 /**
  * Helper to multiply two SchemeNumbers preserving exactness
  */
-function schemeMul(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
-  if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
-    const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
-    const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    return new SchemeInexact(aVal * bVal);
+function schemeMul(a: ANumeric, b: ANumeric): ANumeric {
+  if (a instanceof AInexact || b instanceof AInexact) {
+    const aVal = a instanceof AExact ? a.valueOf() : a.real;
+    const bVal = b instanceof AExact ? b.valueOf() : b.real;
+    return new AInexact(aVal * bVal);
   }
-  return (a as SchemeExact).mul(b as SchemeExact);
+  return (a as AExact).mul(b as AExact);
 }
 
 /**
  * Helper to divide two SchemeNumbers preserving exactness
  */
-function schemeDiv(a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric {
-  if (a instanceof SchemeInexact || b instanceof SchemeInexact) {
-    const aVal = a instanceof SchemeExact ? a.valueOf() : a.real;
-    const bVal = b instanceof SchemeExact ? b.valueOf() : b.real;
-    return new SchemeInexact(aVal / bVal);
+function schemeDiv(a: ANumeric, b: ANumeric): ANumeric {
+  if (a instanceof AInexact || b instanceof AInexact) {
+    const aVal = a instanceof AExact ? a.valueOf() : a.real;
+    const bVal = b instanceof AExact ? b.valueOf() : b.real;
+    return new AInexact(aVal / bVal);
   }
   // Both exact - returns inexact if not evenly divisible
   // If result is a non-integer rational, keep exact. Otherwise convert to inexact for consistency
-  return (a as SchemeExact).div(b as SchemeExact);
+  return (a as AExact).div(b as AExact);
 }
 
 /** (- n1 n2 ...) - Subtracts numbers from n1. (- n) negates n. */
@@ -120,7 +120,7 @@ export const sub = new Operator("-", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: SchemeNum,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     if (rest.length === 0) return schemeNegate(first);
     return rest.reduce(schemeSub, first);
   },
@@ -132,7 +132,7 @@ export const mul = Operator.create("*", {
   inRest: SchemeNum,
   out: SchemeNum,
   fn: (...args) => {
-    if (args.length === 0) return new SchemeExact(1n);
+    if (args.length === 0) return new AExact(1n);
     return args.reduce(schemeMul);
   },
 });
@@ -142,10 +142,10 @@ export const div = new Operator("/", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: SchemeNum,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     if (rest.length === 0) {
       // (/ n) = 1/n
-      return schemeDiv(new SchemeExact(1n), first);
+      return schemeDiv(new AExact(1n), first);
     }
     return rest.reduce(schemeDiv, first);
   },
@@ -155,8 +155,8 @@ export const div = new Operator("/", {
  * Convert SchemeNumeric to integer value (bigint for exact, number for inexact).
  * Throws if not an integer.
  */
-function toInteger(n: SchemeNumeric, opName: string): { value: bigint | number; exact: boolean } {
-  if (n instanceof SchemeExact) {
+function toInteger(n: ANumeric, opName: string): { value: bigint | number; exact: boolean } {
+  if (n instanceof AExact) {
     TypeError.invariant(n.denom === 1n, `${opName}: not an integer`);
     return { value: n.num, exact: true };
   } else {
@@ -174,8 +174,8 @@ function toInteger(n: SchemeNumeric, opName: string): { value: bigint | number; 
  * operand is inexact, both are coerced to JS number (precision already gone).
  */
 function toIntegerPair(
-  a: SchemeNumeric,
-  b: SchemeNumeric,
+  a: ANumeric,
+  b: ANumeric,
   opName: string,
 ): { bothExact: true; av: bigint; bv: bigint } | { bothExact: false; av: number; bv: number } {
   const ai = toInteger(a, opName);
@@ -217,14 +217,14 @@ export const quotient = new Operator("quotient", {
 export const remainder = new Operator("remainder", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "remainder");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "remainder: division by zero");
       // JS bigint % truncates toward zero → matches R7RS truncating remainder.
-      return new SchemeExact(p.av % p.bv);
+      return new AExact(p.av % p.bv);
     }
-    return new SchemeInexact(p.av % p.bv);
+    return new AInexact(p.av % p.bv);
   },
 });
 
@@ -232,13 +232,13 @@ export const remainder = new Operator("remainder", {
 export const modulo = new Operator("modulo", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "modulo");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "modulo: division by zero");
-      return new SchemeExact(((p.av % p.bv) + p.bv) % p.bv);
+      return new AExact(((p.av % p.bv) + p.bv) % p.bv);
     }
-    return new SchemeInexact(((p.av % p.bv) + p.bv) % p.bv);
+    return new AInexact(((p.av % p.bv) + p.bv) % p.bv);
   },
 });
 
@@ -246,13 +246,13 @@ export const modulo = new Operator("modulo", {
 export const floorQuotient = new Operator("floor-quotient", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "floor-quotient");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "floor-quotient: division by zero");
-      return new SchemeExact(bigintFloorDiv(p.av, p.bv));
+      return new AExact(bigintFloorDiv(p.av, p.bv));
     }
-    return new SchemeInexact(Math.floor(p.av / p.bv));
+    return new AInexact(Math.floor(p.av / p.bv));
   },
 });
 
@@ -260,15 +260,15 @@ export const floorQuotient = new Operator("floor-quotient", {
 export const floorRemainder = new Operator("floor-remainder", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "floor-remainder");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "floor-remainder: division by zero");
       // a - floor(a/b)*b ≡ ((a % b) + b) % b (always same sign as divisor).
-      return new SchemeExact(((p.av % p.bv) + p.bv) % p.bv);
+      return new AExact(((p.av % p.bv) + p.bv) % p.bv);
     }
     const q = Math.floor(p.av / p.bv);
-    return new SchemeInexact(p.av - q * p.bv);
+    return new AInexact(p.av - q * p.bv);
   },
 });
 
@@ -276,14 +276,14 @@ export const floorRemainder = new Operator("floor-remainder", {
 export const truncateQuotient = new Operator("truncate-quotient", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "truncate-quotient");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "truncate-quotient: division by zero");
       // JS bigint / truncates toward zero.
-      return new SchemeExact(p.av / p.bv);
+      return new AExact(p.av / p.bv);
     }
-    return new SchemeInexact(Math.trunc(p.av / p.bv));
+    return new AInexact(Math.trunc(p.av / p.bv));
   },
 });
 
@@ -291,13 +291,13 @@ export const truncateQuotient = new Operator("truncate-quotient", {
 export const truncateRemainder = new Operator("truncate-remainder", {
   in: [SchemeNum, SchemeNum],
   out: SchemeNum,
-  fn: (a: SchemeNumeric, b: SchemeNumeric): SchemeNumeric => {
+  fn: (a: ANumeric, b: ANumeric): ANumeric => {
     const p = toIntegerPair(a, b, "truncate-remainder");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "truncate-remainder: division by zero");
-      return new SchemeExact(p.av % p.bv);
+      return new AExact(p.av % p.bv);
     }
-    return new SchemeInexact(p.av % p.bv);
+    return new AInexact(p.av % p.bv);
   },
 });
 
@@ -365,24 +365,24 @@ export const lcm = Operator.create("lcm", {
  * back to `Math.pow` only when an operand is inexact or the exponent is a
  * non-integer rational (where the result genuinely isn't exact-representable).
  */
-function schemeExpt(base: SchemeNumeric, power: SchemeNumeric): SchemeNumeric {
+function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
   if (
-    base instanceof SchemeExact &&
-    power instanceof SchemeExact &&
+    base instanceof AExact &&
+    power instanceof AExact &&
     power.denom === 1n // integer exponent only — rational exponents go inexact
   ) {
     const n = power.num;
     if (n >= 0n) {
       // (p/q)^n = p^n / q^n. SchemeExact normalizes/reduces.
-      return new SchemeExact(base.num ** n, base.denom ** n);
+      return new AExact(base.num ** n, base.denom ** n);
     }
     // Negative exponent → reciprocal: (p/q)^(-m) = q^m / p^m. Guard 0 base.
     invariant(base.num !== 0n, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return new SchemeExact(base.denom ** m, base.num ** m);
+    return new AExact(base.denom ** m, base.num ** m);
   }
   // Inexact (or non-integer exponent): float exponentiation is correct here.
-  return new SchemeInexact(Math.pow(toReal(base, "expt"), toReal(power, "expt")));
+  return new AInexact(Math.pow(toReal(base, "expt"), toReal(power, "expt")));
 }
 
 export const expt = new Operator("expt", {
@@ -399,18 +399,18 @@ export const expt = new Operator("expt", {
  * Compare two SchemeNumeric values for equality.
  * Handles exact/inexact and complex numbers properly.
  */
-function schemeNumEq(a: SchemeNumeric, b: SchemeNumeric): boolean {
+function schemeNumEq(a: ANumeric, b: ANumeric): boolean {
   // Both exact
-  if (a instanceof SchemeExact && b instanceof SchemeExact) {
+  if (a instanceof AExact && b instanceof AExact) {
     return a.cmp(b) === 0;
   }
   // Both inexact
-  if (a instanceof SchemeInexact && b instanceof SchemeInexact) {
+  if (a instanceof AInexact && b instanceof AInexact) {
     return a.real === b.real;
   }
   // Mixed: compare as inexact (convert exact to float)
-  const aReal = a instanceof SchemeExact ? Number(a.num) / Number(a.denom) : a.real;
-  const bReal = b instanceof SchemeExact ? Number(b.num) / Number(b.denom) : b.real;
+  const aReal = a instanceof AExact ? Number(a.num) / Number(a.denom) : a.real;
+  const bReal = b instanceof AExact ? Number(b.num) / Number(b.denom) : b.real;
   return aReal === bReal;
 }
 
@@ -419,7 +419,7 @@ export const numEq = new Operator("=", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: Bool,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     return rest.every((x) => schemeNumEq(first, x));
   },
 });
@@ -429,7 +429,7 @@ export const lt = new Operator("<", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: Bool,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
       if (!(schemeCompare(prev, x, "<") < 0)) return false;
@@ -444,7 +444,7 @@ export const gt = new Operator(">", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: Bool,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
       if (!(schemeCompare(prev, x, ">") > 0)) return false;
@@ -459,7 +459,7 @@ export const lte = new Operator("<=", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: Bool,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
       // NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is false ⇒ short-circuit.
@@ -475,7 +475,7 @@ export const gte = new Operator(">=", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: Bool,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]) => {
+  fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
       if (!(schemeCompare(prev, x, ">=") >= 0)) return false;
@@ -490,18 +490,18 @@ export const max = new Operator("max", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: SchemeNum,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]): SchemeNumeric => {
+  fn: (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
     // R7RS § 6.2.6: if any argument is inexact, the result is inexact —
     // exactness is contagious even when the chosen value was exact.
     // (max 3 3.0) ⇒ 3.0. Compare via schemeCompare so huge exacts don't
     // collapse through a float.
     let extreme = first;
-    let hasInexact = first instanceof SchemeInexact;
+    let hasInexact = first instanceof AInexact;
     for (const x of rest) {
-      if (x instanceof SchemeInexact) hasInexact = true;
+      if (x instanceof AInexact) hasInexact = true;
       if (schemeCompare(x, extreme, "max") > 0) extreme = x;
     }
-    return hasInexact && extreme instanceof SchemeExact ? extreme.toInexact() : extreme;
+    return hasInexact && extreme instanceof AExact ? extreme.toInexact() : extreme;
   },
 });
 
@@ -510,14 +510,14 @@ export const min = new Operator("min", {
   in: [SchemeNum],
   inRest: SchemeNum,
   out: SchemeNum,
-  fn: (first: SchemeNumeric, ...rest: SchemeNumeric[]): SchemeNumeric => {
+  fn: (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
     let extreme = first;
-    let hasInexact = first instanceof SchemeInexact;
+    let hasInexact = first instanceof AInexact;
     for (const x of rest) {
-      if (x instanceof SchemeInexact) hasInexact = true;
+      if (x instanceof AInexact) hasInexact = true;
       if (schemeCompare(x, extreme, "min") < 0) extreme = x;
     }
-    return hasInexact && extreme instanceof SchemeExact ? extreme.toInexact() : extreme;
+    return hasInexact && extreme instanceof AExact ? extreme.toInexact() : extreme;
   },
 });
 
@@ -589,7 +589,7 @@ export const isInfinite = new Operator("infinite?", {
 export const isNumber = new Operator("number?", {
   in: [Any],
   out: Bool,
-  fn: (x) => x instanceof SchemeExact || x instanceof SchemeInexact,
+  fn: (x) => x instanceof AExact || x instanceof AInexact,
 });
 
 /**
@@ -598,7 +598,7 @@ export const isNumber = new Operator("number?", {
  * #f, NOT an error. They take `Any` (not `SchemeNum`) so the codec doesn't
  * reject non-numerics before the predicate runs.
  */
-const isNum = (x: unknown): x is SchemeNumeric => x instanceof SchemeExact || x instanceof SchemeInexact;
+const isNum = (x: unknown): x is ANumeric => x instanceof AExact || x instanceof AInexact;
 
 /** complex? - true for all numbers (all numbers are complex in Scheme), #f otherwise. */
 export const isComplex = new Operator("complex?", {
@@ -732,14 +732,14 @@ function floatToRational(x: number): { num: bigint; denom: bigint } {
 export const numerator = new Operator("numerator", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      return new SchemeExact(x.num);
+  fn: (x: ANumeric): ANumeric => {
+    if (x instanceof AExact) {
+      return new AExact(x.num);
     }
-    invariant(x instanceof SchemeInexact, "numerator requires a rational number");
+    invariant(x instanceof AInexact, "numerator requires a rational number");
     // For inexact, convert to rational and return inexact numerator
     const { num } = floatToRational(x.real);
-    return new SchemeInexact(Number(num));
+    return new AInexact(Number(num));
   },
 });
 
@@ -747,14 +747,14 @@ export const numerator = new Operator("numerator", {
 export const denominator = new Operator("denominator", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
-    if (x instanceof SchemeExact) {
-      return new SchemeExact(x.denom);
+  fn: (x: ANumeric): ANumeric => {
+    if (x instanceof AExact) {
+      return new AExact(x.denom);
     }
     // For inexact, convert to rational and return inexact denominator
-    invariant(x instanceof SchemeInexact, "denominator requires a rational number");
+    invariant(x instanceof AInexact, "denominator requires a rational number");
     const { denom } = floatToRational(x.real);
-    return new SchemeInexact(Number(denom));
+    return new AInexact(Number(denom));
   },
 });
 
@@ -774,42 +774,42 @@ export const denominator = new Operator("denominator", {
 export const makeRectangular = new Operator("make-rectangular", {
   in: [Num, Num],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 /** (make-polar magnitude angle) - DOORED: complex numbers are not supported. */
 export const makePolar = new Operator("make-polar", {
   in: [Num, Num],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 /** (real-part z) - DOORED: complex numbers are not supported. */
 export const realPart = new Operator("real-part", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 /** (imag-part z) - DOORED: complex numbers are not supported. */
 export const imagPart = new Operator("imag-part", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 /** (magnitude z) - DOORED: complex numbers are not supported. */
 export const magnitude = new Operator("magnitude", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 /** (angle z) - DOORED: complex numbers are not supported. */
 export const angle = new Operator("angle", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (): SchemeNumeric => complexDoor(),
+  fn: (): ANumeric => complexDoor(),
 });
 
 // ============================================================================
@@ -820,9 +820,9 @@ export const angle = new Operator("angle", {
 export const sqrt = new Operator("sqrt", {
   in: [SchemeNum],
   out: SchemeNum,
-  fn: (x: SchemeNumeric): SchemeNumeric => {
+  fn: (x: ANumeric): ANumeric => {
     // Get the real value
-    const val = x instanceof SchemeExact ? x.valueOf() : x.real;
+    const val = x instanceof AExact ? x.valueOf() : x.real;
 
     // sqrt of a negative real is complex → DOORED (complex not supported).
     if (val < 0) {
@@ -831,13 +831,13 @@ export const sqrt = new Operator("sqrt", {
     // For exact non-negative integers that are perfect squares, return exact.
     // Use a bigint integer sqrt so squares ≥ 2^53 (where Math.sqrt(Number(n))
     // loses precision and misclassifies) are detected exactly.
-    if (x instanceof SchemeExact && x.denom === 1n && x.num >= 0n) {
+    if (x instanceof AExact && x.denom === 1n && x.num >= 0n) {
       const r = bigintISqrt(x.num);
       if (r * r === x.num) {
-        return new SchemeExact(r);
+        return new AExact(r);
       }
     }
-    return new SchemeInexact(Math.sqrt(val));
+    return new AInexact(Math.sqrt(val));
   },
 });
 

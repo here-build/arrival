@@ -20,10 +20,10 @@
 import "../errors.js";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeExact } from "../values/numbers.js";
+import { AExact } from "../values/numbers.js";
 import { toIndex } from "../values/op-helpers.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { Nil, nil } from "../values/primitives/Nil.js";
+import { APair } from "../values/primitives/APair.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { is_false } from "../eval/guards.js";
 import { unpromise } from "../utils/promises.js";
 
@@ -38,21 +38,21 @@ export default new EnvCapability("scheme/combinators", {
         // singleton) would make \`single(Pair(x, nil-clone))\` falsely report false,
         // sending callers down the multi-element slow path. Use the structural
         // \`instanceof Nil\` guard.
-        return list instanceof Pair && list.cdr instanceof Nil;
+        return list instanceof APair && list.cdr instanceof ANil;
       },
     ),
 
     take: symbol.native`take: the first n elements of lst as a fresh list`(
       { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.union([z.pair, z.nil])] },
-      (lst: unknown, n: unknown): Pair | typeof nil => {
+      (lst: unknown, n: unknown): APair | typeof nil => {
         const count = toIndex(n);
-        let result: Pair | typeof nil = nil;
-        let tail: Pair | null = null;
+        let result: APair | typeof nil = nil;
+        let tail: APair | null = null;
         let current = lst;
         let i = 0;
 
-        while (current instanceof Pair && i < count) {
-          const newPair = new Pair(current.car, nil);
+        while (current instanceof APair && i < count) {
+          const newPair = new APair(current.car, nil);
           if (tail === null) {
             result = newPair;
           } else {
@@ -73,7 +73,7 @@ export default new EnvCapability("scheme/combinators", {
         let current = lst;
         let i = 0;
 
-        while (current instanceof Pair && i < count) {
+        while (current instanceof APair && i < count) {
           current = current.cdr;
           i++;
         }
@@ -83,7 +83,7 @@ export default new EnvCapability("scheme/combinators", {
 
     range: symbol.native`range: an exact-integer list [start, stop) by step (1- to 3-arg forms)`(
       { input: z.tuple([z.schemeNumber], z.unknown()), output: [z.union([z.pair, z.nil])] },
-      (stopOrStart: unknown, ...rest: unknown[]): Pair | typeof nil => {
+      (stopOrStart: unknown, ...rest: unknown[]): APair | typeof nil => {
         let start: number, stop: number, step: number;
 
         if (rest.length === 0) {
@@ -114,9 +114,9 @@ export default new EnvCapability("scheme/combinators", {
 
         // Convert array to list
         if (result.length === 0) return nil;
-        let list: Pair | typeof nil = nil;
+        let list: APair | typeof nil = nil;
         for (let i = result.length - 1; i >= 0; i--) {
-          list = new Pair(new SchemeExact(BigInt(result[i])), list);
+          list = new APair(new AExact(BigInt(result[i])), list);
         }
         return list;
       },

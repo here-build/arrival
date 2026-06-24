@@ -24,8 +24,8 @@
 import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";
 import { AValue } from "./values/primitives/AValue.js";
-import { Pair } from "./values/primitives/Pair.js";
-import { SchemeVector } from "./values/primitives/SchemeVector.js";
+import { APair } from "./values/primitives/APair.js";
+import { AVector } from "./values/primitives/AVector.js";
 
 /**
  * A fn that CLAIMED purity broke its contract — distinct from {@link PurityError}.
@@ -84,11 +84,11 @@ export const PURITY_ASSERT_ENABLED: boolean =
 export type Fingerprint = readonly unknown[];
 
 export function fingerprint(value: unknown): Fingerprint {
-  if (value instanceof Pair) {
+  if (value instanceof APair) {
     // car/cdr are reassignable fields (set-car!/set-cdr! would write them).
     return ["pair", value.car, value.cdr];
   }
-  if (value instanceof SchemeVector) {
+  if (value instanceof AVector) {
     // __vector__ is a live array: vector-set!/fill!/copy! mutate it in place.
     // Snapshot length + a shallow copy of element identities (the slice is the
     // only allocation; elements are kept by reference).

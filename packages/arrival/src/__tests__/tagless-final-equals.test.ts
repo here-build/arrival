@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { AValue } from "../values/primitives/AValue.js";
-import { Pair } from "../values/primitives/Pair.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { HalfBaked } from "../values/primitives/HalfBaked.js";
-import { LazySeq } from "../values/primitives/LazySeq.js";
-import { SchemeJSObject, SchemeJSFunction } from "../membrane.js";
-import { Nil, nil } from "../values/primitives/Nil.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
+import { APair } from "../values/primitives/APair.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { AString } from "../values/primitives/AString.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AExact, AInexact } from "../values/numbers.js";
+import { AHalfBaked } from "../values/primitives/AHalfBaked.js";
+import { ALazySeq } from "../values/primitives/ALazySeq.js";
+import { AJSObject, AJSFunction } from "../membrane.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
 import listsCap from "../env/lists.js";
 import type { EnvCapability } from "../env/capability.js";
@@ -55,10 +55,10 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
 const LIST_OPS = opsOf(listsCap);
 
 // Build a proper list of Pairs terminated by nil.
-function list(...xs: unknown[]): Pair | Nil {
-  let acc: Pair | Nil = nil;
-  for (let i = xs.length - 1; i >= 0; i--) acc = new Pair(xs[i], acc);
-  return acc as Pair;
+function list(...xs: unknown[]): APair | ANil {
+  let acc: APair | ANil = nil;
+  for (let i = xs.length - 1; i >= 0; i--) acc = new APair(xs[i], acc);
+  return acc as APair;
 }
 
 // A value that defines EQ (typeof v[EQ] === "function"). Build a representative
@@ -66,19 +66,19 @@ function list(...xs: unknown[]): Pair | Nil {
 function representativeValues(): { name: string; value: AValue }[] {
   const reps: { name: string; value: AValue }[] = [
     { name: "Nil", value: nil },
-    { name: "Pair", value: new Pair(new SchemeExact(1n), nil) },
-    { name: "SchemeString", value: new SchemeString("x") },
-    { name: "SchemeExact", value: new SchemeExact(1n) },
-    { name: "SchemeInexact", value: new SchemeInexact(1.5) },
-    { name: "SchemeBool", value: new SchemeBool(true) },
-    { name: "SchemeCharacter", value: new SchemeCharacter("a") },
-    { name: "SchemeSymbol", value: new SchemeSymbol("sym") },
-    { name: "SchemeVector", value: new SchemeVector([new SchemeExact(1n)]) },
-    { name: "SchemeBytevector", value: new SchemeBytevector([1, 2, 3]) },
-    { name: "HalfBaked", value: HalfBaked.collection([Promise.resolve([])], () => [0, 1]) },
-    { name: "LazySeq", value: new LazySeq([new SchemeExact(1n)]) },
-    { name: "SchemeJSObject", value: new SchemeJSObject({ a: 1 }) },
-    { name: "SchemeJSFunction", value: new SchemeJSFunction(() => 1) },
+    { name: "Pair", value: new APair(new AExact(1n), nil) },
+    { name: "SchemeString", value: new AString("x") },
+    { name: "SchemeExact", value: new AExact(1n) },
+    { name: "SchemeInexact", value: new AInexact(1.5) },
+    { name: "SchemeBool", value: new ABool(true) },
+    { name: "SchemeCharacter", value: new ACharacter("a") },
+    { name: "SchemeSymbol", value: new ASymbol("sym") },
+    { name: "SchemeVector", value: new AVector([new AExact(1n)]) },
+    { name: "SchemeBytevector", value: new ABytevector([1, 2, 3]) },
+    { name: "HalfBaked", value: AHalfBaked.collection([Promise.resolve([])], () => [0, 1]) },
+    { name: "LazySeq", value: new ALazySeq([new AExact(1n)]) },
+    { name: "SchemeJSObject", value: new AJSObject({ a: 1 }) },
+    { name: "SchemeJSFunction", value: new AJSFunction(() => 1) },
   ];
   return reps;
 }
@@ -100,58 +100,58 @@ describe("G1 totality — every AValue subtype defines fantasy-land/equals", () 
 describe("G2 Pair Setoid", () => {
   // Invoke EQ as a METHOD on the receiver so `this` is bound (the protocol is a
   // method on the term). Pre-impl, Pair has no EQ → "not a function" (a clean RED).
-  const pairEq = (p: Pair, other: unknown, seen?: Map<object, Set<object>>): boolean =>
+  const pairEq = (p: APair, other: unknown, seen?: Map<object, Set<object>>): boolean =>
     (p as unknown as { ["fantasy-land/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
 
   it("equal proper lists compare equal through the Pair Setoid", () => {
-    const a = list(new SchemeExact(1n), new SchemeExact(2n), new SchemeExact(3n)) as Pair;
-    const b = list(new SchemeExact(1n), new SchemeExact(2n), new SchemeExact(3n)) as Pair;
+    const a = list(new AExact(1n), new AExact(2n), new AExact(3n)) as APair;
+    const b = list(new AExact(1n), new AExact(2n), new AExact(3n)) as APair;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("unequal lists compare unequal", () => {
-    const a = list(new SchemeExact(1n), new SchemeExact(2n)) as Pair;
-    const b = list(new SchemeExact(1n), new SchemeExact(9n)) as Pair;
+    const a = list(new AExact(1n), new AExact(2n)) as APair;
+    const b = list(new AExact(1n), new AExact(9n)) as APair;
     expect(pairEq(a, b)).toBe(false);
   });
 
   it("pair vs non-pair is false", () => {
-    const a = list(new SchemeExact(1n)) as Pair;
-    expect(pairEq(a, new SchemeExact(1n))).toBe(false);
+    const a = list(new AExact(1n)) as APair;
+    expect(pairEq(a, new AExact(1n))).toBe(false);
     expect(pairEq(a, nil)).toBe(false);
   });
 
   it("nested lists compare structurally", () => {
-    const a = list(list(new SchemeExact(1n), new SchemeExact(2n)), new SchemeString("k")) as Pair;
-    const b = list(list(new SchemeExact(1n), new SchemeExact(2n)), new SchemeString("k")) as Pair;
-    const c = list(list(new SchemeExact(1n), new SchemeExact(7n)), new SchemeString("k")) as Pair;
+    const a = list(list(new AExact(1n), new AExact(2n)), new AString("k")) as APair;
+    const b = list(list(new AExact(1n), new AExact(2n)), new AString("k")) as APair;
+    const c = list(list(new AExact(1n), new AExact(7n)), new AString("k")) as APair;
     expect(pairEq(a, b)).toBe(true);
     expect(pairEq(a, c)).toBe(false);
   });
 
   it("self-cyclic pairs (a.cdr=a, b.cdr=b) compare equal AND terminate", () => {
-    const a = new Pair(new SchemeExact(1n), nil);
+    const a = new APair(new AExact(1n), nil);
     a.cdr = a;
-    const b = new Pair(new SchemeExact(1n), nil);
+    const b = new APair(new AExact(1n), nil);
     b.cdr = b;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("mutually-cyclic pairs (a↔b vs c↔d) compare equal AND terminate", () => {
-    const a = new Pair(new SchemeExact(1n), nil);
-    const b = new Pair(new SchemeExact(2n), nil);
+    const a = new APair(new AExact(1n), nil);
+    const b = new APair(new AExact(2n), nil);
     a.cdr = b;
     b.cdr = a;
-    const c = new Pair(new SchemeExact(1n), nil);
-    const d = new Pair(new SchemeExact(2n), nil);
+    const c = new APair(new AExact(1n), nil);
+    const d = new APair(new AExact(2n), nil);
     c.cdr = d;
     d.cdr = c;
     expect(pairEq(a, c)).toBe(true);
   });
 
   it("an explicit seen Map argument is honored", () => {
-    const a = list(new SchemeExact(1n)) as Pair;
-    const b = list(new SchemeExact(1n)) as Pair;
+    const a = list(new AExact(1n)) as APair;
+    const b = list(new AExact(1n)) as APair;
     expect(pairEq(a, b, new Map())).toBe(true);
   });
 });
@@ -172,25 +172,25 @@ describe("G2 Pair Setoid", () => {
 // on mutual cycles once it owns the recursion.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G3 Vector Setoid — cyclic vectors terminate", () => {
-  const vecEq = (v: SchemeVector, other: unknown, seen?: Map<object, Set<object>>): boolean =>
+  const vecEq = (v: AVector, other: unknown, seen?: Map<object, Set<object>>): boolean =>
     (v as unknown as { ["fantasy-land/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
-    const a = new SchemeVector([new SchemeExact(1n)]);
-    const b = new SchemeVector([new SchemeExact(2n)]);
+    const a = new AVector([new AExact(1n)]);
+    const b = new AVector([new AExact(2n)]);
     a.__vector__.push(b);
     b.__vector__.push(a);
-    const c = new SchemeVector([new SchemeExact(1n)]);
-    const d = new SchemeVector([new SchemeExact(2n)]);
+    const c = new AVector([new AExact(1n)]);
+    const d = new AVector([new AExact(2n)]);
     c.__vector__.push(d);
     d.__vector__.push(c);
     expect(vecEq(a, c)).toBe(true);
   });
 
   it("equal acyclic vectors compare equal; unequal differ", () => {
-    const a = new SchemeVector([new SchemeExact(1n), new SchemeExact(2n)]);
-    const b = new SchemeVector([new SchemeExact(1n), new SchemeExact(2n)]);
-    const c = new SchemeVector([new SchemeExact(1n), new SchemeExact(3n)]);
+    const a = new AVector([new AExact(1n), new AExact(2n)]);
+    const b = new AVector([new AExact(1n), new AExact(2n)]);
+    const c = new AVector([new AExact(1n), new AExact(3n)]);
     expect(vecEq(a, b)).toBe(true);
     expect(vecEq(a, c)).toBe(false);
   });
@@ -201,17 +201,17 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G4 equal? regression — structuralEqual", () => {
   it("deep nested structures: true and false", () => {
-    const a = list(list(new SchemeExact(1n)), new SchemeString("k"), new SchemeVector([new SchemeBool(true)]));
-    const b = list(list(new SchemeExact(1n)), new SchemeString("k"), new SchemeVector([new SchemeBool(true)]));
-    const c = list(list(new SchemeExact(1n)), new SchemeString("k"), new SchemeVector([new SchemeBool(false)]));
+    const a = list(list(new AExact(1n)), new AString("k"), new AVector([new ABool(true)]));
+    const b = list(list(new AExact(1n)), new AString("k"), new AVector([new ABool(true)]));
+    const c = list(list(new AExact(1n)), new AString("k"), new AVector([new ABool(false)]));
     expect(structuralEqual(a, b)).toBe(true);
     expect(structuralEqual(a, c)).toBe(false);
   });
 
   it("cyclic list via structuralEqual terminates", () => {
-    const a = new Pair(new SchemeExact(1n), nil);
+    const a = new APair(new AExact(1n), nil);
     a.cdr = a;
-    const b = new Pair(new SchemeExact(1n), nil);
+    const b = new APair(new AExact(1n), nil);
     b.cdr = b;
     expect(structuralEqual(a, b)).toBe(true);
     // self-equality on a cyclic list must also terminate (the bridge.ts war story)
@@ -219,16 +219,16 @@ describe("G4 equal? regression — structuralEqual", () => {
   });
 
   it("cyclic vector via structuralEqual terminates", () => {
-    const a = new SchemeVector([new SchemeExact(1n)]);
+    const a = new AVector([new AExact(1n)]);
     a.__vector__.push(a);
-    const b = new SchemeVector([new SchemeExact(1n)]);
+    const b = new AVector([new AExact(1n)]);
     b.__vector__.push(b);
     expect(structuralEqual(a, b)).toBe(true);
   });
 
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
-    expect(typeof (new Pair(new SchemeExact(1n), nil) as unknown as Record<string, unknown>)[EQ]).toBe("function");
-    expect(typeof (new SchemeVector([]) as unknown as Record<string, unknown>)[EQ]).toBe("function");
+    expect(typeof (new APair(new AExact(1n), nil) as unknown as Record<string, unknown>)[EQ]).toBe("function");
+    expect(typeof (new AVector([]) as unknown as Record<string, unknown>)[EQ]).toBe("function");
   });
 });
 
@@ -237,14 +237,14 @@ describe("G4 equal? regression — structuralEqual", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
   it("eq?/eqv? on distinct equal lists is #f; equal? is #t", () => {
-    expect(eq(list(new SchemeExact(1n)), list(new SchemeExact(1n)))).toBe(false);
-    expect(eqv(list(new SchemeExact(1n)), list(new SchemeExact(1n)))).toBe(false);
-    expect(structuralEqual(list(new SchemeExact(1n)), list(new SchemeExact(1n)))).toBe(true);
+    expect(eq(list(new AExact(1n)), list(new AExact(1n)))).toBe(false);
+    expect(eqv(list(new AExact(1n)), list(new AExact(1n)))).toBe(false);
+    expect(structuralEqual(list(new AExact(1n)), list(new AExact(1n)))).toBe(true);
   });
 
   it("eqv? exact vs inexact #f; exact vs exact #t", () => {
-    expect(eqv(new SchemeExact(1n), new SchemeInexact(1))).toBe(false);
-    expect(eqv(new SchemeExact(1n), new SchemeExact(1n))).toBe(true);
+    expect(eqv(new AExact(1n), new AInexact(1))).toBe(false);
+    expect(eqv(new AExact(1n), new AExact(1n))).toBe(true);
   });
 });
 
@@ -267,23 +267,23 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G6 equality-suite cleanup", () => {
   // A distinct-instance symbol of the same name (uninterned provenance clone).
-  const distinctSym = (name: string): SchemeSymbol =>
-    new SchemeSymbol(name).withProvenance(new Set([1]));
+  const distinctSym = (name: string): ASymbol =>
+    new ASymbol(name).withProvenance(new Set([1]));
 
   describe("eqv? over scalars (canonical structural-equal)", () => {
     it("exact ≡ exact (same value) → true", () => {
-      expect(eqv(new SchemeExact(1n), new SchemeExact(1n))).toBe(true);
+      expect(eqv(new AExact(1n), new AExact(1n))).toBe(true);
     });
     it("exact vs inexact → false (exactness distinguishes)", () => {
-      expect(eqv(new SchemeExact(1n), new SchemeInexact(1))).toBe(false);
+      expect(eqv(new AExact(1n), new AInexact(1))).toBe(false);
     });
     it("char same/diff", () => {
-      expect(eqv(new SchemeCharacter("a"), new SchemeCharacter("a"))).toBe(true);
-      expect(eqv(new SchemeCharacter("a"), new SchemeCharacter("b"))).toBe(false);
+      expect(eqv(new ACharacter("a"), new ACharacter("a"))).toBe(true);
+      expect(eqv(new ACharacter("a"), new ACharacter("b"))).toBe(false);
     });
     it("bool same/diff", () => {
-      expect(eqv(new SchemeBool(true), new SchemeBool(true))).toBe(true);
-      expect(eqv(new SchemeBool(true), new SchemeBool(false))).toBe(false);
+      expect(eqv(new ABool(true), new ABool(true))).toBe(true);
+      expect(eqv(new ABool(true), new ABool(false))).toBe(false);
     });
     it("two DISTINCT-instance symbols of the same name → true", () => {
       const a = distinctSym("a");
@@ -302,13 +302,13 @@ describe("G6 equality-suite cleanup", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
       (x as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
-      { name: "exact==exact", x: new SchemeExact(1n), y: new SchemeExact(1n) },
-      { name: "exact!=exact", x: new SchemeExact(1n), y: new SchemeExact(2n) },
-      { name: "inexact==inexact", x: new SchemeInexact(1.5), y: new SchemeInexact(1.5) },
-      { name: "char==char", x: new SchemeCharacter("a"), y: new SchemeCharacter("a") },
-      { name: "char!=char", x: new SchemeCharacter("a"), y: new SchemeCharacter("b") },
-      { name: "bool==bool", x: new SchemeBool(true), y: new SchemeBool(true) },
-      { name: "bool!=bool", x: new SchemeBool(true), y: new SchemeBool(false) },
+      { name: "exact==exact", x: new AExact(1n), y: new AExact(1n) },
+      { name: "exact!=exact", x: new AExact(1n), y: new AExact(2n) },
+      { name: "inexact==inexact", x: new AInexact(1.5), y: new AInexact(1.5) },
+      { name: "char==char", x: new ACharacter("a"), y: new ACharacter("a") },
+      { name: "char!=char", x: new ACharacter("a"), y: new ACharacter("b") },
+      { name: "bool==bool", x: new ABool(true), y: new ABool(true) },
+      { name: "bool!=bool", x: new ABool(true), y: new ABool(false) },
       { name: "sym==sym(distinct)", x: distinctSym("a"), y: distinctSym("a") },
       { name: "nil==nil", x: nil, y: nil.withProvenance(new Set([1])) },
     ];
@@ -325,47 +325,47 @@ describe("G6 equality-suite cleanup", () => {
     // is RED for a distinct-instance 'a (no SchemeSymbol case → #f).
     it("memv finds a distinct-instance symbol of the same name", () => {
       const needle = distinctSym("a");
-      const lst = list(new SchemeSymbol("b"), new SchemeSymbol("a"), new SchemeSymbol("c"));
+      const lst = list(new ASymbol("b"), new ASymbol("a"), new ASymbol("c"));
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
-      expect((found as Pair).car).toBeInstanceOf(SchemeSymbol);
-      expect(((found as Pair).car as SchemeSymbol).__name__).toBe("a");
+      expect((found as APair).car).toBeInstanceOf(ASymbol);
+      expect(((found as APair).car as ASymbol).__name__).toBe("a");
     });
 
     it("memv finds a distinct-instance nil", () => {
       const needle = nil.withProvenance(new Set([1]));
-      const lst = list(new SchemeSymbol("x"), nil);
+      const lst = list(new ASymbol("x"), nil);
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
-      expect((found as Pair).car).toBeInstanceOf(Nil);
+      expect((found as APair).car).toBeInstanceOf(ANil);
     });
 
     it("assv finds a distinct-instance symbol key of the same name", () => {
       const needle = distinctSym("k");
       const alist = list(
-        new Pair(new SchemeSymbol("j"), new SchemeExact(1n)),
-        new Pair(new SchemeSymbol("k"), new SchemeExact(2n)),
+        new APair(new ASymbol("j"), new AExact(1n)),
+        new APair(new ASymbol("k"), new AExact(2n)),
       );
       const found = LIST_OPS.assv(needle, alist);
       expect(found).not.toBe(false);
-      expect(((found as Pair).car as SchemeSymbol).__name__).toBe("k");
-      expect(((found as Pair).cdr as SchemeExact).valueOf()).toBe(2);
+      expect(((found as APair).car as ASymbol).__name__).toBe("k");
+      expect(((found as APair).cdr as AExact).valueOf()).toBe(2);
     });
 
     // Numeric eqv? path (interned-symbol-independent): assv still matches numbers.
     it("memv matches distinct-instance exact numbers (eqv? numeric path)", () => {
-      const needle = new SchemeExact(2n);
-      const lst = list(new SchemeExact(1n), new SchemeExact(2n), new SchemeExact(3n));
+      const needle = new AExact(2n);
+      const lst = list(new AExact(1n), new AExact(2n), new AExact(3n));
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
-      expect(((found as Pair).car as SchemeExact).valueOf()).toBe(2);
+      expect(((found as APair).car as AExact).valueOf()).toBe(2);
     });
   });
 
   describe("G5 reaffirm — eq/eqv stay pointer-grade on Pairs (NOT deep)", () => {
     it("distinct equal Pairs: eq/eqv #f, equal? #t", () => {
-      const a = list(new SchemeExact(1n), new SchemeExact(2n)) as Pair;
-      const b = list(new SchemeExact(1n), new SchemeExact(2n)) as Pair;
+      const a = list(new AExact(1n), new AExact(2n)) as APair;
+      const b = list(new AExact(1n), new AExact(2n)) as APair;
       expect(eq(a, b)).toBe(false);
       expect(eqv(a, b)).toBe(false);
       expect(structuralEqual(a, b)).toBe(true);
@@ -380,11 +380,11 @@ describe("G6 equality-suite cleanup", () => {
     // pins eq()'s SchemeBool case so a naive route-through-Setoid (which would
     // flip #f→#t here) is caught.
     it("eq?/eqv? of a boxed SchemeBool vs a raw JS boolean is #f", () => {
-      expect(eq(new SchemeBool(true), true as unknown as never)).toBe(false);
-      expect(eqv(new SchemeBool(true), true as unknown as never)).toBe(false);
+      expect(eq(new ABool(true), true as unknown as never)).toBe(false);
+      expect(eqv(new ABool(true), true as unknown as never)).toBe(false);
       // but the Setoid itself IS representation-blind (documents the divergence):
       expect(
-        (new SchemeBool(true) as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](true),
+        (new ABool(true) as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](true),
       ).toBe(true);
     });
   });

@@ -1,6 +1,6 @@
 import "@here.build/arrival-env";
 
-const isNil = (element: any) => element?.constructor?.name === "Nil";
+const isNil = (element: any) => element?.constructor?.name === "ANil";
 
 /**
  * S-Expression Serializer
@@ -162,7 +162,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
   // Handle LIPS-specific types before generic Symbol.toSExpr
   if (obj && typeof obj === "object") {
     // SchemeExact (exact integers/rationals)
-    if (obj.constructor?.name === "SchemeExact" && "num" in obj && "denom" in obj) {
+    if (obj.constructor?.name === "AExact" && "num" in obj && "denom" in obj) {
       if (obj.denom === 1n) {
         const value = obj.num as bigint;
         if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
@@ -175,7 +175,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
 
     // SchemeInexact (floats/complex)
-    if (obj.constructor?.name === "SchemeInexact" && "real" in obj) {
+    if (obj.constructor?.name === "AInexact" && "real" in obj) {
       if ("imag" in obj && obj.imag !== 0) {
         return `${obj.real}+${obj.imag}i`;
       }
@@ -183,12 +183,12 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
 
     // SchemeSymbol
-    if (obj.constructor?.name === "SchemeSymbol" && "__name__" in obj) {
+    if (obj.constructor?.name === "ASymbol" && "__name__" in obj) {
       return obj.__name__; // Return symbol name as-is (includes : for keywords)
     }
 
     // SchemeString
-    if (obj.constructor?.name === "SchemeString" && "__string__" in obj) {
+    if (obj.constructor?.name === "AString" && "__string__" in obj) {
       const str = capString(obj.__string__);
       // Use template strings for complex strings (multi-line, quotes, etc.)
       if (str.includes(String.raw`\n`) || str.includes(String.raw`\t`) || str.includes('"') || str.includes("'")) {
@@ -199,7 +199,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
 
     // SchemeCharacter
-    if (obj.constructor?.name === "SchemeCharacter" && "__char__" in obj) {
+    if (obj.constructor?.name === "ACharacter" && "__char__" in obj) {
       return `#\\${obj.__char__}`; // Return character with #\ prefix
     }
 
@@ -210,12 +210,12 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
 
     // LIPS Pair (linked list structure)
-    if (obj.constructor?.name === "Pair" && "car" in obj && "cdr" in obj) {
+    if (obj.constructor?.name === "APair" && "car" in obj && "cdr" in obj) {
       return ["list", ...convertLipsPairToArray(obj, visited)];
     }
 
     // LIPS Nil (empty list) - be more specific to avoid catching plain objects
-    if (obj.constructor?.name === "Nil") {
+    if (obj.constructor?.name === "ANil") {
       return []; // Return empty list
     }
 
@@ -550,13 +550,13 @@ function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
   let current = pair;
   let shown = 0;
 
-  while (current && current.constructor?.name === "Pair") {
+  while (current && current.constructor?.name === "APair") {
     // Cap hit: cheap-count the rest (cdr walk, NO serialize) for the marker, then stop —
     // the tail of a thousand-element list is never serialized.
     if (shown >= activeCaps.maxItems) {
       let rest = 0;
       let c: any = current;
-      while (c && c.constructor?.name === "Pair") {
+      while (c && c.constructor?.name === "APair") {
         rest++;
         c = c.cdr;
       }

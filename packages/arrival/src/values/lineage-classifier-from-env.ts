@@ -31,7 +31,7 @@
  */
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
-import { SchemeJSFunction } from "../membrane.js";
+import { AJSFunction } from "../membrane.js";
 import type { Classifier } from "./lineage.js";
 
 /** Collection operators that classify to a per-element fan template (see classify). */
@@ -66,6 +66,6 @@ export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>
     isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
     isFan: (op) => FAN_OPS.has(op),
     // Structural: a foreign-call membrane wrapper is an opaque black box.
-    isOpaque: (op) => env.get(op, { throwError: false }) instanceof SchemeJSFunction,
+    isOpaque: (op) => env.get(op, { throwError: false }) instanceof AJSFunction,
   };
 }

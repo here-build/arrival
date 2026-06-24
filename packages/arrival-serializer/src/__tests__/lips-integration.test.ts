@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, SchemeExact, schemeToJs, SchemeString, SchemeSymbol, Nil, Pair, sandboxedEnv } from "@here.build/arrival";
+import { exec, AExact, schemeToJs, AString, ASymbol, ANil, APair, sandboxedEnv } from "@here.build/arrival";
 // Import custom matchers
 import "@here.build/arrival";
 
@@ -161,25 +161,25 @@ describe("exec with proper environment", () => {
     expect(results[0]).toBe(3n); // First result
     expect(results[1]).toBe(12n); // Second result
     // Symbol needs special handling
-    expect(rawResults[2]).toBeInstanceOf(SchemeSymbol);
+    expect(rawResults[2]).toBeInstanceOf(ASymbol);
     expect(rawResults[2].__name__).toBe("hello");
   });
 
   it("should handle lists (returns LIPS Pair)", async () => {
     const result = (await exec("(list 1 2 3)"))[0];
-    expect(result).toBeInstanceOf(Pair);
-    expect(result.car).toBeInstanceOf(SchemeExact);
+    expect(result).toBeInstanceOf(APair);
+    expect(result.car).toBeInstanceOf(AExact);
   });
 
   it("should handle symbols (returns SchemeSymbol)", async () => {
     const result = (await exec("'symbol-name"))[0];
-    expect(result).toBeInstanceOf(SchemeSymbol);
+    expect(result).toBeInstanceOf(ASymbol);
     expect(result.__name__).toBe("symbol-name");
   });
 
   it("should handle strings (returns SchemeString)", async () => {
     const result = (await exec('"hello world"'))[0];
-    expect(result).toBeInstanceOf(SchemeString);
+    expect(result).toBeInstanceOf(AString);
     expect(result.__string__).toBe("hello world");
   });
 
@@ -190,16 +190,16 @@ describe("exec with proper environment", () => {
 
   it("should handle complex expressions (returns LIPS structures)", async () => {
     const result = (await exec("(map (lambda (x) (* x 2)) (list 1 2 3))"))[0];
-    expect(result).toBeInstanceOf(Pair);
+    expect(result).toBeInstanceOf(APair);
     // Result is Pair with SchemeExact values
-    expect(result.car).toBeInstanceOf(SchemeExact);
+    expect(result.car).toBeInstanceOf(AExact);
     expect(result.car.num).toBe(2n);
     expect(result.cdr.car.num).toBe(4n);
   });
 
   it("should handle empty expressions (returns Nil)", async () => {
     const result = (await exec("()"))[0];
-    expect(result).toBeInstanceOf(Nil);
+    expect(result).toBeInstanceOf(ANil);
   });
 
   it("should have access to Ramda functions", async () => {
@@ -208,7 +208,7 @@ describe("exec with proper environment", () => {
         env: sandboxedEnv
       })
     )[0];
-    expect(result).toBeInstanceOf(Pair);
+    expect(result).toBeInstanceOf(APair);
 
     // Convert to JS values for easier testing
     const values = schemeToJs(result, { forceBigInt: true });

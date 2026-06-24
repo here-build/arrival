@@ -31,15 +31,15 @@
 export * from "zod";
 import * as z from "zod";
 
-import { Pair } from "../values/primitives/Pair.js";
-import { Nil } from "../values/primitives/Nil.js";
-import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
-import { SchemeVector } from "../values/primitives/SchemeVector.js";
-import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
-import { SchemeString } from "../values/primitives/SchemeString.js";
-import { SchemeBool } from "../values/primitives/SchemeBool.js";
-import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
-import { SchemeExact, SchemeInexact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AString } from "../values/primitives/AString.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
+import { AExact, AInexact } from "../values/numbers.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEME-IDENTITY PRIMITIVES — for `arrival.symbol` (native).
@@ -47,18 +47,18 @@ import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 // (`Pair`, `SchemeString`, …), exactly like today's `{ value: fn }` ops. No codec,
 // no decode — `z.output<typeof pair> = Pair`.
 // ─────────────────────────────────────────────────────────────────────────────
-export const pair = z.instanceof(Pair);
-export const symbol = z.instanceof(SchemeSymbol);
-export const svector = z.instanceof(SchemeVector);
-export const sbytevector = z.instanceof(SchemeBytevector);
-export const nil = z.instanceof(Nil);
-export const schemeString = z.instanceof(SchemeString);
-export const schemeBool = z.instanceof(SchemeBool);
-export const schemeChar = z.instanceof(SchemeCharacter);
-export const schemeExact = z.instanceof(SchemeExact);
-export const schemeInexact = z.instanceof(SchemeInexact);
+export const pair = z.instanceof(APair);
+export const symbol = z.instanceof(ASymbol);
+export const svector = z.instanceof(AVector);
+export const sbytevector = z.instanceof(ABytevector);
+export const nil = z.instanceof(ANil);
+export const schemeString = z.instanceof(AString);
+export const schemeBool = z.instanceof(ABool);
+export const schemeChar = z.instanceof(ACharacter);
+export const schemeExact = z.instanceof(AExact);
+export const schemeInexact = z.instanceof(AInexact);
 /** Either numeric tower class — the identity term for a native numeric op. */
-export const schemeNumber = z.union([z.instanceof(SchemeExact), z.instanceof(SchemeInexact)]);
+export const schemeNumber = z.union([z.instanceof(AExact), z.instanceof(AInexact)]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CODECS — for `arrival.rosetta` (JS-land). Each codec IS the per-arg membrane:
@@ -68,21 +68,21 @@ export const schemeNumber = z.union([z.instanceof(SchemeExact), z.instanceof(Sch
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** SchemeString ↔ JS `string`. */
-export const string = z.codec(z.instanceof(SchemeString), z.string(), {
+export const string = z.codec(z.instanceof(AString), z.string(), {
   decode: (s) => s.toJs(),
-  encode: (s) => new SchemeString(s),
+  encode: (s) => new AString(s),
 });
 
 /** SchemeBool ↔ JS `boolean`. */
-export const boolean = z.codec(z.instanceof(SchemeBool), z.boolean(), {
+export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
   decode: (b) => b.value,
-  encode: (b) => new SchemeBool(b),
+  encode: (b) => new ABool(b),
 });
 
 /** SchemeCharacter ↔ JS `string` (single grapheme). */
-export const char = z.codec(z.instanceof(SchemeCharacter), z.string(), {
+export const char = z.codec(z.instanceof(ACharacter), z.string(), {
   decode: (c) => c.valueOf(),
-  encode: (c) => new SchemeCharacter(c),
+  encode: (c) => new ACharacter(c),
 });
 
 // ── the NUMBER CODEC FAMILY ───────────────────────────────────────────────────
@@ -94,7 +94,7 @@ const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 /** A scheme number that fits in a JS `number` without loss; SchemeExact integers in
  *  safe range and SchemeInexact reals decode directly. Anything that would lose
  *  precision DOORS — a teaching error, never a silent narrowing. */
-function exactToJsNumberOrDoor(n: SchemeExact): number {
+function exactToJsNumberOrDoor(n: AExact): number {
   if (n.denom !== 1n) {
     // A non-integer rational can't be a faithful JS number (e.g. 1/3). The door tells
     // the author to choose `z.bigint` / the `schemeExact` identity term for full fidelity.
@@ -112,16 +112,16 @@ function exactToJsNumberOrDoor(n: SchemeExact): number {
 
 /** SchemeExact|SchemeInexact ↔ JS `number`. decode lowers (DOORS on precision loss);
  *  encode of a JS number → SchemeInexact (the float type the consumer chose). */
-export const number = z.codec(z.union([z.instanceof(SchemeExact), z.instanceof(SchemeInexact)]), z.number(), {
-  decode: (n) => (n instanceof SchemeInexact ? n.real : exactToJsNumberOrDoor(n)),
-  encode: (n) => new SchemeInexact(n),
+export const number = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number(), {
+  decode: (n) => (n instanceof AInexact ? n.real : exactToJsNumberOrDoor(n)),
+  encode: (n) => new AInexact(n),
 });
 
 /** SchemeExact|SchemeInexact ↔ JS `number` constrained to SAFE INTEGERS. decode
  *  validates it IS a safe integer (DOORS otherwise); encode → SchemeExact (exact). */
-export const integer = z.codec(z.union([z.instanceof(SchemeExact), z.instanceof(SchemeInexact)]), z.number().int(), {
+export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
   decode: (n) => {
-    if (n instanceof SchemeInexact) {
+    if (n instanceof AInexact) {
       if (!Number.isSafeInteger(n.real)) {
         throw new Error(`integer codec: inexact ${n.toString()} is not a safe integer`);
       }
@@ -133,16 +133,16 @@ export const integer = z.codec(z.union([z.instanceof(SchemeExact), z.instanceof(
     if (!Number.isSafeInteger(n)) {
       throw new Error(`integer codec: ${n} is not a safe integer`);
     }
-    return new SchemeExact(BigInt(n));
+    return new AExact(BigInt(n));
   },
 });
 
 /** SchemeExact|SchemeInexact ↔ JS `bigint` (exact, arbitrary precision — always faithful
  *  for an integer term). decode → bigint; encode → SchemeExact. A non-integer rational
  *  or a non-integral inexact DOORS (a bigint has no fractional part). */
-export const bigint = z.codec(z.union([z.instanceof(SchemeExact), z.instanceof(SchemeInexact)]), z.bigint(), {
+export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.bigint(), {
   decode: (n) => {
-    if (n instanceof SchemeInexact) {
+    if (n instanceof AInexact) {
       if (!Number.isInteger(n.real)) {
         throw new Error(`bigint codec: inexact ${n.toString()} has a fractional part`);
       }
@@ -153,5 +153,5 @@ export const bigint = z.codec(z.union([z.instanceof(SchemeExact), z.instanceof(S
     }
     return n.num;
   },
-  encode: (n) => new SchemeExact(n),
+  encode: (n) => new AExact(n),
 });

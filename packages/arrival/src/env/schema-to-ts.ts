@@ -54,16 +54,16 @@ import type { SymbolDef } from "./symbol.js";
 // Each entry is exactly one z.instanceof export from scheme-zod.
 // ─────────────────────────────────────────────────────────────────────────────
 const SCHEME_PRIMITIVE_FALLBACK: ReadonlyMap<unknown, string> = new Map<unknown, string>([
-  [z.pair, "Pair"],
-  [z.symbol, "SchemeSymbol"],
-  [z.svector, "SchemeVector"],
-  [z.sbytevector, "SchemeBytevector"],
-  [z.nil, "Nil"],
-  [z.schemeString, "SchemeString"],
-  [z.schemeBool, "SchemeBool"],
-  [z.schemeChar, "SchemeCharacter"],
-  [z.schemeExact, "SchemeExact"],
-  [z.schemeInexact, "SchemeInexact"],
+  [z.pair, "APair"],
+  [z.symbol, "ASymbol"],
+  [z.svector, "AVector"],
+  [z.sbytevector, "ABytevector"],
+  [z.nil, "ANil"],
+  [z.schemeString, "AString"],
+  [z.schemeBool, "ABool"],
+  [z.schemeChar, "ACharacter"],
+  [z.schemeExact, "AExact"],
+  [z.schemeInexact, "AInexact"],
 ]);
 
 /** Read the JS class name a custom/instanceof schema was built from. Primary:

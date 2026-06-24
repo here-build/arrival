@@ -26,10 +26,10 @@
 // not a wiring path; access a member first.
 
 import { AValue } from "./values/primitives/AValue.js";
-import { Pair } from "./values/primitives/Pair.js";
-import { SchemeVector } from "./values/primitives/SchemeVector.js";
+import { APair } from "./values/primitives/APair.js";
+import { AVector } from "./values/primitives/AVector.js";
 import { SchemeJSArray } from "./membrane.js";
-import { SchemeString } from "./values/primitives/SchemeString.js";
+import { AString } from "./values/primitives/AString.js";
 
 /** Union the provenance point-ids of every AValue reachable in `vals`, deep-walking
  *  the structured carriers (list spines, vectors, arrays). Idempotent: only existing
@@ -41,10 +41,10 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
     if (v === null || typeof v !== "object" || seen.has(v)) return;
     seen.add(v);
     if (v instanceof AValue) for (const p of v.provenance) acc.add(p);
-    if (v instanceof Pair) {
+    if (v instanceof APair) {
       walk(v.car);
       walk(v.cdr);
-    } else if (v instanceof SchemeVector) {
+    } else if (v instanceof AVector) {
       for (const el of v.__vector__) walk(el);
     } else if (v instanceof SchemeJSArray) {
       for (const el of v.source) walk(el);
@@ -58,6 +58,6 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
 
 /** Re-stamp a collapsed string with provenance — a provenance-carrying `SchemeString`
  *  when there is lineage to carry, else the bare string (no empty wrapper churn). */
-export function taintString(result: string, prov: Set<number>): string | SchemeString {
-  return prov.size > 0 ? new SchemeString(result, prov) : result;
+export function taintString(result: string, prov: Set<number>): string | AString {
+  return prov.size > 0 ? new AString(result, prov) : result;
 }

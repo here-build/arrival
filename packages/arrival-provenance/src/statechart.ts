@@ -38,7 +38,7 @@
  * Distinguishing parallel-region-within-loop-region needs the §5.4 mark
  * hierarchy and is the v1 follow-up; this v0 is the flat collapsed causal DAG.
  */
-import type { Pair, SchemeSymbol } from "@here.build/arrival";
+import type { APair, ASymbol } from "@here.build/arrival";
 
 import { carrierFieldEdges } from "./carrier-fields.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
@@ -89,14 +89,14 @@ export interface Statechart {
   layerCount: number;
 }
 
-const isPair = (v: unknown): v is Pair => v !== null && typeof v === "object" && "car" in v && "cdr" in v;
+const isPair = (v: unknown): v is APair => v !== null && typeof v === "object" && "car" in v && "cdr" in v;
 
 /** Leading symbol of a form, e.g. `(infer/chat …)` → `"infer/chat"`. Falls back
  *  to `"?"` for shapes without a symbol head (rare for tracked infer nodes). */
-function leadingSymbol(node: Pair): string {
+function leadingSymbol(node: APair): string {
   const head = (node as { car: unknown }).car;
   if (head !== null && typeof head === "object" && "__name__" in head) {
-    const name = (head as SchemeSymbol as { __name__: unknown }).__name__;
+    const name = (head as ASymbol as { __name__: unknown }).__name__;
     if (typeof name === "string") return name;
   }
   return "?";
@@ -172,7 +172,7 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
 
   // 4. Collapse by Pair identity → one cell per AST node. Representative = lowest
   //    id; cell layer = lowest member layer (where the construct first fires).
-  const cellByNode = new Map<Pair, { rep: number; count: number; layer: number; label: string }>();
+  const cellByNode = new Map<APair, { rep: number; count: number; layer: number; label: string }>();
   const cellIdOf = new Map<number, number>(); // invocation id → representative id
   for (const [id, inv] of points) {
     const node = inv.node;

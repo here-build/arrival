@@ -9,25 +9,25 @@ import { printType, signatureOf } from "../schema-to-ts.js";
 
 describe("printType — native identity primitives (z.instanceof → class name)", () => {
   it("prints z.pair as its class name", () => {
-    expect(printType(z.pair)).toBe("Pair");
+    expect(printType(z.pair)).toBe("APair");
   });
   it("prints z.schemeString as its class name", () => {
-    expect(printType(z.schemeString)).toBe("SchemeString");
+    expect(printType(z.schemeString)).toBe("AString");
   });
   it("prints each numeric-tower identity term", () => {
-    expect(printType(z.schemeExact)).toBe("SchemeExact");
-    expect(printType(z.schemeInexact)).toBe("SchemeInexact");
+    expect(printType(z.schemeExact)).toBe("AExact");
+    expect(printType(z.schemeInexact)).toBe("AInexact");
   });
   it("prints the rest of the scheme-identity primitives", () => {
-    expect(printType(z.symbol)).toBe("SchemeSymbol");
-    expect(printType(z.svector)).toBe("SchemeVector");
-    expect(printType(z.sbytevector)).toBe("SchemeBytevector");
-    expect(printType(z.nil)).toBe("Nil");
-    expect(printType(z.schemeBool)).toBe("SchemeBool");
-    expect(printType(z.schemeChar)).toBe("SchemeCharacter");
+    expect(printType(z.symbol)).toBe("ASymbol");
+    expect(printType(z.svector)).toBe("AVector");
+    expect(printType(z.sbytevector)).toBe("ABytevector");
+    expect(printType(z.nil)).toBe("ANil");
+    expect(printType(z.schemeBool)).toBe("ABool");
+    expect(printType(z.schemeChar)).toBe("ACharacter");
   });
   it("prints a union of identity primitives as 'A | B' (override fires per-member)", () => {
-    expect(printType(z.schemeNumber)).toBe("SchemeExact | SchemeInexact");
+    expect(printType(z.schemeNumber)).toBe("AExact | AInexact");
   });
 });
 
@@ -54,13 +54,13 @@ describe("printType — compounds", () => {
     expect(printType(z.array(z.number))).toBe("number[]");
   });
   it("prints z.array of an identity primitive as 'T[]'", () => {
-    expect(printType(z.array(z.pair))).toBe("Pair[]");
+    expect(printType(z.array(z.pair))).toBe("APair[]");
   });
   it("prints a tuple as '[A, B]'", () => {
     expect(printType(z.tuple([z.string, z.number]))).toBe("[string, number]");
   });
   it("prints a tuple mixing codec + identity members", () => {
-    expect(printType(z.tuple([z.pair, z.schemeString]))).toBe("[Pair, SchemeString]");
+    expect(printType(z.tuple([z.pair, z.schemeString]))).toBe("[APair, AString]");
   });
   it("prints a union as 'A | B'", () => {
     expect(printType(z.union([z.string, z.number]))).toBe("string | number");
@@ -73,7 +73,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair, z.pair], output: [z.pair] },
       (a) => a,
     );
-    expect(signatureOf(def)).toBe("(a: Pair, b: Pair) => Pair");
+    expect(signatureOf(def)).toBe("(a: APair, b: APair) => APair");
   });
 
   it("composes a rosetta def: decoded JS args, async (Promise) return", () => {
@@ -97,7 +97,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair], output: [z.pair, z.pair] },
       (p) => [p, p] as [typeof p, typeof p],
     );
-    expect(signatureOf(def)).toBe("(a: Pair) => [Pair, Pair]");
+    expect(signatureOf(def)).toBe("(a: APair) => [APair, APair]");
   });
 
   it("composes a variadic (z.array) input as a rest parameter", () => {

@@ -117,7 +117,7 @@ function union(...sets: readonly Provenance[]): Provenance {
   return merged;
 }
 
-export class LazySeq extends AValue {
+export class ALazySeq extends AValue {
   readonly kind = "lazy-seq" as const;
 
   /**
@@ -137,15 +137,15 @@ export class LazySeq extends AValue {
   }
 
   /** `pipe` — extend the plan. Pure, cheap, runs NOTHING. */
-  pipe(op: LazyOp): LazySeq {
-    return new LazySeq(this.source, [...this.ops, op], this.provenance);
+  pipe(op: LazyOp): ALazySeq {
+    return new ALazySeq(this.source, [...this.ops, op], this.provenance);
   }
 
-  map(fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
+  map(fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>, prov: Provenance = EMPTY_PROVENANCE): ALazySeq {
     return this.pipe({ kind: "map", fn, prov });
   }
 
-  filter(pred: (x: SchemeValue) => boolean | Promise<boolean>, prov: Provenance = EMPTY_PROVENANCE): LazySeq {
+  filter(pred: (x: SchemeValue) => boolean | Promise<boolean>, prov: Provenance = EMPTY_PROVENANCE): ALazySeq {
     return this.pipe({ kind: "filter", pred, prov });
   }
 
@@ -240,13 +240,13 @@ export class LazySeq extends AValue {
     return this === other;
   }
 
-  withProvenance(p: Provenance): LazySeq {
-    return new LazySeq(this.source, this.ops, p);
+  withProvenance(p: Provenance): ALazySeq {
+    return new ALazySeq(this.source, this.ops, p);
   }
 }
 
-markInteropBoundary(LazySeq);
+markInteropBoundary(ALazySeq);
 
-export function is_lazy_seq(o: unknown): o is LazySeq {
-  return o instanceof LazySeq;
+export function is_lazy_seq(o: unknown): o is ALazySeq {
+  return o instanceof ALazySeq;
 }
