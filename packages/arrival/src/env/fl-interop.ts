@@ -29,6 +29,8 @@
  */
 
 import { EnvCapability } from "./capability.js";
+import { symbol } from "./symbol.js";
+import * as z from "./scheme-zod.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/types.js";
 import { SchemeJSArray } from "../membrane.js";
@@ -336,16 +338,18 @@ function unforcedLazyEgress(op: string): never {
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
     // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers; a Pair computes on the term (arrival/tagless-final/car)
-    car: {
-      value: (list: unknown) => {
+    car: symbol.native`car: first element — unwraps a SchemeJSArray; a Pair computes on the term`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
         if (list instanceof Pair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
         return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
       },
-    },
-    cdr: {
-      value: (list: unknown) => {
+    ),
+    cdr: symbol.native`cdr: rest — unwraps a SchemeJSArray; a Pair computes on the term`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: unknown) => {
         captureBuiltins();
         if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
         if (list instanceof Pair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
@@ -355,14 +359,15 @@ export default new EnvCapability("scheme/fl-interop", {
             : new SchemeJSArray(list.source.slice(1))
           : builtinCdr!(list);
       },
-    },
+    ),
     // FL-dispatch: any FL entity — INCLUDING a LIPS Pair (filterPair preserves spine
     // order; the coercion-soundness suite pins per-element-box order) — computes by its
     // own fantasy-land/filter, so this no longer reaches the env-resolved scheme builtin.
     // (map/reduce below still route Pairs to the builtin — only filter is flipped here.)
     // LIPS lambdas are async; FL methods are sync. asyncFL* bridges this gap.
-    filter: {
-      value: function filter(this: unknown, arg: ((v: unknown) => unknown) | RegExp, list: unknown) {
+    filter: symbol.native`filter: keep elements matching a pred/regex — FL-dispatch, nil-tolerant`(
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      function filter(this: unknown, arg: any, list: unknown) {
         captureBuiltins();
         // Nil-tolerant: a `(first? …)`/`(if …)` that yielded #f or void flowing into a
         // filter resolves to the empty list, not a crash — so a multi-leaf proof can still
@@ -391,9 +396,10 @@ export default new EnvCapability("scheme/fl-interop", {
         // Final fallback — any input that implements neither LazySeq nor fantasy-land/filter.
         return builtinFilter!.call(this, arg, list);
       },
-    },
-    map: {
-      value: function map(this: unknown, fn: (v: unknown) => unknown, ...lists: unknown[]) {
+    ),
+    map: symbol.native`map: apply fn over one list (FL-dispatch) or zip over several — nil-tolerant`(
+      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
+      function map(this: unknown, fn: any, ...lists: unknown[]) {
         captureBuiltins();
         if (lists.length === 1 && (lists[0] == null || is_false(lists[0]))) return nil; // nil-tolerant (see filter)
         // LazySeq fast-path — extend the plan, run nothing (a pure map mints no
@@ -424,11 +430,12 @@ export default new EnvCapability("scheme/fl-interop", {
         // typechecks pair|nil and THROWS, the coercion-soundness pin).
         return builtinMap!.call(this, fn, ...lists);
       },
-    },
-    reduce: {
-      value: function reduce(
+    ),
+    reduce: symbol.native`reduce: left fold in scheme convention fn(element, acc) — FL-dispatch`(
+      { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.unknown()] },
+      function reduce(
         this: unknown,
-        fn: (acc: unknown, val: unknown) => unknown,
+        fn: any,
         init: unknown,
         collection: unknown,
       ) {
@@ -457,7 +464,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // input). builtinReduce typechecks pair|nil and folds (or throws for a non-list).
         return builtinReduce!.call(this, fn, init, collection);
       },
-    },
+    ),
 
     // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────
     // The operator membrane rejects a nil operand at codec-match time (the `=`/`<`/…
@@ -469,46 +476,51 @@ export default new EnvCapability("scheme/fl-interop", {
     // by-value via their `fantasy-land/lte` (numericChain — no env-read, byte-identical
     // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
     // falls back to the kept bridged builtin, which is that Operator (identical throw).
-    "=": {
-      value: function numEq(...args: unknown[]) {
+    "=": symbol.native`=: numeric =, nil-tolerant (a nil operand ⇒ #f)`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      function numEq(...args: unknown[]) {
         if (args.some(isNilOperand)) return false;
         if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("=", args);
         captureBuiltins();
         return builtinNumEq!(...args);
       },
-    },
-    "<": {
-      value: function lt(...args: unknown[]) {
+    ),
+    "<": symbol.native`<: numeric <, nil-tolerant`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      function lt(...args: unknown[]) {
         if (args.some(isNilOperand)) return false;
         if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<", args);
         captureBuiltins();
         return builtinLt!(...args);
       },
-    },
-    ">": {
-      value: function gt(...args: unknown[]) {
+    ),
+    ">": symbol.native`>: numeric >, nil-tolerant`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      function gt(...args: unknown[]) {
         if (args.some(isNilOperand)) return false;
         if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">", args);
         captureBuiltins();
         return builtinGt!(...args);
       },
-    },
-    "<=": {
-      value: function lte(...args: unknown[]) {
+    ),
+    "<=": symbol.native`<=: numeric <=, nil-tolerant`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      function lte(...args: unknown[]) {
         if (args.some(isNilOperand)) return false;
         if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<=", args);
         captureBuiltins();
         return builtinLte!(...args);
       },
-    },
-    ">=": {
-      value: function gte(...args: unknown[]) {
+    ),
+    ">=": symbol.native`>=: numeric >=, nil-tolerant`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      function gte(...args: unknown[]) {
         if (args.some(isNilOperand)) return false;
         if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">=", args);
         captureBuiltins();
         return builtinGte!(...args);
       },
-    },
+    ),
 
     // ── Array-aware list accessors ───────────────────────────────────────────────
     // Nil-tolerant accessors that work over both JS arrays (what `@`/SchemeJSArray
@@ -517,14 +529,16 @@ export default new EnvCapability("scheme/fl-interop", {
     // ── List aliases (models expect these) ──
     // Each guards against an un-forced lazy-seq (A18d): without it these silently
     // return nil for a LazySeq (no `.car`, not an array), masking the misuse.
-    first: {
-      value: (list: any) => {
+    first: symbol.native`first: the first element — array- and pair-aware`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: any) => {
         if (is_lazy_seq(list)) unforcedLazyEgress("first");
         return list?.car ?? (Array.isArray(list) ? list[0] : nil);
       },
-    },
-    last: {
-      value: (list: any) => {
+    ),
+    last: symbol.native`last: the last element — array- and pair-aware`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: any) => {
         if (is_lazy_seq(list)) unforcedLazyEgress("last");
         if (Array.isArray(list)) return list.at(-1) ?? nil;
         let current = list;
@@ -533,23 +547,26 @@ export default new EnvCapability("scheme/fl-interop", {
         }
         return current?.car ?? nil;
       },
-    },
-    second: {
-      value: (list: any) => {
+    ),
+    second: symbol.native`second: the second element — array- and pair-aware`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: any) => {
         if (is_lazy_seq(list)) unforcedLazyEgress("second");
         return list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil);
       },
-    },
-    third: {
-      value: (list: any) => {
+    ),
+    third: symbol.native`third: the third element — array- and pair-aware`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: any) => {
         if (is_lazy_seq(list)) unforcedLazyEgress("third");
         return list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil);
       },
-    },
+    ),
 
     // ── Association lists ──
-    assoc: {
-      value: (key: any, alist: any) => {
+    assoc: symbol.native`assoc: the alist entry whose key equals key, else nil`(
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      (key: any, alist: any) => {
         if (is_lazy_seq(alist)) unforcedLazyEgress("assoc");
         if (!alist) return nil;
         const items = Array.isArray(alist) ? alist : [];
@@ -565,11 +582,12 @@ export default new EnvCapability("scheme/fl-interop", {
         }
         return items.find((pair: any) => pair?.[0] === key || pair?.car === key) ?? nil;
       },
-    },
+    ),
 
     // ── Sort ──
-    sort: {
-      value: (list: any, comparator?: any) => {
+    sort: symbol.native`sort: a sorted scheme list (optional comparator)`(
+      { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
+      (list: any, comparator?: any) => {
         if (is_lazy_seq(list)) unforcedLazyEgress("sort");
         const arr = Array.isArray(list) ? [...list] : [];
         if (!Array.isArray(list) && list?.car) {
@@ -590,10 +608,11 @@ export default new EnvCapability("scheme/fl-interop", {
         // an empty result is nil.
         return Pair.fromArray(arr, false);
       },
-    },
+    ),
 
-    length: {
-      value: (collection: any) => {
+    length: symbol.native`length: element count carrying the elements' provenance — forces a lazy-seq`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (collection: any) => {
         // LazySeq fast-path — the demand cone IS the provenance cone: refine under a
         // `length` observation runs only the ops the count depends on (a pure-map
         // chain runs NOTHING — `(length (map f xs))` never touches f) and stamps the
@@ -616,7 +635,7 @@ export default new EnvCapability("scheme/fl-interop", {
         const prov = unionProvenance(inputs);
         return prov.size === 0 ? count : AValue.fromJs(count, prov);
       },
-    },
+    ),
 
     // A18c — the scheme-surface entry into the lazy plane. `(lazy-seq xs)` wraps a
     // collection's elements into an un-run plan; `map`/`filter` then EXTEND it and
@@ -625,13 +644,14 @@ export default new EnvCapability("scheme/fl-interop", {
     // is distributed only on materialization. Conservative by design: laziness is
     // opt-in, so a plain Pair stays eager and byte-identical (the speculate
     // discipline) — flipping map's default to lazy is a separate, deliberate call.
-    "lazy-seq": {
-      value: (collection: any) =>
+    "lazy-seq": symbol.native`lazy-seq: wrap a collection's elements into an un-run lazy plan`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (collection: any) =>
         new LazySeq(
           collectElements(collection),
           [],
           collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,
         ),
-    },
+    ),
   },
 });

@@ -45,7 +45,9 @@ await initBridge();
 // declaration site). These packs are all the record form of `spec.symbols`.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { value: (...a: any[]) => any }>).map(([k, v]) => [k, v.value]),
+    Object.entries(
+      cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
+    ).map(([k, v]) => [k, v.impl ?? v.value]),
   );
 const ops = opsOf(flInteropCap);
 
