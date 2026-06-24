@@ -16,7 +16,7 @@ import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
-import type { Pair } from "../values/Pair.js";
+import type { Pair } from "../values/primitives/Pair.js";
 import type { SchemeValue } from "../values/types.js";
 
 // Give the value-layer shadow module the evaluator's own `is_macro` without a

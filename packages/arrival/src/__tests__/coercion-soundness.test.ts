@@ -29,14 +29,14 @@
 
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeVector } from "../values/SchemeVector.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { LazySeq } from "../values/LazySeq.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { LazySeq } from "../values/primitives/LazySeq.js";
 import { SchemeJSArray } from "../membrane.js";
 import flInteropCap from "../env/fl-interop.js";
 import type { EnvCapability } from "../env/capability.js";
-import { nil } from "../values/types.js";
+import { nil } from "../values/primitives/Nil.js";
 import { provOf } from "../values/lineage-shadow.js";
 
 await initBridge();

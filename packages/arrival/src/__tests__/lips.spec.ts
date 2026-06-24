@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env as global_environment, exec, parse } from "../stdlib";
-import { nil } from "../values/types.js";
-import { Pair } from "../values/Pair.js";
+import { nil } from "../values/primitives/Nil.js";
+import { Pair } from "../values/primitives/Pair.js";
 import { initBridge } from "../bridge";
 import { SchemeExact } from "../values/numbers";
 

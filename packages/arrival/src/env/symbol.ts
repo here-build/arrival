@@ -39,8 +39,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "./scheme-zod.js";
-import type { Pair } from "../values/Pair.js";
-import { AValue, pointProvenance, unionProvenance } from "../values/AValue.js";
+import type { Pair } from "../values/primitives/Pair.js";
+import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 
 // ─────────────────────────────────────────────────────────────────────────────

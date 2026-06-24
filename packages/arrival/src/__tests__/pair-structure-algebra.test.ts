@@ -11,8 +11,8 @@
 // structuralEqual.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Pair } from "../values/Pair.js";
-import { nil, Nil } from "../values/types.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { nil, Nil } from "../values/primitives/Nil.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { functorLaws } from "./algebra-laws.js";
 

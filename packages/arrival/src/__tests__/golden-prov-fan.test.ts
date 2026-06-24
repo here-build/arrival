@@ -36,8 +36,8 @@
  * (unwrap-to-JS) and `triple` (Pair fixture) wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { Pair } from "../values/Pair";
-import { AValue } from "../values/AValue";
+import { Pair } from "../values/primitives/Pair.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow";
 import { sStr, runRaw } from "./_lineage-test-helpers";
 

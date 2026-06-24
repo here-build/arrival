@@ -29,7 +29,7 @@
  */
 import { CLASS } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
 
 // ============================================================================

@@ -1,6 +1,6 @@
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../interop-access.js";
+import { markInteropBoundary } from "../../interop-access.js";
 
 /**
  * Boxed boolean. Lineage: the representation-blind `fantasy-land/equals` is a

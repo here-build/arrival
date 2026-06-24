@@ -31,14 +31,14 @@
 export * from "zod";
 import * as z from "zod";
 
-import { Pair } from "../values/Pair.js";
-import { Nil } from "../values/types.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
-import { SchemeVector } from "../values/SchemeVector.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeBool } from "../values/SchemeBool.js";
-import { SchemeCharacter } from "../values/types.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { Nil } from "../values/primitives/Nil.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 
 // ─────────────────────────────────────────────────────────────────────────────

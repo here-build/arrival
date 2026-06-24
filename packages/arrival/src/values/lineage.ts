@@ -53,8 +53,8 @@
  * the backward pass — v0.2 is "populate the adjoint table," not "flip a mode").
  */
 import { is_pair } from "./value-guards.js";
-import { SchemeSymbol } from "./SchemeSymbol.js";
-import type { Pair } from "./Pair.js";
+import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
+import type { Pair } from "./primitives/Pair.js";
 import type { SchemeValue } from "./types.js";
 
 /** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes

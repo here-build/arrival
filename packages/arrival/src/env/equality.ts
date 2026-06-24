@@ -23,8 +23,8 @@
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeBool } from "../values/SchemeBool.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { EnvCapability } from "./capability.js";
 import { is_callable, is_macro } from "../eval/guards.js";

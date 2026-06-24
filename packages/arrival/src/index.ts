@@ -29,7 +29,7 @@ export {
   EMPTY_PROVENANCE,
   pointProvenance,
   unionProvenance,
-} from "./values/AValue.js";
+} from "./values/primitives/AValue.js";
 
 // A* aliases for arrival-chain compatibility — both spellings work until L4
 // deletes the draft AValue there. Re-exports live here (not in AValue.ts) to
@@ -41,21 +41,23 @@ export {
   schemeFalse,
   schemeTrue as ATrue,
   schemeTrue,
-} from "./values/SchemeBool.js";
+} from "./values/primitives/SchemeBool.js";
 export { SchemeJSFunction as AProc, SchemeJSObject as AObject } from "./membrane.js";
-export { SchemeString as AString } from "./values/SchemeString.js";
-export { SchemeSymbol as ASymbol } from "./values/SchemeSymbol.js";
-export { Pair as APair } from "./values/Pair.js";
-export { Nil as ANil, SchemeCharacter as AChar } from "./values/types.js";
+export { SchemeString as AString } from "./values/primitives/SchemeString.js";
+export { SchemeSymbol as ASymbol } from "./values/primitives/SchemeSymbol.js";
+export { Pair as APair } from "./values/primitives/Pair.js";
+export { Nil as ANil } from "./values/primitives/Nil.js";
+export { SchemeCharacter as AChar } from "./values/primitives/SchemeCharacter.js";
 
 // Canonical core-type re-exports. These used to ride the `export * from
 // "./stdlib.js"` barrel via a re-export block at the bottom of lips.ts; that
 // block was removed (barrel-ectomy) so these names are re-surfaced from their
 // real home modules to keep the public API identical.
-export { nil, Nil, characters, SchemeCharacter } from "./values/types.js";
-export { SchemeSymbol } from "./values/SchemeSymbol.js";
-export { SchemeString } from "./values/SchemeString.js";
-export { Pair } from "./values/Pair.js";
+export { nil, Nil } from "./values/primitives/Nil.js";
+export { characters, SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
+export { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
+export { SchemeString } from "./values/primitives/SchemeString.js";
+export { Pair } from "./values/primitives/Pair.js";
 
 // Scheme namespace - canonical API for Scheme types
 // Usage: import { Scheme } from 'arrival-scheme'
@@ -66,7 +68,7 @@ export * as Scheme from "./Scheme.js";
 void initBridge();
 
 // Classes that may be needed for type checking or extension
-export { EOF as EOF } from "./values/EOF.js";
+export { EOF as EOF } from "./values/primitives/EOF.js";
 // Environment is INTERNAL-ONLY — the concrete scope-node is not part of the public
 // surface (consumers type against the structural `SchemeEnv` below). `KEYWORD_ACCESSOR_FIELD`
 // stays exported: arrival-chain's `dict` (project.ts) reads the same registered symbol.

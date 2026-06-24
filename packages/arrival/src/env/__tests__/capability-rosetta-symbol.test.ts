@@ -18,9 +18,9 @@ import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
-import { SchemeString } from "../../values/SchemeString.js";
+import { SchemeString } from "../../values/primitives/SchemeString.js";
 import { SchemeExact, SchemeInexact } from "../../values/numbers.js";
-import { AValue } from "../../values/AValue.js";
+import { AValue } from "../../values/primitives/AValue.js";
 
 type WithCtxFn = ((...a: unknown[]) => unknown) & { __withCtx?: boolean };
 

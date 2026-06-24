@@ -9,11 +9,11 @@
 // (resolveNfx, in core), the errors-as-door cases (no `$nfx$` ever), quote
 // distribution, and non-regression of `()`/`[]` list reading.
 import { describe, expect, it } from "vitest";
-import { eof } from "../values/EOF.js";
+import { eof } from "../values/primitives/EOF.js";
 import { Lexer } from "../reader/Lexer.js";
-import { EOF } from "../values/EOF.js";
+import { EOF } from "../values/primitives/EOF.js";
 import { Parser } from "../reader/Parser.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { canonicalizeCurly, FIXITY } from "../reader/curly-infix.js";
 import type { SchemeValue } from "../values/types.js";
 

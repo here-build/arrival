@@ -53,7 +53,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "./AValue.js";
-import { markInteropBoundary } from "../interop-access.js";
+import { markInteropBoundary } from "../../interop-access.js";
 
 // Loose, like the rest of the interpreter — SchemeValue is `any` in types.ts.
 type SchemeValue = any;

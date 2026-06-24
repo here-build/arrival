@@ -29,9 +29,9 @@ import {
   accessSet,
   isInteropBoundary,
 } from "../interop-access";
-import { SchemeString } from "../values/SchemeString";
-import { SchemeSymbol } from "../values/SchemeSymbol";
-import { AValue } from "../values/AValue";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { exec as gexec } from "../eval/generator-exec";
 
 // ============================================================================

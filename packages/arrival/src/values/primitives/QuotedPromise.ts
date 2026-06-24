@@ -1,10 +1,10 @@
 // Wraps a Promise so it travels through Scheme code as an opaque value instead
 // of being auto-forced, letting `(quote …)` survive an async boundary.
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import invariant from "tiny-invariant";
-import { is_function } from "../eval/guards.js";
-import type { SchemeValue } from "./types.js";
-import { type } from "../utils/typecheck.js";
+import { is_function } from "../../eval/guards.js";
+import type { SchemeValue } from "../types.js";
+import { type } from "../../utils/typecheck.js";
 
 export class QuotedPromise {
   static [CLASS] = "promise";

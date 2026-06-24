@@ -1,4 +1,4 @@
-import { characters } from "./types.js";
+import { characters } from "./primitives/SchemeCharacter.js";
 
 export const p_o = /^[[(]$/;
 export const p_e = /^[\])]$/;

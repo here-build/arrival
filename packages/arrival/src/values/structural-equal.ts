@@ -1,7 +1,8 @@
-import { SchemeBool } from "./SchemeBool.js";
-import { SchemeSymbol } from "./SchemeSymbol.js";
+import { SchemeBool } from "./primitives/SchemeBool.js";
+import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { Nil, SchemeCharacter } from "./types.js";
+import { Nil } from "./primitives/Nil.js";
+import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
 import type { SchemeValue } from "./types.js";
 
 /**

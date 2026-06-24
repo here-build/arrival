@@ -8,7 +8,7 @@
 // The lexer is a self-contained incremental FSM with zero dependency on the
 // evaluator, so these run without any environment/stdlib bootstrap.
 import { describe, expect, it } from "vitest";
-import { eof } from "../values/EOF.js";
+import { eof } from "../values/primitives/EOF.js";
 import { Lexer } from "../reader/Lexer.js";
 
 /** Collect every meaningful token (string form) from an input. */

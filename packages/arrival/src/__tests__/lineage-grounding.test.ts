@@ -37,7 +37,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { is_pair, is_nil } from "../values/value-guards.js";
-import { AValue } from "../values/AValue.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".

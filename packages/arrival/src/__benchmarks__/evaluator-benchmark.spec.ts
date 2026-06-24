@@ -5,9 +5,9 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { exec as lipsExec, env as lipsEnv, parse } from "../stdlib";
-import { nil } from "../values/types.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { nil } from "../values/primitives/Nil.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { initBridge } from "../bridge";
 import { exec as genExec } from "../eval/evaluator";
 import type { SchemeValue } from "../values/types";

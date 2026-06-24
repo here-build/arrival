@@ -4,7 +4,8 @@
 // / antisymmetry actually bite.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Nil, SchemeCharacter, nil } from "../values/types.js";
+import { Nil, nil } from "../values/primitives/Nil.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import { setoidLaws, ordLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";

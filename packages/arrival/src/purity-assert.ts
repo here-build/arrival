@@ -23,9 +23,9 @@
 
 import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";
-import { AValue } from "./values/AValue.js";
-import { Pair } from "./values/Pair.js";
-import { SchemeVector } from "./values/SchemeVector.js";
+import { AValue } from "./values/primitives/AValue.js";
+import { Pair } from "./values/primitives/Pair.js";
+import { SchemeVector } from "./values/primitives/SchemeVector.js";
 
 /**
  * A fn that CLAIMED purity broke its contract — distinct from {@link PurityError}.

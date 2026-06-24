@@ -32,9 +32,9 @@ import "@here.build/error-invariant";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { withInputProvenance } from "../values/op-helpers.js";
-import { isCircularList, Pair } from "../values/Pair.js";
+import { isCircularList, Pair } from "../values/primitives/Pair.js";
 import { eqv, structuralEqual } from "../values/structural-equal.js";
-import { Nil, nil } from "../values/types.js";
+import { Nil, nil } from "../values/primitives/Nil.js";
 import { is_false } from "../eval/guards.js";
 import { EnvCapability } from "./capability.js";
 

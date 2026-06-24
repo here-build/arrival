@@ -12,8 +12,8 @@ import { describe, it, expect } from "vitest";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import { initBridge } from "../bridge";
-import { SchemeString } from "../values/SchemeString";
-import { AValue } from "../values/AValue";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AValue } from "../values/primitives/AValue.js";
 
 const stamped = (s: string, ...pts: number[]) => new SchemeString(s, new Set(pts));
 const provOf = (v: unknown): number[] =>

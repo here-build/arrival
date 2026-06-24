@@ -32,10 +32,11 @@ import {
   withInputProvenance,
 } from "../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../provenance-collapse.js";
-import { SchemeString } from "../values/SchemeString.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import { SchemeExact } from "../values/numbers.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeCharacter, nil } from "../values/types.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { nil } from "../values/primitives/Nil.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import { is_promise } from "../eval/guards.js";
 import { promise_all } from "../utils/promises.js";
 import { EnvCapability } from "./capability.js";

@@ -25,17 +25,18 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { AValue } from "../values/AValue";
+import { AValue } from "../values/primitives/AValue.js";
 import { is_nil } from "../eval/guards";
 import { fromJS, isSchemeValue, SchemeJSFunction, SchemeJSObject, toJS } from "../membrane";
 import { jsToScheme, schemeToJs } from "../rosetta";
-import { SchemeBool, schemeFalse, schemeTrue } from "../values/SchemeBool";
-import { SchemeString } from "../values/SchemeString";
-import { SchemeSymbol } from "../values/SchemeSymbol";
+import { SchemeBool, schemeFalse, schemeTrue } from "../values/primitives/SchemeBool.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/Pair";
-import { Nil, nil, SchemeCharacter } from "../values/types";
-import { QuotedPromise } from "../values/QuotedPromise";
+import { Pair } from "../values/primitives/Pair.js";
+import { Nil, nil } from "../values/primitives/Nil";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter";
+import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 
 // =========================================================================
 // AValue.fromJs boxer dispatch — coverage of every registered tag

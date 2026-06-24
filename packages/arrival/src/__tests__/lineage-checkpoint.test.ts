@@ -16,7 +16,7 @@ import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { Pair } from "../values/Pair";
+import { Pair } from "../values/primitives/Pair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";
 import { provOf } from "../values/lineage-shadow";
 import { sStr } from "./_lineage-test-helpers";

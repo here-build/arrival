@@ -4,7 +4,7 @@
 import { CLASS } from "../well-known-symbols.js";
 import { is_special, is_symbol_string } from "../eval/guards.js";
 import { tokenize } from "../stdlib.js";
-import { SchemeString } from "../values/SchemeString.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import {
   def_lambda_re,
   glob,

@@ -12,9 +12,9 @@
  * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
  * Fantasy Land (fantasyland/fantasy-land).
  */
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../interop-access.js";
+import { markInteropBoundary } from "../../interop-access.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // rather than imported from membrane.js. `Symbol.for` returns the SAME symbol as

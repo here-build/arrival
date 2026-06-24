@@ -37,8 +37,8 @@ import { schemeToJs } from "../rosetta";
 import combinatorsCap from "../env/combinators";
 import listsCap from "../env/lists";
 import type { EnvCapability } from "../env/capability";
-import { Pair } from "../values/Pair";
-import { Nil, nil } from "../values/types";
+import { Pair } from "../values/primitives/Pair.js";
+import { Nil, nil } from "../values/primitives/Nil";
 
 // A nil clone carrying non-empty provenance — exactly what
 // `restrictControlFlowProvenance` (evaluator.ts:627) hands back when an `if`

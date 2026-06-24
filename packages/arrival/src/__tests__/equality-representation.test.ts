@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { SchemeBool } from "../values/SchemeBool.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { structuralEqual } from "../values/structural-equal.js";
-import { SchemeCharacter } from "../values/types.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 
 // THE EQUALITY CONTRACT — representation-blindness (R7RS §6.1).
 //

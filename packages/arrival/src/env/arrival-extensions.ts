@@ -16,11 +16,11 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `ARRIVAL_EXTENSIONS_SCM`
 // and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "./capability.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { typecheck } from "../utils/typecheck.js";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeString } from "../values/SchemeString.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import { stringValue, withInputProvenance } from "../values/op-helpers.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host

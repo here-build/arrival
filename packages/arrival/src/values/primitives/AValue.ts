@@ -20,8 +20,8 @@
  */
 
 import invariant from "tiny-invariant";
-import { markInteropBoundary } from "../interop-access.js";
-import type { SeenMap } from "./structural-equal.js";
+import { markInteropBoundary } from "../../interop-access.js";
+import type { SeenMap } from "../structural-equal.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 

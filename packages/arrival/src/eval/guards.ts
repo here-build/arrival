@@ -1,6 +1,6 @@
 import { Environment } from "../Environment.js";
 import { LambdaContext } from "./LambdaContext.js";
-import { SchemeBool } from "../values/SchemeBool.js";
+import { SchemeBool } from "../values/primitives/SchemeBool.js";
 import { Macro } from "./Macro.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { Syntax } from "./Syntax.js";
@@ -13,10 +13,10 @@ import {
   rational_re,
   re_re,
 } from "../values/primitives.js";
-import { QuotedPromise } from "../values/QuotedPromise.js";
+import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { CLASS, LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
-import { nil } from "../values/types.js";
+import { nil } from "../values/primitives/Nil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.

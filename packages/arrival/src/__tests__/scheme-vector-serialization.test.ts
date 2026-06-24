@@ -4,9 +4,9 @@
 // (the whole point of boxing — goal (b)). Locks the rosetta schemeToJs/jsToScheme +
 // deepProvenance vector handling. (docs/plan-2026-06-10-boxing-track.md.)
 import { describe, expect, it } from "vitest";
-import { AValue } from "../values/AValue.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
-import { SchemeVector } from "../values/SchemeVector.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
 
 describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", () => {

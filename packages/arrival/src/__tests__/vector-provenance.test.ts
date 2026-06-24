@@ -8,9 +8,9 @@ import { initBridge } from "../bridge.js";
 import bytevectorsCap from "../env/bytevectors.js";
 import vectorsCap from "../env/vectors.js";
 import type { EnvCapability } from "../env/capability.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeVector } from "../values/SchemeVector.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
 
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was

@@ -20,8 +20,8 @@
  * They come from the same walk, which is the whole point.
  */
 import { describe, expect, it } from "vitest";
-import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/AValue.js";
-import { LazySeq } from "../values/LazySeq.js";
+import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
+import { LazySeq } from "../values/primitives/LazySeq.js";
 
 // A minimal provenance-bearing element: a number that carries a provenance set,
 // so the carrier's `provOf` sees it exactly as it would a boxed AValue.

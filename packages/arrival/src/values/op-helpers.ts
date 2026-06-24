@@ -13,12 +13,13 @@
 
 import invariant from "tiny-invariant";
 
-import { AValue, unionProvenance } from "./AValue.js";
-import { SchemeBytevector } from "./SchemeBytevector.js";
-import { SchemeString } from "./SchemeString.js";
-import { SchemeVector } from "./SchemeVector.js";
+import { AValue, unionProvenance } from "./primitives/AValue.js";
+import { SchemeBytevector } from "./primitives/SchemeBytevector.js";
+import { SchemeString } from "./primitives/SchemeString.js";
+import { SchemeVector } from "./primitives/SchemeVector.js";
 import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./numbers.js";
-import { SchemeCharacter, type SchemeValue } from "./types.js";
+import { type SchemeValue } from "./types.js";
+import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
 import "../errors.js";
 
 // ============================================================================

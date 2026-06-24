@@ -13,9 +13,10 @@
 
 import type { SourceLocation } from "../errors.js";
 import { ParseError } from "../errors.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
-import { nil, type SchemeValue } from "../values/types.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { type SchemeValue } from "../values/types.js";
+import { nil } from "../values/primitives/Nil.js";
 
 type Loc = SourceLocation | null | undefined;
 

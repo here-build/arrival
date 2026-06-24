@@ -12,22 +12,22 @@
  * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
  * cycle detection is Floyd's tortoise-and-hare.
  */
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { withInputProvenance } from "./op-helpers.js";
-import { structuralEqual, type SeenMap } from "./structural-equal.js";
-import { type SourceLocation } from "../errors.js";
-import { is_native, is_nil, is_pair, is_plain_object } from "./value-guards.js";
+import { withInputProvenance } from "../op-helpers.js";
+import { structuralEqual, type SeenMap } from "../structural-equal.js";
+import { type SourceLocation } from "../../errors.js";
+import { is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
 import { SchemeBytevector } from "./SchemeBytevector.js";
 import { SchemeString } from "./SchemeString.js";
 import { SchemeVector } from "./SchemeVector.js";
 import { SchemeSymbol } from "./SchemeSymbol.js";
-import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { CYCLES, DATA, LOCATION, REF } from "../well-known-symbols.js";
-import { markInteropBoundary } from "../interop-access.js";
-import { type PairLike } from "./types.js";
-import { Nil, nil, setPairConstructor } from "./types.js";
+import { SchemeExact, SchemeInexact } from "../numbers.js";
+import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
+import { markInteropBoundary } from "../../interop-access.js";
+import { type PairLike } from "../types.js";
+import { Nil, nil, setPairConstructor } from "./Nil.js";
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends Pair<Car, Cdr> {
   [CYCLES]?: { car?: string | Pair; cdr?: string | Pair };

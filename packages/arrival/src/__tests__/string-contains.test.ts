@@ -15,9 +15,9 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { SchemeString } from "../values/SchemeString";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import { SchemeExact } from "../values/numbers";
-import { AValue } from "../values/AValue";
+import { AValue } from "../values/primitives/AValue.js";
 
 const stamped = (s: string, ...points: number[]) => new SchemeString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

@@ -23,10 +23,10 @@ import { describe, it, expect, vi } from "vitest";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
-import { Pair } from "../values/Pair";
-import { SchemeVector } from "../values/SchemeVector";
-import { SchemeString } from "../values/SchemeString";
-import { AValue } from "../values/AValue";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AValue } from "../values/primitives/AValue.js";
 import {
   PurityViolation,
   fingerprint,
@@ -270,8 +270,8 @@ describe("G5 confluence guard — armed wrapper catches a mutating pure rosetta 
     vi.resetModules();
     const { createRosettaWrapper } = await import("../rosetta");
     const { PurityViolation: PV } = await import("../purity-assert");
-    const { SchemeVector: Vec } = await import("../values/SchemeVector");
-    const { SchemeString: Str } = await import("../values/SchemeString");
+    const { SchemeVector: Vec } = await import("../values/primitives/SchemeVector");
+    const { SchemeString: Str } = await import("../values/primitives/SchemeString");
 
     // A clean pure rosetta: returns a constant, never touches its input.
     const clean = createRosettaWrapper({ fn: function cleanPure() { return "ok"; }, pure: true });

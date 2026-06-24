@@ -21,11 +21,12 @@
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeVector } from "../values/SchemeVector.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeCharacter, type SchemeValue } from "../values/types.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { type SchemeValue } from "../values/types.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import type { SchemeExact } from "../values/numbers.js";
-import { Pair } from "../values/Pair.js";
+import { Pair } from "../values/primitives/Pair.js";
 import { is_promise } from "../eval/guards.js";
 import { promise_all } from "../utils/promises.js";
 import invariant from "tiny-invariant";

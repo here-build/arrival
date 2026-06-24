@@ -1,8 +1,8 @@
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../interop-access.js";
-import type { SchemeStringLike } from "./types.js";
-import { isSchemeString, isString } from "./types.js";
+import { markInteropBoundary } from "../../interop-access.js";
+import type { SchemeStringLike } from "../types.js";
+import { isSchemeString, isString } from "../types.js";
 
 type SchemeSymbolName = string | symbol;
 

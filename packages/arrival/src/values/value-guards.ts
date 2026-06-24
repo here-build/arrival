@@ -14,10 +14,11 @@
 // dependency graph stays acyclic. ESM resolves it because instanceof is
 // evaluated at call time, never at module-init.
 // ----------------------------------------------------------------------
-import { SchemeString } from "./SchemeString.js";
+import { SchemeString } from "./primitives/SchemeString.js";
 import { SchemeExact, SchemeInexact } from "./numbers.js";
-import { Pair } from "./Pair.js";
-import { Nil, SchemeCharacter } from "./types.js";
+import { Pair } from "./primitives/Pair.js";
+import { Nil } from "./primitives/Nil.js";
+import { SchemeCharacter } from "./primitives/SchemeCharacter.js";
 
 // ----------------------------------------------------------------------
 export function is_plain_object(object: unknown): object is Record<string, unknown> {

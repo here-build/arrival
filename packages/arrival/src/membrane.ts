@@ -22,22 +22,22 @@
 
 import { CLASS } from "./well-known-symbols.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./values/AValue.js";
-import { SchemeBool } from "./values/SchemeBool.js";
-import { SchemeBytevector } from "./values/SchemeBytevector.js";
-import { SchemeVector } from "./values/SchemeVector.js";
-import { LazySeq } from "./values/LazySeq.js";
+import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
+import { SchemeBool } from "./values/primitives/SchemeBool.js";
+import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
+import { SchemeVector } from "./values/primitives/SchemeVector.js";
+import { LazySeq } from "./values/primitives/LazySeq.js";
 import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import type { ResolverSpec } from "./env/scheme-env.js";
 import { SchemePromise } from "./eval/evaluator.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
-import { SchemeString } from "./values/SchemeString.js";
-import { SchemeSymbol } from "./values/SchemeSymbol.js";
+import { SchemeString } from "./values/primitives/SchemeString.js";
+import { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
 import { Macro } from "./eval/Macro.js";
 import { SchemeExact, SchemeInexact, type SchemeNumeric } from "./values/numbers.js";
-import { Pair } from "./values/Pair.js";
+import { Pair } from "./values/primitives/Pair.js";
 import { LAMBDA } from "./well-known-symbols.js";
-import { QuotedPromise } from "./values/QuotedPromise.js";
+import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
 // rosetta.ts statically imports `SchemeJSObject` from this file. ES module
 // resolution lets the cycle close at definition time (both functions are
@@ -53,7 +53,9 @@ import {
   NOT_FOUND,
 } from "./interop-access.js";
 import { Syntax } from "./eval/Syntax.js";
-import { Nil, nil, SchemeCharacter, type SchemeValue } from "./values/types.js";
+import { type SchemeValue } from "./values/types.js";
+import { Nil, nil } from "./values/primitives/Nil.js";
+import { SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
 
 // Re-export the interop-access primitives for consumers.
 export {

@@ -16,17 +16,18 @@
 import invariant from "tiny-invariant";
 import { EnvLookup } from "../EnvLookup.js";
 import { Environment } from "../Environment.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { Macro } from "./Macro.js";
-import { Pair } from "../values/Pair.js";
-import { QuotedPromise } from "../values/QuotedPromise.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { Syntax } from "./Syntax.js";
 import { is_nil, is_pair } from "./guards.js";
 import { isNumeric, SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
 import { eqv } from "../values/structural-equal.js";
-import { nil, type SchemeValue } from "../values/types.js";
+import { type SchemeValue } from "../values/types.js";
+import { nil } from "../values/primitives/Nil.js";
 import { type } from "../utils/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../reader/values-repr.js";
 

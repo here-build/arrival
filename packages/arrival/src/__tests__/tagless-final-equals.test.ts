@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { AValue } from "../values/AValue.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeVector } from "../values/SchemeVector.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeBool } from "../values/SchemeBool.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeBool } from "../values/primitives/SchemeBool.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { HalfBaked } from "../values/HalfBaked.js";
-import { LazySeq } from "../values/LazySeq.js";
+import { HalfBaked } from "../values/primitives/HalfBaked.js";
+import { LazySeq } from "../values/primitives/LazySeq.js";
 import { SchemeJSObject, SchemeJSFunction } from "../membrane.js";
-import { Nil, nil, SchemeCharacter } from "../values/types.js";
+import { Nil, nil } from "../values/primitives/Nil.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
 import listsCap from "../env/lists.js";
 import type { EnvCapability } from "../env/capability.js";

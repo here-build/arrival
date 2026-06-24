@@ -10,10 +10,10 @@ import run, { exec } from "../eval/evaluator";
 // cross-`run()` recursion shape and needs real `if`/`=`/`-` rather than the
 // minimal hand-rolled `env` above.
 import { exec as execSource } from "../eval/generator-exec";
-import { SchemeSymbol } from "../values/SchemeSymbol";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers";
-import { Pair } from "../values/Pair";
-import { nil } from "../values/types";
+import { Pair } from "../values/primitives/Pair.js";
+import { nil } from "../values/primitives/Nil";
 import { list, num, sym } from "./helpers";
 
 describe("Generator Evaluator with Real LIPS Types", () => {

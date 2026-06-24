@@ -23,25 +23,26 @@ import {
   is_vector_literal,
 } from "../eval/guards.js";
 import { Environment } from "../Environment.js";
-import type { EOF } from "../values/EOF.js";
-import { eof } from "../values/EOF.js";
+import type { EOF } from "../values/primitives/EOF.js";
+import { eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
 import { Lexer } from "./Lexer.js";
 // These deps form an import cycle with the value/eval modules; ES6 live bindings
 // resolve it, since they're referenced only inside methods, not at module-eval time.
 import { call_function } from "../eval/call-function.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
-import { SchemeVector } from "../values/SchemeVector.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
+import { SchemeVector } from "../values/primitives/SchemeVector.js";
 import { unpromise } from "../stdlib.js";
 import { exec as generatorExec } from "../eval/evaluator.js";
 import { parse_argument } from "../utils/parsing.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { Macro } from "../eval/Macro.js";
-import { Pair } from "../values/Pair.js";
+import { Pair } from "../values/primitives/Pair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
-import type { Nil, SchemeValue } from "../values/types.js";
-import { nil } from "../values/types.js";
+import type { SchemeValue } from "../values/types.js";
+import type { Nil } from "../values/primitives/Nil.js";
+import { nil } from "../values/primitives/Nil.js";
 import invariant from "tiny-invariant";
 
 // Nesting-depth cap — rejects a deeply-nested input at PARSE time before it can

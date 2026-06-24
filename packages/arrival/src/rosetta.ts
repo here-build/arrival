@@ -10,16 +10,16 @@
  * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md.
  */
 
-import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/AValue.js";
+import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
-import { SchemeBool } from "./values/SchemeBool.js";
-import { SchemeBytevector } from "./values/SchemeBytevector.js";
-import { SchemeVector } from "./values/SchemeVector.js";
+import { SchemeBool } from "./values/primitives/SchemeBool.js";
+import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
+import { SchemeVector } from "./values/primitives/SchemeVector.js";
 import { SchemeJSArray, SchemeJSObject } from "./membrane.js";
 import { SchemeExact, SchemeInexact } from "./values/numbers.js";
-import { Pair } from "./values/Pair.js";
-import { Nil, nil } from "./values/types.js";
+import { Pair } from "./values/primitives/Pair.js";
+import { Nil, nil } from "./values/primitives/Nil.js";
 
 interface RosettaOptions {
   forceBigInt?: boolean;

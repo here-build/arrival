@@ -46,7 +46,7 @@
  * shared `runRaw` via its setup hook; the `prov`/`value` wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { AValue } from "../values/AValue";
+import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow";
 import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers";
 

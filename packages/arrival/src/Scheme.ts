@@ -8,10 +8,11 @@
  */
 
 // Re-export classes with clean names
-export { SchemeString as String } from "./values/SchemeString.js";
-export { SchemeSymbol as Symbol } from "./values/SchemeSymbol.js";
-export { SchemeCharacter as Character, Nil as Nil, nil as nil } from "./values/types.js";
-export { Pair as Pair } from "./values/Pair.js";
+export { SchemeString as String } from "./values/primitives/SchemeString.js";
+export { SchemeSymbol as Symbol } from "./values/primitives/SchemeSymbol.js";
+export { Nil as Nil, nil as nil } from "./values/primitives/Nil.js";
+export { SchemeCharacter as Character } from "./values/primitives/SchemeCharacter.js";
+export { Pair as Pair } from "./values/primitives/Pair.js";
 export { SchemeExact as Exact, SchemeInexact as Inexact } from "./values/numbers.js";
 export { Environment as Environment } from "./Environment.js";
 

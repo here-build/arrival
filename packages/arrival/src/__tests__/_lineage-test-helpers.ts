@@ -21,8 +21,8 @@
 import { initBridge } from "../bridge.js";
 import { exec } from "../stdlib.js";
 import { inferenceEnv } from "../inference-env.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { AValue } from "../values/AValue.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 

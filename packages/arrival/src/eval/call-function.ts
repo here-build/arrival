@@ -17,7 +17,7 @@
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
 import { LambdaContext } from "./LambdaContext.js";
-import { Pair } from "../values/Pair.js";
+import { Pair } from "../values/primitives/Pair.js";
 import { DATA } from "../well-known-symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";

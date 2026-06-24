@@ -14,11 +14,11 @@
 // QuotedPromise is itself repointed.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
-import { SchemeString } from "../values/SchemeString.js";
-import { SchemeSymbol } from "../values/SchemeSymbol.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
-import { SchemeCharacter } from "../values/types.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import type { SchemeValue } from "../values/types.js";
 import { is_nil, is_pair } from "../values/value-guards.js";
 

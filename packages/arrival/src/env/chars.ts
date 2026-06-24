@@ -22,7 +22,7 @@ import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { charValue, coerceNumeric, deriveOrd } from "../values/op-helpers.js";
 import { SchemeExact } from "../values/numbers.js";
-import { SchemeCharacter } from "../values/types.js";
+import { SchemeCharacter } from "../values/primitives/SchemeCharacter.js";
 import { EnvCapability } from "./capability.js";
 
 export default new EnvCapability("scheme/chars", {

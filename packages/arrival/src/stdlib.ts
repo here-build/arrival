@@ -8,12 +8,12 @@ import invariant from "tiny-invariant";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
-import { eof } from "./values/EOF.js";
-import { HalfBaked, is_half_baked } from "./values/HalfBaked.js";
+import { eof } from "./values/primitives/EOF.js";
+import { HalfBaked, is_half_baked } from "./values/primitives/HalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
 import { purityDoor } from "./purity.js";
 import { Parser } from "./reader/Parser.js";
-import { QuotedPromise } from "./values/QuotedPromise.js";
+import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
   is_env,
   is_false,
@@ -28,7 +28,7 @@ import {
   is_promise,
   is_prototype,
 } from "./eval/guards.js";
-import { SchemeSymbol } from "./values/SchemeSymbol.js";
+import { SchemeSymbol } from "./values/primitives/SchemeSymbol.js";
 import { eq, eqv } from "./values/structural-equal.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { box, gensym, patch_value, quote } from "./reader/values-repr.js";
@@ -43,24 +43,25 @@ import {
   rational_re,
 } from "./values/primitives.js";
 import { CLASS, SPECULATE } from "./well-known-symbols.js";
-import { nil, SchemeCharacter } from "./values/types.js";
+import { nil } from "./values/primitives/Nil.js";
+import { SchemeCharacter } from "./values/primitives/SchemeCharacter.js";
 import * as specials from "./reader/specials.js";
 import { call_function } from "./eval/call-function.js";
 import { SchemeExact, SchemeInexact } from "./values/numbers.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
-import { Values } from "./values/Values.js";
+import { Values } from "./values/primitives/Values.js";
 import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
-import { isCircularList, Pair } from "./values/Pair.js";
+import { isCircularList, Pair } from "./values/primitives/Pair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
 import { compose, curry, fold, pipe } from "./utils/functional.js";
 
-import { SchemeBool } from "./values/SchemeBool.js";
-import { SchemeBytevector } from "./values/SchemeBytevector.js";
-import { SchemeString } from "./values/SchemeString.js";
-import { SchemeVector } from "./values/SchemeVector.js";
+import { SchemeBool } from "./values/primitives/SchemeBool.js";
+import { SchemeBytevector } from "./values/primitives/SchemeBytevector.js";
+import { SchemeString } from "./values/primitives/SchemeString.js";
+import { SchemeVector } from "./values/primitives/SchemeVector.js";
 import {
   keywordAccessorResolver,
   NOT_FOUND,
@@ -1831,4 +1832,4 @@ export const parse = async (arg: SchemeValue, env?: Environment, source?: string
 };
 
 // Additional exports needed by Environment.ts
-export { eof } from "./values/EOF.js";
+export { eof } from "./values/primitives/EOF.js";

@@ -25,8 +25,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Pair } from "../values/Pair";
-import { nil } from "../values/types";
+import { Pair } from "../values/primitives/Pair.js";
+import { nil } from "../values/primitives/Nil";
 
 describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {

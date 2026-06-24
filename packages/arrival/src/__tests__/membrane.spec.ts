@@ -19,10 +19,10 @@ import {
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane";
-import { nil } from "../values/types";
-import { SchemeString } from "../values/SchemeString";
-import { SchemeSymbol } from "../values/SchemeSymbol";
-import { Pair } from "../values/Pair";
+import { nil } from "../values/primitives/Nil";
+import { SchemeString } from "../values/primitives/SchemeString.js";
+import { SchemeSymbol } from "../values/primitives/SchemeSymbol.js";
+import { Pair } from "../values/primitives/Pair.js";
 import {
   abs,
   add,

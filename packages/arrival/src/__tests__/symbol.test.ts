@@ -12,10 +12,10 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import * as arrival from "../env/symbol.js";
 import * as z from "../env/scheme-zod.js";
-import { Pair } from "../values/Pair.js";
-import { SchemeString } from "../values/SchemeString.js";
+import { Pair } from "../values/primitives/Pair.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import { SchemeExact, SchemeInexact } from "../values/numbers.js";
-import { nil } from "../values/types.js";
+import { nil } from "../values/primitives/Nil.js";
 
 const { symbol } = arrival;
 

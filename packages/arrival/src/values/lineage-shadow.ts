@@ -36,11 +36,11 @@
  * a divergence outside the two skip categories is a THROW, never a silent pass.
  */
 import { is_pair } from "./value-guards.js";
-import { SchemeSymbol } from "./SchemeSymbol.js";
-import { AValue } from "./AValue.js";
+import { SchemeSymbol } from "./primitives/SchemeSymbol.js";
+import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
-import type { Pair } from "./Pair.js";
+import type { Pair } from "./primitives/Pair.js";
 import type { SchemeValue } from "./types.js";
 
 /** Provenance ids on a value, sorted — `[]` for a non-AValue. Mirrors the

@@ -23,8 +23,8 @@ import "../errors.js";
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
-import { SchemeBytevector } from "../values/SchemeBytevector.js";
-import { SchemeString } from "../values/SchemeString.js";
+import { SchemeBytevector } from "../values/primitives/SchemeBytevector.js";
+import { SchemeString } from "../values/primitives/SchemeString.js";
 import {
   asBytevector,
   stringValue,

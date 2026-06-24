@@ -8,15 +8,15 @@
  */
 
 import { SPECULATE } from "./well-known-symbols.js";
-import { AValue, unionProvenance } from "./values/AValue.js";
+import { AValue, unionProvenance } from "./values/primitives/AValue.js";
 import { isBridgeInitialized, markBridgeInitialized, setBootstrapComplete } from "./boot.js";
 import { EnvCapability } from "./env/capability.js";
 import { assembleEnv } from "./env/kernel.js";
 import { BASE_PACKS } from "./env/base-packs.js";
 import type { EvalSchemeInto, SchemeEnv } from "./env/scheme-env.js";
-import { HalfBaked, type Interval, is_half_baked } from "./values/HalfBaked.js";
+import { HalfBaked, type Interval, is_half_baked } from "./values/primitives/HalfBaked.js";
 import type { Environment } from "./Environment.js";
-import { schemeFalse, schemeTrue } from "./values/SchemeBool.js";
+import { schemeFalse, schemeTrue } from "./values/primitives/SchemeBool.js";
 import { coerceNumeric, type FLOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
@@ -28,16 +28,16 @@ import { NATIVE_PACKS } from "./env/native-packs.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
 import { inferenceEnv } from "./inference-env.js";
 import flInterop from "./env/fl-interop.js";
-import { SchemeString } from "./values/SchemeString.js";
+import { SchemeString } from "./values/primitives/SchemeString.js";
 import type { Codec, Operator } from "./membrane.js";
 import type { SchemeNumeric } from "./values/numbers.js";
 import { SchemeExact, SchemeInexact } from "./values/numbers.js";
 import * as ops from "./operators/index.js";
 // Import directly from source files to avoid circular dependency during init
-import { Pair } from "./values/Pair.js";
-import { nil } from "./values/types.js";
+import { Pair } from "./values/primitives/Pair.js";
+import { nil } from "./values/primitives/Nil.js";
 import { type } from "./utils/typecheck.js";
-import { Values } from "./values/Values.js";
+import { Values } from "./values/primitives/Values.js";
 import invariant from "tiny-invariant";
 import "./errors.js";
 // Import global environment for initBridge - this is safe because bridge.ts

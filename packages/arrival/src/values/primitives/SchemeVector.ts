@@ -15,11 +15,11 @@
  * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
-import { CLASS } from "../well-known-symbols.js";
+import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../interop-access.js";
-import { structuralEqual, type SeenMap } from "./structural-equal.js";
-import type { SchemeValue } from "./types.js";
+import { markInteropBoundary } from "../../interop-access.js";
+import { structuralEqual, type SeenMap } from "../structural-equal.js";
+import type { SchemeValue } from "../types.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // (same rationale as SchemeBytevector.ts — avoids a membrane→SchemeVector class-def-time
