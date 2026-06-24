@@ -261,7 +261,7 @@ export class AHalfBaked extends AValue {
   // HalfBakeds are never `equal?` even with the same interval. The abstract AValue
   // Setoid forces this method; identity is the faithful minimal choice. (`seen` unused
   // — identity never recurses.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this === other;
   }
 

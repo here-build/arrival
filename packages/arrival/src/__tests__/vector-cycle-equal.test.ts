@@ -1,5 +1,5 @@
 // Caveat-sweep finding (2026-06-11): boxing vectors broke structuralEqual's
-// documented cycle-safety. The fantasy-land/equals hook (structural-equal.ts:43)
+// documented cycle-safety. The arrival/tagless-final/equals hook (structural-equal.ts:43)
 // fires BEFORE the occurs-check seeds `seen`, and SchemeVector's hook recursed
 // through structuralEqual with a FRESH empty seen-map per call — so cyclic
 // vectors recursed forever and blew the JS stack. Fixed by special-casing

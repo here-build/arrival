@@ -58,7 +58,7 @@ export class ANil extends AValue {
   // Setoid (Fantasy Land). Every Nil — including provenance clones — is equal,
   // matching eq's instanceof check. structuralEqual / equal? consult this first.
   // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof ANil;
   }
 

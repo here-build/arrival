@@ -97,7 +97,7 @@ export class AString extends AValue {
   // sift/closure.scm browser hang). `this.__string__ === other` lets a plain-string `other` match by
   // content and a non-string `other` (number/object) fall through to #f. structuralEqual consults the
   // Setoid before its valueOf check, so this is THE place string equality is decided.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this.__string__ === (other instanceof AString ? other.__string__ : other);
   }
 

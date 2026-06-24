@@ -236,7 +236,7 @@ export class ALazySeq extends AValue {
   // plus un-run op CLOSURES); op fns/preds are functions, structurally incomparable, so
   // there is no value equality to define. The abstract AValue Setoid forces this method;
   // identity is faithful and minimal. (`seen` unused — identity never recurses.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this === other;
   }
 

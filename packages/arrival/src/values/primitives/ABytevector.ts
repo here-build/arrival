@@ -117,9 +117,9 @@ export class ABytevector extends AValue {
   }
 
   // Setoid (Fantasy Land) — byte-wise value equality. structuralEqual consults
-  // fantasy-land/equals first, so (equal? (bytevector 1 2) (bytevector 1 2)) → #t.
+  // arrival/tagless-final/equals first, so (equal? (bytevector 1 2) (bytevector 1 2)) → #t.
   // Non-SchemeBytevector → false.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
     const b = other.__bytevector__;

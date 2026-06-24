@@ -18,10 +18,10 @@ import listsCap from "../env/lists.js";
 import type { EnvCapability } from "../env/capability.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// B2 — fantasy-land/equals as a totalic, cycle-safe, tagless-final Setoid.
+// B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.
 //
 // The protocol moves per-type structural comparison ONTO the terms: AValue
-// declares an abstract ["fantasy-land/equals"](other, seen?) so EVERY subtype
+// declares an abstract ["arrival/tagless-final/equals"](other, seen?) so EVERY subtype
 // owns its equality; structuralEqual becomes a thin co-induction HARNESS that
 // records the (a, b) partner pair BEFORE descending (generically, not just for
 // Vector) and threads a shared seen map through the per-type comparisons so
@@ -39,7 +39,7 @@ import type { EnvCapability } from "../env/capability.js";
 //   G5 — green: eq/eqv stay identity/scalar; this group is the landmine guard.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const EQ = "fantasy-land/equals";
+const EQ = "arrival/tagless-final/equals";
 
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
@@ -84,11 +84,11 @@ function representativeValues(): { name: string; value: AValue }[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// G1 — TOTALITY: every representative AValue defines fantasy-land/equals.
+// G1 — TOTALITY: every representative AValue defines arrival/tagless-final/equals.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("G1 totality — every AValue subtype defines fantasy-land/equals", () => {
+describe("G1 totality — every AValue subtype defines arrival/tagless-final/equals", () => {
   for (const { name, value } of representativeValues()) {
-    it(name + " has a callable fantasy-land/equals", () => {
+    it(name + " has a callable arrival/tagless-final/equals", () => {
       expect(typeof (value as unknown as Record<string, unknown>)[EQ]).toBe("function");
     });
   }
@@ -101,7 +101,7 @@ describe("G2 Pair Setoid", () => {
   // Invoke EQ as a METHOD on the receiver so `this` is bound (the protocol is a
   // method on the term). Pre-impl, Pair has no EQ → "not a function" (a clean RED).
   const pairEq = (p: APair, other: unknown, seen?: Map<object, Set<object>>): boolean =>
-    (p as unknown as { ["fantasy-land/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
+    (p as unknown as { ["arrival/tagless-final/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
 
   it("equal proper lists compare equal through the Pair Setoid", () => {
     const a = list(new AExact(1n), new AExact(2n), new AExact(3n)) as APair;
@@ -162,7 +162,7 @@ describe("G2 Pair Setoid", () => {
 // INVESTIGATED SIGNAL (the prompt predicted this group RED-now; it is GREEN-now):
 // the documented fresh-seen stack-blow is LATENT today, masked by the inline
 // SchemeVector special-case in structuralEqual (structural-equal.ts:50-63) which
-// threads a SHARED seen and intercepts vectors BEFORE the fantasy-land/equals
+// threads a SHARED seen and intercepts vectors BEFORE the arrival/tagless-final/equals
 // hook. A direct a[EQ](c) call recurses through structuralEqual's inline block
 // (shared seen) — never through the vector method's own fresh-seen — so it
 // terminates. The blow-up only manifests if the refactor removes that inline
@@ -173,7 +173,7 @@ describe("G2 Pair Setoid", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G3 Vector Setoid — cyclic vectors terminate", () => {
   const vecEq = (v: AVector, other: unknown, seen?: Map<object, Set<object>>): boolean =>
-    (v as unknown as { ["fantasy-land/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
+    (v as unknown as { ["arrival/tagless-final/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
     const a = new AVector([new AExact(1n)]);
@@ -254,7 +254,7 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
 //   (1) the duplicate op-helpers `eqv` is collapsed onto the canonical
 //       structural-equal `eqv` (= `eq`); env/lists' memv/assv now use the
 //       canonical semantics, fixing the latent symbol/nil divergence.
-//   (2) eq()'s scalar cases route THROUGH each term's fantasy-land/equals Setoid
+//   (2) eq()'s scalar cases route THROUGH each term's arrival/tagless-final/equals Setoid
 //       (de-dup of the per-scalar compare) — with the SchemeBool boundary pinned.
 //
 // Interning note (verified): SchemeSymbol interns by default, so two bare
@@ -300,7 +300,7 @@ describe("G6 equality-suite cleanup", () => {
 
   describe("eq()/eqv() scalar result == the term's own Setoid", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
-      (x as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](y);
+      (x as unknown as { ["arrival/tagless-final/equals"](o: unknown): boolean })[EQ](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
       { name: "exact==exact", x: new AExact(1n), y: new AExact(1n) },
       { name: "exact!=exact", x: new AExact(1n), y: new AExact(2n) },
@@ -384,7 +384,7 @@ describe("G6 equality-suite cleanup", () => {
       expect(eqv(new ABool(true), true as unknown as never)).toBe(false);
       // but the Setoid itself IS representation-blind (documents the divergence):
       expect(
-        (new ABool(true) as unknown as { ["fantasy-land/equals"](o: unknown): boolean })[EQ](true),
+        (new ABool(true) as unknown as { ["arrival/tagless-final/equals"](o: unknown): boolean })[EQ](true),
       ).toBe(true);
     });
   });

@@ -3,7 +3,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 
 /**
- * Boxed boolean. Lineage: the representation-blind `fantasy-land/equals` is a
+ * Boxed boolean. Lineage: the representation-blind `arrival/tagless-final/equals` is a
  * Fantasy Land Setoid (fantasyland/fantasy-land); the shared schemeTrue/
  * schemeFalse singletons on the empty-provenance fast path are the flyweight
  * pattern.
@@ -36,7 +36,7 @@ export class ABool extends AValue {
   // same value AND the same value UNBOXED (a plain JS boolean). Booleans carry no grade, so identity
   // is the truth value alone; the chain plane boxes inconsistently, so equal? meets boxed vs plain.
   // `this.value === other` matches a plain-boolean `other` and rejects non-booleans (1, "true").
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this.value === (other instanceof ABool ? other.value : other);
   }
 }

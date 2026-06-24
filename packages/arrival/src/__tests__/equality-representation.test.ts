@@ -17,7 +17,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 // over derived values compares ACROSS the boxed↔unboxed boundary. If equal? is representation-strict
 // there, dedup silently fails — the sift/closure.scm browser hang (unbounded doubling).
 //
-// Root cause: each primitive box's `fantasy-land/equals` is `other instanceof X && content`, and
+// Root cause: each primitive box's `arrival/tagless-final/equals` is `other instanceof X && content`, and
 // structuralEqual consults the Setoid BEFORE its valueOf content-check — so boxed-vs-unboxed short-
 // circuits to false. This pack asserts the contract per type so the regression can't reappear.
 

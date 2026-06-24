@@ -100,7 +100,7 @@ export class AVector extends AValue {
   // stack-blow this method used to risk once the harness's inline-Vector special-case
   // was removed (B2). Elements recurse through structuralEqual threading the SAME map
   // (handles nested AValues/Pairs/vectors). Non-SchemeVector → false.
-  ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
+  ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof AVector)) return false;
     const a = this.__vector__;
     const b = other.__vector__;

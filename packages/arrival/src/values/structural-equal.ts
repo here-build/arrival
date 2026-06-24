@@ -31,13 +31,13 @@ import type { SchemeValue } from "./types.js";
  *
  * Lineage: R7RS-small §6.1 three-tier eq?/eqv?/equal?; the visited-pair walk is
  * a co-inductive bisimulation (the standard occurs-check); equality dispatches
- * through each value's Fantasy Land Setoid (`fantasy-land/equals`).
+ * through each value's Fantasy Land Setoid (`arrival/tagless-final/equals`).
  */
 /**
  * The co-induction visited set threaded through a single `equal?` walk. Maps each
  * visited `a`-reference to the SET of `b`-partners it has been compared against on
  * the current path; a re-encountered `(a, b)` short-circuits to true (the standard
- * occurs-check). Shared by the harness AND by each term's `fantasy-land/equals`
+ * occurs-check). Shared by the harness AND by each term's `arrival/tagless-final/equals`
  * (Pair/Vector recurse through `structuralEqual` threading this map), so mutually-
  * cyclic structures terminate. Exported so AValue's abstract Setoid can type its
  * optional `seen` parameter identically.
@@ -55,7 +55,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   // GENERICALLY for any object pair (no longer Vector-specific). A re-encountered
   // (a, b) short-circuits to true, so cyclic structures (Pair/Vector/array/plain
   // object) terminate co-inductively. Recording here, before the Setoid dispatch,
-  // is what lets each term's `fantasy-land/equals` recurse through `structuralEqual`
+  // is what lets each term's `arrival/tagless-final/equals` recurse through `structuralEqual`
   // with a shared `seen` and never re-record — so a mutually-cyclic vector pair
   // can no longer blow the stack (the war story / the moved-inline-Vector case).
   // Primitives can't carry cycles; they fall straight through to the leaf fallbacks.
@@ -73,8 +73,8 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   // also own it; an entity compared to a non-entity (a bare literal) returns false.
   // Symmetric. The `seen` is forwarded so a Setoid's element recursion co-inducts
   // through the SAME visited set this harness just recorded into.
-  if (typeof a["fantasy-land/equals"] === "function") return Boolean(a["fantasy-land/equals"](b, seen));
-  if (typeof b["fantasy-land/equals"] === "function") return Boolean(b["fantasy-land/equals"](a, seen));
+  if (typeof a["arrival/tagless-final/equals"] === "function") return Boolean(a["arrival/tagless-final/equals"](b, seen));
+  if (typeof b["arrival/tagless-final/equals"] === "function") return Boolean(b["arrival/tagless-final/equals"](a, seen));
 
   const av = a?.valueOf?.();
   const bv = b?.valueOf?.();
@@ -140,7 +140,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 export function eq(x: SchemeValue, y: SchemeValue): boolean {
   // Identity first — also the only true-answer for the pointer-grade types below
   // (Pair / vector / SchemeString / plain object). Then the SCALAR types route
-  // their value-comparison THROUGH their own Setoid (`fantasy-land/equals`): the
+  // their value-comparison THROUGH their own Setoid (`arrival/tagless-final/equals`): the
   // single comparison impl now lives on each term, not inlined here. Post-B2 each
   // scalar's Setoid is exactly the compare this used to inline.
   //
@@ -158,9 +158,9 @@ export function eq(x: SchemeValue, y: SchemeValue): boolean {
     x instanceof AExact ||
     x instanceof AInexact
   ) {
-    return x["fantasy-land/equals"](y);
+    return x["arrival/tagless-final/equals"](y);
   }
-  if (x instanceof ABool) return y instanceof ABool && x["fantasy-land/equals"](y);
+  if (x instanceof ABool) return y instanceof ABool && x["arrival/tagless-final/equals"](y);
   // Everything else (Pair, vector/Array, SchemeString, plain objects) keeps
   // strict pointer-grade — distinct heap instances answer #f (the === above is
   // the only true case).

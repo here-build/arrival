@@ -52,7 +52,7 @@ function same_atom(a, b) {
   // replaces the old `equal()` helper whose is_function branch dragged `unbind`
   // — the macro engine's last tendril into lips's structural-equality switch.
   // (The algebras-in-entities migration will fold this into each type's own
-  // fantasy-land/equals — see plan-2026-06-10-algebras-in-entities.md.)
+  // arrival/tagless-final/equals — see plan-2026-06-10-algebras-in-entities.md.)
   return eqv(a, b);
 }
 

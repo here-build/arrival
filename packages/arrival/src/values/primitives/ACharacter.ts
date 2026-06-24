@@ -132,7 +132,7 @@ export class ACharacter extends AValue {
   // Setoid (Fantasy Land). Char ≡ char iff same grapheme. Matches the value
   // semantics of __char__. structuralEqual / equal? consult this first.
   // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof ACharacter && this.__char__ === other.__char__;
   }
 

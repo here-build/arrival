@@ -146,7 +146,7 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
 
 // The comparison operators consult `arrival/tagless-final/lte` when their operands are
 // ordered ENTITIES (a DateTime, a Version, a SchemeCharacter, a SchemeString …),
-// exactly as equal? consults a Setoid's `fantasy-land/equals`. All four relations
+// exactly as equal? consults a Setoid's `arrival/tagless-final/equals`. All four relations
 // derive from the single `lte`; a chain `(< a b c)` holds iff each adjacent pair
 // does. The per-type order lives in the entity's instance, so the string<? /
 // char<? families are type-agnostic chains over it — adding a new ordered type

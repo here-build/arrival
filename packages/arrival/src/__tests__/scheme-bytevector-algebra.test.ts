@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
-const FL = "fantasy-land/equals";
+const FL = "arrival/tagless-final/equals";
 const LTE = "arrival/tagless-final/lte";
 const CONCAT = "arrival/tagless-final/concat";
 

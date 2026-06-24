@@ -3,9 +3,9 @@
 // (nil identity). Migrated from the fantasy-land-lips.ts monkey-patch INTO the
 // Pair class body (plan-2026-06-10-algebras-in-entities.md).
 //
-// Pair has NO `fantasy-land/equals` BY DESIGN — `structuralEqual` IS its Setoid
+// Pair has NO `arrival/tagless-final/equals` BY DESIGN — `structuralEqual` IS its Setoid
 // (a self-recursive Pair instance would loop ∞; see the matrix in the plan). So
-// the law harness's internal `equals` (which calls `a["fantasy-land/equals"]`)
+// the law harness's internal `equals` (which calls `a["arrival/tagless-final/equals"]`)
 // can't be used for Pair directly; we feed `functorLaws` an explicit
 // structuralEqual `eq`, and assert Semigroup/Monoid laws directly over
 // structuralEqual.
@@ -54,7 +54,7 @@ functorLaws<APair, number>("Pair", {
 
 // ----------------------------------------------------------------------
 // Semigroup (list append) — associativity over structuralEqual. (Cannot use
-// the harness `semigroupLaws`: it needs `fantasy-land/equals`, which Pair
+// the harness `semigroupLaws`: it needs `arrival/tagless-final/equals`, which Pair
 // deliberately lacks.)
 // ----------------------------------------------------------------------
 describe("Pair — Semigroup (list-append)", () => {

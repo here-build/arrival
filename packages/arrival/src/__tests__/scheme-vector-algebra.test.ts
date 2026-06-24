@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { AVector } from "../values/primitives/AVector.js";
 import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
-const FL = "fantasy-land/equals";
+const FL = "arrival/tagless-final/equals";
 const CONCAT = "arrival/tagless-final/concat";
 const MAP = "fantasy-land/map";
 

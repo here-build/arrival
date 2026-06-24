@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
-const FL = "fantasy-land/equals";
+const FL = "arrival/tagless-final/equals";
 const LTE = "arrival/tagless-final/lte";
 
 // Small domain + edge cases: "" (empty), astral unicode, ASCII collisions.

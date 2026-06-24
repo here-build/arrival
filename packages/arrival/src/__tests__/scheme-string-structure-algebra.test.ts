@@ -3,7 +3,7 @@
 // Migrated from the fantasy-land-lips.ts monkey-patch INTO the SchemeString
 // class body (plan-2026-06-10-algebras-in-entities.md).
 //
-// SchemeString HAS `fantasy-land/equals` (wave-1 Setoid), so the law harness's
+// SchemeString HAS `arrival/tagless-final/equals` (wave-1 Setoid), so the law harness's
 // internal `equals` works directly — no custom eq needed.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

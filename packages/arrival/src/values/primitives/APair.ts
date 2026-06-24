@@ -679,7 +679,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // harness and short-circuits — this method just recurses element-wise. A non-Pair
   // `other` is false. (B2: per-type `equal?` moved onto the term; the abstract AValue
   // Setoid forces it. Mirrors SchemeVector's seen-threaded Setoid.)
-  ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean {
+  ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     return (
       other instanceof APair &&
       structuralEqual(this.car, other.car, seen) &&

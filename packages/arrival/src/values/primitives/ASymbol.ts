@@ -100,7 +100,7 @@ export class ASymbol extends AValue {
   // works for both string names and gensym ES6 symbols (interned identity).
   // Mirrors `SchemeSymbol.is` (which compares `__name__`), preserving
   // structuralEqual / equal? behavior. (algebras-in-entities migration.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof ASymbol && this.__name__ === other.__name__;
   }
 

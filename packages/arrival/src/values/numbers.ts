@@ -199,7 +199,7 @@ export class AExact extends AValue {
   // (R7RS eqv?). structuralEqual / equal? consult this BEFORE their valueOf
   // fast-path, so this is what makes `(equal? 1 1.0)` correctly #f.
   // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AExact && this.equals(other);
   }
 
@@ -445,7 +445,7 @@ export class AInexact extends AValue {
   // Setoid (Fantasy Land). Inexact ≡ inexact ONLY. Object.is (not ===) so
   // reflexivity holds for NaN (`(eqv? +nan.0 +nan.0)` ⇒ #t) and ±0 stay
   // distinct — matching the legacy `equal` number-branch semantics.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AInexact && Object.is(this.real, other.real);
   }
 

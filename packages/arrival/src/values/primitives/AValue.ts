@@ -67,10 +67,10 @@ export abstract class AValue {
    * is the harness — it records the (this, other) co-induction pair, then dispatches
    * HERE, threading the shared `seen` so recursive terms (Pair/Vector) co-induct
    * through one visited set and mutual cycles terminate. The `seen` parameter is
-   * optional: a direct `a["fantasy-land/equals"](b)` call (no harness) starts a
+   * optional: a direct `a["arrival/tagless-final/equals"](b)` call (no harness) starts a
    * fresh walk; leaf Setoids ignore it.
    */
-  abstract ["fantasy-land/equals"](other: unknown, seen?: SeenMap): boolean;
+  abstract ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean;
 
   /** Subtype modules call this at top-level. Registration order is not significant. */
   static registerBoxer(typeofTag: string, fn: Boxer): void {

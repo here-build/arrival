@@ -351,7 +351,7 @@ export class AJSObject extends AValue {
   // OPAQUE foreign object; deep-comparing the source is the "deep semantics" the membrane
   // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
   // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSObject && this.source === other.source;
   }
 
@@ -408,7 +408,7 @@ export class AJSFunction extends AValue {
   // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME function
   // (reference identity); functions have no structural equality. The abstract AValue
   // Setoid forces this; reference compare is faithful, minimal, and matches pre-B2 equal?.
-  ["fantasy-land/equals"](other: unknown): boolean {
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSFunction && this.source === other.source;
   }
 
