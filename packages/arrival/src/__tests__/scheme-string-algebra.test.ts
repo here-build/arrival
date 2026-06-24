@@ -9,7 +9,7 @@ import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
-const LTE = "fantasy-land/lte";
+const LTE = "arrival/tagless-final/lte";
 
 // Small domain + edge cases: "" (empty), astral unicode, ASCII collisions.
 const arb = fc

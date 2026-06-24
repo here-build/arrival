@@ -208,7 +208,7 @@ export class AExact extends AValue {
   // above where exact ≠ inexact. NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is #f,
   // so every relation derived from this collapses to #f on a NaN operand, exactly
   // like the numeric `<=` Operator. Non-number → false (Ord convention).
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       (other instanceof AExact || other instanceof AInexact) &&
       schemeCompare(this, other, "<=") <= 0
@@ -454,7 +454,7 @@ export class AInexact extends AValue {
   // representation Setoid above uses Object.is (so eqv? NaN is reflexive); this Ord
   // uses schemeCompare (so `(= +nan.0 +nan.0)` is #f) — two genuine comparisons.
   // Non-number → false (Ord convention).
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       (other instanceof AExact || other instanceof AInexact) &&
       schemeCompare(this, other, "<=") <= 0
@@ -566,7 +566,7 @@ export class AInexact extends AValue {
  * Get real value from SchemeNumeric. (Reals-only — every inexact is real.)
  *
  * Lives in the value layer (not operators/numeric.ts) so the number classes' own
- * `fantasy-land/lte` Ord can compute by-value without the operators→numbers cycle.
+ * `arrival/tagless-final/lte` Ord can compute by-value without the operators→numbers cycle.
  */
 export function toReal(n: ANumeric, _opName: string): number {
   if (n instanceof AExact) {

@@ -104,7 +104,7 @@ export class AString extends AValue {
   // Ord (Fantasy Land, extends Setoid). Lexicographic via JS `<=`, a total
   // code-unit order (totality/antisymmetry/transitivity/consistency-with-equals
   // all hold against the Setoid above). Non-SchemeString → false.
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     return other instanceof AString && this.__string__ <= other.__string__;
   }
 

@@ -108,7 +108,7 @@ export class ASymbol extends AValue {
   // A gensym's `__name__` is an ES6 symbol with no meaningful order — falling
   // back to `String(...)` gives a STABLE total order within a run (Symbol
   // toString is stable), so totality/antisymmetry/transitivity still hold.
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     return other instanceof ASymbol && String(this.__name__) <= String(other.__name__);
   }
 

@@ -96,7 +96,7 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
-    // string</>/<=/>= derive from SchemeString's fantasy-land/lte (wave-1 Ord) via
+    // string</>/<=/>= derive from SchemeString's arrival/tagless-final/lte (wave-1 Ord) via
     // the shared deriveOrd chain — same adapter as the char family.
     "string<?": symbol.native`string<?: strictly-increasing string order`(
       { input: z.array(z.unknown()), output: [z.boolean] },

@@ -103,7 +103,7 @@ function isNilOperand(v: unknown): boolean {
 }
 
 // ── Numeric Ord chain (plane-local) ─────────────────────────────────────────
-// The 5 comparisons below derive PURELY from the operands' numeric `fantasy-land/lte`
+// The 5 comparisons below derive PURELY from the operands' numeric `arrival/tagless-final/lte`
 // (SchemeExact/SchemeInexact, added value-side) when EVERY operand is a number — no
 // `global_env.get("=")` env-read. NaN ⇒ both `lte` directions are #f ⇒ every relation
 // collapses to #f, exactly like the numeric Operators. A non-number operand (or arity 0)
@@ -112,7 +112,7 @@ function isNilOperand(v: unknown): boolean {
 // short-circuited to #f first (the plane's nil-tolerance, see filter/map).
 const isNumberOperand = (v: unknown): v is ANumeric =>
   v instanceof AExact || v instanceof AInexact;
-const flLteNum = (a: ANumeric, b: ANumeric): boolean => a["fantasy-land/lte"](b);
+const flLteNum = (a: ANumeric, b: ANumeric): boolean => a["arrival/tagless-final/lte"](b);
 // Each relation of the (partial — NaN-incomparable) numeric order, from the single `lte`.
 // Strict </> use the CONJUNCTIVE form (`lte(a,b) && !lte(b,a)`), NOT `!lte(b,a)`: the
 // latter is the total-order shortcut and would wrongly yield #t for a NaN pair.
@@ -473,7 +473,7 @@ export default new EnvCapability("scheme/fl-interop", {
     // to write defensive `(if (nil? x) … (= x …))` guards. Completing the plane's
     // existing nil-tolerance grain (see filter/map): a nil operand resolves the
     // comparison to #f rather than crashing the proof. Non-nil NUMBER operands compute
-    // by-value via their `fantasy-land/lte` (numericChain — no env-read, byte-identical
+    // by-value via their `arrival/tagless-final/lte` (numericChain — no env-read, byte-identical
     // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
     // falls back to the kept bridged builtin, which is that Operator (identical throw).
     "=": symbol.native`=: numeric =, nil-tolerant (a nil operand ⇒ #f)`(

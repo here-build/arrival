@@ -10,7 +10,7 @@ import { ABytevector } from "../values/primitives/ABytevector.js";
 import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
-const LTE = "fantasy-land/lte";
+const LTE = "arrival/tagless-final/lte";
 const CONCAT = "fantasy-land/concat";
 
 // Small byte arrays + edge cases: empty, prefixes, collisions on a small domain.

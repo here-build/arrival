@@ -9,7 +9,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import { setoidLaws, ordLaws } from "./algebra-laws.js";
 
 const FL = "fantasy-land/equals";
-const LTE = "fantasy-land/lte";
+const LTE = "arrival/tagless-final/lte";
 
 // Small grapheme domain (incl. punctuation/digits/letters) → collisions exercise
 // the symmetric/transitive/antisymmetric branches; one astral char for unicode.

@@ -43,7 +43,7 @@ export default new EnvCapability("scheme/chars", {
       },
     ),
 
-    // char</>/<=/>= derive from SchemeCharacter's fantasy-land/lte (wave-1 Ord) via
+    // char</>/<=/>= derive from SchemeCharacter's arrival/tagless-final/lte (wave-1 Ord) via
     // the shared deriveOrd chain — see ORD_REL above.
     "char<?": symbol.native`char<?: strictly-increasing character order`(
       { input: z.array(z.unknown()), output: [z.boolean] },

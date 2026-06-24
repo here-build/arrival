@@ -13,7 +13,7 @@ import fc from "fast-check";
 import { describe, it } from "vitest";
 
 const EQ = "fantasy-land/equals";
-const LTE = "fantasy-land/lte";
+const LTE = "arrival/tagless-final/lte";
 const CONCAT = "fantasy-land/concat";
 const MAP = "fantasy-land/map";
 

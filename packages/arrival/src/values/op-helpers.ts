@@ -144,7 +144,7 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
 // Fantasy Land Ord — the type-agnostic ordered-comparison chain
 // ============================================================================
 
-// The comparison operators consult `fantasy-land/lte` when their operands are
+// The comparison operators consult `arrival/tagless-final/lte` when their operands are
 // ordered ENTITIES (a DateTime, a Version, a SchemeCharacter, a SchemeString …),
 // exactly as equal? consults a Setoid's `fantasy-land/equals`. All four relations
 // derive from the single `lte`; a chain `(< a b c)` holds iff each adjacent pair
@@ -152,26 +152,26 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
 // char<? families are type-agnostic chains over it — adding a new ordered type
 // needs no new comparison builtin. Numeric operands take the numeric/speculative
 // path (bridge's `wrapOrd`) — the FL check is one inexpensive property read.
-export interface FLOrd {
-  "fantasy-land/lte"(other: unknown): boolean;
+export interface AOrd {
+  "arrival/tagless-final/lte"(other: unknown): boolean;
 }
-export const isOrd = (x: unknown): x is FLOrd =>
-  x != null && typeof (x as Partial<FLOrd>)["fantasy-land/lte"] === "function";
-const flLte = (a: FLOrd, b: unknown): boolean => Boolean(a["fantasy-land/lte"](b));
+export const isOrd = (x: unknown): x is AOrd =>
+  x != null && typeof (x as Partial<AOrd>)["arrival/tagless-final/lte"] === "function";
+const lte = (a: AOrd, b: unknown): boolean => Boolean(a["arrival/tagless-final/lte"](b));
 /** The four relations of a total order, all derived from the single `lte`. */
-export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: FLOrd, b: FLOrd) => boolean> = {
-  "<": (a, b) => !flLte(b, a),
-  ">": (a, b) => !flLte(a, b),
-  "<=": (a, b) => flLte(a, b),
-  ">=": (a, b) => flLte(b, a),
+export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => boolean> = {
+  "<": (a, b) => !lte(b, a),
+  ">": (a, b) => !lte(a, b),
+  "<=": (a, b) => lte(a, b),
+  ">=": (a, b) => lte(b, a),
 };
-/** n-ary ordered comparison derived purely from the operands' `fantasy-land/lte`. */
+/** n-ary ordered comparison derived purely from the operands' `arrival/tagless-final/lte`. */
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => boolean {
   const rel = ORD_REL[sym];
   return (...args: unknown[]): boolean => {
     let verdict = true;
     for (let i = 0; i < args.length - 1; i++) {
-      if (!rel(args[i] as FLOrd, args[i + 1] as FLOrd)) {
+      if (!rel(args[i] as AOrd, args[i + 1] as AOrd)) {
         verdict = false;
         break;
       }

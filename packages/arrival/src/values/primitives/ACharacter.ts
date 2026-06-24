@@ -137,7 +137,7 @@ export class ACharacter extends AValue {
   }
 
   // Ord (Fantasy Land, extends Setoid). Ordered by code point.
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       other instanceof ACharacter &&
       (this.__char__.codePointAt(0) ?? 0) <= (other.__char__.codePointAt(0) ?? 0)

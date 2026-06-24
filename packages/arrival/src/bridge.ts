@@ -17,7 +17,7 @@ import type { EvalSchemeInto, SchemeEnv } from "./env/scheme-env.js";
 import { AHalfBaked, type Interval, is_half_baked } from "./values/primitives/AHalfBaked.js";
 import type { Environment } from "./Environment.js";
 import { schemeFalse, schemeTrue } from "./values/primitives/ABool.js";
-import { coerceNumeric, type FLOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
+import { coerceNumeric, type AOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
 // They are no longer spread into `wrappedOps`: `initBridge` ASSEMBLES them onto
@@ -290,13 +290,13 @@ function makeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): u
 function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
   const rel = ORD_REL[sym];
   // FL-Ord only intercepts NON-NUMERIC ordered entities (string/char/symbol/DateTime/…).
-  // A number is excluded even though it now carries a `fantasy-land/lte` (numbers' Ord is
+  // A number is excluded even though it now carries a `arrival/tagless-final/lte` (numbers' Ord is
   // numeric): ORD_REL is a TOTAL-order shortcut (`<` ≡ `!lte(b,a)`) that is WRONG for the
   // partial numeric order (NaN-incomparable ⇒ would yield #t for `(< +nan.0 1)`), and the
   // numeric Operator additionally carries provenance + the speculative early-collapse the
   // FL branch can't. So numbers fall through to `numeric(...)`, exactly as before numbers
   // gained an Ord — the invariant this branch always relied on, now made explicit.
-  const isOrdEntity = (x: unknown): x is FLOrd => isOrd(x) && !isSchemeNumber(x);
+  const isOrdEntity = (x: unknown): x is AOrd => isOrd(x) && !isSchemeNumber(x);
   const fn = (...args: unknown[]): unknown => {
     if (args.length >= 2 && args.some(isOrdEntity)) {
       for (let i = 0; i < args.length - 1; i++) {

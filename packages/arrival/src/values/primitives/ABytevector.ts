@@ -133,7 +133,7 @@ export class ABytevector extends AValue {
   // Ord (Fantasy Land, extends Setoid) — lexicographic over unsigned bytes.
   // A proper prefix is ≤ its extension; antisymmetry holds against the Setoid
   // above (equal iff same bytes AND same length). Non-SchemeBytevector → false.
-  ["fantasy-land/lte"](other: unknown): boolean {
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
     if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
     const b = other.__bytevector__;
