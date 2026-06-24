@@ -21,12 +21,18 @@
 
 import { describe, expect, it } from "vitest";
 import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
+import { exec, get } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import {
   INTEROP_BOUNDARY,
+  InteropAccessError,
+  accessSet,
   isInteropBoundary,
 } from "../interop-access";
+import { SchemeString } from "../values/SchemeString";
+import { SchemeSymbol } from "../values/SchemeSymbol";
+import { AValue } from "../values/AValue";
+import { exec as gexec } from "../eval/generator-exec";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -115,7 +121,6 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * prototype-chain walk in accessMember stops at them.
    */
   it("SchemeString is marked as a sandbox boundary", async () => {
-    const { SchemeString } = await import("../values/SchemeString");
     // Direct check, two ways the marker can be present:
     const protoMarked =
       Object.prototype.hasOwnProperty.call(SchemeString.prototype, INTEROP_BOUNDARY) &&
@@ -170,7 +175,6 @@ describe("CRITICAL: accessor isolation leaks", () => {
     // routed via Environment.get's dotted resolution). On a raw function its
     // `else` branch used to do `object[name]` — so get(fn, "constructor") handed
     // back the Function constructor (RCE). It now routes through accessMember.
-    const { get } = await import("../stdlib");
     const fn = (x: number) => x;
     expect(get(fn, "constructor")).toBeUndefined();
     expect(get(fn, "__proto__")).toBeUndefined();
@@ -278,7 +282,6 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // `budgetMs` throws a SchemeError(/budget/) at the existing 1000-iter / 5ms
     // event-loop yield once the deadline passes; it composes with `signal`
     // (whichever fires first wins). See evaluator.ts RunOptions.budgetMs.
-    const { exec: gexec } = await import("../eval/generator-exec");
     const start = Date.now();
     // `(let loop () (loop))` is now flat under TCO (task #46), so the budget
     // fires cleanly instead of the loop blowing the JS stack first.
@@ -305,7 +308,6 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * behavior pin.
    */
   it("DOCUMENTED: string->symbol of N distinct names creates N intern entries", async () => {
-    const { SchemeSymbol } = await import("../values/SchemeSymbol");
     const before = Object.keys(SchemeSymbol.list).length;
     const N = 500;
     for (let i = 0; i < N; i++) {
@@ -431,7 +433,6 @@ describe("registry poisoning vectors", () => {
    * After such a fix, this test should be updated to assert the new control.
    */
   it("DOCUMENTED: AValue.registerBoxer has no access control today", async () => {
-    const { AValue } = await import("../values/AValue");
     // registerBoxer is an exposed static method. No frozen check, no symbol
     // guard. If AValue ever leaks to the sandbox, this is a direct write to
     // a global registry. Test pin: any PR that hardens the registry should
@@ -456,7 +457,6 @@ describe("registry poisoning vectors", () => {
 
 describe("CRITICAL: write-side prototype pollution (S6)", () => {
   it("string->symbol of '__proto__' does not pollute Object.prototype", async () => {
-    const { SchemeSymbol } = await import("../values/SchemeSymbol");
     // Minting symbols named after dangerous keys must touch only the intern
     // table as own keys — never reach Object.prototype.
     for (const name of ["__proto__", "constructor", "prototype"]) {
@@ -471,7 +471,6 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
   });
 
   it("sandboxedSet('__proto__', ...) is rejected as a blocked key", async () => {
-    const { accessSet, InteropAccessError } = await import("../interop-access");
     const target: Record<string, unknown> = {};
     expect(() => accessSet(target, "__proto__", { evil: true })).toThrow(InteropAccessError);
     expect(() => accessSet(target, "constructor", 1)).toThrow(InteropAccessError);
@@ -479,7 +478,6 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
   });
 
   it("sandboxedSet installs an OWN data property without firing inherited setters", async () => {
-    const { accessSet } = await import("../interop-access");
     let setterFired = false;
     // A poisoned setter on a prototype must NOT fire on assignment.
     const proto = {};
@@ -498,7 +496,6 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
   });
 
   it("SANDBOX_BOUNDARY sentinel is not forgeable from the global Symbol registry", async () => {
-    const { INTEROP_BOUNDARY } = await import("../interop-access");
     // A module-local Symbol() is never equal to a registry symbol of any key.
     expect(INTEROP_BOUNDARY).not.toBe(Symbol.for("scheme:sandbox-boundary"));
   });

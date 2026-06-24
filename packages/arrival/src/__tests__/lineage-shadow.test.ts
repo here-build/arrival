@@ -36,6 +36,7 @@ import { exec, parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { SchemeString } from "../values/SchemeString";
 import { AValue } from "../values/AValue";
+import { Pair } from "../values/Pair";
 import { classify, fullCone } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
 import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
@@ -212,7 +213,6 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]); // eager spine
@@ -223,7 +223,6 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]);
@@ -274,7 +273,6 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
-    const { Pair } = await import("../values/Pair");
     env.set("xs", Pair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
       /PROVENANCE-SHADOW-DIVERGENCE/,

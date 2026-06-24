@@ -13,6 +13,9 @@
 import { describe, expect, it } from "vitest";
 import { Environment } from "../Environment";
 import type { EnvironmentModule, FallbackResolver } from "../bindings";
+// Side-effect import: ensure the stdlib runtime module is loaded (was three in-body
+// `await import("../stdlib")` warm-ups; env.eval self-bootstraps, so once at load suffices).
+import "../stdlib";
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);
@@ -405,9 +408,6 @@ describe("Environment Module Composition", () => {
 
   describe("Environment.eval()", () => {
     it("should evaluate simple expressions", async () => {
-      // Import lips to ensure runtime is loaded
-      await import("../stdlib");
-
       const module: EnvironmentModule = {
         id: "test",
         bindings: {
@@ -424,8 +424,6 @@ describe("Environment Module Composition", () => {
     });
 
     it("should evaluate multiple expressions and return last", async () => {
-      await import("../stdlib");
-
       const module: EnvironmentModule = {
         id: "test",
         bindings: {
@@ -443,8 +441,6 @@ describe("Environment Module Composition", () => {
     });
 
     it("should allow setting bindings that are visible to eval", async () => {
-      await import("../stdlib");
-
       const module: EnvironmentModule = {
         id: "test",
         bindings: {

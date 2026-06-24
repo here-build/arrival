@@ -25,6 +25,8 @@ import { coerceNumeric, type FLOrd, isOrd, isSchemeNumber, ORD_REL } from "./val
 // Operator/Profunctor↔Scheme bridge).
 import { NATIVE_PACKS } from "./env/native-packs.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
+import { inferenceEnv } from "./inference-env.js";
+import flInterop from "./env/fl-interop.js";
 import { SchemeString } from "./values/SchemeString.js";
 import type { Codec, Operator } from "./membrane.js";
 import type { SchemeNumeric } from "./values/numbers.js";
@@ -752,14 +754,13 @@ export function initBridge(): Promise<void> {
       ),
     )
     .then(async () => {
-      const { inferenceEnv } = await import("./inference-env.js");
       // The FL/array-interop overlay (car/cdr/filter/map/reduce) is its own capability
       // pack. Assemble it onto the inference-plane base env HERE — after global_env's
       // native assembly and the base packs — so its lazily-captured `builtin*` refs
       // (read at first call from global_env) are guaranteed live. Doing it inside
       // whenBootstrapComplete's chain means a public exec never sees a half-assembled
-      // inferenceEnv. (Dynamic import mirrors the inference-env one — avoids an init cycle.)
-      const flInterop = (await import("./env/fl-interop.js")).default;
+      // inferenceEnv. (inferenceEnv + flInterop are imported statically at module top;
+      // the assembly stays HERE in the bootstrap chain so sequencing is preserved.)
       await assembleEnv(inferenceEnv as unknown as SchemeEnv, [flInterop.lower()]);
       for (const name of [
         "->",

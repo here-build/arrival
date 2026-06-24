@@ -18,6 +18,7 @@ import { fromJS, isSchemeValue, SchemeJSObject } from "./membrane.js";
 import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
 import { patch_value } from "./reader/values-repr.js";
 import { docsOf, rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
+import { exec } from "./eval/generator-exec.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -491,10 +492,7 @@ export class Environment {
    */
   async eval(code: string): Promise<SchemeValue> {
     // Generator path (run(evaluate(...))) rather than the legacy lips.evaluate.
-    // Lazy import keeps the evaluator off Environment's module-init chain — the
-    // edge is call-time only, so no init-order cycle. exec throws on error by
-    // default, matching the old re-throwing handler.
-    const { exec } = await import("./eval/generator-exec.js");
+    // exec throws on error by default, matching the old re-throwing handler.
     const results = await exec(code, { env: this });
     return results.length > 0 ? results[results.length - 1] : nil;
   }
