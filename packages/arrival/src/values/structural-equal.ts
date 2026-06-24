@@ -109,7 +109,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // ----------------------------------------------------------------------
 // R7RS § 6.1 — the lower two tiers of the equivalence hierarchy (`eq?`/`eqv?`).
 // `equal?` (structuralEqual, above) is the third. Co-located here so the three
-// grades live in one equality leaf — and so the future Setoid (fantasy-land/
+// grades live in one equality leaf — and so the future Setoid (arrival/tagless-final/
 // equals) consolidation has a single home (see plan-2026-06-10-algebras-in-entities.md).
 //
 // War story: `eq?` and `eqv?` were both aliased to a single structural-ish
