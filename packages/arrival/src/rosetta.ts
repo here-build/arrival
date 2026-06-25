@@ -11,7 +11,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
-import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
 import { ABool } from "./values/primitives/ABool.js";
@@ -257,13 +257,14 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
  * that wrapper rather than allocating an infinite spine.
  */
 export function jsToScheme(
+  ctx: RunContext,
   value: any,
   options: RosettaOptions = {},
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   seen: WeakSet<object> = new WeakSet(),
 ): any {
   if (value === null || value === undefined) {
-    return provenance === EMPTY_PROVENANCE ? nil : new ANil(CONSTANT_CTX, provenance);
+    return provenance === EMPTY_PROVENANCE ? nil : new ANil(ctx, provenance);
   }
 
   // Cycle in JS-side input — return as-is. The caller's outer wrapper already
@@ -277,17 +278,17 @@ export function jsToScheme(
   if (value instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === value.provenance) return value;
     if (value instanceof APair) {
-      return new APair(CONSTANT_CTX, 
-        jsToScheme(value.car, options, provenance, seen),
-        jsToScheme(value.cdr, options, provenance, seen),
+      return new APair(ctx, 
+        jsToScheme(ctx, value.car, options, provenance, seen),
+        jsToScheme(ctx, value.cdr, options, provenance, seen),
         provenance,
       );
     }
     if (value instanceof AVector) {
       // Deep-stamp elements (parallel to Pair), keep it a vector. The container
       // also carries the provenance via the constructor arg.
-      return new AVector(CONSTANT_CTX, 
-        value.__vector__.map((el) => jsToScheme(el, options, provenance, seen)),
+      return new AVector(ctx, 
+        value.__vector__.map((el) => jsToScheme(ctx, el, options, provenance, seen)),
         provenance,
       );
     }
@@ -296,9 +297,9 @@ export function jsToScheme(
 
   // JS array → Pair-chain, each cons + each leaf stamped on the way down.
   if (Array.isArray(value)) {
-    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(CONSTANT_CTX, provenance);
+    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(ctx, provenance);
     for (let i = value.length - 1; i >= 0; i--) {
-      list = new APair(CONSTANT_CTX, jsToScheme(value[i], options, provenance, seen), list, provenance);
+      list = new APair(ctx, jsToScheme(ctx, value[i], options, provenance, seen), list, provenance);
     }
     return list;
   }
@@ -308,13 +309,13 @@ export function jsToScheme(
     typeof value === "object" &&
     (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
   ) {
-    return new AJSObject(CONSTANT_CTX, value as object, provenance);
+    return new AJSObject(ctx, value as object, provenance);
   }
 
   // JS primitives → AValue.fromJs (boxer registry handles bool/number/string/bigint).
   const tag = typeof value;
   if (tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint") {
-    return AValue.fromJs(CONSTANT_CTX, value, provenance);
+    return AValue.fromJs(ctx, value, provenance);
   }
 
   // Functions, exotic objects (Promise, Buffer, …): the caller's responsibility.
@@ -444,7 +445,7 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
         resultProvenance = pointProvenance(inv.id);
       }
 
-      const result = jsToScheme(rawResult, options, resultProvenance);
+      const result = jsToScheme((ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX, rawResult, options, resultProvenance);
       return options.returnEither ? [result, nil] : result;
     } catch (error) {
       console.error("Rosetta function error:", error);

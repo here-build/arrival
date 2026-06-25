@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * Test all examples from the Quick Start section to ensure they work
  */
@@ -47,7 +48,7 @@ describe("Quick Start Examples", () => {
       { id: "charlie", priority: 20 },
     ];
 
-    sandboxedEnv.set("users", jsToScheme(users, {}));
+    sandboxedEnv.set("users", jsToScheme(CONSTANT_CTX, users, {}));
 
     const results = await exec(
       `

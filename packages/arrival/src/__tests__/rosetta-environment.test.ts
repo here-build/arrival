@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * Test Rosetta Environment - seamless LIPS ↔ JS interop
  */
@@ -45,7 +46,7 @@ describe("Rosetta Environment", () => {
       const original: Record<string | symbol, unknown> = { visible: 1 };
       original[SECRET] = [4, 5, 6];
 
-      const roundTripped = schemeToJs(jsToScheme(original, {}), {}) as Record<string | symbol, unknown>;
+      const roundTripped = schemeToJs(jsToScheme(CONSTANT_CTX, original, {}), {}) as Record<string | symbol, unknown>;
 
       expect(roundTripped.visible).toBe(1); // string key unchanged
       expect(roundTripped[SECRET]).toEqual([4, 5, 6]); // symbol key survives
@@ -94,7 +95,7 @@ describe("Rosetta Environment", () => {
   describe("JS → LIPS Conversion", () => {
     it("should convert JS arrays to LIPS lists", () => {
       const jsArray = [1, 2, 3, 4];
-      const lipsList = jsToScheme(jsArray, {});
+      const lipsList = jsToScheme(CONSTANT_CTX, jsArray, {});
 
       console.log("JS array:", jsArray);
       console.log("LIPS list:", lipsList);
@@ -108,7 +109,7 @@ describe("Rosetta Environment", () => {
 
     it("should convert empty JS array to LIPS nil", () => {
       const emptyArray: any[] = [];
-      const lipsList = jsToScheme(emptyArray, {});
+      const lipsList = jsToScheme(CONSTANT_CTX, emptyArray, {});
 
       console.log("Empty JS array:", emptyArray);
       console.log("LIPS nil:", lipsList);
@@ -121,7 +122,7 @@ describe("Rosetta Environment", () => {
         [1, 2],
         [3, 4],
       ];
-      const lipsList = jsToScheme(nestedArray, {});
+      const lipsList = jsToScheme(CONSTANT_CTX, nestedArray, {});
 
       console.log("Nested JS array:", nestedArray);
       console.log("Nested LIPS list:", lipsList);
@@ -133,7 +134,7 @@ describe("Rosetta Environment", () => {
 
     it("should handle JS objects", () => {
       const jsObject = { name: "test", value: 42, items: [1, 2, 3] };
-      const lipsObject = jsToScheme(jsObject, {});
+      const lipsObject = jsToScheme(CONSTANT_CTX, jsObject, {});
 
       console.log("JS object:", jsObject);
       console.log("LIPS object:", lipsObject);
@@ -254,7 +255,7 @@ describe("Rosetta Environment", () => {
       ];
 
       // Convert to LIPS and call function
-      const lipsData = jsToScheme(testData, {});
+      const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
       const rosettaFn = inferenceEnv.get("extract-values");
       const result = await rosettaFn(lipsData);
 
@@ -283,7 +284,7 @@ describe("Rosetta Environment", () => {
       ];
 
       // Convert to LIPS and filter
-      const lipsNodes = jsToScheme(testNodes, {});
+      const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const filterFn = inferenceEnv.get("filter-by-css-property");
       const result = await filterFn(lipsNodes, "overflow", "hidden");
 
@@ -317,7 +318,7 @@ describe("Rosetta Environment", () => {
         { style: { overflow: "hidden", display: "flex" } },
       ];
 
-      const lipsNodes = jsToScheme(testNodes, {});
+      const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const statsFn = inferenceEnv.get("css-property-stats");
       const result = await statsFn(lipsNodes);
 

@@ -7,7 +7,7 @@
  * projections (element-only) — so `(car (infer …))` returned a SchemeString
  * carrying nothing, breaking the v0-gap provenance chain.
  *
- * Post-change: `jsToScheme(raw, opts, provenance)` deep-stamps every
+ * Post-change: `jsToScheme(CONSTANT_CTX, raw, opts, provenance)` deep-stamps every
  * constructed AValue in a single pass. Plain JS objects wrap as
  * `SchemeJSObject`; their entries box lazily via `.get(key)` carrying the
  * wrapper's provenance, with a per-wrapper cache for identity stability.
@@ -32,7 +32,7 @@ const PROV = new Set<number>([42]);
 
 describe("jsToScheme deep-stamps every constructed AValue", () => {
   it("array → Pair-chain — each cons has provenance, each leaf SchemeString has provenance", () => {
-    const result = jsToScheme(["a", "b"], {}, PROV);
+    const result = jsToScheme(CONSTANT_CTX, ["a", "b"], {}, PROV);
     expect(result).toBeInstanceOf(APair);
     const pair = result as APair;
     expect([...pair.provenance]).toEqual([42]);
@@ -50,7 +50,7 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
   });
 
   it("nested array deep-stamps recursively", () => {
-    const result = jsToScheme([[1], [2, 3]], {}, PROV) as APair;
+    const result = jsToScheme(CONSTANT_CTX, [[1], [2, 3]], {}, PROV) as APair;
     expect([...result.provenance]).toEqual([42]);
     const inner = result.car as APair;
     expect(inner).toBeInstanceOf(APair);
@@ -60,7 +60,7 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
   });
 
   it("plain object → SchemeJSObject with provenance; entries lazy-boxed", () => {
-    const result = jsToScheme({ name: "claude" }, {}, PROV);
+    const result = jsToScheme(CONSTANT_CTX, { name: "claude" }, {}, PROV);
     expect(result).toBeInstanceOf(AJSObject);
     expect([...(result as AJSObject).provenance]).toEqual([42]);
     // Entry surfaces through `.get` — boxed lazily with the wrapper's provenance.
@@ -70,17 +70,17 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
   });
 
   it("primitive string → SchemeString boxed via AValue.fromJs with provenance", () => {
-    const result = jsToScheme("hello", {}, PROV);
+    const result = jsToScheme(CONSTANT_CTX, "hello", {}, PROV);
     expect(result).toBeInstanceOf(AString);
     expect([...(result as AString).provenance]).toEqual([42]);
   });
 
   it("primitive number → SchemeExact (safe int) or SchemeInexact with provenance", () => {
-    const intResult = jsToScheme(42, {}, PROV);
+    const intResult = jsToScheme(CONSTANT_CTX, 42, {}, PROV);
     expect(intResult).toBeInstanceOf(AExact);
     expect([...(intResult as AExact).provenance]).toEqual([42]);
 
-    const floatResult = jsToScheme(3.14, {}, PROV);
+    const floatResult = jsToScheme(CONSTANT_CTX, 3.14, {}, PROV);
     expect(floatResult).toBeInstanceOf(AInexact);
     expect([...(floatResult as AInexact).provenance]).toEqual([42]);
   });
@@ -89,18 +89,18 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
     // Empty-provenance fast path reuses singletons / skips withProvenance —
     // boxer registry decides whether to allocate. SchemeString always
     // allocates (no singleton); SchemeBool reuses schemeTrue/schemeFalse.
-    expect(jsToScheme(true, {}, EMPTY_PROVENANCE)).toBe(schemeTrue);
-    expect(jsToScheme(false, {}, EMPTY_PROVENANCE)).toBe(schemeFalse);
-    const str = jsToScheme("x", {}, EMPTY_PROVENANCE) as AString;
+    expect(jsToScheme(CONSTANT_CTX, true, {}, EMPTY_PROVENANCE)).toBe(schemeTrue);
+    expect(jsToScheme(CONSTANT_CTX, false, {}, EMPTY_PROVENANCE)).toBe(schemeFalse);
+    const str = jsToScheme(CONSTANT_CTX, "x", {}, EMPTY_PROVENANCE) as AString;
     expect(str).toBeInstanceOf(AString);
     expect(str.provenance.size).toBe(0);
   });
 
   it("with already-AValue same provenance returns input unchanged (identity fast path)", () => {
     const orig = new AString(CONSTANT_CTX, "x", PROV);
-    expect(jsToScheme(orig, {}, PROV)).toBe(orig);
+    expect(jsToScheme(CONSTANT_CTX, orig, {}, PROV)).toBe(orig);
     // Empty-provenance argument also short-circuits — input is preserved.
-    expect(jsToScheme(orig, {}, EMPTY_PROVENANCE)).toBe(orig);
+    expect(jsToScheme(CONSTANT_CTX, orig, {}, EMPTY_PROVENANCE)).toBe(orig);
   });
 });
 
@@ -111,7 +111,7 @@ describe("jsToScheme WeakSet cycle protection", () => {
     // No assertion on the inner reference shape — only that the call returns
     // without blowing the stack. The Pair-chain for the outer reference is
     // built; the cyclic slot bottoms out at the WeakSet guard.
-    expect(() => jsToScheme(arr, {}, PROV)).not.toThrow();
+    expect(() => jsToScheme(CONSTANT_CTX, arr, {}, PROV)).not.toThrow();
   });
 
   it("mutual-cycle plain objects terminate", () => {
@@ -119,7 +119,7 @@ describe("jsToScheme WeakSet cycle protection", () => {
     const b: Record<string, unknown> = { name: "b" };
     a.peer = b;
     b.peer = a;
-    expect(() => jsToScheme(a, {}, PROV)).not.toThrow();
+    expect(() => jsToScheme(CONSTANT_CTX, a, {}, PROV)).not.toThrow();
   });
 });
 

@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * Test whether LIPS supports :keyword syntax
  */
@@ -84,7 +85,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
       { id: "3", name: "Charlie" },
     ];
     // Scheme map expects pair chains, not JS arrays
-    inferenceEnv.set("users", jsToScheme(users));
+    inferenceEnv.set("users", jsToScheme(CONSTANT_CTX, users));
 
     expect(schemeToJs(await execOne(`(map :name users)`))).toEqual(["Alice", "Bob", "Charlie"]);
   });
@@ -96,7 +97,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
       { active: true, name: "Item 3" },
     ];
     // Scheme filter expects pair chains, not JS arrays
-    inferenceEnv.set("items", jsToScheme(items));
+    inferenceEnv.set("items", jsToScheme(CONSTANT_CTX, items));
 
     // Filter using keyword extractor
     const filtered = schemeToJs(await execOne(`(filter :active items)`));

@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * Test escaped symbols and edge cases in LIPS
  *
@@ -231,7 +232,7 @@ describe("Escaped Symbol Resolution", () => {
       ];
 
       // Convert to LIPS list — scheme filter expects pair chains, not JS arrays
-      inferenceEnv.set("items", jsToScheme(items));
+      inferenceEnv.set("items", jsToScheme(CONSTANT_CTX, items));
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)
       // and post-eq?/eqv?-split returns #f for two distinct heap string instances.

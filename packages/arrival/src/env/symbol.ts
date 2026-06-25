@@ -42,6 +42,7 @@ import * as z from "./scheme-zod.js";
 import type { APair } from "../values/primitives/APair.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -310,11 +311,11 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     if (singleOut) {
       // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
       const encoded = (z.encode(outSchema, [result]) as readonly unknown[])[0];
-      return jsToScheme(encoded, {}, resultProvenance);
+      return jsToScheme((ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
     }
     // multiple-values / array-ish output: the impl returned the values-vector already.
     const encoded = z.encode(outSchema, result) as unknown[];
-    return encoded.map((v) => jsToScheme(v, {}, resultProvenance));
+    return encoded.map((v) => jsToScheme((ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance));
   };
   // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
   // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS

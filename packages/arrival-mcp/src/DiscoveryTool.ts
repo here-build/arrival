@@ -14,7 +14,7 @@
 //                  the eval membrane — a run can't reach it, so session/other-call state stays out.
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
-import { type SchemeEnv, exec, jsToScheme, sandboxedEnv, schemeToJs, tokenize } from "@here.build/arrival";
+import { type SchemeEnv, CONSTANT_CTX, exec, jsToScheme, sandboxedEnv, schemeToJs, tokenize } from "@here.build/arrival";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -218,7 +218,7 @@ export class DiscoveryTool {
     for (const src of history) {
       const name = defineName(src);
       if (cache[src] !== undefined && name) {
-        env.set(name, jsToScheme(JSON.parse(cache[src])));
+        env.set(name, jsToScheme(CONSTANT_CTX, JSON.parse(cache[src])));
         continue;
       }
       try {

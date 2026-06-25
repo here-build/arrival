@@ -34,7 +34,7 @@ describe("boxed vector — provenance propagation (jsToScheme)", () => {
   it("deep-stamps element provenance, keeps it a vector", () => {
     const v = new AVector(CONSTANT_CTX, [1, 2, 3]);
     const prov = new Set<number>([42]);
-    const stamped = jsToScheme(v, {}, prov) as AVector;
+    const stamped = jsToScheme(CONSTANT_CTX, v, {}, prov) as AVector;
     expect(stamped).toBeInstanceOf(AVector);
     // Container carries provenance...
     expect([...stamped.provenance]).toEqual([42]);

@@ -153,7 +153,7 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // string in produces a `SchemeString` carrying the supplied provenance.
   // Closes the shape divergence the membrane symmetry audit flagged.
   it("string is wrapped through jsToScheme into SchemeString", () => {
-    const lipsified = jsToScheme("hello");
+    const lipsified = jsToScheme(CONSTANT_CTX, "hello");
     expect(lipsified).toBeInstanceOf(AString);
   });
 
@@ -161,15 +161,15 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // This IS expected behavior today and is the green guard for the
   // primitive-passthrough contract.
   it("string round-trips by passthrough (raw → raw)", () => {
-    expect(schemeToJs(jsToScheme("hello"))).toBe("hello");
+    expect(schemeToJs(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
   });
 
   it("number round-trips by passthrough", () => {
-    expect(schemeToJs(jsToScheme(42))).toBe(42);
+    expect(schemeToJs(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
   });
 
   it("boolean round-trips by passthrough", () => {
-    expect(schemeToJs(jsToScheme(true))).toBe(true);
+    expect(schemeToJs(jsToScheme(CONSTANT_CTX, true))).toBe(true);
   });
 
   // Arrays are properly cons'd to Pair, then schemeToJs walks the spine
@@ -177,24 +177,24 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // through jsToScheme (so primitives stay primitives), and schemeToJs
   // recurses through the Pair spine.
   it("array round-trips through a Pair chain", () => {
-    const result = schemeToJs(jsToScheme([1, 2, 3]));
+    const result = schemeToJs(jsToScheme(CONSTANT_CTX, [1, 2, 3]));
     expect(result).toEqual([1, 2, 3]);
   });
 
   it("nested array round-trips", () => {
-    const result = schemeToJs(jsToScheme([[1, 2], [3, 4]]));
+    const result = schemeToJs(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
     expect(result).toEqual([[1, 2], [3, 4]]);
   });
 
-  // Plain objects are recursed: jsToScheme builds { k: jsToScheme(v) }, schemeToJs
+  // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, schemeToJs
   // mirrors via Object.entries → schemeToJs(value). Round-trip is correct.
   it("plain object round-trips", () => {
-    const result = schemeToJs(jsToScheme({ a: 1, b: "two" }));
+    const result = schemeToJs(jsToScheme(CONSTANT_CTX, { a: 1, b: "two" }));
     expect(result).toEqual({ a: 1, b: "two" });
   });
 
   it("nested object round-trips", () => {
-    const result = schemeToJs(jsToScheme({ outer: { inner: 42 } }));
+    const result = schemeToJs(jsToScheme(CONSTANT_CTX, { outer: { inner: 42 } }));
     expect(result).toEqual({ outer: { inner: 42 } });
   });
 
@@ -202,8 +202,8 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // is the `value === nil` early return (rosetta.ts:70) — returns the nil
   // SINGLETON, not `null`. Documented divergence: rosetta does not invert
   // the null⇄nil contract symmetrically.
-  it.fails("null round-trips to null (currently jsToScheme(null) → nil, schemeToJs(nil) → nil singleton)", () => {
-    expect(schemeToJs(jsToScheme(null))).toBeNull();
+  it.fails("null round-trips to null (currently jsToScheme(CONSTANT_CTX, null) → nil, schemeToJs(nil) → nil singleton)", () => {
+    expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
   });
 });
 

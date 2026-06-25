@@ -294,7 +294,7 @@ export class AJSObject extends AValue {
     // through rosetta deep-stamping for the common case (jsToScheme reached
     // here on the way down); direct construction with empty provenance keeps
     // the empty-provenance fast-path everywhere.
-    const boxed = jsToScheme(raw, {}, this.provenance);
+    const boxed = jsToScheme(this.ctx, raw, {}, this.provenance);
     if (cacheKey !== undefined && boxed instanceof AValue) {
       if (cache === undefined) {
         cache = new Map();

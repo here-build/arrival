@@ -55,6 +55,7 @@ export { characters } from "./values/primitives/ACharacter.js";
 export { ASymbol } from "./values/primitives/ASymbol.js";
 export { AString } from "./values/primitives/AString.js";
 export { APair } from "./values/primitives/APair.js";
+export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
 
 // Scheme namespace - canonical API for Scheme types
 // Usage: import { Scheme } from 'arrival-scheme'
