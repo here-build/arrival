@@ -1249,13 +1249,6 @@ export const global_env = new Environment(
     "inexact->exact": doc("inexact->exact", function inexactToExact(z: SchemeValue): SchemeValue {
       return (global_env.get("exact") as SchemeFunction)(z);
     }),
-    // ------------------------------------------------------------------
-    not: doc("not", function not(value) {
-      // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
-      // (a truthy object in JS), so `!value` would wrongly return false here.
-      // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
-      return is_false(value);
-    }),
   },
   undefined,
 );

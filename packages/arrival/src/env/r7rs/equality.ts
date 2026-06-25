@@ -35,7 +35,7 @@ import { ABool } from "../../values/primitives/ABool.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
-import { is_callable, is_macro, is_null } from "../../eval/guards.js";
+import { is_callable, is_false, is_macro, is_null } from "../../eval/guards.js";
 import { is_nil, is_pair } from "../../values/value-guards.js";
 import { AString } from "../../values/primitives/AString.js";
 import { isCircularList } from "../../values/primitives/APair.js";
@@ -104,6 +104,18 @@ export default new EnvCapability("scheme/equality", {
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.unknown(), z.unknown()], output: [z.boolean] },
       (x: unknown, y: unknown): boolean => eqv(x, y),
+    ),
+
+    // R7RS 6.3 — logical negation, relocated VERBATIM from stdlib.ts global_env
+    // (husk dissolution). Native pack (Phase 1) binds onto global_env BEFORE the
+    // scheme/core prelude (Phase 2) that calls `not` at macro-define time, so the
+    // move is load-order-safe.
+    "not": symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
+      { input: [z.unknown()], output: [z.boolean] },
+      // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
+      // (a truthy object in JS), so `!value` would wrongly return false here.
+      // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
+      (value: unknown): boolean => is_false(value),
     ),
 
     // ── R7RS type predicates (relocated from stdlib.ts global_env, POC) ──────────
