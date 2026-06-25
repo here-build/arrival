@@ -16,6 +16,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
+import { withInputProvenance } from "../op-helpers.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // rather than imported from membrane.js. `Symbol.for` returns the SAME symbol as
@@ -158,6 +159,16 @@ export class ABytevector extends AValue {
     result.set(a, 0);
     result.set(b, a.length);
     return new ABytevector(this.ctx, result);
+  }
+
+  // Arrival's element-count — generalized `length` over a bytevector (byte length). Like
+  // AString (and UNLIKE the Pair/Vector element-union), bytes carry NO element ids, so this
+  // carries the BYTEVECTOR's OWN provenance (container prov) via `withInputProvenance([this],
+  // count)` — the count boxes with this bytevector's provenance when non-empty, else the bare
+  // `count`. NO heap-charge / NO strict-gating, so the trailing runCtx `symbol.tagless` threads
+  // is ignored.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    return withInputProvenance([this], this.__bytevector__.byteLength);
   }
 }
 

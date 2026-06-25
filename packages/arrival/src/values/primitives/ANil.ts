@@ -109,6 +109,14 @@ export class ANil extends AValue {
     return nil;
   }
 
+  // length of the EMPTY list is 0 — the authoritative empty-count (mirrors the map/filter/
+  // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO the
+  // term). No elements ⇒ no provenance to carry: a bare `0`. NO heap-charge / NO strict-gating,
+  // so the trailing runCtx `symbol.tagless` threads is ignored.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): number {
+    return 0;
+  }
+
   // Monoid empty — the identity is Nil itself (the canonical singleton).
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;

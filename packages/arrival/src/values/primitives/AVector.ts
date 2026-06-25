@@ -18,7 +18,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { is_false, is_nil } from "../../eval/guards.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
@@ -178,6 +178,21 @@ export class AVector extends AValue {
     const out = this.__vector__.slice();
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined));
     return new AVector(this.ctx, out);
+  }
+
+  // Arrival's element-count — `length` carrying the ELEMENTS' unioned provenance, NOT the
+  // container box (DISSOLVED from fl-interop's `length` overlay onto the term; the base stdlib
+  // `length` keeps the CONTAINER-provenance discipline). count = the payload length; the cone
+  // carries every grounded element's id (the same element-union APair gives — a count carries
+  // the grounding of what it counted; the container box is outside a count's cone, so it drops).
+  // `AValue.fromJs(count, unioned-prov)` when any element is grounded, else the bare `count`. NO
+  // heap-charge / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    const count = this.__vector__.length;
+    const inputs = this.__vector__.filter((e): e is AValue => e instanceof AValue);
+    if (inputs.length === 0) return count;
+    const prov = unionProvenance(inputs);
+    return prov.size === 0 ? count : AValue.fromJs(this.ctx, count, prov);
   }
 
   // A boxed vector is iterable from JS — spread / for-of / Array.from yield its

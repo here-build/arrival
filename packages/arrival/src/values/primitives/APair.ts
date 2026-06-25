@@ -15,7 +15,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
@@ -745,6 +745,34 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     }
     out.sort(deriveSortCompare(comparator));
     return APair.fromArray(this.ctx, out, false) as APair | ANil;
+  }
+
+  // Arrival's element-count — `length` carrying the ELEMENTS' (cars') unioned provenance,
+  // NOT the container box (DISSOLVED from fl-interop's `length` overlay onto the term, the
+  // element-union half; the base stdlib `length` keeps the CONTAINER-provenance discipline).
+  // Walks the cdr-spine counting elements + collecting their AValue cars; a count carries the
+  // grounding of every element it touched (V: "provenance everything; a count the seal can't
+  // sign is the hole the teleological seal forbids"). The container box is OUTSIDE a count's
+  // cone (Galois-slicing upper adjoint), so it drops — `AValue.fromJs(count, unioned-prov)` when
+  // any element is grounded, else the bare `count` (no grounding to carry). NO heap-charge (a
+  // count allocates nothing) and NO strict-gating (always counts), so the trailing runCtx that
+  // `symbol.tagless` threads is accepted + ignored. Throws on a circular list, matching the base
+  // stdlib `length`'s "length: circular list". Honors the empty-pair sentinel.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    if (isCircularList(this)) throw new TypeError("length: circular list");
+    let count = 0;
+    const inputs: AValue[] = [];
+    let node: unknown = this;
+    while (node && !(node instanceof ANil)) {
+      const p = node as APair;
+      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      count++;
+      if (p.car instanceof AValue) inputs.push(p.car);
+      node = p.cdr;
+    }
+    if (inputs.length === 0) return count;
+    const prov = unionProvenance(inputs);
+    return prov.size === 0 ? count : AValue.fromJs(this.ctx, count, prov);
   }
 
   // Arrival's canonical car/cdr — the head/tail PROJECTIONS. They mirror the scheme

@@ -9,6 +9,7 @@ import type { ANumeric } from "../numbers.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { ACharacter } from "./ACharacter.js";
 import { typecheck } from "../../utils/typecheck.js";
+import { withInputProvenance } from "../op-helpers.js";
 
 type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
@@ -117,6 +118,18 @@ export class AString extends AValue {
   // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
     return new AString(this.ctx, [...this.__string__].map(f).join(""));
+  }
+
+  // Arrival's element-count — generalized `length` over a string (code-point count). A
+  // string's characters carry NO element ids (chars aren't separately grounded), so — UNLIKE
+  // the Pair/Vector element-union — this carries the STRING's OWN provenance (container prov),
+  // matching `string-length` (a separate `symbol.native` binding; THIS is the generalized
+  // `length` dispatching here). `withInputProvenance([this], count)` boxes the count with this
+  // string's provenance when non-empty, else the bare `count`. Code-point length (spread), so
+  // astral chars count once — identical to the `length` getter / `string-length`. NO heap-charge
+  // / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    return withInputProvenance([this], [...this.__string__].length);
   }
 
   // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
