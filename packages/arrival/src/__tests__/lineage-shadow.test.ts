@@ -217,7 +217,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]); // eager spine
     const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
@@ -227,7 +227,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]);
     const [ast] = await parse(`(filter (lambda (e) (not (string=? e "b"))) xs)`, env);
@@ -272,7 +272,7 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
-    env.set("xs", APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
     await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
       /PROVENANCE-SHADOW-DIVERGENCE/,
     );

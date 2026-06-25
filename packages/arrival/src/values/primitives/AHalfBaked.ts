@@ -122,6 +122,7 @@ export class AHalfBaked extends AValue {
    * for map/list.
    */
   static collection(
+    ctx: RunContext,
     slots: readonly Promise<SchemeValue[]>[],
     cardBounds: (index: number) => [number, number],
     provenance: Provenance = EMPTY_PROVENANCE,
@@ -130,7 +131,7 @@ export class AHalfBaked extends AValue {
       const [cardLo, cardHi] = cardBounds(i);
       return { cardLo, cardHi, settled: false, items: [] };
     });
-    const hb = new AHalfBaked(CONSTANT_CTX, "collection", slots, records, null, provenance);
+    const hb = new AHalfBaked(ctx, "collection", slots, records, null, provenance);
     // The single benign `.then` per slot: it ONLY updates the record and
     // notifies listeners. It fires no Scheme work — settlement is driven by the
     // slot promises (already dispatched), the lattice merely OBSERVES status.
@@ -240,7 +241,7 @@ export class AHalfBaked extends AValue {
         if (Array.isArray(items)) flat.push(...items);
         else flat.push(items);
       }
-      return arrayToPair(flat, this.provenance);
+      return arrayToPair(this.ctx, flat, this.provenance);
     });
     return this.forced;
   }
@@ -276,8 +277,8 @@ markInteropBoundary(AHalfBaked);
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-function arrayToPair(items: SchemeValue[], provenance: Provenance): SchemeValue {
-  const pair = items.length === 0 ? nil : APair.fromArray(items);
+function arrayToPair(ctx: RunContext, items: SchemeValue[], provenance: Provenance): SchemeValue {
+  const pair = items.length === 0 ? nil : APair.fromArray(ctx, items);
   return provenance && provenance.size > 0 && pair instanceof AValue ? pair.withProvenance(provenance) : pair;
 }
 

@@ -75,7 +75,7 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
       settle = res;
     });
     // A filter slot: cardinality [0,1] until the predicate's promise settles.
-    const hb = AHalfBaked.collection([slot], () => [0, 1], pointProvenance(7));
+    const hb = AHalfBaked.collection(CONSTANT_CTX, [slot], () => [0, 1], pointProvenance(7));
 
     expect(hb.isFullySettled).toBe(false);
     expect(hb.interval()).toEqual({ lo: 0, hi: 1 });
@@ -98,7 +98,7 @@ describe("deferred egress — un-forced escape is structurally detectable", () =
   });
 
   it("AHalfBaked.toJs() is the interval, never the collapsed value", () => {
-    const hb = AHalfBaked.collection([Promise.resolve([1])], () => [1, 1]);
+    const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([1])], () => [1, 1]);
     expect(hb.toJs()).toMatchObject({ __halfBaked__: "collection" });
   });
 });
@@ -122,7 +122,7 @@ describe("deferred egress — the force mechanism force-on-egress will call", ()
   });
 
   it("AHalfBaked.force() is idempotent — forcing at two boundaries folds once", async () => {
-    const hb = AHalfBaked.collection([Promise.resolve([1]), Promise.resolve([2])], () => [1, 1]);
+    const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([1]), Promise.resolve([2])], () => [1, 1]);
     const a = hb.force();
     const b = hb.force();
     expect(a).toBe(b); // same memoized promise — the fold runs once

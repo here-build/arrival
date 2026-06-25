@@ -264,7 +264,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return false;
   }
 
-  static fromArray(array: unknown, deep = true, quote = false): APair | ANil | unknown[] {
+  static fromArray(ctx: RunContext, array: unknown, deep = true, quote = false): APair | ANil | unknown[] {
     if (
       is_pair(array) ||
       (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[DATA])
@@ -275,7 +275,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     if (deep === false) {
       let list: APair | ANil = nil;
       for (let i = arr.length; i--; ) {
-        list = new APair(CONSTANT_CTX, arr[i], list);
+        list = new APair(ctx, arr[i], list);
       }
       return list;
     }
@@ -284,28 +284,28 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     while (i--) {
       let car: unknown = arr[i];
       if (Array.isArray(car)) {
-        car = APair.fromArray(car, deep, quote);
+        car = APair.fromArray(ctx, car, deep, quote);
       } else if (typeof car === "string") {
-        car = new AString(CONSTANT_CTX, car);
+        car = new AString(ctx, car);
       } else if (typeof car === "number" && !Number.isNaN(car)) {
-        car = Number.isSafeInteger(car) ? new AExact(CONSTANT_CTX, BigInt(car)) : new AInexact(CONSTANT_CTX, car);
+        car = Number.isSafeInteger(car) ? new AExact(ctx, BigInt(car)) : new AInexact(ctx, car);
       } else if (typeof car === "bigint") {
-        car = new AExact(CONSTANT_CTX, car);
+        car = new AExact(ctx, car);
       }
-      result = new APair(CONSTANT_CTX, car, result);
+      result = new APair(ctx, car, result);
     }
     return result;
   }
 
-  static fromPairs(array: [string, unknown][]): APair | ANil {
+  static fromPairs(ctx: RunContext, array: [string, unknown][]): APair | ANil {
     return array.reduce<APair | ANil>((list, pair) => {
-      return new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, pair[0]), pair[1]), list);
+      return new APair(ctx, new APair(ctx, new ASymbol(ctx, pair[0]), pair[1]), list);
     }, nil);
   }
 
-  static fromObject(obj: Record<string, unknown>): APair | ANil {
+  static fromObject(ctx: RunContext, obj: Record<string, unknown>): APair | ANil {
     const array = Object.keys(obj).map((key) => [key, obj[key]] as [string, unknown]);
-    return APair.fromPairs(array);
+    return APair.fromPairs(ctx, array);
   }
 
   /** Returns this for chaining. */
@@ -320,7 +320,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   // Instance methods
   flatten(): APair | ANil | unknown[] {
-    return APair.fromArray(this.to_array().flat(Infinity));
+    return APair.fromArray(this.ctx, this.to_array().flat(Infinity));
   }
 
   length(): number {
@@ -674,7 +674,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       out.push(await fn(p.car));
       node = p.cdr;
     }
-    return APair.fromArray(out, false) as APair | ANil;
+    return APair.fromArray(this.ctx, out, false) as APair | ANil;
   }
 
   // Arrival's async-aware Filterable — `filter` that PRESERVES every kept element's box.
@@ -697,7 +697,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       if (!is_false(verdict) && !is_nil(verdict)) out.push(p.car);
       node = p.cdr;
     }
-    return APair.fromArray(out, false) as APair | ANil;
+    return APair.fromArray(this.ctx, out, false) as APair | ANil;
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
@@ -739,7 +739,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   // Traversable — effectful traversal; `of` lifts into the applicative.
   ["arrival/tagless-final/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
-    return traversePair(of, f, this);
+    return traversePair(this.ctx, of, f, this);
   }
 
   // Chain (Monad) — map then flatten. Flattening reuses the PURE list-concat
@@ -747,14 +747,14 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // require("./stdlib") hack the monkey-patch carried existed ONLY because the
   // method lived outside the class — see plan wave 2).
   ["arrival/tagless-final/chain"](f: (x: unknown) => APair | ANil): APair | ANil {
-    return chainPair(f, this);
+    return chainPair(this.ctx, f, this);
   }
 
   // Semigroup — list append. `this ⋄ other` = the elements of this list
   // followed by the elements of `other`. Pure: builds a fresh spine, never
   // mutates either operand (unlike the in-place `append` method above).
   ["arrival/tagless-final/concat"](other: APair | ANil): APair | ANil {
-    return concatPair(this, other);
+    return concatPair(this.ctx, this, other);
   }
 
   // Monoid — the empty list is the identity for list-concat.
@@ -781,7 +781,7 @@ function isEmptyPairSentinel(p: APair): boolean {
   return p.car === undefined && p.cdr instanceof ANil;
 }
 
-function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {
+function traversePair(ctx: RunContext, of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {
   // Iterative right fold (was self-recursive → O(depth) host stack). traverse is a
   // RIGHT fold: collect each `f(car)` left-to-right (preserving f-call order), then
   // combine from the tail with `of(nil)` as the seed — `ap` when the mapped head is
@@ -801,7 +801,7 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
     const mappedCar = heads[i];
     acc = mappedCar?.["arrival/tagless-final/ap"]
       ? mappedCar["arrival/tagless-final/ap"](acc)
-      : of(new APair(CONSTANT_CTX, mappedCar, acc));
+      : of(new APair(ctx, mappedCar, acc));
   }
   return acc;
 }
@@ -812,7 +812,7 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
 // recursive base `return b ?? nil` did — purity: a's spine is fresh, b untouched).
 // An improper `a` still contributes its phantom `undefined` car before the non-Pair
 // tail ends the walk, matching the recursive form.
-export function concatPair(a: unknown, b: unknown): APair | ANil {
+export function concatPair(ctx: RunContext, a: unknown, b: unknown): APair | ANil {
   const cars: unknown[] = [];
   let node: unknown = a;
   while (node && !(node instanceof ANil)) {
@@ -822,7 +822,7 @@ export function concatPair(a: unknown, b: unknown): APair | ANil {
   }
   let result: APair | ANil = (b ?? nil) as APair | ANil;
   for (let i = cars.length; i--; ) {
-    result = new APair(CONSTANT_CTX, cars[i], result);
+    result = new APair(ctx, cars[i], result);
   }
   return result;
 }
@@ -833,7 +833,7 @@ export function concatPair(a: unknown, b: unknown): APair | ANil {
 // (preserving f-call order), then concat from the right onto `nil` — the same right-
 // associated fold the recursion produced, so the flattened result is identical
 // (concat is associative). An improper tail still maps its phantom `f(undefined)`.
-function chainPair(f: (x: unknown) => APair | ANil, pair: unknown): APair | ANil {
+function chainPair(ctx: RunContext, f: (x: unknown) => APair | ANil, pair: unknown): APair | ANil {
   const parts: (APair | ANil)[] = [];
   let node: unknown = pair;
   while (node && !(node instanceof ANil)) {
@@ -843,7 +843,7 @@ function chainPair(f: (x: unknown) => APair | ANil, pair: unknown): APair | ANil
   }
   let result: APair | ANil = nil;
   for (let i = parts.length; i--; ) {
-    result = concatPair(parts[i], result);
+    result = concatPair(ctx, parts[i], result);
   }
   return result;
 }

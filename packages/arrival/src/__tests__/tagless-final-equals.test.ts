@@ -76,7 +76,7 @@ function representativeValues(): { name: string; value: AValue }[] {
     { name: "SchemeSymbol", value: new ASymbol(CONSTANT_CTX, "sym") },
     { name: "SchemeVector", value: new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]) },
     { name: "SchemeBytevector", value: new ABytevector(CONSTANT_CTX, [1, 2, 3]) },
-    { name: "HalfBaked", value: AHalfBaked.collection([Promise.resolve([])], () => [0, 1]) },
+    { name: "HalfBaked", value: AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([])], () => [0, 1]) },
     { name: "LazySeq", value: new ALazySeq(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]) },
     { name: "SchemeJSObject", value: new AJSObject(CONSTANT_CTX, { a: 1 }) },
     { name: "SchemeJSFunction", value: new AJSFunction(CONSTANT_CTX, () => 1) },

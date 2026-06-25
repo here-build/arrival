@@ -6,6 +6,7 @@
  */
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
+import { ctxOf } from "./values/primitives/AValue.js";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
@@ -376,7 +377,7 @@ const listToArray = to_array("list->array");
 
 function arrayToList(array: SchemeValue): SchemeValue {
   typecheck("array->list", array, "array");
-  return APair.fromArray(array);
+  return APair.fromArray(CONSTANT_CTX, array);
 }
 
 function isProperList(obj: SchemeValue): SchemeValue {
@@ -436,14 +437,14 @@ function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
   // length/comparison (the values stay lazy; only the count is surfaced).
   if (hasPromises && isSpeculating()) {
     const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-    return AHalfBaked.collection(slots, () => [1, 1]);
+    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
   }
   if (hasPromises) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(resolved as SchemeValue[]),
+      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
     );
   }
-  return APair.fromArray(results);
+  return APair.fromArray(ctxOf(lists[0]), results);
 }
 
 // Old Pair prototype methods are now in the Pair class above
@@ -1309,7 +1310,7 @@ export const global_env = new Environment(
         if (is_null(item)) {
           return acc;
         }
-        return concatPair(acc, item);
+        return concatPair(ctxOf(item), acc, item);
       }, nil);
     }),
     // ------------------------------------------------------------------
@@ -1687,16 +1688,16 @@ export const global_env = new Environment(
           const keep = (verdict: unknown): SchemeValue[] => (!is_false(verdict) && !is_nil(verdict) ? [array[i]] : []);
           return is_promise(r) ? (r as Promise<unknown>).then(keep) : Promise.resolve(keep(r));
         });
-        return AHalfBaked.collection(slots, () => [0, 1]);
+        return AHalfBaked.collection(ctxOf(list), slots, () => [0, 1]);
       }
       if (hasPromises) {
         return (promise_all(predicateResults) as Promise<unknown[]>).then((results) => {
           const filtered = array.filter((_, i) => !is_false(results[i]) && !is_nil(results[i]));
-          return APair.fromArray(filtered);
+          return APair.fromArray(ctxOf(list), filtered);
         });
       }
       const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
-      return APair.fromArray(filtered);
+      return APair.fromArray(ctxOf(list), filtered);
     }),
     // ------------------------------------------------------------------
     compose: doc(null, compose),

@@ -33,13 +33,13 @@ type FL = Record<string, any>;
 // list (nil) and length up to 4 so associativity has something to bite on.
 const intList = fc
   .array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 })
-  .map((arr) => APair.fromArray(arr, false) as APair | ANil);
+  .map((arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil);
 
 // Non-empty variant for tests that need a Pair head (Functor laws map over a
 // Pair; nil has its own trivial behavior covered separately).
 const nonEmptyIntList = fc
   .array(fc.integer({ min: -5, max: 5 }), { minLength: 1, maxLength: 4 })
-  .map((arr) => APair.fromArray(arr, false) as APair);
+  .map((arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair);
 
 const eq = (a: unknown, b: unknown) => structuralEqual(a, b);
 
@@ -70,8 +70,8 @@ describe("Pair — Semigroup (list-append)", () => {
     );
   });
   it("concat preserves element order and is pure (operands untouched)", () => {
-    const a = APair.fromArray([1, 2], false) as APair;
-    const b = APair.fromArray([3, 4], false) as APair;
+    const a = APair.fromArray(CONSTANT_CTX, [1, 2], false) as APair;
+    const b = APair.fromArray(CONSTANT_CTX, [3, 4], false) as APair;
     const r = (a as FL)[CONCAT](b);
     expect((r as APair).to_array()).toEqual([1, 2, 3, 4]);
     // purity: a and b unchanged
@@ -104,13 +104,13 @@ describe("Pair — Monoid (nil identity)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Foldable (reduce)", () => {
   it("reduce sums elements left-to-right", async () => {
-    const list = APair.fromArray([1, 2, 3, 4], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4], false) as APair;
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
     const sum = await (list as FL)[REDUCE]((x: number, acc: number) => acc + x, 0);
     expect(sum).toBe(10);
   });
   it("reduce collects in order", async () => {
-    const list = APair.fromArray([1, 2, 3], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
     // element-FIRST fn(element, acc): append the element onto the accumulator, in order.
     const collected = await (list as FL)[REDUCE]((x: number, acc: number[]) => [...acc, x], [] as number[]);
     expect(collected).toEqual([1, 2, 3]);
@@ -132,12 +132,12 @@ describe("Pair — Foldable (reduce)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Filterable (filter)", () => {
   it("filter keeps evens", async () => {
-    const list = APair.fromArray([1, 2, 3, 4, 5, 6], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5, 6], false) as APair;
     const evens = (await (list as FL)[FILTER]((x: number) => x % 2 === 0)) as APair;
     expect(evens.to_array()).toEqual([2, 4, 6]);
   });
   it("filter all-false yields nil", async () => {
-    const list = APair.fromArray([1, 3, 5], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 3, 5], false) as APair;
     const r = await (list as FL)[FILTER](() => false);
     expect(r).toBe(nil);
   });
@@ -163,7 +163,7 @@ describe("Pair — Traversable (traverse)", () => {
       ofCalls.push(v);
       return v;
     };
-    const list = APair.fromArray([1, 2], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2], false) as APair;
     (list as FL)[TRAVERSE](of, (x: number) => x);
     // base case of(nil) + one of(new Pair(...)) per element (leaf path) = 1 + 2.
     expect(ofCalls.length).toBe(3);
@@ -181,7 +181,7 @@ describe("Pair — Traversable (traverse)", () => {
         return Id(new APair(CONSTANT_CTX, (this as any).value, other.value));
       },
     });
-    const list = APair.fromArray([1, 2, 3], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
     const result = (list as FL)[TRAVERSE]((v: unknown) => Id(v), (x: number) => Id(x)) as any;
     expect((result.value as APair).to_array()).toEqual([1, 2, 3]);
   });
@@ -192,17 +192,17 @@ describe("Pair — Traversable (traverse)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Chain (flatten via pure concat)", () => {
   it("chain duplicates each element (x → (x x))", () => {
-    const list = APair.fromArray([1, 2, 3], false) as APair;
-    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray([x, x], false)) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
+    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray(CONSTANT_CTX, [x, x], false)) as APair;
     expect(r.to_array()).toEqual([1, 1, 2, 2, 3, 3]);
   });
   it("chain with single-element results equals map", () => {
-    const list = APair.fromArray([1, 2, 3], false) as APair;
-    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray([x + 10], false)) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
+    const r = (list as FL)[CHAIN]((x: number) => APair.fromArray(CONSTANT_CTX, [x + 10], false)) as APair;
     expect(r.to_array()).toEqual([11, 12, 13]);
   });
   it("chain flattening empties drops them (nil result)", () => {
-    const list = APair.fromArray([1, 2], false) as APair;
+    const list = APair.fromArray(CONSTANT_CTX, [1, 2], false) as APair;
     const r = (list as FL)[CHAIN](() => nil);
     expect(r).toBe(nil);
   });

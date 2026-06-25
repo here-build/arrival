@@ -260,9 +260,9 @@ export function extract_patterns(
           if (ellipsis) {
             const count = code.length - 2;
             const array_head = count > 0 ? code.slice(0, count) : code;
-            const as_list = APair.fromArray(array_head, false);
+            const as_list = APair.fromArray(CONSTANT_CTX, array_head, false);
             if (bindings["..."].symbols[name]) {
-              bindings["..."].symbols[name] = concatPair(
+              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, 
                 bindings["..."].symbols[name],
                 new APair(CONSTANT_CTX, as_list, nil),
               );
@@ -270,7 +270,7 @@ export function extract_patterns(
               bindings["..."].symbols[name] = new APair(CONSTANT_CTX, as_list, nil);
             }
           } else {
-            bindings["..."].symbols[name] = APair.fromArray(code, false);
+            bindings["..."].symbols[name] = APair.fromArray(CONSTANT_CTX, code, false);
           }
         } else if (Array.isArray(pattern[0])) {
           const names = [...pattern_names];
@@ -344,7 +344,7 @@ export function extract_patterns(
               let node = bindings["..."].symbols[name];
               node = is_nil(node)
                 ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code, nil))
-                : concatPair(node, new APair(CONSTANT_CTX, code, nil));
+                : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
               bindings["..."].symbols[name] = node;
             } else {
               bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
@@ -380,7 +380,7 @@ export function extract_patterns(
             pattern_names.push(name);
             if (bindings["..."].symbols[name]) {
               const node = bindings["..."].symbols[name];
-              bindings["..."].symbols[name] = concatPair(node, new APair(CONSTANT_CTX, code, nil));
+              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
             } else {
               bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
             }
@@ -578,7 +578,7 @@ export function transform_syntax(options: SchemeValue = {}) {
         const parts = name.split(".");
         const first = parts[0];
         if (first in bindings.symbols) {
-          return APair.fromArray([
+          return APair.fromArray(CONSTANT_CTX, [
             new ASymbol(CONSTANT_CTX, "."),
             bindings.symbols[first],
             ...parts.slice(1).map((x) => new AString(CONSTANT_CTX, x)),
@@ -694,7 +694,7 @@ export function transform_syntax(options: SchemeValue = {}) {
                 if (is_array) {
                   return (car as SchemeValue).concat(rest);
                 } else if (is_pair(car)) {
-                  return concatPair(car, rest);
+                  return concatPair(CONSTANT_CTX, car, rest);
                 } else {
                 }
               }
@@ -717,7 +717,7 @@ export function transform_syntax(options: SchemeValue = {}) {
           } else if (Array.isArray(item)) {
             if (nested) {
               next(name, item.slice(1));
-              return APair.fromArray(item);
+              return APair.fromArray(CONSTANT_CTX, item);
             } else {
               const rest = item.slice(1);
               if (rest.length > 0) {
@@ -841,7 +841,7 @@ export function transform_syntax(options: SchemeValue = {}) {
                     } else {
                     }
                   } else {
-                    result = is_nil(result) ? car : concatPair(result, car);
+                    result = is_nil(result) ? car : concatPair(CONSTANT_CTX, result, car);
                   }
                 } else if (is_array) {
                   result.push(car);
@@ -852,7 +852,7 @@ export function transform_syntax(options: SchemeValue = {}) {
               bind = new_bind;
             }
             if (!is_nil(result) && !is_spread && !is_array) {
-              result = APair.fromArray(result.to_array(false).reverse(), false);
+              result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
             }
             // case of (list) ... (rest code)
             if (is_array) {
@@ -864,7 +864,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             }
             if (!is_nil(exprVal.cdr.cdr) && !ASymbol.is(exprVal.cdr.cdr.car, ellipsis_symbol)) {
               const rest = traverse(exprVal.cdr.cdr, { disabled });
-              return concatPair(result, rest);
+              return concatPair(CONSTANT_CTX, result, rest);
             }
             return result;
           } else {
@@ -911,7 +911,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             bind = new_bind;
           }
           if (!is_nil(result) && !is_array) {
-            result = APair.fromArray(result.to_array(false).reverse(), false);
+            result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
           }
           // case if (x ... y ...) second spread is not processed
           // and (??? . x) last symbol
@@ -925,7 +925,7 @@ export function transform_syntax(options: SchemeValue = {}) {
             if (is_nil(result)) {
               result = node;
             } else {
-              result = concatPair(result, node);
+              result = concatPair(CONSTANT_CTX, result, node);
             }
           }
           return result;

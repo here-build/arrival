@@ -17,6 +17,7 @@ import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { type SchemeValue } from "../values/types.js";
 import { nil } from "../values/primitives/ANil.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 type Loc = SourceLocation | null | undefined;
 
@@ -54,7 +55,7 @@ function prec(v: SchemeValue): number {
 }
 
 function list(items: SchemeValue[]): SchemeValue {
-  return APair.fromArray(items, false) as SchemeValue;
+  return APair.fromArray(CONSTANT_CTX, items, false) as SchemeValue;
 }
 
 /** SRFI-105 element classifier. `E` is the flat sequence read between `{` and `}`. */

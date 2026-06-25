@@ -22,9 +22,20 @@
 import invariant from "tiny-invariant";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
-import type { RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
+
+/**
+ * The run-context of a maybe-boxed operand. At the membrane an operand often
+ * arrives typed `unknown` (scheme-zod decode); when it IS an AValue its ctx is
+ * the run-correct source for any value derived from it, else there is no run to
+ * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
+ * instanceof narrowing — never a cast — so it stays sound when the input is raw.
+ */
+export function ctxOf(x: unknown): RunContext {
+  return x instanceof AValue ? x.ctx : CONSTANT_CTX;
+}
 
 export type AKind =
   | "string"

@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * GOLDEN CAPTURE (gate G2 oracle) — FAN-OUT provenance: map / filter / length.
  *
@@ -53,7 +54,7 @@ async function value(src: string, binds: Record<string, unknown> = {}): Promise<
 }
 
 // a Pair-backed source of three provenance-stamped strings, ids 100/101/102.
-const triple = () => APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
+const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
 
 // ============================================================================
 // GOLDEN — runnable NOW. These go GREEN and become the gate-G2 equivalence

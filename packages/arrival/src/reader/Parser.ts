@@ -541,7 +541,7 @@ export class Parser {
       // Quote the macro's result: the parser's output is evaluated again by the
       // interpreter, so a bare pair/symbol would be (re-)evaluated unintentionally.
       if (is_pair(result) || result instanceof ASymbol) {
-        const quoted = APair.fromArray([new ASymbol(CONSTANT_CTX, "quote"), result]) as APair;
+        const quoted = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), result]) as APair;
         if (loc) quoted.setLocation(loc);
         return quoted;
       }

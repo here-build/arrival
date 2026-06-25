@@ -41,7 +41,7 @@ import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { is_false, is_nil } from "../eval/guards.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { AValue, unionProvenance, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { AValue, unionProvenance, EMPTY_PROVENANCE, ctxOf } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
@@ -161,7 +161,7 @@ async function reduceLazySeq(
   ls: ALazySeq,
 ): Promise<unknown> {
   const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
-  return builtinReduce!(fn, init, APair.fromArray([...items], false));
+  return builtinReduce!(fn, init, APair.fromArray(ls.ctx, [...items], false));
 }
 
 // Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
@@ -496,7 +496,7 @@ export default new EnvCapability("scheme/fl-interop", {
         // `map`/`filter` reject ("Expecting pair or nil, got array") is an inconsistency. The elements
         // are already Scheme values (we just reordered them), so build the list shallow (no re-boxing);
         // an empty result is nil.
-        return APair.fromArray(arr, false);
+        return APair.fromArray(ctxOf(list), arr, false);
       },
     ),
 

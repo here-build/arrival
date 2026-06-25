@@ -68,7 +68,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
 
   it("returns an array for a proper list", () => {
     // (1 2 3) → [1, 2, 3]; cdr-chain terminates at nil.
-    const p = APair.fromArray([1, 2, 3], false) as APair;
+    const p = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
     expect(p.toJs()).toEqual([1, 2, 3]);
   });
 

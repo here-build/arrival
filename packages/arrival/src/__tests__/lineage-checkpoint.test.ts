@@ -1,3 +1,4 @@
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 /**
  * CHECKPOINT for build-step 1 (design note §10) — the go/no-go for the IR.
  *
@@ -78,7 +79,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   async function eagerProvSize(n: number): Promise<number> {
     await initBridge();
     const env = inferenceEnv.inherit(`lin-scale-${n}`);
-    const xs = APair.fromArray(
+    const xs = APair.fromArray(CONSTANT_CTX, 
       Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),
       false,
     );

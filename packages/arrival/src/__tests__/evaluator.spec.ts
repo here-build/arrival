@@ -89,7 +89,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const bVal = b instanceof AExact ? b.num : BigInt(b as number);
         return aVal === bVal;
       },
-      list: (...args: unknown[]) => APair.fromArray(args, false),
+      list: (...args: unknown[]) => APair.fromArray(CONSTANT_CTX, args, false),
       car: (pair: APair) => pair.car,
       cdr: (pair: APair) => pair.cdr,
       cons: (a: unknown, b: unknown) => new APair(CONSTANT_CTX, a, b),

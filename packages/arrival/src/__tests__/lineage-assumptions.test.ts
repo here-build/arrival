@@ -68,7 +68,7 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
 
 describe("ASSUMPTION — a count is identity-entangled today (teleological); the tree must serve both queries (§5)", () => {
   it("A13: (length (map identity xs)) carries every element's provenance (over-attributes through map)", async () => {
-    const xs = APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+    const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) xs))`, { xs: xs as unknown as AValue })).toMatchInlineSnapshot(`
       [
         100,
@@ -109,7 +109,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
     // The fast-paths are guarded on `is_lazy_seq`; a plain Pair is untouched, so
     // the pre-flip behavior (A13) is preserved exactly. This is the speculate
     // discipline: laziness changes nothing it doesn't explicitly touch.
-    const ys = APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+    const ys = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
   });
 
@@ -119,7 +119,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
     env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
     // The Pair's OWN provenance (id 7) is the grouping fact lazy-seq lifts to the
     // collection level; the elements carry their own per-element provenance.
-    const ys = (APair.fromArray([sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
+    const ys = (APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
     env.set("ys", ys);
 
     // (map boom (lazy-seq ys)) over a plain Pair, lifted lazy from user code, EXTENDS
@@ -136,7 +136,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
   it("A18d: an un-forced lazy-seq at a non-recognizing egress FAILS LOUD — never a silent nil/empty", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`la-${seq++}`);
-    const ys = APair.fromArray([sStr("a", 100), sStr("b", 101)], false);
+    const ys = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], false);
     env.set("ys", ys as unknown as AValue);
     // Without the guard, `first` returns nil and `sort` returns '() — both silent
     // wrong answers. The first cut hasn't taught these to force, so they throw.
@@ -153,7 +153,7 @@ describe("ASSUMPTION — the demand cone is the provenance cone, through the liv
 // pinned too. Numbers are provenance-stamped (id 0) so the lazy path exercises the
 // real AValue arithmetic, not a bare-JS shortcut.
 describe("CAPABILITY — lazy ≡ eager confluence (forcing yields identical results)", () => {
-  const nums = () => APair.fromArray([1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
+  const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
   const jsVal = (r: unknown): unknown => (r instanceof AValue ? r.toJs() : r);
 
   // Run `chain` with the collection slot filled eager (xs) and lazy (lazy-seq xs).

@@ -21,6 +21,7 @@
 
 import * as z from "./scheme-zod.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { ctxOf } from "../values/primitives/AValue.js";
 import { symbol } from "./symbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
@@ -114,7 +115,7 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return APair.fromArray(arr.slice(s, e));
+        return APair.fromArray(ctxOf(vec), arr.slice(s, e));
       },
     ),
 

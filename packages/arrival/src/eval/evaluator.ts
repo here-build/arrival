@@ -1426,7 +1426,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Handle rest arg: (lambda (a b . rest) ...)
     if (argNode instanceof ASymbol) {
       // Rest of args go into this symbol as a list
-      callEnv.set(argNode, APair.fromArray(values.slice(i), false));
+      callEnv.set(argNode, APair.fromArray(ctx.runCtx ?? CONSTANT_CTX, values.slice(i), false));
     }
 
     // Pick up the dynamic call site if evaluatePair set it just before
