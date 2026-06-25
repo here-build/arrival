@@ -33,11 +33,83 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
-import { isCircularList, APair } from "../../values/primitives/APair.js";
+import invariant from "tiny-invariant";
+import { isCircularList, APair, concatPair } from "../../values/primitives/APair.js";
+import { ctxOf } from "../../values/primitives/AValue.js";
+import { is_pair, is_nil, is_null } from "../../eval/guards.js";
+import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
+import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
+import { currentRunEnv, SchemeError } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { is_false } from "../../eval/guards.js";
 import { EnvCapability } from "../../common/capability.js";
+
+// Scheme is inherently dynamic at these interop boundaries — the relocated
+// LIPS-era list builtins below typecheck their args at runtime; the param
+// types use `any` intentionally (as in the stdlib originals).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SchemeValue = any;
+
+// Pack-local copies of the list<->array bridge helpers. The stdlib originals
+// (`listToArray`/`arrayToList`/`to_array`/`isProperList`) stay in stdlib.ts for
+// its remaining consumers; these reproduce the same logic byte-for-byte (incl.
+// the per-run heap-meter charge `to_array` levies at the collection choke) so
+// the relocated defs are behavior-identical.
+function to_array(name: string, deep = false): (list: SchemeValue) => SchemeValue[] {
+  return function recur(list: SchemeValue): SchemeValue[] {
+    typecheck(name, list, ["pair", "nil"]);
+    if (is_nil(list)) {
+      return [];
+    }
+    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
+    const runEnv = currentRunEnv();
+    const meter = findHeapMeter(runEnv ?? null);
+    const result: SchemeValue[] = [];
+    let node = list;
+    while (true) {
+      if (is_pair(node)) {
+        if (node.have_cycles("cdr")) {
+          break;
+        }
+        let car = node.car;
+        if (deep && is_pair(car)) {
+          car = recur(car);
+        }
+        result.push(car);
+        if (meter !== undefined && ++meter.used > meter.max) {
+          throw new SchemeError(heapBudgetMessage(meter.max), []);
+        }
+        node = node.cdr;
+      } else {
+        invariant(is_nil(node), `${name}: can't convert improper list`);
+        break;
+      }
+    }
+    return result;
+  };
+}
+const listToArray = to_array("list->array");
+const treeToArray = to_array("tree->array", true);
+
+function arrayToList(array: SchemeValue): SchemeValue {
+  typecheck("array->list", array, "array");
+  return APair.fromArray(CONSTANT_CTX, array);
+}
+
+function isProperList(obj: SchemeValue): SchemeValue {
+  // A circular list is NOT a proper list (R7RS). Detect runtime cycles.
+  if (is_pair(obj) && isCircularList(obj)) {
+    return false;
+  }
+  let node = obj;
+  while (true) {
+    if (is_nil(node)) return true;
+    if (!is_pair(node)) return false;
+    if (node.have_cycles("cdr")) return false;
+    node = node.cdr;
+  }
+}
 
 export default new EnvCapability("scheme/lists", {
   symbols: {
@@ -218,6 +290,117 @@ export default new EnvCapability("scheme/lists", {
         }
         return false;
       },
+    ),
+
+    // ---------------------------------------------------------------------
+    // LIPS-era list builtins relocated from stdlib.ts global_env (stdlib
+    // elimination). These are polymorphic / non-R7RS extensions (`reverse`,
+    // `nth` accept arrays as well as pairs; `clone`/`flatten`/`tree->array`/
+    // `array->list`/`list->array` are LIPS extensions). Bodies reproduced
+    // byte-for-byte; runtime `typecheck` guards preserved. `native` means the
+    // (identity) zod contract never runs — the impls receive Scheme values
+    // exactly as the old `doc({ value })` form did.
+    // ---------------------------------------------------------------------
+    clone: symbol.native`clone: a deep copy of the list spine (LIPS extension)`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: SchemeValue): SchemeValue => {
+        typecheck("clone", list, "pair");
+        return list.clone();
+      },
+    ),
+
+    append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      (...items: SchemeValue[]): SchemeValue => {
+        // `append` builds a FRESH list (pure). It clones every segment first, then
+        // splices the CLONES together via Pair.append. Because every cell touched
+        // is a clone, no caller-visible value is mutated — the result is the only
+        // new thing. (The destructive `append!` builtin this used to delegate to is
+        // OMITTED by the purity invariant — doored in core.ts. Its splice
+        // logic is inlined here, operating on clones, so it stays pure.)
+        const is_list = isProperList;
+        const cloned = items.map((item) => (is_pair(item) ? item.clone() : item));
+        return cloned.reduce((acc, item, idx) => {
+          typecheck("append", acc, ["nil", "pair"]);
+          // R7RS: last argument can be any value (creates improper list)
+          const isLast = idx === cloned.length - 1;
+          if (!isLast && (is_pair(item) || is_nil(item)) && !is_list(item)) {
+            throw new Error("append: Invalid argument, value is not a list");
+          }
+          if (is_nil(acc)) {
+            return is_nil(item) ? nil : item;
+          }
+          if (is_null(item)) {
+            return acc;
+          }
+          return concatPair(ctxOf(item), acc, item);
+        }, nil);
+      },
+    ),
+
+    reverse: symbol.native`reverse: the list (or array) reversed (LIPS-polymorphic)`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (arg: SchemeValue): SchemeValue => {
+        typecheck("reverse", arg, ["array", "pair", "nil"]);
+        if (is_nil(arg)) {
+          return nil;
+        }
+        if (is_pair(arg)) {
+          const arr = listToArray(arg).toReversed();
+          return arrayToList(arr);
+        } else if (Array.isArray(arg)) {
+          return arg.toReversed();
+        } else {
+          throw new TypeError(typeErrorMessage("reverse", type(arg), "array or pair"));
+        }
+      },
+    ),
+
+    nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      (index: SchemeValue, obj: SchemeValue): SchemeValue => {
+        typecheck("nth", index, "number");
+        typecheck("nth", obj, ["array", "pair"]);
+        if (is_pair(obj)) {
+          let node = obj;
+          let count = 0;
+          while (count < index) {
+            if (!node.cdr || is_nil(node.cdr) || node.have_cycles("cdr")) {
+              return nil;
+            }
+            node = node.cdr as APair;
+            count++;
+          }
+          return node.car;
+        } else if (Array.isArray(obj)) {
+          return obj[index];
+        } else {
+          throw new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2));
+        }
+      },
+    ),
+
+    flatten: symbol.native`flatten: the list with nested lists spliced in (LIPS extension)`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: SchemeValue): SchemeValue => {
+        typecheck("flatten", list, "pair");
+        return list.flatten();
+      },
+    ),
+
+    "array->list": symbol.native`array->list: a proper list built from a JS array`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (array: SchemeValue): SchemeValue => arrayToList(array),
+    ),
+
+    "tree->array": symbol.native`tree->array: a nested JS array built from a tree of pairs`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: SchemeValue): SchemeValue => treeToArray(list),
+    ),
+
+    "list->array": symbol.native`list->array: a JS array built from a proper list`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      (list: SchemeValue): SchemeValue => listToArray(list),
     ),
   },
 });

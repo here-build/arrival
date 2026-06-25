@@ -1272,73 +1272,6 @@ export const global_env = new Environment(
     // nesting levels, dotted tails, and vector quasiquotation.
     quasiquote: genMacroWrapper("quasiquote"),
     // ------------------------------------------------------------------
-    clone: doc("clone", function clone(list) {
-      typecheck("clone", list, "pair");
-      return list.clone();
-    }),
-    // ------------------------------------------------------------------
-    append: doc("append", function append(this: Environment, ...items: SchemeValue[]) {
-      // `append` builds a FRESH list (pure). It clones every segment first, then
-      // splices the CLONES together via Pair.append. Because every cell touched
-      // is a clone, no caller-visible value is mutated — the result is the only
-      // new thing. (The destructive `append!` builtin this used to delegate to is
-      // OMITTED by the purity invariant — doored in core.ts. Its splice
-      // logic is inlined here, operating on clones, so it stays pure.)
-      const is_list = isProperList;
-      const cloned = items.map((item) => (is_pair(item) ? item.clone() : item));
-      return cloned.reduce((acc, item, idx) => {
-        typecheck("append", acc, ["nil", "pair"]);
-        // R7RS: last argument can be any value (creates improper list)
-        const isLast = idx === cloned.length - 1;
-        if (!isLast && (is_pair(item) || is_nil(item)) && !is_list(item)) {
-          throw new Error("append: Invalid argument, value is not a list");
-        }
-        if (is_nil(acc)) {
-          return is_nil(item) ? nil : item;
-        }
-        if (is_null(item)) {
-          return acc;
-        }
-        return concatPair(ctxOf(item), acc, item);
-      }, nil);
-    }),
-    // ------------------------------------------------------------------
-    reverse: doc("reverse", function reverse(this: Environment, arg) {
-      typecheck("reverse", arg, ["array", "pair", "nil"]);
-      if (is_nil(arg)) {
-        return nil;
-      }
-      if (is_pair(arg)) {
-        const arr = listToArray(arg).toReversed();
-        return arrayToList(arr);
-      } else if (Array.isArray(arg)) {
-        return arg.toReversed();
-      } else {
-        throw new TypeError(typeErrorMessage("reverse", type(arg), "array or pair"));
-      }
-    }),
-    // ------------------------------------------------------------------
-    nth: doc("nth", function nth(index, obj) {
-      typecheck("nth", index, "number");
-      typecheck("nth", obj, ["array", "pair"]);
-      if (is_pair(obj)) {
-        let node = obj;
-        let count = 0;
-        while (count < index) {
-          if (!node.cdr || is_nil(node.cdr) || node.have_cycles("cdr")) {
-            return nil;
-          }
-          node = node.cdr as APair;
-          count++;
-        }
-        return node.car;
-      } else if (Array.isArray(obj)) {
-        return obj[index];
-      } else {
-        throw new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2));
-      }
-    }),
-    // ------------------------------------------------------------------
     list: doc("list", function list(...args) {
       const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
       return withInputProvenance(args, result);
@@ -1438,21 +1371,10 @@ export const global_env = new Environment(
       );
     }),
     // ------------------------------------------------------------------
-    flatten: doc("flatten", function flatten(list) {
-      typecheck("flatten", list, "pair");
-      return list.flatten();
-    }),
-    // ------------------------------------------------------------------
     // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed
     // SchemeVector. The former stdlib `vector` here was DEAD (initBridge applies
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
-    // ------------------------------------------------------------------
-    "array->list": doc("array->list", arrayToList),
-    // ------------------------------------------------------------------
-    "tree->array": doc("tree->array", to_array("tree->array", true)),
-    // ------------------------------------------------------------------
-    "list->array": doc("list->array", listToArray),
     // ------------------------------------------------------------------
     apply: doc("apply", function apply(this: Environment, fn: SchemeFunction, ...args: SchemeValue[]) {
       typecheck("apply", fn, "function", 1);
