@@ -3,10 +3,10 @@
 //
 // Scheme semantics: (+ n ...) → the sum of all arguments; (+ ) → 0.
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`SNum`). TS merges this into the shared `__arr`
+// in terms of PRE's base types (`number`). TS merges this into the shared `__arr`
 // (see ../types.d.ts → THE LEAF MERGE CONTRACT).
 // Operator name `+` is not a valid TS identifier → bracketed string key.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "+"(...n: SNum[]): SNum;
+  "+"(...n: number[]): number;
 }

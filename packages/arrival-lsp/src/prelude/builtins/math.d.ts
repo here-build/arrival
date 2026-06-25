@@ -10,14 +10,14 @@
 //   (max x ...)      → largest of one or more numbers
 //
 // Pattern: re-declare `interface ArrShape` with these cohesive members, written
-// purely in terms of PRE's base types (`SNum`). TS merges this into the shared
+// purely in terms of PRE's base types (`number`). TS merges this into the shared
 // `__arr` (see ../types.d.ts → THE LEAF MERGE CONTRACT).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  abs(x: SNum): SNum;
-  sqrt(x: SNum): SNum;
-  floor(x: SNum): SNum;
-  round(x: SNum): SNum;
-  min(...n: SNum[]): SNum;
-  max(...n: SNum[]): SNum;
+  abs(x: number): number;
+  sqrt(x: number): number;
+  floor(x: number): number;
+  round(x: number): number;
+  min(...n: number[]): number;
+  max(...n: number[]): number;
 }

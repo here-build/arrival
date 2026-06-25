@@ -18,26 +18,26 @@
 //
 // ★ Granularity via TS type-GUARDS (rule 4): where the guard TARGET is expressible
 // in PRE vocab, these narrow `unknown` so a guarded branch types precisely:
-//   string?  → x is SStr        number? → x is SNum      boolean? → x is SBool
+//   string?  → x is string        number? → x is number      boolean? → x is boolean
 //   array?   → x is List<unknown> (Array.isArray)
 //   pair?    → x is Pair<unknown> (the dotted-pair brand)
 //   list?    → x is List<unknown> (proper list)
 // The rest (`symbol?`, `function?`, `object?`, `regex?`) have no clean PRE brand
 // for their target — PRE has no Symbol/Function/RegExp/plain-object alias — so
-// they stay plain `(v: unknown): SBool`. `real?` is number-ISH but not exactly
-// SNum (it rejects NaN / non-reals), so narrowing to `x is SNum` would over-claim;
-// kept plain `SBool`.
+// they stay plain `(v: unknown): boolean`. `real?` is number-ISH but not exactly
+// number (it rejects NaN / non-reals), so narrowing to `x is number` would over-claim;
+// kept plain `boolean`.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "string?"(v: unknown): v is SStr;
-  "number?"(v: unknown): v is SNum;
-  "boolean?"(v: unknown): v is SBool;
+  "string?"(v: unknown): v is string;
+  "number?"(v: unknown): v is number;
+  "boolean?"(v: unknown): v is boolean;
   "array?"(v: unknown): v is List<unknown>;
   "list?"(v: unknown): v is List<unknown>;
   "pair?"(v: unknown): v is Pair<unknown>;
-  "symbol?"(v: unknown): SBool;
-  "function?"(v: unknown): SBool;
-  "object?"(v: unknown): SBool;
-  "regex?"(v: unknown): SBool;
-  "real?"(v: unknown): SBool;
+  "symbol?"(v: unknown): boolean;
+  "function?"(v: unknown): boolean;
+  "object?"(v: unknown): boolean;
+  "regex?"(v: unknown): boolean;
+  "real?"(v: unknown): boolean;
 }

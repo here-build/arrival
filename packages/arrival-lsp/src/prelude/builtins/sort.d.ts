@@ -8,9 +8,9 @@
 //   NOTE: runtime arg order is (LIST, comparator?) — list FIRST, comparator
 //   OPTIONAL second — NOT the `(cmp, xs)` shape; grounded below.
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`List<T>`, `SNum`). Element type `T` is preserved
+// in terms of PRE's base types (`List<T>`, `number`). Element type `T` is preserved
 // in → out so a mis-typed comparator or a wrong-typed result bites.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  sort<T>(xs: List<T>, cmp?: (a: T, b: T) => SNum): List<T>;
+  sort<T>(xs: List<T>, cmp?: (a: T, b: T) => number): List<T>;
 }

@@ -16,5 +16,5 @@
 // type — `(find odd? strs)` where strs is a string-list bites.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  find<T>(pred: (x: T) => SBool, xs: List<T>): T | undefined;
+  find<T>(pred: (x: T) => boolean, xs: List<T>): T | undefined;
 }

@@ -5,16 +5,16 @@
 // OR a return→any rot both bite). Empty invocation → List<never>. Negatives use
 // `// @ts-expect-error`: a heterogeneous arg bites at the call (2345), a wrong-typed
 // threaded result at the assignment (2322).
-// Base vocab (`List`/`SNum`) is ambient from ../types.d.ts.
+// Base vocab (`List`/`number`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
-// Constructing a List<SNum> from SNum arguments — result is List<SNum>.
-expectTypeOf(__arr.list(1, 2, 3)).toEqualTypeOf<List<SNum>>();
+// Constructing a List<number> from number arguments — result is List<number>.
+expectTypeOf(__arr.list(1, 2, 3)).toEqualTypeOf<List<number>>();
 // Empty invocation — no args, so T widens to unknown → List<unknown>.
 expectTypeOf(__arr.list()).toEqualTypeOf<List<unknown>>();
 
-// @ts-expect-error heterogeneous args: 'oops' is not assignable to the inferred T=SNum
+// @ts-expect-error heterogeneous args: 'oops' is not assignable to the inferred T=number
 __arr.list(1, "oops");
-// @ts-expect-error assigning a List<SNum> to a scalar SNum bites (2322)
-const n: SNum = __arr.list(1, 2, 3);
+// @ts-expect-error assigning a List<number> to a scalar number bites (2322)
+const n: number = __arr.list(1, 2, 3);

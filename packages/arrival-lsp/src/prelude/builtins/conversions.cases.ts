@@ -2,21 +2,21 @@
 // Bite cases for `number->string` / `string->number` (conversions.d.ts) — the
 // R7RS conversion family. expect-type assertions over the ambient `__arr`; inputs
 // are widened literals so the results are exact brands — positives pin with
-// `.toEqualTypeOf<T>()`. `string->number` is honestly `SNum | SBool` (R7RS returns
+// `.toEqualTypeOf<T>()`. `string->number` is honestly `number | boolean` (R7RS returns
 // #f on a parse failure), so arithmetic on the unchecked result SHOULD bite — that
 // is a latent bug, not lens noise. Negatives use `// @ts-expect-error`: a wrong arg
 // type bites at the call, a too-narrow result type at the assignment.
-// Base vocab (`SNum`/`SStr`/`SBool`) is ambient from ../types.d.ts.
+// Base vocab (`number`/`string`/`boolean`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
 // (number->string n [radix]) → the decimal (or radix-) string of n
-expectTypeOf(__arr["number->string"](42)).toEqualTypeOf<SStr>();
-expectTypeOf(__arr["number->string"](255, 16)).toEqualTypeOf<SStr>();
-// (string->number s [radix]) → parsed number, or #f when unparseable → SNum | SBool
-expectTypeOf(__arr["string->number"]("3.14")).toEqualTypeOf<SNum | SBool>();
+expectTypeOf(__arr["number->string"](42)).toEqualTypeOf<string>();
+expectTypeOf(__arr["number->string"](255, 16)).toEqualTypeOf<string>();
+// (string->number s [radix]) → parsed number, or #f when unparseable → number | boolean
+expectTypeOf(__arr["string->number"]("3.14")).toEqualTypeOf<number | boolean>();
 
 // @ts-expect-error number->string wants a number, not a string
 __arr["number->string"]("x");
-// @ts-expect-error string->number may return #f — not silently a precise SNum
-const n: SNum = __arr["string->number"]("3");
+// @ts-expect-error string->number may return #f — not silently a precise number
+const n: number = __arr["string->number"]("3");

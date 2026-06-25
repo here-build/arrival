@@ -10,13 +10,13 @@
 //   (string-contains s sub) → #t/#f whether `sub` appears in `s`.
 //
 // Pattern: re-declare `interface ArrShape` with these members, written purely
-// in terms of PRE's base types (`SStr`, `SNum`, `SBool`). TS merges this into
+// in terms of PRE's base types (`string`, `number`, `boolean`). TS merges this into
 // the shared `__arr` (see ../types.d.ts → THE LEAF MERGE CONTRACT).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "string-append"(...s: SStr[]): SStr;
-  "string-length"(s: SStr): SNum;
-  "string-upcase"(s: SStr): SStr;
-  "string-downcase"(s: SStr): SStr;
-  "string-contains"(s: SStr, sub: SStr): SBool;
+  "string-append"(...s: string[]): string;
+  "string-length"(s: string): number;
+  "string-upcase"(s: string): string;
+  "string-downcase"(s: string): string;
+  "string-contains"(s: string, sub: string): boolean;
 }

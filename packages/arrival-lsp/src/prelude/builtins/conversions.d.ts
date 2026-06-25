@@ -11,11 +11,11 @@
 //   LENS_EXTRA_MEMBERS (service-core.ts), which lowers their call heads to
 //   `__arr[…]` via the hostMembers seam.
 //
-// `string->number` is honestly `SNum | SBool`: R7RS returns #f on a parse
+// `string->number` is honestly `number | boolean`: R7RS returns #f on a parse
 // failure, and arithmetic on the unchecked result SHOULD bite — that is a
 // latent bug, not lens noise.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "number->string"(n: SNum, radix?: SNum): SStr;
-  "string->number"(s: SStr, radix?: SNum): SNum | SBool;
+  "number->string"(n: number, radix?: number): string;
+  "string->number"(s: string, radix?: number): number | boolean;
 }

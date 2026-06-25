@@ -6,47 +6,47 @@
 // callbacks exactly like the list family → positives pin with `.toEqualTypeOf<T>()`.
 //
 // ★ Leaf caveats (carried, do not "fix"):
-//   • Search/index ops (vector-index/-binary-search) return `SNum | SBool` — a real
+//   • Search/index ops (vector-index/-binary-search) return `number | boolean` — a real
 //     index OR the #f miss sentinel; downstream must account for the false case.
-//   • vector-any/-every return the truthy callback result `R` unioned with SBool
-//     (the #f sentinel); vector-every's R=SBool collapses the union to SBool.
+//   • vector-any/-every return the truthy callback result `R` unioned with boolean
+//     (the #f sentinel); vector-every's R=boolean collapses the union to boolean.
 //   • vector-fold's accumulator type A threads via (acc, elt)=>acc' independent of T.
-// Base vocab (`List`/`SNum`/`SStr`/`SBool`) is ambient from ../types.d.ts.
+// Base vocab (`List`/`number`/`string`/`boolean`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
 // vector constructor → List<T>
-expectTypeOf(__arr.vector(1, 2, 3)).toEqualTypeOf<List<SNum>>();
-// vector? returns SBool
-expectTypeOf(__arr["vector?"](__arr.vector(1, 2, 3))).toEqualTypeOf<SBool>();
+expectTypeOf(__arr.vector(1, 2, 3)).toEqualTypeOf<List<number>>();
+// vector? returns boolean
+expectTypeOf(__arr["vector?"](__arr.vector(1, 2, 3))).toEqualTypeOf<boolean>();
 // vector-fold threads the accumulator type through kons
-expectTypeOf(__arr["vector-fold"]((acc: SNum, elt: SNum): SNum => acc + elt, 0, [1, 2, 3])).toEqualTypeOf<SNum>();
+expectTypeOf(__arr["vector-fold"]((acc: number, elt: number): number => acc + elt, 0, [1, 2, 3])).toEqualTypeOf<number>();
 // fold can change the accumulator type relative to elements
 expectTypeOf(
-  __arr["vector-fold-right"]((acc: SStr, elt: SNum): SStr => acc + elt, "", [1, 2, 3]),
-).toEqualTypeOf<SStr>();
-// vector-count → SNum
-expectTypeOf(__arr["vector-count"]((elt: SNum) => elt > 1, [1, 2, 3])).toEqualTypeOf<SNum>();
-// vector-index → SNum | SBool
-expectTypeOf(__arr["vector-index"]((elt: SNum) => elt === 2, [1, 2, 3])).toEqualTypeOf<SNum | SBool>();
-// vector-any returns the callback result type | SBool
-expectTypeOf(__arr["vector-any"]((elt: SNum): SStr => `${elt}`, [1, 2, 3])).toEqualTypeOf<SStr | SBool>();
-// vector-every likewise (R=SBool collapses the union to SBool)
-expectTypeOf(__arr["vector-every"]((elt: SNum): SBool => elt > 0, [1, 2, 3])).toEqualTypeOf<SBool>();
-// vector-empty? → SBool
-expectTypeOf(__arr["vector-empty?"]([1, 2, 3])).toEqualTypeOf<SBool>();
-// binary-search with a comparator callback → SNum | SBool
+  __arr["vector-fold-right"]((acc: string, elt: number): string => acc + elt, "", [1, 2, 3]),
+).toEqualTypeOf<string>();
+// vector-count → number
+expectTypeOf(__arr["vector-count"]((elt: number) => elt > 1, [1, 2, 3])).toEqualTypeOf<number>();
+// vector-index → number | boolean
+expectTypeOf(__arr["vector-index"]((elt: number) => elt === 2, [1, 2, 3])).toEqualTypeOf<number | boolean>();
+// vector-any returns the callback result type | boolean
+expectTypeOf(__arr["vector-any"]((elt: number): string => `${elt}`, [1, 2, 3])).toEqualTypeOf<string | boolean>();
+// vector-every likewise (R=boolean collapses the union to boolean)
+expectTypeOf(__arr["vector-every"]((elt: number): boolean => elt > 0, [1, 2, 3])).toEqualTypeOf<boolean>();
+// vector-empty? → boolean
+expectTypeOf(__arr["vector-empty?"]([1, 2, 3])).toEqualTypeOf<boolean>();
+// binary-search with a comparator callback → number | boolean
 expectTypeOf(
-  __arr["vector-binary-search"]([1, 2, 3], 2, (elt: SNum, value: SNum): SNum => elt - value),
-).toEqualTypeOf<SNum | SBool>();
+  __arr["vector-binary-search"]([1, 2, 3], 2, (elt: number, value: number): number => elt - value),
+).toEqualTypeOf<number | boolean>();
 
-// @ts-expect-error vector elements are homogeneous T: a mixed call can't be List<SNum>
-const w: List<SNum> = __arr.vector(1, "two", 3);
-// @ts-expect-error vector-fold kons param must match element type (SStr elt over SNum vec)
-__arr["vector-fold"]((acc: SNum, elt: SStr): SNum => acc, 0, [1, 2, 3]);
-// @ts-expect-error fold accumulator type must be consistent: knil SNum vs kons returning SStr mismatch
-const wr: SNum = __arr["vector-fold"]((acc: SNum, elt: SNum): SStr => `${acc}`, 0, [1, 2, 3]);
-// @ts-expect-error vector-count pred must consume the element type (SStr param over SNum vec)
-__arr["vector-count"]((elt: SStr) => true, [1, 2, 3]);
+// @ts-expect-error vector elements are homogeneous T: a mixed call can't be List<number>
+const w: List<number> = __arr.vector(1, "two", 3);
+// @ts-expect-error vector-fold kons param must match element type (string elt over number vec)
+__arr["vector-fold"]((acc: number, elt: string): number => acc, 0, [1, 2, 3]);
+// @ts-expect-error fold accumulator type must be consistent: knil number vs kons returning string mismatch
+const wr: number = __arr["vector-fold"]((acc: number, elt: number): string => `${acc}`, 0, [1, 2, 3]);
+// @ts-expect-error vector-count pred must consume the element type (string param over number vec)
+__arr["vector-count"]((elt: string) => true, [1, 2, 3]);
 // @ts-expect-error binary-search value must match the vector element type
-__arr["vector-binary-search"]([1, 2, 3], "two", (elt: SNum, value: SNum): SNum => 0);
+__arr["vector-binary-search"]([1, 2, 3], "two", (elt: number, value: number): number => 0);

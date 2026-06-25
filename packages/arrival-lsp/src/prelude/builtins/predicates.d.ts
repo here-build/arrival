@@ -18,12 +18,12 @@
 //   (see ../types.d.ts → THE LEAF MERGE CONTRACT).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "zero?"(n: SNum): SBool;
-  "even?"(n: SNum): SBool;
-  "odd?"(n: SNum): SBool;
-  "null?"(xs: List<unknown>): SBool;
-  "empty?"(xs: List<unknown>): SBool;
-  not(v: unknown): SBool;
-  "equal?"(a: unknown, b: unknown): SBool;
-  "eq?"(a: unknown, b: unknown): SBool;
+  "zero?"(n: number): boolean;
+  "even?"(n: number): boolean;
+  "odd?"(n: number): boolean;
+  "null?"(xs: List<unknown>): boolean;
+  "empty?"(xs: List<unknown>): boolean;
+  not(v: unknown): boolean;
+  "equal?"(a: unknown, b: unknown): boolean;
+  "eq?"(a: unknown, b: unknown): boolean;
 }

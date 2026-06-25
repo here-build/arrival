@@ -4,16 +4,21 @@
    • `interface ArrShape {}` MUST be empty here — it is the declaration-merge
      target the 34 builtin leaves extend; the emptiness is the seam, not an
      accident.
-   • `SNum`/`SStr`/`SBool`/`Unit` are DELIBERATE named-vocabulary aliases, not
-     redundant ones: leaf signatures are authored against `SNum` (never `number`)
-     so the deferred numeric tower (NUM) can re-point one alias and upgrade every
-     leaf for free. Inlining the primitives would dissolve that seam. */
+   • `SNum`/`SStr`/`SBool`/`Unit` are RETAINED aliases (each ≡ its primitive).
+     Leaf signatures now use plain TS (`string`/`number`/`boolean`/`void`) directly
+     — the membrane makes a boundary value its plain JS type, so the dialect bought
+     nothing but noise. The aliases survive as the COMPAT BRIDGE the lens still
+     needs resolvable: rosetta `type:` strings splice them (host-prelude.ts), the
+     `(require)` synthesizer emits them (arrival-scheme-env-loader), and the
+     `.cases.ts` bite-guards assert against them. (The deferred numeric tower that
+     once justified `SNum` is retired — V chose plain TS.) */
 // ─────────────────────────────────────────────────────────────────────────────
 // PRE — the SHARED PRELUDE for the Scheme→TS type lens.
 //
 // This is the ONE upstream node the 34 builtin `.d.ts` leaves
 // (`prelude/builtins/<slug>.d.ts`) declaration-merge into. It declares:
-//   1. the branded base types every leaf signature is written in terms of,
+//   1. the structural base types leaf signatures use (`List`/`Pair`/`Nil`/`Dict`)
+//      + the retained scalar-compat aliases (`SNum`/`SStr`/`SBool`/`Unit`, see header),
 //   2. the `Dict<Pairs>` homoiconic-dict → precise-object mapped type,
 //   3. the keyword-accessor helper types (`@` / `@?` / `:k`),
 //   4. the typed-apply HOF fallback `sexpr<F>`,
@@ -45,16 +50,13 @@ type Pair<H, T = unknown> = readonly [head: H, tail: T];
 // readonly tuple, assignable to `List<never>`.
 type Nil = readonly [];
 
-// Unit / the "no useful value" return (Scheme's unspecified value). Modeled as
-// `void` so a statement-position form that yields nothing doesn't pollute types.
+// Scalar-compat aliases (each ≡ its primitive). Leaves write the primitive
+// directly now (`string`/`number`/`boolean`/`void`); these are retained ONLY so
+// rosetta `type:` strings, the `(require)` synthesizer, and the `.cases.ts`
+// bite-guards keep resolving. `Unit` is Scheme's unspecified value (`void`). The
+// numeric-tower seam that once made `SNum` mandatory is retired — V chose plain TS.
 type Unit = void;
-
-// NUM re-points this. v1 = plain `number`. The deferred numeric tower (NUM node)
-// later re-points `SNum` to a branded Exact/Inexact algebra; every leaf written
-// against `SNum` upgrades for free when that lands. Do NOT inline `number` in a
-// leaf — always write `SNum`.
 type SNum = number;
-
 type SStr = string;
 type SBool = boolean;
 

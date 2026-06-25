@@ -23,25 +23,25 @@
 //
 // ★ Precedence corrections that change the signatures:
 //   • `search` is NOT a Ramda `find`. SAFE_BUILTINS' LIPS
-//     `search` (string `.search` → an index) overrides it → returns SNum.
+//     `search` (string `.search` → an index) overrides it → returns number.
 //   • `split`/`replace`/`match` take (sep|pat) FIRST then the string — LIPS arg
 //     order — and `split`/`match` return Scheme LISTS (`array->list`), not arrays.
-//   • `match` honestly returns `List<SStr> | SBool`: LIPS returns #f on no match,
+//   • `match` honestly returns `List<string> | boolean`: LIPS returns #f on no match,
 //     so a downstream list use SHOULD bite — a latent bug, not lens noise (same
-//     shape as `string->number`'s `SNum | SBool`).
+//     shape as `string->number`'s `number | boolean`).
 //
-// `string-ref` returns `SStr | Nil`: LIPS yields `nil` on an out-of-range index,
+// `string-ref` returns `string | Nil`: LIPS yields `nil` on an out-of-range index,
 // so the absence must be accounted for downstream.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "symbol->string"(sym: unknown): SStr;
-  "string->symbol"(s: SStr): unknown;
-  "string-ref"(s: SStr, i: SNum): SStr | Nil;
-  substring(s: SStr, start: SNum, end?: SNum): SStr;
-  split(separator: SStr, s: SStr): List<SStr>;
-  join(separator: SStr, list: List<unknown>): SStr;
-  replace(pattern: SStr, replacement: SStr, s: SStr): SStr;
-  search(pattern: SStr, s: SStr): SNum;
-  match(pattern: SStr, s: SStr): List<SStr> | SBool;
-  "escape-regex"(s: SStr): SStr;
+  "symbol->string"(sym: unknown): string;
+  "string->symbol"(s: string): unknown;
+  "string-ref"(s: string, i: number): string | Nil;
+  substring(s: string, start: number, end?: number): string;
+  split(separator: string, s: string): List<string>;
+  join(separator: string, list: List<unknown>): string;
+  replace(pattern: string, replacement: string, s: string): string;
+  search(pattern: string, s: string): number;
+  match(pattern: string, s: string): List<string> | boolean;
+  "escape-regex"(s: string): string;
 }

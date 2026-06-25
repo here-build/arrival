@@ -6,8 +6,8 @@
 // COUNT, not the type), so the result is `List<T>` over the same `T`.
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`List<T>`, `SBool`). TS merges this into `__arr`.
+// in terms of PRE's base types (`List<T>`, `boolean`). TS merges this into `__arr`.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  filter<T>(pred: (x: T) => SBool, xs: List<T>): List<T>;
+  filter<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;
 }

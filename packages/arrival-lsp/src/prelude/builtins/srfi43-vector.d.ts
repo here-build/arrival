@@ -21,9 +21,9 @@
 //   • The pure SRFI-43 ops are define'd over vector-length/vector-ref:
 //       vector-fold           — (kons acc elt), acc threads
 //       vector-fold-right
-//       vector-count          — pred → count (SNum)
+//       vector-count          — pred → count (number)
 //       vector-index          — first index | #f
-//       vector-binary-search  — (vec value cmp), cmp→SNum, idx | #f
+//       vector-binary-search  — (vec value cmp), cmp→number, idx | #f
 //       vector-empty?
 //       vector-any            — first truthy (pred elt) | #f
 //       vector-every          — last (pred elt) | #f
@@ -33,36 +33,36 @@
 // MODELING (v1):
 //   • vector V = `List<T>`. So vector-fold/any/etc. take `List<T>` and thread T into
 //     the kons/pred callbacks exactly like the list-family leaves.
-//   • Search/index ops return `SNum | SBool` (a real index, or #f on miss) — honest:
+//   • Search/index ops return `number | boolean` (a real index, or #f on miss) — honest:
 //     the impl returns #f, so a downstream use must account for the false case.
 //   • vector-any/-every return the truthy callback result OR #f — typed as the
-//     callback's result type unioned with SBool (the #f sentinel).
+//     callback's result type unioned with boolean (the #f sentinel).
 //
 // `?`-names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   // Construct a vector from its elements (v1: a List<T>). Variadic in elements.
   vector<T>(...elems: T[]): List<T>;
-  // Tag/type predicate — accepts any value, returns SBool.
-  "vector?"(x: unknown): SBool;
+  // Tag/type predicate — accepts any value, returns boolean.
+  "vector?"(x: unknown): boolean;
 
   // Folds — kons is (acc, elt) → acc'; the accumulator type A threads through.
   "vector-fold"<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
   "vector-fold-right"<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
 
-  // Count of indices where the predicate holds → SNum.
-  "vector-count"<T>(pred: (elt: T) => unknown, vec: List<T>): SNum;
-  // First matching index, or #f → SNum | SBool.
-  "vector-index"<T>(pred: (elt: T) => unknown, vec: List<T>): SNum | SBool;
+  // Count of indices where the predicate holds → number.
+  "vector-count"<T>(pred: (elt: T) => unknown, vec: List<T>): number;
+  // First matching index, or #f → number | boolean.
+  "vector-index"<T>(pred: (elt: T) => unknown, vec: List<T>): number | boolean;
 
   // Short-circuiting search — returns the truthy (pred elt) result, or #f.
-  "vector-any"<T, R>(pred: (elt: T) => R, vec: List<T>): R | SBool;
+  "vector-any"<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
   // Returns the last (pred elt) if all truthy, or #f.
-  "vector-every"<T, R>(pred: (elt: T) => R, vec: List<T>): R | SBool;
+  "vector-every"<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
 
-  // Length-0 test → SBool.
-  "vector-empty?"<T>(vec: List<T>): SBool;
+  // Length-0 test → boolean.
+  "vector-empty?"<T>(vec: List<T>): boolean;
 
-  // Binary search — (vec, value, cmp) where cmp(elt, value) → SNum sign; index | #f.
-  "vector-binary-search"<T>(vec: List<T>, value: T, cmp: (elt: T, value: T) => SNum): SNum | SBool;
+  // Binary search — (vec, value, cmp) where cmp(elt, value) → number sign; index | #f.
+  "vector-binary-search"<T>(vec: List<T>, value: T, cmp: (elt: T, value: T) => number): number | boolean;
 }

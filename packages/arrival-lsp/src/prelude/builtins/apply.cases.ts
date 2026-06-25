@@ -5,15 +5,15 @@
 // call yields the callee's return brand `R` exactly → positives pin with
 // `.toEqualTypeOf<R>()`. Negatives use `// @ts-expect-error`: a wrong-element
 // tuple or a non-function first arg bites at the call (2345).
-// Base vocab (`SNum`/`SStr`) is ambient from ../types.d.ts.
+// Base vocab (`number`/`string`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
 // args tuple matches the callee's parameter types → returns the callee's brand
-expectTypeOf(__arr.apply((a: SNum, b: SNum) => a + b, [1, 2] as const)).toEqualTypeOf<SNum>();
-expectTypeOf(__arr.apply((x: SStr) => x, ["hi"] as const)).toEqualTypeOf<SStr>();
+expectTypeOf(__arr.apply((a: number, b: number) => a + b, [1, 2] as const)).toEqualTypeOf<number>();
+expectTypeOf(__arr.apply((x: string) => x, ["hi"] as const)).toEqualTypeOf<string>();
 
-// @ts-expect-error second arg is a string but the callee's 2nd param is SNum → TS2345
-__arr.apply((a: SNum, b: SNum) => a + b, [1, "x"] as const);
+// @ts-expect-error second arg is a string but the callee's 2nd param is number → TS2345
+__arr.apply((a: number, b: number) => a + b, [1, "x"] as const);
 // @ts-expect-error first arg is not a function → TS2345
 __arr.apply(5, [1, 2] as const);

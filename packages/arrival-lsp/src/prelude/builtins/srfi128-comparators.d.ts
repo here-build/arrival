@@ -29,13 +29,13 @@
 //
 // MODELING (v1):
 //   • A comparator is the literal-tagged 4-tuple
-//       ['comparator', (x)=>SBool, (a,b)=>SBool, (a,b)=>SBool]
+//       ['comparator', (x)=>boolean, (a,b)=>boolean, (a,b)=>boolean]
 //     written INLINE (PRE forbids a top-level `Comparator<T>` alias). The tag makes
 //     comparator? discriminate; the extractor accessors return the bundled predicates.
 //   • The type-test/equality/ordering predicates are NOT parameterised over a shared
 //     element type T in v1 — make-comparator's three preds are independent values, so
 //     a precise cross-pred T-binding would over-constrain. Honest-coarse: type-test is
-//     `(x: unknown)=>SBool`, equality/ordering `(a: unknown, b: unknown)=>SBool`. A
+//     `(x: unknown)=>boolean`, equality/ordering `(a: unknown, b: unknown)=>boolean`. A
 //     `Comparator<T>` brand in PRE could thread T — flagged in the report, NOT added.
 //   • default-comparator / make-default-comparator are NULLARY FUNCTIONS that RETURN a
 //     comparator — typed `(): <comparator>`, NOT a value.
@@ -46,123 +46,123 @@
 interface ArrShape {
   // Construct a comparator. 4th `hash` arg accepted (ignored at runtime) → optional.
   "make-comparator"(
-    typeTest: (x: unknown) => SBool,
-    equality: (a: unknown, b: unknown) => SBool,
-    ordering: (a: unknown, b: unknown) => SBool,
-    ...hash: [((x: unknown) => SNum)?]
+    typeTest: (x: unknown) => boolean,
+    equality: (a: unknown, b: unknown) => boolean,
+    ordering: (a: unknown, b: unknown) => boolean,
+    ...hash: [((x: unknown) => number)?]
   ): readonly [
     "comparator",
-    (x: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
+    (x: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
   ];
 
   // The default total-order comparator — both are NULLARY and RETURN a comparator.
   "make-default-comparator"(): readonly [
     "comparator",
-    (x: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
+    (x: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
   ];
   "default-comparator"(): readonly [
     "comparator",
-    (x: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
-    (a: unknown, b: unknown) => SBool,
+    (x: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
+    (a: unknown, b: unknown) => boolean,
   ];
 
-  // Tag predicate — accepts any value, returns SBool.
-  "comparator?"(x: unknown): SBool;
+  // Tag predicate — accepts any value, returns boolean.
+  "comparator?"(x: unknown): boolean;
 
   // Extractors — pull the bundled predicate back out of a comparator tuple.
   "comparator-type-test-predicate"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
-  ): (x: unknown) => SBool;
+  ): (x: unknown) => boolean;
   "comparator-equality-predicate"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
-  ): (a: unknown, b: unknown) => SBool;
+  ): (a: unknown, b: unknown) => boolean;
   "comparator-ordering-predicate"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
-  ): (a: unknown, b: unknown) => SBool;
-  // Always #f at runtime, but the signature is still a SBool-returning predicate.
+  ): (a: unknown, b: unknown) => boolean;
+  // Always #f at runtime, but the signature is still a boolean-returning predicate.
   "comparator-hashable?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
-  ): SBool;
+  ): boolean;
 
-  // Relational chain ops — (cmp, a, b, …rest) → SBool. Comparator is the FIRST arg.
+  // Relational chain ops — (cmp, a, b, …rest) → boolean. Comparator is the FIRST arg.
   "=?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
     a: unknown,
     b: unknown,
     ...rest: unknown[]
-  ): SBool;
+  ): boolean;
   "<?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
     a: unknown,
     b: unknown,
     ...rest: unknown[]
-  ): SBool;
+  ): boolean;
   "<=?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
     a: unknown,
     b: unknown,
     ...rest: unknown[]
-  ): SBool;
+  ): boolean;
   ">?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
     a: unknown,
     b: unknown,
     ...rest: unknown[]
-  ): SBool;
+  ): boolean;
   ">=?"(
     c: readonly [
       "comparator",
-      (x: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
-      (a: unknown, b: unknown) => SBool,
+      (x: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
+      (a: unknown, b: unknown) => boolean,
     ],
     a: unknown,
     b: unknown,
     ...rest: unknown[]
-  ): SBool;
+  ): boolean;
 }

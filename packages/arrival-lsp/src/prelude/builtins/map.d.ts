@@ -7,7 +7,7 @@
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
 // in terms of PRE's base types (`List<T>`). The callback's param type is bound to
 // the input element type and its return type drives the output element type, so
-// `(map (lambda (n) (string-upcase n)) '(1 2 3))` bites (1 is not an SStr).
+// `(map (lambda (n) (string-upcase n)) '(1 2 3))` bites (1 is not a string).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   map<A, B>(f: (a: A) => B, xs: List<A>): List<B>;

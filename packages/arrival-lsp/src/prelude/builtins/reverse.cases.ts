@@ -3,14 +3,14 @@
 // expect-type assertions over the ambient `__arr`; inputs are WIDENED list literals
 // so results are exact brands — positives pin with `.toEqualTypeOf<T>()` (an arg-rot
 // OR a return→any rot both bite); negatives use `// @ts-expect-error`.
-// Base vocab (`List`/`SNum`/`SStr`) is ambient from ../types.d.ts.
+// Base vocab (`List`/`number`/`string`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
 // reverse of a number list returns a number list
-expectTypeOf(__arr.reverse([1, 2, 3])).toEqualTypeOf<List<SNum>>();
+expectTypeOf(__arr.reverse([1, 2, 3])).toEqualTypeOf<List<number>>();
 // reverse of a string list returns a string list
-expectTypeOf(__arr.reverse(["a", "b", "c"])).toEqualTypeOf<List<SStr>>();
+expectTypeOf(__arr.reverse(["a", "b", "c"])).toEqualTypeOf<List<string>>();
 
 // @ts-expect-error reverse requires a List<T>, not a bare number
 __arr.reverse(42);

@@ -14,5 +14,5 @@
 interface ArrShape {
   "@"<O, K extends keyof O>(obj: O, key: K): Field<O, K>;
   "@?"<O extends object, K extends string>(obj: O, key: K): HasField<O, K>;
-  "@keys"<O extends object>(obj: O): List<SStr>;
+  "@keys"<O extends object>(obj: O): List<string>;
 }

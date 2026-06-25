@@ -3,14 +3,14 @@
 // expect-type assertions over the ambient `__arr`; inputs are WIDENED list literals
 // so results are exact brands — positives pin with `.toEqualTypeOf<T>()` (an arg-rot
 // OR a return→any rot both bite); negatives use `// @ts-expect-error`.
-// Base vocab (`List`/`SNum`/`SStr`) is ambient from ../types.d.ts.
+// Base vocab (`List`/`number`/`string`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
 // (third (list 1 2 3)) → 3 (a number)
-expectTypeOf(__arr.third([1, 2, 3])).toEqualTypeOf<SNum>();
+expectTypeOf(__arr.third([1, 2, 3])).toEqualTypeOf<number>();
 // (third (list "a" "b" "c")) → "c" (a string)
-expectTypeOf(__arr.third(["a", "b", "c"])).toEqualTypeOf<SStr>();
+expectTypeOf(__arr.third(["a", "b", "c"])).toEqualTypeOf<string>();
 
 // @ts-expect-error third of a non-list (number) is not assignable to List<T>
 __arr.third(42);

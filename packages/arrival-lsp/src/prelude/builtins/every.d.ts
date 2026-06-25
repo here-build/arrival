@@ -5,8 +5,8 @@
 // `xs` (predicate FIRST, list SECOND). Lowers to `xs.every(pred)`.
 // Precise where Scheme is polymorphic: the predicate's parameter type is bound to
 // the list's element type `T`, so passing a predicate that expects the wrong
-// element type bites. Return is `SBool`.
+// element type bites. Return is `boolean`.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  every<T>(pred: (x: T) => SBool, xs: List<T>): SBool;
+  every<T>(pred: (x: T) => boolean, xs: List<T>): boolean;
 }

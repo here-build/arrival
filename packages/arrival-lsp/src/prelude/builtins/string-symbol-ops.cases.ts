@@ -8,44 +8,44 @@
 // directive becomes the failure.
 //
 // ★ Precedence corrections baked into the asserted return types:
-//   • `search` returns SNum (LIPS string `.search` index, NOT ramda `R.find`).
+//   • `search` returns number (LIPS string `.search` index, NOT ramda `R.find`).
 //   • `split`/`replace`/`match` take (sep|pat) FIRST then the string; `split`/`match`
-//     return Scheme LISTS. `match` honestly returns `List<SStr> | SBool` (#f on no
+//     return Scheme LISTS. `match` honestly returns `List<string> | boolean` (#f on no
 //     match) so a downstream list use SHOULD bite.
-//   • `string-ref` returns `SStr | Nil` (nil on out-of-range index).
-// Base vocab (`SStr`/`SNum`/`SBool`/`List`/`Nil`) is ambient from ../types.d.ts.
+//   • `string-ref` returns `string | Nil` (nil on out-of-range index).
+// Base vocab (`string`/`number`/`boolean`/`List`/`Nil`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
-// symbol->string returns SStr (threading string->symbol's symbol back out)
-expectTypeOf(__arr["symbol->string"](__arr["string->symbol"]("x"))).toEqualTypeOf<SStr>();
-// string-ref: SStr | Nil — absence accounted for downstream
-expectTypeOf(__arr["string-ref"]("hello", 0)).toEqualTypeOf<SStr | Nil>();
-// substring with optional end → SStr
-expectTypeOf(__arr.substring("hello", 1)).toEqualTypeOf<SStr>();
-expectTypeOf(__arr.substring("hello", 1, 3)).toEqualTypeOf<SStr>();
+// symbol->string returns string (threading string->symbol's symbol back out)
+expectTypeOf(__arr["symbol->string"](__arr["string->symbol"]("x"))).toEqualTypeOf<string>();
+// string-ref: string | Nil — absence accounted for downstream
+expectTypeOf(__arr["string-ref"]("hello", 0)).toEqualTypeOf<string | Nil>();
+// substring with optional end → string
+expectTypeOf(__arr.substring("hello", 1)).toEqualTypeOf<string>();
+expectTypeOf(__arr.substring("hello", 1, 3)).toEqualTypeOf<string>();
 // split → list of strings (sep first)
-expectTypeOf(__arr.split(",", "a,b,c")).toEqualTypeOf<List<SStr>>();
+expectTypeOf(__arr.split(",", "a,b,c")).toEqualTypeOf<List<string>>();
 // join collapses a list to one string
-expectTypeOf(__arr.join(", ", ["a", "b"])).toEqualTypeOf<SStr>();
-// replace pattern/replacement/string → SStr
-expectTypeOf(__arr.replace("a", "b", "banana")).toEqualTypeOf<SStr>();
-// search → an index (SNum)
-expectTypeOf(__arr.search("an", "banana")).toEqualTypeOf<SNum>();
+expectTypeOf(__arr.join(", ", ["a", "b"])).toEqualTypeOf<string>();
+// replace pattern/replacement/string → string
+expectTypeOf(__arr.replace("a", "b", "banana")).toEqualTypeOf<string>();
+// search → an index (number)
+expectTypeOf(__arr.search("an", "banana")).toEqualTypeOf<number>();
 // match → list of groups OR #f
-expectTypeOf(__arr.match("a", "banana")).toEqualTypeOf<List<SStr> | SBool>();
-// escape-regex → SStr
-expectTypeOf(__arr["escape-regex"]("a.b")).toEqualTypeOf<SStr>();
+expectTypeOf(__arr.match("a", "banana")).toEqualTypeOf<List<string> | boolean>();
+// escape-regex → string
+expectTypeOf(__arr["escape-regex"]("a.b")).toEqualTypeOf<string>();
 
 // @ts-expect-error substring needs numeric start, not a string
 __arr.substring("hello", "x");
 // @ts-expect-error split separator/string both strings — number as string arg bites
 __arr.split(",", 42);
-// @ts-expect-error search returns SNum, not SStr
-const x: SStr = __arr.search("an", "banana");
-// @ts-expect-error string-ref index must be SNum
+// @ts-expect-error search returns number, not string
+const x: string = __arr.search("an", "banana");
+// @ts-expect-error string-ref index must be number
 __arr["string-ref"]("hello", "x");
 // @ts-expect-error match may return #f — not silently a precise list
-const y: List<SStr> = __arr.match("a", "banana");
+const y: List<string> = __arr.match("a", "banana");
 // @ts-expect-error join wants a string separator, not a number
 __arr.join(42, ["a", "b"]);

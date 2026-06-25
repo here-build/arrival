@@ -5,16 +5,16 @@
 // Every argument must be a list of the same element type T; the result is List<T>.
 // Negatives use `// @ts-expect-error`; if the signature rots so the line stops
 // erroring, the unused directive itself becomes the compile error.
-// Base vocab (`List`/`SNum`/`SStr`) is ambient from ../types.d.ts.
+// Base vocab (`List`/`number`/`string`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
-// append two number lists → List<SNum>
-expectTypeOf(__arr.append([1, 2], [3, 4])).toEqualTypeOf<List<SNum>>();
-// append a single string list → List<SStr>
-expectTypeOf(__arr.append(["a", "b", "c"])).toEqualTypeOf<List<SStr>>();
+// append two number lists → List<number>
+expectTypeOf(__arr.append([1, 2], [3, 4])).toEqualTypeOf<List<number>>();
+// append a single string list → List<string>
+expectTypeOf(__arr.append(["a", "b", "c"])).toEqualTypeOf<List<string>>();
 // append three lists of the same element type
-expectTypeOf(__arr.append([1], [2], [3])).toEqualTypeOf<List<SNum>>();
+expectTypeOf(__arr.append([1], [2], [3])).toEqualTypeOf<List<number>>();
 
 // @ts-expect-error a bare number is not a List
 __arr.append(42);

@@ -10,7 +10,7 @@
 // Pattern: re-declare `interface ArrShape` with this ONE member, written in terms
 // of PRE's `Dict<Pairs>` (../types.d.ts). The `Pairs` type param is captured from
 // the `as const` entry-tuple the lens emits, so `(dict :name "a" :age 30)` infers
-// `{ name: SStr; age: SNum }` precisely (mis-keyed/mis-typed reads then bite via
+// `{ name: string; age: number }` precisely (mis-keyed/mis-typed reads then bite via
 // the `Field`/accessor leaves).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {

@@ -9,7 +9,7 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  modulo(a: SNum, b: SNum): SNum;
-  remainder(a: SNum, b: SNum): SNum;
-  quotient(a: SNum, b: SNum): SNum;
+  modulo(a: number, b: number): number;
+  remainder(a: number, b: number): number;
+  quotient(a: number, b: number): number;
 }

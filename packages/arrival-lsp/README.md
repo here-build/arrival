@@ -53,9 +53,9 @@ interface ArrShape {
   interface body, so no identifier cleaning is ever needed:
   ```ts
   interface ArrShape {
-    "+"(...xs: SNum[]): SNum;
-    "string-append"(...xs: SStr[]): SStr;
-    "null?"(xs: List<unknown>): SBool;
+    "+"(...xs: number[]): number;
+    "string-append"(...xs: string[]): string;
+    "null?"(xs: List<unknown>): boolean;
   }
   ```
 - **Multi-name families** (chained compares, the math cluster) are ONE file with
@@ -67,24 +67,26 @@ interface ArrShape {
 > `interface` declarations **do** merge unconditionally. This is verified in
 > `__tests__/prelude.test.ts`. Always extend `ArrShape`.
 
-### 3. Reference PRE's base types — never inline primitives
+### 3. Plain TS scalars + PRE's structural types
 
-Write signatures in terms of PRE's vocabulary ONLY:
+Write signatures in plain TS scalars plus PRE's structural vocabulary:
 
-| PRE type | meaning |
+| type | meaning |
 |---|---|
+| `string` / `number` / `boolean` | plain TS scalars — the membrane makes a boundary value *be* its plain JS type |
+| `void` | the unspecified value (Scheme's unit) |
 | `List<T>` | a Scheme proper list (readonly `T[]`) |
 | `Pair<H, T>` | a cons cell / dotted pair `[head, tail]` |
-| `Nil` / `Unit` | the empty list / the unspecified value (`void`) |
-| `SNum` | a number — **`// NUM re-points this`**; never inline `number` |
-| `SStr` / `SBool` | string / boolean |
+| `Nil` | the empty list (`readonly []`) |
 | `Dict<Pairs>` | the homoiconic-dict → precise-object mapped type |
 | `Field<O, K>` | `(@ obj key)` / `(:key obj)` precise field read |
 | `sexpr<F>(f, …a)` | typed-apply fallback for indirect/HOF call heads |
 
-Inlining `number` instead of `SNum` breaks the deferred numeric tower (the NUM node
-re-points `SNum` to a branded Exact/Inexact algebra; every `SNum` upgrades for
-free). Same discipline for `SStr`/`SBool`.
+Scalars are plain TS — the LIPS↔JS membrane guarantees a boundary value *is* its
+plain JS type, so no dialect is needed. (The `SNum`/`SStr`/`SBool`/`Unit` aliases
+still exist in `types.d.ts` — each ≡ its primitive — but only as the compat bridge
+for rosetta `type:` strings and the `(require)` synthesizer; don't author leaves
+against them.)
 
 ### 4. The required 1-positive / 1-negative assertion
 

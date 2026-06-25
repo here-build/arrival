@@ -7,10 +7,10 @@
 //     `${list}.reduce((acc, el) => (${key(el)} > ${key("acc")} ? el : acc))`
 //
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`List<T>`, `SNum`). The key function is generic
+// in terms of PRE's base types (`List<T>`, `number`). The key function is generic
 // over the element type `T` so a mis-typed key callback bites; the return is `T`
-// (an element), NOT `SNum` (the key value).
+// (an element), NOT `number` (the key value).
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
-  "max-by"<T>(key: (x: T) => SNum, xs: List<T>): T;
+  "max-by"<T>(key: (x: T) => number, xs: List<T>): T;
 }

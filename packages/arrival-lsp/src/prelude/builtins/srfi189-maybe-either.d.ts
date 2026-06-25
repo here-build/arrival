@@ -47,13 +47,13 @@ interface ArrShape {
   left<L>(x: L): readonly ["left", L];
   right<R>(x: R): readonly ["right", R];
 
-  // ── Tag predicates — accept any value (impl guards with pair?), return SBool ─
+  // ── Tag predicates — accept any value (impl guards with pair?), return boolean ─
   // Arg typed `unknown`: these are GUARDS, valid to call on a non-Maybe (→ #f).
-  "just?"(m: unknown): SBool;
-  "nothing?"(m: unknown): SBool;
-  "maybe?"(m: unknown): SBool;
-  "left?"(e: unknown): SBool;
-  "right?"(e: unknown): SBool;
+  "just?"(m: unknown): boolean;
+  "nothing?"(m: unknown): boolean;
+  "maybe?"(m: unknown): boolean;
+  "left?"(e: unknown): boolean;
+  "right?"(e: unknown): boolean;
 
   // ── Maybe combinators ───────────────────────────────────────────────────────
   // maybe-bind: Nothing short-circuits (returns the Nothing). Result unions the

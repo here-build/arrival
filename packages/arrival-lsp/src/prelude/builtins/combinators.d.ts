@@ -15,7 +15,7 @@
 // eviction (only a curated set survived). Typing them here made the lens advertise
 // symbols unbound at runtime, so they are removed. `when` / `unless` are now
 // `define-macro`s (with evaluator special-forms); their honest return is `T | Nil`
-// (the last body value when the gate passes, else nil — NOT `Unit`).
+// (the last body value when the gate passes, else nil — NOT `void`).
 //
 // Pattern: re-declare `interface ArrShape` with these members, written in terms of
 // PRE's base types (see ../types.d.ts → THE LEAF MERGE CONTRACT).
@@ -23,7 +23,7 @@
 interface ArrShape {
   always<T>(x: T): () => T;
   clone<T>(xs: List<T>): List<T>;
-  repr(obj: unknown, quote?: unknown): SStr;
+  repr(obj: unknown, quote?: unknown): string;
   when<T>(test: unknown, ...body: T[]): T | Nil;
   unless<T>(test: unknown, ...body: T[]): T | Nil;
 }
