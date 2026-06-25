@@ -32,7 +32,7 @@ import {
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { box, gensym, patch_value, quote } from "./reader/values-repr.js";
+import { box, patch_value, quote } from "./reader/values-repr.js";
 import {
   complex_bare_re,
   complex_re,
@@ -910,8 +910,6 @@ export const global_env = new Environment(
     // only special-cases `lambda`/`define` by identity (the `let` family by name),
     // so the bindings are unreferenced. See husk-dissolution pass.
     // ------------------------------------------------------------------
-    gensym: doc("gensym", gensym),
-    // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     // %purity-door — the ONE host primitive behind every omitted feature.
     // arrival's omission boundary (dynamics + writing methods) is declared in
@@ -1077,8 +1075,6 @@ export const global_env = new Environment(
     repr: doc("repr", function repr(obj, quote) {
       return toString(obj, quote);
     }),
-    // ------------------------------------------------------------------
-    typecheck: doc(null, typecheck),
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed

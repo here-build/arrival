@@ -13,6 +13,10 @@
 // pattern the SRFI / r7rs / polyglot packs already follow.
 
 import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
+import { gensym } from "../../reader/values-repr.js";
+import { typecheck } from "../../utils/typecheck.js";
 
 /** The irreducible scheme core pack: constants, purity doors, syntax-binding macros.
  *  Prelude-only module-singleton capability; the precedence floor every base pack deps. */
@@ -119,4 +123,32 @@ export default new EnvCapability("scheme/core", {
     (define (single list)
       (and (pair? list) (not (cdr list))))
 `,
+  // The two host primitives the syntax-binding macros above expand into / depend on,
+  // relocated VERBATIM from stdlib.ts global_env (husk dissolution). `define-syntax` /
+  // `let-syntax` / `letrec-syntax` emit `(typecheck … "syntax")` and `define-syntax` mints
+  // a hygiene name via `(gensym …)`; both resolve at macro-EXPANSION time, so binding them
+  // on this precedence-floor pack (assembled first among the base packs) reaches every
+  // consumer — including the inference-plane `cut`/`cute` copy in initBridge, which reads
+  // `gensym` off the user_env chain post-assembly. Native: the impls are the shared
+  // `reader/values-repr` gensym and `utils/typecheck` typecheck, bound raw.
+  symbols: {
+    gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      gensym,
+    ),
+
+    // Contract mirrors typecheck's real arity so the raw function binds cast-free:
+    // fn (Valuable = anything with valueOf), arg (any scheme value), expected (a type
+    // token or a predicate Function), optional position. The identity contract never runs.
+    typecheck: symbol.native`typecheck: assert arg matches an expected type (or throw a typed error)`(
+      {
+        input: z.tuple(
+          [z.custom<{ valueOf(): unknown }>(), z.unknown(), z.custom<{ valueOf(): unknown } | Function>()],
+          z.custom<number | null>(),
+        ),
+        output: [z.void()],
+      },
+      typecheck,
+    ),
+  },
 });
