@@ -26,6 +26,7 @@
 // not a wiring path; access a member first.
 
 import { AValue } from "./values/primitives/AValue.js";
+import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { APair } from "./values/primitives/APair.js";
 import { AVector } from "./values/primitives/AVector.js";
 import { SchemeJSArray } from "./membrane.js";
@@ -59,5 +60,5 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
 /** Re-stamp a collapsed string with provenance — a provenance-carrying `SchemeString`
  *  when there is lineage to carry, else the bare string (no empty wrapper churn). */
 export function taintString(result: string, prov: Set<number>): string | AString {
-  return prov.size > 0 ? new AString(result, prov) : result;
+  return prov.size > 0 ? new AString(CONSTANT_CTX, result, prov) : result;
 }

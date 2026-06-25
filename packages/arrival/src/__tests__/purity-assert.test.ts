@@ -20,6 +20,7 @@
  * checks behind it. Match the inline-helper idiom of the provenance test dir.
  */
 import { describe, it, expect, vi } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
@@ -205,36 +206,36 @@ describe("G5 confluence guard — purity doors stay closed", () => {
 // ── (2) A pure-marked rosetta must not mutate its inputs — fingerprint logic. ─
 describe("G5 confluence guard — pure-rosetta mutation fingerprint (sound subset)", () => {
   it("fingerprint is STABLE across a no-op (a pure pass-through trips nothing)", () => {
-    const pair = new APair(new AString("a", p(100)), new APair(new AString("b", p(101)), null as never));
+    const pair = new APair(CONSTANT_CTX, new AString(CONSTANT_CTX, "a", p(100)), new APair(CONSTANT_CTX, new AString(CONSTANT_CTX, "b", p(101)), null as never));
     const before = fingerprint(pair);
     // identity transform — no slot touched
     expect(fingerprintChanged(before, fingerprint(pair))).toBe(false);
   });
 
   it("DETECTS set-car!-style mutation: reassigning Pair.car changes the fingerprint", () => {
-    const pair = new APair<AValue, AValue>(new AString("a", p(100)), new AString("b", p(101)));
+    const pair = new APair<AValue, AValue>(CONSTANT_CTX, new AString(CONSTANT_CTX, "a", p(100)), new AString(CONSTANT_CTX, "b", p(101)));
     const before = fingerprint(pair);
-    pair.car = new AString("MUTATED", p(999)); // the doored mutation, done raw in JS
+    pair.car = new AString(CONSTANT_CTX, "MUTATED", p(999)); // the doored mutation, done raw in JS
     expect(fingerprintChanged(before, fingerprint(pair))).toBe(true);
   });
 
   it("DETECTS vector-set!-style mutation: writing __vector__ in place changes the fingerprint", () => {
-    const vec = new AVector([new AString("a", p(100)), new AString("b", p(101))], p(7));
+    const vec = new AVector(CONSTANT_CTX, [new AString(CONSTANT_CTX, "a", p(100)), new AString(CONSTANT_CTX, "b", p(101))], p(7));
     const before = fingerprint(vec);
-    vec.__vector__[0] = new AString("MUTATED", p(999));
+    vec.__vector__[0] = new AString(CONSTANT_CTX, "MUTATED", p(999));
     expect(fingerprintChanged(before, fingerprint(vec))).toBe(true);
   });
 
   it("DETECTS a length change: pushing onto __vector__ trips the fingerprint", () => {
-    const vec = new AVector([new AString("a", p(100))], p(7));
+    const vec = new AVector(CONSTANT_CTX, [new AString(CONSTANT_CTX, "a", p(100))], p(7));
     const before = fingerprint(vec);
-    vec.__vector__.push(new AString("c", p(102)));
+    vec.__vector__.push(new AString(CONSTANT_CTX, "c", p(102)));
     expect(fingerprintChanged(before, fingerprint(vec))).toBe(true);
   });
 
   it("assertInputsUnmutated: clean inputs pass; a mutated input throws PurityViolation naming the verb + index", () => {
-    const a = new APair<AValue, AValue>(new AString("x", p(1)), new AString("y", p(2)));
-    const b = new AVector([new AString("z", p(3))], p(7));
+    const a = new APair<AValue, AValue>(CONSTANT_CTX, new AString(CONSTANT_CTX, "x", p(1)), new AString(CONSTANT_CTX, "y", p(2)));
+    const b = new AVector(CONSTANT_CTX, [new AString(CONSTANT_CTX, "z", p(3))], p(7));
     const rawArg = 42; // non-AValue — never fingerprinted
     const args = [a, rawArg, b];
     const before = snapshotInputs(args);
@@ -243,7 +244,7 @@ describe("G5 confluence guard — pure-rosetta mutation fingerprint (sound subse
     expect(() => assertInputsUnmutated("my-pure-fn", args, before)).not.toThrow();
 
     // Mutate the SECOND AValue (index 2). The violation must name the verb + #2.
-    b.__vector__[0] = new AString("MUTATED", p(999));
+    b.__vector__[0] = new AString(CONSTANT_CTX, "MUTATED", p(999));
     expect(() => assertInputsUnmutated("my-pure-fn", args, before)).toThrow(PurityViolation);
     expect(() => assertInputsUnmutated("my-pure-fn", args, before)).toThrow(/my-pure-fn.*#2/s);
   });
@@ -275,17 +276,17 @@ describe("G5 confluence guard — armed wrapper catches a mutating pure rosetta 
 
     // A clean pure rosetta: returns a constant, never touches its input.
     const clean = createRosettaWrapper({ fn: function cleanPure() { return "ok"; }, pure: true });
-    const vec1 = new Vec([new Str("a", p(100))], p(7));
+    const vec1 = new Vec(CONSTANT_CTX, [new Str(CONSTANT_CTX, "a", p(100))], p(7));
     await expect(clean(vec1 as never)).resolves.toBeDefined();
     expect(vec1.__vector__.length).toBe(1); // untouched
 
     // A MUTATING pure rosetta: writes its scheme input in place, then returns. The
     // fn closes over and mutates the ORIGINAL scheme input via the captured
     // reference — the exact unsoundness the guard catches.
-    const vec2 = new Vec([new Str("a", p(100))], p(7));
+    const vec2 = new Vec(CONSTANT_CTX, [new Str(CONSTANT_CTX, "a", p(100))], p(7));
     const mutator = createRosettaWrapper({
       fn: function badPure() {
-        vec2.__vector__[0] = new Str("MUTATED", p(999));
+        vec2.__vector__[0] = new Str(CONSTANT_CTX, "MUTATED", p(999));
         return "done";
       },
       pure: true,
@@ -294,9 +295,9 @@ describe("G5 confluence guard — armed wrapper catches a mutating pure rosetta 
 
     // A NON-pure rosetta (default = source) is NEVER fingerprinted — mutation
     // (while still wrong) does not trip THIS guard; sources are allowed to be effectful.
-    const vec3 = new Vec([new Str("a", p(100))], p(7));
+    const vec3 = new Vec(CONSTANT_CTX, [new Str(CONSTANT_CTX, "a", p(100))], p(7));
     const sourceish = createRosettaWrapper({
-      fn: function sourceFn() { vec3.__vector__[0] = new Str("SRC", p(888)); return "x"; },
+      fn: function sourceFn() { vec3.__vector__[0] = new Str(CONSTANT_CTX, "SRC", p(888)); return "x"; },
     });
     await expect(sourceish(vec3 as never)).resolves.toBeDefined();
 

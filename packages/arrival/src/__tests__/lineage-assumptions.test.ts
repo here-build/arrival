@@ -7,6 +7,7 @@
  * Measured first, then locked — snapshots record observed reality.
  */
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { parse } from "../eval/generator-exec";
@@ -82,7 +83,7 @@ describe("ASSUMPTION — a count is identity-entangled today (teleological); the
 describe("ASSUMPTION — the demand cone is the provenance cone, through the live builtins (§5, Step 2)", () => {
   // A bare JS source value carries no provenance; the GROUPING fact (id 7) is the
   // collection-level provenance — the only thing a pure-map length should depend on.
-  const lazy = (els: AValue[], groupId: number) => new ALazySeq(els, [], new Set([groupId]));
+  const lazy = (els: AValue[], groupId: number) => new ALazySeq(CONSTANT_CTX, els, [], new Set([groupId]));
 
   it("A18: (map f xs) over a LazySeq hits the fast-path — returns a LazySeq (extend), NOT an eager collect", async () => {
     const xs = lazy([sStr("a", 100), sStr("b", 101)], 7);
@@ -298,7 +299,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
 
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; count/convert ops drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     await initBridge();
-    const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
+    const mkVec = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
       const env = inferenceEnv.inherit(`la-${seq++}`);

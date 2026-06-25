@@ -4,14 +4,15 @@
  * Pair without a circular import. `setPairConstructor` is called by Pair.ts.
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { APairLike } from "../types.js";
 
 // Pair constructor type - will be set by Pair.ts
-let PairConstructor: new (car: unknown, cdr: unknown) => APairLike;
+let PairConstructor: new (ctx: RunContext, car: unknown, cdr: unknown) => APairLike;
 
-export function setPairConstructor(ctor: new (car: unknown, cdr: unknown) => APairLike) {
+export function setPairConstructor(ctor: new (ctx: RunContext, car: unknown, cdr: unknown) => APairLike) {
   PairConstructor = ctor;
 }
 
@@ -19,8 +20,8 @@ export class ANil extends AValue {
   static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
-  constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
   }
 
   toString(): string {
@@ -40,7 +41,7 @@ export class ANil extends AValue {
   }
 
   append(x: unknown): APairLike {
-    return new PairConstructor(x, nil);
+    return new PairConstructor(CONSTANT_CTX, x, nil);
   }
 
   to_array(): [] {
@@ -52,7 +53,7 @@ export class ANil extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ANil {
-    return new ANil(p);
+    return new ANil(CONSTANT_CTX, p);
   }
 
   // Setoid (Fantasy Land). Every Nil — including provenance clones — is equal,
@@ -77,10 +78,10 @@ export class ANil extends AValue {
   }
 }
 
-export const nil = new ANil();
+export const nil = new ANil(CONSTANT_CTX, );
 
 // null/undefined → nil (empty list).
-AValue.registerBoxer("null", (_v, p) => new ANil(p));
-AValue.registerBoxer("undefined", (_v, p) => new ANil(p));
+AValue.registerBoxer("null", (_ctx, _v, p) => new ANil(CONSTANT_CTX, p));
+AValue.registerBoxer("undefined", (_ctx, _v, p) => new ANil(CONSTANT_CTX, p));
 
 markInteropBoundary(ANil);

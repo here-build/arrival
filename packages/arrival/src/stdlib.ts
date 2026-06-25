@@ -5,6 +5,7 @@
  * https://github.com/jcubic/lips
  */
 import invariant from "tiny-invariant";
+import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
@@ -233,7 +234,7 @@ function hygienic_begin(envs, expr) {
   for (const env of envs) {
     env.set(g_begin, begin);
   }
-  return new APair(g_begin, expr);
+  return new APair(CONSTANT_CTX, g_begin, expr);
 }
 
 // ----------------------------------------------------------------------
@@ -855,7 +856,7 @@ const internal_env = new Environment(
   undefined,
 );
 // ----------------------------------------------------------------------
-const nan = new AInexact(Number.NaN);
+const nan = new AInexact(CONSTANT_CTX, Number.NaN);
 const constants = {
   "#t": true,
   "#f": false,
@@ -879,7 +880,7 @@ const is_node = () => typeof process === "object" && !!process.env;
 // -------------------------------------------------------------------------
 function genMacroWrapper(name: string): Macro {
   return new Macro(name, function (this: Environment, code: SchemeValue, options: SchemeValue = {}) {
-    const form = new APair(new ASymbol(name), code);
+    const form = new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, name), code);
     const ctx: EvalContext = {
       env: this,
       dynamic_env: options.dynamic_env ?? this,
@@ -906,7 +907,7 @@ export const global_env = new Environment(
     undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
     cons: doc("cons", function cons(car, cdr) {
-      return withInputProvenance([car, cdr], new APair(car, cdr));
+      return withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr));
     }),
     // ------------------------------------------------------------------
     // Spec §5.3 car/cdr element-only provenance.
@@ -1001,7 +1002,7 @@ export const global_env = new Environment(
       // the generator evaluator (genRun drives it to completion); the discarded
       // promise is why this is the simplest legacy-evaluate caller to migrate.
       const ctx: EvalContext = { env: this, dynamic_env: this, use_dynamic: options.use_dynamic };
-      genRun(genEvaluate(new APair(new ASymbol("begin"), code), ctx));
+      genRun(genEvaluate(new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "begin"), code), ctx));
     }),
     // ------------------------------------------------------------------
     // parameterize delegates to the generator evaluator (evalParameterize) via
@@ -1349,7 +1350,7 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     list: doc("list", function list(...args) {
-      const result = args.reduceRight((list, item) => new APair(item, list), nil);
+      const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
       return withInputProvenance(args, result);
     }),
     // ------------------------------------------------------------------

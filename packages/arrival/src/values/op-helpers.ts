@@ -12,6 +12,7 @@
  */
 
 import invariant from "tiny-invariant";
+import { CONSTANT_CTX } from "./primitives/RunContext.js";
 
 import { AValue, unionProvenance } from "./primitives/AValue.js";
 import { ABytevector } from "./primitives/ABytevector.js";
@@ -192,18 +193,18 @@ export function coerceNumeric(value: unknown): ANumeric {
     case value instanceof AInexact:
       return value;
     case typeof value === "bigint":
-      return new AExact(value);
+      return new AExact(CONSTANT_CTX, value);
     // Safe integers become exact (likely from Scheme integer literals)
     // Non-safe integers and floats become inexact
     case typeof value === "number":
-      return Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
+      return Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
       switch (true) {
         case typeof val === "bigint":
-          return new AExact(val);
+          return new AExact(CONSTANT_CTX, val);
         case typeof val === "number":
-          return Number.isSafeInteger(val) ? new AExact(BigInt(val)) : new AInexact(val);
+          return Number.isSafeInteger(val) ? new AExact(CONSTANT_CTX, BigInt(val)) : new AInexact(CONSTANT_CTX, val);
         default:
           throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }
@@ -264,7 +265,7 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   if (result instanceof AValue) return result.withProvenance(prov) as T;
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    return AValue.fromJs(result, prov) as T;
+    return AValue.fromJs(CONSTANT_CTX, result, prov) as T;
   }
   return result;
 }

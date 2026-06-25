@@ -13,6 +13,7 @@
 // real createRosettaWrapper tests use — no full evaluator needed to prove the wiring.
 
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef } from "../symbol.js";
@@ -78,7 +79,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // No ctx (a direct/test call) — proves the codec membrane in isolation.
-    const out = await verb(new AString("hello"));
+    const out = await verb(new AString(CONSTANT_CTX, "hello"));
     expect(out).toBeInstanceOf(AInexact); // z.number encode → inexact
     expect((out as AInexact).real).toBe(5);
   });
@@ -87,7 +88,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(verb(new AExact(3n))).rejects.toThrow();
+    await expect(verb(new AExact(CONSTANT_CTX, 3n))).rejects.toThrow();
   });
 
   it("MINTS provenance off ctx.currentInvocation — marks the point + stamps the output", async () => {
@@ -96,7 +97,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
 
     const { ctx, marked } = ctxWithInvocation(42);
     // The evaluator appends ctx as the trailing arg for a __withCtx fn — replicate that here.
-    const out = (await verb(new AString("hello"), ctx)) as AInexact;
+    const out = (await verb(new AString(CONSTANT_CTX, "hello"), ctx)) as AInexact;
 
     expect(out).toBeInstanceOf(AInexact);
     expect(out.real).toBe(5);
@@ -116,7 +117,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { ctx } = ctxWithInvocation(7);
-    const out = (await verb(new AString("ab"), ctx)) as AValue;
+    const out = (await verb(new AString(CONSTANT_CTX, "ab"), ctx)) as AValue;
     // Walk the spine: every reachable AValue must carry {7}.
     const seen: number[][] = [];
     const walk = (v: unknown): void => {
@@ -140,7 +141,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     // An input string carrying a known origin; no ctx → resultProvenance falls back to the input union.
-    const tagged = new AString("x", new Set([99]));
+    const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
     const out = (await verb(tagged)) as AString;
     expect(out.toJs()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
@@ -158,7 +159,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { ctx, marked } = ctxWithInvocation(42);
-    const tagged = new AString("x", new Set([99]));
+    const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
     const out = (await verb(tagged, ctx)) as AString;
     expect(out.toJs()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)

@@ -53,6 +53,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "./AValue.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { markInteropBoundary } from "../../interop-access.js";
 
 // Loose, like the rest of the interpreter — SchemeValue is `any` in types.ts.
@@ -129,16 +130,17 @@ export class ALazySeq extends AValue {
    *                   elements and is distributed lazily, only on materialization.
    */
   constructor(
+    ctx: RunContext,
     readonly source: readonly SchemeValue[],
     readonly ops: readonly LazyOp[] = [],
     provenance: Provenance = EMPTY_PROVENANCE,
   ) {
-    super(provenance);
+    super(ctx, provenance);
   }
 
   /** `pipe` — extend the plan. Pure, cheap, runs NOTHING. */
   pipe(op: LazyOp): ALazySeq {
-    return new ALazySeq(this.source, [...this.ops, op], this.provenance);
+    return new ALazySeq(CONSTANT_CTX, this.source, [...this.ops, op], this.provenance);
   }
 
   map(fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>, prov: Provenance = EMPTY_PROVENANCE): ALazySeq {
@@ -241,7 +243,7 @@ export class ALazySeq extends AValue {
   }
 
   withProvenance(p: Provenance): ALazySeq {
-    return new ALazySeq(this.source, this.ops, p);
+    return new ALazySeq(CONSTANT_CTX, this.source, this.ops, p);
   }
 }
 

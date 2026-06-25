@@ -1,4 +1,5 @@
 import { CLASS } from "./well-known-symbols.js";
+import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
 import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/primitives/EOF.js";
@@ -382,12 +383,12 @@ export class Environment {
     // Numbers get special handling (convert to SchemeExact/SchemeInexact for typed numeric ops)
     if (typeof value === "number") {
       if (Number.isNaN(value)) {
-        storedValue = new AInexact(value);
+        storedValue = new AInexact(CONSTANT_CTX, value);
       } else {
-        storedValue = Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
+        storedValue = Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
       }
     } else if (typeof value === "bigint") {
-      storedValue = new AExact(value);
+      storedValue = new AExact(CONSTANT_CTX, value);
     }
     // Already a Scheme value - pass through
     else if (isSchemeValue(value)) {

@@ -5,6 +5,7 @@
  * at read time, before the evaluator ever sees a form. Derived from upstream LIPS.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
 export const LITERAL = Symbol.for("literal");
@@ -64,13 +65,13 @@ export let __events__: Record<string, Function[]> = {};
 export const __list__ = {};
 
 const defined_specials = [
-  ["'", new ASymbol("quote"), LITERAL],
-  ["`", new ASymbol("quasiquote"), LITERAL],
-  [",@", new ASymbol("unquote-splicing"), LITERAL],
-  [",", new ASymbol("unquote"), LITERAL],
-  ["'>", new ASymbol("quote-promise"), LITERAL],
-  ["#(", new ASymbol("vector"), LITERAL],
-  ["#u8(", new ASymbol("bytevector"), LITERAL],
+  ["'", new ASymbol(CONSTANT_CTX, "quote"), LITERAL],
+  ["`", new ASymbol(CONSTANT_CTX, "quasiquote"), LITERAL],
+  [",@", new ASymbol(CONSTANT_CTX, "unquote-splicing"), LITERAL],
+  [",", new ASymbol(CONSTANT_CTX, "unquote"), LITERAL],
+  ["'>", new ASymbol(CONSTANT_CTX, "quote-promise"), LITERAL],
+  ["#(", new ASymbol(CONSTANT_CTX, "vector"), LITERAL],
+  ["#u8(", new ASymbol(CONSTANT_CTX, "bytevector"), LITERAL],
 ];
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));

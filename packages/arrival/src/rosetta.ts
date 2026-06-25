@@ -11,6 +11,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
+import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
 import { ABool } from "./values/primitives/ABool.js";
@@ -262,7 +263,7 @@ export function jsToScheme(
   seen: WeakSet<object> = new WeakSet(),
 ): any {
   if (value === null || value === undefined) {
-    return provenance === EMPTY_PROVENANCE ? nil : new ANil(provenance);
+    return provenance === EMPTY_PROVENANCE ? nil : new ANil(CONSTANT_CTX, provenance);
   }
 
   // Cycle in JS-side input — return as-is. The caller's outer wrapper already
@@ -276,7 +277,7 @@ export function jsToScheme(
   if (value instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === value.provenance) return value;
     if (value instanceof APair) {
-      return new APair(
+      return new APair(CONSTANT_CTX, 
         jsToScheme(value.car, options, provenance, seen),
         jsToScheme(value.cdr, options, provenance, seen),
         provenance,
@@ -285,7 +286,7 @@ export function jsToScheme(
     if (value instanceof AVector) {
       // Deep-stamp elements (parallel to Pair), keep it a vector. The container
       // also carries the provenance via the constructor arg.
-      return new AVector(
+      return new AVector(CONSTANT_CTX, 
         value.__vector__.map((el) => jsToScheme(el, options, provenance, seen)),
         provenance,
       );
@@ -295,9 +296,9 @@ export function jsToScheme(
 
   // JS array → Pair-chain, each cons + each leaf stamped on the way down.
   if (Array.isArray(value)) {
-    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(provenance);
+    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(CONSTANT_CTX, provenance);
     for (let i = value.length - 1; i >= 0; i--) {
-      list = new APair(jsToScheme(value[i], options, provenance, seen), list, provenance);
+      list = new APair(CONSTANT_CTX, jsToScheme(value[i], options, provenance, seen), list, provenance);
     }
     return list;
   }
@@ -307,13 +308,13 @@ export function jsToScheme(
     typeof value === "object" &&
     (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
   ) {
-    return new AJSObject(value as object, provenance);
+    return new AJSObject(CONSTANT_CTX, value as object, provenance);
   }
 
   // JS primitives → AValue.fromJs (boxer registry handles bool/number/string/bigint).
   const tag = typeof value;
   if (tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint") {
-    return AValue.fromJs(value, provenance);
+    return AValue.fromJs(CONSTANT_CTX, value, provenance);
   }
 
   // Functions, exotic objects (Promise, Buffer, …): the caller's responsibility.

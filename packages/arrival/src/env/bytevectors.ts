@@ -20,6 +20,7 @@
  */
 
 import "../errors.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
@@ -62,7 +63,7 @@ export default new EnvCapability("scheme/bytevectors", {
         if (byte !== undefined) {
           arr.fill(toIndex(byte));
         }
-        return withInputProvenance([byte], new ABytevector(arr));
+        return withInputProvenance([byte], new ABytevector(CONSTANT_CTX, arr));
       },
     ),
 
@@ -73,7 +74,7 @@ export default new EnvCapability("scheme/bytevectors", {
         for (const [i, b] of bytes.entries()) {
           result[i] = toIndex(b);
         }
-        return withInputProvenance(bytes, new ABytevector(result));
+        return withInputProvenance(bytes, new ABytevector(CONSTANT_CTX, result));
       },
     ),
 
@@ -102,7 +103,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "bytevector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
-        return withInputProvenance([bv], new ABytevector(view.slice(s, e)));
+        return withInputProvenance([bv], new ABytevector(CONSTANT_CTX, view.slice(s, e)));
       },
     ),
 
@@ -117,7 +118,7 @@ export default new EnvCapability("scheme/bytevectors", {
           result.set(view, offset);
           offset += view.byteLength;
         }
-        return withInputProvenance(bvs, new ABytevector(result));
+        return withInputProvenance(bvs, new ABytevector(CONSTANT_CTX, result));
       },
     ),
 
@@ -127,7 +128,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "utf8->string");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? view.byteLength : toIndex(end);
-        return withInputProvenance([bv], new AString(new TextDecoder("utf-8").decode(view.subarray(s, e))));
+        return withInputProvenance([bv], new AString(CONSTANT_CTX, new TextDecoder("utf-8").decode(view.subarray(s, e))));
       },
     ),
 
@@ -137,7 +138,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? s_str.length : toIndex(end);
-        return withInputProvenance([str], new ABytevector(new TextEncoder().encode(s_str.slice(s, e))));
+        return withInputProvenance([str], new ABytevector(CONSTANT_CTX, new TextEncoder().encode(s_str.slice(s, e))));
       },
     ),
   },

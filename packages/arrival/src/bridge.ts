@@ -8,6 +8,7 @@
  */
 
 import { SPECULATE } from "./well-known-symbols.js";
+import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "./values/primitives/AValue.js";
 import { isBridgeInitialized, markBridgeInitialized, setBootstrapComplete } from "./boot.js";
 import { EnvCapability } from "./env/capability.js";
@@ -341,24 +342,24 @@ export const wrappedOps = {
   "floor/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(CONSTANT_CTX, BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(CONSTANT_CTX, BigInt(Math.trunc(b.real)));
     const q = ops.floorQuotient.call([aExact, bExact]);
     const r = ops.floorRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(CONSTANT_CTX, q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(CONSTANT_CTX, r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
   "truncate/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(CONSTANT_CTX, BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(CONSTANT_CTX, BigInt(Math.trunc(b.real)));
     const q = ops.truncateQuotient.call([aExact, bExact]);
     const r = ops.truncateRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(CONSTANT_CTX, q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(CONSTANT_CTX, r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
@@ -374,21 +375,21 @@ export const wrappedOps = {
   gcd: wrapOperator(ops.gcd),
 
   lcm(...args: unknown[]): ANumeric {
-    if (args.length === 0) return new AExact(1n);
+    if (args.length === 0) return new AExact(CONSTANT_CTX, 1n);
     let hasInexact = false;
     const exactArgs: AExact[] = [];
     for (const arg of args) {
       const n = coerceNumeric(arg);
       if (n instanceof AInexact) {
         hasInexact = true;
-        exactArgs.push(new AExact(BigInt(Math.trunc(n.real))));
+        exactArgs.push(new AExact(CONSTANT_CTX, BigInt(Math.trunc(n.real))));
       } else {
-        exactArgs.push(new AExact(n.num / n.denom));
+        exactArgs.push(new AExact(CONSTANT_CTX, n.num / n.denom));
       }
     }
     const result = ops.lcm.call(exactArgs);
     const resultBigint = result instanceof AExact ? result.num : (result as bigint);
-    return hasInexact ? new AInexact(Number(resultBigint)) : new AExact(resultBigint);
+    return hasInexact ? new AInexact(CONSTANT_CTX, Number(resultBigint)) : new AExact(CONSTANT_CTX, resultBigint);
   },
 
   expt: wrapOperator(ops.expt),
@@ -447,13 +448,13 @@ export const wrappedOps = {
 
   "1+"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new AExact(1n);
+    const one = new AExact(CONSTANT_CTX, 1n);
     return ops.add.call([converted, one]);
   },
 
   "1-"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new AExact(1n);
+    const one = new AExact(CONSTANT_CTX, 1n);
     return ops.sub.call([converted, one]);
   },
 
@@ -481,8 +482,8 @@ export const wrappedOps = {
     const n = coerceNumeric(z);
     if (n instanceof AInexact) return n;
     const exact = n;
-    if (exact.denom === 1n) return new AInexact(Number(exact.num));
-    return new AInexact(Number(exact.num) / Number(exact.denom));
+    if (exact.denom === 1n) return new AInexact(CONSTANT_CTX, Number(exact.num));
+    return new AInexact(CONSTANT_CTX, Number(exact.num) / Number(exact.denom));
   },
 
   exact(z: unknown): AExact {
@@ -491,7 +492,7 @@ export const wrappedOps = {
     const inexact = n;
     const real = inexact.real;
     TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-    if (Number.isInteger(real)) return new AExact(BigInt(real));
+    if (Number.isInteger(real)) return new AExact(CONSTANT_CTX, BigInt(real));
     // JS Number.toString picks between fixed (`0.5`) and exponential (`1e-10`,
     // `1e+21`) notations based on magnitude. The fixed-notation path uses the
     // decimal-place count to derive the denominator. The exponential path was
@@ -510,21 +511,21 @@ export const wrappedOps = {
       const mantissa = BigInt(`${sign}${digits}`);
       const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
       if (netExp >= 0) {
-        return new AExact(mantissa * 10n ** BigInt(netExp));
+        return new AExact(CONSTANT_CTX, mantissa * 10n ** BigInt(netExp));
       }
       const denomBig = 10n ** BigInt(-netExp);
       const absNum = mantissa < 0n ? -mantissa : mantissa;
       const g = gcd(absNum, denomBig);
-      return new AExact(mantissa / g, denomBig / g);
+      return new AExact(CONSTANT_CTX, mantissa / g, denomBig / g);
     }
     const decimalIndex = str.indexOf(".");
-    if (decimalIndex === -1) return new AExact(BigInt(real));
+    if (decimalIndex === -1) return new AExact(CONSTANT_CTX, BigInt(real));
     const decimals = str.length - decimalIndex - 1;
     const scale = 10n ** BigInt(decimals);
     const num = BigInt(Math.round(real * Number(scale)));
     const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
     const g = gcd(num < 0n ? -num : num, scale);
-    return new AExact(num / g, scale / g);
+    return new AExact(CONSTANT_CTX, num / g, scale / g);
   },
 
   "number->string"(z: unknown, radix?: unknown): string {
@@ -572,7 +573,7 @@ export const wrappedOps = {
       // Convert JS array to Scheme list
       let result: unknown = nil;
       for (let i = err.irritants.length - 1; i >= 0; i--) {
-        result = new APair(err.irritants[i], result);
+        result = new APair(CONSTANT_CTX, err.irritants[i], result);
       }
       return result;
     }

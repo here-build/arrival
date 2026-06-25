@@ -9,6 +9,7 @@
 // (resolveNfx, in core), the errors-as-door cases (no `$nfx$` ever), quote
 // distribution, and non-regression of `()`/`[]` list reading.
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { eof } from "../values/primitives/EOF.js";
 import { Lexer } from "../reader/Lexer.js";
 import { EOF } from "../values/primitives/EOF.js";
@@ -229,7 +230,7 @@ describe("curly-infix — pure module is independently testable", () => {
     expect(FIXITY["*"].prec).toBeGreaterThan(FIXITY["+"].prec);
   });
   it("canonicalizeCurly escapes a single element", () => {
-    const sym = new ASymbol("x");
+    const sym = new ASymbol(CONSTANT_CTX, "x");
     expect(canonicalizeCurly([sym])).toBe(sym);
   });
 });

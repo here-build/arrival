@@ -15,6 +15,7 @@
  */
 
 import foldCase from "fold-case";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
@@ -196,14 +197,14 @@ export default new EnvCapability("scheme/chars", {
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.schemeChar], output: [z.schemeChar] },
       (char: unknown): ACharacter => {
-        return new ACharacter(charValue(char).toUpperCase());
+        return new ACharacter(CONSTANT_CTX, charValue(char).toUpperCase());
       },
     ),
 
     "char-downcase": symbol.native`char-downcase: lowercase form of the character`(
       { input: [z.schemeChar], output: [z.schemeChar] },
       (char: unknown): ACharacter => {
-        return new ACharacter(charValue(char).toLowerCase());
+        return new ACharacter(CONSTANT_CTX, charValue(char).toLowerCase());
       },
     ),
 
@@ -217,7 +218,7 @@ export default new EnvCapability("scheme/chars", {
         // sigma, etc.), there is no single-char result, so the operation MUST
         // return the input unchanged. Truncating to `folded[0]` produces a
         // different character (ß → s) which violates the round-trip identity.
-        return [...folded].length === 1 ? new ACharacter(folded) : (char as ACharacter);
+        return [...folded].length === 1 ? new ACharacter(CONSTANT_CTX, folded) : (char as ACharacter);
       },
     ),
 
@@ -229,7 +230,7 @@ export default new EnvCapability("scheme/chars", {
     "char->integer": symbol.native`char->integer: Unicode scalar value of the character`(
       { input: [z.schemeChar], output: [z.schemeExact] },
       (char: unknown): AExact => {
-        return new AExact(BigInt(charValue(char).codePointAt(0)!));
+        return new AExact(CONSTANT_CTX, BigInt(charValue(char).codePointAt(0)!));
       },
     ),
 
@@ -248,7 +249,7 @@ export default new EnvCapability("scheme/chars", {
           code < 0xd8_00 || code > 0xdf_ff,
           `integer->char: surrogate code point ${code.toString(16)} is not a Unicode scalar`,
         );
-        return new ACharacter(String.fromCodePoint(code));
+        return new ACharacter(CONSTANT_CTX, String.fromCodePoint(code));
       },
     ),
   },

@@ -1,4 +1,5 @@
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { SchemeStringLike } from "../types.js";
@@ -35,11 +36,12 @@ export class ASymbol extends AValue {
   declare __name__: SchemeSymbolName;
 
   constructor(
+    ctx: RunContext,
     name: SchemeSymbolName | SchemeStringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
     intern: symbol | true = true,
   ) {
-    super(provenance);
+    super(ctx, provenance);
     // Unwrap SchemeStringLike to plain string
     const unwrapped: SchemeSymbolName = isSchemeString(name) ? name.valueOf() : name;
 
@@ -123,7 +125,7 @@ export class ASymbol extends AValue {
 
   /** See UNINTERNED sentinel doc. */
   withProvenance(p: ReadonlySet<number>): ASymbol {
-    return new ASymbol(this.__name__, p, UNINTERNED);
+    return new ASymbol(CONSTANT_CTX, this.__name__, p, UNINTERNED);
   }
 }
 

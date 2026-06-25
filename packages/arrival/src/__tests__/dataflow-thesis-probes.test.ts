@@ -9,13 +9,14 @@
  * lands. Same convention as js-interop.test.ts.
  */
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import { initBridge } from "../bridge";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 
-const stamped = (s: string, ...pts: number[]) => new AString(s, new Set(pts));
+const stamped = (s: string, ...pts: number[]) => new AString(CONSTANT_CTX, s, new Set(pts));
 const provOf = (v: unknown): number[] =>
   v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
 

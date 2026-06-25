@@ -6,6 +6,7 @@
  * test-only until Slice 2 (the --ir-lineage load hook).
  */
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
@@ -73,7 +74,7 @@ describe("classifierFromEnv — reproduces the hand-built classifier from live e
   it("isOpaque: a name bound to a SchemeJSFunction (foreign call) → opaque black box", async () => {
     await initBridge();
     const e = env();
-    e.set("ext-call", new AJSFunction((...xs: unknown[]) => xs) as unknown as never);
+    e.set("ext-call", new AJSFunction(CONSTANT_CTX, (...xs: unknown[]) => xs) as unknown as never);
     const n = await node("(ext-call a b)", e);
     expect(n.kind).toBe("opaque");
     expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // holistic merge of inputs

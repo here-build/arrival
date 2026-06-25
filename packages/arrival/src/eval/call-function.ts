@@ -16,6 +16,7 @@
 // lips.ts.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { LambdaContext } from "./LambdaContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
@@ -66,7 +67,7 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
   }
 
   async function promise(node) {
-    const pair = new APair(
+    const pair = new APair(CONSTANT_CTX, 
       node.have_cycles("car") ? node.car : await resolve(node.car),
       node.have_cycles("cdr") ? node.cdr : await resolve(node.cdr),
     );

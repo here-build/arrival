@@ -20,6 +20,7 @@
  */
 
 import * as z from "./scheme-zod.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { symbol } from "./symbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
@@ -57,14 +58,14 @@ export default new EnvCapability("scheme/vectors", {
         }
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
-        return withInputProvenance([fill], new AVector(arr));
+        return withInputProvenance([fill], new AVector(CONSTANT_CTX, arr));
       },
     ),
 
     vector: symbol.native`vector: a vector of the given objects`(
       { input: z.array(z.unknown()), output: [z.svector] },
       (...objs: unknown[]): AVector => {
-        return withInputProvenance(objs, new AVector([...objs] as SchemeValue[]));
+        return withInputProvenance(objs, new AVector(CONSTANT_CTX, [...objs] as SchemeValue[]));
       },
     ),
 
@@ -72,7 +73,7 @@ export default new EnvCapability("scheme/vectors", {
       { input: z.array(z.unknown()), output: [z.svector] },
       (...vectors: unknown[]): AVector => {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
-        return withInputProvenance(vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
+        return withInputProvenance(vectors, new AVector(CONSTANT_CTX, ([] as SchemeValue[]).concat(...arrays)));
       },
     ),
 
@@ -126,7 +127,7 @@ export default new EnvCapability("scheme/vectors", {
           result.push(current.car);
           current = current.cdr;
         }
-        return withInputProvenance([list], new AVector(result));
+        return withInputProvenance([list], new AVector(CONSTANT_CTX, result));
       },
     ),
 
@@ -141,7 +142,7 @@ export default new EnvCapability("scheme/vectors", {
           const ch = arr[i];
           result += ch instanceof ACharacter ? charValue(ch) : String(ch);
         }
-        return withInputProvenance([vec], new AString(result));
+        return withInputProvenance([vec], new AString(CONSTANT_CTX, result));
       },
     ),
 
@@ -153,9 +154,9 @@ export default new EnvCapability("scheme/vectors", {
         const e = end === undefined ? s_str.length : toIndex(end);
         const result: SchemeValue[] = [];
         for (let i = s; i < e; i++) {
-          result.push(new ACharacter(s_str[i]));
+          result.push(new ACharacter(CONSTANT_CTX, s_str[i]));
         }
-        return withInputProvenance([str], new AVector(result));
+        return withInputProvenance([str], new AVector(CONSTANT_CTX, result));
       },
     ),
 
@@ -165,7 +166,7 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return withInputProvenance([vec], new AVector(arr.slice(s, e)));
+        return withInputProvenance([vec], new AVector(CONSTANT_CTX, arr.slice(s, e)));
       },
     ),
 
@@ -189,10 +190,10 @@ export default new EnvCapability("scheme/vectors", {
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
         if (result.some(is_promise)) {
           return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
-            withInputProvenance(vectors, new AVector(resolved)),
+            withInputProvenance(vectors, new AVector(CONSTANT_CTX, resolved)),
           );
         }
-        return withInputProvenance(vectors, new AVector(result));
+        return withInputProvenance(vectors, new AVector(CONSTANT_CTX, result));
       },
     ),
 

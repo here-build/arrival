@@ -13,6 +13,7 @@
  * cycle detection is Floyd's tortoise-and-hare.
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
@@ -243,8 +244,8 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   car: Car;
   cdr: Cdr;
 
-  constructor(car?: Car, cdr?: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, car?: Car, cdr?: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     this.car = car as Car;
     this.cdr = cdr as Cdr;
   }
@@ -274,7 +275,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     if (deep === false) {
       let list: APair | ANil = nil;
       for (let i = arr.length; i--; ) {
-        list = new APair(arr[i], list);
+        list = new APair(CONSTANT_CTX, arr[i], list);
       }
       return list;
     }
@@ -285,20 +286,20 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       if (Array.isArray(car)) {
         car = APair.fromArray(car, deep, quote);
       } else if (typeof car === "string") {
-        car = new AString(car);
+        car = new AString(CONSTANT_CTX, car);
       } else if (typeof car === "number" && !Number.isNaN(car)) {
-        car = Number.isSafeInteger(car) ? new AExact(BigInt(car)) : new AInexact(car);
+        car = Number.isSafeInteger(car) ? new AExact(CONSTANT_CTX, BigInt(car)) : new AInexact(CONSTANT_CTX, car);
       } else if (typeof car === "bigint") {
-        car = new AExact(car);
+        car = new AExact(CONSTANT_CTX, car);
       }
-      result = new APair(car, result);
+      result = new APair(CONSTANT_CTX, car, result);
     }
     return result;
   }
 
   static fromPairs(array: [string, unknown][]): APair | ANil {
     return array.reduce<APair | ANil>((list, pair) => {
-      return new APair(new APair(new ASymbol(pair[0]), pair[1]), list);
+      return new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, pair[0]), pair[1]), list);
     }, nil);
   }
 
@@ -347,7 +348,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
         if (visited.has(node)) {
           return visited.get(node);
         }
-        const pair = new APair() as PairWithMetadata;
+        const pair = new APair(CONSTANT_CTX, ) as PairWithMetadata;
         visited.set(node, pair);
         pair.car = deep ? cloneNode(node.car) : node.car;
         pair.cdr = cloneNode(node.cdr);
@@ -476,7 +477,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
           cdr = recur(cdr);
           visited.push(cdr as APair);
         }
-        return new APair(car, cdr);
+        return new APair(CONSTANT_CTX, car, cdr);
       }
       return pair;
     }
@@ -485,7 +486,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   map(fn: (val: unknown) => unknown): APair | ANil {
-    return this.car === undefined ? nil : new APair(fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
+    return this.car === undefined ? nil : new APair(CONSTANT_CTX, fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
   }
 
   mark_cycles(): this {
@@ -600,7 +601,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
    * survive — losing it breaks stack traces and reader-cycle reconstruction.
    */
   withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
-    const copy = new APair<Car, Cdr>(this.car, this.cdr, p);
+    const copy = new APair<Car, Cdr>(CONSTANT_CTX, this.car, this.cdr, p);
     const src = this as PairWithMetadata<Car, Cdr>;
     const dst = copy as PairWithMetadata<Car, Cdr>;
     if (src[LOCATION] !== undefined) dst[LOCATION] = src[LOCATION];
@@ -761,7 +762,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   // Applicative — single-element list.
   static ["arrival/tagless-final/of"](value: unknown): APair {
-    return new APair(value, nil);
+    return new APair(CONSTANT_CTX, value, nil);
   }
 }
 
@@ -798,7 +799,7 @@ function traversePair(of: (x: unknown) => unknown, f: (x: unknown) => unknown, p
     const mappedCar = heads[i];
     acc = mappedCar?.["arrival/tagless-final/ap"]
       ? mappedCar["arrival/tagless-final/ap"](acc)
-      : of(new APair(mappedCar, acc));
+      : of(new APair(CONSTANT_CTX, mappedCar, acc));
   }
   return acc;
 }
@@ -819,7 +820,7 @@ export function concatPair(a: unknown, b: unknown): APair | ANil {
   }
   let result: APair | ANil = (b ?? nil) as APair | ANil;
   for (let i = cars.length; i--; ) {
-    result = new APair(cars[i], result);
+    result = new APair(CONSTANT_CTX, cars[i], result);
   }
   return result;
 }

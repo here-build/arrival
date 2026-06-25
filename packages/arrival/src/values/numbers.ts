@@ -28,6 +28,7 @@
  * inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
  */
 import { CLASS } from "../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { markInteropBoundary } from "../interop-access.js";
@@ -85,8 +86,8 @@ export class AExact extends AValue {
   readonly num: bigint;
   readonly denom: bigint;
 
-  constructor(num: bigint, denom: bigint = 1n, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, num: bigint, denom: bigint = 1n, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     // Normalize: keep denom positive, reduce to lowest terms
     invariant(denom != 0n, "Division by zero");
     if (denom < 0n) {
@@ -172,7 +173,7 @@ export class AExact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AExact {
-    return new AExact(this.num, this.denom, p);
+    return new AExact(CONSTANT_CTX, this.num, this.denom, p);
   }
 
   // String representation
@@ -217,31 +218,31 @@ export class AExact extends AValue {
 
   // Same-type arithmetic
   add(other: AExact): AExact {
-    return new AExact(this.num * other.denom + other.num * this.denom, this.denom * other.denom);
+    return new AExact(CONSTANT_CTX, this.num * other.denom + other.num * this.denom, this.denom * other.denom);
   }
 
   sub(other: AExact): AExact {
-    return new AExact(this.num * other.denom - other.num * this.denom, this.denom * other.denom);
+    return new AExact(CONSTANT_CTX, this.num * other.denom - other.num * this.denom, this.denom * other.denom);
   }
 
   mul(other: AExact): AExact {
-    return new AExact(this.num * other.num, this.denom * other.denom);
+    return new AExact(CONSTANT_CTX, this.num * other.num, this.denom * other.denom);
   }
 
   div(other: AExact): AExact {
-    return new AExact(this.num * other.denom, this.denom * other.num);
+    return new AExact(CONSTANT_CTX, this.num * other.denom, this.denom * other.num);
   }
 
   neg(): AExact {
-    return new AExact(-this.num, this.denom);
+    return new AExact(CONSTANT_CTX, -this.num, this.denom);
   }
 
   abs(): AExact {
-    return new AExact(this.num < 0n ? -this.num : this.num, this.denom);
+    return new AExact(CONSTANT_CTX, this.num < 0n ? -this.num : this.num, this.denom);
   }
 
   inverse(): AExact {
-    return new AExact(this.denom, this.num);
+    return new AExact(CONSTANT_CTX, this.denom, this.num);
   }
 
   // Floor, ceiling, truncate, round - return exact integers
@@ -250,9 +251,9 @@ export class AExact extends AValue {
     const q = this.num / this.denom;
     // Floor: round toward negative infinity
     if (this.num < 0n && this.num % this.denom !== 0n) {
-      return new AExact(q - 1n);
+      return new AExact(CONSTANT_CTX, q - 1n);
     }
-    return new AExact(q);
+    return new AExact(CONSTANT_CTX, q);
   }
 
   ceiling(): AExact {
@@ -260,15 +261,15 @@ export class AExact extends AValue {
     const q = this.num / this.denom;
     // Ceiling: round toward positive infinity
     if (this.num > 0n && this.num % this.denom !== 0n) {
-      return new AExact(q + 1n);
+      return new AExact(CONSTANT_CTX, q + 1n);
     }
-    return new AExact(q);
+    return new AExact(CONSTANT_CTX, q);
   }
 
   truncate(): AExact {
     if (this.denom === 1n) return this;
     // Truncate: round toward zero
-    return new AExact(this.num / this.denom);
+    return new AExact(CONSTANT_CTX, this.num / this.denom);
   }
 
   round(): AExact {
@@ -280,39 +281,39 @@ export class AExact extends AValue {
     const halfDenom = this.denom / 2n;
 
     if (absR < halfDenom) {
-      return new AExact(q);
+      return new AExact(CONSTANT_CTX, q);
     } else if (absR > halfDenom) {
-      return new AExact(this.num < 0n ? q - 1n : q + 1n);
+      return new AExact(CONSTANT_CTX, this.num < 0n ? q - 1n : q + 1n);
     } else {
       // Tie: round to even
       if (q % 2n === 0n) {
-        return new AExact(q);
+        return new AExact(CONSTANT_CTX, q);
       }
-      return new AExact(this.num < 0n ? q - 1n : q + 1n);
+      return new AExact(CONSTANT_CTX, this.num < 0n ? q - 1n : q + 1n);
     }
   }
 
   // Integer operations (only valid when isInteger)
   mod(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "mod requires integers");
-    return new AExact(this.num % other.num);
+    return new AExact(CONSTANT_CTX, this.num % other.num);
   }
 
   quotient(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "quotient requires integers");
-    return new AExact(this.num / other.num);
+    return new AExact(CONSTANT_CTX, this.num / other.num);
   }
 
   gcd(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "gcd requires integers");
-    return new AExact(
+    return new AExact(CONSTANT_CTX, 
       AExact.gcd(this.num < 0n ? -this.num : this.num, other.num < 0n ? -other.num : other.num),
     );
   }
 
   // Convert to inexact
   toInexact(): AInexact {
-    return new AInexact(this.valueOf());
+    return new AInexact(CONSTANT_CTX, this.valueOf());
   }
 }
 
@@ -326,8 +327,8 @@ export class AInexact extends AValue {
 
   readonly real: number;
 
-  constructor(real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     this.real = real;
   }
 
@@ -380,20 +381,20 @@ export class AInexact extends AValue {
 
   private static floatToRational(x: number, tolerance: number = 1e-10): AExact {
     if (Number.isInteger(x)) {
-      return new AExact(BigInt(x));
+      return new AExact(CONSTANT_CTX, BigInt(x));
     }
 
     // Simple approach: use decimal representation
     const str = x.toString();
     const dotIndex = str.indexOf(".");
     if (dotIndex === -1) {
-      return new AExact(BigInt(x));
+      return new AExact(CONSTANT_CTX, BigInt(x));
     }
 
     const decimals = str.length - dotIndex - 1;
     const denom = 10n ** BigInt(decimals);
     const num = BigInt(str.replace(".", ""));
-    return new AExact(num, denom);
+    return new AExact(CONSTANT_CTX, num, denom);
   }
 
   // Conversion to JS
@@ -411,7 +412,7 @@ export class AInexact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AInexact {
-    return new AInexact(this.real, p);
+    return new AInexact(CONSTANT_CTX, this.real, p);
   }
 
   // String representation. Reals-only — emit the Scheme inexact form with a
@@ -463,90 +464,90 @@ export class AInexact extends AValue {
 
   // Same-type arithmetic (reals-only)
   add(other: AInexact): AInexact {
-    return new AInexact(this.real + other.real);
+    return new AInexact(CONSTANT_CTX, this.real + other.real);
   }
 
   sub(other: AInexact): AInexact {
-    return new AInexact(this.real - other.real);
+    return new AInexact(CONSTANT_CTX, this.real - other.real);
   }
 
   mul(other: AInexact): AInexact {
-    return new AInexact(this.real * other.real);
+    return new AInexact(CONSTANT_CTX, this.real * other.real);
   }
 
   div(other: AInexact): AInexact {
     // IEEE division directly: 1.0/0.0 = +inf.0, -1.0/0.0 = -inf.0, 0.0/0.0 = +nan.0.
-    return new AInexact(this.real / other.real);
+    return new AInexact(CONSTANT_CTX, this.real / other.real);
   }
 
   neg(): AInexact {
-    return new AInexact(-this.real);
+    return new AInexact(CONSTANT_CTX, -this.real);
   }
 
   abs(): AInexact {
-    return new AInexact(Math.abs(this.real));
+    return new AInexact(CONSTANT_CTX, Math.abs(this.real));
   }
 
   // Floor, ceiling, truncate, round
   floor(): AInexact {
-    return new AInexact(Math.floor(this.real));
+    return new AInexact(CONSTANT_CTX, Math.floor(this.real));
   }
 
   ceiling(): AInexact {
-    return new AInexact(Math.ceil(this.real));
+    return new AInexact(CONSTANT_CTX, Math.ceil(this.real));
   }
 
   truncate(): AInexact {
-    return new AInexact(Math.trunc(this.real));
+    return new AInexact(CONSTANT_CTX, Math.trunc(this.real));
   }
 
   round(): AInexact {
     // Scheme rounds to even on ties
     const floored = Math.floor(this.real);
     const diff = this.real - floored;
-    if (diff < 0.5) return new AInexact(floored);
-    if (diff > 0.5) return new AInexact(floored + 1);
+    if (diff < 0.5) return new AInexact(CONSTANT_CTX, floored);
+    if (diff > 0.5) return new AInexact(CONSTANT_CTX, floored + 1);
     // Tie: round to even
-    if (floored % 2 === 0) return new AInexact(floored);
-    return new AInexact(floored + 1);
+    if (floored % 2 === 0) return new AInexact(CONSTANT_CTX, floored);
+    return new AInexact(CONSTANT_CTX, floored + 1);
   }
 
   // Transcendental functions (reals-only). sqrt of a negative DOORS — complex
   // results are not representable (see header / complexDoor).
   sqrt(): AInexact {
     if (this.real < 0) complexDoor();
-    return new AInexact(Math.sqrt(this.real));
+    return new AInexact(CONSTANT_CTX, Math.sqrt(this.real));
   }
 
   exp(): AInexact {
-    return new AInexact(Math.exp(this.real));
+    return new AInexact(CONSTANT_CTX, Math.exp(this.real));
   }
 
   log(): AInexact {
-    return new AInexact(Math.log(this.real));
+    return new AInexact(CONSTANT_CTX, Math.log(this.real));
   }
 
   sin(): AInexact {
-    return new AInexact(Math.sin(this.real));
+    return new AInexact(CONSTANT_CTX, Math.sin(this.real));
   }
 
   cos(): AInexact {
-    return new AInexact(Math.cos(this.real));
+    return new AInexact(CONSTANT_CTX, Math.cos(this.real));
   }
 
   tan(): AInexact {
-    return new AInexact(Math.tan(this.real));
+    return new AInexact(CONSTANT_CTX, Math.tan(this.real));
   }
 
   pow(exponent: AInexact): AInexact {
     if (this.isZero) {
       // R7RS § 6.2.6: 0^0 = 1; 0^positive = 0; 0^negative is undefined
       // (division by zero).
-      if (exponent.isZero) return new AInexact(1);
+      if (exponent.isZero) return new AInexact(CONSTANT_CTX, 1);
       invariant(exponent.real > 0, "expt: 0 raised to a negative power (division by zero)");
-      return new AInexact(0);
+      return new AInexact(CONSTANT_CTX, 0);
     }
-    return new AInexact(Math.pow(this.real, exponent.real));
+    return new AInexact(CONSTANT_CTX, Math.pow(this.real, exponent.real));
   }
 
   // Convert to exact (if possible)
@@ -632,7 +633,7 @@ export const RationalExact: ExactBehavior = {
       const n = a.num;
       const root = bigintISqrt(n);
       if (root * root === n) {
-        return new AExact(root);
+        return new AExact(CONSTANT_CTX, root);
       }
     }
     // Not a perfect square, return inexact
@@ -661,7 +662,7 @@ export const IntegerExact: ExactBehavior = {
       const n = a.num;
       const root = bigintISqrt(n);
       if (root * root === n) {
-        return new AExact(root);
+        return new AExact(CONSTANT_CTX, root);
       }
     }
     return a.toInexact().sqrt();
@@ -704,11 +705,11 @@ export class NumberRegistry {
   // ──────────────────────────────────────────────────────────────────────────
 
   fromInteger(n: bigint | number): AExact {
-    return new AExact(BigInt(n));
+    return new AExact(CONSTANT_CTX, BigInt(n));
   }
 
   fromRational(num: bigint | number, denom: bigint | number): ANumeric {
-    const exact = new AExact(BigInt(num), BigInt(denom));
+    const exact = new AExact(CONSTANT_CTX, BigInt(num), BigInt(denom));
     // If rationals aren't supported, check if we need to demote
     if (this.config.exact === IntegerExact && !exact.isInteger) {
       return exact.toInexact();
@@ -717,7 +718,7 @@ export class NumberRegistry {
   }
 
   fromFloat(n: number): AInexact {
-    return new AInexact(n);
+    return new AInexact(CONSTANT_CTX, n);
   }
 
   /**
@@ -726,7 +727,7 @@ export class NumberRegistry {
    */
   fromComplex(real: number, imag: number): ANumeric {
     if (imag === 0) {
-      return new AInexact(real);
+      return new AInexact(CONSTANT_CTX, real);
     }
     return complexDoor();
   }
@@ -921,9 +922,9 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
   }
 
   // Handle special values
-  if (str === "+inf.0") return new AInexact(Infinity);
-  if (str === "-inf.0") return new AInexact(-Infinity);
-  if (str === "+nan.0" || str === "-nan.0") return new AInexact(Number.NaN);
+  if (str === "+inf.0") return new AInexact(CONSTANT_CTX, Infinity);
+  if (str === "-inf.0") return new AInexact(CONSTANT_CTX, -Infinity);
+  if (str === "+nan.0" || str === "-nan.0") return new AInexact(CONSTANT_CTX, Number.NaN);
 
   // Complex literals (a+bi / a-bi) are DOORED — recognize the shape, reject with
   // the teaching message (complex not supported), never silently misparse.
@@ -934,7 +935,7 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
     // imaginary axis is unrepresentable.
     if (imag === 0) {
       const real = complexMatch[1] ? Number.parseFloat(complexMatch[1]) : 0;
-      return new AInexact(real);
+      return new AInexact(CONSTANT_CTX, real);
     }
     return complexDoor();
   }
@@ -955,9 +956,9 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
   if (str.includes(".") || str.includes("e") || str.includes("E")) {
     const value = Number.parseFloat(str);
     if (forceExact) {
-      return new AInexact(value).toExact();
+      return new AInexact(CONSTANT_CTX, value).toExact();
     }
-    return new AInexact(value);
+    return new AInexact(CONSTANT_CTX, value);
   }
 
   // Handle integer. Parse the magnitude via BigInt so digits beyond 2^53 are
@@ -968,7 +969,7 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
   const digits = neg || str.startsWith("+") ? str.slice(1) : str;
   const prefix = radix === 16 ? "0x" : radix === 8 ? "0o" : radix === 2 ? "0b" : "";
   const magnitude = BigInt(prefix + digits);
-  const exact = new AExact(neg ? -magnitude : magnitude);
+  const exact = new AExact(CONSTANT_CTX, neg ? -magnitude : magnitude);
   if (forceInexact) {
     return exact.toInexact();
   }
@@ -1055,13 +1056,13 @@ export function isBigInteger(n: unknown): boolean {
   return typeof n === "bigint";
 }
 
-AValue.registerBoxer("bigint", (v, p) => new AExact(v as bigint, 1n, p));
+AValue.registerBoxer("bigint", (_ctx, v, p) => new AExact(CONSTANT_CTX, v as bigint, 1n, p));
 
 // Safe-integer JS numbers route to exact — preserves precision through scheme
 // arithmetic. Anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
-AValue.registerBoxer("number", (v, p) => {
+AValue.registerBoxer("number", (_ctx, v, p) => {
   const n = v as number;
-  return Number.isSafeInteger(n) ? new AExact(BigInt(n), 1n, p) : new AInexact(n, p);
+  return Number.isSafeInteger(n) ? new AExact(CONSTANT_CTX, BigInt(n), 1n, p) : new AInexact(CONSTANT_CTX, n, p);
 });
 
 // ============================================================================

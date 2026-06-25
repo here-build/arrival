@@ -3,6 +3,7 @@
 // Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { markInteropBoundary } from "../../interop-access.js";
@@ -19,10 +20,11 @@ export class AString extends AValue {
   __string__: string;
 
   constructor(
+    ctx: RunContext,
     string: ACharacter[] | StringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(provenance);
+    super(ctx, provenance);
     this.__string__ = Array.isArray(string)
       ? string
           .map((x, i) => {
@@ -46,7 +48,7 @@ export class AString extends AValue {
   *[Symbol.iterator]() {
     const chars = [...this.__string__];
     for (const char of chars) {
-      yield new ACharacter(char);
+      yield new ACharacter(CONSTANT_CTX, char);
     }
   }
 
@@ -114,35 +116,35 @@ export class AString extends AValue {
   // this is the borrowed-protocol rename only. (Migrated from the fantasy-land.ts
   // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
-    return new AString([...this.__string__].map(f).join(""));
+    return new AString(CONSTANT_CTX, [...this.__string__].map(f).join(""));
   }
 
   // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
   // two underlying strings. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AString): AString {
-    return new AString(this.__string__ + other.valueOf());
+    return new AString(CONSTANT_CTX, this.__string__ + other.valueOf());
   }
 
   // Monoid (Fantasy Land) — the empty string is the identity for append.
   static ["arrival/tagless-final/empty"](): AString {
-    return new AString("");
+    return new AString(CONSTANT_CTX, "");
   }
 
   // Applicative (Fantasy Land) — lift a value into a SchemeString.
   static ["arrival/tagless-final/of"](value: unknown): AString {
-    return new AString(String(value));
+    return new AString(CONSTANT_CTX, String(value));
   }
 
   lower(): AString {
-    return new AString(this.__string__.toLowerCase());
+    return new AString(CONSTANT_CTX, this.__string__.toLowerCase());
   }
 
   upper(): AString {
-    return new AString(this.__string__.toUpperCase());
+    return new AString(CONSTANT_CTX, this.__string__.toUpperCase());
   }
 
   clone(): AString {
-    return new AString(this.valueOf());
+    return new AString(CONSTANT_CTX, this.valueOf());
   }
 
   valueOf(): string {
@@ -158,11 +160,11 @@ export class AString extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AString {
-    return new AString(this.__string__, p);
+    return new AString(CONSTANT_CTX, this.__string__, p);
   }
 }
 
-AValue.registerBoxer("string", (v, p) => new AString(v as string, p));
+AValue.registerBoxer("string", (_ctx, v, p) => new AString(CONSTANT_CTX, v as string, p));
 
 // Dynamically wrap all String.prototype methods
 {

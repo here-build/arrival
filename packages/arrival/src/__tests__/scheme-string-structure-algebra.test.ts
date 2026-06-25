@@ -6,6 +6,7 @@
 // SchemeString HAS `arrival/tagless-final/equals` (wave-1 Setoid), so the law harness's
 // internal `equals` works directly — no custom eq needed.
 import fc from "fast-check";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
@@ -20,7 +21,7 @@ type FL = Record<string, any>;
 // Small domain + edge cases: "" (empty), astral unicode, ASCII.
 const arb = fc
   .oneof(fc.constantFrom("", "a", "b", "ab", "🦄", "naïve", "Z"), fc.string({ maxLength: 4 }))
-  .map((s) => new AString(s));
+  .map((s) => new AString(CONSTANT_CTX, s));
 
 // ----------------------------------------------------------------------
 // Semigroup (string-append) — associativity. Functor — identity + composition
@@ -38,11 +39,11 @@ functorLaws<AString, string>("SchemeString", {
 // ----------------------------------------------------------------------
 // Monoid — "" is the identity for append.
 // ----------------------------------------------------------------------
-monoidLaws("SchemeString", arb, () => new AString(""));
+monoidLaws("SchemeString", arb, () => new AString(CONSTANT_CTX, ""));
 
 describe("SchemeString — structure-algebra behavior", () => {
   it("concat appends underlying strings", () => {
-    const r = (new AString("foo") as FL)[CONCAT](new AString("bar"));
+    const r = (new AString(CONSTANT_CTX, "foo") as FL)[CONCAT](new AString(CONSTANT_CTX, "bar"));
     expect((r as AString).valueOf()).toBe("foobar");
   });
   it("empty() is the empty string", () => {
@@ -55,20 +56,20 @@ describe("SchemeString — structure-algebra behavior", () => {
     expect(s.valueOf()).toBe("42");
   });
   it("map transforms each character", () => {
-    const r = (new AString("abc") as FL)[MAP]((c: string) => c.toUpperCase());
+    const r = (new AString(CONSTANT_CTX, "abc") as FL)[MAP]((c: string) => c.toUpperCase());
     expect((r as AString).valueOf()).toBe("ABC");
   });
   it("map iterates by code point (astral chars map as single graphemes)", () => {
     const seen: string[] = [];
-    (new AString("a🦄b") as FL)[MAP]((c: string) => {
+    (new AString(CONSTANT_CTX, "a🦄b") as FL)[MAP]((c: string) => {
       seen.push(c);
       return c;
     });
     expect(seen).toEqual(["a", "🦄", "b"]);
   });
   it("concat is pure (operands untouched)", () => {
-    const a = new AString("x");
-    const b = new AString("y");
+    const a = new AString(CONSTANT_CTX, "x");
+    const b = new AString(CONSTANT_CTX, "y");
     (a as FL)[CONCAT](b);
     expect(a.valueOf()).toBe("x");
     expect(b.valueOf()).toBe("y");

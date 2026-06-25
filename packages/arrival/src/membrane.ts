@@ -21,6 +21,7 @@
  */
 
 import { CLASS } from "./well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
 import { ABool } from "./values/primitives/ABool.js";
@@ -216,10 +217,11 @@ export class AJSObject extends AValue {
   readonly kind = "object" as const;
 
   constructor(
+    ctx: RunContext,
     readonly source: object,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(provenance);
+    super(ctx, provenance);
   }
 
   /** Unwrap to original JS object (TO_JS protocol). */
@@ -235,7 +237,7 @@ export class AJSObject extends AValue {
     // New wrapper = new identity = empty cache. Provenance-variant entries
     // would otherwise leak between wrappers; cleaner to let each lineage
     // build its own cache the first time it's queried.
-    return new AJSObject(this.source, p);
+    return new AJSObject(CONSTANT_CTX, this.source, p);
   }
 
   /**
@@ -372,10 +374,11 @@ export class AJSFunction extends AValue {
   readonly kind = "procedure" as const;
 
   constructor(
+    ctx: RunContext,
     readonly source: (...args: unknown[]) => unknown,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(provenance);
+    super(ctx, provenance);
   }
 
   /** Unwrap to original JS function (TO_JS protocol). */
@@ -389,7 +392,7 @@ export class AJSFunction extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AJSFunction {
-    return new AJSFunction(this.source, p);
+    return new AJSFunction(CONSTANT_CTX, this.source, p);
   }
 
   /** Invoke the wrapped function with Scheme values. */
@@ -478,9 +481,9 @@ export function fromJS(value: unknown): SchemeValue {
   // Create appropriate wrapper
   let wrapper: SchemeValue;
   if (typeof value === "function") {
-    wrapper = new AJSFunction(value as (...args: unknown[]) => unknown);
+    wrapper = new AJSFunction(CONSTANT_CTX, value as (...args: unknown[]) => unknown);
   } else {
-    wrapper = new AJSObject(value as object);
+    wrapper = new AJSObject(CONSTANT_CTX, value as object);
   }
 
   jsToWrapper.set(value as object, wrapper);
@@ -566,12 +569,12 @@ export const AnyNum: Codec<ANumeric, number | bigint> = {
 
   fromJS(v) {
     if (typeof v === "bigint") {
-      return new AExact(v);
+      return new AExact(CONSTANT_CTX, v);
     }
     if (Number.isSafeInteger(v)) {
-      return new AExact(BigInt(v));
+      return new AExact(CONSTANT_CTX, BigInt(v));
     }
-    return new AInexact(v);
+    return new AInexact(CONSTANT_CTX, v);
   },
 };
 
@@ -581,7 +584,7 @@ export const Int: Codec<AExact, bigint> = {
     return v instanceof AExact && v.isInteger;
   },
   toJS: (v) => v.num,
-  fromJS: (v) => new AExact(v),
+  fromJS: (v) => new AExact(CONSTANT_CTX, v),
 };
 
 /** Safe integers ↔ JS number (for bitwise ops etc.) */
@@ -595,7 +598,7 @@ export const SafeInt: Codec<AExact, number> = {
     );
   },
   toJS: (v) => Number(v.num),
-  fromJS: (v) => new AExact(BigInt(v)),
+  fromJS: (v) => new AExact(CONSTANT_CTX, BigInt(v)),
 };
 
 /** Inexact reals ↔ JS number */
@@ -604,7 +607,7 @@ export const Real: Codec<AInexact, number> = {
     return v instanceof AInexact && v.isReal;
   },
   toJS: (v) => v.real,
-  fromJS: (v) => new AInexact(v),
+  fromJS: (v) => new AInexact(CONSTANT_CTX, v),
 };
 
 /** Any number as JS number (lossy for bigints and rationals) */
@@ -620,9 +623,9 @@ export const Num: Codec<ANumeric, number> = {
   },
   fromJS(v) {
     if (Number.isSafeInteger(v)) {
-      return new AExact(BigInt(v));
+      return new AExact(CONSTANT_CTX, BigInt(v));
     }
-    return new AInexact(v);
+    return new AInexact(CONSTANT_CTX, v);
   },
 };
 
@@ -822,18 +825,18 @@ export class OperatorRegistry {
 // `typeof [] === "object"`. Arrays cons-up into a proper scheme list; everything
 // else wraps. Provenance stamps the top-level result only; spine elements stay
 // empty until a provenance-aware op touches them.
-AValue.registerBoxer("object", (v, p) => {
+AValue.registerBoxer("object", (_ctx, v, p) => {
   if (Array.isArray(v)) {
     let list: AValue = nil;
     for (let i = v.length - 1; i >= 0; i--) {
-      list = new APair(AValue.fromJs(v[i]), list) as unknown as AValue;
+      list = new APair(CONSTANT_CTX, AValue.fromJs(CONSTANT_CTX, v[i]), list) as unknown as AValue;
     }
     return p === EMPTY_PROVENANCE ? list : list.withProvenance(p);
   }
-  return new AJSObject(v as object, p);
+  return new AJSObject(CONSTANT_CTX, v as object, p);
 });
 
-AValue.registerBoxer("function", (v, p) => new AJSFunction(v as (...args: unknown[]) => unknown, p));
+AValue.registerBoxer("function", (_ctx, v, p) => new AJSFunction(CONSTANT_CTX, v as (...args: unknown[]) => unknown, p));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).

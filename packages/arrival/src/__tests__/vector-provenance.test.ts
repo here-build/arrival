@@ -4,6 +4,7 @@
 // to carry lineage; its own producers were throwing it away. utf8->string /
 // vector->string even returned RAW JS strings (provenance-blind escapees).
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
 import bytevectorsCap from "../env/bytevectors.js";
 import vectorsCap from "../env/vectors.js";
@@ -32,8 +33,8 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
 // onto global_env.
 const ops = { ...opsOf(vectorsCap), ...opsOf(bytevectorsCap) };
 const PROV = new Set<number>([42]);
-const provVec = (xs: any[]) => new AVector(xs, PROV);
-const provBv = (xs: number[]) => new ABytevector(Uint8Array.from(xs), PROV);
+const provVec = (xs: any[]) => new AVector(CONSTANT_CTX, xs, PROV);
+const provBv = (xs: number[]) => new ABytevector(CONSTANT_CTX, Uint8Array.from(xs), PROV);
 const prov = (r: unknown) => [...((r as { provenance: ReadonlySet<number> }).provenance ?? [])];
 
 describe("vector/bytevector builtins propagate input provenance (goal b)", () => {
@@ -48,7 +49,7 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
   });
   it("list->vector via vector(...) elements carries union provenance", () => {
     // `vector` unions its element provenance onto the container.
-    const el = new AString("x", PROV);
+    const el = new AString(CONSTANT_CTX, "x", PROV);
     expect(prov(ops["vector"](el))).toEqual([42]);
   });
   it("bytevector-copy carries provenance", () => {
@@ -65,7 +66,7 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
     expect(prov(r)).toEqual([42]);
   });
   it("vector->string returns a SchemeString and carries provenance", () => {
-    const r = ops["vector->string"](provVec([new (AString as any)("a")]));
+    const r = ops["vector->string"](provVec([new (AString as any)(CONSTANT_CTX, "a")]));
     expect(r).toBeInstanceOf(AString);
   });
 });

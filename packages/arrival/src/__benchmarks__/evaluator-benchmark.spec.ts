@@ -4,6 +4,7 @@
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec as lipsExec, env as lipsEnv, parse } from "../stdlib";
 import { nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
@@ -71,14 +72,14 @@ describe("Evaluator Benchmarks", () => {
 
   describe("Generator (flat trampoline) performance", () => {
     function sym(name: string): ASymbol {
-      return new ASymbol(name);
+      return new ASymbol(CONSTANT_CTX, name);
     }
 
     function listLips(...items: SchemeValue[]): APair | typeof nil {
       if (items.length === 0) return nil;
       let result: APair | typeof nil = nil;
       for (let i = items.length - 1; i >= 0; i--) {
-        result = new APair(items[i], result);
+        result = new APair(CONSTANT_CTX, items[i], result);
       }
       return result;
     }
@@ -143,9 +144,9 @@ describe("Evaluator Benchmarks", () => {
       const lipsAst = parsed[0] as APair;
 
       // Create equivalent AST for generator
-      const genAst = new APair(
-        new ASymbol("+"),
-        new APair(1, new APair(2, new APair(3, new APair(4, new APair(5, nil))))),
+      const genAst = new APair(CONSTANT_CTX, 
+        new ASymbol(CONSTANT_CTX, "+"),
+        new APair(CONSTANT_CTX, 1, new APair(CONSTANT_CTX, 2, new APair(CONSTANT_CTX, 3, new APair(CONSTANT_CTX, 4, new APair(CONSTANT_CTX, 5, nil))))),
       );
 
       const iterations = 1000;
@@ -184,11 +185,11 @@ describe("Evaluator Benchmarks", () => {
       const lipsAst = parsed[0] as APair;
 
       // Create equivalent AST for generator
-      const genAst = new APair(
-        new ASymbol("+"),
-        new APair(
-          new APair(new ASymbol("*"), new APair(2, new APair(3, nil))),
-          new APair(new APair(new ASymbol("*"), new APair(4, new APair(5, nil))), nil),
+      const genAst = new APair(CONSTANT_CTX, 
+        new ASymbol(CONSTANT_CTX, "+"),
+        new APair(CONSTANT_CTX, 
+          new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "*"), new APair(CONSTANT_CTX, 2, new APair(CONSTANT_CTX, 3, nil))),
+          new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "*"), new APair(CONSTANT_CTX, 4, new APair(CONSTANT_CTX, 5, nil))), nil),
         ),
       );
 

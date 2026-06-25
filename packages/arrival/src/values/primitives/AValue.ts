@@ -22,6 +22,7 @@
 import invariant from "tiny-invariant";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
+import type { RunContext } from "./RunContext.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -42,15 +43,20 @@ export type AKind =
   | "void";
 
 /** Keyed by `typeof`-tag plus the two null-ish tags ("null", "undefined") — see `resolveTypeofTag`. */
-type Boxer = (v: unknown, p: ReadonlySet<number>) => AValue;
+type Boxer = (ctx: RunContext, v: unknown, p: ReadonlySet<number>) => AValue;
 
 const boxers = new Map<string, Boxer>();
 
 export abstract class AValue {
   abstract readonly kind: AKind;
   readonly provenance: ReadonlySet<number>;
+  /** Per-run context (RunContext). REQUIRED — a ctx-less value cannot be constructed.
+   *  Run-built values carry the run ctx; singletons/quoted-AST/bootstrap carry CONSTANT_CTX.
+   *  UNREAD by ops in N1; readers turn on at N2. Clones (withProvenance) keep this.ctx. */
+  readonly ctx: RunContext;
 
-  protected constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+  protected constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    this.ctx = ctx;
     this.provenance = provenance;
   }
 
@@ -84,7 +90,7 @@ export abstract class AValue {
    * Throws if the subtype module hasn't loaded yet — that's a programmer error,
    * not a runtime condition.
    */
-  static fromJs(v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
+  static fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
     if (v instanceof AValue) {
       return provenance === EMPTY_PROVENANCE || provenance === v.provenance
         ? v
@@ -97,7 +103,7 @@ export abstract class AValue {
       boxer !== undefined,
       `AValue.fromJs: no boxer registered for tag "${tag}" — subtype module not loaded`,
     );
-    return boxer(v, provenance);
+    return boxer(ctx, v, provenance);
   }
 }
 

@@ -22,6 +22,7 @@
  */
 
 import invariant from "tiny-invariant";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment.js";
@@ -1192,7 +1193,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       }
       out.push(yield { call: processQuasiquote(item, ctx, level) });
     }
-    return new AVector(out);
+    return new AVector(CONSTANT_CTX, out);
   }
 
   // Atoms are returned as-is
@@ -1213,7 +1214,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       // Nested quasiquote - decrease level and recurse
       invariant(is_pair(expr.cdr), "unquote: missing argument");
       const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-      return new APair(new ASymbol("unquote"), new APair(processed, nil));
+      return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "unquote"), new APair(CONSTANT_CTX, processed, nil));
     }
   }
 
@@ -1223,14 +1224,14 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     invariant(level > 1, "unquote-splicing: invalid context");
     invariant(is_pair(expr.cdr), "unquote-splicing: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-    return new APair(new ASymbol("unquote-splicing"), new APair(processed, nil));
+    return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "unquote-splicing"), new APair(CONSTANT_CTX, processed, nil));
   }
 
   // Check for nested quasiquote
   if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
     invariant(is_pair(expr.cdr), "quasiquote: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level + 1) };
-    return new APair(new ASymbol("quasiquote"), new APair(processed, nil));
+    return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "quasiquote"), new APair(CONSTANT_CTX, processed, nil));
   }
 
   // Process list elements, handling unquote-splicing
@@ -1309,7 +1310,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // Pair.fromArray always nil-terminates, so fold manually onto `tail`.
   let result: SchemeValue = tail;
   for (let i = results.length; i--; ) {
-    result = new APair(results[i], result);
+    result = new APair(CONSTANT_CTX, results[i], result);
   }
   return result;
 }
@@ -1330,7 +1331,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(name instanceof ASymbol, "define: expected symbol for function name");
 
     // Create lambda expression
-    const value = yield { call: evalLambda(new APair(args, valueRest), ctx) };
+    const value = yield { call: evalLambda(new APair(CONSTANT_CTX, args, valueRest), ctx) };
 
     // Set the function's name
     if (is_lambda_function(value)) {

@@ -42,6 +42,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { APair } from "./APair.js";
 import { nil } from "./ANil.js";
@@ -99,13 +100,14 @@ export class AHalfBaked extends AValue {
   private forced?: Promise<SchemeValue>;
 
   private constructor(
+    ctx: RunContext,
     domain: "collection" | "number",
     slots: readonly Promise<SchemeValue[]>[],
     records: SlotRecord[],
     source: AHalfBaked | null,
     provenance: Provenance,
   ) {
-    super(provenance);
+    super(ctx, provenance);
     this.domain = domain;
     this.slots = slots;
     this.records = records;
@@ -128,7 +130,7 @@ export class AHalfBaked extends AValue {
       const [cardLo, cardHi] = cardBounds(i);
       return { cardLo, cardHi, settled: false, items: [] };
     });
-    const hb = new AHalfBaked("collection", slots, records, null, provenance);
+    const hb = new AHalfBaked(CONSTANT_CTX, "collection", slots, records, null, provenance);
     // The single benign `.then` per slot: it ONLY updates the record and
     // notifies listeners. It fires no Scheme work — settlement is driven by the
     // slot promises (already dispatched), the lattice merely OBSERVES status.
@@ -182,7 +184,7 @@ export class AHalfBaked extends AValue {
    */
   toCardinalityNumber(provenance: Provenance = this.provenance): AHalfBaked {
     if (this.domain !== "collection") return this;
-    return new AHalfBaked("number", this.slots, this.records, this, provenance);
+    return new AHalfBaked(CONSTANT_CTX, "number", this.slots, this.records, this, provenance);
   }
 
   /**
@@ -266,7 +268,7 @@ export class AHalfBaked extends AValue {
   }
 
   withProvenance(p: Provenance): AValue {
-    return new AHalfBaked(this.domain, this.slots, this.records, this.source, p);
+    return new AHalfBaked(CONSTANT_CTX, this.domain, this.slots, this.records, this.source, p);
   }
 }
 

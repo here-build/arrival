@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact, AInexact } from "../values/numbers";
 import { coerceNumeric, wrapOperator, wrappedOps } from "../bridge";
 import { add, mul, sqrt, sub } from "../operators";
@@ -30,12 +31,12 @@ describe("coerceNumeric", () => {
 
   describe("passthrough", () => {
     it("passes through ExactNumber", () => {
-      const exact = new AExact(42n);
+      const exact = new AExact(CONSTANT_CTX, 42n);
       expect(coerceNumeric(exact)).toBe(exact);
     });
 
     it("passes through InexactNumber", () => {
-      const inexact = new AInexact(3.14);
+      const inexact = new AInexact(CONSTANT_CTX, 3.14);
       expect(coerceNumeric(inexact)).toBe(inexact);
     });
   });
@@ -237,7 +238,7 @@ describe("R7RS type predicates", () => {
     expect((wrappedOps["exact-integer?"] as Function)(3.14)).toBe(false);
     // Note: In JS, 3.0 === 3 so we can't distinguish them
     // To test inexact integers, use InexactNumber directly
-    expect((wrappedOps["exact-integer?"] as Function)(new AInexact(3))).toBe(false);
+    expect((wrappedOps["exact-integer?"] as Function)(new AInexact(CONSTANT_CTX, 3))).toBe(false);
   });
 
   it("finite?", () => {
@@ -285,7 +286,7 @@ describe("integration scenarios", () => {
 
     // With R7RS: exact + exact = exact, so 1 + 1/3 = 4/3 (exact)
     // To test inexact promotion, we need an actual inexact operand
-    const result = add(1, new AInexact(0.5));
+    const result = add(1, new AInexact(CONSTANT_CTX, 0.5));
     expect(result).toBeInstanceOf(AInexact);
     expect((result as AInexact).real).toBe(1.5);
   });

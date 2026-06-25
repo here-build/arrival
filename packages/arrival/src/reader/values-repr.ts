@@ -14,6 +14,7 @@
 // QuotedPromise is itself repointed.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact, AInexact } from "../values/numbers.js";
@@ -49,7 +50,7 @@ export const gensym = (function () {
   let count = 0;
 
   function with_props(name: SchemeValue, sym: symbol) {
-    const symbol = new ASymbol(sym);
+    const symbol = new ASymbol(CONSTANT_CTX, sym);
     hidden_prop(symbol, "__literal__", name);
     return symbol;
   }
@@ -63,7 +64,7 @@ export const gensym = (function () {
     }
     if (is_gensym(name)) {
       // don't do double gynsyms in nested syntax-rules
-      return new ASymbol(name);
+      return new ASymbol(CONSTANT_CTX, name);
     }
     // use ES6 symbol as name for lips symbol (they are unique)
     if (name !== null) {
@@ -99,16 +100,16 @@ export function quote(value: SchemeValue): SchemeValue {
 export function box(object: unknown): SchemeValue {
   switch (typeof object) {
     case "string":
-      return new AString(object);
+      return new AString(CONSTANT_CTX, object);
     case "bigint":
-      return new AExact(object);
+      return new AExact(CONSTANT_CTX, object);
     case "number":
-      if (Number.isNaN(object)) return new AInexact(Number.NaN);
+      if (Number.isNaN(object)) return new AInexact(CONSTANT_CTX, Number.NaN);
       // Safe integers become exact, floats become inexact.
       if (Number.isSafeInteger(object)) {
-        return new AExact(BigInt(object));
+        return new AExact(CONSTANT_CTX, BigInt(object));
       }
-      return new AInexact(object);
+      return new AInexact(CONSTANT_CTX, object);
   }
   return object as SchemeValue;
 }

@@ -2,6 +2,7 @@
 // :: Functional programming utilities
 // -------------------------------------------------------------------------
 import { is_null } from "../eval/guards.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact, AInexact } from "../values/numbers.js";
 import { typecheck } from "./typecheck.js";
 
@@ -40,10 +41,10 @@ export function fold(
     typecheck(name, fn, "function");
     if (lists.some(is_null)) {
       if (typeof init === "number") {
-        return Number.isSafeInteger(init) ? new AExact(BigInt(init)) : new AInexact(init);
+        return Number.isSafeInteger(init) ? new AExact(CONSTANT_CTX, BigInt(init)) : new AInexact(CONSTANT_CTX, init);
       }
       if (typeof init === "bigint") {
-        return new AExact(init);
+        return new AExact(CONSTANT_CTX, init);
       }
       return init;
     } else {

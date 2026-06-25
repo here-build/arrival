@@ -4,6 +4,7 @@
 // fresh distinct-but-equal instance, exercising the value-equality (string-copy)
 // contract a bare `===` would miss.
 import fc from "fast-check";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
@@ -17,22 +18,22 @@ const arb = fc
     fc.constantFrom("", "a", "b", "ab", "🦄", "🦄a", "naïve", "Z"),
     fc.string({ maxLength: 4 }),
   )
-  .map((s) => new AString(s));
+  .map((s) => new AString(CONSTANT_CTX, s));
 
-const equalClone = (s: AString) => new AString(s.valueOf());
+const equalClone = (s: AString) => new AString(CONSTANT_CTX, s.valueOf());
 
 setoidLaws("SchemeString", { arb, equalClone });
 ordLaws("SchemeString", arb);
 
 describe("SchemeString Setoid/Ord — totality boundaries", () => {
   it("value equality over distinct heap instances", () => {
-    const a = new AString("🦄");
-    const b = new AString("🦄");
+    const a = new AString(CONSTANT_CTX, "🦄");
+    const b = new AString(CONSTANT_CTX, "🦄");
     expect((a as never)[FL](b)).toBe(true);
   });
 
   it("equals is representation-blind (plain string matches by content); lte stays type-strict", () => {
-    const a = new AString("a");
+    const a = new AString(CONSTANT_CTX, "a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
     // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
     expect((a as never)[FL]("a")).toBe(true); // plain string, equal content → equal (was false)
@@ -45,8 +46,8 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
   });
 
   it("lexicographic lte agrees with JS string order", () => {
-    const a = new AString("ab");
-    const b = new AString("b");
+    const a = new AString(CONSTANT_CTX, "ab");
+    const b = new AString(CONSTANT_CTX, "b");
     expect((a as never)[LTE](b)).toBe(true);
     expect((b as never)[LTE](a)).toBe(false);
   });

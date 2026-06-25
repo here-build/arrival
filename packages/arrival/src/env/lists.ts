@@ -28,6 +28,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
@@ -48,7 +49,7 @@ export default new EnvCapability("scheme/lists", {
         const value = fill === undefined ? false : fill;
         let result: unknown = nil;
         for (let i = 0; i < count; i++) {
-          result = new APair(value, result);
+          result = new APair(CONSTANT_CTX, value, result);
         }
         // Stamp the head Pair only — internal cons cells share the same lineage
         // by definition; downstream traversal reads provenance off whichever pair
@@ -116,7 +117,7 @@ export default new EnvCapability("scheme/lists", {
           // would otherwise be preserved as an improper-list tail.
           if (lst instanceof ANil) return nil;
           if (!(lst instanceof APair)) return lst; // improper list tail
-          return new APair(lst.car, copy(lst.cdr));
+          return new APair(CONSTANT_CTX, lst.car, copy(lst.cdr));
         };
         // Copy is a fresh allocation but semantically the same lineage as \`list\`.
         return withInputProvenance([list], copy(list));

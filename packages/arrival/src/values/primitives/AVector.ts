@@ -16,6 +16,7 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { is_false, is_nil } from "../../eval/guards.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
@@ -38,8 +39,8 @@ export class AVector extends AValue {
    *  vector mutators reject a frozen target. Constructed vectors stay mutable. */
   frozen = false;
 
-  constructor(items: SchemeValue[], provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, items: SchemeValue[], provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     this.__vector__ = items;
   }
 
@@ -61,7 +62,7 @@ export class AVector extends AValue {
   }
 
   copy(start = 0, end = this.__vector__.length): AVector {
-    return new AVector(this.__vector__.slice(start, end));
+    return new AVector(CONSTANT_CTX, this.__vector__.slice(start, end));
   }
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
@@ -79,7 +80,7 @@ export class AVector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AVector {
-    const v = new AVector(this.__vector__, p);
+    const v = new AVector(CONSTANT_CTX, this.__vector__, p);
     // The copy shares the payload by reference, so a frozen literal stays frozen
     // (else re-stamping a literal's provenance would yield a mutable alias of it).
     if (this.frozen) v.freeze();
@@ -107,7 +108,7 @@ export class AVector extends AValue {
   // Semigroup (Fantasy Land) — element concatenation. Associative; equality via
   // the Setoid above.
   ["arrival/tagless-final/concat"](other: AVector): AVector {
-    return new AVector([...this.__vector__, ...other.__vector__]);
+    return new AVector(CONSTANT_CTX, [...this.__vector__, ...other.__vector__]);
   }
 
   // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A
@@ -123,7 +124,7 @@ export class AVector extends AValue {
   ): Promise<AVector> {
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) out.push(unwrapForeign(await fn(v)) as SchemeValue);
-    return new AVector(out);
+    return new AVector(CONSTANT_CTX, out);
   }
 
   // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a
@@ -141,7 +142,7 @@ export class AVector extends AValue {
       const verdict = await pred(v);
       if (!is_false(verdict) && !is_nil(verdict)) out.push(v);
     }
-    return new AVector(out);
+    return new AVector(CONSTANT_CTX, out);
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention

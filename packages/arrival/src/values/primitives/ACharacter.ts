@@ -3,6 +3,7 @@
  * Carries the `characters` named-character table it is backed by.
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
@@ -79,8 +80,8 @@ export class ACharacter extends AValue {
   readonly __char__: string;
   readonly __name__?: string;
 
-  constructor(char: string | SchemeStringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, char: string | SchemeStringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     let charValue = isSchemeString(char) ? char.valueOf() : char;
     let name: string | undefined;
 
@@ -102,11 +103,11 @@ export class ACharacter extends AValue {
   }
 
   toUpperCase(): ACharacter {
-    return new ACharacter(this.__char__.toUpperCase());
+    return new ACharacter(CONSTANT_CTX, this.__char__.toUpperCase());
   }
 
   toLowerCase(): ACharacter {
-    return new ACharacter(this.__char__.toLowerCase());
+    return new ACharacter(CONSTANT_CTX, this.__char__.toLowerCase());
   }
 
   toString(): string {
@@ -126,7 +127,7 @@ export class ACharacter extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ACharacter {
-    return new ACharacter(this.__char__, p);
+    return new ACharacter(CONSTANT_CTX, this.__char__, p);
   }
 
   // Setoid (Fantasy Land). Char ≡ char iff same grapheme. Matches the value

@@ -18,6 +18,7 @@
  */
 
 import foldCase from "fold-case";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
 
 import * as z from "./scheme-zod.js";
@@ -53,7 +54,7 @@ export default new EnvCapability("scheme/strings", {
         // Both the length and (when present) the filling char contribute lineage —
         // `(make-string n user-char)` should remember user-char as a source even
         // though the length is what dictates the result's size.
-        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(c.repeat(len)));
+        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(CONSTANT_CTX, c.repeat(len)));
       },
     ),
 
@@ -61,14 +62,14 @@ export default new EnvCapability("scheme/strings", {
       { input: z.array(z.unknown()), output: [z.schemeString] },
       (...chars: unknown[]): AString => {
         // Union of every character argument — same shape as `vector` below.
-        return withInputProvenance(chars, new AString(chars.map(charValue).join("")));
+        return withInputProvenance(chars, new AString(CONSTANT_CTX, chars.map(charValue).join("")));
       },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.schemeString], output: [z.schemeExact] },
       (str: unknown): AExact => {
-        return withInputProvenance([str], new AExact(BigInt([...stringValue(str)].length)));
+        return withInputProvenance([str], new AExact(CONSTANT_CTX, BigInt([...stringValue(str)].length)));
       },
     ),
 
@@ -76,7 +77,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.schemeString, z.schemeNumber], output: [z.schemeChar] },
       (str: unknown, k: unknown): ACharacter => {
         const idx = Number(coerceNumeric(k).valueOf());
-        return withInputProvenance([str, k], new ACharacter([...stringValue(str)][idx]));
+        return withInputProvenance([str, k], new ACharacter(CONSTANT_CTX, [...stringValue(str)][idx]));
       },
     ),
 
@@ -194,7 +195,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.schemeString, z.schemeString], output: [z.union([z.schemeExact, z.boolean])] },
       (str: unknown, sub: unknown): AExact | boolean => {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i < 0 ? false : new AExact(BigInt(i)));
+        return withInputProvenance([str, sub], i < 0 ? false : new AExact(CONSTANT_CTX, BigInt(i)));
       },
     ),
 
@@ -223,7 +224,7 @@ export default new EnvCapability("scheme/strings", {
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
         let result: unknown = nil;
-        for (let i = endIdx - 1; i >= startIdx; i--) result = new APair(new ACharacter(chars[i]), result);
+        for (let i = endIdx - 1; i >= startIdx; i--) result = new APair(CONSTANT_CTX, new ACharacter(CONSTANT_CTX, chars[i]), result);
         return result;
       },
     ),
@@ -237,7 +238,7 @@ export default new EnvCapability("scheme/strings", {
           chars.push(charValue(current.car));
           current = current.cdr;
         }
-        return new AString(chars.join(""));
+        return new AString(CONSTANT_CTX, chars.join(""));
       },
     ),
 
@@ -249,7 +250,7 @@ export default new EnvCapability("scheme/strings", {
         const endIdx = end === undefined ? chars.length : toIndex(end);
         // The copy is a fresh allocation but semantically the same lineage as `str`
         // (start/end indices don't carry meaning here, they shape the slice).
-        return withInputProvenance([str], new AString(chars.slice(startIdx, endIdx).join("")));
+        return withInputProvenance([str], new AString(CONSTANT_CTX, chars.slice(startIdx, endIdx).join("")));
       },
     ),
 
@@ -262,21 +263,21 @@ export default new EnvCapability("scheme/strings", {
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
       (str: unknown): AString => {
-        return withInputProvenance([str], new AString(stringValue(str).toUpperCase()));
+        return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toUpperCase()));
       },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
       (str: unknown): AString => {
-        return withInputProvenance([str], new AString(stringValue(str).toLowerCase()));
+        return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toLowerCase()));
       },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.schemeString], output: [z.schemeString] },
       (str: unknown): AString => {
-        return withInputProvenance([str], new AString(foldCase(stringValue(str))));
+        return withInputProvenance([str], new AString(CONSTANT_CTX, foldCase(stringValue(str))));
       },
     ),
 
@@ -289,7 +290,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          results.push(proc(...strs.map((s) => new ACharacter(s[i]))));
+          results.push(proc(...strs.map((s) => new ACharacter(CONSTANT_CTX, s[i]))));
         }
         const join = (chars: unknown[]) =>
           chars
@@ -313,7 +314,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = proc(...strs.map((s) => new ACharacter(s[i])));
+          const ret = proc(...strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])));
           if (is_promise(ret)) pending.push(ret);
         }
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);

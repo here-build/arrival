@@ -2,6 +2,7 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { is_inexact, is_int } from "../eval/guards.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
@@ -92,9 +93,9 @@ export function parse_rational(arg: string, radix = 10): AExact | AInexact {
   const num = parseBigInt(parts[0], r);
   const denom = parseBigInt(parts[1], r);
   if (parse.inexact) {
-    return new AInexact(Number(num) / Number(denom));
+    return new AInexact(CONSTANT_CTX, Number(num) / Number(denom));
   }
-  return new AExact(num, denom);
+  return new AExact(CONSTANT_CTX, num, denom);
 }
 
 // ----------------------------------------------------------------------
@@ -102,9 +103,9 @@ export function parse_integer(arg: string, radix = 10): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const r = parse.radix || radix;
   if (parse.inexact) {
-    return new AInexact(Number.parseInt(parse.number!, r));
+    return new AInexact(CONSTANT_CTX, Number.parseInt(parse.number!, r));
   }
-  return new AExact(parseBigInt(parse.number!, r));
+  return new AExact(CONSTANT_CTX, parseBigInt(parse.number!, r));
 }
 
 // ----------------------------------------------------------------------
@@ -121,7 +122,7 @@ export function parse_character(arg: string): ACharacter {
     }
   }
   invariant(char !== undefined, `Parse: invalid character in ${arg}`);
-  return new ACharacter(char);
+  return new ACharacter(CONSTANT_CTX, char);
 }
 
 // ----------------------------------------------------------------------
@@ -158,11 +159,11 @@ export function parse_float(arg: string): AExact | AInexact {
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return new AExact(BigInt(Math.round(value)));
+      return new AExact(CONSTANT_CTX, BigInt(Math.round(value)));
     }
     // positive big num that eval to int e.g.: 1.2e+20
     if (is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(parse.number!)) {
-      return new AExact(BigInt(Math.round(value)));
+      return new AExact(CONSTANT_CTX, BigInt(Math.round(value)));
     }
     // calculate big int and big fraction by hand - it don't fit into JS float
     const { mantisa, exponent } = parse_big_int(parse.number!);
@@ -170,9 +171,9 @@ export function parse_float(arg: string): AExact | AInexact {
       const expAbs = Math.abs(exponent);
       const factorBigInt = 10n ** BigInt(expAbs);
       if (parse.exact && exponent < 0) {
-        return new AExact(mantisa, factorBigInt);
+        return new AExact(CONSTANT_CTX, mantisa, factorBigInt);
       } else if (exponent > 0 && (parse.exact || !/\./.test(parse.number!))) {
-        return new AExact(mantisa * factorBigInt);
+        return new AExact(CONSTANT_CTX, mantisa * factorBigInt);
       }
     }
   }
@@ -182,7 +183,7 @@ export function parse_float(arg: string): AExact | AInexact {
     // Use a simple continued fraction approach for reasonable precision
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
-      return new AExact(BigInt(Math.round(floatVal)));
+      return new AExact(CONSTANT_CTX, BigInt(Math.round(floatVal)));
     }
     // Convert decimal to fraction
     const str = floatVal.toString();
@@ -192,11 +193,11 @@ export function parse_float(arg: string): AExact | AInexact {
       const denom = 10n ** BigInt(decimals);
       const num = BigInt(str.replace(".", "").replace("-", ""));
       const sign = floatVal < 0 ? -1n : 1n;
-      return new AExact(sign * num, denom);
+      return new AExact(CONSTANT_CTX, sign * num, denom);
     }
-    return new AExact(BigInt(Math.round(floatVal)));
+    return new AExact(CONSTANT_CTX, BigInt(Math.round(floatVal)));
   }
-  return new AInexact(value);
+  return new AInexact(CONSTANT_CTX, value);
 }
 
 // ----------------------------------------------------------------------
@@ -232,7 +233,7 @@ export function parse_string(string: string): AString {
     throw new Error(`Invalid string literal, unclosed: ${m[2]}`);
   }
   try {
-    const str = new AString(JSON.parse(string));
+    const str = new AString(CONSTANT_CTX, JSON.parse(string));
     str.freeze();
     return str;
   } catch (error) {
@@ -245,7 +246,7 @@ export function parse_string(string: string): AString {
 
 // ----------------------------------------------------------------------
 export const parse_symbol = (arg: string): ASymbol =>
-  new ASymbol(
+  new ASymbol(CONSTANT_CTX, 
     /(?:^|.)\|/.test(arg)
       ? arg
           .split("|")
@@ -285,9 +286,9 @@ export const parse_symbol = (arg: string): ASymbol =>
 // These MUST stay boxed SchemeInexact, not raw JS numbers: a bare primitive leaks an un-AValue past
 // the parser and breaks every downstream consumer that assumes numerics are SchemeExact/SchemeInexact
 // (`is_inexact`, the bridge's wrapOperator, the L2+ provenance algebra).
-const nan = new AInexact(Number.NaN);
-const posInf = new AInexact(Number.POSITIVE_INFINITY);
-const negInf = new AInexact(Number.NEGATIVE_INFINITY);
+const nan = new AInexact(CONSTANT_CTX, Number.NaN);
+const posInf = new AInexact(CONSTANT_CTX, Number.POSITIVE_INFINITY);
+const negInf = new AInexact(CONSTANT_CTX, Number.NEGATIVE_INFINITY);
 
 const constants: Record<string, unknown> = {
   "#t": schemeTrue,

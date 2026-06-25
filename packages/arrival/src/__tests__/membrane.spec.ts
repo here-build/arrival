@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact, AInexact } from "../values/numbers";
 import {
   AnyNum,
@@ -53,29 +54,29 @@ import {
 describe("Codecs", () => {
   describe("AnyNum", () => {
     it("matches ExactNumber", () => {
-      expect(AnyNum.match(new AExact(42n))).toBe(true);
-      expect(AnyNum.match(new AExact(1n, 3n))).toBe(true);
+      expect(AnyNum.match(new AExact(CONSTANT_CTX, 42n))).toBe(true);
+      expect(AnyNum.match(new AExact(CONSTANT_CTX, 1n, 3n))).toBe(true);
     });
 
     it("matches InexactNumber", () => {
-      expect(AnyNum.match(new AInexact(3.14))).toBe(true);
+      expect(AnyNum.match(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
     });
 
     it("converts exact integer to JS number", () => {
-      expect(AnyNum.toJS(new AExact(42n))).toBe(42);
+      expect(AnyNum.toJS(new AExact(CONSTANT_CTX, 42n))).toBe(42);
     });
 
     it("converts large exact integer to JS bigint", () => {
-      const big = new AExact(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+      const big = new AExact(CONSTANT_CTX, BigInt(Number.MAX_SAFE_INTEGER) + 1n);
       expect(AnyNum.toJS(big)).toBe(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
     });
 
     it("converts exact rational to JS number", () => {
-      expect(AnyNum.toJS(new AExact(1n, 2n))).toBe(0.5);
+      expect(AnyNum.toJS(new AExact(CONSTANT_CTX, 1n, 2n))).toBe(0.5);
     });
 
     it("converts inexact to JS number", () => {
-      expect(AnyNum.toJS(new AInexact(3.14))).toBe(3.14);
+      expect(AnyNum.toJS(new AInexact(CONSTANT_CTX, 3.14))).toBe(3.14);
     });
 
     it("converts JS safe integer to ExactNumber", () => {
@@ -97,17 +98,17 @@ describe("Codecs", () => {
 
   describe("Int", () => {
     it("matches only integers", () => {
-      expect(Int.match(new AExact(42n))).toBe(true);
-      expect(Int.match(new AExact(1n, 2n))).toBe(false);
-      expect(Int.match(new AInexact(42))).toBe(false);
+      expect(Int.match(new AExact(CONSTANT_CTX, 42n))).toBe(true);
+      expect(Int.match(new AExact(CONSTANT_CTX, 1n, 2n))).toBe(false);
+      expect(Int.match(new AInexact(CONSTANT_CTX, 42))).toBe(false);
     });
   });
 
   describe("Real", () => {
     it("matches only real inexact numbers", () => {
-      expect(Real.match(new AInexact(3.14))).toBe(true);
+      expect(Real.match(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
       // (No complex case: arrival is reals-only — every SchemeInexact IS real.)
-      expect(Real.match(new AExact(42n))).toBe(false);
+      expect(Real.match(new AExact(CONSTANT_CTX, 42n))).toBe(false);
     });
   });
 });
@@ -121,152 +122,152 @@ describe("Operator", () => {
 
   it("throws on wrong arity", () => {
     expect(() => quotient.call([])).toThrow("expected at least 2 args");
-    expect(() => quotient.call([new AExact(1n)])).toThrow("expected at least 2 args");
-    expect(() => quotient.call([new AExact(1n), new AExact(2n), new AExact(3n)])).toThrow(
+    expect(() => quotient.call([new AExact(CONSTANT_CTX, 1n)])).toThrow("expected at least 2 args");
+    expect(() => quotient.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)])).toThrow(
       "expected 2 args",
     );
   });
 
   it("throws on type mismatch", () => {
-    expect(() => quotient.call([new AInexact(1), new AExact(2n)])).toThrow("type mismatch");
+    expect(() => quotient.call([new AInexact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2n)])).toThrow("type mismatch");
   });
 });
 
 describe("Arithmetic Operators", () => {
   it("add - variadic", () => {
-    expect(add.call([])).toEqual(new AExact(0n));
-    expect(add.call([new AExact(1n)])).toEqual(new AExact(1n));
-    expect(add.call([new AExact(1n), new AExact(2n)])).toEqual(new AExact(3n));
-    expect(add.call([new AExact(1n), new AExact(2n), new AExact(3n)])).toEqual(new AExact(6n));
+    expect(add.call([])).toEqual(new AExact(CONSTANT_CTX, 0n));
+    expect(add.call([new AExact(CONSTANT_CTX, 1n)])).toEqual(new AExact(CONSTANT_CTX, 1n));
+    expect(add.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)])).toEqual(new AExact(CONSTANT_CTX, 3n));
+    expect(add.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)])).toEqual(new AExact(CONSTANT_CTX, 6n));
   });
 
   it("add - promotes to inexact", () => {
-    const result = add.call([new AExact(1n), new AInexact(2.5)]);
+    const result = add.call([new AExact(CONSTANT_CTX, 1n), new AInexact(CONSTANT_CTX, 2.5)]);
     expect(result).toBeInstanceOf(AInexact);
     expect((result as AInexact).real).toBe(3.5);
   });
 
   it("sub - unary negation", () => {
-    expect(sub.call([new AExact(5n)])).toEqual(new AExact(-5n));
+    expect(sub.call([new AExact(CONSTANT_CTX, 5n)])).toEqual(new AExact(CONSTANT_CTX, -5n));
   });
 
   it("sub - variadic", () => {
-    expect(sub.call([new AExact(10n), new AExact(3n)])).toEqual(new AExact(7n));
-    expect(sub.call([new AExact(10n), new AExact(3n), new AExact(2n)])).toEqual(new AExact(5n));
+    expect(sub.call([new AExact(CONSTANT_CTX, 10n), new AExact(CONSTANT_CTX, 3n)])).toEqual(new AExact(CONSTANT_CTX, 7n));
+    expect(sub.call([new AExact(CONSTANT_CTX, 10n), new AExact(CONSTANT_CTX, 3n), new AExact(CONSTANT_CTX, 2n)])).toEqual(new AExact(CONSTANT_CTX, 5n));
   });
 
   it("mul - variadic", () => {
-    expect(mul.call([])).toEqual(new AExact(1n));
-    expect(mul.call([new AExact(2n), new AExact(3n)])).toEqual(new AExact(6n));
+    expect(mul.call([])).toEqual(new AExact(CONSTANT_CTX, 1n));
+    expect(mul.call([new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)])).toEqual(new AExact(CONSTANT_CTX, 6n));
   });
 
   it("div - unary reciprocal", () => {
     // R7RS: exact / exact = exact (rational 1/2)
-    const result = div.call([new AExact(2n)]);
+    const result = div.call([new AExact(CONSTANT_CTX, 2n)]);
     expect(result).toBeInstanceOf(AExact);
     expect((result as AExact).num).toBe(1n);
     expect((result as AExact).denom).toBe(2n);
   });
 
   it("quotient - integer division", () => {
-    expect(quotient.call([new AExact(7n), new AExact(3n)])).toEqual(new AExact(2n));
+    expect(quotient.call([new AExact(CONSTANT_CTX, 7n), new AExact(CONSTANT_CTX, 3n)])).toEqual(new AExact(CONSTANT_CTX, 2n));
   });
 
   it("remainder", () => {
-    expect(remainder.call([new AExact(7n), new AExact(3n)])).toEqual(new AExact(1n));
+    expect(remainder.call([new AExact(CONSTANT_CTX, 7n), new AExact(CONSTANT_CTX, 3n)])).toEqual(new AExact(CONSTANT_CTX, 1n));
   });
 
   it("gcd", () => {
-    expect(gcd.call([])).toEqual(new AExact(0n));
-    expect(gcd.call([new AExact(12n), new AExact(18n)])).toEqual(new AExact(6n));
+    expect(gcd.call([])).toEqual(new AExact(CONSTANT_CTX, 0n));
+    expect(gcd.call([new AExact(CONSTANT_CTX, 12n), new AExact(CONSTANT_CTX, 18n)])).toEqual(new AExact(CONSTANT_CTX, 6n));
   });
 
   it("lcm", () => {
-    expect(lcm.call([])).toEqual(new AExact(1n));
-    expect(lcm.call([new AExact(4n), new AExact(6n)])).toEqual(new AExact(12n));
+    expect(lcm.call([])).toEqual(new AExact(CONSTANT_CTX, 1n));
+    expect(lcm.call([new AExact(CONSTANT_CTX, 4n), new AExact(CONSTANT_CTX, 6n)])).toEqual(new AExact(CONSTANT_CTX, 12n));
   });
 
   it("abs", () => {
-    expect(abs.call([new AExact(-5n)])).toEqual(new AExact(5n));
-    expect(abs.call([new AInexact(-3.14)])).toEqual(new AInexact(3.14));
+    expect(abs.call([new AExact(CONSTANT_CTX, -5n)])).toEqual(new AExact(CONSTANT_CTX, 5n));
+    expect(abs.call([new AInexact(CONSTANT_CTX, -3.14)])).toEqual(new AInexact(CONSTANT_CTX, 3.14));
   });
 });
 
 describe("Comparison Operators", () => {
   it("numEq", () => {
-    expect(numEq.call([new AExact(1n), new AExact(1n)])).toBe(true);
-    expect(numEq.call([new AExact(1n), new AExact(2n)])).toBe(false);
-    expect(numEq.call([new AExact(1n), new AExact(1n), new AExact(1n)])).toBe(true);
+    expect(numEq.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n)])).toBe(true);
+    expect(numEq.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)])).toBe(false);
+    expect(numEq.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n)])).toBe(true);
   });
 
   it("lt - chain comparison", () => {
-    expect(lt.call([new AExact(1n), new AExact(2n)])).toBe(true);
-    expect(lt.call([new AExact(1n), new AExact(2n), new AExact(3n)])).toBe(true);
-    expect(lt.call([new AExact(1n), new AExact(3n), new AExact(2n)])).toBe(false);
+    expect(lt.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)])).toBe(true);
+    expect(lt.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)])).toBe(true);
+    expect(lt.call([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 3n), new AExact(CONSTANT_CTX, 2n)])).toBe(false);
   });
 
   it("gt - chain comparison", () => {
-    expect(gt.call([new AExact(3n), new AExact(2n)])).toBe(true);
-    expect(gt.call([new AExact(3n), new AExact(2n), new AExact(1n)])).toBe(true);
+    expect(gt.call([new AExact(CONSTANT_CTX, 3n), new AExact(CONSTANT_CTX, 2n)])).toBe(true);
+    expect(gt.call([new AExact(CONSTANT_CTX, 3n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 1n)])).toBe(true);
   });
 });
 
 describe("Predicates", () => {
   it("isZero", () => {
-    expect(isZero.call([new AExact(0n)])).toBe(true);
-    expect(isZero.call([new AInexact(0)])).toBe(true);
-    expect(isZero.call([new AExact(1n)])).toBe(false);
+    expect(isZero.call([new AExact(CONSTANT_CTX, 0n)])).toBe(true);
+    expect(isZero.call([new AInexact(CONSTANT_CTX, 0)])).toBe(true);
+    expect(isZero.call([new AExact(CONSTANT_CTX, 1n)])).toBe(false);
   });
 
   it("isOdd", () => {
-    expect(isOdd.call([new AExact(3n)])).toBe(true);
-    expect(isOdd.call([new AExact(4n)])).toBe(false);
+    expect(isOdd.call([new AExact(CONSTANT_CTX, 3n)])).toBe(true);
+    expect(isOdd.call([new AExact(CONSTANT_CTX, 4n)])).toBe(false);
   });
 
   it("isEven", () => {
-    expect(isEven.call([new AExact(4n)])).toBe(true);
-    expect(isEven.call([new AExact(3n)])).toBe(false);
+    expect(isEven.call([new AExact(CONSTANT_CTX, 4n)])).toBe(true);
+    expect(isEven.call([new AExact(CONSTANT_CTX, 3n)])).toBe(false);
   });
 });
 
 describe("Rounding", () => {
   it("floor", () => {
-    expect(floor.call([new AInexact(3.7)])).toEqual(new AExact(3n));
-    expect(floor.call([new AInexact(-3.7)])).toEqual(new AExact(-4n));
+    expect(floor.call([new AInexact(CONSTANT_CTX, 3.7)])).toEqual(new AExact(CONSTANT_CTX, 3n));
+    expect(floor.call([new AInexact(CONSTANT_CTX, -3.7)])).toEqual(new AExact(CONSTANT_CTX, -4n));
   });
 
   it("ceiling", () => {
-    expect(ceiling.call([new AInexact(3.2)])).toEqual(new AExact(4n));
+    expect(ceiling.call([new AInexact(CONSTANT_CTX, 3.2)])).toEqual(new AExact(CONSTANT_CTX, 4n));
   });
 
   it("round - ties to even", () => {
-    expect(round.call([new AInexact(2.5)])).toEqual(new AExact(2n));
-    expect(round.call([new AInexact(3.5)])).toEqual(new AExact(4n));
+    expect(round.call([new AInexact(CONSTANT_CTX, 2.5)])).toEqual(new AExact(CONSTANT_CTX, 2n));
+    expect(round.call([new AInexact(CONSTANT_CTX, 3.5)])).toEqual(new AExact(CONSTANT_CTX, 4n));
   });
 });
 
 describe("Transcendentals", () => {
   it("sqrt", () => {
-    const result = sqrt.call([new AInexact(4)]);
+    const result = sqrt.call([new AInexact(CONSTANT_CTX, 4)]);
     // Num profunctor returns ExactNumber for safe integers
     expect(result.valueOf()).toBeCloseTo(2);
   });
 
   it("sqrt - non-integer result", () => {
-    const result = sqrt.call([new AInexact(2)]);
+    const result = sqrt.call([new AInexact(CONSTANT_CTX, 2)]);
     expect(result).toBeInstanceOf(AInexact);
     expect((result as AInexact).real).toBeCloseTo(Math.SQRT2);
   });
 
   it("sin", () => {
-    const result = sin.call([new AInexact(0)]);
+    const result = sin.call([new AInexact(CONSTANT_CTX, 0)]);
     // sin(0) = 0, which is a safe integer
     expect(result.valueOf()).toBeCloseTo(0);
   });
 
   it("sin - non-integer result", () => {
     // sin(1) ≈ 0.841, definitely not an integer
-    const result = sin.call([new AInexact(1)]);
+    const result = sin.call([new AInexact(CONSTANT_CTX, 1)]);
     expect(result).toBeInstanceOf(AInexact);
     expect((result as AInexact).real).toBeCloseTo(Math.sin(1));
   });
@@ -274,11 +275,11 @@ describe("Transcendentals", () => {
 
 describe("Bitwise", () => {
   it("bitwiseAnd", () => {
-    expect(bitwiseAnd.call([new AExact(0b1100n), new AExact(0b1010n)])).toEqual(new AExact(0b1000n));
+    expect(bitwiseAnd.call([new AExact(CONSTANT_CTX, 0b1100n), new AExact(CONSTANT_CTX, 0b1010n)])).toEqual(new AExact(CONSTANT_CTX, 0b1000n));
   });
 
   it("bitwiseXor", () => {
-    expect(bitwiseXor.call([new AExact(0b1100n), new AExact(0b1010n)])).toEqual(new AExact(0b0110n));
+    expect(bitwiseXor.call([new AExact(CONSTANT_CTX, 0b1100n), new AExact(CONSTANT_CTX, 0b1010n)])).toEqual(new AExact(CONSTANT_CTX, 0b0110n));
   });
 });
 
@@ -294,7 +295,7 @@ describe("OperatorRegistry", () => {
   it("calls operators by name", () => {
     const env = new OperatorRegistry("test").registerAll(add, mul);
 
-    expect(env.call("+", [new AExact(1n), new AExact(2n)])).toEqual(new AExact(3n));
+    expect(env.call("+", [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)])).toEqual(new AExact(CONSTANT_CTX, 3n));
   });
 
   it("throws on unknown operator", () => {
@@ -344,16 +345,16 @@ describe("Wrapper Layer", () => {
     });
 
     it("recognizes native Scheme types", () => {
-      expect(isSchemeValue(new AExact(42n))).toBe(true);
-      expect(isSchemeValue(new AInexact(3.14))).toBe(true);
-      expect(isSchemeValue(new AString("hello"))).toBe(true);
-      expect(isSchemeValue(new ASymbol("foo"))).toBe(true);
-      expect(isSchemeValue(new APair(1, 2))).toBe(true);
+      expect(isSchemeValue(new AExact(CONSTANT_CTX, 42n))).toBe(true);
+      expect(isSchemeValue(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
+      expect(isSchemeValue(new AString(CONSTANT_CTX, "hello"))).toBe(true);
+      expect(isSchemeValue(new ASymbol(CONSTANT_CTX, "foo"))).toBe(true);
+      expect(isSchemeValue(new APair(CONSTANT_CTX, 1, 2))).toBe(true);
     });
 
     it("recognizes wrappers as Scheme values", () => {
-      expect(isSchemeValue(new AJSObject({}))).toBe(true);
-      expect(isSchemeValue(new AJSFunction(() => {}))).toBe(true);
+      expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
+      expect(isSchemeValue(new AJSFunction(CONSTANT_CTX, () => {}))).toBe(true);
     });
 
     it("rejects JS primitives and objects", () => {
@@ -402,10 +403,10 @@ describe("Wrapper Layer", () => {
     });
 
     it("passes through Scheme values", () => {
-      const exact = new AExact(42n);
+      const exact = new AExact(CONSTANT_CTX, 42n);
       expect(fromJS(exact)).toBe(exact);
 
-      const pair = new APair(1, 2);
+      const pair = new APair(CONSTANT_CTX, 1, 2);
       expect(fromJS(pair)).toBe(pair);
     });
 
@@ -463,27 +464,27 @@ describe("Wrapper Layer", () => {
 
     it("unwraps SchemeJSObject", () => {
       const obj = { a: 1 };
-      const wrapped = new AJSObject(obj);
+      const wrapped = new AJSObject(CONSTANT_CTX, obj);
       expect(toJS(wrapped)).toBe(obj);
     });
 
     it("unwraps SchemeJSFunction", () => {
       const fn = () => 42;
-      const wrapped = new AJSFunction(fn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
       expect(toJS(wrapped)).toBe(fn);
     });
 
     it("converts SchemeString to string", () => {
-      expect(toJS(new AString("hello"))).toBe("hello");
+      expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
     });
 
     it("converts SchemeExact to number (safe integers)", () => {
       // SchemeExact.valueOf() returns number for safe integers
-      expect(toJS(new AExact(42n))).toBe(42);
+      expect(toJS(new AExact(CONSTANT_CTX, 42n))).toBe(42);
     });
 
     it("converts SchemeInexact to number", () => {
-      expect(toJS(new AInexact(3.14))).toBe(3.14);
+      expect(toJS(new AInexact(CONSTANT_CTX, 3.14))).toBe(3.14);
     });
 
     it("passes through primitives", () => {
@@ -493,26 +494,26 @@ describe("Wrapper Layer", () => {
     });
 
     it("keeps SchemeSymbol as-is", () => {
-      const sym = new ASymbol("foo");
+      const sym = new ASymbol(CONSTANT_CTX, "foo");
       expect(toJS(sym)).toBe(sym);
     });
 
     it("keeps Pair as-is", () => {
-      const pair = new APair(1, 2);
+      const pair = new APair(CONSTANT_CTX, 1, 2);
       expect(toJS(pair)).toBe(pair);
     });
   });
 
   describe("SchemeJSObject", () => {
     it("has TO_JS symbol", () => {
-      const obj = new AJSObject({});
+      const obj = new AJSObject(CONSTANT_CTX, {});
       expect(TO_JS in obj).toBe(true);
       expect(obj[TO_JS]()).toEqual({});
     });
 
     it("gets properties with lazy wrapping", () => {
       const inner = { b: 2 };
-      const obj = new AJSObject({ a: 1, inner });
+      const obj = new AJSObject(CONSTANT_CTX, { a: 1, inner });
 
       // Option C (2026-05-28): `.get(key)` now boxes entries through
       // jsToScheme so they inherit the wrapper's provenance — a primitive
@@ -528,7 +529,7 @@ describe("Wrapper Layer", () => {
 
     it("rejects writes — the membrane is read-only (pure-dataflow sandbox)", () => {
       const source: any = { a: 1 };
-      const obj = new AJSObject(source);
+      const obj = new AJSObject(CONSTANT_CTX, source);
       expect(() => obj.set("a", 42)).toThrow(/writes are banned/);
       expect(source.a).toBe(1); // nothing crossed the boundary
       expect(() => obj.delete("a")).toThrow(/mutations are banned/);
@@ -545,20 +546,20 @@ describe("Wrapper Layer", () => {
           return "danger";
         },
       };
-      const obj = new AJSObject(source);
+      const obj = new AJSObject(CONSTANT_CTX, source);
       expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value
       expect(obj.get("method")).toBe(nil); // method → invisible (no foreign invocations)
     });
 
     it("checks property existence (own properties only)", () => {
-      const obj = new AJSObject({ a: 1 });
+      const obj = new AJSObject(CONSTANT_CTX, { a: 1 });
       expect(obj.has("a")).toBe(true);
       expect(obj.has("b")).toBe(false);
     });
 
     it("blocks inherited properties from Object.prototype", () => {
-      const obj = new AJSObject({ a: 1 });
+      const obj = new AJSObject(CONSTANT_CTX, { a: 1 });
       // These are inherited from Object.prototype - blocked by sandbox
       expect(obj.has("toString")).toBe(false);
       expect(obj.has("hasOwnProperty")).toBe(false);
@@ -566,12 +567,12 @@ describe("Wrapper Layer", () => {
     });
 
     it("gets keys", () => {
-      const obj = new AJSObject({ a: 1, b: 2 });
+      const obj = new AJSObject(CONSTANT_CTX, { a: 1, b: 2 });
       expect(obj.keys()).toEqual(["a", "b"]);
     });
 
     it("has toString", () => {
-      const obj = new AJSObject({});
+      const obj = new AJSObject(CONSTANT_CTX, {});
       expect(obj.toString()).toBe("#<js-object>");
     });
   });
@@ -579,14 +580,14 @@ describe("Wrapper Layer", () => {
   describe("SchemeJSFunction", () => {
     it("has TO_JS symbol", () => {
       const fn = () => 42;
-      const wrapped = new AJSFunction(fn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
       expect(TO_JS in wrapped).toBe(true);
       expect(wrapped[TO_JS]()).toBe(fn);
     });
 
     it("calls function with unwrapped args", () => {
       const fn = (a: number, b: number) => a + b;
-      const wrapped = new AJSFunction(fn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
 
       const result = wrapped.call(1, 2);
       expect(result).toBe(3);
@@ -594,7 +595,7 @@ describe("Wrapper Layer", () => {
 
     it("wraps return value", () => {
       const fn = () => ({ a: 1 });
-      const wrapped = new AJSFunction(fn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
 
       const result = wrapped.call();
       expect(result).toBeInstanceOf(AJSObject);
@@ -602,21 +603,21 @@ describe("Wrapper Layer", () => {
 
     it("unwraps SchemeJSObject args", () => {
       const fn = (obj: any) => obj.a;
-      const wrapped = new AJSFunction(fn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
 
-      const arg = new AJSObject({ a: 42 });
+      const arg = new AJSObject(CONSTANT_CTX, { a: 42 });
       const result = wrapped.call(arg);
       expect(result).toBe(42);
     });
 
     it("has toString with function name", () => {
       function namedFn() {}
-      const wrapped = new AJSFunction(namedFn);
+      const wrapped = new AJSFunction(CONSTANT_CTX, namedFn);
       expect(wrapped.toString()).toBe("#<js-function namedFn>");
     });
 
     it("has toString for anonymous functions", () => {
-      const wrapped = new AJSFunction(() => {});
+      const wrapped = new AJSFunction(CONSTANT_CTX, () => {});
       expect(wrapped.toString()).toBe("#<js-function anonymous>");
     });
   });

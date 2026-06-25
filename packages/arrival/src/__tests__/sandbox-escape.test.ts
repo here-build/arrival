@@ -20,6 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec, get } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
@@ -312,7 +313,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     const N = 500;
     for (let i = 0; i < N; i++) {
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      new ASymbol(`__test-intern-doc-${Date.now()}-${i}`);
+      new ASymbol(CONSTANT_CTX, `__test-intern-doc-${Date.now()}-${i}`);
     }
     const after = Object.keys(ASymbol.list).length;
     // Current behavior: grows by N. When a bound exists, this should
@@ -461,7 +462,7 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     // table as own keys — never reach Object.prototype.
     for (const name of ["__proto__", "constructor", "prototype"]) {
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      new ASymbol(name);
+      new ASymbol(CONSTANT_CTX, name);
     }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     // Object.prototype must remain a clean baseline (no foreign own keys added).

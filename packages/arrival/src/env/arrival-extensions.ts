@@ -16,6 +16,7 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `ARRIVAL_EXTENSIONS_SCM`
 // and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "./capability.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { typecheck } from "../utils/typecheck.js";
 import * as z from "./scheme-zod.js";
@@ -41,14 +42,14 @@ export default new EnvCapability("arrival/core-extensions", {
         typecheck("symbol->string", s, "symbol");
         const name = (s as ASymbol).__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
-        return withInputProvenance([s], new AString(str));
+        return withInputProvenance([s], new AString(CONSTANT_CTX, str));
       },
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
       { input: [z.schemeString], output: [z.symbol] },
       (s: unknown): ASymbol => {
         typecheck("string->symbol", s, "string");
-        return withInputProvenance([s], new ASymbol(stringValue(s)));
+        return withInputProvenance([s], new ASymbol(CONSTANT_CTX, stringValue(s)));
       },
     ),
     "regex?": symbol.native`regex?: #t iff x is a host regular expression`(

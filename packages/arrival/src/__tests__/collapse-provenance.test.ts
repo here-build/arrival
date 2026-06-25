@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { collapseProvenance } from "../provenance-collapse";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
@@ -19,7 +20,7 @@ import { APair } from "../values/primitives/APair.js";
 import { SchemeJSArray } from "../membrane";
 import { nil } from "../values/primitives/ANil";
 
-const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 
 describe("collapseProvenance — sound over every structured carrier", () => {
@@ -28,12 +29,12 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("deep-walks a Pair list spine", () => {
-    const list = new APair(stamped("a", 1), new APair(stamped("b", 2), nil));
+    const list = new APair(CONSTANT_CTX, stamped("a", 1), new APair(CONSTANT_CTX, stamped("b", 2), nil));
     expect(sorted(collapseProvenance(list))).toEqual([1, 2]);
   });
 
   it("deep-walks a SchemeVector's elements (the gap a flat union missed)", () => {
-    const vec = new AVector([stamped("a", 1), stamped("b", 2)]);
+    const vec = new AVector(CONSTANT_CTX, [stamped("a", 1), stamped("b", 2)]);
     expect(sorted(collapseProvenance(vec))).toEqual([1, 2]);
   });
 
@@ -47,7 +48,7 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("unions across multiple args and nested structures", () => {
-    const nested = new APair(stamped("a", 1), new APair(new AVector([stamped("b", 2)]), nil));
+    const nested = new APair(CONSTANT_CTX, stamped("a", 1), new APair(CONSTANT_CTX, new AVector(CONSTANT_CTX, [stamped("b", 2)]), nil));
     expect(sorted(collapseProvenance(stamped("sep", 9), nested))).toEqual([1, 2, 9]);
   });
 

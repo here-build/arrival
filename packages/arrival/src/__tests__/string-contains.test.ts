@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
@@ -19,7 +20,7 @@ import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/numbers";
 import { AValue } from "../values/primitives/AValue.js";
 
-const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // Literal-string args carry no provenance, so the result comes back raw (a JS boolean
 // or a bare SchemeExact); a provenanced input boxes it. Unwrap either shape.

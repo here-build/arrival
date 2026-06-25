@@ -1,4 +1,5 @@
 import { is_undef } from "../eval/guards.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact, AInexact } from "../values/numbers.js";
@@ -26,17 +27,17 @@ export function parseBigInt(str: string, radix: number = 10): bigint {
 // SchemeString/SchemeCharacter are reached through getters so the live binding is read lazily —
 // referencing them eagerly here would form a module-init cycle with the types modules.
 const serialization_map = {
-  pair: ([car, cdr]) => new APair(car, cdr),
+  pair: ([car, cdr]) => new APair(CONSTANT_CTX, car, cdr),
   number(value) {
     if (AString.isString(value)) {
-      return new AExact(parseBigInt(value.valueOf(), 10));
+      return new AExact(CONSTANT_CTX, parseBigInt(value.valueOf(), 10));
     }
     if (typeof value === "bigint") {
-      return new AExact(value);
+      return new AExact(CONSTANT_CTX, value);
     }
     if (typeof value === "number") {
       // Safe-integer JS numbers round-trip exactly as bigint; anything else stays inexact float.
-      return Number.isSafeInteger(value) ? new AExact(BigInt(value)) : new AInexact(value);
+      return Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
     }
     return value; // already a wrapped number
   },
@@ -48,9 +49,9 @@ const serialization_map = {
   },
   symbol(value) {
     if (AString.isString(value)) {
-      return new ASymbol(value);
+      return new ASymbol(CONSTANT_CTX, value);
     } else if (Array.isArray(value)) {
-      return new ASymbol(Symbol.for(value[0]));
+      return new ASymbol(CONSTANT_CTX, Symbol.for(value[0]));
     }
   },
   get string() {

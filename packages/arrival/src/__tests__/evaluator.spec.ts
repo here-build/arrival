@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment";
 import run, { exec } from "../eval/evaluator";
 // String-based exec with the full default env (provides `=`, `-`, etc.) — used
@@ -39,29 +40,29 @@ describe("Generator Evaluator with Real LIPS Types", () => {
             result += arg;
           }
         }
-        return hasInexact ? new AInexact(Number(result)) : new AExact(result);
+        return hasInexact ? new AInexact(CONSTANT_CTX, Number(result)) : new AExact(CONSTANT_CTX, result);
       },
       "-": (...args: unknown[]) => {
-        if (args.length === 0) return new AExact(0n);
+        if (args.length === 0) return new AExact(CONSTANT_CTX, 0n);
         let result = args[0] instanceof AExact ? args[0].num : BigInt(args[0] as number);
-        if (args.length === 1) return new AExact(-result);
+        if (args.length === 1) return new AExact(CONSTANT_CTX, -result);
         for (let i = 1; i < args.length; i++) {
           const arg = args[i];
           result -= arg instanceof AExact ? arg.num : BigInt(arg as number);
         }
-        return new AExact(result);
+        return new AExact(CONSTANT_CTX, result);
       },
       "*": (...args: unknown[]) => {
         let result = 1n;
         for (const arg of args) {
           result *= arg instanceof AExact ? arg.num : BigInt(arg as number);
         }
-        return new AExact(result);
+        return new AExact(CONSTANT_CTX, result);
       },
       "/": (a: unknown, b: unknown) => {
         const aVal = a instanceof AExact ? Number(a.num) : (a as number);
         const bVal = b instanceof AExact ? Number(b.num) : (b as number);
-        return new AInexact(aVal / bVal);
+        return new AInexact(CONSTANT_CTX, aVal / bVal);
       },
       "<": (a: unknown, b: unknown) => {
         const aVal = a instanceof AExact ? a.num : BigInt(a as number);
@@ -91,7 +92,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       list: (...args: unknown[]) => APair.fromArray(args, false),
       car: (pair: APair) => pair.car,
       cdr: (pair: APair) => pair.cdr,
-      cons: (a: unknown, b: unknown) => new APair(a, b),
+      cons: (a: unknown, b: unknown) => new APair(CONSTANT_CTX, a, b),
       "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as ANil).toString?.() === "()"),
       not: (x: unknown) => x === false || x === nil,
       "#t": true,
@@ -139,8 +140,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     it("should look up symbols in environment", async () => {
       env.set("x", num(10));
       env.set("y", num(20));
-      expect(await exec(new ASymbol("x"), { env })).toEqual(num(10));
-      expect(await exec(new ASymbol("y"), { env })).toEqual(num(20));
+      expect(await exec(new ASymbol(CONSTANT_CTX, "x"), { env })).toEqual(num(10));
+      expect(await exec(new ASymbol(CONSTANT_CTX, "y"), { env })).toEqual(num(20));
     });
 
     it("should evaluate simple function calls", async () => {
@@ -273,7 +274,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         let sideEffect = 0;
         env.set("inc!", () => {
           sideEffect++;
-          return new AExact(BigInt(sideEffect));
+          return new AExact(CONSTANT_CTX, BigInt(sideEffect));
         });
 
         // (begin (inc!) (inc!) (inc!))
@@ -619,7 +620,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // Then: (my-when #t 1 2 3)
         const defineMacro = list(
           sym("define-macro"),
-          new APair(sym("my-when"), new APair(sym("test"), sym("body"))),
+          new APair(CONSTANT_CTX, sym("my-when"), new APair(CONSTANT_CTX, sym("test"), sym("body"))),
           list(
             sym("quasiquote"),
             list(

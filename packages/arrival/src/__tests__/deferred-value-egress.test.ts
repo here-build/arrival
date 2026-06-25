@@ -18,6 +18,7 @@
  * force-on-egress the migration installs. See project-arrival-hermetic-env-dissolution.
  */
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
@@ -28,16 +29,17 @@ import { exec } from "../eval/generator-exec.js";
 class ProvNum extends AValue {
   readonly kind = "number" as const;
   constructor(
+    ctx: RunContext,
     readonly n: number,
     p: ReadonlySet<number>,
   ) {
-    super(p);
+    super(ctx, p);
   }
   toJs() {
     return this.n;
   }
   withProvenance(p: ReadonlySet<number>) {
-    return new ProvNum(this.n, p);
+    return new ProvNum(CONSTANT_CTX, this.n, p);
   }
 }
 
@@ -55,7 +57,7 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
       observed.push(runASentinel);
       return x * 2;
     };
-    const seq = new ALazySeq([1, 2, 3]).map(fn, pointProvenance(1));
+    const seq = new ALazySeq(CONSTANT_CTX, [1, 2, 3]).map(fn, pointProvenance(1));
 
     const r = (await seq.refine({ kind: "iterate" })) as { items: number[] };
 
@@ -91,7 +93,7 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
 
 describe("deferred egress — un-forced escape is structurally detectable", () => {
   it("ALazySeq.toJs() is the plan shape, never a materialized array", () => {
-    const seq = new ALazySeq([1, 2, 3]).map((x: number) => x, pointProvenance(1));
+    const seq = new ALazySeq(CONSTANT_CTX, [1, 2, 3]).map((x: number) => x, pointProvenance(1));
     expect(seq.toJs()).toEqual({ __lazySeq__: true, sourceLength: 3, ops: ["map"] });
   });
 
@@ -103,11 +105,11 @@ describe("deferred egress — un-forced escape is structurally detectable", () =
 
 describe("deferred egress — the force mechanism force-on-egress will call", () => {
   it("ALazySeq.refine({iterate}) materializes the full plan + the whole cone", async () => {
-    const seq = new ALazySeq(
-      [new ProvNum(1, pointProvenance(100)), new ProvNum(2, pointProvenance(101))],
+    const seq = new ALazySeq(CONSTANT_CTX, 
+      [new ProvNum(CONSTANT_CTX, 1, pointProvenance(100)), new ProvNum(CONSTANT_CTX, 2, pointProvenance(101))],
       [],
       pointProvenance(1),
-    ).map((x: ProvNum) => new ProvNum(x.n * 2, EMPTY_PROVENANCE), pointProvenance(2));
+    ).map((x: ProvNum) => new ProvNum(CONSTANT_CTX, x.n * 2, EMPTY_PROVENANCE), pointProvenance(2));
 
     const r = (await seq.refine({ kind: "iterate" })) as {
       items: ProvNum[];

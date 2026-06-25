@@ -31,6 +31,7 @@
  * eager goldens in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc).
  */
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec, parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
@@ -44,8 +45,8 @@ import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
 let seq = 0;
 
 /** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
-const sStr = (s: string, p: number) => new AString(s, new Set([p]));
-const sNum = (n: number, p: number) => AValue.fromJs(n, new Set([p]));
+const sStr = (s: string, p: number) => new AString(CONSTANT_CTX, s, new Set([p]));
+const sNum = (n: number, p: number) => AValue.fromJs(CONSTANT_CTX, n, new Set([p]));
 
 const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
 const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) });

@@ -28,6 +28,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -54,7 +55,7 @@ const ops = opsOf(flInteropCap);
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
 /** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the
  *  asyncFLMap box-strip) treats it as a real boxed value, not an inert host num. */
-const el = (s: string, p: number) => new AString(s, new Set([p]));
+const el = (s: string, p: number) => new AString(CONSTANT_CTX, s, new Set([p]));
 /** Element-level provenance of a returned collection, in order — the soundness
  *  signal the seal reads (per-element grounding survives the transform). */
 const elemProvs = (r: unknown): number[][] => {
@@ -81,10 +82,10 @@ const idSync = (x: unknown) => x;
 const keepAll = () => true;
 const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
 
-const mkPair = () => new APair(el("a", 100), new APair(el("b", 101), nil)).withProvenance(new Set([7]));
-const mkVec = () => new AVector([el("a", 100), el("b", 101)], new Set([7]));
+const mkPair = () => new APair(CONSTANT_CTX, el("a", 100), new APair(CONSTANT_CTX, el("b", 101), nil)).withProvenance(new Set([7]));
+const mkVec = () => new AVector(CONSTANT_CTX, [el("a", 100), el("b", 101)], new Set([7]));
 const mkArr = () => new SchemeJSArray([el("a", 100), el("b", 101)]);
-const mkLazy = () => new ALazySeq([el("a", 100), el("b", 101)], [], new Set([7]));
+const mkLazy = () => new ALazySeq(CONSTANT_CTX, [el("a", 100), el("b", 101)], [], new Set([7]));
 
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND: per-element provenance survives the structure-preserving
@@ -246,7 +247,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(elemProvs(await force(ops.cdr(mkArr())))).toEqual([[101]]);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
-    const alist = new APair(new APair(el("k", 100), el("v", 101)), nil);
+    const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
     const found = (await force(ops.assoc(el("k", 200), alist))) as APair;
     expect(provOf(found.car)).toEqual([100]); // key box
     expect(provOf(found.cdr)).toEqual([101]); // value box

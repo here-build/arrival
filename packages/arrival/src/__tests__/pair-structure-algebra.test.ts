@@ -10,6 +10,7 @@
 // structuralEqual `eq`, and assert Semigroup/Monoid laws directly over
 // structuralEqual.
 import fc from "fast-check";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { APair } from "../values/primitives/APair.js";
 import { nil, ANil } from "../values/primitives/ANil.js";
@@ -117,7 +118,7 @@ describe("Pair — Foldable (reduce)", () => {
   it("reduce on empty-pair sentinel returns the seed (no phantom element)", async () => {
     let calls = 0;
     // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
-    const r = await (new APair(undefined, nil) as FL)[REDUCE]((_element: unknown, acc: string) => {
+    const r = await (new APair(CONSTANT_CTX, undefined, nil) as FL)[REDUCE]((_element: unknown, acc: string) => {
       calls++;
       return acc;
     }, "SEED");
@@ -142,7 +143,7 @@ describe("Pair — Filterable (filter)", () => {
   });
   it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
-    await (new APair(undefined, nil) as FL)[FILTER](() => {
+    await (new APair(CONSTANT_CTX, undefined, nil) as FL)[FILTER](() => {
       calls++;
       return true;
     });
@@ -177,7 +178,7 @@ describe("Pair — Traversable (traverse)", () => {
       ["arrival/tagless-final/ap"](other: any) {
         // this holds a function-or-value; for traverse, `this` wraps the head
         // and `other` wraps the rest — combine into a Pair.
-        return Id(new APair((this as any).value, other.value));
+        return Id(new APair(CONSTANT_CTX, (this as any).value, other.value));
       },
     });
     const list = APair.fromArray([1, 2, 3], false) as APair;
@@ -228,7 +229,7 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
   const cloneNil = () => nil.withProvenance(new Set<number>([42]));
   it("map(Pair(1, nil-clone)) → (1), fn called once", async () => {
     const calls: unknown[] = [];
-    const r = (await (new APair(1, cloneNil()) as FL)[MAP]((x: unknown) => {
+    const r = (await (new APair(CONSTANT_CTX, 1, cloneNil()) as FL)[MAP]((x: unknown) => {
       calls.push(x);
       return x;
     })) as APair;
@@ -237,7 +238,7 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
     expect(r.cdr).toBeInstanceOf(ANil);
   });
   it("reduce(Pair(1, nil-clone)) folds one element", async () => {
-    const r = await (new APair(1, cloneNil()) as FL)[REDUCE]((x: number, acc: number) => acc + x, 0);
+    const r = await (new APair(CONSTANT_CTX, 1, cloneNil()) as FL)[REDUCE]((x: number, acc: number) => acc + x, 0);
     expect(r).toBe(1);
   });
 });

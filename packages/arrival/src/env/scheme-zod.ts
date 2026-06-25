@@ -30,6 +30,7 @@
 
 export * from "zod";
 import * as z from "zod";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -70,19 +71,19 @@ export const schemeNumber = z.union([z.instanceof(AExact), z.instanceof(AInexact
 /** SchemeString ↔ JS `string`. */
 export const string = z.codec(z.instanceof(AString), z.string(), {
   decode: (s) => s.toJs(),
-  encode: (s) => new AString(s),
+  encode: (s) => new AString(CONSTANT_CTX, s),
 });
 
 /** SchemeBool ↔ JS `boolean`. */
 export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
   decode: (b) => b.value,
-  encode: (b) => new ABool(b),
+  encode: (b) => new ABool(CONSTANT_CTX, b),
 });
 
 /** SchemeCharacter ↔ JS `string` (single grapheme). */
 export const char = z.codec(z.instanceof(ACharacter), z.string(), {
   decode: (c) => c.valueOf(),
-  encode: (c) => new ACharacter(c),
+  encode: (c) => new ACharacter(CONSTANT_CTX, c),
 });
 
 // ── the NUMBER CODEC FAMILY ───────────────────────────────────────────────────
@@ -114,7 +115,7 @@ function exactToJsNumberOrDoor(n: AExact): number {
  *  encode of a JS number → SchemeInexact (the float type the consumer chose). */
 export const number = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number(), {
   decode: (n) => (n instanceof AInexact ? n.real : exactToJsNumberOrDoor(n)),
-  encode: (n) => new AInexact(n),
+  encode: (n) => new AInexact(CONSTANT_CTX, n),
 });
 
 /** SchemeExact|SchemeInexact ↔ JS `number` constrained to SAFE INTEGERS. decode
@@ -133,7 +134,7 @@ export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInex
     if (!Number.isSafeInteger(n)) {
       throw new Error(`integer codec: ${n} is not a safe integer`);
     }
-    return new AExact(BigInt(n));
+    return new AExact(CONSTANT_CTX, BigInt(n));
   },
 });
 
@@ -153,5 +154,5 @@ export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexa
     }
     return n.num;
   },
-  encode: (n) => new AExact(n),
+  encode: (n) => new AExact(CONSTANT_CTX, n),
 });

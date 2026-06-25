@@ -8,6 +8,7 @@
  * below). Structure inspired by BiwaScheme's parser.
  */
 import { DatumReference } from "../values/DatumReference.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
 import {
@@ -313,7 +314,7 @@ export class Parser {
       } else {
         invariant(!dot, "Parser: syntax error more than one element after dot");
         const node = await this._read_object();
-        const cur = new APair(node, nil);
+        const cur = new APair(CONSTANT_CTX, node, nil);
         if (loc) {
           cur.setLocation(loc);
         }
@@ -470,7 +471,7 @@ export class Parser {
         // Convert list to a boxed vector (#(...) literal producer). R7RS literals
         // are immutable → freeze, so a later vector-set!/fill! on the literal is
         // an error (else it would corrupt the shared parsed AST node persistently).
-        const litVec = is_nil(list) ? new AVector([]) : new AVector(list.to_array(false));
+        const litVec = is_nil(list) ? new AVector(CONSTANT_CTX, []) : new AVector(CONSTANT_CTX, list.to_array(false));
         litVec.freeze();
         return litVec;
       }
@@ -483,10 +484,10 @@ export class Parser {
         // literals are immutable → freeze (see the #(...) case above).
         let litBv: ABytevector;
         if (is_nil(list)) {
-          litBv = new ABytevector(new Uint8Array(0));
+          litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(0));
         } else {
           const arr = list.to_array(false) as number[];
-          litBv = new ABytevector(new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
+          litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
         }
         litBv.freeze();
         return litBv;
@@ -525,10 +526,10 @@ export class Parser {
       }
       if (is_literal(token)) {
         invariant(!was_close_paren, "Parse Error: expecting datum");
-        expr = new APair(special.symbol, new APair(object, nil));
+        expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object, nil));
         if (loc) expr.setLocation(loc);
       } else {
-        expr = new APair(special.symbol, object);
+        expr = new APair(CONSTANT_CTX, special.symbol, object);
         if (loc) expr.setLocation(loc);
       }
       // Built-in parser extensions just expand into lists like 'x ==> (quote x)
@@ -540,7 +541,7 @@ export class Parser {
       // Quote the macro's result: the parser's output is evaluated again by the
       // interpreter, so a bare pair/symbol would be (re-)evaluated unintentionally.
       if (is_pair(result) || result instanceof ASymbol) {
-        const quoted = APair.fromArray([new ASymbol("quote"), result]) as APair;
+        const quoted = APair.fromArray([new ASymbol(CONSTANT_CTX, "quote"), result]) as APair;
         if (loc) quoted.setLocation(loc);
         return quoted;
       }

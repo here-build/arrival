@@ -31,6 +31,7 @@
  */
 
 import { EnvCapability } from "./capability.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { symbol } from "./symbol.js";
 import * as z from "./scheme-zod.js";
 import { global_env } from "../stdlib.js";
@@ -510,7 +511,7 @@ export default new EnvCapability("scheme/fl-interop", {
         if (is_lazy_seq(collection)) {
           return collection.refine({ kind: "length" }).then((r) => {
             const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
-            return provenance.size === 0 ? count : AValue.fromJs(count, provenance);
+            return provenance.size === 0 ? count : AValue.fromJs(CONSTANT_CTX, count, provenance);
           });
         }
         // Collect elements so the count can carry their provenance (V: "provenance
@@ -522,7 +523,7 @@ export default new EnvCapability("scheme/fl-interop", {
         const inputs = elements.filter((e): e is AValue => e instanceof AValue);
         if (inputs.length === 0) return count;
         const prov = unionProvenance(inputs);
-        return prov.size === 0 ? count : AValue.fromJs(count, prov);
+        return prov.size === 0 ? count : AValue.fromJs(CONSTANT_CTX, count, prov);
       },
     ),
 
@@ -536,7 +537,7 @@ export default new EnvCapability("scheme/fl-interop", {
     "lazy-seq": symbol.native`lazy-seq: wrap a collection's elements into an un-run lazy plan`(
       { input: [z.unknown()], output: [z.unknown()] },
       (collection: any) =>
-        new ALazySeq(
+        new ALazySeq(CONSTANT_CTX, 
           collectElements(collection),
           [],
           collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,

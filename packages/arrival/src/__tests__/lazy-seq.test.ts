@@ -20,6 +20,7 @@
  * They come from the same walk, which is the whole point.
  */
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
 import { ALazySeq } from "../values/primitives/ALazySeq.js";
 
@@ -27,20 +28,20 @@ import { ALazySeq } from "../values/primitives/ALazySeq.js";
 // so the carrier's `provOf` sees it exactly as it would a boxed AValue.
 class ProvNum extends AValue {
   readonly kind = "number" as const;
-  constructor(readonly n: number, p: ReadonlySet<number>) {
-    super(p);
+  constructor(ctx: RunContext, readonly n: number, p: ReadonlySet<number>) {
+    super(ctx, p);
   }
   toJs() {
     return this.n;
   }
   withProvenance(p: ReadonlySet<number>) {
-    return new ProvNum(this.n, p);
+    return new ProvNum(CONSTANT_CTX, this.n, p);
   }
 }
 
 /** Source of `count` elements, element i tagged with provenance id `base + i`. */
 function provSource(count: number, base: number): ProvNum[] {
-  return Array.from({ length: count }, (_, i) => new ProvNum(i, pointProvenance(base + i)));
+  return Array.from({ length: count }, (_, i) => new ProvNum(CONSTANT_CTX, i, pointProvenance(base + i)));
 }
 
 const ids = (p: ReadonlySet<number>): number[] => [...p].sort((a, b) => a - b);
@@ -50,10 +51,10 @@ describe("LazySeq — demand cone == provenance cone", () => {
     let fCalls = 0;
     const f = (x: ProvNum) => {
       fCalls++;
-      return new ProvNum(x.n * 2, EMPTY_PROVENANCE);
+      return new ProvNum(CONSTANT_CTX, x.n * 2, EMPTY_PROVENANCE);
     };
 
-    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
+    const xs = new ALazySeq(CONSTANT_CTX, provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const mapped = xs.map(f, pointProvenance(2)); // op id 2 (f's introduction)
 
     const r = (await mapped.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
@@ -73,7 +74,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
       return x.n % 2 === 0;
     };
 
-    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1)); // grouping id 1
+    const xs = new ALazySeq(CONSTANT_CTX, provSource(5, 100), [], pointProvenance(1)); // grouping id 1
     const filtered = xs.filter(pred, pointProvenance(3)); // op id 3
 
     const r = (await filtered.refine({ kind: "length", callId: 999 })) as { count: number; provenance: ReadonlySet<number> };
@@ -91,7 +92,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
     let predCalls = 0;
     const f = (x: ProvNum) => {
       fCalls++;
-      return new ProvNum(x.n + 1, EMPTY_PROVENANCE);
+      return new ProvNum(CONSTANT_CTX, x.n + 1, EMPTY_PROVENANCE);
     };
     const pred = (x: ProvNum) => {
       predCalls++;
@@ -99,10 +100,10 @@ describe("LazySeq — demand cone == provenance cone", () => {
     };
     const g = (x: ProvNum) => {
       gCalls++;
-      return new ProvNum(x.n * 10, EMPTY_PROVENANCE);
+      return new ProvNum(CONSTANT_CTX, x.n * 10, EMPTY_PROVENANCE);
     };
 
-    const xs = new ALazySeq(provSource(5, 100), [], pointProvenance(1));
+    const xs = new ALazySeq(CONSTANT_CTX, provSource(5, 100), [], pointProvenance(1));
     const plan = xs
       .map(f, pointProvenance(2)) // before the filter → MUST run
       .filter(pred, pointProvenance(3)) // last length-changing op
@@ -125,9 +126,9 @@ describe("LazySeq — demand cone == provenance cone", () => {
     let fCalls = 0;
     const f = (x: ProvNum) => {
       fCalls++;
-      return new ProvNum(x.n * 2, EMPTY_PROVENANCE);
+      return new ProvNum(CONSTANT_CTX, x.n * 2, EMPTY_PROVENANCE);
     };
-    const xs = new ALazySeq(provSource(3, 100), [], pointProvenance(1));
+    const xs = new ALazySeq(CONSTANT_CTX, provSource(3, 100), [], pointProvenance(1));
     const r = (await xs.map(f, pointProvenance(2)).refine({ kind: "iterate" })) as {
       items: ProvNum[];
       provenance: ReadonlySet<number>;
@@ -139,7 +140,7 @@ describe("LazySeq — demand cone == provenance cone", () => {
 
   it("pipe runs nothing: building a plan never calls fn", () => {
     let calls = 0;
-    const xs = new ALazySeq(provSource(1000, 0), [], EMPTY_PROVENANCE);
+    const xs = new ALazySeq(CONSTANT_CTX, provSource(1000, 0), [], EMPTY_PROVENANCE);
     xs.map(() => (calls++, 0))
       .filter(() => (calls++, true))
       .map(() => (calls++, 0));

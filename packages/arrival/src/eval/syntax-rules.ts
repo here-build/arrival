@@ -14,6 +14,7 @@
 // syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { EnvLookup } from "../EnvLookup.js";
 import { Environment } from "../Environment.js";
 import { AString } from "../values/primitives/AString.js";
@@ -119,7 +120,7 @@ export function macro_expand(): SchemeFunction {
         return nil;
       }
       const pair = node.car;
-      return new APair(new APair(pair.car, await traverse(pair.cdr, n ?? -1, env)), await expand_let_binding(node.cdr));
+      return new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, pair.car, await traverse(pair.cdr, n ?? -1, env)), await expand_let_binding(node.cdr));
     }
 
     async function traverse(node: SchemeValue, n: number, env: Environment): Promise<SchemeValue> {
@@ -143,7 +144,7 @@ export function macro_expand(): SchemeFunction {
             bindings = proc_bindings(nodeCdr.car);
             second = nodeCdr.car;
           }
-          return new APair(node.car, new APair(second, await traverse(nodeCdr.cdr, n, env)));
+          return new APair(CONSTANT_CTX, node.car, new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)));
         } else if (is_macro(name, value)) {
           const code = value instanceof Syntax ? node : nodeCdr;
           let result = await (value as SchemeValue).invoke(code, { ...args, env }, true);
@@ -186,7 +187,7 @@ export function macro_expand(): SchemeFunction {
       if (is_pair(cdr)) {
         cdr = await traverse(cdr, n, env);
       }
-      return new APair(car, cdr);
+      return new APair(CONSTANT_CTX, car, cdr);
     }
 
     if (is_pair(code.cdr) && isNumeric(code.cdr.car)) {
@@ -263,10 +264,10 @@ export function extract_patterns(
             if (bindings["..."].symbols[name]) {
               bindings["..."].symbols[name] = concatPair(
                 bindings["..."].symbols[name],
-                new APair(as_list, nil),
+                new APair(CONSTANT_CTX, as_list, nil),
               );
             } else {
-              bindings["..."].symbols[name] = new APair(as_list, nil);
+              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, as_list, nil);
             }
           } else {
             bindings["..."].symbols[name] = APair.fromArray(code, false);
@@ -342,14 +343,14 @@ export function extract_patterns(
             if (bindings["..."].symbols[name]) {
               let node = bindings["..."].symbols[name];
               node = is_nil(node)
-                ? new APair(nil, new APair(code, nil))
-                : concatPair(node, new APair(code, nil));
+                ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code, nil))
+                : concatPair(node, new APair(CONSTANT_CTX, code, nil));
               bindings["..."].symbols[name] = node;
             } else {
-              bindings["..."].symbols[name] = new APair(code, nil);
+              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
             }
           } else {
-            bindings["..."].symbols[name] = new APair(code, nil);
+            bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
           }
         } else {
           if (is_pair(code)) {
@@ -358,7 +359,7 @@ export function extract_patterns(
               if (is_nil(pattern.cdr.cdr)) {
                 return false;
               } else if (!bindings["..."].symbols[name]) {
-                bindings["..."].symbols[name] = new APair(code.car, nil);
+                bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code.car, nil);
                 return traverse(pattern.cdr.cdr, code.cdr, state);
               }
             }
@@ -379,9 +380,9 @@ export function extract_patterns(
             pattern_names.push(name);
             if (bindings["..."].symbols[name]) {
               const node = bindings["..."].symbols[name];
-              bindings["..."].symbols[name] = concatPair(node, new APair(code, nil));
+              bindings["..."].symbols[name] = concatPair(node, new APair(CONSTANT_CTX, code, nil));
             } else {
-              bindings["..."].symbols[name] = new APair(code, nil);
+              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
             }
           } else if (
             pattern.car instanceof ASymbol &&
@@ -534,13 +535,13 @@ export function clear_gensyms(node, gensyms) {
       const cdr = traverse(node.cdr);
       // TODO: check if it's safe to modify the list
       //       some funky modify of code can happen in macro
-      return new APair(car, cdr);
+      return new APair(CONSTANT_CTX, car, cdr);
     } else if (node instanceof ASymbol) {
       const replacement = gensyms.find((gensym) => {
         return gensym.gensym === node;
       });
       if (replacement) {
-        return new ASymbol(replacement.name);
+        return new ASymbol(CONSTANT_CTX, replacement.name);
       }
       return node;
     } else {
@@ -578,9 +579,9 @@ export function transform_syntax(options: SchemeValue = {}) {
         const first = parts[0];
         if (first in bindings.symbols) {
           return APair.fromArray([
-            new ASymbol("."),
+            new ASymbol(CONSTANT_CTX, "."),
             bindings.symbols[first],
-            ...parts.slice(1).map((x) => new AString(x)),
+            ...parts.slice(1).map((x) => new AString(CONSTANT_CTX, x)),
           ]);
         }
       }
@@ -654,7 +655,7 @@ export function transform_syntax(options: SchemeValue = {}) {
           if (nested) {
             const { car: caar, cdr: cadr } = car as SchemeValue;
             if (!is_nil(cadr)) {
-              next(name, new APair(cadr, nil));
+              next(name, new APair(CONSTANT_CTX, cadr, nil));
             }
             return caar;
           }
@@ -700,7 +701,7 @@ export function transform_syntax(options: SchemeValue = {}) {
               return car;
             } else if (is_pair(car)) {
               if (!is_nil(car.cdr)) {
-                next(name, new APair(car.cdr, cdr));
+                next(name, new APair(CONSTANT_CTX, car.cdr, cdr));
               }
               // wrap with EnvLookup to handle undefined
               return new EnvLookup(car.car);
@@ -735,7 +736,7 @@ export function transform_syntax(options: SchemeValue = {}) {
       if (is_array) {
         return [head, ...rest];
       }
-      return new APair(head, rest);
+      return new APair(CONSTANT_CTX, head, rest);
     }
     return expr;
   }
@@ -779,7 +780,7 @@ export function transform_syntax(options: SchemeValue = {}) {
       }
       // escape ellispsis from R7RS e.g. (... ...)
       if (!disabled && is_pair(first) && ASymbol.is(first.car, ellipsis_symbol)) {
-        return new APair((first.cdr as SchemeValue).car, traverse(exprVal.cdr));
+        return new APair(CONSTANT_CTX, (first.cdr as SchemeValue).car, traverse(exprVal.cdr));
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
@@ -810,7 +811,7 @@ export function transform_syntax(options: SchemeValue = {}) {
           let new_expr = first;
           if (is_spread) {
             // TODO: array
-            new_expr = new APair(first, new APair(second, nil));
+            new_expr = new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil));
           }
           let result;
           if (keys.length > 0) {
@@ -845,7 +846,7 @@ export function transform_syntax(options: SchemeValue = {}) {
                 } else if (is_array) {
                   result.push(car);
                 } else {
-                  result = new APair(car, result);
+                  result = new APair(CONSTANT_CTX, car, result);
                 }
               }
               bind = new_bind;
@@ -874,7 +875,7 @@ export function transform_syntax(options: SchemeValue = {}) {
               if (car instanceof EnvLookup) {
                 car = car.valueOf();
               }
-              return new APair(car, nil);
+              return new APair(CONSTANT_CTX, car, nil);
             }
             return nil;
           }
@@ -904,7 +905,7 @@ export function transform_syntax(options: SchemeValue = {}) {
               if (is_array) {
                 result.push(value);
               } else {
-                result = new APair(value, result);
+                result = new APair(CONSTANT_CTX, value, result);
               }
             }
             bind = new_bind;
@@ -941,15 +942,15 @@ export function transform_syntax(options: SchemeValue = {}) {
       if (is_syntax) {
         rest =
           exprAny.cdr.car instanceof ASymbol
-            ? new APair(
+            ? new APair(CONSTANT_CTX, 
                 traverse(exprAny.cdr.car, { disabled }),
-                new APair(exprAny.cdr.cdr.car, traverse(exprAny.cdr.cdr.cdr, { disabled })),
+                new APair(CONSTANT_CTX, exprAny.cdr.cdr.car, traverse(exprAny.cdr.cdr.cdr, { disabled })),
               )
-            : new APair(exprAny.cdr.car, traverse(exprAny.cdr.cdr, { disabled }));
+            : new APair(CONSTANT_CTX, exprAny.cdr.car, traverse(exprAny.cdr.cdr, { disabled }));
       } else {
         rest = traverse(exprAny.cdr, { disabled });
       }
-      return new APair(head, rest);
+      return new APair(CONSTANT_CTX, head, rest);
     }
     if (expr instanceof ASymbol) {
       if (disabled && ASymbol.is(expr, ellipsis_symbol)) {

@@ -4,6 +4,7 @@
 // number→number. equalClone forges a fresh distinct-but-equal payload.
 // (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AVector } from "../values/primitives/AVector.js";
 import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
@@ -18,9 +19,9 @@ const arb = fc
     fc.constantFrom<number[]>([], [0], [1], [1, 2], [1, 2, 3], [2, 1]),
     fc.array(fc.integer({ min: 0, max: 4 }), { maxLength: 4 }),
   )
-  .map((xs) => new AVector(xs));
+  .map((xs) => new AVector(CONSTANT_CTX, xs));
 
-const equalClone = (v: AVector) => new AVector(v.__vector__.slice());
+const equalClone = (v: AVector) => new AVector(CONSTANT_CTX, v.__vector__.slice());
 
 setoidLaws("SchemeVector", { arb, equalClone });
 semigroupLaws("SchemeVector", arb);
@@ -32,41 +33,41 @@ functorLaws("SchemeVector", {
 
 describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
   it("structural value equality over distinct heap payloads", () => {
-    const a = new AVector([1, 2, 3]);
-    const b = new AVector([1, 2, 3]);
+    const a = new AVector(CONSTANT_CTX, [1, 2, 3]);
+    const b = new AVector(CONSTANT_CTX, [1, 2, 3]);
     expect((a as never)[FL](b)).toBe(true);
   });
 
   it("nested-vector equality recurses through structuralEqual", () => {
-    const a = new AVector([new AVector([1, 2]), 3]);
-    const b = new AVector([new AVector([1, 2]), 3]);
+    const a = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [1, 2]), 3]);
+    const b = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [1, 2]), 3]);
     expect((a as never)[FL](b)).toBe(true);
-    const c = new AVector([new AVector([1, 9]), 3]);
+    const c = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [1, 9]), 3]);
     expect((a as never)[FL](c)).toBe(false);
   });
 
   it("non-SchemeVector other → false (a raw array is NOT a SchemeVector)", () => {
-    const a = new AVector([1, 2]);
+    const a = new AVector(CONSTANT_CTX, [1, 2]);
     expect((a as never)[FL]([1, 2])).toBe(false);
     expect((a as never)[FL](42)).toBe(false);
   });
 
   it("concat appends elements, length-additive", () => {
-    const a = new AVector([1, 2]);
-    const b = new AVector([3]);
+    const a = new AVector(CONSTANT_CTX, [1, 2]);
+    const b = new AVector(CONSTANT_CTX, [3]);
     const c = (a as never)[CONCAT](b) as AVector;
     expect(c.__vector__).toEqual([1, 2, 3]);
   });
 
   it("map produces a fresh vector, leaves the source untouched", async () => {
-    const a = new AVector([1, 2, 3]);
+    const a = new AVector(CONSTANT_CTX, [1, 2, 3]);
     const mapped = (await (a as never)[MAP]((x: number) => x * 10)) as AVector;
     expect(mapped.__vector__).toEqual([10, 20, 30]);
     expect(a.__vector__).toEqual([1, 2, 3]);
   });
 
   it("toJs / TO_JS unwrap to the raw array", () => {
-    const a = new AVector([1, 2, 3]);
+    const a = new AVector(CONSTANT_CTX, [1, 2, 3]);
     expect(a.toJs()).toEqual([1, 2, 3]);
     expect(Array.isArray(a.toJs())).toBe(true);
   });

@@ -13,6 +13,7 @@
  * Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 
@@ -66,8 +67,8 @@ export class ABytevector extends AValue {
    *  it throws on a non-empty typed array — so a flag is the uniform mechanism.) */
   frozen = false;
 
-  constructor(source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(ctx: RunContext, source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(ctx, provenance);
     this.__bytevector__ = toUint8(source);
   }
 
@@ -89,7 +90,7 @@ export class ABytevector extends AValue {
   }
 
   copy(start = 0, end = this.__bytevector__.byteLength): ABytevector {
-    return new ABytevector(this.__bytevector__.slice(start, end));
+    return new ABytevector(CONSTANT_CTX, this.__bytevector__.slice(start, end));
   }
 
   // Membrane unwrap (membrane.ts toJS, TO_JS protocol): a boxed bytevector
@@ -107,7 +108,7 @@ export class ABytevector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ABytevector {
-    const bv = new ABytevector(this.__bytevector__, p);
+    const bv = new ABytevector(CONSTANT_CTX, this.__bytevector__, p);
     if (this.frozen) bv.freeze();
     return bv;
   }
@@ -156,7 +157,7 @@ export class ABytevector extends AValue {
     const result = new Uint8Array(a.length + b.length);
     result.set(a, 0);
     result.set(b, a.length);
-    return new ABytevector(result);
+    return new ABytevector(CONSTANT_CTX, result);
   }
 }
 

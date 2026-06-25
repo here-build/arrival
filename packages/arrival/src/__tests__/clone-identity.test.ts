@@ -31,6 +31,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { is_nil } from "../eval/guards";
 import { hasMember, isSchemeValue, readMember, toJS } from "../membrane";
 import { schemeToJs } from "../rosetta";
@@ -142,7 +143,7 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
     // line 70 also fires false for the clone. The `tail === nil` check at
     // line 130 then sees the Nil clone again (not coerced) and dispatches
     // to the dotted-pair branch. Expected: a proper list [1].
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     expect(schemeToJs(p)).toEqual([1]);
   });
 });
@@ -183,7 +184,7 @@ describe("bridge.ts — `=== nil` identity-equality sites", () => {
   it("list-copy(Pair(1, nil-clone)) — tail must NOT alias the input's tail (bridge.ts:989)", () => {
     const listCopy = LIST_OPS["list-copy"] as (l: unknown) => unknown;
     const cdrClone = cloneNil();
-    const input = new APair(1, cdrClone);
+    const input = new APair(CONSTANT_CTX, 1, cdrClone);
     const result = listCopy(input) as APair;
     expect(result).toBeInstanceOf(APair);
     // The cdr should be the canonical singleton (or a freshly minted Nil), but
@@ -198,7 +199,7 @@ describe("bridge.ts — `=== nil` identity-equality sites", () => {
   // singletons — a wrong answer means the slow path runs.
   it("single(Pair(1, nil-clone)) — should be true (bridge.ts:1351)", () => {
     const single = COMBINATOR_OPS["single"] as (l: unknown) => boolean;
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     expect(single(p)).toBe(true);
   });
 });
@@ -222,7 +223,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   it("mapPair(f, Pair(1, nil-clone)) — should produce (1) only, fn called once (fantasy-land-lips.ts:89)", async () => {
     // mapPair is not exported; invoke via the FL protocol installed on Pair.prototype.
     const calls: unknown[] = [];
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (p as any)["arrival/tagless-final/map"]((x: unknown) => {
       calls.push(x);
@@ -237,7 +238,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // base case misses on a clone, leading to predicate being called with
   // undefined and a phantom Pair node being added to the result.
   it("filterPair(_, Pair(1, nil-clone)) — predicate called once (fantasy-land-lips.ts:94)", async () => {    let predCalls = 0;
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (p as any)["arrival/tagless-final/filter"](() => {
       predCalls++;
@@ -253,7 +254,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // f-invocation with `undefined`." Expected: f called once with the
   // genuine element only.
   it("reducePair(f, init, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:102)", async () => {    const collected: unknown[] = [];
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
     await (p as any)["arrival/tagless-final/reduce"]((v: unknown, acc: unknown[]) => {
@@ -279,7 +280,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
       ofCalls.push(v);
       return v;
     };
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any)["arrival/tagless-final/traverse"](of, (x: unknown) => x);
     expect(ofCalls.length).toBe(1);
@@ -290,11 +291,11 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   // `if (!pair || pair === nil) return nil`. Same pattern: a phantom
   // f-invocation on undefined when the cdr is a Nil clone.
   it("chainPair(f, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:120)", () => {    const calls: unknown[] = [];
-    const p = new APair(1, cloneNil());
+    const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any)["arrival/tagless-final/chain"]((x: unknown) => {
       calls.push(x);
-      return new APair(x, nil);
+      return new APair(CONSTANT_CTX, x, nil);
     });
     expect(calls).toEqual([1]);
   });

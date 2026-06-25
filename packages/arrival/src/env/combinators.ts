@@ -18,6 +18,7 @@
  */
 
 import "../errors.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { AExact } from "../values/numbers.js";
@@ -52,7 +53,7 @@ export default new EnvCapability("scheme/combinators", {
         let i = 0;
 
         while (current instanceof APair && i < count) {
-          const newPair = new APair(current.car, nil);
+          const newPair = new APair(CONSTANT_CTX, current.car, nil);
           if (tail === null) {
             result = newPair;
           } else {
@@ -116,7 +117,7 @@ export default new EnvCapability("scheme/combinators", {
         if (result.length === 0) return nil;
         let list: APair | typeof nil = nil;
         for (let i = result.length - 1; i >= 0; i--) {
-          list = new APair(new AExact(BigInt(result[i])), list);
+          list = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, BigInt(result[i])), list);
         }
         return list;
       },
