@@ -35,7 +35,7 @@ import { type RunContext } from "../values/primitives/RunContext.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { global_env } from "../stdlib.js";
-import { AJSArray } from "../values/primitives/js-wrappers.js";
+
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -193,33 +193,7 @@ function comparisonImpl(sym: "=" | "<" | ">" | "<=" | ">="): (args: unknown[], r
 }
 
 
-// Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
-// AJSArray wrapper, or a raw JS array — to a flat element array. Used by
-// `length` to see the full element set. As lenient as the old length: an
-// unrecognized input yields `[]` (an empty collection).
-//
-// G6 (carrier-coercion soundness): the SchemeVector branch mirrors its twin
-// `collapseProvenance` (provenance-collapse.ts), which already deep-walks
-// `__vector__`. Without it a SchemeVector matched none of the branches and
-// silently collected `[]` — so `(length vec)` counted 0, dropping every
-// element's provenance with no error.
-function collectElements(collection: any): unknown[] {
-  const elements: unknown[] = [];
-  if (collection && typeof collection === "object" && "car" in collection) {
-    let current = collection; // LIPS list — walk the spine.
-    while (current?.constructor && current.constructor.name !== "ANil") {
-      elements.push(current.car);
-      current = current.cdr;
-    }
-  } else if (collection instanceof AVector) {
-    elements.push(...collection.__vector__); // boxed vector — its elements carry provenance
-  } else if (collection instanceof AJSArray) {
-    elements.push(...collection.source); // lazy JS-array wrapper from `@`/membrane
-  } else if (Array.isArray(collection)) {
-    elements.push(...collection);
-  }
-  return elements;
-}
+
 
 // chargeAndDispatch — the sequence ops' thin program: charge the run's allocation meter, then
 // dispatch to the receiver's OWN arrival/tagless-final/<op>. The EAGER materializers (APair/
@@ -340,19 +314,23 @@ export default new EnvCapability("scheme/fl-interop", {
       (args, runCtx) => chargeAndDispatch("sort", args[0], [args[1]], runCtx),
     ),
 
-    length: symbol.native`length: element count carrying the elements' provenance`(
+    length: symbol.native`length: universal element count — dispatches to each term's own arrival/tagless-final/length`(
       { input: [z.unknown()], output: [z.unknown()] },
-      (collection: any) => {
-        // Collect elements so the count can carry their provenance (V: "provenance
-        // everything; exclusion should not be possible in teleological mode"). A
-        // `(count …)`/`(length …)` the seal can't sign — even though every row that
-        // produced it was grounded — is exactly the hole the teleological seal forbids.
-        const elements = collectElements(collection);
-        const count = elements.length;
-        const inputs = elements.filter((e): e is AValue => e instanceof AValue);
-        if (inputs.length === 0) return count;
-        const prov = unionProvenance(inputs);
-        return prov.size === 0 ? count : AValue.fromJs(inputs[0].ctx, count, prov);
+      (receiver: unknown) => {
+        // Dispatch to the receiver's OWN arrival/tagless-final/length (the per-primitive count,
+        // carrying the elements' provenance — the per-primitive divergence lives ON each term;
+        // this op is the COMBINATOR over it). TOTALIC: a receiver with no length algebra (a
+        // number/boolean) → "does not support length", never a silent 0 (the bug the old
+        // collectElements lenient-[] fallback hid for strings). SYNC (symbol.native): a count is
+        // a value-layer read with no run-state, so length's result stays a bare scalar,
+        // consistent with vector-length. (A strict R7RS-list-only probe is DEFERRED: it needs
+        // ctx, and threading ctx via the async sequence builder broke bare-scalar forcing in
+        // nested position — `(equal? (length lit) n)`. Revisit once that is solved generally.)
+        const m = (receiver as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/length"];
+        if (typeof m !== "function") {
+          throw new TypeError(`length: ${describeOperand(receiver)} does not support length (no arrival/tagless-final/length).`);
+        }
+        return (m as () => unknown).call(receiver);
       },
     ),
 
