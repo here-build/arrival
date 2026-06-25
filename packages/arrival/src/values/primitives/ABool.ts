@@ -47,8 +47,8 @@ export const schemeTrue = new ABool(CONSTANT_CTX, true);
 export const schemeFalse = new ABool(CONSTANT_CTX, false);
 
 // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
-AValue.registerBoxer("boolean", (_ctx, v, p) =>
-  p === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(CONSTANT_CTX, v as boolean, p),
+AValue.registerBoxer("boolean", (ctx, v, p) =>
+  p === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v as boolean, p),
 );
 
 // ============================================================================

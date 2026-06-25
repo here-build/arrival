@@ -825,18 +825,18 @@ export class OperatorRegistry {
 // `typeof [] === "object"`. Arrays cons-up into a proper scheme list; everything
 // else wraps. Provenance stamps the top-level result only; spine elements stay
 // empty until a provenance-aware op touches them.
-AValue.registerBoxer("object", (_ctx, v, p) => {
+AValue.registerBoxer("object", (ctx, v, p) => {
   if (Array.isArray(v)) {
     let list: AValue = nil;
     for (let i = v.length - 1; i >= 0; i--) {
-      list = new APair(CONSTANT_CTX, AValue.fromJs(CONSTANT_CTX, v[i]), list) as unknown as AValue;
+      list = new APair(ctx, AValue.fromJs(ctx, v[i]), list) as unknown as AValue;
     }
     return p === EMPTY_PROVENANCE ? list : list.withProvenance(p);
   }
-  return new AJSObject(CONSTANT_CTX, v as object, p);
+  return new AJSObject(ctx, v as object, p);
 });
 
-AValue.registerBoxer("function", (_ctx, v, p) => new AJSFunction(CONSTANT_CTX, v as (...args: unknown[]) => unknown, p));
+AValue.registerBoxer("function", (ctx, v, p) => new AJSFunction(ctx, v as (...args: unknown[]) => unknown, p));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).

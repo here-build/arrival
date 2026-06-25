@@ -1056,13 +1056,13 @@ export function isBigInteger(n: unknown): boolean {
   return typeof n === "bigint";
 }
 
-AValue.registerBoxer("bigint", (_ctx, v, p) => new AExact(CONSTANT_CTX, v as bigint, 1n, p));
+AValue.registerBoxer("bigint", (ctx, v, p) => new AExact(ctx, v as bigint, 1n, p));
 
 // Safe-integer JS numbers route to exact — preserves precision through scheme
 // arithmetic. Anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
-AValue.registerBoxer("number", (_ctx, v, p) => {
+AValue.registerBoxer("number", (ctx, v, p) => {
   const n = v as number;
-  return Number.isSafeInteger(n) ? new AExact(CONSTANT_CTX, BigInt(n), 1n, p) : new AInexact(CONSTANT_CTX, n, p);
+  return Number.isSafeInteger(n) ? new AExact(ctx, BigInt(n), 1n, p) : new AInexact(ctx, n, p);
 });
 
 // ============================================================================

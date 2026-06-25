@@ -81,7 +81,7 @@ export class ANil extends AValue {
 export const nil = new ANil(CONSTANT_CTX, );
 
 // null/undefined → nil (empty list).
-AValue.registerBoxer("null", (_ctx, _v, p) => new ANil(CONSTANT_CTX, p));
-AValue.registerBoxer("undefined", (_ctx, _v, p) => new ANil(CONSTANT_CTX, p));
+AValue.registerBoxer("null", (ctx, _v, p) => new ANil(ctx, p));
+AValue.registerBoxer("undefined", (ctx, _v, p) => new ANil(ctx, p));
 
 markInteropBoundary(ANil);

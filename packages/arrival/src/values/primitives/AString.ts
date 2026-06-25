@@ -164,7 +164,7 @@ export class AString extends AValue {
   }
 }
 
-AValue.registerBoxer("string", (_ctx, v, p) => new AString(CONSTANT_CTX, v as string, p));
+AValue.registerBoxer("string", (ctx, v, p) => new AString(ctx, v as string, p));
 
 // Dynamically wrap all String.prototype methods
 {
