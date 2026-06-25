@@ -237,7 +237,7 @@ export class AJSObject extends AValue {
     // New wrapper = new identity = empty cache. Provenance-variant entries
     // would otherwise leak between wrappers; cleaner to let each lineage
     // build its own cache the first time it's queried.
-    return new AJSObject(CONSTANT_CTX, this.source, p);
+    return new AJSObject(this.ctx, this.source, p);
   }
 
   /**
@@ -392,7 +392,7 @@ export class AJSFunction extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AJSFunction {
-    return new AJSFunction(CONSTANT_CTX, this.source, p);
+    return new AJSFunction(this.ctx, this.source, p);
   }
 
   /** Invoke the wrapped function with Scheme values. */

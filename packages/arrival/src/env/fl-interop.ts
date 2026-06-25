@@ -511,7 +511,7 @@ export default new EnvCapability("scheme/fl-interop", {
         if (is_lazy_seq(collection)) {
           return collection.refine({ kind: "length" }).then((r) => {
             const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
-            return provenance.size === 0 ? count : AValue.fromJs(CONSTANT_CTX, count, provenance);
+            return provenance.size === 0 ? count : AValue.fromJs(collection.ctx, count, provenance);
           });
         }
         // Collect elements so the count can carry their provenance (V: "provenance
@@ -523,7 +523,7 @@ export default new EnvCapability("scheme/fl-interop", {
         const inputs = elements.filter((e): e is AValue => e instanceof AValue);
         if (inputs.length === 0) return count;
         const prov = unionProvenance(inputs);
-        return prov.size === 0 ? count : AValue.fromJs(CONSTANT_CTX, count, prov);
+        return prov.size === 0 ? count : AValue.fromJs(inputs[0].ctx, count, prov);
       },
     ),
 
@@ -537,7 +537,7 @@ export default new EnvCapability("scheme/fl-interop", {
     "lazy-seq": symbol.native`lazy-seq: wrap a collection's elements into an un-run lazy plan`(
       { input: [z.unknown()], output: [z.unknown()] },
       (collection: any) =>
-        new ALazySeq(CONSTANT_CTX, 
+        new ALazySeq(collection instanceof AValue ? collection.ctx : CONSTANT_CTX, 
           collectElements(collection),
           [],
           collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,

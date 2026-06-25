@@ -265,7 +265,7 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   if (result instanceof AValue) return result.withProvenance(prov) as T;
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    return AValue.fromJs(CONSTANT_CTX, result, prov) as T;
+    return AValue.fromJs(inputs[0].ctx, result, prov) as T;
   }
   return result;
 }
