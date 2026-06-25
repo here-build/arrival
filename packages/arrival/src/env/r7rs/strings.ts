@@ -41,6 +41,72 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
+import { typecheck } from "../../utils/typecheck.js";
+import { is_pair, is_nil } from "../../eval/guards.js";
+import { isCircularList } from "../../values/primitives/APair.js";
+import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
+import { currentRunEnv, SchemeError } from "../../eval/evaluator.js";
+import { AInexact } from "../../values/numbers.js";
+import {
+  complex_bare_re,
+  complex_re,
+  float_re,
+  int_bare_re,
+  int_re,
+  rational_bare_re,
+  rational_re,
+} from "../../values/primitives.js";
+import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
+
+// Scheme is inherently dynamic at these interop boundaries — the relocated
+// LIPS-era string builtins (`concat`/`join`/`split`/`substring`/`string->number`)
+// typecheck their args at runtime; the param types use `any` intentionally (as in
+// the stdlib originals).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SchemeValue = any;
+
+// Pack-local copies of the list<->array bridge helpers `join`/`split` need. The
+// stdlib originals (`listToArray`/`arrayToList`/`to_array`) stay in stdlib.ts for
+// its remaining consumers; these reproduce the same non-deep logic byte-for-byte
+// (incl. the per-run heap-meter charge `to_array` levies at the collection choke)
+// so the relocated `join`/`split` stay behavior-identical. (lists.ts carries its
+// own copy — pack isolation forbids a cross-pack import.)
+function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
+  return function recur(list: SchemeValue): SchemeValue[] {
+    typecheck(name, list, ["pair", "nil"]);
+    if (is_nil(list)) {
+      return [];
+    }
+    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
+    const runEnv = currentRunEnv();
+    const meter = findHeapMeter(runEnv ?? null);
+    const result: SchemeValue[] = [];
+    let node = list;
+    while (true) {
+      if (is_pair(node)) {
+        if (node.have_cycles("cdr")) {
+          break;
+        }
+        const car = node.car;
+        result.push(car);
+        if (meter !== undefined && ++meter.used > meter.max) {
+          throw new SchemeError(heapBudgetMessage(meter.max), []);
+        }
+        node = node.cdr;
+      } else {
+        invariant(is_nil(node), `${name}: can't convert improper list`);
+        break;
+      }
+    }
+    return result;
+  };
+}
+const listToArray = to_array("list->array");
+
+function arrayToList(array: SchemeValue): SchemeValue {
+  typecheck("array->list", array, "array");
+  return APair.fromArray(CONSTANT_CTX, array);
+}
 
 export default new EnvCapability("scheme/strings", {
   symbols: {
@@ -318,6 +384,90 @@ export default new EnvCapability("scheme/strings", {
           if (is_promise(ret)) pending.push(ret);
         }
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);
+      },
+    ),
+
+    // ---------------------------------------------------------------------
+    // LIPS-era string builtins relocated from stdlib.ts global_env (stdlib
+    // elimination). `concat`/`join`/`split` are LIPS-era names; `substring`
+    // and `string->number` are R7RS but lived only in the legacy global_env
+    // literal (no pack/wrappedOps duplicate). Bodies reproduced byte-for-byte;
+    // runtime `typecheck` guards preserved. `native` means the (identity) zod
+    // contract never runs — the impls receive Scheme values exactly as the old
+    // `doc({ value })` form did. (`join`'s former `this: Environment` param is
+    // dropped: its body reads the module-local `listToArray`, never `this`.)
+    // ---------------------------------------------------------------------
+    substring: symbol.native`substring: the slice of the string between start and end`(
+      { input: [z.schemeString, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
+      (string: SchemeValue, start: SchemeValue, end: SchemeValue): SchemeValue => {
+        typecheck("substring", string, "string");
+        typecheck("substring", start, "number");
+        typecheck("substring", end, ["number", "void"]);
+        return string.substring(start.valueOf(), end?.valueOf());
+      },
+    ),
+
+    concat: symbol.native`concat: the concatenation of all string arguments (LIPS extension)`(
+      { input: z.array(z.unknown()), output: [z.string] },
+      (...args: SchemeValue[]): SchemeValue => {
+        for (const [i, arg] of args.entries()) typecheck("concat", arg, "string", i + 1);
+        return args.join("");
+      },
+    ),
+
+    join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
+      { input: [z.schemeString, z.unknown()], output: [z.union([z.string, z.schemeString])] },
+      (separator: SchemeValue, list: SchemeValue): SchemeValue => {
+        typecheck("join", separator, "string");
+        typecheck("join", list, ["pair", "nil"]);
+        // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
+        // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
+        // strips the provenance the trace wires on. See provenance-collapse.ts.
+        const joined = listToArray(list).join(separator);
+        return taintString(String(joined), collapseProvenance(separator, list));
+      },
+    ),
+
+    split: symbol.native`split: a list of the string's pieces around the separator (LIPS extension)`(
+      { input: [z.unknown(), z.schemeString], output: [z.unknown()] },
+      (separator: SchemeValue, string: SchemeValue): SchemeValue => {
+        typecheck("split", separator, ["regex", "string"]);
+        typecheck("split", string, "string");
+        return arrayToList(string.split(separator));
+      },
+    ),
+
+    "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
+      { input: [z.schemeString, z.schemeNumber.optional()], output: [z.union([z.schemeNumber, z.boolean])] },
+      (arg: SchemeValue, radix: SchemeValue = 10): AExact | AInexact | boolean => {
+        typecheck("string->number", arg, "string", 1);
+        typecheck("string->number", radix, "number", 2);
+        arg = arg.valueOf();
+        radix = radix.valueOf();
+        try {
+          if (arg.match(rational_bare_re) || arg.match(rational_re)) {
+            return parse_rational(arg, radix);
+          } else if (arg.match(complex_bare_re) || arg.match(complex_re)) {
+            // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
+            // Reject patterns like "3i", "33i", "3.3i" without leading sign
+            if (/^#?[iexobd]*[0-9.]+i$/i.test(arg)) {
+              return false;
+            }
+            return parse_complex(arg, radix);
+          } else {
+            const valid_bare = (radix === 10 && !/e/i.test(arg)) || radix === 16;
+            if ((arg.match(int_bare_re) && valid_bare) || arg.match(int_re)) {
+              return parse_integer(arg, radix);
+            }
+            if (float_re.test(arg)) {
+              return parse_float(arg);
+            }
+          }
+        } catch {
+          // Invalid number format - return #f per R7RS
+          return false;
+        }
+        return false;
       },
     ),
   },

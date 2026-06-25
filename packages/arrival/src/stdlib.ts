@@ -1277,34 +1277,6 @@ export const global_env = new Environment(
       return withInputProvenance(args, result);
     }),
     // ------------------------------------------------------------------
-    substring: doc("substring", function substring(string, start, end) {
-      typecheck("substring", string, "string");
-      typecheck("substring", start, "number");
-      typecheck("substring", end, ["number", "void"]);
-      return string.substring(start.valueOf(), end?.valueOf());
-    }),
-    // ------------------------------------------------------------------
-    concat: doc("concat", function concat(...args) {
-      for (const [i, arg] of args.entries()) typecheck("concat", arg, "string", i + 1);
-      return args.join("");
-    }),
-    // ------------------------------------------------------------------
-    join: doc("join", function join(this: Environment, separator, list) {
-      typecheck("join", separator, "string");
-      typecheck("join", list, ["pair", "nil"]);
-      // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
-      // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
-      // strips the provenance the trace wires on. See provenance-collapse.ts.
-      const joined = listToArray(list).join(separator);
-      return taintString(String(joined), collapseProvenance(separator, list));
-    }),
-    // ------------------------------------------------------------------
-    split: doc("split", function split(separator, string) {
-      typecheck("split", separator, ["regex", "string"]);
-      typecheck("split", string, "string");
-      return arrayToList(string.split(separator));
-    }),
-    // ------------------------------------------------------------------
     replace: doc("replace", function replace(pattern, replacement, string) {
       typecheck("replace", pattern, ["regex", "string"]);
       typecheck("replace", replacement, ["string", "function"]);
@@ -1405,37 +1377,6 @@ export const global_env = new Environment(
         }
       }),
     ),
-    // ------------------------------------------------------------------
-    "string->number": doc("string->number", function (arg, radix = 10) {
-      typecheck("string->number", arg, "string", 1);
-      typecheck("string->number", radix, "number", 2);
-      arg = arg.valueOf();
-      radix = radix.valueOf();
-      try {
-        if (arg.match(rational_bare_re) || arg.match(rational_re)) {
-          return parse_rational(arg, radix);
-        } else if (arg.match(complex_bare_re) || arg.match(complex_re)) {
-          // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
-          // Reject patterns like "3i", "33i", "3.3i" without leading sign
-          if (/^#?[iexobd]*[0-9.]+i$/i.test(arg)) {
-            return false;
-          }
-          return parse_complex(arg, radix);
-        } else {
-          const valid_bare = (radix === 10 && !/e/i.test(arg)) || radix === 16;
-          if ((arg.match(int_bare_re) && valid_bare) || arg.match(int_re)) {
-            return parse_integer(arg, radix);
-          }
-          if (float_re.test(arg)) {
-            return parse_float(arg);
-          }
-        }
-      } catch {
-        // Invalid number format - return #f per R7RS
-        return false;
-      }
-      return false;
-    }),
     throw: doc("throw", function (message) {
       throw new Error(message);
     }),
