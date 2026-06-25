@@ -35,7 +35,6 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { is_nil } from "../eval/guards";
 import { hasMember, isSchemeValue, readMember, toJS } from "../membrane";
 import { schemeToJs } from "../rosetta";
-import combinatorsCap from "../env/combinators";
 import listsCap from "../env/r7rs/lists";
 import type { EnvCapability } from "../env/capability";
 import { APair } from "../values/primitives/APair.js";
@@ -59,7 +58,6 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
     ).map(([k, v]) => [k, v.impl ?? v.value]),
   );
 const LIST_OPS = opsOf(listsCap);
-const COMBINATOR_OPS = opsOf(combinatorsCap);
 
 // Sanity check: confirm the witness has the right shape before any sites
 // are exercised. If this breaks, every test below is meaningless.
@@ -192,16 +190,6 @@ describe("bridge.ts — `=== nil` identity-equality sites", () => {
     expect(result.cdr === cdrClone).toBe(false);
   });
 
-  // bridge.ts:1351 — The `single` predicate: `list instanceof Pair && list.cdr === nil`.
-  // Tests whether a list has exactly one element. With Pair(x, nil-clone)
-  // the cdr-eq check fails and `single` reports false for a genuinely
-  // single-element list. R7RS authors call this to skip iteration on
-  // singletons — a wrong answer means the slow path runs.
-  it("single(Pair(1, nil-clone)) — should be true (bridge.ts:1351)", () => {
-    const single = COMBINATOR_OPS["single"] as (l: unknown) => boolean;
-    const p = new APair(CONSTANT_CTX, 1, cloneNil());
-    expect(single(p)).toBe(true);
-  });
 });
 
 // =========================================================================

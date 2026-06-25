@@ -22,7 +22,12 @@ import { typecheck } from "../utils/typecheck.js";
 import * as z from "./scheme-zod.js";
 import { symbol } from "./symbol.js";
 import { AString } from "../values/primitives/AString.js";
-import { stringValue, withInputProvenance } from "../values/op-helpers.js";
+import { stringValue, withInputProvenance, toIndex } from "../values/op-helpers.js";
+import { AExact } from "../values/numbers.js";
+import { APair } from "../values/primitives/APair.js";
+import { nil } from "../values/primitives/ANil.js";
+import { unpromise } from "../utils/promises.js";
+import { is_false } from "../eval/guards.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
 // types directly, so they live in TS rather than reaching back across the membrane
@@ -36,6 +41,106 @@ export default new EnvCapability("arrival/core-extensions", {
     // their input's provenance via withInputProvenance — never mint. (The prior { fn, type }
     // form was defineRosetta-bound, which minted; that was a legacy accident, not intent —
     // the comment above already called them "native, below the membrane".)
+    range: symbol.native`range: an exact-integer list [start, stop) by step (1- to 3-arg forms)`(
+      { input: z.tuple([z.schemeNumber], z.unknown()), output: [z.union([z.pair, z.nil])] },
+      (stopOrStart: unknown, ...rest: unknown[]): APair | typeof nil => {
+        let start: number, stop: number, step: number;
+
+        if (rest.length === 0) {
+          start = 0;
+          stop = toIndex(stopOrStart);
+          step = 1;
+        } else if (rest.length === 1) {
+          start = toIndex(stopOrStart);
+          stop = toIndex(rest[0]);
+          step = 1;
+        } else {
+          start = toIndex(stopOrStart);
+          stop = toIndex(rest[0]);
+          step = toIndex(rest[1]);
+        }
+
+        const result: number[] = [];
+
+        if (start < stop && step > 0) {
+          for (let i = start; i < stop; i += step) {
+            result.push(i);
+          }
+        } else if (start > stop && step < 0) {
+          for (let i = start; i > stop; i += step) {
+            result.push(i);
+          }
+        }
+
+        // Convert array to list
+        if (result.length === 0) return nil;
+        let list: APair | typeof nil = nil;
+        for (let i = result.length - 1; i >= 0; i--) {
+          list = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, BigInt(result[i])), list);
+        }
+        return list;
+      },
+    ),
+
+    complement: symbol.native`complement: a predicate returning the boolean negation of fn`(
+      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
+      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
+        // \`fn\` may be a scheme lambda, which returns a Promise to JS callers
+        // (generator-lambda async return) — so unpromise before testing. And its
+        // result may be a boxed SchemeBool (a truthy JS object), so negate via
+        // is_false, not \`!\` (always false on an object). Both were latent: plain
+        // \`!fn(...)\` failed for async predicates AND for boxed-bool ones.
+        const result = (...args: unknown[]) => unpromise(fn(...args), is_false);
+        Object.defineProperty(result, "name", { value: "complement" });
+        return result;
+      },
+    ),
+
+    always: symbol.native`always: a thunk that always returns constant`(
+      { input: [z.unknown()], output: [z.custom<(...args: unknown[]) => unknown>()] },
+      (constant: unknown): (...args: unknown[]) => unknown => {
+        const result = () => constant;
+        Object.defineProperty(result, "name", { value: "always" });
+        return result;
+      },
+    ),
+
+    once: symbol.native`once: a wrapper that runs fn at most once, caching its result`(
+      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
+      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
+        let called = false;
+        let result: unknown;
+        const wrapped = (...args: unknown[]) => {
+          if (!called) {
+            called = true;
+            result = fn(...args);
+          }
+          return result;
+        };
+        Object.defineProperty(wrapped, "name", { value: "once" });
+        return wrapped;
+      },
+    ),
+
+    flip: symbol.native`flip: fn with its first two arguments swapped`(
+      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
+      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
+        const result = (a: unknown, b: unknown, ...rest: unknown[]) => fn(b, a, ...rest);
+        Object.defineProperty(result, "name", { value: "flip" });
+        return result;
+      },
+    ),
+
+    "n-ary": symbol.native`n-ary: fn restricted to its first n arguments`(
+      { input: [z.schemeNumber, z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
+      (n: unknown, fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
+        const count = toIndex(n);
+        const result = (...args: unknown[]) => fn(...args.slice(0, count));
+        Object.defineProperty(result, "name", { value: "n-ary" });
+        return result;
+      },
+    ),
+
     "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
       { input: [z.symbol], output: [z.schemeString] },
       (s: unknown): AString => {

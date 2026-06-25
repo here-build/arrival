@@ -28,6 +28,18 @@ export const SRFI1_SCM = `
         (loop (cdr xs))
         xs)))
 
+;; take — the first n elements of xs as a fresh list.
+(define (take xs n)
+  (if (or (<= n 0) (not (pair? xs)))
+      '()
+      (cons (car xs) (take (cdr xs) (- n 1)))))
+
+;; drop — the sublist of xs after the first n elements.
+(define (drop xs n)
+  (if (or (<= n 0) (not (pair? xs)))
+      xs
+      (drop (cdr xs) (- n 1))))
+
 ;; span — (values (take-while pred xs) (drop-while pred xs)).
 (define (span pred xs)
   (let loop ((xs xs) (acc '()))
