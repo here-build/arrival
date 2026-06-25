@@ -11,7 +11,7 @@ import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/primitives/EOF.js";
-import { AHalfBaked, is_half_baked } from "./values/primitives/AHalfBaked.js";
+import { AHalfBaked } from "./values/primitives/AHalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
 import { purityDoor } from "./purity.js";
 import { Parser } from "./reader/Parser.js";
@@ -43,7 +43,7 @@ import {
   rational_bare_re,
   rational_re,
 } from "./values/primitives.js";
-import { CLASS, SPECULATE } from "./well-known-symbols.js";
+import { CLASS } from "./well-known-symbols.js";
 import { nil } from "./values/primitives/ANil.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 import * as specials from "./reader/specials.js";
@@ -279,18 +279,6 @@ export function doc(name: string | null, fn: SchemeValue, docstring?: string) {
   if (docstring) {
     fn.__doc__ = docstring;
   }
-  return fn;
-}
-
-/**
- * Mark a builtin as understanding a `HalfBaked` arg (Tier 2 speculative
- * evaluation). The dispatch choke (evaluator.ts) skips forcing the args of a
- * marked callable, so the builtin reads the lazy carrier itself (its cardinality
- * interval) instead of receiving a settled value. Only `length` and the
- * comparison ops are marked; everything else gets force-on-unknown-boundary.
- */
-function speculative<T>(fn: T): T {
-  (fn as { [SPECULATE]?: boolean })[SPECULATE] = true;
   return fn;
 }
 
@@ -1098,28 +1086,6 @@ export const global_env = new Environment(
     // SchemeVector. The former stdlib `vector` here was DEAD (initBridge applies
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
-    // ------------------------------------------------------------------
-    length: speculative(
-      doc("length", function length(obj) {
-        if (!obj || is_nil(obj)) {
-          return 0;
-        }
-        // Tier 2 speculation: length of a still-filling collection is its narrowing
-        // cardinality INTERVAL, surfaced as a number-domain HalfBaked that the
-        // comparison ops read for early collapse. Reached only when speculation is
-        // on (the choke leaves a HalfBaked unforced solely for this marked op).
-        if (is_half_baked(obj)) {
-          return obj.toCardinalityNumber();
-        }
-        if (is_pair(obj)) {
-          TypeError.invariant(!isCircularList(obj), "length: circular list");
-          return withInputProvenance([obj], obj.length());
-        }
-        if ("length" in obj) {
-          return withInputProvenance([obj], obj.length);
-        }
-      }),
-    ),
     // ------------------------------------------------------------------
     find: doc("find", function find(arg, list) {
       typecheck("find", arg, ["regex", "function"]);

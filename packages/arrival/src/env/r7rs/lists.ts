@@ -44,6 +44,8 @@ import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { is_false } from "../../eval/guards.js";
 import { EnvCapability } from "../../common/capability.js";
+import { is_half_baked } from "../../values/primitives/AHalfBaked.js";
+import { SPECULATE } from "../../well-known-symbols.js";
 
 // Scheme is inherently dynamic at these interop boundaries — the relocated
 // LIPS-era list builtins below typecheck their args at runtime; the param
@@ -111,6 +113,32 @@ function isProperList(obj: SchemeValue): SchemeValue {
   }
 }
 
+// `length` carries the Tier-2 speculation marker: the evaluator's dispatch choke
+// leaves a still-filling collection's HalfBaked UNFORCED for ops whose impl has
+// [SPECULATE]=true, so length reads the lazy cardinality interval itself instead of a
+// settled value (see evaluator.ts dispatch). Relocated VERBATIM from stdlib.ts
+// global_env, where the `speculative()` helper set the same symbol on the bound fn.
+const lengthImpl = (obj: SchemeValue): SchemeValue => {
+  if (!obj || is_nil(obj)) {
+    return 0;
+  }
+  // Tier 2 speculation: length of a still-filling collection is its narrowing
+  // cardinality INTERVAL, surfaced as a number-domain HalfBaked that the
+  // comparison ops read for early collapse. Reached only when speculation is
+  // on (the choke leaves a HalfBaked unforced solely for this marked op).
+  if (is_half_baked(obj)) {
+    return obj.toCardinalityNumber();
+  }
+  if (is_pair(obj)) {
+    TypeError.invariant(!isCircularList(obj), "length: circular list");
+    return withInputProvenance([obj], obj.length());
+  }
+  if ("length" in obj) {
+    return withInputProvenance([obj], obj.length);
+  }
+};
+(lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
+
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.4 Pairs and lists
@@ -121,6 +149,13 @@ export default new EnvCapability("scheme/lists", {
       // make-list / list, which stamp only the produced Pair).
       (car: unknown, cdr: unknown): APair =>
         withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr)),
+    ),
+
+    // R7RS 6.4 — length is the speculation-marked impl declared at module scope above
+    // (the inline arrow form cannot carry the [SPECULATE] symbol the dispatch choke reads).
+    "length": symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
+      { input: [z.unknown()], output: [z.unknown()] },
+      lengthImpl,
     ),
 
     apply: symbol.native`apply: call fn with args, the last of which is a list spliced in`(
