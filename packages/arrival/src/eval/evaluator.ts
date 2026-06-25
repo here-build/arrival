@@ -23,6 +23,7 @@
 
 import invariant from "tiny-invariant";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
 import {
@@ -263,6 +264,15 @@ export interface EvalContext {
    * generator-exec.ts.
    */
   strict?: boolean;
+  /**
+   * The per-run context (minted by `exec()`; see `values/primitives/RunContext`).
+   * Carries hermetic run-state — strict mode + the heap meter — as DATA threaded
+   * through evaluation, the channel that will replace the module-level holders
+   * (`_currentStrict`, the env heap-meter). Optional + currently UNREAD (scaffolding):
+   * ops read run-state off the holders today and migrate to `ctx.runCtx` / `operand.ctx`
+   * at N2. Propagated structurally like `strict`/`speculate` (the `{ ...ctx }` spreads).
+   */
+  runCtx?: RunContext;
 }
 
 /** Options for the trampoline runner (`run`). */

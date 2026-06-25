@@ -17,6 +17,7 @@ import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import type { APair } from "../values/primitives/APair.js";
+import { makeRunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
 // Give the value-layer shadow module the evaluator's own `is_macro` without a
@@ -219,8 +220,15 @@ export async function exec(
   // allocations don't count against the user program), spanning the WHOLE exec like the wall-clock
   // budget. Save/restore the prior meter so a nested exec on the same env can't clobber the outer
   // one. `to_array` finds it by walking the parent chain from the calling scope.
+  // Mint the per-run context (the hermetic handle; see RunContext). Today it carries
+  // strict + the heap meter as scaffolding — `exec` still installs the meter on the env
+  // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
+  // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget });
   const priorMeter = actualEnv.__heapMeter__;
-  if (heapBudget !== undefined) actualEnv.__heapMeter__ = { used: 0, max: heapBudget };
+  // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
+  // `operand.ctx.heapMeter` reads the live meter with no behavior change.
+  if (runCtx.heapMeter !== undefined) actualEnv.__heapMeter__ = runCtx.heapMeter;
 
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
@@ -248,6 +256,8 @@ export async function exec(
             // Default false ⇒ today's tolerant nil-projection. No consumer reads
             // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
             strict: strict ?? false,
+            // The per-run handle, threaded as data (unread scaffold; N2 reads it).
+            runCtx,
           }),
           { signal, budgetMs: remaining },
         );
