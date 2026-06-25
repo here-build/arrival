@@ -28,6 +28,7 @@ import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { unpromise } from "../utils/promises.js";
 import { is_false } from "../eval/guards.js";
+import { curry } from "../utils/functional.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
 // types directly, so they live in TS rather than reaching back across the membrane
@@ -139,6 +140,16 @@ export default new EnvCapability("arrival/core-extensions", {
         Object.defineProperty(result, "name", { value: "n-ary" });
         return result;
       },
+    ),
+
+    // `curry` — relocated VERBATIM from stdlib.ts global_env (husk dissolution). The
+    // impl is the shared `utils/functional` curry; it joins its functional-combinator
+    // siblings (n-ary / complement / flip / always / once) and its only define-time
+    // consumer, the `(define unary (curry n-ary 1))` prelude below. Intra-pack, so the
+    // symbol is live before the prelude evals — no cross-pack ordering dependency.
+    curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
+      { input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()), output: [z.custom<(...args: unknown[]) => unknown>()] },
+      curry,
     ),
 
     "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(

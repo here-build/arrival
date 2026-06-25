@@ -57,7 +57,6 @@ import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
 import { isCircularList, APair, concatPair } from "./values/primitives/APair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
-import { curry } from "./utils/functional.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
@@ -1163,8 +1162,6 @@ export const global_env = new Environment(
       const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
       return APair.fromArray(ctxOf(list), filtered);
     }),
-    // ------------------------------------------------------------------
-    curry: doc(null, curry),
   },
   undefined,
 );
