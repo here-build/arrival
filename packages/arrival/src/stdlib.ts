@@ -1415,48 +1415,8 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     "function?": doc("function?", is_function),
     // ------------------------------------------------------------------
-    "real?": doc("real?", function (value) {
-      if (value instanceof AExact || value instanceof AInexact) {
-        return value.isReal;
-      }
-      if (type(value) !== "number") {
-        return false;
-      }
-      return typeof value === "number" && !Number.isNaN(value);
-    }),
-    // ------------------------------------------------------------------
-    "number?": doc("number?", function (x) {
-      return (
-        Number.isNaN(x) ||
-        x instanceof AExact ||
-        x instanceof AInexact ||
-        typeof x === "number" ||
-        typeof x === "bigint"
-      );
-    }),
-    // ------------------------------------------------------------------
-    "string?": doc("string?", function (obj) {
-      return AString.isString(obj);
-    }),
-    // ------------------------------------------------------------------
-    "pair?": doc("pair?", is_pair),
-    // ------------------------------------------------------------------
     "regex?": doc("regex?", function (obj) {
       return obj instanceof RegExp;
-    }),
-    // ------------------------------------------------------------------
-    "null?": doc("null?", function (obj) {
-      return is_null(obj);
-    }),
-    // ------------------------------------------------------------------
-    "boolean?": doc("boolean?", function (obj) {
-      // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
-      // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
-      return typeof obj === "boolean" || obj instanceof ABool;
-    }),
-    // ------------------------------------------------------------------
-    "symbol?": doc("symbol?", function (obj) {
-      return obj instanceof ASymbol;
     }),
     // ------------------------------------------------------------------
     "array?": doc("array?", function (obj) {
@@ -1590,8 +1550,6 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     map: doc("map", mapImpl),
-    // ------------------------------------------------------------------
-    "list?": doc("list?", isProperList),
     // ------------------------------------------------------------------
     fold: doc(
       "fold",

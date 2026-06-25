@@ -19,6 +19,14 @@
  * honest output is the `z.boolean` codec (DECODED type `boolean`) — the impl returns a JS
  * boolean, which native binds
  * and returns raw — downstream `structuralEqual` treats `true ≡ SchemeBool(true)`).
+ *
+ * ALSO HOLDS the R7RS TYPE predicates `string?` / `pair?` / `null?` / `boolean?` /
+ * `symbol?` / `list?` — relocated VERBATIM from the legacy `stdlib.ts` global_env as
+ * the stdlib-elimination POC. These are the value-domain-agnostic type tests (a
+ * string/pair/symbol test belongs with `procedure?`, not in any one cluster). Bodies
+ * are reproduced byte-for-byte; `list?` inlines the proper-list-with-cycle-detection
+ * walk (stdlib's `isProperList`) over the canonical `is_pair`/`is_nil`/`isCircularList`
+ * primitives. (`number?` / `real?` stay OUT — the numbers pack already binds them.)
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -27,7 +35,10 @@ import { ABool } from "../../values/primitives/ABool.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
-import { is_callable, is_macro } from "../../eval/guards.js";
+import { is_callable, is_macro, is_null } from "../../eval/guards.js";
+import { is_nil, is_pair } from "../../values/value-guards.js";
+import { AString } from "../../values/primitives/AString.js";
+import { isCircularList } from "../../values/primitives/APair.js";
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -76,6 +87,75 @@ export default new EnvCapability("scheme/equality", {
       { input: [z.unknown(), z.unknown()], output: [z.boolean] },
       (a: unknown, b: unknown): boolean => {
         return structuralEqual(a, b);
+      },
+    ),
+
+    // ── R7RS type predicates (relocated from stdlib.ts global_env, POC) ──────────
+    // Reproduced byte-for-byte from the legacy global_env defs. Representation-blind
+    // like the equivalence predicates above: each accepts a boxed AValue OR a raw JS
+    // value that crossed the rosetta membrane.
+    "string?": symbol.native`string?: boxed-or-raw string test`(
+      { input: [z.unknown()], output: [z.boolean] },
+      // L1 boxes string literals as SchemeString; AString.isString accepts BOTH the
+      // boxed SchemeString and a raw JS string (representation-blind).
+      (obj: unknown): boolean => {
+        return AString.isString(obj);
+      },
+    ),
+
+    "pair?": symbol.native`pair?: cons-cell test`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (obj: unknown): boolean => {
+        return is_pair(obj);
+      },
+    ),
+
+    "null?": symbol.native`null?: empty-list test`(
+      { input: [z.unknown()], output: [z.boolean] },
+      // is_null is nil OR JS null/undefined — matches the legacy global_env body exactly.
+      (obj: unknown): boolean => {
+        return is_null(obj);
+      },
+    ),
+
+    "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
+      { input: [z.unknown()], output: [z.boolean] },
+      // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
+      // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
+      (obj: unknown): boolean => {
+        return typeof obj === "boolean" || obj instanceof ABool;
+      },
+    ),
+
+    "symbol?": symbol.native`symbol?: interned-symbol test`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (obj: unknown): boolean => {
+        return obj instanceof ASymbol;
+      },
+    ),
+
+    "list?": symbol.native`list?: proper-list test (cycle-safe)`(
+      { input: [z.unknown()], output: [z.boolean] },
+      // Reproduces stdlib's `isProperList` body verbatim: a circular list is NOT a
+      // proper list (R7RS). Detect runtime cycles (have_cycles below only catches
+      // reader #0= cycles).
+      (obj: unknown): boolean => {
+        if (is_pair(obj) && isCircularList(obj)) {
+          return false;
+        }
+        let node: unknown = obj;
+        while (true) {
+          if (is_nil(node)) {
+            return true;
+          }
+          if (!is_pair(node)) {
+            return false;
+          }
+          if (node.have_cycles("cdr")) {
+            return false;
+          }
+          node = node.cdr;
+        }
       },
     ),
   },
