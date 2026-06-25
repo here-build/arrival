@@ -1,19 +1,11 @@
-// Purity doors — the typed throw behind every omitted feature.
+// PurityError — the typed error carried by a deliberately-omitted feature.
 //
-// arrival is PURE DATAFLOW, not general Scheme. Two whole families are omitted
-// by design — DYNAMICS (call/cc, dynamic-wind, make-parameter/parameterize,
-// delay/force) and WRITING METHODS (set-car!/set-cdr!/append!, vector/string/
-// bytevector mutators). Both falsify provenance: arrival's reason to exist is
-// value-level lineage (every value carries a provenance set the MCP/trace engine
-// reads), and lineage is sound only if values are immutable and evaluation is
-// pure. These are not missing features — they are what HAD to be excluded.
-//
-// The omission LIST is declared in core.ts as a manifesto of `define-macro`
-// doors (see the "PURITY" block there). Each door expands to a `(%purity-door
-// feature reason alternative)` call; the `%purity-door` stdlib primitive routes
-// here. This module owns only the TYPED throw — a PurityError carrying the
-// feature as an internal routing/telemetry key (errors-as-doors Rule 3/5) — so
-// the language owns the list and the host owns the structured error.
+// arrival is PURE DATAFLOW: value-level provenance requires immutable values and
+// pure evaluation, so value mutation (set-car!/vector-set!/…) and the dynamics
+// (call/cc/dynamic-wind/parameterize/delay/force) are omitted by design — they
+// would falsify the lineage every value carries. The capability door surface
+// throws this when an omitted verb is reached; the omission ledger lives in
+// env/r7rs/_unimplemented.ts.
 
 import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";
@@ -32,14 +24,4 @@ export class PurityError extends ArrivalError {
   }
 }
 
-/**
- * Throw a teaching door for a deliberately-omitted feature: deny + name the
- * reason (purity/provenance) + route to the supported alternative.
- *
- * @param feature     the name the caller reached for (e.g. `"vector-set!"`)
- * @param reason      why it is omitted (the provenance/purity concern)
- * @param alternative the supported channel to use instead
- */
-export function purityDoor(feature: string, reason: string, alternative: string): never {
-  throw new PurityError(`${feature} is omitted from arrival by design.\n  Why: ${reason}\n  Instead: ${alternative}`, feature);
-}
+

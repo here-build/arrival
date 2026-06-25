@@ -37,15 +37,15 @@ export const R7RS_OMITTED: Readonly<Record<string, R7rsOmission>> = {
   "for-each": { section: "6.10", reason: "elsewhere", at: "stdlib core" },
 
   // §6.10 Control features — first-class continuations + dynamics are purity doors.
-  "call/cc": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  "call-with-current-continuation": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  "dynamic-wind": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  "make-parameter": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  parameterize: { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  delay: { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  force: { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  "make-promise": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
-  "delay-force": { section: "6.10", reason: "door", at: "core.ts (%purity-door)" },
+  "call/cc": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  "call-with-current-continuation": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  "dynamic-wind": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  "make-parameter": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  parameterize: { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  delay: { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  force: { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  "make-promise": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
+  "delay-force": { section: "6.10", reason: "door", at: "omitted (provenance-incompatible: severs construction-site grounding)" },
 
   // §6.11 Exceptions — error-object predicates/constructors are native (bridge).
   "error-object?": { section: "6.11", reason: "elsewhere", at: "bridge.ts (native)" },

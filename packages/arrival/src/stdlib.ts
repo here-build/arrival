@@ -13,7 +13,7 @@ import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/primitives/EOF.js";
 import { AHalfBaked } from "./values/primitives/AHalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
-import { purityDoor } from "./purity.js";
+
 import { Parser } from "./reader/Parser.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
@@ -911,16 +911,7 @@ export const global_env = new Environment(
     // so the bindings are unreferenced. See husk-dissolution pass.
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
-    // %purity-door — the ONE host primitive behind every omitted feature.
-    // arrival's omission boundary (dynamics + writing methods) is declared in
-    // core.ts as a manifesto of `define-macro` doors that all call this.
-    // It throws the typed PurityError (feature/owner code → follow-rate
-    // telemetry, errors-as-doors Rule 3/5); the language owns the LIST, the host
-    // owns the typed throw. See docs/plan-2026-06-11-purity-pass.md.
-    "%purity-door": doc(null, function (feature: unknown, reason: unknown, alternative: unknown) {
-      const s = (v: unknown) => String((v as { valueOf?: () => unknown })?.valueOf?.() ?? v);
-      purityDoor(s(feature), s(reason), s(alternative));
-    }),
+
     // ------------------------------------------------------------------
     // define delegates to the generator evaluator (evalDefine) via
     // genMacroWrapper. Verified empirically equivalent to the old defmacro on
