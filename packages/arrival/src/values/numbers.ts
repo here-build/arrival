@@ -379,22 +379,22 @@ export class AInexact extends AValue {
     return Number.isFinite(this.real);
   }
 
-  private static floatToRational(x: number, tolerance: number = 1e-10): AExact {
+  private static floatToRational(ctx: RunContext, x: number, tolerance: number = 1e-10): AExact {
     if (Number.isInteger(x)) {
-      return new AExact(CONSTANT_CTX, BigInt(x));
+      return new AExact(ctx, BigInt(x));
     }
 
     // Simple approach: use decimal representation
     const str = x.toString();
     const dotIndex = str.indexOf(".");
     if (dotIndex === -1) {
-      return new AExact(CONSTANT_CTX, BigInt(x));
+      return new AExact(ctx, BigInt(x));
     }
 
     const decimals = str.length - dotIndex - 1;
     const denom = 10n ** BigInt(decimals);
     const num = BigInt(str.replace(".", ""));
-    return new AExact(CONSTANT_CTX, num, denom);
+    return new AExact(ctx, num, denom);
   }
 
   // Conversion to JS
@@ -555,7 +555,7 @@ export class AInexact extends AValue {
     invariant(Number.isFinite(this.real), "Infinite number cannot be converted to exact");
     invariant(!Number.isNaN(this.real), "NaN cannot be converted to exact");
     // Convert float to rational
-    return AInexact.floatToRational(this.real);
+    return AInexact.floatToRational(this.ctx, this.real);
   }
 }
 

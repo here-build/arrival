@@ -342,13 +342,14 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   clone(deep = true): APair {
     const visited = new Map<APair, APair>();
+    const selfCtx = this.ctx;
 
     function cloneNode(node: unknown): unknown {
       if (is_pair(node)) {
         if (visited.has(node)) {
           return visited.get(node);
         }
-        const pair = new APair(CONSTANT_CTX, ) as PairWithMetadata;
+        const pair = new APair(selfCtx, ) as PairWithMetadata;
         visited.set(node, pair);
         pair.car = deep ? cloneNode(node.car) : node.car;
         pair.cdr = cloneNode(node.cdr);
@@ -460,6 +461,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   transform(fn: (val: unknown) => unknown): APair {
     const visited: APair[] = [];
+    const selfCtx = this.ctx;
 
     function recur(pair: unknown): unknown {
       if (is_pair(pair)) {
@@ -477,7 +479,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
           cdr = recur(cdr);
           visited.push(cdr as APair);
         }
-        return new APair(CONSTANT_CTX, car, cdr);
+        return new APair(selfCtx, car, cdr);
       }
       return pair;
     }
