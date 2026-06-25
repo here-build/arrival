@@ -47,6 +47,7 @@ export type AKind =
   | "character"
   | "procedure"
   | "object"
+  | "js-array"
   | "vector"
   | "bytevector"
   | "halfbaked"

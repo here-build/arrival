@@ -17,7 +17,7 @@ import { inferenceEnv } from "../inference-env";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
-import { SchemeJSArray } from "../membrane";
+import { AJSArray } from "../membrane";
 import { nil } from "../values/primitives/ANil";
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
@@ -38,8 +38,8 @@ describe("collapseProvenance — sound over every structured carrier", () => {
     expect(sorted(collapseProvenance(vec))).toEqual([1, 2]);
   });
 
-  it("deep-walks a SchemeJSArray's source (the wrapper is not an AValue)", () => {
-    const arr = new SchemeJSArray([stamped("a", 1), stamped("b", 2)]);
+  it("deep-walks a AJSArray's source (now an AValue; its source elements are still deep-walked)", () => {
+    const arr = new AJSArray(CONSTANT_CTX, [stamped("a", 1), stamped("b", 2)]);
     expect(sorted(collapseProvenance(arr))).toEqual([1, 2]);
   });
 

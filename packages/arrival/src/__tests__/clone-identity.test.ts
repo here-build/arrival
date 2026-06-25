@@ -117,7 +117,7 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
   // rosetta.ts:70 — `schemeToJs(value)` short-circuits `value == null || value === nil`
   // by returning the value as-is. A Nil clone fails BOTH checks (it is not
   // nullish, and not === nil), so control falls through the function body.
-  // It is not a SchemeExact/SchemeInexact/SchemeJSObject/SchemeJSArray/
+  // It is not a SchemeExact/SchemeInexact/SchemeJSObject/AJSArray/
   // SchemeBool/SchemeString/Pair/plain-object — so the final `return value`
   // (line 156) hands back the Nil instance. JS-side consumers expecting
   // `null` (the contract that `value === nil` is supposed to give them) see

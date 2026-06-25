@@ -84,7 +84,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   // Both must be objects to recurse; otherwise they're unequal primitives.
   if (typeof a !== "object" || typeof b !== "object") return false;
 
-  // Arrays (incl. SchemeJSArray sources are raw arrays by this point).
+  // Arrays (incl. AJSArray sources are raw arrays by this point).
   const aArr = Array.isArray(a);
   const bArr = Array.isArray(b);
   if (aArr || bArr) {

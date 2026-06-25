@@ -1,11 +1,11 @@
 /**
  * Array-interop overlay — the genuine interop members of the inference-plane base
  * env (`inferenceEnv`), carved out of the hand-built overlay in `inference-env.ts`.
- * These are the members with NO equivalent in the assembled base: the SchemeJSArray-
+ * These are the members with NO equivalent in the assembled base: the AJSArray-
  * aware `car`/`cdr` and the term-dispatching, nil-tolerant `filter`/`map`/`reduce`.
  *
  * Why a separate capability and not an inline spread: this overlay bridges interop
- * mismatches the base env does NOT — lazy JS-array wrappers (`SchemeJSArray`) that
+ * mismatches the base env does NOT — lazy JS-array wrappers (`AJSArray`) that
  * must unwrap before LIPS car/cdr, and the nil tolerance the sequence ops
  * need at the inference boundary.
  *
@@ -35,7 +35,7 @@ import { type RunContext } from "../values/primitives/RunContext.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { global_env } from "../stdlib.js";
-import { SchemeJSArray } from "../membrane.js";
+import { AJSArray } from "../membrane.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -194,7 +194,7 @@ function comparisonImpl(sym: "=" | "<" | ">" | "<=" | ">="): (args: unknown[], r
 
 
 // Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
-// SchemeJSArray wrapper, or a raw JS array — to a flat element array. Used by
+// AJSArray wrapper, or a raw JS array — to a flat element array. Used by
 // `length` to see the full element set. As lenient as the old length: an
 // unrecognized input yields `[]` (an empty collection).
 //
@@ -213,7 +213,7 @@ function collectElements(collection: any): unknown[] {
     }
   } else if (collection instanceof AVector) {
     elements.push(...collection.__vector__); // boxed vector — its elements carry provenance
-  } else if (collection instanceof SchemeJSArray) {
+  } else if (collection instanceof AJSArray) {
     elements.push(...collection.source); // lazy JS-array wrapper from `@`/membrane
   } else if (Array.isArray(collection)) {
     elements.push(...collection);
@@ -227,7 +227,7 @@ function collectElements(collection: any): unknown[] {
 // trampoline TICK, so without it a `(map f huge)`/O(K²) churn runs unbounded (heap-budget.ts);
 // ANil is empty. The per-primitive box discipline + fold convention all live ON the term. A
 // receiver with NO such algebra
-// (a SchemeJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
+// (a AJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
 // throw, never a silent coercion. Heap stays holder-free here (runCtx, not currentRunEnv).
 function chargeAndDispatch(
   method: "map" | "filter" | "reduce" | "sort",

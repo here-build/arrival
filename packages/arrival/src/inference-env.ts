@@ -28,7 +28,7 @@ export const inferenceEnv = new Environment(
   {
     ...wrappedOps,
     nil,
-    // car/cdr/filter/map/reduce — the SchemeJSArray-aware + FL-dispatching interop
+    // car/cdr/filter/map/reduce — the AJSArray-aware + FL-dispatching interop
     // overlay — moved to the `scheme/fl-interop` capability (env/fl-interop.ts),
     // assembled onto this env in the bootstrap chain (bridge.ts initBridge).
     // `@` / `@?` / `@keys` (polyglot member access) are no longer shadowed here —

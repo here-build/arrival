@@ -17,7 +17,7 @@
 // structured carriers — a gap is a silent provenance hole:
 //   • `Pair`        — list spines (`car`/`cdr`)
 //   • `SchemeVector`— elements (the vector itself does NOT stamp from its members)
-//   • `SchemeJSArray`— the lazy JS-array wrapper's `source` (the wrapper is NOT an
+//   • `AJSArray`— the lazy JS-array wrapper's `source` (the wrapper is NOT an
 //                      AValue, so its elements are invisible to a flat union)
 //   • raw JS `Array`— elements
 // A value's OWN provenance is collected for ANY `AValue` (so a bare SchemeString
@@ -29,7 +29,7 @@ import { AValue } from "./values/primitives/AValue.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { APair } from "./values/primitives/APair.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { SchemeJSArray } from "./membrane.js";
+import { AJSArray } from "./membrane.js";
 import { AString } from "./values/primitives/AString.js";
 
 /** Union the provenance point-ids of every AValue reachable in `vals`, deep-walking
@@ -47,7 +47,7 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
       walk(v.cdr);
     } else if (v instanceof AVector) {
       for (const el of v.__vector__) walk(el);
-    } else if (v instanceof SchemeJSArray) {
+    } else if (v instanceof AJSArray) {
       for (const el of v.source) walk(el);
     } else if (Array.isArray(v)) {
       for (const el of v) walk(el);

@@ -222,11 +222,11 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
   // across ALL carriers; no coercion silently drops a provenance box.
   // Pair is pinned by A13 above; the runnable golden below
   // pins the SchemeVector carrier (the remaining constructible one) under the
-  // EAGER engine — the oracle the static path must reproduce. SchemeJSArray is a
+  // EAGER engine — the oracle the static path must reproduce. AJSArray is a
   // membrane wrapper (no public constructor here) and is asserted only via the
   // todo, end-to-end through the flag.
   it.todo(
-    "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / SchemeJSArray) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
+    "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / AJSArray) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
   );
 
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; count/convert ops drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {

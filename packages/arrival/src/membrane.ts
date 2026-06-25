@@ -23,7 +23,7 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./values/primitives/AValue.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
@@ -155,12 +155,24 @@ export function isBytevectorLike(value: unknown): boolean {
 
 /**
  * Lazy wrapper for JS arrays. O(1) creation, converts elements on access via fromJS.
- * NOT a Pair — consumers must check explicitly with `instanceof SchemeJSArray`.
+ * NOT a Pair — consumers must check explicitly with `instanceof AJSArray`.
  */
-export class SchemeJSArray {
+export class AJSArray extends AValue {
   static [CLASS] = "js-array";
+  readonly kind = "js-array" as const;
 
-  constructor(readonly source: readonly unknown[]) {}
+  // A borrowed JS array re-presented as a scheme value — the lazy member-access wrapper
+  // (readMember returns one so car/cdr/length work on a foreign array without an eager copy).
+  // Now an AValue term like its membrane siblings AJSObject / AJSFunction: it carries the run
+  // ctx + provenance and its own tagless-final algebra, instead of being the one wrapper that
+  // escaped the convention.
+  constructor(
+    ctx: RunContext,
+    readonly source: readonly unknown[],
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+  ) {
+    super(ctx, provenance);
+  }
 
   get length(): number {
     return this.source.length;
@@ -171,19 +183,44 @@ export class SchemeJSArray {
     return fromJS(this.source[index]);
   }
 
-  // Head/tail of a borrowed JS array — the SchemeJSArray car/cdr algebra (dissolved from
-  // fl-interop's SchemeJSArray branch onto the wrapper). car is at(0) (already nil when empty);
-  // cdr is the rest, nil once exhausted.
+  [TO_JS](): readonly unknown[] {
+    return this.source;
+  }
+
+  toJs(): readonly unknown[] {
+    return this.source;
+  }
+
+  withProvenance(p: ReadonlySet<number>): AJSArray {
+    return new AJSArray(this.ctx, this.source, p);
+  }
+
+  // Head/tail of a borrowed JS array — the AJSArray car/cdr algebra. car is at(0) (already nil
+  // when empty); cdr is the rest, nil once exhausted (threading this run's ctx).
   ["arrival/tagless-final/car"](): SchemeValue {
     return this.at(0);
   }
 
   ["arrival/tagless-final/cdr"](): SchemeValue {
-    return this.length <= 1 ? nil : new SchemeJSArray(this.source.slice(1));
+    return this.length <= 1 ? nil : new AJSArray(this.ctx, this.source.slice(1));
   }
 
-  [TO_JS](): readonly unknown[] {
-    return this.source;
+  // Arrival's element-count — like AVector, the count carries the source elements' unioned
+  // provenance (those already boxed as AValues), else the bare count. Dormant until the length
+  // binding switches to tagless dispatch.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    const count = this.source.length;
+    const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
+    if (inputs.length === 0) return count;
+    const prov = unionProvenance(inputs);
+    return prov.size === 0 ? count : AValue.fromJs(this.ctx, count, prov);
+  }
+
+  // Setoid — two AJSArray wrappers are equal iff they wrap the SAME source (reference identity),
+  // matching AJSObject: a borrowed foreign array is an opaque read-only view, and deep-comparing
+  // the source is the deep semantics the membrane exists to avoid.
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
+    return other instanceof AJSArray && other.source === this.source;
   }
 
   toString(): string {
@@ -882,7 +919,7 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
   // membrane-exposed foreign value (lazy proxy) → provenance-cached read.
   if (obj instanceof AJSObject) return obj.get(keyStr);
   try {
-    const source = obj instanceof SchemeJSArray ? obj.source : obj;
+    const source = obj instanceof AJSArray ? obj.source : obj;
     // Only a native dict (a plain record) or an array exposes members. A scheme
     // leaf value (string / number / symbol / nil / pair — a class instance), a
     // primitive, or a function is NOT a record: it has no members, and reading
@@ -895,7 +932,12 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
     const result = accessMember(source, keyStr);
     if (result === NOT_FOUND) return nil;
     // re-present a JS array as a polyglot array so car/cdr work on the result.
-    if (Array.isArray(result)) return new SchemeJSArray(result);
+    if (Array.isArray(result)) {
+      // ctx-threading rough edge (readMember is ctx-free): derive the run ctx from the
+      // container being read; a non-AValue container (a native dict) falls back to CONSTANT_CTX.
+      const ctx = obj instanceof AValue ? obj.ctx : CONSTANT_CTX;
+      return new AJSArray(ctx, result);
+    }
     return fromJS(result);
   } catch (e) {
     if (e instanceof InteropAccessError) return nil;

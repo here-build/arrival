@@ -2,10 +2,10 @@
  * G6 — carrier-coercion soundness (Wave A / W2).
  *
  * The claim under test: provenance must survive `map`/`filter`/`length`/`sort`
- * across ALL carriers (Pair / SchemeVector / SchemeJSArray) with no
+ * across ALL carriers (Pair / SchemeVector / AJSArray) with no
  * SILENT box-drop. The crossing audited is the FL-interop overlay
  * (`env/fl-interop.ts`) — the genuine interop members of the inference plane,
- * where a SchemeJSArray (a non-AValue membrane wrapper) and the eager
+ * where a AJSArray (a non-AValue membrane wrapper) and the eager
  * carriers all meet the polymorphic `map`/`filter`/`length`/`reduce`.
  *
  * DR5 (pre-mortem): every assertion inspects `.provenance` DIRECTLY — never via
@@ -33,7 +33,7 @@ import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
-import { SchemeJSArray } from "../membrane.js";
+import { AJSArray } from "../membrane.js";
 import flInteropCap from "../env/fl-interop.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
@@ -69,7 +69,7 @@ const elemProvs = (r: unknown): number[][] => {
     }
   } else if (r instanceof AVector) {
     for (const e of r.__vector__) out.push(provOf(e));
-  } else if (r instanceof SchemeJSArray) {
+  } else if (r instanceof AJSArray) {
     for (const e of r.source) out.push(provOf(e));
   } else if (Array.isArray(r)) {
     for (const e of r) out.push(provOf(e));
@@ -85,7 +85,7 @@ const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeC
 
 const mkPair = () => new APair(CONSTANT_CTX, el("a", 100), new APair(CONSTANT_CTX, el("b", 101), nil)).withProvenance(new Set([7]));
 const mkVec = () => new AVector(CONSTANT_CTX, [el("a", 100), el("b", 101)], new Set([7]));
-const mkArr = () => new SchemeJSArray([el("a", 100), el("b", 101)]);
+const mkArr = () => new AJSArray(CONSTANT_CTX, [el("a", 100), el("b", 101)]);
 
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND: per-element provenance survives the structure-preserving
@@ -114,7 +114,7 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // STRATUM 1 — SOUND (REPAIRED THIS WAVE): the `collectElements` SchemeVector gap.
 //
 // `collectElements` (used by `length`) had no SchemeVector branch — a vector
-// matched none of {Pair-spine, SchemeJSArray, raw array} and silently collected
+// matched none of {Pair-spine, AJSArray, raw array} and silently collected
 // []. So `(length vec)` counted 0, dropping every element's provenance with NO error.
 // Its twin `collapseProvenance` (provenance-collapse.ts) already walked
 // `__vector__`; the two near-twin deep-walkers disagreed (pre-mortem DR6). Fixed
@@ -129,7 +129,7 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
     expect(provOf(r)).toEqual([100, 101]);
   });
 
-  it("length(SchemeJSArray) carries element provenance (the membrane-wrapper carrier)", async () => {
+  it("length(AJSArray) carries element provenance (the membrane-wrapper carrier)", async () => {
     const r = await force(ops.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     expect(provOf(r)).toEqual([100, 101]);
@@ -194,10 +194,10 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
   });
 
-  // The overlay exists FOR SchemeJSArray-aware car/cdr, yet its map/filter/reduce
-  // do NOT handle a SchemeJSArray — they fall through to the LIPS builtins, which
-  // typecheck pair|nil and THROW. (Length/first/sort over a SchemeJSArray work.)
-  it("map(SchemeJSArray) THROWS — the overlay map has no SchemeJSArray branch [CONTESTED]", () => {
+  // The overlay exists FOR AJSArray-aware car/cdr, yet its map/filter/reduce
+  // do NOT handle a AJSArray — they fall through to the LIPS builtins, which
+  // typecheck pair|nil and THROW. (Length/first/sort over a AJSArray work.)
+  it("map(AJSArray) THROWS — the overlay map has no AJSArray branch [CONTESTED]", () => {
     expect("arrival/tagless-final/map" in mkArr()).toBe(false);
   });
 });
@@ -215,13 +215,13 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("car(Pair) projects the head element WITH its box", async () => {
     expect(provOf(await force(mkPair()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
-  it("car(SchemeJSArray) projects the head element WITH its box (the .at(0) carrier path)", async () => {
+  it("car(AJSArray) projects the head element WITH its box (the .at(0) carrier path)", async () => {
     expect(provOf(await force(mkArr()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
     expect(elemProvs(await force(mkPair()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
-  it("cdr(SchemeJSArray): the tail wrapper carries the remaining element's box", async () => {
+  it("cdr(AJSArray): the tail wrapper carries the remaining element's box", async () => {
     expect(elemProvs(await force(mkArr()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
@@ -231,13 +231,13 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });
 
-  // Wrong-carrier: a SchemeVector has no car algebra and a SchemeJSArray no reduce
+  // Wrong-carrier: a SchemeVector has no car algebra and a AJSArray no reduce
   // overlay branch → the dispatch totalic-throws (the DR4 surface — errors-as-doors,
   // not a silent box-drop). car/cdr are now the primitives OWN tagless-final algebra.
   it("car(SchemeVector): AVector carries no car algebra → the dispatch totalic-throws [DR4]", () => {
     expect("arrival/tagless-final/car" in mkVec()).toBe(false);
   });
-  it("reduce(SchemeJSArray) THROWS — overlay reduce has no SchemeJSArray branch [CONTESTED]", () => {
+  it("reduce(AJSArray) THROWS — overlay reduce has no AJSArray branch [CONTESTED]", () => {
     expect("arrival/tagless-final/reduce" in mkArr()).toBe(false);
   });
 });

@@ -70,7 +70,7 @@ export class AVector extends AValue {
   }
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
-  // array (elements convert lazily, as with SchemeJSArray).
+  // array (elements convert lazily, as with AJSArray).
   [TO_JS](): SchemeValue[] {
     return this.__vector__;
   }

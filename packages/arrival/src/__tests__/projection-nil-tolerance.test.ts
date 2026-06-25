@@ -7,7 +7,7 @@ import { is_nil, is_false } from "../eval/guards";
  * car/cdr nil-tolerance across interpreter modes × all primitive types.
  *
  * car/cdr are a UNIFIED tagless-final algebra ON the primitives: APair projects (with
- * provenance), ANil is the nil-projection, SchemeJSArray unwraps, and any term carrying NO
+ * provenance), ANil is the nil-projection, AJSArray unwraps, and any term carrying NO
  * car algebra (a vector, a number) is a totalic "does not support car" throw —
  * the whole type matrix falls out of one question, "does the receiver carry the algebra?".
  * The ONE mode-dependent cell is the empty list: ANil's car/cdr read the run's strict
