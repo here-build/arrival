@@ -601,7 +601,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
    * survive — losing it breaks stack traces and reader-cycle reconstruction.
    */
   withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
-    const copy = new APair<Car, Cdr>(CONSTANT_CTX, this.car, this.cdr, p);
+    const copy = new APair<Car, Cdr>(this.ctx, this.car, this.cdr, p);
     const src = this as PairWithMetadata<Car, Cdr>;
     const dst = copy as PairWithMetadata<Car, Cdr>;
     if (src[LOCATION] !== undefined) dst[LOCATION] = src[LOCATION];

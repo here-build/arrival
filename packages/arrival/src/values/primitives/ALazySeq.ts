@@ -243,7 +243,7 @@ export class ALazySeq extends AValue {
   }
 
   withProvenance(p: Provenance): ALazySeq {
-    return new ALazySeq(CONSTANT_CTX, this.source, this.ops, p);
+    return new ALazySeq(this.ctx, this.source, this.ops, p);
   }
 }
 

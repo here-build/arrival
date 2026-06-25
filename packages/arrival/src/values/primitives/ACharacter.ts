@@ -127,7 +127,7 @@ export class ACharacter extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ACharacter {
-    return new ACharacter(CONSTANT_CTX, this.__char__, p);
+    return new ACharacter(this.ctx, this.__char__, p);
   }
 
   // Setoid (Fantasy Land). Char ≡ char iff same grapheme. Matches the value

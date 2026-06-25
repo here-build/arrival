@@ -53,7 +53,7 @@ export class ANil extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ANil {
-    return new ANil(CONSTANT_CTX, p);
+    return new ANil(this.ctx, p);
   }
 
   // Setoid (Fantasy Land). Every Nil — including provenance clones — is equal,

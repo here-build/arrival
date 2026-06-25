@@ -125,7 +125,7 @@ export class ASymbol extends AValue {
 
   /** See UNINTERNED sentinel doc. */
   withProvenance(p: ReadonlySet<number>): ASymbol {
-    return new ASymbol(CONSTANT_CTX, this.__name__, p, UNINTERNED);
+    return new ASymbol(this.ctx, this.__name__, p, UNINTERNED);
   }
 }
 

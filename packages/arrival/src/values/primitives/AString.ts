@@ -160,7 +160,7 @@ export class AString extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AString {
-    return new AString(CONSTANT_CTX, this.__string__, p);
+    return new AString(this.ctx, this.__string__, p);
   }
 }
 

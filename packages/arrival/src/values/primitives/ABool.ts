@@ -31,7 +31,7 @@ export class ABool extends AValue {
     return this.value;
   }
   withProvenance(p: ReadonlySet<number>): ABool {
-    return new ABool(CONSTANT_CTX, this.value, p);
+    return new ABool(this.ctx, this.value, p);
   }
 
   // Fantasy Land Setoid: REPRESENTATION-BLIND — a boxed SchemeBool equals another SchemeBool of the

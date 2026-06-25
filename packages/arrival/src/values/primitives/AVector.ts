@@ -80,7 +80,7 @@ export class AVector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AVector {
-    const v = new AVector(CONSTANT_CTX, this.__vector__, p);
+    const v = new AVector(this.ctx, this.__vector__, p);
     // The copy shares the payload by reference, so a frozen literal stays frozen
     // (else re-stamping a literal's provenance would yield a mutable alias of it).
     if (this.frozen) v.freeze();

@@ -268,7 +268,7 @@ export class AHalfBaked extends AValue {
   }
 
   withProvenance(p: Provenance): AValue {
-    return new AHalfBaked(CONSTANT_CTX, this.domain, this.slots, this.records, this.source, p);
+    return new AHalfBaked(this.ctx, this.domain, this.slots, this.records, this.source, p);
   }
 }
 

@@ -108,7 +108,7 @@ export class ABytevector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ABytevector {
-    const bv = new ABytevector(CONSTANT_CTX, this.__bytevector__, p);
+    const bv = new ABytevector(this.ctx, this.__bytevector__, p);
     if (this.frozen) bv.freeze();
     return bv;
   }

@@ -173,7 +173,7 @@ export class AExact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AExact {
-    return new AExact(CONSTANT_CTX, this.num, this.denom, p);
+    return new AExact(this.ctx, this.num, this.denom, p);
   }
 
   // String representation
@@ -412,7 +412,7 @@ export class AInexact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AInexact {
-    return new AInexact(CONSTANT_CTX, this.real, p);
+    return new AInexact(this.ctx, this.real, p);
   }
 
   // String representation. Reals-only — emit the Scheme inexact form with a
