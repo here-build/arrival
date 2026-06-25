@@ -90,7 +90,7 @@ export class ABytevector extends AValue {
   }
 
   copy(start = 0, end = this.__bytevector__.byteLength): ABytevector {
-    return new ABytevector(CONSTANT_CTX, this.__bytevector__.slice(start, end));
+    return new ABytevector(this.ctx, this.__bytevector__.slice(start, end));
   }
 
   // Membrane unwrap (membrane.ts toJS, TO_JS protocol): a boxed bytevector
@@ -157,7 +157,7 @@ export class ABytevector extends AValue {
     const result = new Uint8Array(a.length + b.length);
     result.set(a, 0);
     result.set(b, a.length);
-    return new ABytevector(CONSTANT_CTX, result);
+    return new ABytevector(this.ctx, result);
   }
 }
 

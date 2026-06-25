@@ -486,7 +486,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   map(fn: (val: unknown) => unknown): APair | ANil {
-    return this.car === undefined ? nil : new APair(CONSTANT_CTX, fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
+    return this.car === undefined ? nil : new APair(this.ctx, fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
   }
 
   mark_cycles(): this {

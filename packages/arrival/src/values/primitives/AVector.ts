@@ -62,7 +62,7 @@ export class AVector extends AValue {
   }
 
   copy(start = 0, end = this.__vector__.length): AVector {
-    return new AVector(CONSTANT_CTX, this.__vector__.slice(start, end));
+    return new AVector(this.ctx, this.__vector__.slice(start, end));
   }
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
@@ -108,7 +108,7 @@ export class AVector extends AValue {
   // Semigroup (Fantasy Land) — element concatenation. Associative; equality via
   // the Setoid above.
   ["arrival/tagless-final/concat"](other: AVector): AVector {
-    return new AVector(CONSTANT_CTX, [...this.__vector__, ...other.__vector__]);
+    return new AVector(this.ctx, [...this.__vector__, ...other.__vector__]);
   }
 
   // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A
@@ -124,7 +124,7 @@ export class AVector extends AValue {
   ): Promise<AVector> {
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) out.push(unwrapForeign(await fn(v)) as SchemeValue);
-    return new AVector(CONSTANT_CTX, out);
+    return new AVector(this.ctx, out);
   }
 
   // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a
@@ -142,7 +142,7 @@ export class AVector extends AValue {
       const verdict = await pred(v);
       if (!is_false(verdict) && !is_nil(verdict)) out.push(v);
     }
-    return new AVector(CONSTANT_CTX, out);
+    return new AVector(this.ctx, out);
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention

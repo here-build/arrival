@@ -48,7 +48,7 @@ export class AString extends AValue {
   *[Symbol.iterator]() {
     const chars = [...this.__string__];
     for (const char of chars) {
-      yield new ACharacter(CONSTANT_CTX, char);
+      yield new ACharacter(this.ctx, char);
     }
   }
 
@@ -116,13 +116,13 @@ export class AString extends AValue {
   // this is the borrowed-protocol rename only. (Migrated from the fantasy-land.ts
   // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
-    return new AString(CONSTANT_CTX, [...this.__string__].map(f).join(""));
+    return new AString(this.ctx, [...this.__string__].map(f).join(""));
   }
 
   // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
   // two underlying strings. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AString): AString {
-    return new AString(CONSTANT_CTX, this.__string__ + other.valueOf());
+    return new AString(this.ctx, this.__string__ + other.valueOf());
   }
 
   // Monoid (Fantasy Land) — the empty string is the identity for append.
@@ -136,15 +136,15 @@ export class AString extends AValue {
   }
 
   lower(): AString {
-    return new AString(CONSTANT_CTX, this.__string__.toLowerCase());
+    return new AString(this.ctx, this.__string__.toLowerCase());
   }
 
   upper(): AString {
-    return new AString(CONSTANT_CTX, this.__string__.toUpperCase());
+    return new AString(this.ctx, this.__string__.toUpperCase());
   }
 
   clone(): AString {
-    return new AString(CONSTANT_CTX, this.valueOf());
+    return new AString(this.ctx, this.valueOf());
   }
 
   valueOf(): string {

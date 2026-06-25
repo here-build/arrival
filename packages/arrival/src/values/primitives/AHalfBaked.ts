@@ -184,7 +184,7 @@ export class AHalfBaked extends AValue {
    */
   toCardinalityNumber(provenance: Provenance = this.provenance): AHalfBaked {
     if (this.domain !== "collection") return this;
-    return new AHalfBaked(CONSTANT_CTX, "number", this.slots, this.records, this, provenance);
+    return new AHalfBaked(this.ctx, "number", this.slots, this.records, this, provenance);
   }
 
   /**

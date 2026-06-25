@@ -140,7 +140,7 @@ export class ALazySeq extends AValue {
 
   /** `pipe` — extend the plan. Pure, cheap, runs NOTHING. */
   pipe(op: LazyOp): ALazySeq {
-    return new ALazySeq(CONSTANT_CTX, this.source, [...this.ops, op], this.provenance);
+    return new ALazySeq(this.ctx, this.source, [...this.ops, op], this.provenance);
   }
 
   map(fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>, prov: Provenance = EMPTY_PROVENANCE): ALazySeq {

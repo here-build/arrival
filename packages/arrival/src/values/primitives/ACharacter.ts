@@ -103,11 +103,11 @@ export class ACharacter extends AValue {
   }
 
   toUpperCase(): ACharacter {
-    return new ACharacter(CONSTANT_CTX, this.__char__.toUpperCase());
+    return new ACharacter(this.ctx, this.__char__.toUpperCase());
   }
 
   toLowerCase(): ACharacter {
-    return new ACharacter(CONSTANT_CTX, this.__char__.toLowerCase());
+    return new ACharacter(this.ctx, this.__char__.toLowerCase());
   }
 
   toString(): string {
