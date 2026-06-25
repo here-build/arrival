@@ -10,6 +10,8 @@
 // SRFI-1 `remove` deliberately stay in core (`core.ts`): the accessors are
 // arrival-specific crash-avoidance, and `remove` is authored there directly
 // (it once shadowed a Ramda `remove`, since removed entirely).
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI1_SCM = `
@@ -207,4 +209,19 @@ export const SRFI1_SCM = `
         (iter (fn (cdr pair)) (cons (car pair) result)))))
 `;
 
-export default new EnvCapability("scheme/srfi-1", { prelude: SRFI1_SCM });
+// reduce — SRFI-1's higher-order list fold, RELOCATED from stdlib.ts global_env (stdlib
+// elimination) as a pure `symbol.tagless` dispatcher. NO impl: it forwards to the receiver's
+// own `arrival/tagless-final/reduce` term method (APair/AVector declare the left-fold;
+// ANil returns the seed), threading the run ctx. Scheme places the collection LAST —
+// `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
+// list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
+// convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
+export default new EnvCapability("scheme/srfi-1", {
+  prelude: SRFI1_SCM,
+  symbols: {
+    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`({
+      input: [z.unknown(), z.unknown(), z.unknown()],
+      output: [z.unknown()],
+    }),
+  },
+});

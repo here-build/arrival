@@ -1351,22 +1351,6 @@ export const global_env = new Environment(
       }),
     ),
     // ------------------------------------------------------------------
-    reduce: doc(
-      "reduce",
-      fold("reduce", function (this: unknown, reduce, fn, init, ...lists) {
-        typecheck("reduce", fn, "function");
-        for (const [i, arg] of lists.entries()) {
-          typecheck("reduce", arg, ["pair", "nil"], i + 1);
-        }
-        if (lists.some(is_nil)) {
-          return init;
-        }
-        return unpromise(fn(...lists.map((l: SchemeValue) => l.car), init), (value) => {
-          return reduce.call(this, fn, value, ...lists.map((l: SchemeValue) => l.cdr));
-        });
-      }),
-    ),
-    // ------------------------------------------------------------------
     filter: doc("filter", function filter(this: Environment, arg, list) {
       typecheck("filter", arg, ["regex", "function"]);
       typecheck("filter", list, ["pair", "nil"]);
