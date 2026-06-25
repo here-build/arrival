@@ -41,7 +41,7 @@ export {
   schemeTrue as ATrue,
   schemeTrue,
 } from "./values/primitives/ABool.js";
-export { AJSFunction as AProc, AJSObject as AObject } from "./membrane.js";
+export { AJSFunction as AProc, AJSObject as AObject } from "./values/primitives/js-wrappers.js";
 // `AChar` is the legacy alias kept for cross-package consumers; `ACharacter` is
 // the canonical class name. Both spellings resolve to the same class.
 export { ACharacter, ACharacter as AChar } from "./values/primitives/ACharacter.js";

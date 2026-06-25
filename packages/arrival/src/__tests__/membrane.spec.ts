@@ -13,13 +13,12 @@ import {
   Real,
   // Wrapper layer
   TO_JS,
-  AJSObject,
-  AJSFunction,
   fromJS,
   toJS,
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane";
+import { AJSObject, AJSFunction } from "../values/primitives/js-wrappers.js";
 import { nil } from "../values/primitives/ANil";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

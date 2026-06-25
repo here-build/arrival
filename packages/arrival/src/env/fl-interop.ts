@@ -35,7 +35,7 @@ import { type RunContext } from "../values/primitives/RunContext.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { global_env } from "../stdlib.js";
-import { AJSArray } from "../membrane.js";
+import { AJSArray } from "../values/primitives/js-wrappers.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";

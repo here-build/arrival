@@ -20,7 +20,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
-import { AJSObject } from "../membrane";
+import { AJSObject } from "../values/primitives/js-wrappers.js";
 import { AExact, AInexact } from "../values/numbers";
 import { APair } from "../values/primitives/APair.js";
 import { jsToScheme } from "../rosetta";

@@ -69,8 +69,8 @@ import {
   NOT_FOUND,
   accessMember,
   InteropAccessError,
-  AJSObject,
 } from "./membrane.js";
+import { AJSObject } from "./values/primitives/js-wrappers.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
 import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
 

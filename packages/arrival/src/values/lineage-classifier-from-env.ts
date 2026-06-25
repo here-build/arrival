@@ -31,7 +31,7 @@
  */
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
-import { AJSFunction } from "../membrane.js";
+import { AJSFunction } from "./primitives/js-wrappers.js";
 import type { Classifier } from "./lineage.js";
 
 /** Collection operators that classify to a per-element fan template (see classify). */

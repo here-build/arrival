@@ -12,7 +12,7 @@ import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type LineageNode } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
-import { AJSFunction } from "../membrane";
+import { AJSFunction } from "../values/primitives/js-wrappers.js";
 
 let seq = 0;
 const env = () => inferenceEnv.inherit(`cfe-${seq++}`);

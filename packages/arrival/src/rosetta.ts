@@ -17,7 +17,7 @@ import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fing
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { AJSArray, AJSObject } from "./membrane.js";
+import { AJSArray, AJSObject } from "./values/primitives/js-wrappers.js";
 import { AExact, AInexact } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";

@@ -33,7 +33,7 @@ import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
-import { AJSArray } from "../membrane.js";
+import { AJSArray } from "../values/primitives/js-wrappers.js";
 import flInteropCap from "../env/fl-interop.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";

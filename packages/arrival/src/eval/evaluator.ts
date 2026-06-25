@@ -38,7 +38,7 @@ import {
   is_syntax,
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
-import { AJSFunction } from "../membrane.js";
+import { AJSFunction } from "../values/primitives/js-wrappers.js";
 import { ArrivalError } from "../ArrivalError.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
