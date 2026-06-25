@@ -330,27 +330,6 @@ export default new EnvCapability("scheme/fl-interop", {
       },
     ),
 
-    // ── Association lists ──
-    assoc: symbol.native`assoc: the alist entry whose key equals key, else nil`(
-      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
-      (key: any, alist: any) => {
-        if (is_lazy_seq(alist)) unforcedLazyEgress("assoc");
-        if (!alist) return nil;
-        const items = Array.isArray(alist) ? alist : [];
-        // Convert LIPS pairs to traversable
-        if (!Array.isArray(alist) && alist?.car) {
-          let current = alist;
-          while (current?.car) {
-            const pair = current.car;
-            if (pair?.car?.valueOf?.() === key?.valueOf?.() || pair?.car === key) return pair;
-            current = current.cdr;
-          }
-          return nil;
-        }
-        return items.find((pair: any) => pair?.[0] === key || pair?.car === key) ?? nil;
-      },
-    ),
-
     // ── Sort ──
     sort: symbol.native`sort: a sorted scheme list (optional comparator)`(
       { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },

@@ -36,6 +36,7 @@ import { AString } from "../values/primitives/AString.js";
 import { ALazySeq } from "../values/primitives/ALazySeq.js";
 import { SchemeJSArray } from "../membrane.js";
 import flInteropCap from "../env/fl-interop.js";
+import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../env/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
@@ -51,6 +52,7 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
     ).map(([k, v]) => [k, v.impl ?? v.value]),
   );
 const ops = opsOf(flInteropCap);
+const listOps = opsOf(listsCap); // r7rs scheme/lists — assoc lives here now
 
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
 /** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the
@@ -248,7 +250,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
-    const found = (await force(ops.assoc(el("k", 200), alist))) as APair;
+    const found = (await force(listOps.assoc(el("k", 200), alist))) as APair;
     expect(provOf(found.car)).toEqual([100]); // key box
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });
