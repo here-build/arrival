@@ -160,6 +160,21 @@ export interface AOrd {
 export const isOrd = (x: unknown): x is AOrd =>
   x != null && typeof (x as Partial<AOrd>)["arrival/tagless-final/lte"] === "function";
 const lte = (a: AOrd, b: unknown): boolean => Boolean(a["arrival/tagless-final/lte"](b));
+// Nil is the BOTTOM of the universal order (V's F2: nil-as-bottom, matching SRFI-128's
+// "the empty list is ordered before all pairs" and Clojure's `compare`). Detected
+// structurally (null / undefined / ANil — by constructor name, so no value-class import
+// and no cycle). Returns the 3-way verdict when EITHER side is nil (both nil ⇒ 0/equal;
+// one nil ⇒ it is the lesser), else `undefined` — meaning "neither is nil, compare
+// normally". Shared by `deriveSortCompare` here AND the loose comparison ops in
+// fl-interop, so `<` and `sort` agree on where nil sorts.
+const isNilValue = (x: unknown): boolean =>
+  x == null || (x as { constructor?: { name?: string } })?.constructor?.name === "ANil";
+export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined {
+  const aN = isNilValue(a);
+  const bN = isNilValue(b);
+  if (!aN && !bN) return undefined;
+  return aN && bN ? 0 : aN ? -1 : 1;
+}
 /** The four relations of a total order, all derived from the single `lte`. */
 export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => boolean> = {
   "<": (a, b) => !lte(b, a),
@@ -227,6 +242,8 @@ export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unkno
     };
   }
   return (a, b) => {
+    const nilCmp = nilOrderCompare(a, b);
+    if (nilCmp !== undefined) return nilCmp; // nil is the order's bottom (shared with the comparison ops)
     if (!isOrd(a)) throw new TypeError(`sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
     if (!isOrd(b)) throw new TypeError(`sort: cannot order a ${describeOrdElement(b)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
     const aLE = lte(a, b);

@@ -40,6 +40,7 @@ import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
+import { isOrd, nilOrderCompare, withInputProvenance, type AOrd } from "../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { heapBudgetMessage } from "../heap-budget.js";
 import { SchemeError } from "../eval/evaluator.js";
@@ -116,6 +117,79 @@ function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): u
   const provenance = unionProvenance(args);
   if (provenance.size > 0) return (verdict ? schemeTrue : schemeFalse).withProvenance(provenance);
   return verdict;
+}
+
+// ── Loose universal order (nil-as-bottom) ───────────────────────────────────
+// The four ordering relations, each derived from the two `lte` directions of a non-numeric
+// Ord pair. Conjunctive </> (NOT the `!lte(b,a)` total-order shortcut) so they stay correct
+// even if a NaN-incomparable value ever slipped through (it can't — numbers take the
+// all-number fast path first — but the conjunctive form is the honest derivation).
+const ORD_FROM_LE: Record<"<" | ">" | "<=" | ">=", (le_ab: boolean, le_ba: boolean) => boolean> = {
+  "<": (ab, ba) => ab && !ba,
+  ">": (ab, ba) => ba && !ab,
+  "<=": (ab) => ab,
+  ">=": (_ab, ba) => ba,
+};
+const describeOperand = (v: unknown): string =>
+  v instanceof AValue ? v.kind : v === null || v === undefined ? String(v) : typeof v;
+// One pair of the LOOSE universal order, nil-as-bottom aware. nil is the floor
+// (nilOrderCompare); two numbers use the NaN-safe NUM_PAIR; two non-number Ord values use
+// their `arrival/tagless-final/lte`. A pair that shares no order — one side not Ord, or BOTH
+// lte directions false (cross-type incomparable, e.g. string vs number) — THROWS (V:
+// "crashes on incompatible types, not the JS '' > [] coercion"). The both-false ⟺ cross-type
+// test is sound here: numbers (the only NaN-incomparable Ord) already took the all-number
+// fast path before we reach this.
+function loosePairOrder(sym: "<" | ">" | "<=" | ">=", a: unknown, b: unknown): boolean {
+  const nilCmp = nilOrderCompare(a, b);
+  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
+  if (isNumberOperand(a) && isNumberOperand(b)) return NUM_PAIR[sym](a, b);
+  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeOperand(a)} and ${describeOperand(b)} — no shared order.`);
+  const le_ab = Boolean((a as AOrd)["arrival/tagless-final/lte"](b));
+  const le_ba = Boolean((b as AOrd)["arrival/tagless-final/lte"](a));
+  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeOperand(a)} and ${describeOperand(b)} — incompatible types.`);
+  return ORD_FROM_LE[sym](le_ab, le_ba);
+}
+// n-ary loose ordering with nil-as-bottom — chains adjacent pairs (matches the Operators'
+// prev-walk), forwarding the operands' provenance onto the verdict (never minting).
+function looseOrderChain(sym: "<" | ">" | "<=" | ">=", args: unknown[]): unknown {
+  let verdict = true;
+  for (let i = 0; i < args.length - 1; i++) {
+    if (!loosePairOrder(sym, args[i], args[i + 1])) {
+      verdict = false;
+      break;
+    }
+  }
+  return withInputProvenance(args, verdict);
+}
+// The lazily-captured numeric builtin per symbol (read AFTER captureBuiltins()).
+const NUM_BUILTIN: Record<"=" | "<" | ">" | "<=" | ">=", () => Callable | undefined> = {
+  "=": () => builtinNumEq,
+  "<": () => builtinLt,
+  ">": () => builtinGt,
+  "<=": () => builtinLte,
+  ">=": () => builtinGte,
+};
+// The shared comparison impl, strict/loose-gated (V's F1/F2). STRICT = R7RS-faithful (the
+// negative-test probe): numeric only — a non-number operand is rejected, so every cell where
+// loose answers but strict throws is one documented divergence. LOOSE (default) = the friendly
+// superset: numbers compute NaN-safely (numericCompare), nil is the order's BOTTOM (nil-punning
+// for `=`, looseOrderChain for the orderings), and non-numeric Ord types route to the bridged
+// operator's universal `wrapOrd` chain (which itself throws on a genuine cross-type pair). `=`
+// stays NUMERIC equality (structural equality is `equal?`); its only nil concession is nil = nil.
+function comparisonImpl(sym: "=" | "<" | ">" | "<=" | ">="): (args: unknown[], runCtx: RunContext) => unknown {
+  return (args, runCtx) => {
+    if (runCtx.strict) {
+      if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(sym, args);
+      throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected (use string<? / char<? / equal? for non-numbers).`);
+    }
+    if (args.some(isNilOperand)) {
+      if (sym === "=") return withInputProvenance(args, args.every(isNilOperand)); // nil-punning: nil = nil only
+      return looseOrderChain(sym, args);
+    }
+    if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(sym, args);
+    captureBuiltins();
+    return NUM_BUILTIN[sym]()!(...args);
+  };
 }
 
 
@@ -230,50 +304,25 @@ export default new EnvCapability("scheme/fl-interop", {
     // by-value via their `arrival/tagless-final/lte` (numericChain — no env-read, byte-identical
     // to the =/</>/<=/>= Operators incl. NaN/cross-type); a non-number (or arity-0) operand
     // falls back to the kept bridged builtin, which is that Operator (identical throw).
-    "=": symbol.native`=: numeric =, nil-tolerant (a nil operand ⇒ #f)`(
+    "=": symbol.sequence`=: numeric equality — loose: nil-punning (nil = nil); strict: R7RS-numeric`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
-      function numEq(...args: unknown[]) {
-        if (args.some(isNilOperand)) return false;
-        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("=", args);
-        captureBuiltins();
-        return builtinNumEq!(...args);
-      },
+      comparisonImpl("="),
     ),
-    "<": symbol.native`<: numeric <, nil-tolerant`(
+    "<": symbol.sequence`<: order — loose: universal via lte + nil-as-bottom; strict: R7RS-numeric`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
-      function lt(...args: unknown[]) {
-        if (args.some(isNilOperand)) return false;
-        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<", args);
-        captureBuiltins();
-        return builtinLt!(...args);
-      },
+      comparisonImpl("<"),
     ),
-    ">": symbol.native`>: numeric >, nil-tolerant`(
+    ">": symbol.sequence`>: order — loose: universal via lte + nil-as-bottom; strict: R7RS-numeric`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
-      function gt(...args: unknown[]) {
-        if (args.some(isNilOperand)) return false;
-        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">", args);
-        captureBuiltins();
-        return builtinGt!(...args);
-      },
+      comparisonImpl(">"),
     ),
-    "<=": symbol.native`<=: numeric <=, nil-tolerant`(
+    "<=": symbol.sequence`<=: order — loose: universal via lte + nil-as-bottom; strict: R7RS-numeric`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
-      function lte(...args: unknown[]) {
-        if (args.some(isNilOperand)) return false;
-        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare("<=", args);
-        captureBuiltins();
-        return builtinLte!(...args);
-      },
+      comparisonImpl("<="),
     ),
-    ">=": symbol.native`>=: numeric >=, nil-tolerant`(
+    ">=": symbol.sequence`>=: order — loose: universal via lte + nil-as-bottom; strict: R7RS-numeric`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
-      function gte(...args: unknown[]) {
-        if (args.some(isNilOperand)) return false;
-        if (args.length >= 1 && args.every(isNumberOperand)) return numericCompare(">=", args);
-        captureBuiltins();
-        return builtinGte!(...args);
-      },
+      comparisonImpl(">="),
     ),
 
     // sort — SRFI-95 `(sort seq comparator?)`, DISSOLVED onto the term protocol (like
