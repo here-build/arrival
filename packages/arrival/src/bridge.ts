@@ -342,24 +342,24 @@ export const wrappedOps = {
   "floor/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(CONSTANT_CTX, BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(CONSTANT_CTX, BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
     const q = ops.floorQuotient.call([aExact, bExact]);
     const r = ops.floorRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(CONSTANT_CTX, q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(CONSTANT_CTX, r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
   "truncate/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(CONSTANT_CTX, BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(CONSTANT_CTX, BigInt(Math.trunc(b.real)));
+    const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
+    const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
     const q = ops.truncateQuotient.call([aExact, bExact]);
     const r = ops.truncateRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(CONSTANT_CTX, q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(CONSTANT_CTX, r as unknown as bigint);
+    const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
+    const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
     return Values.from([qNum, rNum]);
   },
 
@@ -382,14 +382,14 @@ export const wrappedOps = {
       const n = coerceNumeric(arg);
       if (n instanceof AInexact) {
         hasInexact = true;
-        exactArgs.push(new AExact(CONSTANT_CTX, BigInt(Math.trunc(n.real))));
+        exactArgs.push(new AExact(n.ctx, BigInt(Math.trunc(n.real))));
       } else {
-        exactArgs.push(new AExact(CONSTANT_CTX, n.num / n.denom));
+        exactArgs.push(new AExact(n.ctx, n.num / n.denom));
       }
     }
     const result = ops.lcm.call(exactArgs);
     const resultBigint = result instanceof AExact ? result.num : (result as bigint);
-    return hasInexact ? new AInexact(CONSTANT_CTX, Number(resultBigint)) : new AExact(CONSTANT_CTX, resultBigint);
+    return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
   },
 
   expt: wrapOperator(ops.expt),
@@ -448,13 +448,13 @@ export const wrappedOps = {
 
   "1+"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new AExact(CONSTANT_CTX, 1n);
+    const one = new AExact(converted.ctx, 1n);
     return ops.add.call([converted, one]);
   },
 
   "1-"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
-    const one = new AExact(CONSTANT_CTX, 1n);
+    const one = new AExact(converted.ctx, 1n);
     return ops.sub.call([converted, one]);
   },
 
@@ -482,8 +482,8 @@ export const wrappedOps = {
     const n = coerceNumeric(z);
     if (n instanceof AInexact) return n;
     const exact = n;
-    if (exact.denom === 1n) return new AInexact(CONSTANT_CTX, Number(exact.num));
-    return new AInexact(CONSTANT_CTX, Number(exact.num) / Number(exact.denom));
+    if (exact.denom === 1n) return new AInexact(exact.ctx, Number(exact.num));
+    return new AInexact(exact.ctx, Number(exact.num) / Number(exact.denom));
   },
 
   exact(z: unknown): AExact {
@@ -492,7 +492,7 @@ export const wrappedOps = {
     const inexact = n;
     const real = inexact.real;
     TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-    if (Number.isInteger(real)) return new AExact(CONSTANT_CTX, BigInt(real));
+    if (Number.isInteger(real)) return new AExact(inexact.ctx, BigInt(real));
     // JS Number.toString picks between fixed (`0.5`) and exponential (`1e-10`,
     // `1e+21`) notations based on magnitude. The fixed-notation path uses the
     // decimal-place count to derive the denominator. The exponential path was
@@ -511,21 +511,21 @@ export const wrappedOps = {
       const mantissa = BigInt(`${sign}${digits}`);
       const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
       if (netExp >= 0) {
-        return new AExact(CONSTANT_CTX, mantissa * 10n ** BigInt(netExp));
+        return new AExact(inexact.ctx, mantissa * 10n ** BigInt(netExp));
       }
       const denomBig = 10n ** BigInt(-netExp);
       const absNum = mantissa < 0n ? -mantissa : mantissa;
       const g = gcd(absNum, denomBig);
-      return new AExact(CONSTANT_CTX, mantissa / g, denomBig / g);
+      return new AExact(inexact.ctx, mantissa / g, denomBig / g);
     }
     const decimalIndex = str.indexOf(".");
-    if (decimalIndex === -1) return new AExact(CONSTANT_CTX, BigInt(real));
+    if (decimalIndex === -1) return new AExact(inexact.ctx, BigInt(real));
     const decimals = str.length - decimalIndex - 1;
     const scale = 10n ** BigInt(decimals);
     const num = BigInt(Math.round(real * Number(scale)));
     const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
     const g = gcd(num < 0n ? -num : num, scale);
-    return new AExact(CONSTANT_CTX, num / g, scale / g);
+    return new AExact(inexact.ctx, num / g, scale / g);
   },
 
   "number->string"(z: unknown, radix?: unknown): string {
