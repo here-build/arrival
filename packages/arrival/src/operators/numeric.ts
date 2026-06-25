@@ -51,7 +51,7 @@ function schemeAdd(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(CONSTANT_CTX, aVal + bVal);
+    return new AInexact(a.ctx, aVal + bVal);
   }
   // Both exact
   return (a as AExact).add(b as AExact);
@@ -75,7 +75,7 @@ function schemeSub(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(CONSTANT_CTX, aVal - bVal);
+    return new AInexact(a.ctx, aVal - bVal);
   }
   return (a as AExact).sub(b as AExact);
 }
@@ -85,9 +85,9 @@ function schemeSub(a: ANumeric, b: ANumeric): ANumeric {
  */
 function schemeNegate(a: ANumeric): ANumeric {
   if (a instanceof AInexact) {
-    return new AInexact(CONSTANT_CTX, -a.real);
+    return new AInexact(a.ctx, -a.real);
   }
-  return new AExact(CONSTANT_CTX, -a.num, a.denom);
+  return new AExact(a.ctx, -a.num, a.denom);
 }
 
 /**
@@ -97,7 +97,7 @@ function schemeMul(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(CONSTANT_CTX, aVal * bVal);
+    return new AInexact(a.ctx, aVal * bVal);
   }
   return (a as AExact).mul(b as AExact);
 }
@@ -109,7 +109,7 @@ function schemeDiv(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(CONSTANT_CTX, aVal / bVal);
+    return new AInexact(a.ctx, aVal / bVal);
   }
   // Both exact - returns inexact if not evenly divisible
   // If result is a non-integer rational, keep exact. Otherwise convert to inexact for consistency
@@ -146,7 +146,7 @@ export const div = new Operator("/", {
   fn: (first: ANumeric, ...rest: ANumeric[]) => {
     if (rest.length === 0) {
       // (/ n) = 1/n
-      return schemeDiv(new AExact(CONSTANT_CTX, 1n), first);
+      return schemeDiv(new AExact(first.ctx, 1n), first);
     }
     return rest.reduce(schemeDiv, first);
   },
@@ -223,9 +223,9 @@ export const remainder = new Operator("remainder", {
     if (p.bothExact) {
       invariant(p.bv !== 0n, "remainder: division by zero");
       // JS bigint % truncates toward zero → matches R7RS truncating remainder.
-      return new AExact(CONSTANT_CTX, p.av % p.bv);
+      return new AExact(a.ctx, p.av % p.bv);
     }
-    return new AInexact(CONSTANT_CTX, p.av % p.bv);
+    return new AInexact(a.ctx, p.av % p.bv);
   },
 });
 
@@ -237,9 +237,9 @@ export const modulo = new Operator("modulo", {
     const p = toIntegerPair(a, b, "modulo");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "modulo: division by zero");
-      return new AExact(CONSTANT_CTX, ((p.av % p.bv) + p.bv) % p.bv);
+      return new AExact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
     }
-    return new AInexact(CONSTANT_CTX, ((p.av % p.bv) + p.bv) % p.bv);
+    return new AInexact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
   },
 });
 
@@ -251,9 +251,9 @@ export const floorQuotient = new Operator("floor-quotient", {
     const p = toIntegerPair(a, b, "floor-quotient");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "floor-quotient: division by zero");
-      return new AExact(CONSTANT_CTX, bigintFloorDiv(p.av, p.bv));
+      return new AExact(a.ctx, bigintFloorDiv(p.av, p.bv));
     }
-    return new AInexact(CONSTANT_CTX, Math.floor(p.av / p.bv));
+    return new AInexact(a.ctx, Math.floor(p.av / p.bv));
   },
 });
 
@@ -266,10 +266,10 @@ export const floorRemainder = new Operator("floor-remainder", {
     if (p.bothExact) {
       invariant(p.bv !== 0n, "floor-remainder: division by zero");
       // a - floor(a/b)*b ≡ ((a % b) + b) % b (always same sign as divisor).
-      return new AExact(CONSTANT_CTX, ((p.av % p.bv) + p.bv) % p.bv);
+      return new AExact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
     }
     const q = Math.floor(p.av / p.bv);
-    return new AInexact(CONSTANT_CTX, p.av - q * p.bv);
+    return new AInexact(a.ctx, p.av - q * p.bv);
   },
 });
 
@@ -282,9 +282,9 @@ export const truncateQuotient = new Operator("truncate-quotient", {
     if (p.bothExact) {
       invariant(p.bv !== 0n, "truncate-quotient: division by zero");
       // JS bigint / truncates toward zero.
-      return new AExact(CONSTANT_CTX, p.av / p.bv);
+      return new AExact(a.ctx, p.av / p.bv);
     }
-    return new AInexact(CONSTANT_CTX, Math.trunc(p.av / p.bv));
+    return new AInexact(a.ctx, Math.trunc(p.av / p.bv));
   },
 });
 
@@ -296,9 +296,9 @@ export const truncateRemainder = new Operator("truncate-remainder", {
     const p = toIntegerPair(a, b, "truncate-remainder");
     if (p.bothExact) {
       invariant(p.bv !== 0n, "truncate-remainder: division by zero");
-      return new AExact(CONSTANT_CTX, p.av % p.bv);
+      return new AExact(a.ctx, p.av % p.bv);
     }
-    return new AInexact(CONSTANT_CTX, p.av % p.bv);
+    return new AInexact(a.ctx, p.av % p.bv);
   },
 });
 
@@ -375,15 +375,15 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
     const n = power.num;
     if (n >= 0n) {
       // (p/q)^n = p^n / q^n. SchemeExact normalizes/reduces.
-      return new AExact(CONSTANT_CTX, base.num ** n, base.denom ** n);
+      return new AExact(base.ctx, base.num ** n, base.denom ** n);
     }
     // Negative exponent → reciprocal: (p/q)^(-m) = q^m / p^m. Guard 0 base.
     invariant(base.num !== 0n, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return new AExact(CONSTANT_CTX, base.denom ** m, base.num ** m);
+    return new AExact(base.ctx, base.denom ** m, base.num ** m);
   }
   // Inexact (or non-integer exponent): float exponentiation is correct here.
-  return new AInexact(CONSTANT_CTX, Math.pow(toReal(base, "expt"), toReal(power, "expt")));
+  return new AInexact(base.ctx, Math.pow(toReal(base, "expt"), toReal(power, "expt")));
 }
 
 export const expt = new Operator("expt", {
@@ -735,12 +735,12 @@ export const numerator = new Operator("numerator", {
   out: SchemeNum,
   fn: (x: ANumeric): ANumeric => {
     if (x instanceof AExact) {
-      return new AExact(CONSTANT_CTX, x.num);
+      return new AExact(x.ctx, x.num);
     }
     invariant(x instanceof AInexact, "numerator requires a rational number");
     // For inexact, convert to rational and return inexact numerator
     const { num } = floatToRational(x.real);
-    return new AInexact(CONSTANT_CTX, Number(num));
+    return new AInexact(x.ctx, Number(num));
   },
 });
 
@@ -750,12 +750,12 @@ export const denominator = new Operator("denominator", {
   out: SchemeNum,
   fn: (x: ANumeric): ANumeric => {
     if (x instanceof AExact) {
-      return new AExact(CONSTANT_CTX, x.denom);
+      return new AExact(x.ctx, x.denom);
     }
     // For inexact, convert to rational and return inexact denominator
     invariant(x instanceof AInexact, "denominator requires a rational number");
     const { denom } = floatToRational(x.real);
-    return new AInexact(CONSTANT_CTX, Number(denom));
+    return new AInexact(x.ctx, Number(denom));
   },
 });
 
@@ -835,10 +835,10 @@ export const sqrt = new Operator("sqrt", {
     if (x instanceof AExact && x.denom === 1n && x.num >= 0n) {
       const r = bigintISqrt(x.num);
       if (r * r === x.num) {
-        return new AExact(CONSTANT_CTX, r);
+        return new AExact(x.ctx, r);
       }
     }
-    return new AInexact(CONSTANT_CTX, Math.sqrt(val));
+    return new AInexact(x.ctx, Math.sqrt(val));
   },
 });
 
