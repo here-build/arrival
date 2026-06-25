@@ -16,10 +16,12 @@
 import conditionals from "./conditionals.js";
 import binding from "./binding.js";
 import exceptions from "./exceptions.js";
+import lists from "./lists.js";
 
 export { default as conditionals } from "./conditionals.js";
 export { default as binding } from "./binding.js";
 export { default as exceptions } from "./exceptions.js";
+export { default as lists } from "./lists.js";
 
 /** The whole R7RS derived-syntax set — assemble all, or `.filter()` a subset. */
-export const allR7rs = [conditionals, binding, exceptions] as const;
+export const allR7rs = [conditionals, binding, exceptions, lists] as const;

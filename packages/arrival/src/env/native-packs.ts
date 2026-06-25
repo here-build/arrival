@@ -20,14 +20,12 @@ import bytevectors from "./bytevectors.js";
 import chars from "./chars.js";
 import combinators from "./combinators.js";
 import equality from "./equality.js";
-import lists from "./lists.js";
 import strings from "./strings.js";
 import vectors from "./vectors.js";
 
 export const NATIVE_PACKS: readonly EnvCapability[] = [
   chars,
   strings,
-  lists,
   vectors,
   bytevectors,
   combinators,

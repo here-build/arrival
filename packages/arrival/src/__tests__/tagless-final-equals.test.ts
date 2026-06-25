@@ -15,7 +15,7 @@ import { AJSObject, AJSFunction } from "../membrane.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
-import listsCap from "../env/lists.js";
+import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../env/capability.js";
 
 // ─────────────────────────────────────────────────────────────────────────────

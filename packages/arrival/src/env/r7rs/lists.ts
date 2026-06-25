@@ -28,16 +28,16 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
-import * as z from "./scheme-zod.js";
-import { symbol } from "./symbol.js";
-import { withInputProvenance } from "../values/op-helpers.js";
-import { isCircularList, APair } from "../values/primitives/APair.js";
-import { eqv, structuralEqual } from "../values/structural-equal.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { is_false } from "../eval/guards.js";
-import { EnvCapability } from "./capability.js";
+import * as z from "../scheme-zod.js";
+import { symbol } from "../symbol.js";
+import { withInputProvenance } from "../../values/op-helpers.js";
+import { isCircularList, APair } from "../../values/primitives/APair.js";
+import { eqv, structuralEqual } from "../../values/structural-equal.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
+import { is_false } from "../../eval/guards.js";
+import { EnvCapability } from "../capability.js";
 
 export default new EnvCapability("scheme/lists", {
   symbols: {
