@@ -100,7 +100,9 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
     expect(elemProvs(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([[100], [101]]);
   });
   it("Pair · sort preserves every element's box (only reorders)", async () => {
-    expect(elemProvs(await force(ops.sort(mkPair(), cmp)))).toEqual([[100], [101]]);
+    // sort dissolved onto the term: call it directly (the fl-interop sort is now a
+    // symbol.sequence dispatcher with no .impl). The term takes the optional comparator.
+    expect(elemProvs(await force(mkPair()["arrival/tagless-final/sort"](cmp)))).toEqual([[100], [101]]);
   });
 
   it("SchemeVector · filter preserves every element's box", async () => {
@@ -148,12 +150,11 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     expect(provOf(r)).toEqual([100, 101]); // NOT [7] — container grouping is outside a count's cone
   });
 
-  it("Pair · sort drops the container box [CONTESTED: overlay-sort makes no collapseProvenance call]", async () => {
-    // Eager parity: the ONLY `sort` is the fl-interop overlay; it rebuilds the
-    // spine via `Pair.fromArray` (the shared spine-rebuild drop) and makes NO
-    // collapseProvenance call. Element boxes survive (stratum 1); the container
-    // box does not. Pinned as parity; flagged for the parent.
-    expect(provOf(await force(ops.sort(mkPair(), cmp)))).toEqual([]);
+  it("Pair · sort drops the container box (spine rebuilt; element boxes survive)", async () => {
+    // APair's arrival/tagless-final/sort re-cons the spine via `Pair.fromArray(_, false)`
+    // (the shared spine-rebuild drop) and makes NO collapseProvenance call. Element boxes
+    // survive (stratum 1); the container box does not — identical to map/filter.
+    expect(provOf(await force(mkPair()["arrival/tagless-final/sort"](cmp)))).toEqual([]);
   });
 
   it("Pair · map / filter drop the container box (spine rebuilt; element boxes survive)", async () => {
@@ -175,13 +176,22 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
   });
 });
 
-describe("G6 golden(eager-parity) — wrong-carrier silent nil [CONTESTED: DR4]", () => {
-  // The overlay's `sort` handles a Pair-spine OR a JS array, but NOT a SchemeVector —
-  // a vector matches neither, so it silently yields nil/empty (worse-than-throw, per
-  // DR4). A vector SHOULD use vector-sort; whether the right fix is to teach sort the
-  // SchemeVector carrier or to throw (errors-as-doors) is a design call, not a silent box-fix.
-  it("sort(vector) silently returns nil (no SchemeVector branch in sort)", () => {
-    expect(ops.sort(mkVec(), cmp)).toBe(nil);
+describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, box-preserving)", () => {
+  // FLIPPED (DR4 fix): the old overlay's `sort` had no SchemeVector branch, so a vector
+  // silently fell through to nil — worse-than-throw. Now sort is dissolved onto the term:
+  // AVector's arrival/tagless-final/sort returns a FRESH sorted vector, PRESERVING every
+  // element's box (no unwrapForeign — this is the box-preserving reorder, not the cross-out
+  // map). Container-preserving (vector→vector) by the term returning its own shape.
+  it("sort(vector) returns a sorted VECTOR (boxes preserved, container preserved)", async () => {
+    const r = await force(mkVec()["arrival/tagless-final/sort"](cmp));
+    expect(r).toBeInstanceOf(AVector);
+    expect(elemProvs(r)).toEqual([[100], [101]]); // element boxes survive the reorder
+  });
+  it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
+    const reversed = new AVector(CONSTANT_CTX, [el("b", 101), el("a", 100)], new Set([7]));
+    const r = (await force(reversed["arrival/tagless-final/sort"](cmp))) as AVector;
+    expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
+    expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
   });
 
   // The overlay exists FOR SchemeJSArray-aware car/cdr, yet its map/filter/reduce

@@ -103,6 +103,12 @@ export class ANil extends AValue {
     return initial;
   }
 
+  // sort of the EMPTY list is the empty list — the identity case (mirrors map/filter
+  // above). The comparator is never consulted; nil is the canonical empty singleton.
+  ["arrival/tagless-final/sort"](_comparator?: unknown, _runCtx?: unknown): ANil {
+    return nil;
+  }
+
   // Monoid empty — the identity is Nil itself (the canonical singleton).
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;

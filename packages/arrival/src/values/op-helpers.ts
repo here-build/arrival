@@ -17,6 +17,7 @@ import { CONSTANT_CTX } from "./primitives/RunContext.js";
 import { AValue, unionProvenance } from "./primitives/AValue.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
+import { ABool } from "./primitives/ABool.js";
 import { AVector } from "./primitives/AVector.js";
 import { AExact, AInexact, type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
@@ -180,6 +181,57 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
     // Plumbing: the ordering verdict carries its operands' provenance (forward, never
     // mint) — the same grounding string-contains? and the numeric comparisons give a bool.
     return withInputProvenance(args, verdict);
+  };
+}
+
+// The Scheme-falsiness a `sort` comparator's verdict is read with — the value-layer
+// twin of eval/guards.ts is_false (false / null / a boxed ABool(#f)). Re-implemented
+// here rather than imported because op-helpers is the cluster leaf (down-only to value
+// classes); importing eval/guards would drag the evaluator world into it.
+const isSchemeFalse = (v: unknown): boolean =>
+  v === false || v === null || (v instanceof ABool && v.value === false);
+
+/** Human kind-name of an element that can't be ordered — its scheme `kind` (an AValue:
+ *  "pair"/"vector"/…) else the JS shape. Mirrors symbol.ts describeReceiver. */
+const describeOrdElement = (v: unknown): string =>
+  v instanceof AValue ? v.kind : v === null || v === undefined ? String(v) : Array.isArray(v) ? "array" : typeof v;
+
+/** Derive the JS `Array.prototype.sort` comparator (a (a,b)=>number) used by every
+ *  primitive's `arrival/tagless-final/sort`. The container-shape decision lives on the
+ *  term; this is the SHARED element-ordering both APair and AVector reach for.
+ *
+ *  • No comparator → the operand's OWN total order via `arrival/tagless-final/lte`: for a
+ *    pair a,b — `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). This is
+ *    correct for EVERY Ord-bearing type (numbers/strings/chars/symbols/bytevectors all carry
+ *    lte), and fixes the prior JS-lexicographic default (`(sort '(2 10))` → `(10 2)`). An
+ *    element lacking `lte` (a pair, with no user comparator) → a totalic "cannot order"
+ *    throw — never a silent mis-order.
+ *  • Comparator present → BOTH supported comparator shapes (wrong-state-impossible across
+ *    the two conventions the ecosystem actually uses), ASSUMED SYNC (ES Array.sort is sync):
+ *      – a JS-style NUMBER comparator (the harvested .d.ts contract: `(a b) → number`,
+ *        <0 ⇒ a-before-b) — used DIRECTLY (this is what the localeCompare test fixture and
+ *        every model-following-the-published-type sends); a boxed Scheme numeric is unboxed.
+ *      – else a `less?` predicate (SRFI-95 / a Scheme `<=`-style boolean) — truthy iff a
+ *        precedes b: `!is_false(cmp(a,b)) ? -1 : (!is_false(cmp(b,a)) ? 1 : 0)`.
+ *    The number branch is REQUIRED: reading a number comparator's positive verdict through
+ *    `!is_false` (every nonzero number is scheme-truthy) would mis-order (it did, in the
+ *    first cut) — so a number is consulted as a number, not coerced to a less?-truthiness. */
+export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unknown): (a: unknown, b: unknown) => number {
+  if (comparator !== undefined && comparator !== null) {
+    return (a, b) => {
+      const v = comparator(a, b);
+      if (typeof v === "number") return v;
+      if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
+      // `less?` predicate: a truthy verdict means a precedes b.
+      return !isSchemeFalse(v) ? -1 : !isSchemeFalse(comparator(b, a)) ? 1 : 0;
+    };
+  }
+  return (a, b) => {
+    if (!isOrd(a)) throw new TypeError(`sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
+    if (!isOrd(b)) throw new TypeError(`sort: cannot order a ${describeOrdElement(b)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
+    const aLE = lte(a, b);
+    const bLE = lte(b, a);
+    return aLE ? (bLE ? 0 : -1) : bLE ? 1 : 0;
   };
 }
 

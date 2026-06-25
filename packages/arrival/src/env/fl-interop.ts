@@ -39,7 +39,7 @@ import { SchemeJSArray } from "../membrane.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { AValue, unionProvenance, ctxOf } from "../values/primitives/AValue.js";
+import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { heapBudgetMessage } from "../heap-budget.js";
 import { SchemeError } from "../eval/evaluator.js";
@@ -156,7 +156,7 @@ function collectElements(collection: any): unknown[] {
 // (a SchemeJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
 // throw, never a silent coercion. Heap stays holder-free here (runCtx, not currentRunEnv).
 function chargeAndDispatch(
-  method: "map" | "filter" | "reduce",
+  method: "map" | "filter" | "reduce" | "sort",
   receiver: unknown,
   leading: unknown[],
   runCtx: RunContext,
@@ -276,29 +276,19 @@ export default new EnvCapability("scheme/fl-interop", {
       },
     ),
 
-    // ── Sort ──
-    sort: symbol.native`sort: a sorted scheme list (optional comparator)`(
+    // sort — SRFI-95 `(sort seq comparator?)`, DISSOLVED onto the term protocol (like
+    // map/filter/reduce). The per-primitive semantics live ON the terms: APair → sorted
+    // LIST (boxes preserved, container box dropped), AVector → fresh sorted VECTOR, ANil →
+    // nil — container-preserving by each term returning its own shape. The DEFAULT order is
+    // the operand's own `arrival/tagless-final/lte` (deriveSortCompare on the term), NOT JS
+    // lexicographic: `(sort '(2 10))` is now (2 10), the lte-default bug-fix; sort is
+    // total-order-correct for every Ord-bearing type. A comparator is a SRFI-95 `less?`
+    // predicate, ASSUMED SYNC. Routed through chargeAndDispatch so it charges runCtx.heapMeter
+    // before materializing the full array (it allocates the whole spine), TOTALIC for a
+    // non-sequence receiver. The comparator is the single leading arg.
+    sort: symbol.sequence`sort: a sorted sequence (list→list, vector→vector); default order is the elements' own ≤`(
       { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
-      (list: any, comparator?: any) => {
-        const arr = Array.isArray(list) ? [...list] : [];
-        if (!Array.isArray(list) && list?.car) {
-          let current = list;
-          while (current?.car) {
-            arr.push(current.car);
-            current = current.cdr;
-          }
-        }
-        if (comparator) {
-          arr.sort((a: any, b: any) => comparator(a, b));
-        } else {
-          arr.sort();
-        }
-        // Return a Scheme LIST, not a raw JS array — a Lisp `sort` whose result the sibling
-        // `map`/`filter` reject ("Expecting pair or nil, got array") is an inconsistency. The elements
-        // are already Scheme values (we just reordered them), so build the list shallow (no re-boxing);
-        // an empty result is nil.
-        return APair.fromArray(ctxOf(list), arr, false);
-      },
+      (args, runCtx) => chargeAndDispatch("sort", args[0], [args[1]], runCtx),
     ),
 
     length: symbol.native`length: element count carrying the elements' provenance`(

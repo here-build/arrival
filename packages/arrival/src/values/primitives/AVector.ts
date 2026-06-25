@@ -22,6 +22,10 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
+// deriveSortCompare lives on the op-helpers Ord leaf (alongside isOrd/ORD_REL). op-helpers
+// imports AVector back, but both directions are referenced ONLY inside function bodies
+// (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
+import { deriveSortCompare } from "../op-helpers.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // (same rationale as SchemeBytevector.ts — avoids a membrane→SchemeVector class-def-time
@@ -157,6 +161,23 @@ export class AVector extends AValue {
     let acc = initial;
     for (const v of this.__vector__) acc = await fn(v, acc);
     return acc;
+  }
+
+  // Arrival's structure-preserving `sort` — a fresh sorted VECTOR (a vector sorts to a
+  // vector; the container-preserving return is structural — the term returns its own shape).
+  // Sorts a COPY of the payload with the shared `deriveSortCompare` (no comparator ⇒ the
+  // elements' own `arrival/tagless-final/lte` total order; a comparator ⇒ a SRFI-95 `less?`
+  // predicate), into a new AVector. Element boxes are PRESERVED (only reordered, NO
+  // unwrapForeign — this is NOT the cross-out map; mirrors the box-PRESERVING filter). The
+  // source payload is untouched (slice copy), so a frozen literal is safe. ES Array.sort is
+  // sync + STABLE; a trailing runCtx (chargeAndDispatch threads one) is accepted + ignored.
+  ["arrival/tagless-final/sort"](
+    comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
+    _runCtx?: unknown,
+  ): AVector {
+    const out = this.__vector__.slice();
+    out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined));
+    return new AVector(this.ctx, out);
   }
 
   // A boxed vector is iterable from JS — spread / for-of / Array.from yield its

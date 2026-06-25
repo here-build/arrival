@@ -16,7 +16,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { withInputProvenance } from "../op-helpers.js";
+import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
@@ -720,6 +720,31 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       node = p.cdr;
     }
     return acc;
+  }
+
+  // Arrival's structure-preserving `sort` — a sorted LIST (a Pair stays an arrival list,
+  // never crossing out). Collects the cdr-spine to a flat array, sorts it with the shared
+  // `deriveSortCompare` (no comparator ⇒ the elements' own `arrival/tagless-final/lte` total
+  // order — so `(sort '(2 10))` is (2 10), the lte-default bug-fix; a comparator ⇒ a SRFI-95
+  // `less?` predicate), then re-cons SHALLOW via Pair.fromArray(_, false): element boxes are
+  // PRESERVED (only reordered — coercion-soundness's "Pair · sort preserves every element's
+  // box"), the container box DROPS, an empty list is nil. The container-preserving return
+  // (list→list) is achieved structurally — the term returns its own shape. ES Array.sort is
+  // sync + STABLE, so a trailing runCtx (chargeAndDispatch threads one) is accepted + ignored.
+  ["arrival/tagless-final/sort"](
+    comparator?: (a: unknown, b: unknown) => unknown,
+    _runCtx?: unknown,
+  ): APair | ANil {
+    const out: unknown[] = [];
+    let node: unknown = this;
+    while (node && !(node instanceof ANil)) {
+      const p = node as APair;
+      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      out.push(p.car);
+      node = p.cdr;
+    }
+    out.sort(deriveSortCompare(comparator));
+    return APair.fromArray(this.ctx, out, false) as APair | ANil;
   }
 
   // Arrival's canonical car/cdr — the head/tail PROJECTIONS. They mirror the scheme

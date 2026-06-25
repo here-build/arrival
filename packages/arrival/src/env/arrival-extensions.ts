@@ -3,7 +3,7 @@
 // The non-R7RS, non-SRFI, non-polyglot procedures that arrival adds on top of
 // the portable Scheme base. All host-interop or arrival-specific:
 //   • symbol/string conversion (symbol->string / string->symbol / %as.data)
-//   • sort (Scheme quicksort) · unary/binary curry wrappers · tree-map
+//   • unary/binary curry wrappers · tree-map
 //   • pair utilities (pair-map / nth-pair)
 //   • type predicates (regex? / key? / …)
 //   • aliases (string-join / string-split) · symbol-append
@@ -165,26 +165,6 @@ export default new EnvCapability("arrival/core-extensions", {
   prelude: `
     ;; symbol->string / string->symbol are native (below the membrane) — see the
     ;; symbols block at the bottom of this module.
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Sorting (recursive, best in Scheme)
-    ;; -----------------------------------------------------------------------------
-    (define (qsort e predicate)
-      (if (or (null? e) (<= (length e) 1))
-          e
-          (let loop ((left '()) (right '())
-                     (pivot (car e)) (rest (cdr e)))
-            (if (null? rest)
-                (append (append (qsort left predicate) (list pivot)) (qsort right predicate))
-                (if (predicate (car rest) pivot)
-                    (loop (append left (list (car rest))) right pivot (cdr rest))
-                    (loop left (append right (list (car rest))) pivot (cdr rest)))))))
-    
-    (define (sort list . rest)
-      (let ((predicate (if (null? rest) <= (car rest))))
-        (typecheck "sort" list "pair")
-        (typecheck "sort" predicate "function")
-        (qsort list predicate)))
     
     ;; -----------------------------------------------------------------------------
     ;; Higher-order function wrappers using curry
