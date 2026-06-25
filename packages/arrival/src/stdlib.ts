@@ -952,27 +952,6 @@ export const global_env = new Environment(
     // hygiene redirect to evalDefine WITH a test that actually reaches it.
     define: genMacroWrapper("define"),
     // ------------------------------------------------------------------
-    values: doc("values", function values(...args) {
-      return Values.from(args);
-    }),
-    // ------------------------------------------------------------------
-    "call-with-values": doc(
-      "call-with-values",
-      function (producer: SchemeFunction, consumer: SchemeFunction) {
-        typecheck("call-with-values", producer, "function", 1);
-        typecheck("call-with-values", consumer, "function", 2);
-        // The producer is usually a generator-lambda, so `producer.apply` returns
-        // a Promise — unwrap it BEFORE the `instanceof Values` check, else a
-        // multi-value producer leaks the Promise as a single arg (wrong arity).
-        return unpromise(producer.apply(undefined), (maybe) => {
-          if (maybe instanceof Values) {
-            return consumer.apply(undefined, maybe.valueOf());
-          }
-          return consumer(maybe);
-        });
-      },
-    ),
-    // ------------------------------------------------------------------
     // lambda delegates to the generator (evalLambda via SPECIAL_FORMS); the
     // binding exists for first-class lookup + the macro engine's identity check
     // (`value === env.get("lambda")` in syntax-rules.ts), like define/let/if.

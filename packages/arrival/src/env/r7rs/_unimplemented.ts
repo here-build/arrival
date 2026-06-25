@@ -27,10 +27,12 @@ export interface R7rsOmission {
  * Grep a symbol name here to learn its disposition.
  */
 export const R7RS_OMITTED: Readonly<Record<string, R7rsOmission>> = {
-  // §6.10 Control features — the value/apply/iteration core lives in the stdlib.
-  values: { section: "6.10", reason: "elsewhere", at: "stdlib core" },
-  "call-with-values": { section: "6.10", reason: "elsewhere", at: "stdlib core" },
-  apply: { section: "6.10", reason: "elsewhere", at: "stdlib core" },
+  // §6.10 Control features — the value/apply/iteration core lives in the env packs
+  // (values/call-with-values in r7rs/binding, apply in r7rs/lists) or, for the ops
+  // still blocked on per-op follow-ups, the stdlib global_env.
+  values: { section: "6.10", reason: "elsewhere", at: "r7rs/binding" },
+  "call-with-values": { section: "6.10", reason: "elsewhere", at: "r7rs/binding" },
+  apply: { section: "6.10", reason: "elsewhere", at: "r7rs/lists" },
   map: { section: "6.10", reason: "elsewhere", at: "stdlib core" },
   "for-each": { section: "6.10", reason: "elsewhere", at: "stdlib core" },
 
