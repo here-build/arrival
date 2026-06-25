@@ -944,16 +944,6 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     gensym: doc("gensym", gensym),
     // ------------------------------------------------------------------
-    while: doc(
-      "while",
-      genMacroWrapper("while"),
-      `(while cond body...)
-
-        Iterate the body while cond evaluates to a truthy value. Returns
-        unspecified. Runs stack-safe through the generator evaluator, so a
-        deeply-iterating loop never overflows the host stack.`,
-    ),
-    // ------------------------------------------------------------------
     do: genMacroWrapper("do"),
     // ------------------------------------------------------------------
     if: genMacroWrapper("if"),
@@ -965,13 +955,6 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     begin: genMacroWrapper("begin"),
     // ------------------------------------------------------------------
-    ignore: new Macro("ignore", function (this: Environment, code: SchemeValue, options: SchemeValue) {
-      // Evaluate (begin . code) for side effects, discard the result. Routed to
-      // the generator evaluator (genRun drives it to completion); the discarded
-      // promise is why this is the simplest legacy-evaluate caller to migrate.
-      const ctx: EvalContext = { env: this, dynamic_env: this, use_dynamic: options.use_dynamic };
-      genRun(genEvaluate(new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "begin"), code), ctx));
-    }),
     // ------------------------------------------------------------------
     // parameterize delegates to the generator evaluator (evalParameterize) via
     // genMacroWrapper — same dynamic-extent semantics (inherit dynamic_env →
@@ -1261,7 +1244,6 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     typecheck: doc(null, typecheck),
     // ------------------------------------------------------------------
-    "function?": doc("function?", is_function),
     // ------------------------------------------------------------------
     // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed
     // SchemeVector. The former stdlib `vector` here was DEAD (initBridge applies
@@ -1297,9 +1279,6 @@ export const global_env = new Environment(
         }
       }),
     ),
-    throw: doc("throw", function (message) {
-      throw new Error(message);
-    }),
     // ------------------------------------------------------------------
     try: genMacroWrapper("try"),
     // ------------------------------------------------------------------
