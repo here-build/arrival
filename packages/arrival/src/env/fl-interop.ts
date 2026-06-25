@@ -6,7 +6,7 @@
  *
  * Why a separate capability and not an inline spread: this overlay bridges interop
  * mismatches the base env does NOT — lazy JS-array wrappers (`SchemeJSArray`) that
- * must unwrap before LIPS car/cdr, and the nil/LazySeq tolerance the sequence ops
+ * must unwrap before LIPS car/cdr, and the nil tolerance the sequence ops
  * need at the inference boundary.
  *
  * SEQUENCE OPS ARE ON THE TERM. `filter`/`map`/`reduce` no longer DISPATCH a borrowed
@@ -31,18 +31,16 @@
  */
 
 import { EnvCapability } from "./capability.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { type RunContext } from "../values/primitives/RunContext.js";
 import { symbol } from "./symbol.js";
 import * as z from "./scheme-zod.js";
 import { global_env } from "../stdlib.js";
-import { nil } from "../values/primitives/ANil.js";
 import { SchemeJSArray } from "../membrane.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { AValue, unionProvenance, EMPTY_PROVENANCE, ctxOf } from "../values/primitives/AValue.js";
+import { AValue, unionProvenance, ctxOf } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
-import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { heapBudgetMessage } from "../heap-budget.js";
 import { SchemeError } from "../eval/evaluator.js";
 
@@ -122,15 +120,15 @@ function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): u
 
 
 // Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
-// SchemeJSArray wrapper, or a raw JS array — to a flat element array. Shared by
-// `length` and the `lazy-seq` constructor so both see the same element set. As
-// lenient as the old length: an unrecognized input yields `[]` (an empty collection).
+// SchemeJSArray wrapper, or a raw JS array — to a flat element array. Used by
+// `length` to see the full element set. As lenient as the old length: an
+// unrecognized input yields `[]` (an empty collection).
 //
 // G6 (carrier-coercion soundness): the SchemeVector branch mirrors its twin
 // `collapseProvenance` (provenance-collapse.ts), which already deep-walks
 // `__vector__`. Without it a SchemeVector matched none of the branches and
-// silently collected `[]` — so `(length vec)` counted 0 and `(lazy-seq vec)` held
-// an empty plan, dropping every element's provenance with no error.
+// silently collected `[]` — so `(length vec)` counted 0, dropping every
+// element's provenance with no error.
 function collectElements(collection: any): unknown[] {
   const elements: unknown[] = [];
   if (collection && typeof collection === "object" && "car" in collection) {
@@ -149,23 +147,12 @@ function collectElements(collection: any): unknown[] {
   return elements;
 }
 
-// A18d — un-forced egress is a programmer error (LazySeq.ts header). An accessor
-// the first cut hasn't taught to force a LazySeq throws LOUD here, never returns a
-// silent nil/empty. The lazy plane is map/filter (extend) → length/iterate/reduce
-// (force); everything else forces explicitly or waits for a later slice.
-function unforcedLazyEgress(op: string): never {
-  throw new Error(
-    `\`${op}\` received an un-forced lazy-seq — the first cut supports map/filter then ` +
-      `length/iterate/reduce only. Force it to a list before \`${op}\` (a later slice may teach it to force).`,
-  );
-}
-
 // chargeAndDispatch — the sequence ops' thin program: charge the run's allocation meter, then
 // dispatch to the receiver's OWN arrival/tagless-final/<op>. The EAGER materializers (APair/
 // AVector) charge runCtx.heapMeter by element count BEFORE walking — a native pass emits no
-// trampoline TICK, so without it a `(map f huge)`/O(K²) churn runs unbounded (heap-budget.ts); a
-// LazySeq extends a plan (no materialize → no charge) and ANil is empty. The per-primitive box
-// discipline + fold convention + lazy plan all live ON the term. A receiver with NO such algebra
+// trampoline TICK, so without it a `(map f huge)`/O(K²) churn runs unbounded (heap-budget.ts);
+// ANil is empty. The per-primitive box discipline + fold convention all live ON the term. A
+// receiver with NO such algebra
 // (a SchemeJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
 // throw, never a silent coercion. Heap stays holder-free here (runCtx, not currentRunEnv).
 function chargeAndDispatch(
@@ -206,12 +193,12 @@ function chargeAndDispatch(
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
     // map/filter/reduce — the inference-plane sequence ops, DISSOLVED onto the term protocol.
-    // The per-primitive semantics live ON the terms (APair/AVector eager + box-discipline, ALazySeq
-    // lazy, ANil empty); the binding is a thin ctx-aware program (chargeAndDispatch) that charges
+    // The per-primitive semantics live ON the terms (APair/AVector eager + box-discipline, ANil
+    // empty); the binding is a thin ctx-aware program (chargeAndDispatch) that charges
     // runCtx.heapMeter and dispatches, TOTALIC for a non-sequence receiver. The old null/#f→nil
     // tolerance is DROPPED: mapping a non-sequence is a type error, not an empty result — only '()
     // is empty (via ANil). The box discipline (Pair preserves boxes, Vector strips — the DR4
-    // box-strip), the keep-rule, the element-first fold, and the lazy plan all live on the terms.
+    // box-strip), the keep-rule, and the element-first fold all live on the terms.
     filter: symbol.sequence`filter: keep elements matching a pred/regex — term-dispatch, totalic`(
       { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
       (args, runCtx) => chargeAndDispatch("filter", args[1], [args[0]], runCtx),
@@ -289,52 +276,10 @@ export default new EnvCapability("scheme/fl-interop", {
       },
     ),
 
-    // ── Array-aware list accessors ───────────────────────────────────────────────
-    // Nil-tolerant accessors that work over both JS arrays (what `@`/SchemeJSArray
-    // hand the inference plane) and LIPS pairs. Self-contained — no builtin capture.
-
-    // ── List aliases (models expect these) ──
-    // Each guards against an un-forced lazy-seq (A18d): without it these silently
-    // return nil for a LazySeq (no `.car`, not an array), masking the misuse.
-    first: symbol.native`first: the first element — array- and pair-aware`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: any) => {
-        if (is_lazy_seq(list)) unforcedLazyEgress("first");
-        return list?.car ?? (Array.isArray(list) ? list[0] : nil);
-      },
-    ),
-    last: symbol.native`last: the last element — array- and pair-aware`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: any) => {
-        if (is_lazy_seq(list)) unforcedLazyEgress("last");
-        if (Array.isArray(list)) return list.at(-1) ?? nil;
-        let current = list;
-        while (current?.cdr?.constructor?.name !== "ANil" && current?.cdr != null) {
-          current = current.cdr;
-        }
-        return current?.car ?? nil;
-      },
-    ),
-    second: symbol.native`second: the second element — array- and pair-aware`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: any) => {
-        if (is_lazy_seq(list)) unforcedLazyEgress("second");
-        return list?.cdr?.car ?? (Array.isArray(list) ? list[1] : nil);
-      },
-    ),
-    third: symbol.native`third: the third element — array- and pair-aware`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: any) => {
-        if (is_lazy_seq(list)) unforcedLazyEgress("third");
-        return list?.cdr?.cdr?.car ?? (Array.isArray(list) ? list[2] : nil);
-      },
-    ),
-
     // ── Sort ──
     sort: symbol.native`sort: a sorted scheme list (optional comparator)`(
       { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
       (list: any, comparator?: any) => {
-        if (is_lazy_seq(list)) unforcedLazyEgress("sort");
         const arr = Array.isArray(list) ? [...list] : [];
         if (!Array.isArray(list) && list?.car) {
           let current = list;
@@ -356,20 +301,9 @@ export default new EnvCapability("scheme/fl-interop", {
       },
     ),
 
-    length: symbol.native`length: element count carrying the elements' provenance — forces a lazy-seq`(
+    length: symbol.native`length: element count carrying the elements' provenance`(
       { input: [z.unknown()], output: [z.unknown()] },
       (collection: any) => {
-        // LazySeq fast-path — the demand cone IS the provenance cone: refine under a
-        // `length` observation runs only the ops the count depends on (a pure-map
-        // chain runs NOTHING — `(length (map f xs))` never touches f) and stamps the
-        // minimal cone from the same walk. Returns a Promise only here; the eager
-        // path below stays sync and byte-identical (the speculate discipline).
-        if (is_lazy_seq(collection)) {
-          return collection.refine({ kind: "length" }).then((r) => {
-            const { count, provenance } = r as { count: number; provenance: ReadonlySet<number> };
-            return provenance.size === 0 ? count : AValue.fromJs(collection.ctx, count, provenance);
-          });
-        }
         // Collect elements so the count can carry their provenance (V: "provenance
         // everything; exclusion should not be possible in teleological mode"). A
         // `(count …)`/`(length …)` the seal can't sign — even though every row that
@@ -383,21 +317,5 @@ export default new EnvCapability("scheme/fl-interop", {
       },
     ),
 
-    // A18c — the scheme-surface entry into the lazy plane. `(lazy-seq xs)` wraps a
-    // collection's elements into an un-run plan; `map`/`filter` then EXTEND it and
-    // `length`/`reduce`/iterate FORCE it. The collection's own provenance is the
-    // grouping fact (cheap, eager); per-element provenance rides the elements and
-    // is distributed only on materialization. Conservative by design: laziness is
-    // opt-in, so a plain Pair stays eager and byte-identical (the speculate
-    // discipline) — flipping map's default to lazy is a separate, deliberate call.
-    "lazy-seq": symbol.native`lazy-seq: wrap a collection's elements into an un-run lazy plan`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (collection: any) =>
-        new ALazySeq(collection instanceof AValue ? collection.ctx : CONSTANT_CTX, 
-          collectElements(collection),
-          [],
-          collection instanceof AValue ? collection.provenance : EMPTY_PROVENANCE,
-        ),
-    ),
   },
 });

@@ -27,7 +27,6 @@ import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { ALazySeq } from "./values/primitives/ALazySeq.js";
 import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 import type { ResolverSpec } from "./env/scheme-env.js";
 import { SchemePromise } from "./eval/evaluator.js";
@@ -118,7 +117,6 @@ export function isSchemeValue(value: unknown): boolean {
     case value instanceof AString:
     case value instanceof ABytevector:
     case value instanceof AVector:
-    case value instanceof ALazySeq:
     case value instanceof ACharacter:
     case value instanceof AExact:
     case value instanceof AInexact:

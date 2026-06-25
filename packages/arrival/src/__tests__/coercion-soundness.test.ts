@@ -2,10 +2,10 @@
  * G6 — carrier-coercion soundness (Wave A / W2).
  *
  * The claim under test: provenance must survive `map`/`filter`/`length`/`sort`
- * across ALL carriers (Pair / SchemeVector / SchemeJSArray / LazySeq) with no
+ * across ALL carriers (Pair / SchemeVector / SchemeJSArray) with no
  * SILENT box-drop. The crossing audited is the FL-interop overlay
  * (`env/fl-interop.ts`) — the genuine interop members of the inference plane,
- * where a SchemeJSArray (a non-AValue membrane wrapper) and the lazy/eager
+ * where a SchemeJSArray (a non-AValue membrane wrapper) and the eager
  * carriers all meet the polymorphic `map`/`filter`/`length`/`reduce`.
  *
  * DR5 (pre-mortem): every assertion inspects `.provenance` DIRECTLY — never via
@@ -33,7 +33,6 @@ import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
-import { ALazySeq } from "../values/primitives/ALazySeq.js";
 import { SchemeJSArray } from "../membrane.js";
 import flInteropCap from "../env/fl-interop.js";
 import listsCap from "../env/r7rs/lists.js";
@@ -87,7 +86,6 @@ const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeC
 const mkPair = () => new APair(CONSTANT_CTX, el("a", 100), new APair(CONSTANT_CTX, el("b", 101), nil)).withProvenance(new Set([7]));
 const mkVec = () => new AVector(CONSTANT_CTX, [el("a", 100), el("b", 101)], new Set([7]));
 const mkArr = () => new SchemeJSArray([el("a", 100), el("b", 101)]);
-const mkLazy = () => new ALazySeq(CONSTANT_CTX, [el("a", 100), el("b", 101)], [], new Set([7]));
 
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND: per-element provenance survives the structure-preserving
@@ -113,10 +111,9 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND (REPAIRED THIS WAVE): the `collectElements` SchemeVector gap.
 //
-// `collectElements` (shared by `length` and the `lazy-seq` constructor) had no
-// SchemeVector branch — a vector matched none of {Pair-spine, SchemeJSArray, raw
-// array} and silently collected []. So `(length vec)` counted 0 and `(lazy-seq
-// vec)` held an empty plan, dropping every element's provenance with NO error.
+// `collectElements` (used by `length`) had no SchemeVector branch — a vector
+// matched none of {Pair-spine, SchemeJSArray, raw array} and silently collected
+// []. So `(length vec)` counted 0, dropping every element's provenance with NO error.
 // Its twin `collapseProvenance` (provenance-collapse.ts) already walked
 // `__vector__`; the two near-twin deep-walkers disagreed (pre-mortem DR6). Fixed
 // by adding the symmetric SchemeVector branch.
@@ -130,37 +127,10 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
     expect(provOf(r)).toEqual([100, 101]);
   });
 
-  it("lazy-seq(vector) materializes every element (not an empty plan)", async () => {
-    const ls = ops["lazy-seq"](mkVec()) as ALazySeq;
-    expect(ls.source.length).toBe(2);
-    const it = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[]; provenance: ReadonlySet<number> };
-    expect(it.items.length).toBe(2);
-    expect(elemProvs([...it.items])).toEqual([[100], [101]]);
-  });
-
   it("length(SchemeJSArray) carries element provenance (the membrane-wrapper carrier)", async () => {
     const r = await force(ops.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     expect(provOf(r)).toEqual([100, 101]);
-  });
-});
-
-// ════════════════════════════════════════════════════════════════════════════
-// STRATUM 1 — SOUND: LazySeq is the carrier where the cone IS the provenance.
-// A pure-map length never touches the elements (their boxes stay OUT of the
-// count's cone — correct minimality); a length-changing filter pulls them in.
-// ════════════════════════════════════════════════════════════════════════════
-describe("G6 sound — LazySeq length cone (demand == provenance)", () => {
-  it("length(lazy map) keeps only the grouping fact — elements stay out of the cone", async () => {
-    const planned = mkLazy()["arrival/tagless-final/map"](idSync); // extends the plan, runs nothing
-    const r = await force(ops.length(planned));
-    expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
-    expect(provOf(r)).toEqual([7]); // grouping box only — map preserves length
-  });
-  it("length(lazy filter) pulls every inspected element into the cone", async () => {
-    const planned = mkLazy()["arrival/tagless-final/filter"](keepAll); // length-changing → must run
-    const r = await force(ops.length(planned));
-    expect(provOf(r)).toEqual([7, 100, 101]);
   });
 });
 
@@ -206,14 +176,10 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
 });
 
 describe("G6 golden(eager-parity) — wrong-carrier silent nil [CONTESTED: DR4]", () => {
-  // The overlay's positional accessors + sort handle a Pair-spine OR a JS array,
-  // but NOT a SchemeVector — a vector matches neither, so they silently yield
-  // nil/empty (worse-than-throw, per DR4). A vector SHOULD use vector-ref /
-  // vector-sort; whether the right fix is to teach these the SchemeVector carrier
-  // or to throw (errors-as-doors) is a design call, not a silent box-fix.
-  it("first(vector) silently returns nil (no SchemeVector branch in the accessor)", () => {
-    expect(ops.first(mkVec())).toBe(nil);
-  });
+  // The overlay's `sort` handles a Pair-spine OR a JS array, but NOT a SchemeVector —
+  // a vector matches neither, so it silently yields nil/empty (worse-than-throw, per
+  // DR4). A vector SHOULD use vector-sort; whether the right fix is to teach sort the
+  // SchemeVector carrier or to throw (errors-as-doors) is a design call, not a silent box-fix.
   it("sort(vector) silently returns nil (no SchemeVector branch in sort)", () => {
     expect(ops.sort(mkVec(), cmp)).toBe(nil);
   });

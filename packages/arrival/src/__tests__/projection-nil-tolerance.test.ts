@@ -8,7 +8,7 @@ import { is_nil, is_false } from "../eval/guards";
  *
  * car/cdr are a UNIFIED tagless-final algebra ON the primitives: APair projects (with
  * provenance), ANil is the nil-projection, SchemeJSArray unwraps, and any term carrying NO
- * car algebra (a lazy-seq, a vector, a number) is a totalic "does not support car" throw —
+ * car algebra (a vector, a number) is a totalic "does not support car" throw —
  * the whole type matrix falls out of one question, "does the receiver carry the algebra?".
  * The ONE mode-dependent cell is the empty list: ANil's car/cdr read the run's strict
  * (ExecOptions.strict -> EvalContext.strict -> the threaded runCtx):
@@ -67,13 +67,6 @@ describe.each([false, true])("non-list non-absent args throw in BOTH modes — s
   it.each(TYPE_ERRORS)("(car %s) and (cdr %s) throw", async (_label, expr) => {
     await expect(run(`(car ${expr})`, strict)).rejects.toThrow();
     await expect(run(`(cdr ${expr})`, strict)).rejects.toThrow();
-  });
-});
-
-describe.each([false, true])("an un-forced lazy-seq is a programmer error in BOTH modes — strict=%s", (strict) => {
-  it("(car (lazy-seq '(1 2 3))) and (cdr …) throw force-first", async () => {
-    await expect(run("(car (lazy-seq '(1 2 3)))", strict)).rejects.toThrow();
-    await expect(run("(cdr (lazy-seq '(1 2 3)))", strict)).rejects.toThrow();
   });
 });
 

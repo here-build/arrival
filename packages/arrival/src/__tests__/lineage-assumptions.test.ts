@@ -15,13 +15,12 @@ import { inferenceEnv } from "../inference-env";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { classify, fullCone, type Classifier } from "../values/lineage";
 import { provOf } from "../values/lineage-shadow";
 import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers";
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
-// a `defineRosetta`/LazySeq fixture); the shared run/runRaw own a separate counter.
+// a `defineRosetta` fixture); the shared run/runRaw own a separate counter.
 let seq = 0;
 
 describe("ASSUMPTION — provenance is minted only at Rosetta crossings (§5)", () => {
@@ -79,119 +78,52 @@ describe("ASSUMPTION — a count is identity-entangled today (teleological); the
   });
 });
 
-// ── Step 2 — the Fantasy Land flip (LIVE: a LazySeq flows through the REAL builtins) ──
-describe("ASSUMPTION — the demand cone is the provenance cone, through the live builtins (§5, Step 2)", () => {
-  // A bare JS source value carries no provenance; the GROUPING fact (id 7) is the
-  // collection-level provenance — the only thing a pure-map length should depend on.
-  const lazy = (els: AValue[], groupId: number) => new ALazySeq(CONSTANT_CTX, els, [], new Set([groupId]));
-
-  it("A18: (map f xs) over a LazySeq hits the fast-path — returns a LazySeq (extend), NOT an eager collect", async () => {
-    const xs = lazy([sStr("a", 100), sStr("b", 101)], 7);
-    const r = await runRaw(`(map (lambda (e) e) xs)`, { xs });
-    expect(is_lazy_seq(r)).toBe(true); // the plan was extended; nothing ran
-  });
-
-  it("A8-live: (length (map f xs)) runs f ZERO times — `f` THROWS, yet length resolves to the source count", async () => {
-    await initBridge();
-    const env = inferenceEnv.inherit(`la-${seq++}`);
-    // If the map were eager, this fn runs and the whole exec rejects. It does not.
-    env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
-    env.set("xs", lazy([sStr("a", 100), sStr("b", 101), sStr("c", 102)], 7) as unknown as AValue);
-    const [r] = await exec(`(length (map boom xs))`, { env });
-    expect(r instanceof AValue ? r.toJs() : r).toBe(3); // f never touched → count is the source length
-    // The cone is the GROUPING fact alone (id 7) — NOT the elements (100,101,102),
-    // NOT boom's op. A pure-map length depends on none of them. (Contrast A13's
-    // eager over-attribution: every element id leaks into the count.)
-    expect(provOf(r)).toEqual([7]);
-  });
-
-  it("A18b: with NO LazySeq, the eager path is byte-identical — (length (map id ys)) over a Pair still over-attributes", async () => {
-    // The fast-paths are guarded on `is_lazy_seq`; a plain Pair is untouched, so
-    // the pre-flip behavior (A13) is preserved exactly. This is the speculate
-    // discipline: laziness changes nothing it doesn't explicitly touch.
+// ── Step 2 — eager map/length over the live builtins ──
+// Laziness is IMPLICIT (Scheme symbols return Promises, the evaluator awaits); the
+// explicit `(lazy-seq …)` carrier + the ALazySeq demand-cone class are gone. A pure-map
+// length therefore reverts to the conservative eager union (A13): every element id leaks
+// into the count. That is sound (a superset of the minimal cone), just non-minimal.
+describe("ASSUMPTION — a pure-map length over-attributes through the live builtins (§5, A13 baseline)", () => {
+  it("A18b: (length (map id ys)) over a Pair carries every element's provenance (eager over-attribution)", async () => {
     const ys = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
     expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
   });
-
-  it("A18c: `(lazy-seq ys)` introduces laziness from PURE scheme — (length (map boom (lazy-seq ys))) runs boom ZERO times", async () => {
-    await initBridge();
-    const env = inferenceEnv.inherit(`la-${seq++}`);
-    env.defineRosetta("boom", { fn: () => { throw new Error("f ran — laziness broke"); } });
-    // The Pair's OWN provenance (id 7) is the grouping fact lazy-seq lifts to the
-    // collection level; the elements carry their own per-element provenance.
-    const ys = (APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue).withProvenance(new Set([7]));
-    env.set("ys", ys);
-
-    // (map boom (lazy-seq ys)) over a plain Pair, lifted lazy from user code, EXTENDS
-    // a plan — boom is stored, not run; the result is a LazySeq.
-    const [lazyResult] = await exec(`(map boom (lazy-seq ys))`, { env });
-    expect(is_lazy_seq(lazyResult)).toBe(true);
-
-    // length forces it — and boom STILL never runs (pure-map length cone excludes f).
-    const [len] = await exec(`(length (map boom (lazy-seq ys)))`, { env });
-    expect(len instanceof AValue ? len.toJs() : len).toBe(3);
-    expect(provOf(len)).toEqual([7]); // grouping fact only — boom & elements outside the cone
-  });
-
-  it("A18d: an un-forced lazy-seq at a non-recognizing egress FAILS LOUD — never a silent nil/empty", async () => {
-    await initBridge();
-    const env = inferenceEnv.inherit(`la-${seq++}`);
-    const ys = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], false);
-    env.set("ys", ys as unknown as AValue);
-    // Without the guard, `first` returns nil and `sort` returns '() — both silent
-    // wrong answers. The first cut hasn't taught these to force, so they throw.
-    await expect(exec(`(first (lazy-seq ys))`, { env })).rejects.toThrow(/lazy-seq/);
-    await expect(exec(`(sort (lazy-seq ys))`, { env })).rejects.toThrow(/lazy-seq/);
-  });
 });
 
-// ── CONFLUENCE — lazy must produce the SAME value as eager (no capability lost) ──
-// The flip is only sound if `(op … (lazy-seq xs))` ≡ `(op … xs)` for every forcing
-// op. These run each chain BOTH ways over the same source and assert equality —
-// the real regression guard. The eager arm doubles as a baseline: if a chain ever
-// breaks (e.g. reduce semantics), both arms move together and the eager value is
-// pinned too. Numbers are provenance-stamped (id 0) so the lazy path exercises the
-// real AValue arithmetic, not a bare-JS shortcut.
-describe("CAPABILITY — lazy ≡ eager confluence (forcing yields identical results)", () => {
+// ── EAGER PIPELINE VALUES — the forcing ops produce the documented results ──
+// Laziness is now implicit; there is no `(lazy-seq …)` carrier to contrast against. These
+// pin the eager value of each map/filter/reduce pipeline directly. The reduce-direction
+// probe is the load-bearing one: the base `reduce` is a RIGHT fold, and subtraction makes
+// the direction observable — the regression guard that a fold never silently flips. Numbers
+// are provenance-stamped (id 0) so the path exercises real AValue arithmetic, not a bare-JS shortcut.
+describe("CAPABILITY — eager map/filter/reduce pipelines yield the documented values", () => {
   const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
   const jsVal = (r: unknown): unknown => (r instanceof AValue ? r.toJs() : r);
+  const eval1 = async (chain: string): Promise<unknown> => jsVal(await runRaw(chain, { xs: nums() }));
 
-  // Run `chain` with the collection slot filled eager (xs) and lazy (lazy-seq xs).
-  async function bothWays(chain: (coll: string) => string): Promise<{ eager: unknown; lazy: unknown }> {
-    return { eager: jsVal(await runRaw(chain("xs"), { xs: nums() })), lazy: jsVal(await runRaw(chain("(lazy-seq xs)"), { xs: nums() })) };
-  }
-
-  it("map → reduce: (reduce + 0 (map (* x 2) …)) is identical eager and lazy", async () => {
-    const { eager, lazy } = await bothWays((c) => `(reduce + 0 (map (lambda (x) (* x 2)) ${c}))`);
-    expect({ eager, lazy }).toEqual({ eager: 30, lazy: 30 }); // 2+4+6+8+10
+  it("map → reduce: (reduce + 0 (map (* x 2) xs)) = 30", async () => {
+    expect(await eval1(`(reduce + 0 (map (lambda (x) (* x 2)) xs))`)).toBe(30); // 2+4+6+8+10
   });
 
-  it("filter → length: the ASYNC pred path counts identically (the soundness risk I flagged)", async () => {
-    const { eager, lazy } = await bothWays((c) => `(length (filter (lambda (x) (> x 2)) ${c}))`);
-    expect({ eager, lazy }).toEqual({ eager: 3, lazy: 3 }); // {3,4,5}
+  it("filter → length: (length (filter (> x 2) xs)) = 3", async () => {
+    expect(await eval1(`(length (filter (lambda (x) (> x 2)) xs))`)).toBe(3); // {3,4,5}
   });
 
-  it("map → filter → reduce: a full pipeline forces through iterate identically", async () => {
+  it("map → filter → reduce: a full pipeline sums to 18", async () => {
     // 1..5 → +1 → 2..6 → keep >2 → {3,4,5,6} → sum 18
-    const { eager, lazy } = await bothWays((c) => `(reduce + 0 (filter (lambda (x) (> x 2)) (map (lambda (x) (+ x 1)) ${c})))`);
-    expect({ eager, lazy }).toEqual({ eager: 18, lazy: 18 });
+    expect(await eval1(`(reduce + 0 (filter (lambda (x) (> x 2)) (map (lambda (x) (+ x 1)) xs)))`)).toBe(18);
   });
 
-  it("reduce matches eager fold DIRECTION under forcing — a non-commutative reducer agrees", async () => {
+  it("reduce respects the eager fold DIRECTION — a non-commutative reducer gives -97", async () => {
     // The base `reduce` is a RIGHT fold: (reduce - 100 '(1 2 3 4 5)) =
-    // 1-(2-(3-(4-(5-100)))) = -97. Subtraction makes direction observable. This is
-    // the probe that caught the original bug — a hand-rolled left-fold in
-    // reduceLazySeq gave 85. The fix delegates to builtinReduce, so lazy now agrees.
-    const { eager, lazy } = await bothWays((c) => `(reduce - 100 (map (lambda (x) x) ${c}))`);
-    expect(lazy).toBe(eager);
-    expect(eager).toBe(-97);
+    // 1-(2-(3-(4-(5-100)))) = -97. Subtraction makes direction observable. This is the
+    // probe that originally caught a hand-rolled left-fold (it gave 85). The eager
+    // builtin folds right, so this pins -97 as the fold-direction regression guard.
+    expect(await eval1(`(reduce - 100 (map (lambda (x) x) xs))`)).toBe(-97);
   });
 
-  it("length over a pure-map chain matches eager COUNT (cone differs, value must not)", async () => {
-    // A8-live proved f runs zero times + a minimal cone; here the COUNT itself must
-    // still equal eager — laziness changes the provenance, never the answer.
-    const { eager, lazy } = await bothWays((c) => `(length (map (lambda (x) (* x x)) ${c}))`);
-    expect({ eager, lazy }).toEqual({ eager: 5, lazy: 5 });
+  it("length over a pure-map chain counts the elements (= 5)", async () => {
+    expect(await eval1(`(length (map (lambda (x) (* x x)) xs))`)).toBe(5);
   });
 });
 
@@ -288,13 +220,13 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
 
   // G6 — carrier-coercion soundness: provenance survives the standard transforms
   // across ALL carriers; no coercion silently drops a provenance box.
-  // Pair is pinned by A13 above; LazySeq by A8-live; the runnable golden below
+  // Pair is pinned by A13 above; the runnable golden below
   // pins the SchemeVector carrier (the remaining constructible one) under the
   // EAGER engine — the oracle the static path must reproduce. SchemeJSArray is a
   // membrane wrapper (no public constructor here) and is asserted only via the
   // todo, end-to-end through the flag.
   it.todo(
-    "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / SchemeJSArray / LazySeq) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
+    "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / SchemeJSArray) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
   );
 
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; count/convert ops drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {

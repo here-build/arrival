@@ -50,7 +50,6 @@ export type AKind =
   | "vector"
   | "bytevector"
   | "halfbaked"
-  | "lazy-seq"
   | "void";
 
 /** Keyed by `typeof`-tag plus the two null-ish tags ("null", "undefined") — see `resolveTypeofTag`. */
