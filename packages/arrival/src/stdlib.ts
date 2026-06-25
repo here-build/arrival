@@ -58,7 +58,7 @@ import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
 import { isCircularList, APair, concatPair } from "./values/primitives/APair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
-import { compose, curry, fold, pipe } from "./utils/functional.js";
+import { curry, fold } from "./utils/functional.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
@@ -904,7 +904,6 @@ function genMacroWrapper(name: string): Macro {
 export const global_env = new Environment(
   "global",
   {
-    eof,
     undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
     cons: doc("cons", function cons(car, cdr) {
@@ -1690,8 +1689,6 @@ export const global_env = new Environment(
       return APair.fromArray(ctxOf(list), filtered);
     }),
     // ------------------------------------------------------------------
-    compose: doc(null, compose),
-    pipe: doc(null, pipe),
     curry: doc(null, curry),
     // ------------------------------------------------------------------
     "eq?": doc("eq?", eq),
