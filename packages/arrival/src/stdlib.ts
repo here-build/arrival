@@ -1220,27 +1220,6 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     curry: doc(null, curry),
-    // ------------------------------------------------------------------
-    // R5RS § 6.2.5 arrow-form aliases for R7RS § 6.2 exact/inexact.
-    //
-    // Why call-time lookup rather than direct binding:
-    // The target functions (`exact`, `inexact`) live in `bridge.ts` and are
-    // applied to `global_env` AFTER this object literal evaluates — see
-    // `applyToEnvironment` in initBridge(). Closing over the values now
-    // would capture `undefined`; the lookup MUST happen on call. Wrapping as
-    // a thin trampoline lets the same Scheme code that uses `exact->inexact`
-    // (chibi/gambit/racket conventions) work without bridge.ts changes.
-    //
-    // The R7RS-renamed `exact`/`inexact` are still the canonical names; these
-    // arrow forms are R5RS-compat aliases (kept by every Scheme that takes
-    // legacy code seriously). Cost is one extra lookup per call, paid only
-    // when downstream code uses the legacy spelling.
-    "exact->inexact": doc("exact->inexact", function exactToInexact(z: SchemeValue): SchemeValue {
-      return (global_env.get("inexact") as SchemeFunction)(z);
-    }),
-    "inexact->exact": doc("inexact->exact", function inexactToExact(z: SchemeValue): SchemeValue {
-      return (global_env.get("exact") as SchemeFunction)(z);
-    }),
   },
   undefined,
 );

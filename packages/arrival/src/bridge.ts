@@ -528,6 +528,21 @@ export const wrappedOps = {
     return new AExact(inexact.ctx, num / g, scale / g);
   },
 
+  // R5RS § 6.2.5 arrow-form aliases for the R7RS § 6.2 `exact`/`inexact` conversions
+  // above. Relocated from stdlib.ts global_env (husk dissolution): they now sit next to
+  // their targets and call them directly, so they ship in `numbersCapability` and bind
+  // onto global_env in the same Phase-1 pass — no more call-time `global_env.get("exact")`
+  // round-trip. The R7RS-renamed `exact`/`inexact` stay canonical; these are the
+  // R5RS-compat spellings (chibi/gambit/racket) every Scheme that takes legacy code
+  // seriously keeps.
+  "exact->inexact"(z: unknown): AInexact {
+    return wrappedOps.inexact(z);
+  },
+
+  "inexact->exact"(z: unknown): AExact {
+    return wrappedOps.exact(z);
+  },
+
   "number->string"(z: unknown, radix?: unknown): string {
     const n = coerceNumeric(z);
     const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
