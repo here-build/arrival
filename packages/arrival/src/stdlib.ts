@@ -931,35 +931,16 @@ export const global_env = new Environment(
       return obj;
     }),
     // ------------------------------------------------------------------
-    // set! delegates to the generator (evalSet via SPECIAL_FORMS); the binding
-    // exists for first-class lookup + macroexpand identity, like define/let/if.
-    // NOTE: evalSet is plain-symbol only — the legacy macro's dot-accessor
-    // `(set! (. o k) v)` and dotted-property `(set! fn.toString v)` JS-interop
-    // forms are not carried (already unreachable post-generator-delegation; no
-    // test exercises them). Re-add to evalSet WITH a test if a real need appears.
-    "set!": genMacroWrapper("set!"),
-    // ------------------------------------------------------------------
     // set-car! / set-cdr! / append! — OMITTED by the purity invariant (every
     // entity is frozen by design). Doored in core.ts. See plan-2026-06-11.
+    // set! / do / if / letrec / letrec* / let* / let / begin / parameterize —
+    // VESTIGIAL global_env registrations of forms the evaluator's SPECIAL_FORMS
+    // table already shadows before env lookup (parameterize is doored in core.ts).
+    // Deleted: no first-class lookup reaches them, and macro_expand's traverse
+    // only special-cases `lambda`/`define` by identity (the `let` family by name),
+    // so the bindings are unreferenced. See husk-dissolution pass.
     // ------------------------------------------------------------------
     gensym: doc("gensym", gensym),
-    // ------------------------------------------------------------------
-    do: genMacroWrapper("do"),
-    // ------------------------------------------------------------------
-    if: genMacroWrapper("if"),
-    // ------------------------------------------------------------------
-    letrec: genMacroWrapper("letrec"),
-    "letrec*": genMacroWrapper("letrec*"),
-    "let*": genMacroWrapper("let*"),
-    let: genMacroWrapper("let"),
-    // ------------------------------------------------------------------
-    begin: genMacroWrapper("begin"),
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    // parameterize delegates to the generator evaluator (evalParameterize) via
-    // genMacroWrapper — same dynamic-extent semantics (inherit dynamic_env →
-    // look up the Parameter → bind param.inherit(value) → eval body as begin).
-    parameterize: genMacroWrapper("parameterize"),
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     // %purity-door — the ONE host primitive behind every omitted feature.
@@ -1088,11 +1069,8 @@ export const global_env = new Environment(
     lambda: genMacroWrapper("lambda"),
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
-    // define-macro delegates to the generator evaluator (evalDefineMacro) via
-    // genMacroWrapper — binds positional + rest params to the unevaluated form
-    // and registers the expander Macro in the calling env. Drops the literal's
-    // last dependency on the legacy macro-engine path.
-    "define-macro": genMacroWrapper("define-macro"),
+    // define-macro — VESTIGIAL: shadowed by the `define-macro` SPECIAL_FORM
+    // (evalDefineMacro) before env lookup; no first-class reader. Deleted.
     // ------------------------------------------------------------------
     "syntax-rules": new Macro("syntax-rules", function (this: Environment, macro: SchemeValue, options: SchemeValue) {
       const { use_dynamic, error } = options;
@@ -1215,23 +1193,17 @@ export const global_env = new Environment(
       return syntax;
     }),
     // ------------------------------------------------------------------
-    quote: doc(
-      null,
-      new Macro("quote", function (arg) {
-        return quote(arg.car);
-      }),
-    ),
+    // quote / quasiquote — VESTIGIAL: shadowed by their SPECIAL_FORM handlers
+    // (evalQuote / evalQuasiquote) before env lookup. The `unquote` /
+    // `unquote-splicing` stubs stay: they are NOT special forms, so a stray
+    // `(unquote x)` outside quasiquote reaches them and raises the friendly
+    // errors-as-doors message rather than "unbound variable".
     "unquote-splicing": doc("unquote-splicing", function () {
       throw new Error(`You can't call \`unquote-splicing\` outside of quasiquote`);
     }),
     unquote: doc("unquote", function () {
       throw new Error(`You can't call \`unquote\` outside of quasiquote`);
     }),
-    // ------------------------------------------------------------------
-    // quasiquote delegates to the generator evaluator (evalQuasiquote) via
-    // genMacroWrapper — full R7RS expansion: unquote, unquote-splicing,
-    // nesting levels, dotted tails, and vector quasiquotation.
-    quasiquote: genMacroWrapper("quasiquote"),
     // ------------------------------------------------------------------
     list: doc("list", function list(...args) {
       const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
@@ -1279,8 +1251,6 @@ export const global_env = new Environment(
         }
       }),
     ),
-    // ------------------------------------------------------------------
-    try: genMacroWrapper("try"),
     // ------------------------------------------------------------------
     find: doc("find", function find(arg, list) {
       typecheck("find", arg, ["regex", "function"]);
@@ -1401,10 +1371,6 @@ export const global_env = new Environment(
     "inexact->exact": doc("inexact->exact", function inexactToExact(z: SchemeValue): SchemeValue {
       return (global_env.get("exact") as SchemeFunction)(z);
     }),
-    // ------------------------------------------------------------------
-    or: genMacroWrapper("or"),
-    // ------------------------------------------------------------------
-    and: genMacroWrapper("and"),
     // ------------------------------------------------------------------
     not: doc("not", function not(value) {
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
