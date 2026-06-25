@@ -123,6 +123,21 @@ export default new EnvCapability("scheme/lists", {
         withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr)),
     ),
 
+    apply: symbol.native`apply: call fn with args, the last of which is a list spliced in`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      // Relocated VERBATIM from stdlib.ts global_env (husk dissolution). The legacy
+      // body took `this: Environment` but never read it — apply's env-as-this was
+      // already erased, so the native bind (this === undefined) is behavior-identical.
+      // Uses the pack-local `listToArray` (same byte-for-byte to_array the bridge used).
+      (fn: SchemeValue, ...args: SchemeValue[]): SchemeValue => {
+        typecheck("apply", fn, "function", 1);
+        const last = args.pop();
+        typecheck("apply", last, ["pair", "nil"], args.length + 2);
+        args = args.concat(listToArray(last));
+        return fn.apply(undefined, args);
+      },
+    ),
+
     "make-list": symbol.native`make-list: build a list of k copies of fill (default #f)`(
       { input: [z.schemeNumber, z.unknown().optional()], output: [z.unknown()] },
       (k: unknown, fill?: unknown): unknown => {

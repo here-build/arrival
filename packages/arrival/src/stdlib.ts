@@ -1120,14 +1120,6 @@ export const global_env = new Environment(
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
     // ------------------------------------------------------------------
-    apply: doc("apply", function apply(this: Environment, fn: SchemeFunction, ...args: SchemeValue[]) {
-      typecheck("apply", fn, "function", 1);
-      const last = args.pop();
-      typecheck("apply", last, ["pair", "nil"], args.length + 2);
-      args = args.concat(listToArray(last));
-      return fn.apply(undefined, args);
-    }),
-    // ------------------------------------------------------------------
     length: speculative(
       doc("length", function length(obj) {
         if (!obj || is_nil(obj)) {
