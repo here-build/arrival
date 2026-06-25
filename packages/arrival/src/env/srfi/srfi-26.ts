@@ -2,7 +2,7 @@
 //
 // SINGLE SOURCE: `base-packs.ts` assembles `SRFI26_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI26_SCM = `
 ;; -----------------------------------------------------------------------------

@@ -22,8 +22,8 @@
 import "../errors.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
-import * as z from "./scheme-zod.js";
-import { symbol } from "./symbol.js";
+import * as z from "../common/scheme-zod.js";
+import { symbol } from "../common/symbol.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import {
@@ -32,7 +32,7 @@ import {
   toIndex,
   withInputProvenance,
 } from "../values/op-helpers.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 
 export default new EnvCapability("scheme/bytevectors", {
   symbols: {

@@ -81,13 +81,13 @@ export { docsOf, rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `Environment` class). Re-surfaced on the barrel from its real home
-// (`./env/scheme-env.ts`, also reachable via the `@here.build/arrival/scheme-env`
+// (`./common/scheme-env.ts`, also reachable via the `@here.build/arrival/scheme-env`
 // subpath) so barrel-style consumers (arrival-chain, arrival-mcp) name the interface.
 export {
   type SchemeEnv,
   type RosettaSpec,
   type ResolverSpec,
-} from "./env/scheme-env.js";
+} from "./common/scheme-env.js";
 
 // Number system - SchemeExact (rationals) and SchemeInexact (floats/complex)
 export {

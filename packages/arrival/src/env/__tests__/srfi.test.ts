@@ -1,7 +1,7 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
 import { exec, sandboxedEnv } from "../../index.js";
-import { assembleEnv } from "../kernel.js";
-import { type SchemeEnv } from "../scheme-env.js";
+import { assembleEnv } from "../../common/kernel.js";
+import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
 import { allSrfi, srfi1, srfi26, srfi43, srfi128, srfi189, srfi2, srfi8 } from "../srfi/index.js";

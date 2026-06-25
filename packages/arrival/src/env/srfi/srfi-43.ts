@@ -2,7 +2,7 @@
 //
 // SINGLE SOURCE: `base-packs.ts` assembles `SRFI43_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI43_SCM = `
 ;; ============ SRFI-43 (vector library — pure ops only; arrival vectors are immutable) ============

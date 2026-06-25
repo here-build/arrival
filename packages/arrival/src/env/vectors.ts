@@ -19,10 +19,10 @@
  * is the types-only \`z.custom\` procedure. Bodies are reproduced byte-for-byte.
  */
 
-import * as z from "./scheme-zod.js";
+import * as z from "../common/scheme-zod.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { ctxOf } from "../values/primitives/AValue.js";
-import { symbol } from "./symbol.js";
+import { symbol } from "../common/symbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
 import { type SchemeValue } from "../values/types.js";
@@ -41,7 +41,7 @@ import {
   withInputProvenance,
 } from "../values/op-helpers.js";
 
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 
 export default new EnvCapability("scheme/vectors", {
   symbols: {

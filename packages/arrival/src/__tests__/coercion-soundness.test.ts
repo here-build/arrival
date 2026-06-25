@@ -36,7 +36,7 @@ import { AString } from "../values/primitives/AString.js";
 import { SchemeJSArray } from "../membrane.js";
 import flInteropCap from "../env/fl-interop.js";
 import listsCap from "../env/r7rs/lists.js";
-import type { EnvCapability } from "../env/capability.js";
+import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
 

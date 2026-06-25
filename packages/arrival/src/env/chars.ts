@@ -19,12 +19,12 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
-import * as z from "./scheme-zod.js";
-import { symbol } from "./symbol.js";
+import * as z from "../common/scheme-zod.js";
+import { symbol } from "../common/symbol.js";
 import { charValue, coerceNumeric, deriveOrd } from "../values/op-helpers.js";
 import { AExact } from "../values/numbers.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 
 export default new EnvCapability("scheme/chars", {
   symbols: {

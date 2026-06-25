@@ -28,7 +28,7 @@ import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
 import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
-import type { ResolverSpec } from "./env/scheme-env.js";
+import type { ResolverSpec } from "./common/scheme-env.js";
 import { SchemePromise } from "./eval/evaluator.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";

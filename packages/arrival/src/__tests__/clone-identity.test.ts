@@ -36,7 +36,7 @@ import { is_nil } from "../eval/guards";
 import { hasMember, isSchemeValue, readMember, toJS } from "../membrane";
 import { schemeToJs } from "../rosetta";
 import listsCap from "../env/r7rs/lists";
-import type { EnvCapability } from "../env/capability";
+import type { EnvCapability } from "../common/capability";
 import { APair } from "../values/primitives/APair.js";
 import { ANil, nil } from "../values/primitives/ANil";
 

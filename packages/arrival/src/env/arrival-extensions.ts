@@ -15,12 +15,12 @@
 //
 // SINGLE SOURCE: `base-packs.ts` assembles `ARRIVAL_EXTENSIONS_SCM`
 // and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { typecheck } from "../utils/typecheck.js";
-import * as z from "./scheme-zod.js";
-import { symbol } from "./symbol.js";
+import * as z from "../common/scheme-zod.js";
+import { symbol } from "../common/symbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { stringValue, withInputProvenance, toIndex } from "../values/op-helpers.js";
 import { AExact } from "../values/numbers.js";

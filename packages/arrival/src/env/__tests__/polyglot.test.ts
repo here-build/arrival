@@ -1,7 +1,7 @@
 // polyglot pack — assemble onto a real env, then RUN the threading macros.
 import { exec, sandboxedEnv } from "../../index.js";
-import { assembleEnv } from "../kernel.js";
-import { type SchemeEnv } from "../scheme-env.js";
+import { assembleEnv } from "../../common/kernel.js";
+import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
 import polyglot from "../polyglot.js";

@@ -6,7 +6,7 @@
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const BINDING_SCM = `    ;; -----------------------------------------------------------------------------
     ;; R7RS let-values and let*-values

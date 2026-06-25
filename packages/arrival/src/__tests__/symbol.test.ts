@@ -11,8 +11,8 @@
 
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import * as arrival from "../env/symbol.js";
-import * as z from "../env/scheme-zod.js";
+import * as arrival from "../common/symbol.js";
+import * as z from "../common/scheme-zod.js";
 import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact, AInexact } from "../values/numbers.js";

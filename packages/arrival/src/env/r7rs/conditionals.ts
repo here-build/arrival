@@ -8,10 +8,10 @@
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import * as z from "../scheme-zod.js";
-import { symbol } from "../symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 
 // Native: recognise a literal `else` clause head — matches the interned `else`

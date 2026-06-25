@@ -11,7 +11,7 @@
 // application order is immaterial; explicit dep edges become necessary only once
 // assembly targets a bare rawBase instead of the already-populated user_env.
 
-import type { EnvCapability } from "./capability.js";
+import type { EnvCapability } from "../common/capability.js";
 import core from "./core.js";
 import polyglot from "./polyglot.js";
 import { allR7rs } from "./r7rs/index.js";

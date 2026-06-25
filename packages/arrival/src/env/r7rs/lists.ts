@@ -30,14 +30,14 @@
 import "@here.build/error-invariant";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
-import * as z from "../scheme-zod.js";
-import { symbol } from "../symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import { isCircularList, APair } from "../../values/primitives/APair.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { is_false } from "../../eval/guards.js";
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/lists", {
   symbols: {

@@ -8,7 +8,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
 import bytevectorsCap from "../env/bytevectors.js";
 import vectorsCap from "../env/vectors.js";
-import type { EnvCapability } from "../env/capability.js";
+import type { EnvCapability } from "../common/capability.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";

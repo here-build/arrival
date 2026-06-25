@@ -15,7 +15,7 @@
 // numeric core + exception machinery still hand-built in `bridge.ts`'s `wrappedOps`
 // (a `numbers` cluster is the next carve) and the global/user env split itself.
 
-import type { EnvCapability } from "./capability.js";
+import type { EnvCapability } from "../common/capability.js";
 import bytevectors from "./bytevectors.js";
 import chars from "./chars.js";
 import equality from "./equality.js";

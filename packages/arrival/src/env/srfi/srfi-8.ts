@@ -8,7 +8,7 @@
 // has no `define-syntax`). This module re-expresses it once as `define-macro`
 // (the sandbox-supported path, same form the threading/cut packs already use),
 // and the bootstrap now single-sources from here — one definition for both envs.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI8_SCM = `
 ;; ============ SRFI-8 receive ============

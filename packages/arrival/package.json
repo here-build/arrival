@@ -32,20 +32,20 @@
       "import": "./dist/oracle/index.js"
     },
     "./env": {
-      "types": "./dist/env/kernel.d.ts",
-      "default": "./dist/env/kernel.js"
+      "types": "./dist/common/kernel.d.ts",
+      "default": "./dist/common/kernel.js"
     },
     "./capability": {
-      "types": "./dist/env/capability.d.ts",
-      "default": "./dist/env/capability.js"
+      "types": "./dist/common/capability.d.ts",
+      "default": "./dist/common/capability.js"
     },
     "./resources": {
-      "types": "./dist/env/resources.d.ts",
-      "default": "./dist/env/resources.js"
+      "types": "./dist/common/resources.d.ts",
+      "default": "./dist/common/resources.js"
     },
     "./scheme-env": {
-      "types": "./dist/env/scheme-env.d.ts",
-      "default": "./dist/env/scheme-env.js"
+      "types": "./dist/common/scheme-env.d.ts",
+      "default": "./dist/common/scheme-env.js"
     },
     "./srfi": {
       "types": "./dist/env/srfi/index.d.ts",

@@ -28,9 +28,9 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `POLYGLOT_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 
-import { EnvCapability } from "./capability.js";
-import { symbol } from "./symbol.js";
-import * as z from "./scheme-zod.js";
+import { EnvCapability } from "../common/capability.js";
+import { symbol } from "../common/symbol.js";
+import * as z from "../common/scheme-zod.js";
 import { hasMember, keywordAccessorResolver, memberKeys, readMember } from "../membrane.js";
 
 /** The polyglot idiom pack — the full member-access surface plus the threading family:

@@ -21,12 +21,12 @@
  * and returns raw — downstream `structuralEqual` treats `true ≡ SchemeBool(true)`).
  */
 
-import * as z from "./scheme-zod.js";
-import { symbol } from "./symbol.js";
+import * as z from "../common/scheme-zod.js";
+import { symbol } from "../common/symbol.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { structuralEqual } from "../values/structural-equal.js";
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 import { is_callable, is_macro } from "../eval/guards.js";
 
 export default new EnvCapability("scheme/equality", {

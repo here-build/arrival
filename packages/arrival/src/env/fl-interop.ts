@@ -30,10 +30,10 @@
  * live before any symbol here can fire.
  */
 
-import { EnvCapability } from "./capability.js";
+import { EnvCapability } from "../common/capability.js";
 import { type RunContext } from "../values/primitives/RunContext.js";
-import { symbol } from "./symbol.js";
-import * as z from "./scheme-zod.js";
+import { symbol } from "../common/symbol.js";
+import * as z from "../common/scheme-zod.js";
 import { global_env } from "../stdlib.js";
 import { SchemeJSArray } from "../membrane.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";

@@ -10,7 +10,7 @@
 // SRFI-1 `remove` deliberately stay in core (`core.ts`): the accessors are
 // arrival-specific crash-avoidance, and `remove` is authored there directly
 // (it once shadowed a Ramda `remove`, since removed entirely).
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI1_SCM = `
 ;; ============ SRFI-1 (list library completion) ============

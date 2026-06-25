@@ -8,7 +8,7 @@
 // has no `define-syntax`). This module re-expresses it once as a recursive
 // `define-macro` (the sandbox-supported path), and the bootstrap now
 // single-sources from here — one definition for both envs.
-import { EnvCapability } from "../capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export const SRFI2_SCM = `
 ;; ============ SRFI-2 and-let* ============
