@@ -130,6 +130,19 @@ export interface RosettaSymbolDef {
   readonly pure?: boolean;
 }
 
+/** A tagless symbol: NO impl — the bypass to the operand's own `arrival/tagless-final/<name>`
+ *  declaration. `run` is the ctx-aware dispatcher (receiver = the last scheme arg, per scheme's
+ *  `(op …args collection)` convention) that hands the method the run's RunContext as its trailing
+ *  arg, with a detailed type-mismatch error when the operand declares no such method. */
+export interface TaglessSymbolDef {
+  readonly kind: "tagless";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+}
+
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
 export interface DoorSymbolDef {
   readonly kind: "door";
@@ -137,7 +150,7 @@ export interface DoorSymbolDef {
   readonly reason: string;
 }
 
-export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | DoorSymbolDef;
+export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | DoorSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
@@ -198,6 +211,12 @@ interface DoorInput {
   kind: "door";
   name: string;
   reason: string;
+}
+interface TaglessInput {
+  kind: "tagless";
+  name: string;
+  doc?: string;
+  contract: Contract<VectorSpec, VectorSpec>;
 }
 
 /** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
@@ -338,6 +357,54 @@ function bakeDoor(input: DoorInput): DoorSymbolDef {
   return { kind: "door", name: input.name, reason: input.reason };
 }
 
+/** Human description of a receiver for the type-mismatch error: an AValue reports its
+ *  scheme `kind` ("number"/"pair"/"nil"/…), else the JS shape. */
+function describeReceiver(v: unknown): string {
+  if (v === null || v === undefined) return String(v);
+  if (v instanceof AValue) return v.kind;
+  return Array.isArray(v) ? "array" : typeof v;
+}
+
+/** Bake a tagless dispatcher. No impl — `run` forwards to the operand's own
+ *  `arrival/tagless-final/<name>` term method. Receiver = the LAST scheme arg (scheme places
+ *  the collection last: `(map fn xs)`, `(car xs)`); the leading args + the run's RunContext
+ *  (read ctx-aware off the evaluator-appended EvalContext) are passed through. A receiver that
+ *  declares no such method is a TYPE MISMATCH — a clear throw, not a silent bypass. */
+function bakeTagless(input: TaglessInput): TaglessSymbolDef {
+  const method = `arrival/tagless-final/${input.name}`;
+  const run = async (...args: unknown[]): Promise<unknown> => {
+    // Strip the evaluator-appended ctx iff the trailing arg looks like one (same probe as
+    // bakeRosetta). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
+    let ctx: unknown = undefined;
+    let schemeArgs = args;
+    const last = args[args.length - 1];
+    if (
+      args.length > 0 &&
+      last != null &&
+      typeof last === "object" &&
+      !(last instanceof AValue) &&
+      !Array.isArray(last) &&
+      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+    ) {
+      ctx = last;
+      schemeArgs = args.slice(0, -1);
+    }
+    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    const receiver = schemeArgs[schemeArgs.length - 1];
+    const leading = schemeArgs.slice(0, -1);
+    const fn = (receiver as Record<string, unknown> | null | undefined)?.[method];
+    if (typeof fn !== "function") {
+      throw new TypeError(
+        `${input.name}: cannot ${input.name} a ${describeReceiver(receiver)} — it declares no ` +
+          `${method}. A tagless op is defined ON the arrival terms that implement it (Pair, Vector, LazySeq, …).`,
+      );
+    }
+    return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);
+  };
+  (run as { __withCtx?: boolean }).__withCtx = true;
+  return { kind: "tagless", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. The three constructors (tagged-template → curry → generics)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -366,6 +433,16 @@ function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl: impl as AnyFn }, opts);
 }
 
+/** Tagless host op — NO impl. Dispatches to the operand's own `arrival/tagless-final/<name>`
+ *  term method (the per-A-entity declaration), threading the run ctx. The contract is the
+ *  type/harvest surface; the behaviour lives on the terms. */
+function tagless(tpl: TemplateStringsArray, ...sub: unknown[]) {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return <const I extends VectorSpec, const O extends VectorSpec>(
+    contract: Contract<I, O>,
+  ): TaglessSymbolDef => bakeTagless({ kind: "tagless", name, doc, contract });
+}
+
 /** errors-as-doors — an OMITTED verb. No contract/impl, just the teaching reason. */
 function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
@@ -374,7 +451,7 @@ function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbo
 
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
-export const symbol = { native, rosetta, notImplemented };
+export const symbol = { native, rosetta, tagless, notImplemented };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.
