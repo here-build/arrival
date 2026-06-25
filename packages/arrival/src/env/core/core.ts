@@ -12,7 +12,7 @@
 // concatenates it FIRST, so this module is the sole definition site — the same
 // pattern the SRFI / r7rs / polyglot packs already follow.
 
-import { EnvCapability } from "../common/capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 /** The irreducible scheme core pack: constants, purity doors, syntax-binding macros.
  *  Prelude-only module-singleton capability; the precedence floor every base pack deps. */

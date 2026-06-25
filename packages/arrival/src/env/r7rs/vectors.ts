@@ -19,18 +19,18 @@
  * is the types-only \`z.custom\` procedure. Bodies are reproduced byte-for-byte.
  */
 
-import * as z from "../common/scheme-zod.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { ctxOf } from "../values/primitives/AValue.js";
-import { symbol } from "../common/symbol.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { AString } from "../values/primitives/AString.js";
-import { type SchemeValue } from "../values/types.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import type { AExact } from "../values/numbers.js";
-import { APair } from "../values/primitives/APair.js";
-import { is_promise } from "../eval/guards.js";
-import { promise_all } from "../utils/promises.js";
+import * as z from "../../common/scheme-zod.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { ctxOf } from "../../values/primitives/AValue.js";
+import { symbol } from "../../common/symbol.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { AString } from "../../values/primitives/AString.js";
+import { type SchemeValue } from "../../values/types.js";
+import { ACharacter } from "../../values/primitives/ACharacter.js";
+import type { AExact } from "../../values/numbers.js";
+import { APair } from "../../values/primitives/APair.js";
+import { is_promise } from "../../eval/guards.js";
+import { promise_all } from "../../utils/promises.js";
 import invariant from "tiny-invariant";
 import {
   assertAllocatable,
@@ -39,9 +39,9 @@ import {
   stringValue,
   toIndex,
   withInputProvenance,
-} from "../values/op-helpers.js";
+} from "../../values/op-helpers.js";
 
-import { EnvCapability } from "../common/capability.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/vectors", {
   symbols: {

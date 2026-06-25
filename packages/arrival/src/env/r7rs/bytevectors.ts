@@ -19,20 +19,20 @@
  * schema. `bytevector?` keeps `z.unknown()` since it deliberately classifies ANY value.
  */
 
-import "../errors.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import "../../errors.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
-import * as z from "../common/scheme-zod.js";
-import { symbol } from "../common/symbol.js";
-import { ABytevector } from "../values/primitives/ABytevector.js";
-import { AString } from "../values/primitives/AString.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
+import { ABytevector } from "../../values/primitives/ABytevector.js";
+import { AString } from "../../values/primitives/AString.js";
 import {
   asBytevector,
   stringValue,
   toIndex,
   withInputProvenance,
-} from "../values/op-helpers.js";
-import { EnvCapability } from "../common/capability.js";
+} from "../../values/op-helpers.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/bytevectors", {
   symbols: {

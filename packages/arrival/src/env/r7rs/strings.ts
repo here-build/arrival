@@ -18,11 +18,11 @@
  */
 
 import foldCase from "fold-case";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
 
-import * as z from "../common/scheme-zod.js";
-import { symbol } from "../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
 import {
   assertAllocatable,
   charValue,
@@ -31,16 +31,16 @@ import {
   stringValue,
   toIndex,
   withInputProvenance,
-} from "../values/op-helpers.js";
-import { collapseProvenance, taintString } from "../provenance-collapse.js";
-import { AString } from "../values/primitives/AString.js";
-import { AExact } from "../values/numbers.js";
-import { APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import { is_promise } from "../eval/guards.js";
-import { promise_all } from "../utils/promises.js";
-import { EnvCapability } from "../common/capability.js";
+} from "../../values/op-helpers.js";
+import { collapseProvenance, taintString } from "../../provenance-collapse.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AExact } from "../../values/numbers.js";
+import { APair } from "../../values/primitives/APair.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { ACharacter } from "../../values/primitives/ACharacter.js";
+import { is_promise } from "../../eval/guards.js";
+import { promise_all } from "../../utils/promises.js";
+import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/strings", {
   symbols: {

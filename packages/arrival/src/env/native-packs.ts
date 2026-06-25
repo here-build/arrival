@@ -16,11 +16,11 @@
 // (a `numbers` cluster is the next carve) and the global/user env split itself.
 
 import type { EnvCapability } from "../common/capability.js";
-import bytevectors from "./bytevectors.js";
-import chars from "./chars.js";
-import equality from "./equality.js";
-import strings from "./strings.js";
-import vectors from "./vectors.js";
+import bytevectors from "./r7rs/bytevectors.js";
+import chars from "./r7rs/chars.js";
+import equality from "./r7rs/equality.js";
+import strings from "./r7rs/strings.js";
+import vectors from "./r7rs/vectors.js";
 
 export const NATIVE_PACKS: readonly EnvCapability[] = [
   chars,
