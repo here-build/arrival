@@ -31,46 +31,26 @@
  */
 
 import { EnvCapability } from "./capability.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { symbol } from "./symbol.js";
 import * as z from "./scheme-zod.js";
 import { global_env } from "../stdlib.js";
 import { nil } from "../values/primitives/ANil.js";
 import { SchemeJSArray } from "../membrane.js";
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
-import { is_false, is_nil } from "../eval/guards.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance, EMPTY_PROVENANCE, ctxOf } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
-import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
-import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
-
-// ── Arrival sequence-op protocol surface ─────────────────────────────────────
-// The list/seq primitives (APair, AVector) carry their OWN async-aware sequence ops
-// ON the value, dispatched by the term — the dissolution of the borrowed fantasy-land/*
-// algebra into arrival/tagless-final/* (per-primitive, async-aware, provenance-aware).
-// The overlay below is a program over this protocol, blind to which term implements it
-// (Carette, Kiselyov & Shan, "Finally Tagless, Partially Evaluated", 2009). Each method
-// is async: it awaits the user fn (live LIPS lambdas always return Promises). `reduce`
-// carries the scheme/SRFI fold convention `fn(element, acc)` (accumulator LAST). Honest
-// named type — we only ever touch these methods, never the term's internals, so model
-// them, not `any`. A term may carry any subset (AString has only `map`, and it is sync —
-// it is never routed here because the overlay's map branch checks for APair/AVector first).
-interface ArrivalSequenceOps {
-  "arrival/tagless-final/map"(fn: (val: unknown) => unknown): unknown;
-  "arrival/tagless-final/filter"(arg: ((val: unknown) => unknown) | RegExp): unknown;
-  "arrival/tagless-final/reduce"<A>(fn: (element: unknown, acc: A) => A, init: A): A;
-}
+import { heapBudgetMessage } from "../heap-budget.js";
+import { SchemeError } from "../eval/evaluator.js";
 
 type Callable = (...args: unknown[]) => unknown;
 
 // ── Lazy builtin capture ────────────────────────────────────────────────────
 // Read once on first use, after bootstrap, when global_env is fully assembled.
-let builtinFilter: Callable | undefined;
 let builtinMap: Callable | undefined;
-let builtinReduce: Callable | undefined;
 
 // Comparison builtins — bridged Operators (=/</>/<=/>=). Captured lazily for the
 // nil-tolerant overrides below (the operator membrane throws on a nil operand at
@@ -82,10 +62,8 @@ let builtinLte: Callable | undefined;
 let builtinGte: Callable | undefined;
 
 function captureBuiltins(): void {
-  if (builtinFilter !== undefined) return;
-  builtinFilter = global_env.get("filter", { throwError: false }) as Callable;
+  if (builtinMap !== undefined) return;
   builtinMap = global_env.get("map", { throwError: false }) as Callable;
-  builtinReduce = global_env.get("reduce", { throwError: false }) as Callable;
   builtinNumEq = global_env.get("=", { throwError: false }) as Callable;
   builtinLt = global_env.get("<", { throwError: false }) as Callable;
   builtinGt = global_env.get(">", { throwError: false }) as Callable;
@@ -143,23 +121,6 @@ function numericCompare(sym: "=" | "<" | ">" | "<=" | ">=", args: ANumeric[]): u
 }
 
 
-// ── LazySeq egress ────────────────────────────────────────────────────────────
-// reduce is a full-egress observation (no `Observation` of its own in the first
-// cut): force the plan with `iterate`, rebuild a Scheme list, and DELEGATE to the
-// captured base `reduce`. Delegating (not re-folding by hand) keeps lazy reduce
-// observationally identical to eager — same fold direction, same provenance
-// propagation — BY CONSTRUCTION. A hand-rolled left-fold here silently disagreed
-// with the base reduce's right-fold for non-commutative reducers (caught by the
-// confluence battery): the lazy plane must defer to the real op, never re-derive it.
-async function reduceLazySeq(
-  fn: (acc: unknown, val: unknown) => unknown,
-  init: unknown,
-  ls: ALazySeq,
-): Promise<unknown> {
-  const { items } = (await ls.refine({ kind: "iterate" })) as { items: readonly unknown[] };
-  return builtinReduce!(fn, init, APair.fromArray(ls.ctx, [...items], false));
-}
-
 // Materialize a collection's elements — a LIPS pair spine, a SchemeVector, a lazy
 // SchemeJSArray wrapper, or a raw JS array — to a flat element array. Shared by
 // `length` and the `lazy-seq` constructor so both see the same element set. As
@@ -199,127 +160,77 @@ function unforcedLazyEgress(op: string): never {
   );
 }
 
-// Per-run allocation bound for the term-delegated sequence ops. The heap meter (heap-budget.ts)
-// is charged per element at `to_array` for append/join/reverse/…; map/filter/reduce USED to be
-// charged at the now-dissolved `flCollectValues`, but they now delegate to the term's OWN
-// arrival/tagless-final method, which walks the spine/array DIRECTLY (bypassing to_array). A
-// native sequence pass emits no trampoline TICK, so the wall-clock budget can't preempt it —
-// without a charge here a `(map f huge)` / O(K²) churn loop would run unbounded. Charge by input
-// element count HERE, at the env-layer dispatch (which may read currentRunEnv), NOT on the value
-// term (the value classes stay evaluator-free — the import cycle AVector/APair forbid). A vector
-// counts O(1); a pair by a spine walk (the term re-walks to map — the same O(2K) profile the old
-// collect→rebuild had). Undefined meter ⇒ no budget ⇒ a single O(depth) lookup, nothing more.
-function chargeSequenceHeap(collection: unknown): void {
-  const meter = findHeapMeter(currentRunEnv() ?? null);
-  if (meter === undefined) return;
-  let count = 0;
-  if (collection instanceof AVector) {
-    count = collection.__vector__.length;
-  } else {
-    let cur: unknown = collection;
-    while (cur instanceof APair) {
-      count++;
-      cur = cur.cdr;
+// chargeAndDispatch — the sequence ops' thin program: charge the run's allocation meter, then
+// dispatch to the receiver's OWN arrival/tagless-final/<op>. The EAGER materializers (APair/
+// AVector) charge runCtx.heapMeter by element count BEFORE walking — a native pass emits no
+// trampoline TICK, so without it a `(map f huge)`/O(K²) churn runs unbounded (heap-budget.ts); a
+// LazySeq extends a plan (no materialize → no charge) and ANil is empty. The per-primitive box
+// discipline + fold convention + lazy plan all live ON the term. A receiver with NO such algebra
+// (a SchemeJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
+// throw, never a silent coercion. Heap stays holder-free here (runCtx, not currentRunEnv).
+function chargeAndDispatch(
+  method: "map" | "filter" | "reduce",
+  receiver: unknown,
+  leading: unknown[],
+  runCtx: RunContext,
+): unknown {
+  if (receiver instanceof APair || receiver instanceof AVector) {
+    const meter = runCtx.heapMeter;
+    if (meter !== undefined) {
+      let count = 0;
+      if (receiver instanceof AVector) {
+        count = receiver.__vector__.length;
+      } else {
+        let cur: unknown = receiver;
+        while (cur instanceof APair) {
+          count++;
+          cur = cur.cdr;
+        }
+      }
+      meter.used += count;
+      if (meter.used > meter.max) throw new SchemeError(heapBudgetMessage(meter.max), []);
     }
   }
-  meter.used += count;
-  if (meter.used > meter.max) throw new SchemeError(heapBudgetMessage(meter.max), []);
+  const m = (receiver as Record<string, unknown> | null | undefined)?.[`arrival/tagless-final/${method}`];
+  if (typeof m !== "function") {
+    const kind = receiver instanceof AValue ? receiver.kind : receiver == null ? String(receiver) : typeof receiver;
+    throw new TypeError(
+      `${method}: the ${kind} primitive does not support ${method} (no arrival/tagless-final/${method}).`,
+    );
+  }
+  return (m as (...a: unknown[]) => unknown).call(receiver, ...leading);
 }
 
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
-    // Term-delegation: an arrival sequence (a LIPS Pair OR a SchemeVector) computes by its
-    // OWN async-aware arrival/tagless-final/filter — spine/array-walk, the canonical keep-rule
-    // (`!is_false && !is_nil`), regex-arg adaptation — so this no longer reaches the
-    // env-resolved scheme builtin. The convention lives ON the term, not in a helper.
-    filter: symbol.native`filter: keep elements matching a pred/regex — term-dispatch, nil-tolerant`(
+    // map/filter/reduce — the inference-plane sequence ops, DISSOLVED onto the term protocol.
+    // The per-primitive semantics live ON the terms (APair/AVector eager + box-discipline, ALazySeq
+    // lazy, ANil empty); the binding is a thin ctx-aware program (chargeAndDispatch) that charges
+    // runCtx.heapMeter and dispatches, TOTALIC for a non-sequence receiver. The old null/#f→nil
+    // tolerance is DROPPED: mapping a non-sequence is a type error, not an empty result — only '()
+    // is empty (via ANil). The box discipline (Pair preserves boxes, Vector strips — the DR4
+    // box-strip), the keep-rule, the element-first fold, and the lazy plan all live on the terms.
+    filter: symbol.sequence`filter: keep elements matching a pred/regex — term-dispatch, totalic`(
       { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
-      function filter(this: unknown, arg: any, list: unknown) {
-        captureBuiltins();
-        // Nil-tolerant: a `(first? …)`/`(if …)` that yielded #f or void flowing into a
-        // filter resolves to the empty list, not a crash — so a multi-leaf proof can still
-        // ground its OTHER leaves instead of losing the whole program to one absent read.
-        // (Matches the `@` accessor, which already returns nil for a null object. nil/'()
-        // is NOT caught here — it passes through to builtinFilter as a valid empty list.)
-        if (list == null || is_false(list)) return nil;
-        // Empty/nil list → nil, like the eager builtin. A Nil carries no
-        // arrival/tagless-final/filter, so guard it before the term route.
-        if (is_nil(list)) return nil;
-        // LazySeq fast-path — BEFORE materializing: extend the plan, run nothing. The
-        // Scheme-truthiness adaptation (await + is_false) lives here, at the interop
-        // boundary, so the carrier stays a generic async-aware pipe. A regex arg never
-        // reaches a LazySeq in practice; cast to the fn form for the await.
-        if (is_lazy_seq(list))
-          return list.filter(async (x: unknown) => !is_false(await (arg as (v: unknown) => unknown)(x)));
-        // An arrival sequence (Pair: box-preserving spine-walk; Vector: box-preserving array
-        // filter) filters by its OWN async-aware term method — byte-identical to the prior
-        // overlay's filter-over-the-term VALUE semantics, now expressed on the term itself.
-        if (list instanceof APair || list instanceof AVector) {
-          chargeSequenceHeap(list);
-          return (list as ArrivalSequenceOps)["arrival/tagless-final/filter"](
-            arg as ((x: unknown) => unknown) | RegExp,
-          );
-        }
-        // Final fallback — any input that is neither a LazySeq nor an arrival sequence
-        // (a SchemeJSArray, a raw input): builtinFilter typechecks pair|nil and folds/throws.
-        return builtinFilter!.call(this, arg, list);
-      },
+      (args, runCtx) => chargeAndDispatch("filter", args[1], [args[0]], runCtx),
     ),
-    map: symbol.native`map: apply fn over one list (term-dispatch) or zip over several — nil-tolerant`(
+    map: symbol.sequence`map: fn over one list (term-dispatch) or zip over several`(
       { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
-      function map(this: unknown, fn: any, ...lists: unknown[]) {
+      (args, runCtx) => {
+        const [fn, ...lists] = args;
+        if (lists.length === 1) return chargeAndDispatch("map", lists[0], [fn], runCtx);
+        // A multi-list map is a ZIP, not a Functor op — delegate to the base scheme `map` (zip +
+        // pair|nil typecheck). builtinMap resolves through global_env (the base, NOT this inference
+        // override), so there is no recursion.
         captureBuiltins();
-        if (lists.length === 1 && (lists[0] == null || is_false(lists[0]))) return nil; // nil-tolerant (see filter)
-        // LazySeq fast-path — extend the plan, run nothing (a pure map mints no
-        // provenance of its own, so its op-prov is empty; the source's grouping
-        // provenance and the elements' provenance ride the carrier).
-        if (lists.length === 1 && is_lazy_seq(lists[0])) return lists[0].map(fn);
-        // Term-delegation — a SINGLE-LIST arrival sequence computes by its OWN async-aware
-        // arrival/tagless-final/map instead of reaching the env-resolved scheme builtin. The
-        // box discipline lives ON the term: a Pair PRESERVES every element's box (it stays an
-        // arrival list — coercion-soundness "Pair · map preserves every element's box"; lineage
-        // A13/A18b), a SchemeVector STRIPS element boxes (it crosses OUT to a foreign Functor —
-        // the DR4 box-strip, GOLDEN-pinned by "SchemeVector · map STRIPS element boxes"). A
-        // multi-list map (lists.length > 1) is a ZIP, not a Functor op, so it stays on
-        // builtinMap below.
-        if (lists.length === 1 && (lists[0] instanceof APair || lists[0] instanceof AVector)) {
-          chargeSequenceHeap(lists[0]);
-          return (lists[0] as ArrivalSequenceOps)["arrival/tagless-final/map"](fn);
-        }
-        // Fallback — multi-list (zip), or a non-sequence input (a SchemeJSArray: builtinMap
-        // typechecks pair|nil and THROWS, the coercion-soundness pin).
-        return builtinMap!.call(this, fn, ...lists);
+        return builtinMap!(fn, ...lists);
       },
     ),
-    reduce: symbol.native`reduce: left fold in scheme convention fn(element, acc) — term-dispatch`(
+    reduce: symbol.sequence`reduce: left fold in scheme convention fn(element, acc) — term-dispatch`(
       { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.unknown()] },
-      function reduce(
-        this: unknown,
-        fn: any,
-        init: unknown,
-        collection: unknown,
-      ) {
-        captureBuiltins();
-        if (is_lazy_seq(collection)) return reduceLazySeq(fn, init, collection); // force the plan, fold eager
-        // Term-delegation — an arrival sequence (a LIPS Pair OR a SchemeVector) folds by its
-        // OWN async-aware arrival/tagless-final/reduce, in ARRIVAL/SCHEME convention
-        // (`fn(element, acc)`, element FIRST), head-to-tail — byte-identical to the eager
-        // scheme `reduce` builtin (`(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first
-        // 85). The convention lives ON the term. A SchemeJSArray carries no such method, so it
-        // falls through to builtinReduce, whose pair|nil typecheck throws (coercion-soundness DR4).
-        if (collection instanceof APair || collection instanceof AVector) {
-          chargeSequenceHeap(collection);
-          return (collection as ArrivalSequenceOps)["arrival/tagless-final/reduce"](
-            fn as (element: unknown, acc: unknown) => unknown,
-            init,
-          );
-        }
-        // Fallback — neither LazySeq nor an arrival sequence (a SchemeJSArray, a raw input).
-        // builtinReduce typechecks pair|nil and folds (or throws for a non-list).
-        return builtinReduce!.call(this, fn, init, collection);
-      },
+      (args, runCtx) => chargeAndDispatch("reduce", args[2], [args[0], args[1]], runCtx),
     ),
 
     // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────

@@ -94,17 +94,17 @@ const mkLazy = () => new ALazySeq(CONSTANT_CTX, [el("a", 100), el("b", 101)], []
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — element provenance survives map/filter/sort", () => {
   it("Pair · map preserves every element's box", async () => {
-    expect(elemProvs(await force(ops.map(idSync, mkPair())))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()["arrival/tagless-final/map"](idSync)))).toEqual([[100], [101]]);
   });
   it("Pair · filter preserves every kept element's box", async () => {
-    expect(elemProvs(await force(ops.filter(keepAll, mkPair())))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([[100], [101]]);
   });
   it("Pair · sort preserves every element's box (only reorders)", async () => {
     expect(elemProvs(await force(ops.sort(mkPair(), cmp)))).toEqual([[100], [101]]);
   });
 
   it("SchemeVector · filter preserves every element's box", async () => {
-    expect(elemProvs(await force(ops.filter(keepAll, mkVec())))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkVec()["arrival/tagless-final/filter"](keepAll)))).toEqual([[100], [101]]);
   });
 });
 
@@ -150,13 +150,13 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — LazySeq length cone (demand == provenance)", () => {
   it("length(lazy map) keeps only the grouping fact — elements stay out of the cone", async () => {
-    const planned = ops.map(idSync, mkLazy()); // extends the plan, runs nothing
+    const planned = mkLazy()["arrival/tagless-final/map"](idSync); // extends the plan, runs nothing
     const r = await force(ops.length(planned));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     expect(provOf(r)).toEqual([7]); // grouping box only — map preserves length
   });
   it("length(lazy filter) pulls every inspected element into the cone", async () => {
-    const planned = ops.filter(keepAll, mkLazy()); // length-changing → must run
+    const planned = mkLazy()["arrival/tagless-final/filter"](keepAll); // length-changing → must run
     const r = await force(ops.length(planned));
     expect(provOf(r)).toEqual([7, 100, 101]);
   });
@@ -185,8 +185,8 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
   });
 
   it("Pair · map / filter drop the container box (spine rebuilt; element boxes survive)", async () => {
-    expect(provOf(await force(ops.map(idSync, mkPair())))).toEqual([]);
-    expect(provOf(await force(ops.filter(keepAll, mkPair())))).toEqual([]);
+    expect(provOf(await force(mkPair()["arrival/tagless-final/map"](idSync)))).toEqual([]);
+    expect(provOf(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([]);
   });
 
   it("SchemeVector · map STRIPS element boxes [CONTESTED: AVector TF-map unwrapForeign — DR4]", async () => {
@@ -198,7 +198,7 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     // change the documented cross-out contract. Pinned as the current reality + escalated.
     // (`filter` over a vector — the term's arrival/tagless-final/filter — does NOT unwrap,
     // so it is sound — see stratum 1.)
-    const r = await force(ops.map(idSync, mkVec()));
+    const r = await force(mkVec()["arrival/tagless-final/map"](idSync));
     expect(elemProvs(r)).toEqual([[], []]); // boxes dropped — the bug, captured
   });
 });
@@ -220,7 +220,7 @@ describe("G6 golden(eager-parity) — wrong-carrier silent nil [CONTESTED: DR4]"
   // do NOT handle a SchemeJSArray — they fall through to the LIPS builtins, which
   // typecheck pair|nil and THROW. (Length/first/sort over a SchemeJSArray work.)
   it("map(SchemeJSArray) THROWS — the overlay map has no SchemeJSArray branch [CONTESTED]", () => {
-    expect(() => ops.map(idSync, mkArr())).toThrow(/pair or nil/i);
+    expect("arrival/tagless-final/map" in mkArr()).toBe(false);
   });
 });
 
@@ -260,6 +260,6 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect("arrival/tagless-final/car" in mkVec()).toBe(false);
   });
   it("reduce(SchemeJSArray) THROWS — overlay reduce has no SchemeJSArray branch [CONTESTED]", () => {
-    expect(() => ops.reduce((a: unknown, _b: unknown) => a, el("z", 0), mkArr())).toThrow(/pair or nil/i);
+    expect("arrival/tagless-final/reduce" in mkArr()).toBe(false);
   });
 });

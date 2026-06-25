@@ -143,6 +143,20 @@ export interface TaglessSymbolDef {
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
 }
 
+/** A ctx-aware op: the impl receives the scheme args AND the run's RunContext (the dual of
+ *  `symbol.native`, which is ctx-FREE). For ops that are kernel-logic-bearing — heap-charged,
+ *  run-strict-reading — yet are NOT pure per-receiver dispatch (`symbol.tagless`): map/filter/
+ *  reduce charge `runCtx.heapMeter` then dispatch to the term's own algebra. `run` is the
+ *  ctx-aware wrapper that strips the evaluator ctx, extracts runCtx, and calls the impl. */
+export interface SequenceSymbolDef {
+  readonly kind: "sequence";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+}
+
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
 export interface DoorSymbolDef {
   readonly kind: "door";
@@ -150,7 +164,7 @@ export interface DoorSymbolDef {
   readonly reason: string;
 }
 
-export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | DoorSymbolDef;
+export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | SequenceSymbolDef | DoorSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
@@ -217,6 +231,13 @@ interface TaglessInput {
   name: string;
   doc?: string;
   contract: Contract<VectorSpec, VectorSpec>;
+}
+interface SequenceInput {
+  kind: "sequence";
+  name: string;
+  doc?: string;
+  contract: Contract<VectorSpec, VectorSpec>;
+  impl: (args: unknown[], runCtx: RunContext) => unknown;
 }
 
 /** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
@@ -405,6 +426,33 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
   return { kind: "tagless", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
 }
 
+/** Bake a ctx-aware op. `run` strips the evaluator-appended ctx (same probe as bakeRosetta/
+ *  bakeTagless), extracts the run's RunContext, and hands it to the impl alongside the scheme
+ *  args — so the impl can charge `runCtx.heapMeter` and read `runCtx.strict` without a holder. */
+function bakeSequence(input: SequenceInput): SequenceSymbolDef {
+  const impl = input.impl;
+  const run = async (...args: unknown[]): Promise<unknown> => {
+    let ctx: unknown = undefined;
+    let schemeArgs = args;
+    const last = args[args.length - 1];
+    if (
+      args.length > 0 &&
+      last != null &&
+      typeof last === "object" &&
+      !(last instanceof AValue) &&
+      !Array.isArray(last) &&
+      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+    ) {
+      ctx = last;
+      schemeArgs = args.slice(0, -1);
+    }
+    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    return await impl(schemeArgs, runCtx);
+  };
+  (run as { __withCtx?: boolean }).__withCtx = true;
+  return { kind: "sequence", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. The three constructors (tagged-template → curry → generics)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -443,6 +491,16 @@ function tagless(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): TaglessSymbolDef => bakeTagless({ kind: "tagless", name, doc, contract });
 }
 
+/** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
+ *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. */
+function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return <const I extends VectorSpec, const O extends VectorSpec>(
+    contract: Contract<I, O>,
+    impl: (args: unknown[], runCtx: RunContext) => unknown,
+  ): SequenceSymbolDef => bakeSequence({ kind: "sequence", name, doc, contract, impl });
+}
+
 /** errors-as-doors — an OMITTED verb. No contract/impl, just the teaching reason. */
 function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
@@ -451,7 +509,7 @@ function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbo
 
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
-export const symbol = { native, rosetta, tagless, notImplemented };
+export const symbol = { native, rosetta, tagless, sequence, notImplemented };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.

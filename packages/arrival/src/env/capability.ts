@@ -67,6 +67,7 @@ const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
   ((m as { kind: unknown }).kind === "native" ||
     (m as { kind: unknown }).kind === "rosetta" ||
     (m as { kind: unknown }).kind === "tagless" ||
+    (m as { kind: unknown }).kind === "sequence" ||
     (m as { kind: unknown }).kind === "door");
 
 // ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
@@ -196,6 +197,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // a native value-op is a pure transform, never a source).
                 env.set(verb, def.impl);
                 break;
+              case "sequence":
               case "tagless":
               case "rosetta": {
                 // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper, already

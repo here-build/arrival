@@ -88,6 +88,21 @@ export class ANil extends AValue {
     return nil;
   }
 
+  // Sequence ops over the EMPTY list — the identity cases (the fl-interop dissolution:
+  // the empty case lives ON the term, not a dispatch branch). map/filter of nothing is
+  // nothing (nil); reduce of nothing is the seed, fn never called.
+  ["arrival/tagless-final/map"](_fn: unknown): ANil {
+    return nil;
+  }
+
+  ["arrival/tagless-final/filter"](_arg: unknown): ANil {
+    return nil;
+  }
+
+  ["arrival/tagless-final/reduce"]<A>(_fn: unknown, initial: A): A {
+    return initial;
+  }
+
   // Monoid empty — the identity is Nil itself (the canonical singleton).
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;

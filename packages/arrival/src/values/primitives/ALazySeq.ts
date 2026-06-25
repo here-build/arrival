@@ -55,6 +55,7 @@
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { markInteropBoundary } from "../../interop-access.js";
+import { is_false } from "../../eval/guards.js";
 
 // Loose, like the rest of the interpreter — SchemeValue is `any` in types.ts.
 type SchemeValue = any;
@@ -149,6 +150,30 @@ export class ALazySeq extends AValue {
 
   filter(pred: (x: SchemeValue) => boolean | Promise<boolean>, prov: Provenance = EMPTY_PROVENANCE): ALazySeq {
     return this.pipe({ kind: "filter", pred, prov });
+  }
+
+  // ── Sequence ops as tagless-final (the dissolution of fl-interop's lazy branches) ──
+  // map/filter EXTEND the un-run plan (pipe, run NOTHING); reduce FORCES it (refine→iterate)
+  // then folds eager in the scheme convention `fn(element, acc)` head-to-tail — observationally
+  // identical to eager BY CONSTRUCTION (same materialized order). The Scheme-truthiness adaptation
+  // (`!is_false(await pred)`) lives here, at the lazy boundary, so the carrier stays a generic
+  // async pipe; a regex pred never reaches a LazySeq in practice (cast to the fn form).
+  ["arrival/tagless-final/map"](fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>): ALazySeq {
+    return this.map(fn);
+  }
+
+  ["arrival/tagless-final/filter"](arg: ((x: SchemeValue) => unknown) | RegExp): ALazySeq {
+    return this.filter(async (x: SchemeValue) => !is_false(await (arg as (v: SchemeValue) => unknown)(x)));
+  }
+
+  async ["arrival/tagless-final/reduce"]<Acc>(
+    fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
+    initial: Acc,
+  ): Promise<Acc> {
+    const { items } = (await this.refine({ kind: "iterate" })) as { items: readonly SchemeValue[] };
+    let acc = initial;
+    for (const item of items) acc = await fn(item, acc);
+    return acc;
   }
 
   /** `refine` — fold under an observation, running only what its cone reaches.
