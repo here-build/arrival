@@ -58,7 +58,7 @@ import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
 import { isCircularList, APair, concatPair } from "./values/primitives/APair.js";
 import { promise_all, unpromise } from "./utils/promises.js";
-import { curry, fold } from "./utils/functional.js";
+import { curry } from "./utils/functional.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
@@ -1181,23 +1181,6 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     map: doc("map", mapImpl),
-    // ------------------------------------------------------------------
-    fold: doc(
-      "fold",
-      fold("fold", function (this: unknown, fold, fn, init, ...lists) {
-        typecheck("fold", fn, "function");
-        for (const [i, arg] of lists.entries()) {
-          typecheck("fold", arg, ["pair", "nil"], i + 1);
-        }
-        if (lists.some(is_nil)) {
-          return init;
-        }
-        const value = fold.call(this, fn, init, ...lists.map((l: SchemeValue) => l.cdr));
-        return unpromise(value, (value) => {
-          return fn(...lists.map((l: SchemeValue) => l.car), value);
-        });
-      }),
-    ),
     // ------------------------------------------------------------------
     filter: doc("filter", function filter(this: Environment, arg, list) {
       typecheck("filter", arg, ["regex", "function"]);
