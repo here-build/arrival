@@ -892,10 +892,6 @@ export const global_env = new Environment(
   {
     undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
-    cons: doc("cons", function cons(car, cdr) {
-      return withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr));
-    }),
-    // ------------------------------------------------------------------
     // Spec §5.3 car/cdr element-only provenance.
     //
     // War story: previously `withInputProvenance([list], list.car)` unioned
@@ -945,10 +941,6 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
     // set-car! / set-cdr! / append! — OMITTED by the purity invariant (every
     // entity is frozen by design). Doored in core.ts. See plan-2026-06-11.
-    // ------------------------------------------------------------------
-    "empty?": doc("empty?", function (x) {
-      return x === undefined || is_nil(x);
-    }),
     // ------------------------------------------------------------------
     gensym: doc("gensym", gensym),
     // ------------------------------------------------------------------

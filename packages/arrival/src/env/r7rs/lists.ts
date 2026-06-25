@@ -114,6 +114,15 @@ function isProperList(obj: SchemeValue): SchemeValue {
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.4 Pairs and lists
+    cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
+      { input: [z.unknown(), z.unknown()], output: [z.pair] },
+      // Byte-identical to the stdlib global_env body it relocates: a constructor,
+      // so it unions both inputs' provenance over the produced cell (parallel to
+      // make-list / list, which stamp only the produced Pair).
+      (car: unknown, cdr: unknown): APair =>
+        withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr)),
+    ),
+
     "make-list": symbol.native`make-list: build a list of k copies of fill (default #f)`(
       { input: [z.schemeNumber, z.unknown().optional()], output: [z.unknown()] },
       (k: unknown, fill?: unknown): unknown => {
