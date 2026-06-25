@@ -75,8 +75,6 @@ import { collapseProvenance, taintString } from "./provenance-collapse.js";
 import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
 
 
-const SyntaxParameter = Syntax.Parameter;
-
 // Type definitions for dynamic Scheme values
 // Scheme is inherently dynamic - these use `any` intentionally for interpreter interop
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,20 +211,6 @@ function strip_s_comments(tokens: string[]): string[] {
 // Helper functions used by gensym - imported types have their own copies
 function symbol_to_string(obj: SchemeValue): string {
   return obj.toString().replace(/^Symbol\(([^)]+)\)/, "$1");
-}
-
-// ----------------------------------------------------------------------
-// :: helper function that make symbols in names array hygienic
-// ----------------------------------------------------------------------
-function hygienic_begin(envs, expr) {
-  // Re-derive the begin macro directly (genMacroWrapper is how the env binds it) rather
-  // than reaching global_env.get("begin") — keeps this helper off the global registry.
-  const begin = genMacroWrapper("begin");
-  const g_begin = gensym("begin");
-  for (const env of envs) {
-    env.set(g_begin, begin);
-  }
-  return new APair(CONSTANT_CTX, g_begin, expr);
 }
 
 // ----------------------------------------------------------------------
@@ -954,79 +938,6 @@ export const global_env = new Environment(
       purityDoor(s(feature), s(reason), s(alternative));
     }),
     // ------------------------------------------------------------------
-    "define-syntax-parameter": doc(
-      null,
-      new Macro("define-syntax-parameter", function (this: Environment, code: SchemeValue, eval_args: SchemeValue) {
-        const name = code.car;
-        const env = this;
-        TypeError.invariant(
-          name instanceof ASymbol,
-          `define-syntax-parameter: invalid syntax expecting symbol got ${type(name)}`,
-        );
-        return unpromise(genRun(genEvaluate(code.cdr.car, { ...eval_args, env })), (syntax: SchemeValue) => {
-          typecheck("define-syntax-parameter", syntax, "syntax", 2);
-          syntax.__name__ = name.valueOf();
-          if (syntax.__name__ instanceof AString) {
-            syntax.__name__ = syntax.__name__.valueOf();
-          }
-          env.set(code.car, new SyntaxParameter(syntax));
-        });
-      }),
-      `(define-syntax-parameter name syntax)
-
-         Binds <keyword> to the transformer obtained by evaluating <transformer spec>.
-         The transformer provides the default expansion for the syntax parameter,
-         and in the absence of syntax-parameterize, is functionally equivalent to
-         define-syntax.`,
-    ),
-    // ------------------------------------------------------------------
-    "syntax-parameterize": doc(
-      null,
-      new Macro("syntax-parameterize", function (this: Environment, code: SchemeValue, eval_args: SchemeValue) {
-        const args = listToArray(code.car) as APair[];
-        const env = this.inherit("syntax-parameterize");
-        // Each binding's transformer evaluates in `this` (NOT the accumulating
-        // env), so the bindings are independent and pure (syntax-rules build a
-        // Syntax with no side effects). Drain them through the generator together,
-        // then bind, then eval the body. genRun always returns a native Promise, so
-        // Promise.all is always async and handles the zero-binding case correctly.
-        const self = this;
-        for (const pair of args) {
-          invariant(
-            is_pair(pair) && pair.car instanceof ASymbol,
-            `syntax-parameterize: invalid syntax for syntax-parameterize: ${toString(code, true)}`,
-          );
-        }
-        return Promise.all(
-          args.map((pair) => genRun(genEvaluate((pair.cdr as APair).car, { ...eval_args, env: self }))),
-        ).then((syntaxes) => {
-          args.forEach((pair, i) => {
-            const syntax = syntaxes[i] as SchemeValue;
-            const name = pair.car as SchemeValue;
-            typecheck("syntax-parameterize", syntax, ["syntax"]);
-            typecheck("syntax-parameterize", name, "symbol");
-            syntax.__name__ = name.valueOf();
-            if (syntax.__name__ instanceof AString) {
-              syntax.__name__ = syntax.__name__.valueOf();
-            }
-            const parameter = new SyntaxParameter(syntax);
-            // used inside syntax-rules
-            if ((name as ASymbol).is_gensym()) {
-              const symbol = (name as ASymbol).literal();
-              const parent = self.get(symbol, { throwError: false });
-              if (parent instanceof SyntaxParameter) {
-                // create anaphoric binding for literal symbol
-                env.set(symbol, parameter);
-              }
-            }
-            env.set(name, parameter);
-          });
-          const expr = hygienic_begin([env, eval_args.dynamic_env], code.cdr);
-          return genRun(genEvaluate(expr, { ...eval_args, env }));
-        });
-      }),
-    ),
-    // ------------------------------------------------------------------
     // define delegates to the generator evaluator (evalDefine) via
     // genMacroWrapper. Verified empirically equivalent to the old defmacro on
     // every reachable case (fn-shorthand + recursion, symbol alias, define in
@@ -1191,18 +1102,6 @@ export const global_env = new Environment(
       }, env);
       (syntax as SchemeValue).__code__ = macro;
       return syntax;
-    }),
-    // ------------------------------------------------------------------
-    // quote / quasiquote — VESTIGIAL: shadowed by their SPECIAL_FORM handlers
-    // (evalQuote / evalQuasiquote) before env lookup. The `unquote` /
-    // `unquote-splicing` stubs stay: they are NOT special forms, so a stray
-    // `(unquote x)` outside quasiquote reaches them and raises the friendly
-    // errors-as-doors message rather than "unbound variable".
-    "unquote-splicing": doc("unquote-splicing", function () {
-      throw new Error(`You can't call \`unquote-splicing\` outside of quasiquote`);
-    }),
-    unquote: doc("unquote", function () {
-      throw new Error(`You can't call \`unquote\` outside of quasiquote`);
     }),
     // ------------------------------------------------------------------
     list: doc("list", function list(...args) {
