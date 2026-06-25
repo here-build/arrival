@@ -31,7 +31,6 @@ import {
   is_prototype,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
-import { eq, eqv } from "./values/structural-equal.js";
 import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { box, gensym, patch_value, quote } from "./reader/values-repr.js";
 import {
@@ -1229,9 +1228,6 @@ export const global_env = new Environment(
     }),
     // ------------------------------------------------------------------
     curry: doc(null, curry),
-    // ------------------------------------------------------------------
-    "eq?": doc("eq?", eq),
-    "eqv?": doc("eqv?", eqv),
     // ------------------------------------------------------------------
     // R5RS § 6.2.5 arrow-form aliases for R7RS § 6.2 exact/inexact.
     //

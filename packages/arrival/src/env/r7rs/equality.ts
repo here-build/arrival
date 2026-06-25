@@ -33,7 +33,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { structuralEqual } from "../../values/structural-equal.js";
+import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_callable, is_macro, is_null } from "../../eval/guards.js";
 import { is_nil, is_pair } from "../../values/value-guards.js";
@@ -88,6 +88,22 @@ export default new EnvCapability("scheme/equality", {
       (a: unknown, b: unknown): boolean => {
         return structuralEqual(a, b);
       },
+    ),
+
+    // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates, relocated
+    // VERBATIM from stdlib.ts global_env (husk dissolution). `eqv?` reduces to `eq?`
+    // today (`eqv` = `eq` + explicit number/char equality, both already routed
+    // through each scalar's Setoid inside `eq`); both delegate to the single
+    // comparison home in `structural-equal.ts`. Representation-blind like the
+    // equivalence predicates above.
+    "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
+      { input: [z.unknown(), z.unknown()], output: [z.boolean] },
+      (x: unknown, y: unknown): boolean => eq(x, y),
+    ),
+
+    "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
+      { input: [z.unknown(), z.unknown()], output: [z.boolean] },
+      (x: unknown, y: unknown): boolean => eqv(x, y),
     ),
 
     // ── R7RS type predicates (relocated from stdlib.ts global_env, POC) ──────────
