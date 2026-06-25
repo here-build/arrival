@@ -173,56 +173,30 @@ console.log(schemeToJs(results[0], {}));
 // [{ id: "alice", priority: 15 }, { id: "charlie", priority: 20 }]
 ```
 
-## Key Differences from LIPS.js
+## How it's built
 
-This is a **fork** of LIPS with fundamental architectural changes:
+arrival isn't a general Scheme that happens to be sandboxed — the architecture is shaped end-to-end by the two goals above: stay transparent, and be a medium a self-evolving symbolic loop can run safely. Four pieces carry it.
 
-### 1. Sandboxed by Default
+### Sandboxed by construction
 
-**LIPS.js**: Full JavaScript interop, call any JS function, access global scope
-**arrival-scheme**: Isolated environment, only explicitly registered functions
+The base reaches nothing ambient. There is no host member-access form — `(. console …)` doesn't exist — so the only way outward is the `@` membrane, and the membrane has no `console`, no `process`, no `require` to reach. Real effects are *recorded crossings*, not escape hatches.
 
 ```typescript
-// LIPS.js: dangerous — has a JS member-access form that reaches the host
-await exec(`(. console (log "pwned"))`); // Has console access
-
-// arrival-scheme: safe — the host member-access form is gone; member-read
-// goes through the `@` membrane, which has no `console` to reach
 await exec(`(@ console :log)`, { env: sandboxedEnv });
-// Error: console not defined
+// Error: console not defined — there is no host to reach
 ```
 
-### 2. Rosetta Integration
+### The rosetta membrane
 
-**LIPS.js**: Manual conversion between JS and Scheme types
-**arrival-scheme**: Automatic translation via Rosetta layer
+JS ↔ Scheme crossings go through a translation layer (`defineRosetta`) that is **provenance-aware by default**: a registered function is a *source* — its result is born carrying a fresh origin — unless you mark it `pure: true`, making it a *pipe* that mints nothing and forwards its inputs' lineage. Conversion is automatic both directions (arrays↔lists, objects↔alists, functions→procedures), and JS sits **beneath the language as a peer, not above it as a host**.
 
-```typescript
-// Automatic conversion:
-// - JS arrays ↔ Scheme lists (consider nil)
-// - JS objects ↔ Scheme alists
-// - JS functions → Scheme procedures
-// - Natural interop in both directions
-```
+### Tagless-final term algebra
 
-A registered rosetta is a **provenance SOURCE by default**: it introduces external
-data, so its result mints a fresh provenance point (never silently lose an origin).
-Pass `pure: true` to opt out to a pass-through **PIPE** — a transform that forwards
-its inputs' provenance and mints nothing (use it for fns that only reshape their
-arguments, like `string-append`).
+Operations live ON the values, not inside the interpreter. Each value carries its own `arrival/tagless-final/<op>` method — `map`, `filter`, `reduce`, `car`, `cdr`, `length`, `lte`, `equals` — and the builtins are thin dispatchers over them. That's why the *same* `map` preserves element identity on a list yet strips it crossing out to a foreign functor: the per-primitive behaviour is a fact about the term, not a branch inside `map`. A new countable type implements the method and the standard library reaches it for free; a type that doesn't carry it gets a clear "does not support" error, never a silent coercion.
 
-### 3. Fantasy-land Support
+### Polyglot surface
 
-**LIPS.js**: Fixed implementations of map, filter, etc.
-**arrival-scheme**: Polymorphic operations defined by data structures
-
-Custom data structures can implement `map`, `filter`, `reduce` following
-the [fantasy-land](https://github.com/fantasyland/fantasy-land) spec, and Scheme primitives will use them. This is
-exceptionally useful for complex structures like trees.
-
-### 4. Polyglot runtime
-
-Some features from other Lisp dialects were added as expression means — e.g. the `(dict :key value …)` map constructor (the canonical dict surface; the serializer prints it, and arrival-chain-view transpiles it to `{ }`) and its `(:key d)` accessor. See [`docs/language-design-foundations.md`](../../../docs/foundations/arrival-scheme/language-design-foundations.md).
+A few constructs from beyond R7RS are admitted as deliberate, bounded supersets — the `(dict :key value …)` keyword-map constructor and its `(:key d)` accessor, and `{ … }` SRFI-105 curly-infix — each canonicalized at read-time. They complete the grammar's grain; they are not an open extension surface. See the [charter](../../../docs/foundations/arrival-scheme/language-design-foundations.md).
 
 ## Sandbox Architecture
 
@@ -275,9 +249,7 @@ This provides valuable feedback instead of opaque, unclear behavior.
 
 ⚠️ **version 0.x - use at your own risk**
 
-LIPS.js (upstream) has deep JavaScript integration that creates attack surfaces. We've removed the biggest ones (
-filesystem, process, network access) but sandbox escape is still feasible at least via property access and some rosetta
-layer aspects.
+arrival's base reaches nothing ambient by construction — no filesystem, no process, no network, no host globals (`window` / `global` / `process` / `require`). But at 0.x, sandbox escape is still feasible — at least via property access and some rosetta-layer aspects — so do not yet treat the isolation as a hard security boundary for untrusted input.
 
 **Do not**:
 
@@ -337,33 +309,26 @@ env.set('pi', 3.14159);
 env.set('config', jsToScheme({ timeout: 5000 }, {}));
 ```
 
-## Fantasy-land Support
+## Extending the term algebra
 
-Data structures can implement algebraic operations via fantasy-land spec:
+A custom data structure carries its own operations by implementing the `arrival/tagless-final/<op>` methods; the standard builtins dispatch to them with no registration.
 
 ```typescript
-// Custom list type implementing map
-class MyList {
-    ["fantasy-land/map"]<U>(fn: (value: T) => U): Tree<U> {
-        return new MyList(
-            fn(this.value),
-            this.children.map((child) => child["fantasy-land/map"](fn))
-        );
-    }
+// A tree that knows how to map over itself
+class Tree<T> {
+  ["arrival/tagless-final/map"]<U>(fn: (value: T) => U): Tree<U> {
+    return new Tree(
+      fn(this.value),
+      this.children.map((child) => child["arrival/tagless-final/map"](fn)),
+    );
+  }
 }
 
-// Scheme (map) will use the .map method
-await exec(`(map double my-list)`, { env });
+// Scheme `(map …)` reaches the method directly — no special case
+await exec(`(map double my-tree)`, { env });
 ```
 
-Supported algebras:
-
-- Functor: `map`
-- Apply: `ap`
-- Chain: `chain` / `flatMap`
-- Monoid: `empty`, `concat`
-
-[request on collaboration: deeper fantasy-land integration and description is needed]
+The protocol covers the value algebra the builtins need — `map`, `filter`, `reduce`, `car`/`cdr`, `length`, `lte` (total order), `equals` (structural). A term implements what it supports; each per-primitive choice (a pair's `map` preserves element boxes, a vector's strips them crossing to a foreign functor) lives on the term, so the builtins stay type-agnostic dispatchers.
 
 ## Performance Characteristics
 
@@ -431,18 +396,17 @@ TypeScript types coverage will be added eventually.
 
 ## Contributing
 
-Early-stage fork. We're interested in:
+Early-stage and moving fast. We're interested in:
 
 - **Security review** - audit sandbox isolation
 - **Performance benchmarks** - measure overhead
-- **Fantasy-land docs** - document algebraic operations
+- **Term-algebra docs** - document the tagless-final operations
 - **Testing** - expand test coverage
 
 ## License
 
 **[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date. Until conversion, the license permits everything *except* Competing Use (making the Software available in a commercial product or service that substitutes for the Software or offers substantially similar functionality). Internal use, non-commercial education and research, and professional services built on top of the Software are always permitted.
 
-This is a fork of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed). LIPS.js copyright
-notices are preserved in source files.
+arrival grew out of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed), and its copyright notices are preserved in the source where shared code — the reader and tokenizer — remains. The interpreter itself is a ground-up rewrite: the tagless-final term algebra, the trampoline-generator kernel, the rosetta membrane, the capability environment, and the provenance substrate share no code with LIPS.
 
 For licensing questions, exemptions, or clarifications: team@here.build

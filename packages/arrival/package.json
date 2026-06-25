@@ -1,7 +1,7 @@
 {
   "name": "@here.build/arrival",
   "version": "0.1.0",
-  "description": "Scheme/LIPS interpreter for Arrival constraint-based execution",
+  "description": "R7RS-subset Scheme interpreter for AI-agent constraint-based execution — transparent provenance, capability sandbox, JS membrane",
   "keywords": [
     "scheme",
     "lisp",
