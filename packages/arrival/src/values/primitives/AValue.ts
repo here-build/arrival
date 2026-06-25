@@ -51,7 +51,8 @@ export type AKind =
   | "vector"
   | "bytevector"
   | "halfbaked"
-  | "void";
+  | "void"
+  | "keyword";
 
 /** Keyed by `typeof`-tag plus the two null-ish tags ("null", "undefined") — see `resolveTypeofTag`. */
 type Boxer = (ctx: RunContext, v: unknown, p: ReadonlySet<number>) => AValue;

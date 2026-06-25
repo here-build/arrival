@@ -835,26 +835,8 @@ const is_node = () => typeof process === "object" && !!process.env;
 // :: poorly-typed LIPS Macro implementations for forms the generator
 // :: already handles correctly.
 // -------------------------------------------------------------------------
-function genMacroWrapper(name: string): Macro {
-  return new Macro(name, function (this: Environment, code: SchemeValue, options: SchemeValue = {}) {
-    const form = new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, name), code);
-    const ctx: EvalContext = {
-      env: this,
-      dynamic_env: options.dynamic_env ?? this,
-      use_dynamic: options.use_dynamic,
-    };
-    // Quote Pair results so evaluate_macro doesn't re-evaluate them as code.
-    // The LIPS evaluator checks __data__ flag — without it, a Pair like
-    // (list "a" "b") would be treated as a function call ("a" "b").
-    return genRun(genEvaluate(form, ctx)).then((value: SchemeValue) => {
-      if (is_pair(value)) {
-        value.mark_cycles();
-        return quote(value);
-      }
-      return value;
-    });
-  });
-}
+// genMacroWrapper removed — define/lambda are kernel keywords (symbol.keyword markers)
+// on scheme/core; the evaluator dispatches them by resolved-marker value, no husk needed.
 
 // -------------------------------------------------------------------------
 export const global_env = new Environment(
@@ -913,25 +895,13 @@ export const global_env = new Environment(
     // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
-    // define delegates to the generator evaluator (evalDefine) via
-    // genMacroWrapper. Verified empirically equivalent to the old defmacro on
-    // every reachable case (fn-shorthand + recursion, symbol alias, define in
-    // let/begin, macroexpand round-trip; full suite green). Three legacy-only
-    // behaviors are NOT ported because they are unreachable through the
-    // current macro engine, so no test can exercise them: (1) the
-    // Syntax.__merge_env__ parent-env redirect — only fires when a syntax-rules
-    // template introduces a define, but expansion dies upstream at pattern
-    // matching first; (2) the macroexpand guard — macroexpand already returns
-    // the form inert without executing it; (3) __name__ stamping on
-    // Syntax/Parameter values (not just lambdas) — cosmetic introspection.
-    // If the macro engine later gains macro-introduced-define support, add the
-    // hygiene redirect to evalDefine WITH a test that actually reaches it.
-    define: genMacroWrapper("define"),
-    // ------------------------------------------------------------------
-    // lambda delegates to the generator (evalLambda via SPECIAL_FORMS); the
-    // binding exists for first-class lookup + the macro engine's identity check
-    // (`value === env.get("lambda")` in syntax-rules.ts), like define/let/if.
-    lambda: genMacroWrapper("lambda"),
+    // define / lambda — now KERNEL KEYWORDS (symbol.keyword markers) on the
+    // scheme/core pack (env/core/core.ts), NOT genMacroWrapper husks here. The
+    // evaluator resolves a call head through the env and dispatches on the marker
+    // VALUE (SPECIAL_FORMS[kw.name]) — so special-ness travels with the value:
+    // `(define => lambda)` aliases the marker, lexical shadowing un-specials it,
+    // and macro_expand's `value === env.get("lambda")` identity check resolves to
+    // the same marker by inheritance. No first-class husk needed here.
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     // define-macro — VESTIGIAL: shadowed by the `define-macro` SPECIAL_FORM

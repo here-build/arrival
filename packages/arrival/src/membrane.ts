@@ -55,6 +55,7 @@ import {
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
+import { Keyword } from "./values/Keyword.js";
 // The 3 JS membrane value-wrappers live in primitives/ with the rest of the term
 // family. They late-bind fromJS/toJS/jsToScheme back through setMembraneBridge
 // (below) to avoid a module-eval cycle — see js-wrappers.ts.
@@ -142,6 +143,10 @@ export function isSchemeValue(value: unknown): boolean {
     case value instanceof Syntax:
     case value instanceof LambdaContext:
     case value instanceof SchemeEnvironment:
+
+    // Kernel keyword marker — a first-class special form (lambda/define/let/…),
+    // bound + resolved like any value so the form is aliasable; never wrapped.
+    case value instanceof Keyword:
 
     // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
     case typeof value === "function" && LAMBDA in value:

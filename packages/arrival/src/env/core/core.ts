@@ -68,6 +68,15 @@ export default new EnvCapability("scheme/core", {
   // `gensym` off the user_env chain post-assembly. Native: the impls are the shared
   // `reader/values-repr` gensym and `utils/typecheck` typecheck, bound raw.
   symbols: {
+    // Kernel KEYWORDS — special forms made first-class (symbol.keyword markers). The
+    // evaluator resolves a call head through the env and dispatches SPECIAL_FORMS[name]
+    // when it resolves to one of these — so `(define => lambda)` aliases the form and
+    // lexical shadowing un-specials it (the dual of cxr; see values/Keyword.ts). The
+    // genMacroWrapper define/lambda husks in stdlib.ts global_env are deleted in favor
+    // of these. (let* / letrec / if / begin / quote / … follow in the macro-cut pass.)
+    lambda: symbol.keyword`lambda: create an anonymous procedure`,
+    define: symbol.keyword`define: bind a name in the current scope`,
+    let: symbol.keyword`let: bind locals over a body`,
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
       gensym,

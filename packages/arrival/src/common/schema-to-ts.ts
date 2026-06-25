@@ -203,7 +203,10 @@ function returnType(output: z.ZodTypeAny): string {
  * multiple-values "[A, B]"; a variadic input becomes "(...args: T[])".
  */
 export function signatureOf(def: SymbolDef): string {
-  if (def.kind === "door") return "never";
+  // door = omitted verb (not callable); keyword = special-form syntax (not a value-level
+  // callable either). Neither carries an in/out codec surface, so both print as `never`
+  // until the type-lens grows a dedicated syntax representation for keywords.
+  if (def.kind === "door" || def.kind === "keyword") return "never";
   const params = paramList(def.in);
   const ret = returnType(def.out);
   const wrapped = def.kind === "rosetta" ? `Promise<${ret}>` : ret;

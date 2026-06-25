@@ -19,6 +19,7 @@ import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from ".
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
 import { PurityError } from "../purity.js";
+import { Keyword } from "../values/Keyword.js";
 import invariant from "tiny-invariant";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
@@ -68,7 +69,8 @@ const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
     (m as { kind: unknown }).kind === "rosetta" ||
     (m as { kind: unknown }).kind === "tagless" ||
     (m as { kind: unknown }).kind === "sequence" ||
-    (m as { kind: unknown }).kind === "door");
+    (m as { kind: unknown }).kind === "door" ||
+    (m as { kind: unknown }).kind === "keyword");
 
 // ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
 const isValueDef = (m: SymbolDef): m is { value: unknown } => typeof m === "object" && m !== null && "value" in m;
@@ -227,6 +229,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 env.set(verb, () => {
                   throw new PurityError(`${def.name} is not available.\n  Why: ${def.reason}`, def.name);
                 });
+                break;
+              case "keyword":
+                // kernel KEYWORD: bind the first-class marker the evaluator dispatches on.
+                // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
+                // cxr): the special form is aliasable + lexically shadowable, unlike the
+                // name-matched-before-lookup table it replaces.
+                env.set(verb, new Keyword(def.name));
                 break;
             }
             continue;

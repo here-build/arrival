@@ -47,6 +47,7 @@ import { APair } from "../values/primitives/APair.js";
 import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
 import { type SchemeValue } from "../values/types.js";
 import { nil } from "../values/primitives/ANil.js";
+import { Keyword } from "../values/Keyword.js";
 
 // ============================================================================
 // Error Handling with Stack Traces
@@ -2576,16 +2577,22 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   // so it can do that. Arg/head evaluation strips the flag.
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
-  // Check for special forms first (before evaluation)
+  // Special-form dispatch. VALUE-FIRST for keywords: a head resolving to a Keyword marker
+  // dispatches the kernel handler by the marker's NAME, so special-ness travels with the
+  // VALUE — aliasable via `(define => lambda)`. ANY OTHER head keeps the ORIGINAL
+  // name-match-before-env-lookup, so not-yet-keyworded forms — including those that ALSO
+  // carry a define-macro env binding (cond/when) — behave exactly as before. TRANSITIONAL:
+  // collapses to pure value-first once every special form is a keyword marker.
   if (first instanceof ASymbol) {
-    const name = symbol_name(first);
-    const specialHandler = SPECIAL_FORMS[name];
-    if (specialHandler) {
+    const headName = symbol_name(first);
+    const resolved = ctx.env._lookupWithResolvers(headName);
+    const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[headName];
+    if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's
       // result. Mark tail so a tail call emerging from the special form's
       // terminal expression collapses this frame too (the special handler
       // threads `ctx.tail` to its own structurally-terminal sub-expression).
-      return yield { call: specialHandler(rest, ctx), frame, tail: true };
+      return yield { call: handler(rest, ctx), frame, tail: true };
     }
   }
 

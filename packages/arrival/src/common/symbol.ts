@@ -164,7 +164,17 @@ export interface DoorSymbolDef {
   readonly reason: string;
 }
 
-export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | SequenceSymbolDef | DoorSymbolDef;
+/** A kernel KEYWORD: a special form, made first-class. No contract/impl — just the
+ *  dispatch `name`. `lower()` binds `new Keyword(name)`; the evaluator resolves a call
+ *  head through the env and dispatches `SPECIAL_FORMS[name]` when it resolves to that
+ *  marker — so the special form is aliasable + lexically shadowable (the dual of cxr). */
+export interface KeywordSymbolDef {
+  readonly kind: "keyword";
+  readonly name: string;
+  readonly doc?: string;
+}
+
+export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | SequenceSymbolDef | DoorSymbolDef | KeywordSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
@@ -507,9 +517,17 @@ function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbo
   return bakeDoor({ kind: "door", name, reason: doc ?? "" });
 }
 
+/** kernel KEYWORD — a special form made first-class. No contract/impl: the tagged
+ *  template carries only `name: doc`; `lower()` binds `new Keyword(name)` and the
+ *  evaluator dispatches `SPECIAL_FORMS[name]` on the resolved marker. */
+function keyword(tpl: TemplateStringsArray, ...sub: unknown[]): KeywordSymbolDef {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return { kind: "keyword", name, doc };
+}
+
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
-export const symbol = { native, rosetta, tagless, sequence, notImplemented };
+export const symbol = { native, rosetta, tagless, sequence, notImplemented, keyword };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.
