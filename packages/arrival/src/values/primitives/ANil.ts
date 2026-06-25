@@ -72,6 +72,22 @@ export class ANil extends AValue {
     return other;
   }
 
+  // Head/tail projection of the EMPTY list — the nil-tolerance algebra (dissolved from
+  // fl-interop's nil-branch ONTO the term). nil is a global constant bearing no run-state,
+  // so the run's mode rides the THREADED runCtx (RunContext.ts's corrected plan: car-of-nil's
+  // strict is read from the active run, never nil.ctx): strict ⇒ the R7RS "() is not a pair"
+  // throw; tolerant ⇒ nil, so a multi-leaf proof grounds its OTHER leaves rather than crashing
+  // on one absent read.
+  ["arrival/tagless-final/car"](runCtx: RunContext): unknown {
+    if (runCtx.strict) throw new TypeError("car: () is not a pair");
+    return nil;
+  }
+
+  ["arrival/tagless-final/cdr"](runCtx: RunContext): unknown {
+    if (runCtx.strict) throw new TypeError("cdr: () is not a pair");
+    return nil;
+  }
+
   // Monoid empty — the identity is Nil itself (the canonical singleton).
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;

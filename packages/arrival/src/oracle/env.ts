@@ -51,10 +51,16 @@ export function makeOracleEnv(env: Environment): OracleEnvΣ {
       for (const key of Object.keys(frame.__env__)) names.add(key);
       frame = frame.__parent__;
     }
+    // car/cdr are kernel-synthesized c[ad]+r primitives — always-available callables, so they
+    // belong in Σ even though no frame binds them (the family's emittable base case).
+    names.add("car");
+    names.add("cdr");
     return names;
   };
 
   const isCallable = (id: string): boolean => {
+    // car/cdr and every c[ad]+r are kernel-synthesized accessors — always callable.
+    if (/^c[ad]+r$/.test(id)) return true;
     // Resolve the nearest binding the runtime would pick.
     let frame: Environment | null = env;
     while (frame) {

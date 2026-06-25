@@ -679,6 +679,34 @@ function symbol_name(sym: ASymbol): string {
  * This uses _lookupWithResolvers directly to avoid patch_value.
  * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
  */
+// c[ad]+r is car/cdr COMPOSITION — the kernel unfolds it by composing each receiver's OWN
+// tagless-final car/cdr algebra (innermost letter first), threading the run ctx. car/cdr are
+// the 1-step base case; cadr…caddddr are the deeper compositions. No "aside" resolver, no
+// field-access/typecheck duplication — composites inherit the atoms' nil-tolerance (ANil reads
+// runCtx.strict), provenance (APair re-stamps), and the totalic "primitive does not support
+// car" throw for free. __withCtx so the apply boundary hands it the run ctx.
+const CXR_RE = /^c[ad]+r$/;
+function cxrUnfold(name: string): SchemeValue | undefined {
+  if (!CXR_RE.test(name)) return undefined;
+  const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
+  const fn = (arg: unknown, ctx?: unknown): unknown => {
+    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    let v: unknown = arg;
+    for (const t of steps) {
+      const method = t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr";
+      const m = (v as Record<string, unknown> | null | undefined)?.[method];
+      if (typeof m !== "function") {
+        const kind = v instanceof AValue ? v.kind : v == null ? String(v) : typeof v;
+        throw new TypeError(`${name}: the ${kind} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${method}).`);
+      }
+      v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
+    }
+    return v;
+  };
+  (fn as { __withCtx?: boolean }).__withCtx = true;
+  return fn as SchemeValue;
+}
+
 function env_get(env: Environment, sym: ASymbol): SchemeValue {
   const name = sym.__name__;
 
@@ -691,6 +719,13 @@ function env_get(env: Environment, sym: ASymbol): SchemeValue {
   const value = env._lookupWithResolvers(name);
   if (value !== undefined) {
     return value;
+  }
+
+  // c[ad]+r — synthesized by the kernel on a binding miss (car/cdr + every composite). No env
+  // binding, no resolver: the family IS car/cdr composition over the unified tagless-final algebra.
+  if (typeof name === "string") {
+    const cxr = cxrUnfold(name);
+    if (cxr !== undefined) return cxr;
   }
 
   // Direct lookup missed. Dot-notation symbols — `foo.bar.baz` source sugar, or the

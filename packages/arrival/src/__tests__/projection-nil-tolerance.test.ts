@@ -6,25 +6,30 @@ import { is_nil, is_false } from "../eval/guards";
 /**
  * car/cdr nil-tolerance across interpreter modes × all primitive types.
  *
- * The interpreter has two nil-tolerance modes (ExecOptions.strict -> EvalContext.strict,
- * read run-scoped via isStrict() in evaluator.ts). The INFERENCE-PLANE projection ops
- * (env/fl-interop.ts car/cdr) honor it:
+ * car/cdr are a UNIFIED tagless-final algebra ON the primitives: APair projects (with
+ * provenance), ANil is the nil-projection, SchemeJSArray unwraps, and any term carrying NO
+ * car algebra (a lazy-seq, a vector, a number) is a totalic "does not support car" throw —
+ * the whole type matrix falls out of one question, "does the receiver carry the algebra?".
+ * The ONE mode-dependent cell is the empty list: ANil's car/cdr read the run's strict
+ * (ExecOptions.strict -> EvalContext.strict -> the threaded runCtx):
  *   - default (strict:false): an ABSENT value (nil/'()) projects to nil — a multi-leaf
  *     proof grounds its OTHER leaves instead of crashing on one absent read.
  *   - strict:true: an absent projection throws (R7RS-faithful pair typecheck).
- * A WRONG-TYPE arg (number/string/vector/…) is a type error, NOT absence, so it throws
- * in BOTH modes — tolerance is scoped to the absent value, it does not swallow mistakes.
+ * A WRONG-TYPE arg (number/string/vector/…) is a type error, NOT absence, so it throws in
+ * BOTH modes — now the totalic "the <kind> primitive does not support car" throw.
  *
- * This matrix pins that the ONLY mode-dependent cell is the absent value; every other
- * primitive behaves identically in both modes. The base R7RS env (user_env) is untouched
- * and throws in BOTH modes (tolerance is an inference-plane property, not a global default).
+ * Because the algebra lives on the primitives, the base env (user_env) and the inference
+ * env share ONE car/cdr — the mode is the per-run strict bit, not the env. (Earlier this was
+ * a base-vs-inference split: stdlib's always-strict car + an fl-interop tolerant overlay; the
+ * split dissolved into runCtx.strict with the tagless-final unification.)
  *
  * (Per feedback-live-verify-is-the-gate: the green suite proved nothing RELIED on the old
  * throw-on-nil; it did NOT prove the new tolerant behavior — this matrix does.)
  */
 
-// Run in the INFERENCE env (where the fl-interop overlay car/cdr live); a plain exec uses
-// user_env's base car/cdr, which always throw.
+// The inference env and a plain exec (user_env) share the unified car/cdr algebra, so both
+// track the run's strict bit identically. `run` exercises the inference env; the final block
+// pins that user_env behaves the same — strict drives it, not the env.
 const run = (code: string, strict: boolean) =>
   exec(code, { env: inferenceEnv.inherit("nil-tol"), strict });
 
@@ -72,9 +77,16 @@ describe.each([false, true])("an un-forced lazy-seq is a programmer error in BOT
   });
 });
 
-describe.each([false, true])("base R7RS env (user_env) stays strict regardless of mode — strict=%s", (strict) => {
-  it("(car '()) and (cdr '()) throw — tolerance is inference-only, base is untouched", async () => {
-    await expect(exec("(car '())", { strict })).rejects.toThrow(); // default env = user_env
-    await expect(exec("(cdr '())", { strict })).rejects.toThrow();
+// The base env (user_env) shares the unified nil-projection — strict drives it, not the env.
+// (Was: "base stays strict regardless of mode" — the old two-car split. Now ONE algebra on the
+// term, so user_env tracks the run's strict exactly like the inference env above.)
+describe("base env (user_env) shares the unified nil-projection — strict drives it, not the env", () => {
+  it("strict: (car '()) and (cdr '()) throw the R7RS pair typecheck", async () => {
+    await expect(exec("(car '())", { strict: true })).rejects.toThrow();
+    await expect(exec("(cdr '())", { strict: true })).rejects.toThrow();
+  });
+  it("default (tolerant): (car '()) and (cdr '()) project to nil — uniform with the inference env", async () => {
+    expect(is_nil((await exec("(car '())", { strict: false }))[0])).toBe(true);
+    expect(is_nil((await exec("(cdr '())", { strict: false }))[0])).toBe(true);
   });
 });

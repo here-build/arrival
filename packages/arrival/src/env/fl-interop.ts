@@ -45,7 +45,7 @@ import { AValue, unionProvenance, EMPTY_PROVENANCE, ctxOf } from "../values/prim
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ALazySeq, is_lazy_seq } from "../values/primitives/ALazySeq.js";
 import { findHeapMeter, heapBudgetMessage } from "../heap-budget.js";
-import { currentRunEnv, isStrict, SchemeError } from "../eval/evaluator.js";
+import { currentRunEnv, SchemeError } from "../eval/evaluator.js";
 
 // ── Arrival sequence-op protocol surface ─────────────────────────────────────
 // The list/seq primitives (APair, AVector) carry their OWN async-aware sequence ops
@@ -68,8 +68,6 @@ type Callable = (...args: unknown[]) => unknown;
 
 // ── Lazy builtin capture ────────────────────────────────────────────────────
 // Read once on first use, after bootstrap, when global_env is fully assembled.
-let builtinCar: Callable | undefined;
-let builtinCdr: Callable | undefined;
 let builtinFilter: Callable | undefined;
 let builtinMap: Callable | undefined;
 let builtinReduce: Callable | undefined;
@@ -84,9 +82,7 @@ let builtinLte: Callable | undefined;
 let builtinGte: Callable | undefined;
 
 function captureBuiltins(): void {
-  if (builtinCar !== undefined) return;
-  builtinCar = global_env.get("car", { throwError: false }) as Callable;
-  builtinCdr = global_env.get("cdr", { throwError: false }) as Callable;
+  if (builtinFilter !== undefined) return;
   builtinFilter = global_env.get("filter", { throwError: false }) as Callable;
   builtinMap = global_env.get("map", { throwError: false }) as Callable;
   builtinReduce = global_env.get("reduce", { throwError: false }) as Callable;
@@ -234,36 +230,6 @@ function chargeSequenceHeap(collection: unknown): void {
 
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
-    // SchemeJSArray-aware car/cdr — unwrap lazy array wrappers; a Pair computes on the term (arrival/tagless-final/car)
-    car: symbol.native`car: first element — unwraps a SchemeJSArray; a Pair computes on the term`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: unknown) => {
-        captureBuiltins();
-        if (is_lazy_seq(list)) unforcedLazyEgress("car"); // A18d (builtinCar would throw a less clear error)
-        // Nil-tolerance mode (EvalContext.strict, read run-scoped). An ABSENT value (null/nil)
-        // projects to nil by default — a multi-leaf proof grounds its OTHER leaves instead of
-        // crashing on one absent read; strict => the R7RS pair typecheck throw (builtinCar). A
-        // non-list non-nil arg (a number, a string) is a TYPE error, not absence, so it throws
-        // in BOTH modes via the builtinCar fall-through below.
-        if (list == null || is_nil(list)) return isStrict() ? builtinCar!(list) : nil;
-        if (list instanceof APair) return list["arrival/tagless-final/car"](); // compute-by-fl: element projection on the term
-        return list instanceof SchemeJSArray ? list.at(0) : builtinCar!(list);
-      },
-    ),
-    cdr: symbol.native`cdr: rest — unwraps a SchemeJSArray; a Pair computes on the term`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (list: unknown) => {
-        captureBuiltins();
-        if (is_lazy_seq(list)) unforcedLazyEgress("cdr");
-        if (list == null || is_nil(list)) return isStrict() ? builtinCdr!(list) : nil; // nil-tolerance (see car)
-        if (list instanceof APair) return list["arrival/tagless-final/cdr"](); // compute-by-fl: tail projection on the term
-        return list instanceof SchemeJSArray
-          ? list.length <= 1
-            ? nil
-            : new SchemeJSArray(list.source.slice(1))
-          : builtinCdr!(list);
-      },
-    ),
     // Term-delegation: an arrival sequence (a LIPS Pair OR a SchemeVector) computes by its
     // OWN async-aware arrival/tagless-final/filter — spine/array-walk, the canonical keep-rule
     // (`!is_false && !is_nil`), regex-arg adaptation — so this no longer reaches the

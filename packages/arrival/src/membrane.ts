@@ -173,6 +173,17 @@ export class SchemeJSArray {
     return fromJS(this.source[index]);
   }
 
+  // Head/tail of a borrowed JS array — the SchemeJSArray car/cdr algebra (dissolved from
+  // fl-interop's SchemeJSArray branch onto the wrapper). car is at(0) (already nil when empty);
+  // cdr is the rest, nil once exhausted.
+  ["arrival/tagless-final/car"](): SchemeValue {
+    return this.at(0);
+  }
+
+  ["arrival/tagless-final/cdr"](): SchemeValue {
+    return this.length <= 1 ? nil : new SchemeJSArray(this.source.slice(1));
+  }
+
   [TO_JS](): readonly unknown[] {
     return this.source;
   }

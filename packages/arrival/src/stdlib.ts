@@ -933,16 +933,6 @@ export const global_env = new Environment(
     // `cons`, `list`, and `length` are CONSTRUCTORS / aggregations, not
     // projections — they correctly retain `withInputProvenance([car, cdr], …)`
     // unioning over all inputs.
-    car: doc("car", function car(list) {
-      typecheck("car", list, "pair");
-      return withInputProvenance([list.car], list.car);
-    }),
-    // ------------------------------------------------------------------
-    cdr: doc("cdr", function cdr(list) {
-      typecheck("cdr", list, "pair");
-      return withInputProvenance([list.cdr], list.cdr);
-    }),
-    // ------------------------------------------------------------------
     // `(dict :k v …)` — the canonical open-key map form, companion to the
     // `(:key d)` accessor. A keyword in argument position evaluates to its
     // property accessor, branded with the bare key via KEYWORD_ACCESSOR_FIELD;
@@ -1766,44 +1756,6 @@ set_interaction_env(user_env, internal_env);
 // See: src/bridge.ts initBridge()
 
 // -------------------------------------------------------------------------
-// The `c[ad]+r` pair-accessor family IS car/cdr composition: each inner letter
-// is one projection applied innermost (rightmost) first — `cadr` = (car (cdr x)).
-// `cxrAccessor` is the single synthesis both faces share; there is no
-// hand-maintained word list to rot.
-const CXR_RE = /^c[ad]+r$/;
-
-export function cxrAccessor(name: string): ((arg: SchemeValue) => SchemeValue) | undefined {
-  if (!CXR_RE.test(name)) return undefined;
-  // inner letters between the leading `c` and trailing `r`, innermost first
-  const chars = [...name.slice(1, -1)].reverse();
-  return function (arg: SchemeValue): SchemeValue {
-    return chars.reduce(function (list, type) {
-      typecheck(name, list, "pair");
-      return type === "a" ? list.car : list.cdr;
-    }, arg);
-  };
-}
-
-/**
- * Install the unbounded `c[ad]+r` catchall on an environment. Registered on
- * `global_env` (here) and `inferenceEnv` (inference-env.ts) — the inference env
- * registers it on its own frame so the catchall is local, independent of what it
- * inherits through the chain. The catchall makes ANY accessor word resolvable, so
- * whatever the sweet lens fuses in unbounded mode (caddddr, caddadar, …) still evaluates.
- */
-export function registerCxrResolver(env: Environment): void {
-  env.registerResolver({
-    id: "cxr-accessor",
-    resolve(name) {
-      return cxrAccessor(name);
-    },
-  });
-}
-
-// The whole `c[ad]+r` family is the cxr RESOLVER's job — no eager bindings. Any
-// accessor word (cadr … caddddr and beyond) is synthesized on lookup; declaring a
-// finite prefix as own bindings was just enumeration cosmetics.
-registerCxrResolver(global_env);
 // The `:key` keyword accessor — a catchall sibling to c[ad]+r. Registered on
 // global_env here (and on the inference env in inference-env.ts). Owned by the
 // polyglot capability.

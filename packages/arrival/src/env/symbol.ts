@@ -5,7 +5,7 @@
 // schema — printer BUILT in schema-to-ts.ts; type-lens wiring pending), and the JS↔Scheme membrane (each
 // schema is the per-arg codec). This file builds the AUTHORED-extension layer:
 //
-//   const symbol = { native, rosetta, notImplemented }
+//   const symbol = { native, rosetta, tagless, notImplemented }
 //
 // so `import * as arrival from "./symbol.js"` →  arrival.symbol.native`name: doc`(…)
 //
@@ -395,8 +395,8 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
     const fn = (receiver as Record<string, unknown> | null | undefined)?.[method];
     if (typeof fn !== "function") {
       throw new TypeError(
-        `${input.name}: cannot ${input.name} a ${describeReceiver(receiver)} — it declares no ` +
-          `${method}. A tagless op is defined ON the arrival terms that implement it (Pair, Vector, LazySeq, …).`,
+        `${input.name}: the ${describeReceiver(receiver)} primitive does not support \`${input.name}\` ` +
+          `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
       );
     }
     return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);

@@ -1,6 +1,6 @@
 import { wrappedOps } from "./bridge.js";
 import { Environment } from "./Environment.js";
-import { env as userEnv, registerCxrResolver } from "./stdlib.js";
+import { env as userEnv } from "./stdlib.js";
 import { nil } from "./values/primitives/ANil.js";
 import { keywordAccessorResolver } from "./membrane.js";
 
@@ -75,7 +75,6 @@ export const inferenceEnv = new Environment(
 // The unbounded `c[ad]+r` catchall. SAFE_BUILTINS copies only a hand-maintained
 // (and incomplete) slice of the family above; the resolver makes ANY accessor
 // word the sweet lens can fuse resolve — without inheriting it (null parent).
-registerCxrResolver(inferenceEnv);
 // The `:key` keyword accessor catchall (sibling to c[ad]+r). On the inference-env
 // base too, so a `:`-prefixed symbol resolves to its `@`-alias pluck.
 inferenceEnv.registerResolver(keywordAccessorResolver);

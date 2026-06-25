@@ -235,16 +235,16 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // car/cdr project ONE element — its box must survive (this IS §5.3 element
   // provenance; the golden-prov-arithmetic car/cons goldens depend on it).
   it("car(Pair) projects the head element WITH its box", async () => {
-    expect(provOf(await force(ops.car(mkPair())))).toEqual([100]);
+    expect(provOf(await force(mkPair()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
   it("car(SchemeJSArray) projects the head element WITH its box (the .at(0) carrier path)", async () => {
-    expect(provOf(await force(ops.car(mkArr())))).toEqual([100]);
+    expect(provOf(await force(mkArr()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
-    expect(elemProvs(await force(ops.cdr(mkPair())))).toEqual([[101]]);
+    expect(elemProvs(await force(mkPair()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
   it("cdr(SchemeJSArray): the tail wrapper carries the remaining element's box", async () => {
-    expect(elemProvs(await force(ops.cdr(mkArr())))).toEqual([[101]]);
+    expect(elemProvs(await force(mkArr()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
@@ -253,11 +253,11 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });
 
-  // Wrong-carrier: car over a SchemeVector + reduce over a SchemeJSArray have NO
-  // overlay branch → fall through to the LIPS builtin which typechecks pair|nil
-  // → THROW (the DR4 surface — errors-as-doors, not a silent box-drop).
-  it("car(SchemeVector) THROWS — no SchemeVector branch in the accessor [CONTESTED: DR4]", () => {
-    expect(() => ops.car(mkVec())).toThrow();
+  // Wrong-carrier: a SchemeVector has no car algebra and a SchemeJSArray no reduce
+  // overlay branch → the dispatch totalic-throws (the DR4 surface — errors-as-doors,
+  // not a silent box-drop). car/cdr are now the primitives OWN tagless-final algebra.
+  it("car(SchemeVector): AVector carries no car algebra → the dispatch totalic-throws [DR4]", () => {
+    expect("arrival/tagless-final/car" in mkVec()).toBe(false);
   });
   it("reduce(SchemeJSArray) THROWS — overlay reduce has no SchemeJSArray branch [CONTESTED]", () => {
     expect(() => ops.reduce((a: unknown, _b: unknown) => a, el("z", 0), mkArr())).toThrow(/pair or nil/i);
