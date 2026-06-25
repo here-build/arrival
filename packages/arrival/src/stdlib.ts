@@ -133,15 +133,6 @@ const debug = {
 /* c8 ignore stop */
 
 // ----------------------------------------------------------------------
-function escape_regex(str: SchemeValue): SchemeValue {
-  if (typeof str === "string") {
-    const special = /([-\\^$[\]()+{}?*.|])/g;
-    return str.replaceAll(special, String.raw`\$1`);
-  }
-  return str;
-}
-
-// ----------------------------------------------------------------------
 function tokens(str: SchemeValue): SchemeValue[] {
   if (str instanceof AString) {
     str = str.valueOf();
@@ -374,11 +365,6 @@ function to_array(name: string, deep = false): SchemeFunction {
 // behavior-identical (already early-bound today) and avoids a per-call env lookup.
 // ---------------------------------------------------------------------------
 const listToArray = to_array("list->array");
-
-function arrayToList(array: SchemeValue): SchemeValue {
-  typecheck("array->list", array, "array");
-  return APair.fromArray(CONSTANT_CTX, array);
-}
 
 function isProperList(obj: SchemeValue): SchemeValue {
   // A circular list is NOT a proper list (R7RS). Detect runtime cycles
@@ -1277,71 +1263,13 @@ export const global_env = new Environment(
       return withInputProvenance(args, result);
     }),
     // ------------------------------------------------------------------
-    replace: doc("replace", function replace(pattern, replacement, string) {
-      typecheck("replace", pattern, ["regex", "string"]);
-      typecheck("replace", replacement, ["string", "function"]);
-      typecheck("replace", string, "string");
-      if (is_function(replacement)) {
-        // ref: https://stackoverflow.com/a/48032528/387194
-        const replacements: SchemeValue[] = [];
-        string.replace(pattern, function (...args: SchemeValue[]) {
-          replacements.push(replacement(...args));
-        });
-        return unpromise(replacements, (replacements) => {
-          return string.replace(pattern, () => (replacements as SchemeValue[]).shift());
-        });
-      }
-      return string.replace(pattern, replacement);
-    }),
-    // ------------------------------------------------------------------
-    match: doc("match", function match(pattern, string) {
-      typecheck("match", pattern, ["regex", "string"]);
-      typecheck("match", string, "string");
-      const m = string.match(pattern);
-      return m ? arrayToList(m) : false;
-    }),
-    // ------------------------------------------------------------------
-    search: doc("search", function search(pattern, string) {
-      typecheck("search", pattern, ["regex", "string"]);
-      typecheck("search", string, "string");
-      return string.search(pattern);
-    }),
-    // ------------------------------------------------------------------
     repr: doc("repr", function repr(obj, quote) {
       return toString(obj, quote);
-    }),
-    // ------------------------------------------------------------------
-    "escape-regex": doc("escape-regex", function (string) {
-      typecheck("escape-regex", string, "string");
-      return escape_regex(string.valueOf());
     }),
     // ------------------------------------------------------------------
     typecheck: doc(null, typecheck),
     // ------------------------------------------------------------------
     "function?": doc("function?", is_function),
-    // ------------------------------------------------------------------
-    "regex?": doc("regex?", function (obj) {
-      return obj instanceof RegExp;
-    }),
-    // ------------------------------------------------------------------
-    "array?": doc("array?", function (obj) {
-      return Array.isArray(obj);
-    }),
-    // ------------------------------------------------------------------
-    "object?": doc("object?", function (obj) {
-      return (
-        !is_nil(obj) &&
-        obj !== null &&
-        !(obj instanceof ACharacter) &&
-        !(obj instanceof RegExp) &&
-        !(obj instanceof AString) &&
-        !is_pair(obj) &&
-        !(obj instanceof AExact) &&
-        !(obj instanceof AInexact) &&
-        typeof obj === "object" &&
-        !Array.isArray(obj)
-      );
-    }),
     // ------------------------------------------------------------------
     // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed
     // SchemeVector. The former stdlib `vector` here was DEAD (initBridge applies
@@ -1430,23 +1358,6 @@ export const global_env = new Environment(
         });
       }),
     ),
-    // ------------------------------------------------------------------
-    pluck: doc("pluck", function pluck(...keys) {
-      return function (obj) {
-        keys = keys.map((x) => (x instanceof ASymbol ? x.__name__ : x));
-        if (keys.length === 0) {
-          return nil;
-        } else if (keys.length === 1) {
-          const [key] = keys;
-          return obj[key];
-        }
-        const result = {};
-        for (const key of keys) {
-          result[key] = obj[key];
-        }
-        return result;
-      };
-    }),
     // ------------------------------------------------------------------
     reduce: doc(
       "reduce",
