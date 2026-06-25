@@ -218,31 +218,31 @@ export class AExact extends AValue {
 
   // Same-type arithmetic
   add(other: AExact): AExact {
-    return new AExact(CONSTANT_CTX, this.num * other.denom + other.num * this.denom, this.denom * other.denom);
+    return new AExact(this.ctx, this.num * other.denom + other.num * this.denom, this.denom * other.denom);
   }
 
   sub(other: AExact): AExact {
-    return new AExact(CONSTANT_CTX, this.num * other.denom - other.num * this.denom, this.denom * other.denom);
+    return new AExact(this.ctx, this.num * other.denom - other.num * this.denom, this.denom * other.denom);
   }
 
   mul(other: AExact): AExact {
-    return new AExact(CONSTANT_CTX, this.num * other.num, this.denom * other.denom);
+    return new AExact(this.ctx, this.num * other.num, this.denom * other.denom);
   }
 
   div(other: AExact): AExact {
-    return new AExact(CONSTANT_CTX, this.num * other.denom, this.denom * other.num);
+    return new AExact(this.ctx, this.num * other.denom, this.denom * other.num);
   }
 
   neg(): AExact {
-    return new AExact(CONSTANT_CTX, -this.num, this.denom);
+    return new AExact(this.ctx, -this.num, this.denom);
   }
 
   abs(): AExact {
-    return new AExact(CONSTANT_CTX, this.num < 0n ? -this.num : this.num, this.denom);
+    return new AExact(this.ctx, this.num < 0n ? -this.num : this.num, this.denom);
   }
 
   inverse(): AExact {
-    return new AExact(CONSTANT_CTX, this.denom, this.num);
+    return new AExact(this.ctx, this.denom, this.num);
   }
 
   // Floor, ceiling, truncate, round - return exact integers
@@ -251,9 +251,9 @@ export class AExact extends AValue {
     const q = this.num / this.denom;
     // Floor: round toward negative infinity
     if (this.num < 0n && this.num % this.denom !== 0n) {
-      return new AExact(CONSTANT_CTX, q - 1n);
+      return new AExact(this.ctx, q - 1n);
     }
-    return new AExact(CONSTANT_CTX, q);
+    return new AExact(this.ctx, q);
   }
 
   ceiling(): AExact {
@@ -261,15 +261,15 @@ export class AExact extends AValue {
     const q = this.num / this.denom;
     // Ceiling: round toward positive infinity
     if (this.num > 0n && this.num % this.denom !== 0n) {
-      return new AExact(CONSTANT_CTX, q + 1n);
+      return new AExact(this.ctx, q + 1n);
     }
-    return new AExact(CONSTANT_CTX, q);
+    return new AExact(this.ctx, q);
   }
 
   truncate(): AExact {
     if (this.denom === 1n) return this;
     // Truncate: round toward zero
-    return new AExact(CONSTANT_CTX, this.num / this.denom);
+    return new AExact(this.ctx, this.num / this.denom);
   }
 
   round(): AExact {
@@ -281,39 +281,39 @@ export class AExact extends AValue {
     const halfDenom = this.denom / 2n;
 
     if (absR < halfDenom) {
-      return new AExact(CONSTANT_CTX, q);
+      return new AExact(this.ctx, q);
     } else if (absR > halfDenom) {
-      return new AExact(CONSTANT_CTX, this.num < 0n ? q - 1n : q + 1n);
+      return new AExact(this.ctx, this.num < 0n ? q - 1n : q + 1n);
     } else {
       // Tie: round to even
       if (q % 2n === 0n) {
-        return new AExact(CONSTANT_CTX, q);
+        return new AExact(this.ctx, q);
       }
-      return new AExact(CONSTANT_CTX, this.num < 0n ? q - 1n : q + 1n);
+      return new AExact(this.ctx, this.num < 0n ? q - 1n : q + 1n);
     }
   }
 
   // Integer operations (only valid when isInteger)
   mod(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "mod requires integers");
-    return new AExact(CONSTANT_CTX, this.num % other.num);
+    return new AExact(this.ctx, this.num % other.num);
   }
 
   quotient(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "quotient requires integers");
-    return new AExact(CONSTANT_CTX, this.num / other.num);
+    return new AExact(this.ctx, this.num / other.num);
   }
 
   gcd(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "gcd requires integers");
-    return new AExact(CONSTANT_CTX, 
+    return new AExact(this.ctx, 
       AExact.gcd(this.num < 0n ? -this.num : this.num, other.num < 0n ? -other.num : other.num),
     );
   }
 
   // Convert to inexact
   toInexact(): AInexact {
-    return new AInexact(CONSTANT_CTX, this.valueOf());
+    return new AInexact(this.ctx, this.valueOf());
   }
 }
 
@@ -464,90 +464,90 @@ export class AInexact extends AValue {
 
   // Same-type arithmetic (reals-only)
   add(other: AInexact): AInexact {
-    return new AInexact(CONSTANT_CTX, this.real + other.real);
+    return new AInexact(this.ctx, this.real + other.real);
   }
 
   sub(other: AInexact): AInexact {
-    return new AInexact(CONSTANT_CTX, this.real - other.real);
+    return new AInexact(this.ctx, this.real - other.real);
   }
 
   mul(other: AInexact): AInexact {
-    return new AInexact(CONSTANT_CTX, this.real * other.real);
+    return new AInexact(this.ctx, this.real * other.real);
   }
 
   div(other: AInexact): AInexact {
     // IEEE division directly: 1.0/0.0 = +inf.0, -1.0/0.0 = -inf.0, 0.0/0.0 = +nan.0.
-    return new AInexact(CONSTANT_CTX, this.real / other.real);
+    return new AInexact(this.ctx, this.real / other.real);
   }
 
   neg(): AInexact {
-    return new AInexact(CONSTANT_CTX, -this.real);
+    return new AInexact(this.ctx, -this.real);
   }
 
   abs(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.abs(this.real));
+    return new AInexact(this.ctx, Math.abs(this.real));
   }
 
   // Floor, ceiling, truncate, round
   floor(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.floor(this.real));
+    return new AInexact(this.ctx, Math.floor(this.real));
   }
 
   ceiling(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.ceil(this.real));
+    return new AInexact(this.ctx, Math.ceil(this.real));
   }
 
   truncate(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.trunc(this.real));
+    return new AInexact(this.ctx, Math.trunc(this.real));
   }
 
   round(): AInexact {
     // Scheme rounds to even on ties
     const floored = Math.floor(this.real);
     const diff = this.real - floored;
-    if (diff < 0.5) return new AInexact(CONSTANT_CTX, floored);
-    if (diff > 0.5) return new AInexact(CONSTANT_CTX, floored + 1);
+    if (diff < 0.5) return new AInexact(this.ctx, floored);
+    if (diff > 0.5) return new AInexact(this.ctx, floored + 1);
     // Tie: round to even
-    if (floored % 2 === 0) return new AInexact(CONSTANT_CTX, floored);
-    return new AInexact(CONSTANT_CTX, floored + 1);
+    if (floored % 2 === 0) return new AInexact(this.ctx, floored);
+    return new AInexact(this.ctx, floored + 1);
   }
 
   // Transcendental functions (reals-only). sqrt of a negative DOORS — complex
   // results are not representable (see header / complexDoor).
   sqrt(): AInexact {
     if (this.real < 0) complexDoor();
-    return new AInexact(CONSTANT_CTX, Math.sqrt(this.real));
+    return new AInexact(this.ctx, Math.sqrt(this.real));
   }
 
   exp(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.exp(this.real));
+    return new AInexact(this.ctx, Math.exp(this.real));
   }
 
   log(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.log(this.real));
+    return new AInexact(this.ctx, Math.log(this.real));
   }
 
   sin(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.sin(this.real));
+    return new AInexact(this.ctx, Math.sin(this.real));
   }
 
   cos(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.cos(this.real));
+    return new AInexact(this.ctx, Math.cos(this.real));
   }
 
   tan(): AInexact {
-    return new AInexact(CONSTANT_CTX, Math.tan(this.real));
+    return new AInexact(this.ctx, Math.tan(this.real));
   }
 
   pow(exponent: AInexact): AInexact {
     if (this.isZero) {
       // R7RS § 6.2.6: 0^0 = 1; 0^positive = 0; 0^negative is undefined
       // (division by zero).
-      if (exponent.isZero) return new AInexact(CONSTANT_CTX, 1);
+      if (exponent.isZero) return new AInexact(this.ctx, 1);
       invariant(exponent.real > 0, "expt: 0 raised to a negative power (division by zero)");
-      return new AInexact(CONSTANT_CTX, 0);
+      return new AInexact(this.ctx, 0);
     }
-    return new AInexact(CONSTANT_CTX, Math.pow(this.real, exponent.real));
+    return new AInexact(this.ctx, Math.pow(this.real, exponent.real));
   }
 
   // Convert to exact (if possible)
@@ -633,7 +633,7 @@ export const RationalExact: ExactBehavior = {
       const n = a.num;
       const root = bigintISqrt(n);
       if (root * root === n) {
-        return new AExact(CONSTANT_CTX, root);
+        return new AExact(a.ctx, root);
       }
     }
     // Not a perfect square, return inexact
@@ -662,7 +662,7 @@ export const IntegerExact: ExactBehavior = {
       const n = a.num;
       const root = bigintISqrt(n);
       if (root * root === n) {
-        return new AExact(CONSTANT_CTX, root);
+        return new AExact(a.ctx, root);
       }
     }
     return a.toInexact().sqrt();
