@@ -292,25 +292,5 @@ export default new EnvCapability("scheme/fl-interop", {
       comparisonImpl(">="),
     ),
 
-    length: symbol.native`length: universal element count — dispatches to each term's own arrival/tagless-final/length`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      (receiver: unknown) => {
-        // Dispatch to the receiver's OWN arrival/tagless-final/length (the per-primitive count,
-        // carrying the elements' provenance — the per-primitive divergence lives ON each term;
-        // this op is the COMBINATOR over it). TOTALIC: a receiver with no length algebra (a
-        // number/boolean) → "does not support length", never a silent 0 (the bug the old
-        // collectElements lenient-[] fallback hid for strings). SYNC (symbol.native): a count is
-        // a value-layer read with no run-state, so length's result stays a bare scalar,
-        // consistent with vector-length. (A strict R7RS-list-only probe is DEFERRED: it needs
-        // ctx, and threading ctx via the async sequence builder broke bare-scalar forcing in
-        // nested position — `(equal? (length lit) n)`. Revisit once that is solved generally.)
-        const m = (receiver as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/length"];
-        if (typeof m !== "function") {
-          throw new TypeError(`length: ${describeOperand(receiver)} does not support length (no arrival/tagless-final/length).`);
-        }
-        return (m as () => unknown).call(receiver);
-      },
-    ),
-
   },
 });

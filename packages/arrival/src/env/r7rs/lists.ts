@@ -119,23 +119,26 @@ function isProperList(obj: SchemeValue): SchemeValue {
 // settled value (see evaluator.ts dispatch). Relocated VERBATIM from stdlib.ts
 // global_env, where the `speculative()` helper set the same symbol on the bound fn.
 const lengthImpl = (obj: SchemeValue): SchemeValue => {
-  if (!obj || is_nil(obj)) {
-    return 0;
-  }
-  // Tier 2 speculation: length of a still-filling collection is its narrowing
-  // cardinality INTERVAL, surfaced as a number-domain HalfBaked that the
-  // comparison ops read for early collapse. Reached only when speculation is
-  // on (the choke leaves a HalfBaked unforced solely for this marked op).
+  if (obj == null) return 0;
+  // Tier 2 speculation: length of a still-filling collection is its narrowing cardinality INTERVAL,
+  // surfaced as a number-domain HalfBaked the comparison ops read for early collapse (reached only
+  // when speculation is on — the choke leaves a HalfBaked unforced solely for this marked op).
   if (is_half_baked(obj)) {
     return obj.toCardinalityNumber();
   }
-  if (is_pair(obj)) {
-    TypeError.invariant(!isCircularList(obj), "length: circular list");
-    return withInputProvenance([obj], obj.length());
+  // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count carrying
+  // the ELEMENTS' unioned provenance (the element-union DISSOLVED from fl-interop's length overlay
+  // onto each term; the term also levies the circular-list check). TOTALIC: a receiver with no
+  // length algebra is a type error, never a silent 0. A non-term carrier with a bare `.length`
+  // (a membrane-wrapped JS array) falls back to that property.
+  const m = (obj as Record<string, unknown>)["arrival/tagless-final/length"];
+  if (typeof m === "function") {
+    return (m as () => SchemeValue).call(obj);
   }
-  if ("length" in obj) {
+  if (typeof obj === "object" && "length" in obj) {
     return withInputProvenance([obj], obj.length);
   }
+  throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
 };
 (lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
 

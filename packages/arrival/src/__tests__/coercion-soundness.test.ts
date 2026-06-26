@@ -122,15 +122,15 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
   it("length(vector) counts every element (not 0) and carries their unioned provenance", async () => {
-    const r = await force(ops.length(mkVec()));
+    const r = await force(listOps.length(mkVec()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     // Element grounding (100,101) rides onto the count — the teleological-seal
-    // need fl-interop.length documents ("a count the seal can't sign is the hole").
+    // need the term length documents ("a count the seal can't sign is the hole").
     expect(provOf(r)).toEqual([100, 101]);
   });
 
   it("length(AJSArray) carries element provenance (the membrane-wrapper carrier)", async () => {
-    const r = await force(ops.length(mkArr()));
+    const r = await force(listOps.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     expect(provOf(r)).toEqual([100, 101]);
   });
@@ -146,7 +146,7 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
   // Galois-slicing upper adjoint: a count/sort does not depend on the container
   // grouping box, so the box is not carried. Element boxes (stratum 1) survive.
   it("Pair · length drops the container box, carries the ELEMENTS' provenance (the seal need)", async () => {
-    const r = await force(ops.length(mkPair()));
+    const r = await force(listOps.length(mkPair()));
     expect(provOf(r)).toEqual([100, 101]); // NOT [7] — container grouping is outside a count's cone
   });
 
