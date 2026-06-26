@@ -10,7 +10,6 @@
 // SRFI-1 `remove` deliberately stay in core (`core.ts`): the accessors are
 // arrival-specific crash-avoidance, and `remove` is authored there directly
 // (it once shadowed a Ramda `remove`, since removed entirely).
-import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 
@@ -219,9 +218,6 @@ export const SRFI1_SCM = `
 export default new EnvCapability("scheme/srfi-1", {
   prelude: SRFI1_SCM,
   symbols: {
-    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`({
-      input: [z.unknown(), z.unknown(), z.unknown()],
-      output: [z.unknown()],
-    }),
+    reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
   },
 });

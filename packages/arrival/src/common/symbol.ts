@@ -43,6 +43,7 @@ import type { APair } from "../values/primitives/APair.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import type { TaglessOp } from "../values/tagless-final.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -491,15 +492,41 @@ function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl: impl as AnyFn }, opts);
 }
 
-/** Tagless host op — NO impl. Dispatches to the operand's own `arrival/tagless-final/<name>`
- *  term method (the per-A-entity declaration), threading the run ctx. The contract is the
- *  type/harvest surface; the behaviour lives on the terms. */
-function tagless(tpl: TemplateStringsArray, ...sub: unknown[]) {
-  const { name, doc } = parseNameDoc(tpl, sub);
-  return <const I extends VectorSpec, const O extends VectorSpec>(
-    contract: Contract<I, O>,
-  ): TaglessSymbolDef => bakeTagless({ kind: "tagless", name, doc, contract });
-}
+/** A tagless binder — the tagged-template fn `symbol.tagless.<op>` exposes. It takes only the
+ *  human description; the op NAME comes from the key, so a symbol can only ever be bound for an op
+ *  the algebra DECLARES. */
+type TaglessBinder = (tpl: TemplateStringsArray, ...sub: unknown[]) => TaglessSymbolDef;
+
+/** Tagless dispatch is pure (NO impl, NO validation) — the contract is only the placeholder harvest
+ *  surface; the real per-op types live in `ArrivalTaglessFinal` (tagless-final.ts), the source of truth. */
+const TAGLESS_HARVEST_CONTRACT: Contract<VectorSpec, VectorSpec> = {
+  input: z.array(z.unknown()),
+  output: [z.unknown()],
+};
+const taglessBinder =
+  (name: TaglessOp): TaglessBinder =>
+  (tpl, ...sub) => {
+    let doc = "";
+    for (let i = 0; i < tpl.length; i++) {
+      doc += tpl[i];
+      if (i < sub.length) doc += String(sub[i]);
+    }
+    return bakeTagless({ kind: "tagless", name, doc: doc.trim(), contract: TAGLESS_HARVEST_CONTRACT });
+  };
+
+/** Tagless host ops — KEYED by the declared algebra (tagless-final.ts): `symbol.tagless.map\`…\``
+ *  binds a symbol that dispatches to the receiver's own `arrival/tagless-final/map`. The
+ *  `Record<TaglessOp, …>` forces a binder for EVERY declared op — add an op to the algebra and this
+ *  object won't compile until it gets one (no cast, drift-proof). */
+const tagless: Record<TaglessOp, TaglessBinder> = {
+  equals: taglessBinder("equals"),
+  lte: taglessBinder("lte"),
+  length: taglessBinder("length"),
+  map: taglessBinder("map"),
+  filter: taglessBinder("filter"),
+  reduce: taglessBinder("reduce"),
+  sort: taglessBinder("sort"),
+};
 
 /** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. */
