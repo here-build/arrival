@@ -28,7 +28,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
@@ -42,10 +42,13 @@ import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
 import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
-import { is_false } from "../../eval/guards.js";
+import { is_false, is_promise } from "../../eval/guards.js";
 import { EnvCapability } from "../../common/capability.js";
-import { is_half_baked } from "../../values/primitives/AHalfBaked.js";
+import { AHalfBaked, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { SPECULATE } from "../../well-known-symbols.js";
+import { call_function } from "../../eval/call-function.js";
+import { promise_all } from "../../utils/promises.js";
+import { tf } from "../../values/tagless-final.js";
 
 // Scheme is inherently dynamic at these interop boundaries — the relocated
 // LIPS-era list builtins below typecheck their args at runtime; the param
@@ -142,8 +145,56 @@ const lengthImpl = (obj: SchemeValue): SchemeValue => {
 };
 (lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
 
+const MAP_METHOD = tf("map");
+
+// Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements across the lists,
+// truncating to the shortest. PACK-LOCAL — uses lists.ts's own listToArray + call_function, so §6.10
+// map carries NO global_env capture (the lazy builtinMap grab fl-interop needed is gone). Speculation
+// rides here too (cardBounds [1,1], the count is exact up front), carrying early-collapse through a
+// multi-list map.
+function multiListMap(fn: SchemeValue, lists: SchemeValue[], runCtx: RunContext): SchemeValue {
+  for (const [i, arg] of lists.entries()) {
+    typecheck("map", arg, ["pair", "nil"], i + 1);
+  }
+  if (lists.some(is_nil)) return nil;
+  const arrays = lists.map((l) => listToArray(l));
+  const len = Math.min(...arrays.map((a) => a.length));
+  const results: SchemeValue[] = [];
+  for (let i = 0; i < len; i++) {
+    results.push(call_function(fn, arrays.map((a) => a[i]), {}));
+  }
+  if (runCtx?.speculate && results.some(is_promise)) {
+    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
+    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
+  }
+  if (results.some(is_promise)) {
+    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
+      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
+    );
+  }
+  return APair.fromArray(ctxOf(lists[0]), results);
+}
+
 export default new EnvCapability("scheme/lists", {
   symbols: {
+    // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
+    // map (Pair preserves boxes + speculates [1,1]; Vector strips boxes, eager) — the term owns the
+    // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
+    map: symbol.sequence`map: fn over one list (its own term map — box discipline + speculation) or a zip over several`(
+      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
+      (args, runCtx) => {
+        const [fn, ...lists] = args;
+        if (lists.length === 1) {
+          const seq = lists[0];
+          const m = (seq as Record<string, unknown> | null | undefined)?.[MAP_METHOD];
+          if (typeof m !== "function") {
+            throw new TypeError(`map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${MAP_METHOD}).`);
+          }
+          return (m as (...a: unknown[]) => unknown).call(seq, fn, runCtx);
+        }
+        return multiListMap(fn, lists, runCtx);
+      },
+    ),
     // R7RS 6.4 Pairs and lists
     cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
       { input: [z.unknown(), z.unknown()], output: [z.pair] },

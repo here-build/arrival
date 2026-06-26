@@ -18,7 +18,8 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { chargeHeap } from "../../heap-budget.js";
-import { is_false, is_nil } from "../../eval/guards.js";
+import { is_false, is_nil, is_promise } from "../../eval/guards.js";
+import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
@@ -124,12 +125,18 @@ export class AVector extends AValue {
   // map (a Pair stays an arrival list, never crossing out). `fn` is awaited per element
   // (live LIPS lambdas return Promises). (The N-ary vector-map builtin is a separate,
   // non-Functor observation — it carries arity the bare Functor underfits.)
-  async ["arrival/tagless-final/map"](
+  ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-  ): Promise<AVector> {
-    const out: SchemeValue[] = [];
-    for (const v of this.__vector__) out.push(unwrapForeign(await fn(v)) as SchemeValue);
-    return new AVector(this.ctx, out);
+    runCtx?: RunContext,
+  ): AVector | Promise<AVector> {
+    chargeHeap(runCtx, this.__vector__.length);
+    const results = this.__vector__.map((v) => fn(v));
+    if (results.some(is_promise)) {
+      return (promise_all(results) as Promise<SchemeValue[]>).then(
+        (resolved) => new AVector(this.ctx, resolved.map((v) => unwrapForeign(v) as SchemeValue)),
+      );
+    }
+    return new AVector(this.ctx, results.map((v) => unwrapForeign(v) as SchemeValue));
   }
 
   // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a

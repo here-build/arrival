@@ -662,23 +662,43 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
 
   // Arrival's async-aware Functor — `map` that PRESERVES every element's box and
   // provenance. Walks the cdr-spine DIRECTLY (not via fantasy-land/reduce collect),
-  // awaiting `fn` per element (live LIPS lambdas always return Promises), then rebuilds
+  // calling `fn` per element CONCURRENTLY (the threads just run; live LIPS lambdas return Promises),
+  // then rebuilds
   // a fresh APair spine via Pair.fromArray(_, false) — the exact form the eager scheme
   // `map` builtin uses (freshening the spine, dropping the container box, terminating in
   // the canonical nil). The element results are kept RAW (no unwrap), so a SchemeString /
   // SchemeExact element keeps its box: coercion-soundness's "Pair · map preserves every
   // element's box" + lineage A13/A18b are the pins. Honors the empty-pair sentinel
   // (`Pair(undefined, nil)`) and a Nil-clone tail exactly as mapPair did.
-  async ["arrival/tagless-final/map"](fn: (x: unknown) => unknown | Promise<unknown>): Promise<APair | ANil> {
-    const out: unknown[] = [];
+  ["arrival/tagless-final/map"](
+    fn: (x: unknown) => unknown | Promise<unknown>,
+    runCtx?: RunContext,
+  ): APair | ANil | AHalfBaked | Promise<APair | ANil> {
+    chargeHeap(runCtx, countPairElements(this));
+    const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node && !(node instanceof ANil)) {
       const p = node as APair;
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
-      out.push(await fn(p.car));
+      elements.push(p.car);
       node = p.cdr;
     }
-    return APair.fromArray(this.ctx, out, false) as APair | ANil;
+    const results = elements.map((x) => fn(x));
+    if (runCtx?.speculate && results.some(is_promise)) {
+      // map's count is known exactly up front (one output per input → bounds [1,1]), so its HalfBaked
+      // interval is already a POINT — `length` is decidable immediately while the values still resolve,
+      // carrying speculation THROUGH a map sitting between a filter and the length/comparison.
+      const slots = results.map((r): Promise<SchemeValue[]> =>
+        is_promise(r) ? (r as Promise<unknown>).then((v) => [v as SchemeValue]) : Promise.resolve([r as SchemeValue]),
+      );
+      return AHalfBaked.collection(this.ctx, slots, () => [1, 1]);
+    }
+    if (results.some(is_promise)) {
+      return (promise_all(results) as Promise<unknown[]>).then(
+        (resolved) => APair.fromArray(this.ctx, resolved, false) as APair | ANil,
+      );
+    }
+    return APair.fromArray(this.ctx, results, false) as APair | ANil;
   }
 
   // Arrival's async-aware Filterable — `filter` that PRESERVES every kept element's box.

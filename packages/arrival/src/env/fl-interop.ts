@@ -37,19 +37,14 @@ import * as z from "../common/scheme-zod.js";
 import { global_env } from "../stdlib.js";
 
 import { AExact, AInexact, type ANumeric } from "../values/numbers.js";
-import { APair } from "../values/primitives/APair.js";
-import { AVector } from "../values/primitives/AVector.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { isOrd, nilOrderCompare, withInputProvenance, type AOrd } from "../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
-import { heapBudgetMessage } from "../heap-budget.js";
-import { ArrivalError } from "../eval/evaluator.js";
 
 type Callable = (...args: unknown[]) => unknown;
 
 // ── Lazy builtin capture ────────────────────────────────────────────────────
 // Read once on first use, after bootstrap, when global_env is fully assembled.
-let builtinMap: Callable | undefined;
 
 // Comparison builtins — bridged Operators (=/</>/<=/>=). Captured lazily for the
 // nil-tolerant overrides below (the operator membrane throws on a nil operand at
@@ -61,8 +56,7 @@ let builtinLte: Callable | undefined;
 let builtinGte: Callable | undefined;
 
 function captureBuiltins(): void {
-  if (builtinMap !== undefined) return;
-  builtinMap = global_env.get("map", { throwError: false }) as Callable;
+  if (builtinNumEq !== undefined) return;
   builtinNumEq = global_env.get("=", { throwError: false }) as Callable;
   builtinLt = global_env.get("<", { throwError: false }) as Callable;
   builtinGt = global_env.get(">", { throwError: false }) as Callable;
@@ -195,72 +189,11 @@ function comparisonImpl(sym: "=" | "<" | ">" | "<=" | ">="): (args: unknown[], r
 
 
 
-// chargeAndDispatch — the sequence ops' thin program: charge the run's allocation meter, then
-// dispatch to the receiver's OWN arrival/tagless-final/<op>. The EAGER materializers (APair/
-// AVector) charge runCtx.heapMeter by element count BEFORE walking — a native pass emits no
-// trampoline TICK, so without it a `(map f huge)`/O(K²) churn runs unbounded (heap-budget.ts);
-// ANil is empty. The per-primitive box discipline + fold convention all live ON the term. A
-// receiver with NO such algebra
-// (a AJSArray, a number) is TOTALIC — "does not support <op>", the uniform DR4 wrong-carrier
-// throw, never a silent coercion. Heap stays holder-free here (runCtx, not currentRunEnv).
-function chargeAndDispatch(
-  method: "map" | "filter" | "reduce" | "sort",
-  receiver: unknown,
-  leading: unknown[],
-  runCtx: RunContext,
-): unknown {
-  if (receiver instanceof APair || receiver instanceof AVector) {
-    const meter = runCtx.heapMeter;
-    if (meter !== undefined) {
-      let count = 0;
-      if (receiver instanceof AVector) {
-        count = receiver.__vector__.length;
-      } else {
-        let cur: unknown = receiver;
-        while (cur instanceof APair) {
-          count++;
-          cur = cur.cdr;
-        }
-      }
-      meter.used += count;
-      if (meter.used > meter.max) throw new ArrivalError(heapBudgetMessage(meter.max), []);
-    }
-  }
-  const m = (receiver as Record<string, unknown> | null | undefined)?.[`arrival/tagless-final/${method}`];
-  if (typeof m !== "function") {
-    const kind = receiver instanceof AValue ? receiver.kind : receiver == null ? String(receiver) : typeof receiver;
-    throw new TypeError(
-      `${method}: the ${kind} primitive does not support ${method} (no arrival/tagless-final/${method}).`,
-    );
-  }
-  return (m as (...a: unknown[]) => unknown).call(receiver, ...leading);
-}
 
 // ── The interop overlay symbols ──────────────────────────────────────────────
 
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
-    // map — the inference-plane sequence op (single-list dispatch + multi-list zip). filter/reduce/
-    // sort/length DISSOLVED to the spec packs (srfi-1 / srfi-95 / lists); the term protocol owns them.
-    // The per-primitive semantics live ON the terms (APair/AVector eager + box-discipline, ANil
-    // empty); the binding is a thin ctx-aware program (chargeAndDispatch) that charges
-    // runCtx.heapMeter and dispatches, TOTALIC for a non-sequence receiver. The old null/#f→nil
-    // tolerance is DROPPED: mapping a non-sequence is a type error, not an empty result — only '()
-    // is empty (via ANil). The box discipline (Pair preserves boxes, Vector strips — the DR4
-    // box-strip), the keep-rule, and the element-first fold all live on the terms.
-    map: symbol.sequence`map: fn over one list (term-dispatch) or zip over several`(
-      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
-      (args, runCtx) => {
-        const [fn, ...lists] = args;
-        if (lists.length === 1) return chargeAndDispatch("map", lists[0], [fn], runCtx);
-        // A multi-list map is a ZIP, not a Functor op — delegate to the base scheme `map` (zip +
-        // pair|nil typecheck). builtinMap resolves through global_env (the base, NOT this inference
-        // override), so there is no recursion.
-        captureBuiltins();
-        return builtinMap!(fn, ...lists);
-      },
-    ),
-
     // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────
     // The operator membrane rejects a nil operand at codec-match time (the `=`/`<`/…
     // Operators declare `in: [SchemeNum]`), so a comparison against an absent value
