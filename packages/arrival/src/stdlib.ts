@@ -31,7 +31,7 @@ import {
   is_prototype,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
-import { clear_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
+import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { box, patch_value, quote } from "./reader/values-repr.js";
 import {
   complex_bare_re,
@@ -70,7 +70,7 @@ import {
 } from "./membrane.js";
 import { AJSObject } from "./values/primitives/js-wrappers.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
-import genRun, { type EvalContext, currentRunEnv, evaluate as genEvaluate, isSpeculating, SchemeError } from "./eval/evaluator.js";
+import { type EvalContext, currentRunEnv, isSpeculating, SchemeError } from "./eval/evaluator.js";
 
 
 // Type definitions for dynamic Scheme values
@@ -680,7 +680,7 @@ function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args
 
 // ----------------------------------------------------------------------
 // eq/eqv moved to structural-equal.ts; the macro engine (macro_expand /
-// extract_patterns / clear_gensyms / transform_syntax / self_evaluated)
+// extract_patterns / restore_data_gensyms / transform_syntax / self_evaluated)
 // moved to syntax-rules.ts (keystone K3) and is imported above.
 // ----------------------------------------------------------------------
 
@@ -996,19 +996,15 @@ export const global_env = new Environment(
                 expr = new_expr;
               }
               const new_env = var_scope.merge(scope, Syntax.__merge_env__ as unknown as string);
-              if (macro_expand) {
-                return { expr, scope: new_env };
-              }
-              // Drain: evaluate the expanded template through the generator. This
-              // is the last reachable legacy-evaluate caller. The Syntax transformer's
-              // return value IS the final result (the generator awaits this promise
-              // before returning the syntax expansion), so going async is transparent.
-              // clear_gensyms runs on the resolved result (gensym→literal-symbol fixup).
-              return unpromise(genRun(genEvaluate(expr, { ...eval_args, env: new_env })), (result: SchemeValue) =>
-                // Hack: update the result if there are generated
-                //       gensyms that should be literal symbols
-                clear_gensyms(result, names),
-              );
+              // FORM-RETURNING (always): hand back the transcribed FORM + its hygiene scope.
+              // The evaluator yields this form into the flat trampoline (tail position) and the
+              // macroexpand traverse re-expands it — the transformer NEVER evaluates inside
+              // itself, so a macro in tail position stays tail-proper (no nested run() frame).
+              // restore_data_gensyms un-renames the template's DATA-position gensyms (under
+              // quote/quasiquote) so quote yields literal symbols with no post-eval fixup.
+              // `macro_expand` no longer changes the return — both callers want the form.
+              void macro_expand;
+              return { expr: restore_data_gensyms(expr, names), scope: new_env };
             }
             rules = rules.cdr;
           }

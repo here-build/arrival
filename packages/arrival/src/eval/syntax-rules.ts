@@ -522,34 +522,43 @@ export function extract_patterns(
 
 // ----------------------------------------------------------------------
 // :: This function is called after syntax-rules macro is evaluated
-// :: and if there are any gensyms added by macro they need to restored
-// :: to original symbols
+// :: Restore hygiene-renamed gensyms to their literal symbols, but ONLY in DATA
+// :: positions — under quote / quasiquote, EXCLUDING unquote(-splicing) holes (which
+// :: are code). A template identifier under quote is DATA, not a reference, so hygiene
+// :: must not rename it (standard expander behaviour). The renamer over-renames every
+// :: identifier; this single pass un-renames the data positions of the transcribed
+// :: FORM, so quote yields the literal symbol with NO post-eval fixup.
+// ::
+// :: Why on the form, not the result: the old clear_gensyms ran on the evaluated RESULT.
+// :: Under the form-returning / tail-proper evaluator a result-side fixup must ride as an
+// :: onResolve, which the trampoline COMPOSES through a tail chain -> O(depth) for a deep
+// :: macro tail loop. Restoring the form once per expansion is O(form) and never composes,
+// :: so a macro in tail position keeps O(1) TCO.
 // ----------------------------------------------------------------------
-export function clear_gensyms(node, gensyms) {
-  function traverse(node) {
-    if (is_pair(node)) {
-      if (gensyms.length === 0) {
-        return node;
-      }
-      const car = traverse(node.car);
-      const cdr = traverse(node.cdr);
-      // TODO: check if it's safe to modify the list
-      //       some funky modify of code can happen in macro
-      return new APair(CONSTANT_CTX, car, cdr);
-    } else if (node instanceof ASymbol) {
-      const replacement = gensyms.find((gensym) => {
-        return gensym.gensym === node;
-      });
-      if (replacement) {
-        return new ASymbol(CONSTANT_CTX, replacement.name);
-      }
-      return node;
-    } else {
-      return node;
+export function restore_data_gensyms(node, gensyms) {
+  if (gensyms.length === 0) return node;
+  const restore = (sym) => {
+    const r = gensyms.find((g) => g.gensym === sym);
+    return r ? new ASymbol(CONSTANT_CTX, r.name) : sym;
+  };
+  function walk(n, data) {
+    if (n instanceof ASymbol) {
+      return data ? restore(n) : n;
     }
+    if (is_pair(n)) {
+      const head = n.car;
+      let childData = data;
+      if (head instanceof ASymbol) {
+        const lit = head.literal();
+        if (lit === "quote" || lit === "quasiquote") childData = true;
+        else if (lit === "unquote" || lit === "unquote-splicing") childData = false;
+      }
+      // head resolves in the CURRENT context (it is the operator); operands take childData.
+      return new APair(CONSTANT_CTX, walk(head, data), walk(n.cdr, childData));
+    }
+    return n;
   }
-
-  return traverse(node);
+  return walk(node, false);
 }
 
 // ----------------------------------------------------------------------

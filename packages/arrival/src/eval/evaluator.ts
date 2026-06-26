@@ -2764,16 +2764,32 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     // syntax-rules VECTOR patterns need a SchemeVector unwrap in matcher/expander
     // (boxing-track S9); dotted-tail-after-ellipsis template, `_`-wildcard binding,
     // let-syntax recursive hygiene — the L1 expander rework.
-    let expansion = fn.invoke(is_syntax(fn) ? code : rest, evalArgs, false);
+    // ── syntax-rules (Syntax): FORM-RETURNING, evaluated in THIS trampoline ──────────
+    // Invoke in macro-expand mode -> { expr, scope }: the transcribed FORM + its hygiene
+    // scope, with NO nested evaluation. Yield the form into the SAME flat trampoline in
+    // TAIL position. The old path (fn.invoke(code, evalArgs, false)) evaluated the expansion
+    // inside a NESTED genRun (stdlib.ts) and returned the VALUE — and a fresh genRun is a
+    // fresh host-stack run() frame, so a syntax-rules macro in a tail loop nested one run()
+    // per iteration and overflowed the host stack. Form-returning keeps everything flat: the
+    // expansion (and any tail call inside it) collapses on the existing trampoline, so a macro
+    // in tail position gets the SAME O(1) TCO as a special form. (A transformer is Exp->Exp;
+    // it must never evaluate inside itself.)
+    if (is_syntax(fn)) {
+      // FORM-RETURNING: macro-expand mode -> { expr, scope } (the transcribed FORM + its
+      // hygiene scope, with data-position gensyms already restored by the transformer), then
+      // evaluate it in THIS flat trampoline in TAIL position. No nested run, no onResolve
+      // fixup, so a syntax-rules macro in tail position has the SAME O(1) TCO as a special
+      // form. (A transformer is Exp->Exp; it must never evaluate inside itself.)
+      const expanded = fn.invoke(code, evalArgs, true) as { expr: SchemeValue; scope: Environment };
+      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope }), tail: true };
+    }
+
+    // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──
+    let expansion = fn.invoke(rest, evalArgs, false);
 
     // If macro returns a promise, yield it
     if (is_promise(expansion)) {
       expansion = yield expansion;
-    }
-
-    // Syntax returns quoted result, Macro requires evaluation of expansion
-    if (is_syntax(fn)) {
-      return expansion; // Syntax result is already quoted
     }
 
     // Regular macro - evaluate the expansion
