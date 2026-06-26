@@ -23,6 +23,7 @@ import invariant from "tiny-invariant";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import type { TaglessMethods } from "../tagless-final.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -169,3 +170,10 @@ export { EMPTY_PROVENANCE };
 // degrades to "blocked" rather than "exposed."
 // ============================================================================
 markInteropBoundary(AValue);
+
+// ── The global tagless-final algebra, merged onto AValue (declaration merging) ──────────────
+// tagless-final.ts declares the algebra ONCE; this merge gives every AValue (and subclass) the
+// optional `arrival/tagless-final/<op>` members, so each entity's override is type-checked
+// against the single declared signature and an entity simply omits the ops it cannot handle.
+// `equals` is additionally `abstract` on the class above (required — every value is a Setoid).
+export interface AValue extends TaglessMethods {}
