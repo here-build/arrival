@@ -1974,8 +1974,10 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const exprs = clause.cdr;
 
     // Check for else clause. Matched-clause body inherits cond's tail flag
-    // and is pass-through (tail-collapsible).
-    if (test instanceof ASymbol && symbol_name(test) === "else") {
+    // and is pass-through (tail-collapsible). `.literal()` (not symbol_name) so a
+    // HYGIENE-renamed `else` (#:else, when cond appears in a user syntax-rules template)
+    // is still recognized — auxiliary keywords match by their un-renamed literal name.
+    if (test instanceof ASymbol && test.literal() === "else") {
       return yield { call: evalBegin(exprs, ctx), tail: ctx.tail === true };
     }
 
@@ -1993,7 +1995,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // as `onResolve` (pass-through, same as the non-`=>` arms below).
       if (is_pair(exprs)) {
         const firstExpr = exprs.car;
-        if (firstExpr instanceof ASymbol && symbol_name(firstExpr) === "=>") {
+        if (firstExpr instanceof ASymbol && firstExpr.literal() === "=>") {
           const exprsCdr = exprs.cdr;
           invariant(is_pair(exprsCdr), "cond: missing procedure after =>");
           const procExpr = exprsCdr.car;
@@ -2052,7 +2054,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const exprs = clause.cdr;
 
     // Check for else clause — pass-through (tail-collapsible).
-    if (datums instanceof ASymbol && symbol_name(datums) === "else") {
+    if (datums instanceof ASymbol && datums.literal() === "else") {
       // R7RS §6.3 also allows `(else => proc)`: apply proc to the key in tail
       // position (mirrors cond's `=>`).
       const arrowProc = yield* evalCaseArrowProc(exprs, nonTailCtx);
@@ -2114,7 +2116,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* evalCaseArrowProc(exprs: SchemeValue, nonTailCtx: EvalContext): EvalGenerator {
   if (!is_pair(exprs)) return undefined;
   const first = exprs.car;
-  if (!(first instanceof ASymbol) || symbol_name(first) !== "=>") return undefined;
+  if (!(first instanceof ASymbol) || first.literal() !== "=>") return undefined;
   const exprsCdr = exprs.cdr;
   invariant(is_pair(exprsCdr), "case: missing procedure after =>");
   let proc = yield { call: evaluate(exprsCdr.car, nonTailCtx) };

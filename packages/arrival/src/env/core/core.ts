@@ -73,17 +73,26 @@ export default new EnvCapability("scheme/core", {
     // when it resolves to one of these — so `(define => lambda)` aliases the form and
     // lexical shadowing un-specials it (the dual of cxr; see values/Keyword.ts). The
     // genMacroWrapper define/lambda husks in stdlib.ts global_env are deleted in favor
-    // of these. if / begin join in the macro-cut pass — NOT only for first-class dispatch
-    // but because the HYGIENE engine resolves a renamed template identifier (`if` → `#:if`)
-    // by binding the gensym to the original name's ENV VALUE (syntax-rules.ts rename()).
-    // A name-dispatched special form has no env value → `#:if` is unbound → the §7.3 derived
-    // macros cannot expand. As keyword markers they resolve, so syntax-rules can host them.
-    // (let* / letrec / quote / quasiquote follow as the remaining primitives are keyworded.)
+    // of these. TWO reasons a kernel special form becomes a keyword: (1) first-class
+    // value-carried dispatch — `(define => lambda)` aliases the form, the dual of cxr; and
+    // (2) the HYGIENE engine resolves a renamed template identifier (`if` → `#:if`) by binding
+    // the gensym to the original name's ENV VALUE (syntax-rules.ts rename()) — a name-only
+    // special form has no env value, so a USER syntax-rules macro expanding to it could not
+    // resolve. cond/case/when/unless stay evaluator SPECIAL FORMS (evalCond/… — TCO-correct,
+    // unlike the nested-genRun syntax-rules path), now ALSO keywords so all control forms are
+    // uniformly first-class and reachable from macro templates. (let* / letrec / and / or
+    // follow as the remaining primitives are keyworded.)
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
     let: symbol.keyword`let: bind locals over a body`,
     if: symbol.keyword`if: conditional — evaluate the consequent or the alternative`,
     begin: symbol.keyword`begin: evaluate a sequence, yield the last`,
+    quote: symbol.keyword`quote: the datum, unevaluated`,
+    quasiquote: symbol.keyword`quasiquote: a template datum with unquote holes`,
+    cond: symbol.keyword`cond: first true test wins; its body (or => application) is the value`,
+    case: symbol.keyword`case: dispatch on a key via eqv? datum lists`,
+    when: symbol.keyword`when: evaluate the body when the test passes`,
+    unless: symbol.keyword`unless: evaluate the body when the test fails`,
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
       gensym,
