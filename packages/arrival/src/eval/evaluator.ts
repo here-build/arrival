@@ -2584,9 +2584,14 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   // carry a define-macro env binding (cond/when) — behave exactly as before. TRANSITIONAL:
   // collapses to pure value-first once every special form is a keyword marker.
   if (first instanceof ASymbol) {
-    const headName = symbol_name(first);
-    const resolved = ctx.env._lookupWithResolvers(headName);
-    const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[headName];
+    // Resolve via the RAW binding key (`first.__name__`) — the SAME key env_get uses — so a
+    // hygiene-renamed gensym head resolves identically. A gensym's __name__ is a JS symbol
+    // whose string DESCRIPTION (what symbol_name returns) differs from the symbol key the
+    // hygiene engine bound it under; looking up by the description missed, fell through to
+    // application, and tried to CALL the resolved Keyword. symbol_name (the string) stays the
+    // SPECIAL_FORMS fallback key for a non-keyworded head (special forms are string-keyed).
+    const resolved = ctx.env._lookupWithResolvers(first.__name__);
+    const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's
       // result. Mark tail so a tail call emerging from the special form's
