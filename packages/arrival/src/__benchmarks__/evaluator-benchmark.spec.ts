@@ -5,7 +5,8 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec as lipsExec, env as lipsEnv, parse } from "../stdlib";
+import { exec as lipsExec, env as lipsEnv } from "../stdlib";
+import { parse } from "../eval/generator-exec";
 import { nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

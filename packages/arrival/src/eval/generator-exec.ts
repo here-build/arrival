@@ -12,6 +12,7 @@
 import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
+import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
@@ -26,13 +27,13 @@ import type { SchemeValue } from "../values/types.js";
 installMacroGuard(is_macro);
 
 // Lazy import to avoid circular dependency during module initialization
-let _lips: typeof import("../stdlib.js") | null = null;
+let _stdlib: typeof import("../stdlib.js") | null = null;
 
-async function getLips() {
-  if (!_lips) {
-    _lips = await import("../stdlib.js");
+async function getStdlib() {
+  if (!_stdlib) {
+    _stdlib = await import("../stdlib.js");
   }
-  return _lips;
+  return _stdlib;
 }
 
 export interface ExecOptions {
@@ -172,10 +173,10 @@ export async function exec(
     irLineageSources,
   }: ExecOptions = {},
 ): Promise<SchemeValue[]> {
-  const lips = await getLips();
+  const stdlib = await getStdlib();
 
-  // Resolve environment - lips.env is the user_env (global_env.inherit("user-env"))
-  const actualEnv = env ?? lips.env;
+  // Resolve environment - stdlib.env is the user_env (global_env.inherit("user-env"))
+  const actualEnv = env ?? stdlib.env;
 
   // Self-initialize the runtime bootstrap (TS builtins + Scheme prelude) lazily, so
   // embedders never call initBridge() manually. If the bootstrap has already STARTED
@@ -191,7 +192,7 @@ export async function exec(
   // Parse if string, otherwise wrap single value in array
   let parsed: SchemeValue[];
   if (typeof code === "string") {
-    parsed = await lips.parse(code, actualEnv);
+    parsed = await readerParse(code);
   } else if (is_pair(code)) {
     // Single expression - evaluate directly
     parsed = [code];
@@ -290,9 +291,10 @@ export async function exec(
  * stamped onto every produced location, so frames built from these forms read as
  * `file:line` — used by `(require …)` to attribute a module's throws to its file.
  */
-export async function parse(code: string, env?: Environment, source?: string): Promise<SchemeValue[]> {
-  const lips = await getLips();
-  return lips.parse(code, env, source);
+export async function parse(code: string, _env?: Environment, source?: string): Promise<SchemeValue[]> {
+  // _env retained for API compat but inert: the reader no longer consults an env (the
+  // reader-extension lookup that used it was removed). Parsing is now a pure reader-leaf call.
+  return readerParse(code, source);
 }
 
 /**
@@ -303,8 +305,8 @@ export async function execExpr(
   expr: SchemeValue,
   { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, speculate, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
-  const lips = await getLips();
-  const actualEnv = env ?? lips.env;
+  const stdlib = await getStdlib();
+  const actualEnv = env ?? stdlib.env;
 
   // See exec() above: await bootstrap COMPLETION, not just the started-flag.
   if (!skipBootstrapWait) {

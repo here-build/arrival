@@ -14,7 +14,7 @@ import { eof } from "./values/primitives/EOF.js";
 import { AHalfBaked } from "./values/primitives/AHalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
 
-import { Parser } from "./reader/Parser.js";
+import { _parse } from "./reader/parse.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
   is_env,
@@ -224,30 +224,7 @@ specials.on(["remove", "append"], function () {
 // :: or macro assigned to symbol, this function is async because
 // :: it evaluates the code, from parser extensions, that may return a promise.
 // ----------------------------------------------------------------------
-async function* _parse(arg: SchemeValue, env?: Environment, source?: string) {
-  if (!env) {
-    env = user_env;
-  }
-  let parser;
-  if (arg instanceof Parser) {
-    parser = arg;
-  } else {
-    parser = new Parser({ env, source });
-    parser.parse(arg);
-  }
-  let prev;
-  while (true) {
-    const expr = await parser.read_object();
-    if (!parser.balanced()) {
-      parser.ballancing_error(expr, prev);
-    }
-    if (expr === eof) {
-      break;
-    }
-    prev = expr;
-    yield expr;
-  }
-}
+// _parse moved to reader/parse.ts (imported above); the reader is now a monolith-free leaf.
 
 // Re-export unpromise from utils/promises
 export { unpromise } from "./utils/promises.js";
@@ -1147,14 +1124,6 @@ for (const [i, cls] of Object.entries(available_class)) {
 }
 // -------------------------------------------------------------------------
 
-// unwrap async generator into Promise<Array>
-export const parse = async (arg: SchemeValue, env?: Environment, source?: string) => {
-  const result: SchemeValue[] = [];
-  for await (const item of _parse(arg, env, source)) {
-    result.push(item);
-  }
-  return result;
-};
 
 // Additional exports needed by Environment.ts
 export { eof } from "./values/primitives/EOF.js";

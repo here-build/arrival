@@ -23,22 +23,18 @@ import {
   is_symbol_extension,
   is_vector_literal,
 } from "../eval/guards.js";
-import { Environment } from "../Environment.js";
 import type { EOF } from "../values/primitives/EOF.js";
 import { eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
 import { Lexer } from "./Lexer.js";
 // These deps form an import cycle with the value/eval modules; ES6 live bindings
 // resolve it, since they're referenced only inside methods, not at module-eval time.
-import { call_function } from "../eval/call-function.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { unpromise } from "../stdlib.js";
-import { exec as generatorExec } from "../eval/evaluator.js";
+import { unpromise } from "../utils/promises.js";
 import { parse_argument } from "../utils/parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { Macro } from "../eval/Macro.js";
 import { APair } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import type { SchemeValue } from "../values/types.js";
@@ -81,7 +77,6 @@ export interface TokenMeta {
 }
 
 interface ParserOptions {
-  env?: Environment;
   meta?: boolean;
   formatter?: (token: TokenMeta) => TokenMeta;
   /** Source identifier (filename / module path) stamped onto every location this
@@ -98,7 +93,6 @@ export class Parser {
   public static readonly Unterminated = Unterminated;
 
   __lexer__!: Lexer;
-  __env__?: Environment;
   private readonly _formatter!: (token: TokenMeta) => TokenMeta;
   private readonly _meta!: boolean;
   private readonly _source?: string;
@@ -108,7 +102,7 @@ export class Parser {
   // a close must match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
   private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
-  constructor({ env, meta = false, formatter = defaultFormatter, source }: ParserOptions = {}) {
+  constructor({ meta = false, formatter = defaultFormatter, source }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
       value: formatter,
       configurable: true,
@@ -118,11 +112,6 @@ export class Parser {
       value: source,
       configurable: true,
       enumerable: false,
-    });
-    Object.defineProperty(this, "__env__", {
-      value: env,
-      configurable: true,
-      enumerable: true,
     });
     Object.defineProperty(this, "_meta", {
       value: meta,
@@ -155,10 +144,6 @@ export class Parser {
       configurable: true,
       enumerable: true,
     });
-  }
-
-  resolve(name: string) {
-    return this.__env__?.get(name, { throwError: false });
   }
 
   async peek() {
@@ -366,14 +351,6 @@ export class Parser {
     return token.match(/^;/) || (token.match(/^#\|/) && token.match(/\|#$/));
   }
 
-  async evaluate(code: SchemeValue): Promise<SchemeValue> {
-    // Runs a parse-time parser-extension through the generator evaluator. Errors
-    // surface as a rejected promise via the `await` — no error callback needed.
-    return (await generatorExec(code, {
-      env: this.__env__!,
-    })) as SchemeValue;
-  }
-
   // Public entry: reads one datum and resolves any R7RS datum labels (#n=/#n#), marking cycles so a
   // self-referential literal terminates instead of looping during later traversal.
   async read_object(): Promise<SchemeValue | EOF> {
@@ -498,32 +475,19 @@ export class Parser {
       const special = specials.get(token);
       const builtin = is_builtin(token);
       this.skip();
-      let expr: any, extension: any;
+      let expr: any;
       const is_symbol = is_symbol_extension(token);
       const was_close_paren = this.is_close(await this.peek());
       const object = is_symbol ? undefined : await this._read_object();
       if (object === eof) {
         throw new Unterminated("Expecting expression, eof found");
       }
-      if (!builtin) {
-        extension = this.__env__!.get(special.symbol);
-        if (typeof extension === "function") {
-          let args: any;
-          if (is_literal(token)) {
-            args = [object];
-          } else if (is_nil(object)) {
-            args = [];
-          } else if (is_pair(object)) {
-            args = object.to_array(false);
-          }
-          invariant(args || is_symbol, () => `Parse Error: Invalid parser extension invocation ${special.symbol}`);
-          return call_function(extension, is_symbol ? [] : args, {
-            env: this.__env__,
-            dynamic_env: this.__env__,
-            use_dynamic: false,
-          });
-        }
-      }
+      // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote prefixes, #(...),
+      // #u8(...)) — it expands into a list the interpreter evaluates later. LIPS user-registered reader
+      // macros (expanded by EVALUATING at parse time) were removed: nothing registered one, and that
+      // read-time evaluator call was the ONLY reason the reader imported the evaluator — the cycle that
+      // forced exec to dynamically import("stdlib") under the vestigial `lips` handle to break it.
+      invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
       if (is_literal(token)) {
         invariant(!was_close_paren, "Parse Error: expecting datum");
         expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object, nil));
@@ -532,20 +496,7 @@ export class Parser {
         expr = new APair(CONSTANT_CTX, special.symbol, object);
         if (loc) expr.setLocation(loc);
       }
-      // Built-in parser extensions just expand into lists like 'x ==> (quote x)
-      if (builtin) {
-        return expr;
-      }
-      invariant(extension instanceof Macro, () => `Parse Error: invalid parser extension: ${special.symbol}`);
-      const result = await this.evaluate(expr);
-      // Quote the macro's result: the parser's output is evaluated again by the
-      // interpreter, so a bare pair/symbol would be (re-)evaluated unintentionally.
-      if (is_pair(result) || result instanceof ASymbol) {
-        const quoted = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), result]) as APair;
-        if (loc) quoted.setLocation(loc);
-        return quoted;
-      }
-      return result;
+      return expr;
     }
     const ref = this.match_datum_ref(token);
     if (ref !== null) {
