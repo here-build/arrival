@@ -761,11 +761,12 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // PRESERVED (only reordered — coercion-soundness's "Pair · sort preserves every element's
   // box"), the container box DROPS, an empty list is nil. The container-preserving return
   // (list→list) is achieved structurally — the term returns its own shape. ES Array.sort is
-  // sync + STABLE, so a trailing runCtx (chargeAndDispatch threads one) is accepted + ignored.
+  // sync + STABLE; the runCtx symbol.sequence threads charges runCtx.heapMeter before materializing (Option A).
   ["arrival/tagless-final/sort"](
     comparator?: (a: unknown, b: unknown) => unknown,
-    _runCtx?: unknown,
+    runCtx?: RunContext,
   ): APair | ANil {
+    chargeHeap(runCtx, countPairElements(this));
     const out: unknown[] = [];
     let node: unknown = this;
     while (node && !(node instanceof ANil)) {

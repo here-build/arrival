@@ -175,11 +175,12 @@ export class AVector extends AValue {
   // predicate), into a new AVector. Element boxes are PRESERVED (only reordered, NO
   // unwrapForeign — this is NOT the cross-out map; mirrors the box-PRESERVING filter). The
   // source payload is untouched (slice copy), so a frozen literal is safe. ES Array.sort is
-  // sync + STABLE; a trailing runCtx (chargeAndDispatch threads one) is accepted + ignored.
+  // sync + STABLE; the runCtx symbol.sequence threads charges runCtx.heapMeter before materializing (Option A).
   ["arrival/tagless-final/sort"](
     comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
-    _runCtx?: unknown,
+    runCtx?: RunContext,
   ): AVector {
+    chargeHeap(runCtx, this.__vector__.length);
     const out = this.__vector__.slice();
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined));
     return new AVector(this.ctx, out);

@@ -46,7 +46,8 @@ describe("@here.build/arrival/srfi", () => {
   });
 
   it("allSrfi exposes the whole set", () => {
-    expect(allSrfi).toHaveLength(7);
+    expect(allSrfi).toHaveLength(8);
     expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-1");
+    expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-95");
   });
 });

@@ -292,21 +292,6 @@ export default new EnvCapability("scheme/fl-interop", {
       comparisonImpl(">="),
     ),
 
-    // sort — SRFI-95 `(sort seq comparator?)`, DISSOLVED onto the term protocol (like
-    // map/filter/reduce). The per-primitive semantics live ON the terms: APair → sorted
-    // LIST (boxes preserved, container box dropped), AVector → fresh sorted VECTOR, ANil →
-    // nil — container-preserving by each term returning its own shape. The DEFAULT order is
-    // the operand's own `arrival/tagless-final/lte` (deriveSortCompare on the term), NOT JS
-    // lexicographic: `(sort '(2 10))` is now (2 10), the lte-default bug-fix; sort is
-    // total-order-correct for every Ord-bearing type. A comparator is a SRFI-95 `less?`
-    // predicate, ASSUMED SYNC. Routed through chargeAndDispatch so it charges runCtx.heapMeter
-    // before materializing the full array (it allocates the whole spine), TOTALIC for a
-    // non-sequence receiver. The comparator is the single leading arg.
-    sort: symbol.sequence`sort: a sorted sequence (list→list, vector→vector); default order is the elements' own ≤`(
-      { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
-      (args, runCtx) => chargeAndDispatch("sort", args[0], [args[1]], runCtx),
-    ),
-
     length: symbol.native`length: universal element count — dispatches to each term's own arrival/tagless-final/length`(
       { input: [z.unknown()], output: [z.unknown()] },
       (receiver: unknown) => {
