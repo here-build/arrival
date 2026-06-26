@@ -20,7 +20,10 @@ import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
 import { is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
-import { is_false } from "../../eval/guards.js";
+import { is_false, is_promise } from "../../eval/guards.js";
+import { promise_all } from "../../utils/promises.js";
+import { AHalfBaked } from "./AHalfBaked.js";
+import type { SchemeValue } from "../types.js";
 import { ABytevector } from "./ABytevector.js";
 import { AString } from "./AString.js";
 import { AVector } from "./AVector.js";
@@ -30,6 +33,7 @@ import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { type APairLike } from "../types.js";
 import { ANil, nil, setPairConstructor } from "./ANil.js";
+import { chargeHeap } from "../../heap-budget.js";
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
   [CYCLES]?: { car?: string | APair; cdr?: string | APair };
@@ -684,20 +688,45 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // `String(x).match`); a fn passes through. Kept elements are re-consed shallow in order
   // via Pair.fromArray(_, false), so element boxes survive and the container box drops —
   // byte-identical to the overlay's prior asyncFLFilter-over-a-Pair VALUE semantics.
-  async ["arrival/tagless-final/filter"](
+  // Concurrent pred-fan (the threads "just run"); keep-rule IDENTICAL to the eager scheme filter
+  // (Scheme-truthy AND nil dropped). A RegExp arg adapts as the eager matcher does. When the run is
+  // SPECULATING (`runCtx.speculate`) and the fan holds promises, emit a lazy AHalfBaked collection
+  // instead of awaiting it: each slot resolves to the item it contributes ([] dropped, [x] kept), so
+  // the cardinality interval narrows and a monotone outer (`(>= (length …) k)`) collapses the instant
+  // lo reaches k with the rest of the fan still pending. Eager: promise_all (async) or a sync pass.
+  // Kept elements re-cons shallow via Pair.fromArray(_, false) — boxes survive, container box drops.
+  // (Absorbed from the stdlib `filter` builtin, which this term-dispatch now SUPERSEDES — shadowed-
+  // redundant, removed in the stdlib-cleanup pass; the term owns the algebra AND its speculation
+  // strategy, reading `runCtx.speculate` off the ctx `symbol.tagless` threads it.)
+  ["arrival/tagless-final/filter"](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-  ): Promise<APair | ANil> {
+    runCtx?: RunContext,
+  ): APair | ANil | AHalfBaked | Promise<APair | ANil> {
+    chargeHeap(runCtx, countPairElements(this));
     const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
-    const out: unknown[] = [];
+    const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node && !(node instanceof ANil)) {
       const p = node as APair;
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
-      const verdict = await pred(p.car);
-      if (!is_false(verdict) && !is_nil(verdict)) out.push(p.car);
+      elements.push(p.car);
       node = p.cdr;
     }
-    return APair.fromArray(this.ctx, out, false) as APair | ANil;
+    const verdicts = elements.map((x) => pred(x));
+    const kept = (verdict: unknown): boolean => !is_false(verdict) && !is_nil(verdict);
+    if (runCtx?.speculate && verdicts.some(is_promise)) {
+      const slots = verdicts.map((r, i): Promise<SchemeValue[]> => {
+        const contribute = (verdict: unknown): SchemeValue[] => (kept(verdict) ? [elements[i]] : []);
+        return is_promise(r) ? (r as Promise<unknown>).then(contribute) : Promise.resolve(contribute(r));
+      });
+      return AHalfBaked.collection(this.ctx, slots, () => [0, 1]);
+    }
+    if (verdicts.some(is_promise)) {
+      return (promise_all(verdicts) as Promise<unknown[]>).then(
+        (results) => APair.fromArray(this.ctx, elements.filter((_, i) => kept(results[i])), false) as APair | ANil,
+      );
+    }
+    return APair.fromArray(this.ctx, elements.filter((_, i) => kept(verdicts[i])), false) as APair | ANil;
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
@@ -710,7 +739,9 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   async ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
+    runCtx?: RunContext,
   ): Promise<Acc> {
+    chargeHeap(runCtx, countPairElements(this));
     let acc = initial;
     let node: unknown = this;
     while (node && !(node instanceof ANil)) {
@@ -910,3 +941,17 @@ setPairConstructor(APair);
 // ref-tracking helpers in particular would leak host-side identity comparisons.
 // This marker stops the prototype-chain walk at Pair before any helper is reached.
 markInteropBoundary(APair);
+
+/** Element count of a pair's cdr-spine (honoring the empty-pair sentinel) — the heap-charge basis
+ *  for the materializing tagless terms. Lives module-side: a plain count, no provenance (unlike the
+ *  `arrival/tagless-final/length` term method, which carries the elements' grounding). */
+function countPairElements(head: APair): number {
+  let n = 0;
+  let node: unknown = head;
+  while (node instanceof APair) {
+    if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+    n++;
+    node = node.cdr;
+  }
+  return n;
+}

@@ -224,7 +224,7 @@ export async function exec(
   // strict + the heap meter as scaffolding — `exec` still installs the meter on the env
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget });
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate });
   const priorMeter = actualEnv.__heapMeter__;
   // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
   // `operand.ctx.heapMeter` reads the live meter with no behavior change.

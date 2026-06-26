@@ -218,6 +218,7 @@ export const SRFI1_SCM = `
 export default new EnvCapability("scheme/srfi-1", {
   prelude: SRFI1_SCM,
   symbols: {
+    filter: symbol.tagless.filter`keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`,
     reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
   },
 });

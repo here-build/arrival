@@ -17,6 +17,7 @@
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { chargeHeap } from "../../heap-budget.js";
 import { is_false, is_nil } from "../../eval/guards.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
@@ -139,7 +140,9 @@ export class AVector extends AValue {
   // (`!is_nil`), IDENTICAL to APair's TF filter. `pred` is awaited per element.
   async ["arrival/tagless-final/filter"](
     arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
+    runCtx?: RunContext,
   ): Promise<AVector> {
+    chargeHeap(runCtx, this.__vector__.length);
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
@@ -157,7 +160,9 @@ export class AVector extends AValue {
   async ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
+    runCtx?: RunContext,
   ): Promise<Acc> {
+    chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
     for (const v of this.__vector__) acc = await fn(v, acc);
     return acc;

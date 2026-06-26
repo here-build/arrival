@@ -39,13 +39,18 @@ export interface RunContext {
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (the default — only sandbox/agent runs opt in). */
   readonly heapMeter: HeapMeter | undefined;
+  /** Tier-2 speculative evaluation: fan-out ops (filter/map) may emit a lazy AHalfBaked
+   *  collection instead of awaiting the whole promise fan, so a monotone outer can early-collapse.
+   *  (Was the `_speculate` apply-boundary holder; read off `operand.ctx`/`runCtx` instead.) */
+  readonly speculate: boolean;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
-export function makeRunContext(opts: { strict?: boolean; heapBudget?: number } = {}): RunContext {
+export function makeRunContext(opts: { strict?: boolean; heapBudget?: number; speculate?: boolean } = {}): RunContext {
   return {
     strict: opts.strict ?? false,
     heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
+    speculate: opts.speculate ?? false,
   };
 }
 
@@ -59,4 +64,5 @@ export function makeRunContext(opts: { strict?: boolean; heapBudget?: number } =
 export const CONSTANT_CTX: RunContext = Object.freeze({
   strict: false,
   heapMeter: undefined,
+  speculate: false,
 });

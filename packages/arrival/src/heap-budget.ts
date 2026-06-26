@@ -27,6 +27,8 @@
 // concurrent runs (each run's builtins resolve their own env's meter), with no module-level ambient state.
 
 import type { Environment } from "./Environment.js";
+import type { RunContext } from "./values/primitives/RunContext.js";
+import { ArrivalError } from "./ArrivalError.js";
 
 /** A run's cumulative allocation meter. `used` counts elements materialized through `to_array` OR
  *  the fl-interop sequence-op dispatch (the two collection-op chokepoints); once it passes `max` the
@@ -63,4 +65,16 @@ export function heapBudgetMessage(max: number): string {
     `heap budget exceeded (${max} cells) — a run materialized more list cells than its allocation ` +
     `bound allows (likely an unbounded-growth loop, e.g. (append acc x) re-copying a growing list).`
   );
+}
+
+/** Charge the run's allocation meter by `count` elements and contain the run if it passes `max`.
+ *  Option A: the materializing tagless terms (APair/AVector map/filter/reduce/sort) charge their
+ *  OWN heap through the runCtx `symbol.tagless` threads them — the primitive owns its algebra AND
+ *  its cost. A meter-less run (no heapBudget) is a no-op. (Was `chargeSequenceHeap` at the env-layer
+ *  dispatch in fl-interop; dissolved onto the terms.) */
+export function chargeHeap(runCtx: RunContext | undefined, count: number): void {
+  const meter = runCtx?.heapMeter;
+  if (meter === undefined) return;
+  meter.used += count;
+  if (meter.used > meter.max) throw new ArrivalError(heapBudgetMessage(meter.max), []);
 }

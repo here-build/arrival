@@ -240,17 +240,14 @@ function chargeAndDispatch(
 
 export default new EnvCapability("scheme/fl-interop", {
   symbols: {
-    // map/filter/reduce — the inference-plane sequence ops, DISSOLVED onto the term protocol.
+    // map — the inference-plane sequence op (single-list dispatch + multi-list zip). filter/reduce/
+    // sort/length DISSOLVED to the spec packs (srfi-1 / srfi-95 / lists); the term protocol owns them.
     // The per-primitive semantics live ON the terms (APair/AVector eager + box-discipline, ANil
     // empty); the binding is a thin ctx-aware program (chargeAndDispatch) that charges
     // runCtx.heapMeter and dispatches, TOTALIC for a non-sequence receiver. The old null/#f→nil
     // tolerance is DROPPED: mapping a non-sequence is a type error, not an empty result — only '()
     // is empty (via ANil). The box discipline (Pair preserves boxes, Vector strips — the DR4
     // box-strip), the keep-rule, and the element-first fold all live on the terms.
-    filter: symbol.sequence`filter: keep elements matching a pred/regex — term-dispatch, totalic`(
-      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
-      (args, runCtx) => chargeAndDispatch("filter", args[1], [args[0]], runCtx),
-    ),
     map: symbol.sequence`map: fn over one list (term-dispatch) or zip over several`(
       { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
       (args, runCtx) => {
@@ -262,10 +259,6 @@ export default new EnvCapability("scheme/fl-interop", {
         captureBuiltins();
         return builtinMap!(fn, ...lists);
       },
-    ),
-    reduce: symbol.sequence`reduce: left fold in scheme convention fn(element, acc) — term-dispatch`(
-      { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.unknown()] },
-      (args, runCtx) => chargeAndDispatch("reduce", args[2], [args[0], args[1]], runCtx),
     ),
 
     // ── Nil-tolerant comparisons (plane-local) ──────────────────────────────────
