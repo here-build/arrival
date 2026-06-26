@@ -6,7 +6,7 @@
  * `SchemeBytevector` as well as raw binary (`Uint8Array`/`ArrayBuffer`/`DataView`/
  * Node `Buffer`) that legitimately flows unboxed through the membrane from FFI.
  * The mutating ops (`bytevector-u8-set!` / `bytevector-copy!`) are intentionally
- * omitted under the purity invariant and doored in bootstrap. Bodies are
+ * omitted under the purity invariant and doored in this pack. Bodies are
  * reproduced verbatim from `bridge.ts`; the only change is sourcing shared
  * helpers via `../op-helpers.js`.
  *
@@ -94,8 +94,13 @@ export default new EnvCapability("scheme/bytevectors", {
       },
     ),
 
-    // bytevector-u8-set! / bytevector-copy! — OMITTED by the purity invariant
-    // (frozen entities); doored in core.ts. Non-mutating bytevector-copy stays.
+    // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────
+    // A bytevector is a frozen entity; an in-place write would falsify the
+    // construction-site provenance it carries. Doored here (errors-as-doors),
+    // co-located with the pack that owns the type — dissolved from the deleted
+    // core.ts manifesto. The non-mutating bytevector-copy below stays.
+    "bytevector-u8-set!": symbol.notImplemented`bytevector-u8-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy / a fresh bytevector)`,
+    "bytevector-copy!": symbol.notImplemented`bytevector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy returns a fresh bytevector)`,
 
     "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
       { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },

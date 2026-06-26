@@ -4,8 +4,9 @@
 // exception system: *current-exception-handlers*, raise, raise-continuable,
 // with-exception-handler, error, and the guard derived syntax.
 //
-// These are the OPPOSITE face of the purity doors in core (`core.ts`): the doors
-// name what R7RS arrival omits (dynamics + mutators) for provenance soundness;
+// These are the OPPOSITE face of the purity doors (now co-located in the packs that
+// own them — r7rs/control for dynamics, the type packs for mutators): those doors
+// name what R7RS arrival omits for provenance soundness;
 // this pack supplies the exception forms it keeps. It depends on the host try /
 // catch / finally + %raise primitives, on which the exception forms are built.
 //

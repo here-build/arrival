@@ -5,7 +5,7 @@
 // (it replaced the legacy hand-concatenated prelude string). Each pack's prelude +
 // symbols + resolvers become the LIVE source of the env's scheme surface.
 //
-// `scheme/core` is the precedence floor (constants, purity doors, syntax-binding
+// `scheme/core` is the precedence floor (constants, syntax-binding
 // macros); everything else expands against it. The base preludes are verified
 // mutually order-independent (no pack expands another's macro), so the C3
 // application order is immaterial; explicit dep edges become necessary only once

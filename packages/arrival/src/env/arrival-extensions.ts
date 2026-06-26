@@ -9,7 +9,7 @@
 //   • aliases (string-join / string-split) · symbol-append
 //   • arrival safe head accessors (first? / first-or) + a standalone SRFI-1 remove
 //
-// The truly-irreducible core (essential constants, the purity doors, the
+// The truly-irreducible core (essential constants, the
 // syntax-binding macros, the --> / .. interop macros and their helpers) stays
 // inline in core (`core.ts`) because the later packs expand against it at load time.
 //

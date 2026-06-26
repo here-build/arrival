@@ -4,8 +4,10 @@
 // pure evaluation, so value mutation (set-car!/vector-set!/…) and the dynamics
 // (call/cc/dynamic-wind/parameterize/delay/force) are omitted by design — they
 // would falsify the lineage every value carries. The capability door surface
-// throws this when an omitted verb is reached; the omission ledger lives in
-// env/r7rs/_unimplemented.ts.
+// throws this when an omitted verb is reached; each omission lives as a
+// `symbol.notImplemented` door INSIDE the pack that owns that part of the spec
+// (value-mutators with their type packs; control/dynamics/laziness in
+// env/r7rs/control; the §6.13/§6.14 host interface in env/r7rs/host).
 
 import { CLASS } from "./well-known-symbols.js";
 import { ArrivalError } from "./ArrivalError.js";

@@ -1,9 +1,8 @@
 // @here.build/arrival/core — the irreducible scheme core pack.
 //
 // The base-most scheme defs that every other pack expands against: the essential
-// constants, the PURITY DOORS (the mutators + dynamics arrival omits by design,
-// each an errors-as-door naming the omission + the supported alternative), the
-// syntax-binding macros (let-syntax / letrec-syntax / define-syntax), and the
+// constants, the syntax-binding macros (let-syntax / letrec-syntax / define-syntax),
+// and the
 // `single` macro helper. Pure scheme, zero external deps — the precedence floor
 // of the base stdlib, so every other base pack (polyglot / r7rs / srfi / …)
 // depends on it.
@@ -18,7 +17,7 @@ import { symbol } from "../../common/symbol.js";
 import { gensym } from "../../reader/values-repr.js";
 import { typecheck } from "../../utils/typecheck.js";
 
-/** The irreducible scheme core pack: constants, purity doors, syntax-binding macros.
+/** The irreducible scheme core pack: constants, syntax-binding macros.
  *  Prelude-only module-singleton capability; the precedence floor every base pack deps. */
 export default new EnvCapability("scheme/core", {
   prelude: `

@@ -151,6 +151,17 @@ export default new EnvCapability("scheme/lists", {
         withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr)),
     ),
 
+    // ── PURITY DOORS — pair/list mutators OMITTED by design (R7RS §6.4) ──────────
+    // arrival values are frozen: a writing method would falsify the construction-site
+    // provenance every value carries. These doors (errors-as-doors) teach the why and
+    // route to the fresh-allocation alternative — dissolved here from the deleted
+    // core.ts purity-door manifesto, co-located with the pairs-and-lists pack that owns
+    // the type. (`list-set!` above stays a working spine-mutator — pre-existing, not in
+    // the doored set; flagged for review.)
+    "set-car!": symbol.notImplemented`set-car!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
+    "set-cdr!": symbol.notImplemented`set-cdr!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
+    "append!": symbol.notImplemented`append!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (append, which builds a fresh list)`,
+
     // R7RS 6.4 — length is the speculation-marked impl declared at module scope above
     // (the inline arrow form cannot carry the [SPECULATE] symbol the dispatch choke reads).
     "length": symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
@@ -375,7 +386,7 @@ export default new EnvCapability("scheme/lists", {
         // splices the CLONES together via Pair.append. Because every cell touched
         // is a clone, no caller-visible value is mutated — the result is the only
         // new thing. (The destructive `append!` builtin this used to delegate to is
-        // OMITTED by the purity invariant — doored in core.ts. Its splice
+        // OMITTED by the purity invariant — doored above. Its splice
         // logic is inlined here, operating on clones, so it stays pure.)
         const is_list = isProperList;
         const cloned = items.map((item) => (is_pair(item) ? item.clone() : item));

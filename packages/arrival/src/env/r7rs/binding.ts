@@ -4,6 +4,11 @@
 // multiple-value binding forms let-values and let*-values, expanded as macros
 // over call-with-values.
 //
+// BACKLOG (not an omission-by-design, so NOT a door): R7RS §5.3.3 `define-values`
+// is derivable over call-with-values (which lives here) but is not yet added — a
+// genuine TODO, not a purity omission. When added it belongs in this pack. (Moved
+// here from the deleted `_unimplemented.ts` R7RS_TODO ledger.)
+//
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";

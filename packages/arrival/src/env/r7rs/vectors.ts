@@ -4,7 +4,7 @@
  * \`SchemeVector\` so the container carries provenance and hosts algebra
  * instances. The mutating members of the family (\`vector-set!\`,
  * \`vector-fill!\`, \`vector-copy!\`) are OMITTED by the purity invariant (frozen
- * entities, doored in core.ts); only the non-mutating constructors,
+ * entities, doored in this pack); only the non-mutating constructors,
  * accessors, and the higher-order \`vector-map\` / \`vector-for-each\` (which await
  * async membrane callbacks before settling) live here.
  *
@@ -106,8 +106,14 @@ export default new EnvCapability("scheme/vectors", {
       },
     ),
 
-    // vector-set! / vector-fill! / vector-copy! — OMITTED by the purity invariant
-    // (frozen entities); doored in core.ts. Non-mutating vector-copy stays.
+    // ── PURITY DOORS — vector mutators OMITTED by design (R7RS §6.8) ─────────────
+    // A vector is a frozen entity; an in-place write would falsify the construction-
+    // site provenance it carries. Doored here (errors-as-doors), co-located with the
+    // pack that owns the vector type — dissolved from the deleted core.ts manifesto.
+    // The non-mutating vector-copy / vector-map below construct fresh vectors instead.
+    "vector-set!": symbol.notImplemented`vector-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (vector-map / vector-copy / a fresh vector)`,
+    "vector-fill!": symbol.notImplemented`vector-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-vector with the fill / vector-map)`,
+    "vector-copy!": symbol.notImplemented`vector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (vector-copy returns a fresh vector)`,
 
     "vector->list": symbol.native`vector->list: a list of vec's elements in [start, end)`(
       { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.unknown()] },
@@ -171,8 +177,8 @@ export default new EnvCapability("scheme/vectors", {
       },
     ),
 
-    // vector-copy! — OMITTED by the purity invariant (mutates its destination);
-    // doored in core.ts. The non-mutating \`vector-copy\` (above) stays.
+    // (vector-set! / vector-fill! / vector-copy! are doored above, grouped with the
+    // other vector mutators; the non-mutating vector-copy above returns a fresh copy.)
 
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
       { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.unknown()), output: [z.svector] },

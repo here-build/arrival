@@ -2486,7 +2486,7 @@ const SPECIAL_FORMS: Record<string, (rest: SchemeValue, ctx: EvalContext) => Eva
   unless: evalUnless,
   do: evalDo,
   while: evalWhile,
-  // delay / force — OMITTED by the purity invariant; doored in core.ts
+  // delay / force — OMITTED by the purity invariant; doored in r7rs/control
   // (removed from the special-form table so env lookup reaches the door).
   // Error handling
   // NOTE: `raise` and `error` are deliberately NOT special forms. They are
@@ -2495,7 +2495,7 @@ const SPECIAL_FORMS: Record<string, (rest: SchemeValue, ctx: EvalContext) => Eva
   // lookup, so shadowing them here made the entire exception tower inert
   // (with-exception-handler / guard / raise-continuable never saw the value).
   try: evalTry,
-  // parameterize — OMITTED by the purity invariant; doored in core.ts.
+  // parameterize — OMITTED by the purity invariant; doored in r7rs/control.
 };
 
 /**

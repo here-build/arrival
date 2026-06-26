@@ -13,16 +13,24 @@
 // evalWhen/evalUnless), so guard's expansion to `(cond …)` resolves to the kernel
 // handler with no pack dependency.
 //
-// `_unimplemented.ts` is a pure manifest of the R7RS symbols arrival omits or
-// defers; it ships no capability and is NOT part of allR7rs / BASE_PACKS.
+// R7RS OMISSIONS do NOT live aside in a central manifest — each is a real
+// `symbol.notImplemented` errors-as-door INSIDE the pack that owns that part of
+// the spec: the value-mutators with their type packs (r7rs/strings, r7rs/vectors,
+// r7rs/lists, r7rs/bytevectors); the §6.10/§4.2.5/§4.2.6 control + dynamics +
+// laziness omissions in `control.ts`; and the §6.13/§6.14 host-interface omissions
+// in `host.ts`. (The former `_unimplemented.ts` manifest is dissolved into these.)
 
 import binding from "./binding.js";
 import exceptions from "./exceptions.js";
 import lists from "./lists.js";
+import control from "./control.js";
+import host from "./host.js";
 
 export { default as binding } from "./binding.js";
 export { default as exceptions } from "./exceptions.js";
 export { default as lists } from "./lists.js";
+export { default as control } from "./control.js";
+export { default as host } from "./host.js";
 
 /** The whole R7RS derived-syntax set — assemble all, or `.filter()` a subset. */
-export const allR7rs = [binding, exceptions, lists] as const;
+export const allR7rs = [binding, exceptions, lists, control, host] as const;

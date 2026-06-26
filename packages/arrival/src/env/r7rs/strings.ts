@@ -147,8 +147,12 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
-    // string-set! / string-fill! — OMITTED by the purity invariant (frozen
-    // entities); doored in core.ts. See plan-2026-06-11-purity-pass.
+    // ── PURITY DOORS — string mutators OMITTED by design (R7RS §6.7) ─────────────
+    // A string is a frozen entity; an in-place write would falsify the construction-
+    // site provenance it carries. Doored here (errors-as-doors), co-located with the
+    // pack that owns the string type — dissolved from the deleted core.ts manifesto.
+    "string-set!": symbol.notImplemented`string-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (string-append / substring / a fresh string)`,
+    "string-fill!": symbol.notImplemented`string-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-string with the fill)`,
 
     // String comparison
     "string=?": symbol.native`string=?: typed equivalence over strings`(
@@ -320,8 +324,9 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
-    // string-copy! — OMITTED by the purity invariant (mutates its destination);
-    // doored in core.ts. The non-mutating `string-copy` stays.
+    // string-copy! — the mutating sibling of string-copy above; OMITTED by design
+    // (mutates its destination), doored here. The non-mutating string-copy stays.
+    "string-copy!": symbol.notImplemented`string-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (string-copy returns a fresh string)`,
 
     // Case conversion for strings — case is a presentation transform, not a
     // new origin; inherit the source's lineage so downstream `define` of the
