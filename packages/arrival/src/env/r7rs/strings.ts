@@ -45,7 +45,7 @@ import { typecheck } from "../../utils/typecheck.js";
 import { is_pair, is_nil } from "../../eval/guards.js";
 import { isCircularList } from "../../values/primitives/APair.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { currentRunEnv, SchemeError } from "../../eval/evaluator.js";
+import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
 import { AInexact } from "../../values/numbers.js";
 import {
   complex_bare_re,
@@ -90,7 +90,7 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
         const car = node.car;
         result.push(car);
         if (meter !== undefined && ++meter.used > meter.max) {
-          throw new SchemeError(heapBudgetMessage(meter.max), []);
+          throw new ArrivalError(heapBudgetMessage(meter.max), []);
         }
         node = node.cdr;
       } else {

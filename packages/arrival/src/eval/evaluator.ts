@@ -27,6 +27,8 @@ import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
+import { ArrivalError } from "../ArrivalError.js";
+export { ArrivalError };
 import {
   is_callable,
   is_false,
@@ -39,7 +41,6 @@ import {
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { AJSFunction } from "../values/primitives/js-wrappers.js";
-import { ArrivalError } from "../ArrivalError.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
@@ -61,80 +62,7 @@ export interface StackFrame {
   location?: SourceLocation;
 }
 
-/** ArrivalError carrying the Scheme-level evaluation stack (host JS frames are useless here). */
-export class SchemeError extends ArrivalError {
-  public readonly name = "SchemeError";
 
-  constructor(
-    message: string,
-    public readonly schemeStack: StackFrame[],
-    public readonly cause?: Error,
-  ) {
-    super(message);
-  }
-
-  toString(): string {
-    let result = `${this.name}: ${this.message}`;
-
-    if (this.schemeStack.length > 0) {
-      result += "\n\nScheme Stack Trace:";
-      for (const [i, frame] of this.schemeStack.entries()) {
-        const codeStr = formatCode(frame.code);
-        const env = frame.env_name ? ` [${frame.env_name}]` : "";
-        const proc = frame.procedure ? ` in ${frame.procedure}` : "";
-        // Include location if available (from frame or from code's metadata)
-        const loc = frame.location ?? getLocation(frame.code);
-        const locStr = loc ? ` at ${formatLocation(loc)}` : "";
-        result += `\n  ${i + 1}. ${codeStr}${locStr}${proc}${env}`;
-      }
-    }
-
-    return result;
-  }
-}
-
-function getLocation(code: SchemeValue): SourceLocation | undefined {
-  if (code && typeof code === "object" && LOCATION in code) {
-    return code[LOCATION] as SourceLocation;
-  }
-  return undefined;
-}
-
-/** Format Scheme code for display in stack traces — truncates lists at 5 elements / `maxLen` chars. */
-function formatCode(code: SchemeValue, maxLen = 60): string {
-  if (code === null || code === undefined) return "null";
-  // `is_nil` not `=== nil`: after the AValue refactor, `nil.withProvenance(p)` mints
-  // fresh Nil clones (types.ts) — reference-equality misses them and a provenance-
-  // bearing list-terminator would format as "[object Object]" in stack traces.
-  // Tier-1 fix context: 5f7f9e46a.
-  if (is_nil(code)) return "()";
-  if (code instanceof ASymbol) return symbol_name(code);
-  if (typeof code === "string") return JSON.stringify(code);
-  if (typeof code === "number" || typeof code === "bigint") return String(code);
-  if (typeof code === "boolean") return code ? "#t" : "#f";
-
-  if (is_pair(code)) {
-    // Format list/pair
-    const parts: string[] = [];
-    let node: SchemeValue = code;
-    let count = 0;
-    while (is_pair(node) && count < 5) {
-      parts.push(formatCode(node.car, 20));
-      node = node.cdr;
-      count++;
-    }
-    if (is_pair(node)) {
-      parts.push("...");
-    } else if (!is_nil(node)) {
-      parts.push(".");
-      parts.push(formatCode(node, 20));
-    }
-    const result = `(${parts.join(" ")})`;
-    return result.length > maxLen ? `${result.slice(0, maxLen - 3)}...` : result;
-  }
-
-  return String(code).slice(0, maxLen);
-}
 
 // ============================================================================
 // Types
@@ -289,7 +217,7 @@ export interface RunOptions {
   /**
    * Wall-clock execution budget in milliseconds. When set, the trampoline
    * starts a deadline at `performance.now() + budgetMs` and throws a
-   * `SchemeError(/budget/)` once the deadline passes — checked at the SAME
+   * `ArrivalError(/budget/)` once the deadline passes — checked at the SAME
    * iteration boundary as the abort signal (the 1000-iter / 5ms TICK
    * cadence), so it costs nothing on the hot path and bounds
    * `(let loop () (loop))` to within one cadence unit.
@@ -769,7 +697,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
   // budget analogue of the pre-aborted-signal fast path above.
   const deadline = budgetMs === undefined ? undefined : performance.now() + budgetMs;
   if (deadline !== undefined && budgetMs! <= 0) {
-    throw new SchemeError(`execution budget exceeded (${budgetMs}ms)`, []);
+    throw new ArrivalError(`execution budget exceeded (${budgetMs}ms)`, []);
   }
 
   // Stack of generators - this is the key to flat trampolining
@@ -783,9 +711,9 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
   let valueToSend: unknown = undefined;
 
   // Fire onReject up the call stack so any tap subscribers see the error,
-  // then build the wrapped SchemeError to throw out of run().
+  // then build the wrapped ArrivalError to throw out of run().
   const failAndWrap = (error: unknown): never => {
-    // Snapshot stack frames BEFORE popping so SchemeError carries the trace.
+    // Snapshot stack frames BEFORE popping so ArrivalError carries the trace.
     const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     while (callStack.length > 0) {
       const c = callStack.pop();
@@ -797,10 +725,10 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         // Swallow tap exceptions — they must not mask the real error.
       }
     }
-    if (error instanceof SchemeError) throw error;
+    if (error instanceof ArrivalError) throw error;
     throw error instanceof Error
-      ? new SchemeError(error.message, frames, error)
-      : new SchemeError(String(error), frames, undefined);
+      ? new ArrivalError(error.message, frames, error)
+      : new ArrivalError(String(error), frames, undefined);
   };
 
   try {
@@ -979,13 +907,13 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           }
           // Budget check rides the SAME cadence as the abort check — see the
           // WHY-HERE note above. `now` is reused for the yield-timer reset so
-          // we read the clock once. A SchemeError (not DOMException) because a
+          // we read the clock once. A ArrivalError (not DOMException) because a
           // budget overrun is OUR policy, not a Web-standard cancellation, and
           // its `/budget/` message is what `exec(code, { budgetMs })` callers
           // (and the sandbox-escape suite) match on.
           const now = performance.now();
           if (deadline !== undefined && now > deadline) {
-            throw new SchemeError(
+            throw new ArrivalError(
               `execution budget exceeded (${budgetMs}ms)`,
               frameStack.filter((f): f is StackFrame => f !== undefined),
             );
@@ -1004,13 +932,13 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
     return valueToSend as T;
   } catch (error) {
     // Final catch - ensure all errors have stack traces
-    if (error instanceof SchemeError) {
+    if (error instanceof ArrivalError) {
       throw error;
     }
     const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     throw error instanceof Error
-      ? new SchemeError(error.message, frames, error)
-      : new SchemeError(String(error), frames, undefined);
+      ? new ArrivalError(error.message, frames, error)
+      : new ArrivalError(String(error), frames, undefined);
   }
 }
 
@@ -2385,11 +2313,11 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // Create catch environment with error bound
       const catchEnv = ctx.env.inherit("catch");
 
-      // Bind the error - unwrap SchemeError to get the original raised value.
+      // Bind the error - unwrap ArrivalError to get the original raised value.
       let errorValue: SchemeValue =
-        caughtError instanceof SchemeError && caughtError.cause ? caughtError.cause : caughtError;
+        caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
       // X3 (conformance + security): a value that reaches here as a RAW host
-      // `Error` (a JS TypeError from a primitive, the wrapping SchemeError, etc.)
+      // `Error` (a JS TypeError from a primitive, the wrapping ArrivalError, etc.)
       // would (a) make `error-object?` return #f — non-conformant per §6.11 — and
       // (b) leak host file paths, since `.stack`/`.fileName` are OWN properties on
       // V8 Errors and the membrane's own-property fast path hands them across.

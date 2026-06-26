@@ -166,7 +166,7 @@ describe("G5 confluence guard — purity doors stay closed", () => {
   it("end-to-end: every door verb THROWS through exec (the real %purity-door route)", async () => {
     await initBridge();
     // One representative door per family + a spot-check across the list. The macro
-    // expands to (%purity-door …) → PurityError, surfaced as a SchemeError whose
+    // expands to (%purity-door …) → PurityError, surfaced as a ArrivalError whose
     // message names the verb verbatim (cause is the PurityError).
     const probes: Record<string, string> = {
       "set-car!": `(set-car! (list 1 2) 9)`,

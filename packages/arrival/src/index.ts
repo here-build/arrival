@@ -124,7 +124,7 @@ export {
 export {
   evaluate as evaluateGenerator,
   exec as execGenerator,
-  SchemeError,
+  ArrivalError,
   SchemePromise,
   is_scheme_promise,
   type EvalContext,

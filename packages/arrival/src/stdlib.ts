@@ -70,7 +70,7 @@ import {
 } from "./membrane.js";
 import { AJSObject } from "./values/primitives/js-wrappers.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
-import { type EvalContext, currentRunEnv, isSpeculating, SchemeError } from "./eval/evaluator.js";
+import { type EvalContext, currentRunEnv, isSpeculating, ArrivalError } from "./eval/evaluator.js";
 
 
 // Type definitions for dynamic Scheme values
@@ -299,7 +299,7 @@ function to_array(name: string, deep = false): SchemeFunction {
         }
         result.push(car);
         if (meter !== undefined && ++meter.used > meter.max) {
-          throw new SchemeError(heapBudgetMessage(meter.max), []);
+          throw new ArrivalError(heapBudgetMessage(meter.max), []);
         }
         node = node.cdr;
       } else {

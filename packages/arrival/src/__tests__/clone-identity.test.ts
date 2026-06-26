@@ -349,9 +349,8 @@ describe("META — provenance clones break identity-equality systematically", ()
       "fantasy-land-lips.ts:120 — chainPair base",
       "sandbox-env.ts:123 — '@' accessor",
       "sandbox-env.ts:163 — '@?' accessor",
-      "evaluator.ts:113   — formatCode debug helper (NOT covered above; cosmetic only)",
     ];
-    expect(sites.length).toBe(15);
+    expect(sites.length).toBe(14);
     // Each entry is the file:line of an `=== nil` site that should be
     // migrated to `is_nil(...)`. The single FIXED site (guards.ts:104) is
     // the model — match its instanceof check.

@@ -11,7 +11,7 @@
 
 import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
-import run, { evaluate, SchemeError, type EvalTap } from "./evaluator.js";
+import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
@@ -55,7 +55,7 @@ export interface ExecOptions {
   /**
    * Wall-clock execution budget in milliseconds. Unlike `signal` (which needs
    * an external controller to fire), this is an INTERNAL bound: the trampoline
-   * throws a `SchemeError(/budget/)` once `budgetMs` of wall-clock elapses,
+   * throws a `ArrivalError(/budget/)` once `budgetMs` of wall-clock elapses,
    * checked at the same iteration boundary that yields to the event loop. This
    * is the bound sandbox / agent code needs so `(let loop () (loop))` can't hang
    * the host. Composable with `signal` — whichever fires first wins.
@@ -238,9 +238,9 @@ export async function exec(
       const remaining =
         budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
       // Preserve the audit-#42 wrapOperator contract (ported from the removed
-      // stdlib.ts `exec_with_stacktrace`): run() wraps every non-SchemeError —
+      // stdlib.ts `exec_with_stacktrace`): run() wraps every non-ArrivalError —
       // including the TypeError wrapOperator throws to name operator + arg types —
-      // in a SchemeError, masking both the TypeError class and its membrane cause.
+      // in a ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
       try {
@@ -262,7 +262,7 @@ export async function exec(
           { signal, budgetMs: remaining },
         );
       } catch (e) {
-        if (e instanceof SchemeError && e.cause instanceof TypeError) throw e.cause;
+        if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
         throw e;
       }
       results.push(result);
@@ -326,7 +326,7 @@ export async function execExpr(
       { signal, budgetMs },
     );
   } catch (e) {
-    if (e instanceof SchemeError && e.cause instanceof TypeError) throw e.cause;
+    if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   }
 }

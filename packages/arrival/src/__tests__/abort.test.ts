@@ -49,7 +49,7 @@ describe("AbortSignal execution budget", () => {
     // (evaluator.ts:533), so each iteration adds one pending await to the JS
     // promise-resolution chain. After ~10k recursions V8's stack overflows
     // inside PromiseRejectCallback — sometimes BEFORE the abort fires
-    // (`SchemeError: Maximum call stack size exceeded`), sometimes AFTER
+    // (`ArrivalError: Maximum call stack size exceeded`), sometimes AFTER
     // (test "passes" but the worker process crashes with an unhandled
     // RangeError that taints the next test in the suite). Proper TCO (see
     // task #46) would fix the underlying recursion shape; until that lands,

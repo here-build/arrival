@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec";
 import { PurityError } from "../purity.js";
 
-// The evaluator wraps a thrown error in SchemeError (stack trace) but preserves
+// The evaluator wraps a thrown error in ArrivalError (stack trace) but preserves
 // the message and chains the original as `.cause`. A door is "fired" if the
 // PurityError surfaces either directly or through the cause chain.
 const door = async (src: string): Promise<{ purity: boolean; message: string }> => {

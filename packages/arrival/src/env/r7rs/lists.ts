@@ -39,7 +39,7 @@ import { ctxOf } from "../../values/primitives/AValue.js";
 import { is_pair, is_nil, is_null } from "../../eval/guards.js";
 import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { currentRunEnv, SchemeError } from "../../eval/evaluator.js";
+import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { is_false } from "../../eval/guards.js";
@@ -80,7 +80,7 @@ function to_array(name: string, deep = false): (list: SchemeValue) => SchemeValu
         }
         result.push(car);
         if (meter !== undefined && ++meter.used > meter.max) {
-          throw new SchemeError(heapBudgetMessage(meter.max), []);
+          throw new ArrivalError(heapBudgetMessage(meter.max), []);
         }
         node = node.cdr;
       } else {

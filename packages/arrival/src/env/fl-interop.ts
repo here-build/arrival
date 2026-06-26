@@ -43,7 +43,7 @@ import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { isOrd, nilOrderCompare, withInputProvenance, type AOrd } from "../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { heapBudgetMessage } from "../heap-budget.js";
-import { SchemeError } from "../eval/evaluator.js";
+import { ArrivalError } from "../eval/evaluator.js";
 
 type Callable = (...args: unknown[]) => unknown;
 
@@ -223,7 +223,7 @@ function chargeAndDispatch(
         }
       }
       meter.used += count;
-      if (meter.used > meter.max) throw new SchemeError(heapBudgetMessage(meter.max), []);
+      if (meter.used > meter.max) throw new ArrivalError(heapBudgetMessage(meter.max), []);
     }
   }
   const m = (receiver as Record<string, unknown> | null | undefined)?.[`arrival/tagless-final/${method}`];

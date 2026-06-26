@@ -280,7 +280,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // (arrival-chain's loader calls `execGeneratorExpr`). The file-level `exec`
     // import is `lips.exec` (legacy REPL evaluator) — used by the other tests
     // here — so we import the generator-exec `exec` locally for the budget API.
-    // `budgetMs` throws a SchemeError(/budget/) at the existing 1000-iter / 5ms
+    // `budgetMs` throws a ArrivalError(/budget/) at the existing 1000-iter / 5ms
     // event-loop yield once the deadline passes; it composes with `signal`
     // (whichever fires first wins). See evaluator.ts RunOptions.budgetMs.
     const start = Date.now();
