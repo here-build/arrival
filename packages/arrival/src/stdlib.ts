@@ -266,22 +266,6 @@ function matcher(name, arg) {
 }
 
 // ----------------------------------------------------------------------
-// :: Sets __name__ on functions for Scheme representation
-// :: Needed because Scheme names (empty?, set-car!) aren't valid JS identifiers
-// ----------------------------------------------------------------------
-export function doc(name: string | null, fn: SchemeValue, docstring?: string) {
-  if (name) {
-    fn.__name__ = name;
-  } else if (fn.name && !is_lambda(fn)) {
-    fn.__name__ = fn.name;
-  }
-  if (docstring) {
-    fn.__doc__ = docstring;
-  }
-  return fn;
-}
-
-// ----------------------------------------------------------------------
 function to_array(name: string, deep = false): SchemeFunction {
   return function recur(list: SchemeValue): SchemeValue[] {
     typecheck(name, list, ["pair", "nil"]);
@@ -758,7 +742,7 @@ const native_lambda = _parse(
 // to Scheme code were removed (the host-language sweep) — Scheme reaches host data
 // only through the blessed `@` / `@?` / `@keys` membrane accessors now. Access still
 // routes through accessMember / SchemeJSObject.get so the membrane is enforced.
-export const get = doc("get", function get(object, ...args) {
+export const get = function get(object, ...args) {
   let value;
   while (args.length > 0) {
     const arg = args.shift();
@@ -800,7 +784,7 @@ export const get = doc("get", function get(object, ...args) {
     object = value;
   }
   return value;
-});
+};
 // -------------------------------------------------------------------------
 const internal_env = new Environment(
   "internal",
@@ -871,7 +855,7 @@ export const global_env = new Environment(
     // property accessor, branded with the bare key via KEYWORD_ACCESSOR_FIELD;
     // read that to build a plain object. The serializer prints `(dict …)`, and
     // arrival-chain-view transpiles it to a JS/Python object literal.
-    dict: doc("dict", function dict(...args: SchemeValue[]) {
+    dict: function dict(...args: SchemeValue[]) {
       const obj: Record<string, SchemeValue> = {};
       for (let i = 0; i + 1 < args.length; i += 2) {
         const k = args[i] as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
@@ -881,13 +865,13 @@ export const global_env = new Environment(
         obj[key] = args[i + 1];
       }
       return obj;
-    }),
+    },
     // ------------------------------------------------------------------
     // set-car! / set-cdr! / append! — OMITTED by the purity invariant (every
-    // entity is frozen by design). Doored in core.ts. See plan-2026-06-11.
+    // entity is frozen by design). Doored in r7rs/lists. See plan-2026-06-11.
     // set! / do / if / letrec / letrec* / let* / let / begin / parameterize —
     // VESTIGIAL global_env registrations of forms the evaluator's SPECIAL_FORMS
-    // table already shadows before env lookup (parameterize is doored in core.ts).
+    // table already shadows before env lookup (parameterize is doored in r7rs/control).
     // Deleted: no first-class lookup reaches them, and macro_expand's traverse
     // only special-cases `lambda`/`define` by identity (the `let` family by name),
     // so the bindings are unreferenced. See husk-dissolution pass.
@@ -1024,14 +1008,14 @@ export const global_env = new Environment(
       return syntax;
     }),
     // ------------------------------------------------------------------
-    list: doc("list", function list(...args) {
+    list: function list(...args) {
       const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
       return withInputProvenance(args, result);
-    }),
+    },
     // ------------------------------------------------------------------
-    repr: doc("repr", function repr(obj, quote) {
+    repr: function repr(obj, quote) {
       return toString(obj, quote);
-    }),
+    },
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
     // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed
@@ -1039,7 +1023,7 @@ export const global_env = new Environment(
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
     // ------------------------------------------------------------------
-    find: doc("find", function find(arg, list) {
+    find: function find(arg, list) {
       typecheck("find", arg, ["regex", "function"]);
       typecheck("find", list, ["pair", "nil"]);
       if (is_null(list)) {
@@ -1052,9 +1036,9 @@ export const global_env = new Environment(
         }
         return find(arg, list.cdr);
       });
-    }),
+    },
     // ------------------------------------------------------------------
-    "for-each": doc("for-each", function (this: Environment, fn: SchemeFunction, ...lists: SchemeValue[]) {
+    "for-each": function (this: Environment, fn: SchemeFunction, ...lists: SchemeValue[]) {
       typecheck("for-each", fn, "function");
       for (const [i, arg] of lists.entries()) {
         typecheck("for-each", arg, ["pair", "nil"], i + 1);
@@ -1066,11 +1050,11 @@ export const global_env = new Environment(
       if (is_promise(ret)) {
         return ret.then(() => {});
       }
-    }),
+    },
     // ------------------------------------------------------------------
-    map: doc("map", mapImpl),
+    map: mapImpl,
     // ------------------------------------------------------------------
-    filter: doc("filter", function filter(this: Environment, arg, list) {
+    filter: function filter(this: Environment, arg, list) {
       typecheck("filter", arg, ["regex", "function"]);
       typecheck("filter", list, ["pair", "nil"]);
       // `to_array` finds this run's heap meter via the evaluator's run-scoped
@@ -1114,7 +1098,7 @@ export const global_env = new Environment(
       }
       const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
       return APair.fromArray(ctxOf(list), filtered);
-    }),
+    },
   },
   undefined,
 );
