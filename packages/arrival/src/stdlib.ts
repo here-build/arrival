@@ -22,19 +22,16 @@ import {
   is_env,
   is_false,
   is_function,
-  is_iterator,
-  is_lambda,
-  is_native_function,
   is_nil,
   is_null,
   is_pair,
   is_plain_object,
   is_promise,
-  is_prototype,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { box, patch_value, quote } from "./reader/values-repr.js";
+import { toString, unbox, map_object, symbolize } from "./printer.js";
 import {
   complex_bare_re,
   complex_re,
@@ -44,12 +41,9 @@ import {
   rational_bare_re,
   rational_re,
 } from "./values/primitives.js";
-import { CLASS } from "./well-known-symbols.js";
 import { nil } from "./values/primitives/ANil.js";
-import { ACharacter } from "./values/primitives/ACharacter.js";
 import * as specials from "./reader/specials.js";
 import { call_function } from "./eval/call-function.js";
-import { AExact, AInexact } from "./values/numbers.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
 import { Values } from "./values/primitives/Values.js";
@@ -60,9 +54,6 @@ import { isCircularList, APair, concatPair } from "./values/primitives/APair.js"
 import { promise_all, unpromise } from "./utils/promises.js";
 
 import { ABool } from "./values/primitives/ABool.js";
-import { ABytevector } from "./values/primitives/ABytevector.js";
-import { AString } from "./values/primitives/AString.js";
-import { AVector } from "./values/primitives/AVector.js";
 import {
   keywordAccessorResolver,
   NOT_FOUND,
@@ -124,10 +115,7 @@ function makeDebugTracer(on: boolean) {
 }
 /* c8 ignore stop */
 
-// Helper functions used by gensym - imported types have their own copies
-function symbol_to_string(obj: SchemeValue): string {
-  return obj.toString().replace(/^Symbol\(([^)]+)\)/, "$1");
-}
+// symbol_to_string relocated to printer.ts (used only by its function_to_string).
 
 // ----------------------------------------------------------------------
 specials.on(["remove", "append"], function () {
@@ -284,267 +272,12 @@ function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
 
 // Old Pair prototype methods are now in the Pair class above
 
-const repr = new Map();
-
-// ----------------------------------------------------------------------
-function user_repr(obj) {
-  const constructor = obj.constructor || Object;
-  const plain_object = is_plain_object(obj);
-  const iterator = is_function(obj[Symbol.asyncIterator]) || is_function(obj[Symbol.iterator]);
-  let fn;
-  if (repr.has(constructor)) {
-    fn = repr.get(constructor);
-  } else {
-    for (const [key, value] of repr.entries()) {
-      // if key is Object it should only work for plain_object
-      // because otherwise it will match every object
-      // we don't use instanceof so it don't work for subclasses
-      if (constructor === key && ((key === Object && plain_object && !iterator) || key !== Object)) {
-        fn = value;
-      }
-    }
-  }
-  return fn;
-}
-
-// ----------------------------------------------------------------------
-const str_mapping = new Map();
-for (const [key, value] of [
-  [true, "#t"],
-  [false, "#f"],
-  [null, "#null"],
-  [undefined, "#void"],
-]) {
-  str_mapping.set(key, value);
-}
-// ----------------------------------------------------------------------
-// :: Debug function that can be used with JSON.stringify
-// :: that will show symbols
-// ----------------------------------------------------------------------
-/* c8 ignore next 22 */
-function symbolize(obj) {
-  if (obj && typeof obj === "object") {
-    const result = {};
-    const symbols = Object.getOwnPropertySymbols(obj);
-    for (const key of symbols) {
-      const name = key.toString().replace(/Symbol\(([^)]+)\)/, "$1");
-      result[name] = toString(obj[key]);
-    }
-    const props = Object.getOwnPropertyNames(obj);
-    for (const key of props) {
-      const o = obj[key];
-      result[key] = o && typeof o === "object" && o.constructor === Object ? symbolize(o) : toString(o);
-    }
-    return result;
-  }
-  return obj;
-}
-
-
-// ----------------------------------------------------------------------
-function has_own_function(obj, name) {
-  return obj.hasOwnProperty(name) && is_function(obj.toString);
-}
-
-// ----------------------------------------------------------------------
-function function_to_string(fn) {
-  if (is_native_function(fn)) {
-    return "#<procedure(native)>";
-  }
-  if (fn.hasOwnProperty("__name__")) {
-    let name = fn.__name__;
-    if (typeof name === "symbol") {
-      name = symbol_to_string(name);
-    }
-    if (typeof name === "string") {
-      return `#<procedure:${name}>`;
-    }
-  }
-  if (has_own_function(fn, "toString")) {
-    return fn.toString();
-  } else if (fn.name && !is_lambda(fn)) {
-    return `#<procedure:${fn.name.trim()}>`;
-  } else {
-    return "#<procedure>";
-  }
-}
-
-// ----------------------------------------------------------------------
-// Instances extracted to make cyclomatic complexity of toString smaller
-let _instances: Map<any, Function> | null = null;
-function get_instances() {
-  if (!_instances) {
-    _instances = new Map();
-    for (const [cls, fn] of [
-      [
-        Error,
-        function (e: Error) {
-          return e.message;
-        },
-      ],
-      [
-        APair,
-        function (pair: APair, { quote, skip_cycles, pair_args }: any) {
-          // make sure that repr directly after update set the cycle ref
-          if (!skip_cycles) {
-            pair.mark_cycles();
-          }
-          return pair.toString(quote, ...pair_args);
-        },
-      ],
-      [
-        ACharacter,
-        function (chr: ACharacter, { quote }: any) {
-          if (quote) {
-            return chr.toString();
-          }
-          return chr.valueOf();
-        },
-      ],
-      [
-        AString,
-        function (str: AString, { quote }: any) {
-          const strVal = str.toString();
-          if (quote) {
-            return JSON.stringify(strVal).replaceAll(String.raw`\n`, "\n");
-          }
-          return strVal;
-        },
-      ],
-      [
-        RegExp,
-        function (re: RegExp) {
-          return `#${re.toString()}`;
-        },
-      ],
-      [
-        // Boxed vectors render as their R7RS external representation #(...),
-        // recursing through `toString` so nested vectors/strings format correctly
-        // and `quote` propagates. (Without this they fell through to the generic
-        // #<__class__> / #<JS-class-name> garbage — the only user-facing stringify
-        // in the MCP bridge env. Cyclic vectors are not datum-labeled here; repr
-        // of a runtime-cyclic vector is a known gap, as for cyclic data generally.)
-        AVector,
-        function (vec: AVector, { quote }: any) {
-          return `#(${vec.__vector__.map((el) => toString(el, quote)).join(" ")})`;
-        },
-      ],
-      [
-        ABytevector,
-        function (bv: ABytevector) {
-          return `#u8(${Array.from(bv.__bytevector__).join(" ")})`;
-        },
-      ],
-    ]) {
-      _instances.set(cls, fn);
-    }
-  }
-  return _instances;
-}
-// ----------------------------------------------------------------------
-let _native_types: any[] | null = null;
-function get_native_types() {
-  if (!_native_types) {
-    _native_types = [ASymbol, Macro, Values, Environment, QuotedPromise];
-  }
-  return _native_types;
-}
-
-// ----------------------------------------------------------------------
-function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args: unknown[]): string {
-  if (str_mapping.has(obj)) {
-    return str_mapping.get(obj);
-  }
-  if (is_prototype(obj)) {
-    return "#<prototype>";
-  }
-  if (obj) {
-    const cls = obj.constructor;
-    const instances = get_instances();
-    if (instances.has(cls)) {
-      return instances.get(cls)!(obj, { quote, skip_cycles, pair_args });
-    }
-  }
-  // standard objects that have toString
-  for (const type of get_native_types()) {
-    if (obj instanceof type) {
-      return (obj as SchemeValue).toString(quote);
-    }
-  }
-  if (obj instanceof AExact || obj instanceof AInexact) {
-    return obj.toString();
-  }
-  // constants
-  if ([nil, eof].includes(obj as typeof nil)) {
-    return (obj as SchemeValue).toString();
-  }
-  if (obj === globalThis) {
-    return "#<js:global>";
-  }
-  if (obj === null) {
-    return "null";
-  }
-  if (is_function(obj)) {
-    if (is_function(obj.toString) && obj.hasOwnProperty("toString")) {
-      // promises
-      return obj.toString().valueOf();
-    }
-    return function_to_string(obj);
-  }
-  if (typeof obj === "object") {
-    let constructor = obj.constructor;
-    if (!constructor) {
-      // This is case of fs.constants in Node.js that is null constructor object.
-      // This object can be handled like normal objects that have properties
-      constructor = Object;
-    }
-    let name;
-    if (typeof (constructor as SchemeValue)[CLASS] === "string") {
-      name = (constructor as SchemeValue)[CLASS];
-    } else {
-      const fn = user_repr(obj);
-      if (fn) {
-        invariant(is_function(fn), "toString: Invalid repr value");
-        return fn(obj, quote);
-      }
-      name = constructor.name;
-    }
-    // user defined representation
-    if (is_function(obj.toString) && obj.hasOwnProperty("toString")) {
-      return obj.toString().valueOf();
-    }
-    if (type(obj) === "instance") {
-      if (is_lambda(constructor) && (constructor as SchemeValue).__name__) {
-        name = (constructor as SchemeValue).__name__.valueOf();
-        if (typeof name === "symbol") {
-          name = name.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1");
-        }
-      } else if (!is_native_function(constructor)) {
-        name = "instance";
-      }
-    }
-    if (is_iterator(obj, Symbol.iterator)) {
-      if (name) {
-        return `#<iterator(${name})>`;
-      }
-      return "#<iterator>";
-    }
-    if (is_iterator(obj, Symbol.asyncIterator)) {
-      if (name) {
-        return `#<asyncIterator(${name})>`;
-      }
-      return "#<asyncIterator>";
-    }
-    if (name !== "") {
-      return `#<${name}>`;
-    }
-    return "#<Object>";
-  }
-  if (obj != null && typeof obj !== "string") {
-    return obj.toString();
-  }
-  return obj ?? "";
-}
+// The value→string printer — `toString`, its repr registry (get_instances /
+// get_native_types / user_repr / function_to_string / the `repr` map + str_mapping),
+// plus `symbolize` and the `unbox` / `map_object` helpers — relocated to printer.ts.
+// It is a top-level module beside stdlib (it must know every printable type, incl.
+// Environment/Macro/Values, so it is not a values/ leaf); imported above for the
+// builtins/tracer that print. Never exported, so it is not on the public barrel.
 
 // ----------------------------------------------------------------------
 // eq/eqv moved to structural-equal.ts; the macro engine (macro_expand /
@@ -557,45 +290,6 @@ function toString(obj: unknown, quote = false, skip_cycles = false, ...pair_args
 // ----------------------------------------------------------------------
 // box() relocated to reader/values-repr.ts (the value-representation leaf,
 // alongside quote/patch_value); imported above. Re-exported below for the barrel.
-
-// ----------------------------------------------------------------------
-function map_object(object, fn) {
-  const props = Object.getOwnPropertyNames(object);
-  const symbols = Object.getOwnPropertySymbols(object);
-  const result = {};
-  for (const key of [...props, ...symbols]) {
-    result[key] = fn(object[key]);
-  }
-  return result;
-}
-
-// ----------------------------------------------------------------------
-function unbox(object) {
-  const is_boxed_primitive =
-    object instanceof AString ||
-    object instanceof ACharacter ||
-    object instanceof AExact ||
-    object instanceof AInexact;
-  if (is_boxed_primitive) {
-    return object.valueOf();
-  }
-  if (object instanceof AVector) {
-    return object.__vector__.map(unbox);
-  }
-  if (object instanceof ABytevector) {
-    return object.__bytevector__;
-  }
-  if (Array.isArray(object)) {
-    return object.map(unbox);
-  }
-  if (object instanceof QuotedPromise) {
-    delete (object as SchemeValue).then;
-  }
-  if (is_plain_object(object)) {
-    return map_object(object, unbox);
-  }
-  return object;
-}
 
 // ----------------------------------------------------------------------
 // patch_value relocated to reader/values-repr.ts; re-exported to preserve the
