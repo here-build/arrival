@@ -46,13 +46,14 @@ export class Syntax extends Macro {
     this.__defmacro__ = true;
   }
 
-  invoke(code: unknown, { error, env, use_dynamic }: MacroInvokeContext, macro_expand: unknown): unknown {
+  invoke(code: unknown, { error, env, use_dynamic, runCtx }: MacroInvokeContext, macro_expand: unknown): unknown {
     const args = {
       error,
       env,
       use_dynamic,
       dynamic_env: this.__env__,
       macro_expand,
+      runCtx,
     };
     return this.__fn__.call(env, code, args, this.__name__ || "syntax");
   }

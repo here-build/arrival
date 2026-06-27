@@ -1,12 +1,16 @@
 import { CLASS } from "../well-known-symbols.js";
 import { trim_lines } from "../utils/trim-lines.js";
 import { typecheck } from "../utils/typecheck.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 
 export interface MacroInvokeContext {
   env: unknown;
   error?: (e: Error) => void;
   use_dynamic?: boolean;
   dynamic_env?: unknown;
+  /** The per-run context, threaded to syntax-rules so the expander can read its
+   *  per-run `debug` option without an env variable or module holder. */
+  runCtx?: RunContext;
   [key: string]: unknown;
 }
 

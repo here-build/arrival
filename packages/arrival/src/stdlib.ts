@@ -82,49 +82,45 @@ type SchemeFunction = (...args: any[]) => any;
 
 // -------------------------------------------------------------------------
 
-// Structured tracer for the syntax-rules expander, gated by the Scheme `DEBUG`
-// variable (`(define DEBUG #t)` to enable; `(define DEBUG n)` to enable only the
-// `enabled(n)` channel). Inert when off — every method short-circuits before
-// touching the console. Mirrors the native console API so traces NEST
-// (group/groupEnd) and are TIMED (time/timeEnd) rather than flat spew; `dir`
-// renders the binding maps with full depth. JS-string args are treated as labels
-// (passed through); SchemeValues are formatted via `toString`/`map_object`.
+// Dev-only structured tracer for the syntax-rules expander. Gated by the per-run
+// `debug` interpreter option (RunContext.debug) — threaded to the expander via the
+// macro invoke's runCtx, NOT a Scheme `DEBUG` variable and NOT module debug-state, so
+// it is inert by default and hermetic across concurrent runs. Mirrors the console API
+// so traces NEST (group/groupEnd) and are TIMED; `debugFmt` renders SchemeValues with
+// full depth, JS-string args passing through as labels.
 /* c8 ignore start */
 let debugSeq = 0;
-const debug = {
-  enabled(n: SchemeValue = null): boolean {
-    const flag = user_env?.get("DEBUG", { throwError: false });
-    if (n === null) {
-      return !is_false(flag);
-    }
-    return flag?.valueOf() === n.valueOf();
-  },
-  fmt(x: SchemeValue): unknown {
-    return typeof x === "string"
-      ? x
-      : is_plain_object(x)
-        ? map_object(x, (value: SchemeValue) => toString(value, true))
-        : toString(x, true);
-  },
-  log(...args: SchemeValue[]): void {
-    if (this.enabled()) console.log(...args.map((a) => this.fmt(a)));
-  },
-  dir(x: unknown): void {
-    if (this.enabled()) console.dir(x, { depth: null });
-  },
-  group(label: SchemeValue): void {
-    if (this.enabled()) console.group(this.fmt(label));
-  },
-  groupEnd(): void {
-    if (this.enabled()) console.groupEnd();
-  },
-  time(label: string): void {
-    if (this.enabled()) console.time(label);
-  },
-  timeEnd(label: string): void {
-    if (this.enabled()) console.timeEnd(label);
-  },
-};
+function debugFmt(x: SchemeValue): unknown {
+  return typeof x === "string"
+    ? x
+    : is_plain_object(x)
+      ? map_object(x, (value: SchemeValue) => toString(value, true))
+      : toString(x, true);
+}
+// `makeDebugTracer(on)` returns the tracer the expander uses; `on` is this run's
+// RunContext.debug. Off ⇒ every method is a no-op, so the expander stays silent.
+function makeDebugTracer(on: boolean) {
+  return {
+    log: (...args: SchemeValue[]): void => {
+      if (on) console.log(...args.map(debugFmt));
+    },
+    dir: (x: unknown): void => {
+      if (on) console.dir(x, { depth: null });
+    },
+    group: (label: SchemeValue): void => {
+      if (on) console.group(debugFmt(label));
+    },
+    groupEnd: (): void => {
+      if (on) console.groupEnd();
+    },
+    time: (label: string): void => {
+      if (on) console.time(label);
+    },
+    timeEnd: (label: string): void => {
+      if (on) console.timeEnd(label);
+    },
+  };
+}
 /* c8 ignore stop */
 
 // ----------------------------------------------------------------------
@@ -883,7 +879,8 @@ Object.assign(global_env.__env__, {
       } else {
         validate_identifiers(macro.car);
       }
-      const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
+      const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand, runCtx }: SchemeValue) {
+        const debug = makeDebugTracer(runCtx?.debug === true);
         const trace = `syntax-expand #${++debugSeq}`;
         debug.group(code);
         debug.time(trace);

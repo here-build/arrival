@@ -2664,6 +2664,8 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       dynamic_env: ctx.dynamic_env,
       use_dynamic: ctx.use_dynamic,
       error: ctx.error,
+      // The per-run context, so the syntax-rules expander reads its `debug` option from ctx.
+      runCtx: ctx.runCtx,
     };
 
     // Invoke the macro with unevaluated code.
