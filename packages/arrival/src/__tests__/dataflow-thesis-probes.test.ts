@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { initBridge } from "../bridge";
 import { AString } from "../values/primitives/AString.js";

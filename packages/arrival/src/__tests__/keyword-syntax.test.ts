@@ -4,7 +4,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { jsToScheme, schemeToJs } from "../rosetta";
 

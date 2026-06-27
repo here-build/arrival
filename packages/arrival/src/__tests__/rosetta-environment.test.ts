@@ -6,7 +6,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../inference-env";
 import { createRosettaWrapper, jsToScheme, schemeToJs } from "../rosetta";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 
 // Helper to unwrap exec results
 async function execOne(expr: string): Promise<any> {

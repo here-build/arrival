@@ -25,7 +25,7 @@ import { AExact, AInexact } from "../values/numbers";
 import { APair } from "../values/primitives/APair.js";
 import { jsToScheme } from "../rosetta";
 import { inferenceEnv } from "../inference-env";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { ANil, nil } from "../values/primitives/ANil";
 
 const PROV = new Set<number>([42]);

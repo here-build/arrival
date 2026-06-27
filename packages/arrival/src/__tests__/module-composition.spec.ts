@@ -15,7 +15,7 @@ import { Environment } from "../Environment";
 import type { EnvironmentModule, FallbackResolver } from "../bindings";
 // `exec` is stdlib's re-export of the generator trampoline; importing it also loads the
 // stdlib runtime module (was three in-body `await import("../stdlib")` warm-ups).
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);

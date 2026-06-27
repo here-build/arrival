@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { AVector } from "../values/primitives/AVector.js";

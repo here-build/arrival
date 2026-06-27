@@ -16,7 +16,7 @@ import type { Environment } from "../Environment";
 import type { SchemeValue } from "../values/types";
 
 // Import both evaluator implementations
-import { exec as lipsExec } from "../stdlib";
+import { exec as lipsExec } from "../eval/generator-exec";
 import { exec as generatorExec } from "../eval/generator-exec";
 
 // Check environment variable at module load time

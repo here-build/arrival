@@ -15,7 +15,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";

@@ -22,7 +22,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
-import { exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
