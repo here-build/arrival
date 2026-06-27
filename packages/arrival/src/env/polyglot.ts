@@ -32,6 +32,7 @@ import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { hasMember, keywordAccessorResolver, memberKeys, readMember } from "../membrane.js";
+import { KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
 
 /** The polyglot idiom pack — the full member-access surface plus the threading family:
  *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. `symbol.native` bindings
@@ -115,6 +116,28 @@ export default new EnvCapability("scheme/polyglot", {
     "@keys": symbol.native`@keys: the own member keys of obj`(
       { input: [z.unknown()], output: [z.unknown()] },
       memberKeys,
+    ),
+    // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
+    // build an open-key map from interleaved `:key value` pairs. A keyword in arg
+    // position evaluates to its pluck closure carrying the bare key on
+    // KEYWORD_ACCESSOR_FIELD; dict reads that (else strips a leading `:`) to key the
+    // plain object. Relocated VERBATIM from stdlib.ts global_env (husk dissolution);
+    // the serializer prints it back as `(dict …)` and arrival-chain-view transpiles
+    // it to a JS/Python object literal. (Plain `symbol.native`: dict reads no membrane
+    // primitive, only KEYWORD_ACCESSOR_FIELD at call-time, so it needs no deferral.)
+    dict: symbol.native`dict: an open-key map built from interleaved :key value pairs`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      (...args: unknown[]): unknown => {
+        const obj: Record<string, unknown> = {};
+        for (let i = 0; i + 1 < args.length; i += 2) {
+          const k = args[i] as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
+          const key =
+            (k != null && (typeof k === "function" || typeof k === "object") && k[KEYWORD_ACCESSOR_FIELD]) ||
+            String(args[i]).replace(/^:/, "");
+          obj[key] = args[i + 1];
+        }
+        return obj;
+      },
     ),
   }),
 });

@@ -7,7 +7,7 @@
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { withInputProvenance } from "./values/op-helpers.js";
-import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "./Environment.js";
+import { Environment, type EnvironmentValue } from "./Environment.js";
 import { global_env, user_env } from "./env-roots.js";
 import { tokenize } from "./reader/tokenize.js";
 import { eof } from "./values/primitives/EOF.js";
@@ -278,22 +278,7 @@ Object.assign(global_env.__env__, {
     // `cons`, `list`, and `length` are CONSTRUCTORS / aggregations, not
     // projections — they correctly retain `withInputProvenance([car, cdr], …)`
     // unioning over all inputs.
-    // `(dict :k v …)` — the canonical open-key map form, companion to the
-    // `(:key d)` accessor. A keyword in argument position evaluates to its
-    // property accessor, branded with the bare key via KEYWORD_ACCESSOR_FIELD;
-    // read that to build a plain object. The serializer prints `(dict …)`, and
-    // arrival-chain-view transpiles it to a JS/Python object literal.
-    dict: function dict(...args: SchemeValue[]) {
-      const obj: Record<string, SchemeValue> = {};
-      for (let i = 0; i + 1 < args.length; i += 2) {
-        const k = args[i] as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
-        const key =
-          (k != null && (typeof k === "function" || typeof k === "object") && k[KEYWORD_ACCESSOR_FIELD]) ||
-          String(args[i]).replace(/^:/, "");
-        obj[key] = args[i + 1];
-      }
-      return obj;
-    },
+    // `dict` relocated to env/polyglot.ts (the Scheme companion to its `:key` accessor).
     // ------------------------------------------------------------------
     // set-car! / set-cdr! / append! — OMITTED by the purity invariant (every
     // entity is frozen by design). Doored in r7rs/lists. See plan-2026-06-11.
