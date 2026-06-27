@@ -205,6 +205,17 @@ export default new EnvCapability("scheme/lists", {
         withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car, cdr)),
     ),
 
+    // R7RS 6.4 — `list` builds a proper list of its arguments. Relocated VERBATIM
+    // from stdlib.ts global_env (husk dissolution): a constructor, so — like cons
+    // and make-list — it unions the inputs' provenance over the produced head only.
+    list: symbol.native`list: a proper list of its arguments`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      (...args: SchemeValue[]): SchemeValue => {
+        const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
+        return withInputProvenance(args, result);
+      },
+    ),
+
     // ── PURITY DOORS — pair/list mutators OMITTED by design (R7RS §6.4) ──────────
     // arrival values are frozen: a writing method would falsify the construction-site
     // provenance every value carries. These doors (errors-as-doors) teach the why and

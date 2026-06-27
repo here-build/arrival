@@ -579,11 +579,7 @@ Object.assign(global_env.__env__, {
       return syntax;
     }),
     // ------------------------------------------------------------------
-    list: function list(...args) {
-      const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
-      return withInputProvenance(args, result);
-    },
-    // ------------------------------------------------------------------
+    // `list` relocated to env/r7rs/lists.ts (R7RS §6.4, next to cons/make-list).
     repr: function repr(obj, quote) {
       return toString(obj, quote);
     },
