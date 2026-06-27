@@ -1015,54 +1015,6 @@ Object.assign(global_env.__env__, {
         return ret.then(() => {});
       }
     },
-    // ------------------------------------------------------------------
-    map: mapImpl,
-    // ------------------------------------------------------------------
-    filter: function filter(this: Environment, arg, list) {
-      typecheck("filter", arg, ["regex", "function"]);
-      typecheck("filter", list, ["pair", "nil"]);
-      // `to_array` finds this run's heap meter via the evaluator's run-scoped
-      // `currentRunEnv()` (set at the apply boundary), so no env threading is needed here.
-      const array = listToArray(list);
-      if (array.length === 0) {
-        return nil;
-      }
-      const fn = matcher("filter", arg);
-
-      // Call predicate on all elements in parallel
-      const predicateResults = array.map((item) => fn(item));
-      const hasPromises = predicateResults.some(is_promise);
-
-      // `is_false` rather than raw `!r`: post-Option-C, predicates can return
-      // SchemeBool wrappers (e.g. `:active` on a SchemeJSObject yields a
-      // boxed boolean carrying container provenance). Raw `&&` treats any
-      // object as truthy and would retain false-valued entries.
-
-      // Tier-2 speculation: when the predicate fan is still filling AND the
-      // caller opted in, return a lazy `HalfBaked` collection instead of
-      // awaiting `promise_all`. Each slot resolves to the items it contributes
-      // ([] dropped, [item] kept), so the cardinality interval narrows from both
-      // ends as slots settle — letting `(>= (length …) k)` collapse the instant
-      // lo reaches k, with the rest of the fan still pending. Bounds [0,1] per
-      // slot (a predicate keeps at most one). Forced back to a Pair (identical
-      // to the eager result) at any non-speculating boundary. EMPTY_PROVENANCE:
-      // filter doesn't union container provenance on the eager path either.
-      if (hasPromises && isSpeculating()) {
-        const slots = predicateResults.map((r, i) => {
-          const keep = (verdict: unknown): SchemeValue[] => (!is_false(verdict) && !is_nil(verdict) ? [array[i]] : []);
-          return is_promise(r) ? (r as Promise<unknown>).then(keep) : Promise.resolve(keep(r));
-        });
-        return AHalfBaked.collection(ctxOf(list), slots, () => [0, 1]);
-      }
-      if (hasPromises) {
-        return (promise_all(predicateResults) as Promise<unknown[]>).then((results) => {
-          const filtered = array.filter((_, i) => !is_false(results[i]) && !is_nil(results[i]));
-          return APair.fromArray(ctxOf(list), filtered);
-        });
-      }
-      const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
-      return APair.fromArray(ctxOf(list), filtered);
-    },
   } satisfies Record<string, EnvironmentValue>);
 export { global_env, user_env as env };
 
