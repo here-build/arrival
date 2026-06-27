@@ -7,9 +7,9 @@
  *
  * Propagation algebra: `docs/spec/arrival-chain.md` §5.
  *
- * Boxer registry rather than a switch in `fromJs`: a switch would import every
- * subtype, but subtypes already import this file for `extends AValue` — cycle.
- * Registry inverts the dependency; subtypes call `registerBoxer` at module load.
+ * The JS→Scheme boxing membrane (`fromJs` + the boxer registry) lives in
+ * `boxing.ts`, NOT here — see that file for why the registry's writer is kept off
+ * this (leakable) class.
  *
  * Lineage (claimed: none — see docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §1,§11):
  * provenance-on-the-value is how-provenance — provenance as an expression/circuit
@@ -19,7 +19,6 @@
  * "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
-import invariant from "tiny-invariant";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
@@ -55,11 +54,6 @@ export type AKind =
   | "void"
   | "keyword";
 
-/** Keyed by `typeof`-tag plus the two null-ish tags ("null", "undefined") — see `resolveTypeofTag`. */
-type Boxer = (ctx: RunContext, v: unknown, p: ReadonlySet<number>) => AValue;
-
-const boxers = new Map<string, Boxer>();
-
 export abstract class AValue {
   abstract readonly kind: AKind;
   readonly provenance: ReadonlySet<number>;
@@ -90,46 +84,6 @@ export abstract class AValue {
    * fresh walk; leaf Setoids ignore it.
    */
   abstract ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean;
-
-  /** Subtype modules call this at top-level. Registration order is not significant. */
-  static registerBoxer(typeofTag: string, fn: Boxer): void {
-    boxers.set(typeofTag, fn);
-  }
-
-  /**
-   * Single JS-input membrane. Already-AValue input is returned as-is unless
-   * a non-empty provenance is supplied (then `withProvenance` mints a copy);
-   * the same-instance fast path is what makes this safe to call on the hot path.
-   * Throws if the subtype module hasn't loaded yet — that's a programmer error,
-   * not a runtime condition.
-   */
-  static fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
-    if (v instanceof AValue) {
-      return provenance === EMPTY_PROVENANCE || provenance === v.provenance
-        ? v
-        : v.withProvenance(provenance);
-    }
-
-    const tag = resolveTypeofTag(v);
-    const boxer = boxers.get(tag);
-    invariant(
-      boxer !== undefined,
-      `AValue.fromJs: no boxer registered for tag "${tag}" — subtype module not loaded`,
-    );
-    return boxer(ctx, v, provenance);
-  }
-}
-
-/** `null` gets its own tag — JS quirk: `typeof null === "object"`. */
-function resolveTypeofTag(v: unknown): string {
-  switch (true) {
-    case v === null:
-      return "null";
-    case v === undefined:
-      return "undefined";
-    default:
-      return typeof v;
-  }
 }
 
 /** Per `docs/spec/arrival-chain.md` §5.1: distinct-by-reference, forward singleton, union ≥2. */

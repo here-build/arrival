@@ -24,6 +24,7 @@ import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { fromJs } from "../values/primitives/boxing.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 
@@ -31,7 +32,7 @@ import type { Environment } from "../Environment.js";
 export const sStr = (s: string, p: number): AString => new AString(CONSTANT_CTX, s, new Set([p]));
 
 /** Stamp a single source-id onto a number input (the scalar arithmetic carrier). */
-export const sNum = (n: number, p: number): AValue => AValue.fromJs(CONSTANT_CTX, n, new Set([p]));
+export const sNum = (n: number, p: number): AValue => fromJs(CONSTANT_CTX, n, new Set([p]));
 
 /** A per-env setup applied before the bindings are written (e.g. `defineRosetta`). */
 export type EnvSetup = (env: Environment) => void;

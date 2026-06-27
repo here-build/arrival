@@ -1,6 +1,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { registerBoxer } from "./boxing.js";
 import { markInteropBoundary } from "../../interop-access.js";
 
 /**
@@ -47,7 +48,7 @@ export const schemeTrue = new ABool(CONSTANT_CTX, true);
 export const schemeFalse = new ABool(CONSTANT_CTX, false);
 
 // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
-AValue.registerBoxer("boolean", (ctx, v, p) =>
+registerBoxer("boolean", (ctx, v, p) =>
   p === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v as boolean, p),
 );
 

@@ -11,6 +11,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
+import { fromJs } from "./values/primitives/boxing.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
@@ -315,7 +316,7 @@ export function jsToScheme(
   // JS primitives → AValue.fromJs (boxer registry handles bool/number/string/bigint).
   const tag = typeof value;
   if (tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint") {
-    return AValue.fromJs(ctx, value, provenance);
+    return fromJs(ctx, value, provenance);
   }
 
   // Functions, exotic objects (Promise, Buffer, …): the caller's responsibility.

@@ -31,6 +31,7 @@ import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
+import { registerBoxer } from "./primitives/boxing.js";
 import { markInteropBoundary } from "../interop-access.js";
 
 // ============================================================================
@@ -1056,11 +1057,11 @@ export function isBigInteger(n: unknown): boolean {
   return typeof n === "bigint";
 }
 
-AValue.registerBoxer("bigint", (ctx, v, p) => new AExact(ctx, v as bigint, 1n, p));
+registerBoxer("bigint", (ctx, v, p) => new AExact(ctx, v as bigint, 1n, p));
 
 // Safe-integer JS numbers route to exact — preserves precision through scheme
 // arithmetic. Anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
-AValue.registerBoxer("number", (ctx, v, p) => {
+registerBoxer("number", (ctx, v, p) => {
   const n = v as number;
   return Number.isSafeInteger(n) ? new AExact(ctx, BigInt(n), 1n, p) : new AInexact(ctx, n, p);
 });

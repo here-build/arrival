@@ -5,6 +5,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { registerBoxer } from "./boxing.js";
 import type { ANumeric } from "../numbers.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { ACharacter } from "./ACharacter.js";
@@ -177,7 +178,7 @@ export class AString extends AValue {
   }
 }
 
-AValue.registerBoxer("string", (ctx, v, p) => new AString(ctx, v as string, p));
+registerBoxer("string", (ctx, v, p) => new AString(ctx, v as string, p));
 
 // Dynamically wrap all String.prototype methods
 {

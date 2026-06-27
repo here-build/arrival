@@ -16,6 +16,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
+import { fromJs } from "./boxing.js";
 import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
@@ -805,7 +806,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   // Walks the cdr-spine counting elements + collecting their AValue cars; a count carries the
   // grounding of every element it touched (V: "provenance everything; a count the seal can't
   // sign is the hole the teleological seal forbids"). The container box is OUTSIDE a count's
-  // cone (Galois-slicing upper adjoint), so it drops — `AValue.fromJs(count, unioned-prov)` when
+  // cone (Galois-slicing upper adjoint), so it drops — `fromJs(count, unioned-prov)` when
   // any element is grounded, else the bare `count` (no grounding to carry). NO heap-charge (a
   // count allocates nothing) and NO strict-gating (always counts), so the trailing runCtx that
   // `symbol.tagless` threads is accepted + ignored. Throws on a circular list, matching the base
@@ -824,7 +825,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     }
     if (inputs.length === 0) return count;
     const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : AValue.fromJs(this.ctx, count, prov);
+    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
 
   // Arrival's canonical car/cdr — the head/tail PROJECTIONS. They mirror the scheme

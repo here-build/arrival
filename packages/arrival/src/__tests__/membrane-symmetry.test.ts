@@ -27,6 +27,7 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { fromJs } from "../values/primitives/boxing.js";
 import { is_nil } from "../eval/guards";
 import { fromJS, isSchemeValue, toJS } from "../membrane";
 import { AJSFunction, AJSObject } from "../values/primitives/js-wrappers.js";
@@ -47,7 +48,7 @@ import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 describe("AValue.fromJs — boxer dispatch produces the expected subtype per typeof tag", () => {
   // Boxer registry resolution: typeof string → "string" boxer (SchemeString.ts:139)
   it("string → SchemeString", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, "hello");
+    const result = fromJs(CONSTANT_CTX, "hello");
     expect(result).toBeInstanceOf(AString);
     expect((result as AString).valueOf()).toBe("hello");
   });
@@ -55,21 +56,21 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // typeof 42 === "number" — registered in operators/index.ts (via the
   // numbers module). Safe integer path → SchemeExact with bigint num.
   it("number (safe integer) → SchemeExact", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, 42);
+    const result = fromJs(CONSTANT_CTX, 42);
     expect(result).toBeInstanceOf(AExact);
     expect((result as AExact).num).toBe(42n);
   });
 
   // Non-integer float → SchemeInexact (real part).
   it("number (float) → SchemeInexact", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, 3.14);
+    const result = fromJs(CONSTANT_CTX, 3.14);
     expect(result).toBeInstanceOf(AInexact);
     expect((result as AInexact).real).toBe(3.14);
   });
 
   // typeof 1n === "bigint" → SchemeExact regardless of size.
   it("bigint → SchemeExact", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, 123n);
+    const result = fromJs(CONSTANT_CTX, 123n);
     expect(result).toBeInstanceOf(AExact);
     expect((result as AExact).num).toBe(123n);
   });
@@ -77,13 +78,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
   // singletons. Non-empty provenance mints a fresh SchemeBool.
   it("boolean (empty provenance) → singleton SchemeBool", () => {
-    expect(AValue.fromJs(CONSTANT_CTX, true)).toBe(schemeTrue);
-    expect(AValue.fromJs(CONSTANT_CTX, false)).toBe(schemeFalse);
+    expect(fromJs(CONSTANT_CTX, true)).toBe(schemeTrue);
+    expect(fromJs(CONSTANT_CTX, false)).toBe(schemeFalse);
   });
 
   it("boolean (non-empty provenance) → fresh SchemeBool with provenance", () => {
     const prov = new Set<number>([99]);
-    const result = AValue.fromJs(CONSTANT_CTX, true, prov);
+    const result = fromJs(CONSTANT_CTX, true, prov);
     expect(result).toBeInstanceOf(ABool);
     expect(result).not.toBe(schemeTrue);
     expect((result as ABool).value).toBe(true);
@@ -94,13 +95,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // Empty provenance: returns a fresh Nil (NOT the singleton — see types.ts:87
   // — withProvenance always allocates). This is exactly the clone-leak shape.
   it("null → Nil instance", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, null);
+    const result = fromJs(CONSTANT_CTX, null);
     expect(result).toBeInstanceOf(ANil);
     expect(is_nil(result)).toBe(true);
   });
 
   it("undefined → Nil instance", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, undefined);
+    const result = fromJs(CONSTANT_CTX, undefined);
     expect(result).toBeInstanceOf(ANil);
     expect(is_nil(result)).toBe(true);
   });
@@ -108,7 +109,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // membrane.ts:647-656 — "object" boxer. Arrays cons up into a Pair chain;
   // plain objects wrap as SchemeJSObject.
   it("array → Pair chain", () => {
-    const result = AValue.fromJs(CONSTANT_CTX, [1, 2, 3]);
+    const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
     expect(result).toBeInstanceOf(APair);
     const p = result as APair;
     expect((p.car as AExact).num).toBe(1n);
@@ -116,14 +117,14 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   it("plain object → SchemeJSObject wrapper", () => {
     const obj = { foo: 1 };
-    const result = AValue.fromJs(CONSTANT_CTX, obj);
+    const result = fromJs(CONSTANT_CTX, obj);
     expect(result).toBeInstanceOf(AJSObject);
     expect((result as AJSObject).source).toBe(obj);
   });
 
   it("function → SchemeJSFunction wrapper", () => {
     const fn = () => 42;
-    const result = AValue.fromJs(CONSTANT_CTX, fn);
+    const result = fromJs(CONSTANT_CTX, fn);
     expect(result).toBeInstanceOf(AJSFunction);
     expect((result as AJSFunction).source).toBe(fn);
   });
@@ -131,13 +132,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // AValue input is returned as-is on the empty-provenance fast path.
   it("AValue input (empty provenance) is returned by identity", () => {
     const orig = new AString(CONSTANT_CTX, "x");
-    expect(AValue.fromJs(CONSTANT_CTX, orig)).toBe(orig);
+    expect(fromJs(CONSTANT_CTX, orig)).toBe(orig);
   });
 
   it("AValue input (with non-empty provenance) is cloned via withProvenance", () => {
     const orig = new AString(CONSTANT_CTX, "x");
     const prov = new Set<number>([7]);
-    const result = AValue.fromJs(CONSTANT_CTX, orig, prov);
+    const result = fromJs(CONSTANT_CTX, orig, prov);
     expect(result).not.toBe(orig);
     expect(result).toBeInstanceOf(AString);
     expect([...result.provenance]).toEqual([7]);

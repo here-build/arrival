@@ -23,6 +23,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
+import { fromJs } from "./boxing.js";
 import { nil } from "./ANil.js";
 import {
   accessHas,
@@ -144,7 +145,7 @@ export class AJSArray extends AValue {
     const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
     if (inputs.length === 0) return count;
     const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : AValue.fromJs(this.ctx, count, prov);
+    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
 
   // Setoid — two AJSArray wrappers are equal iff they wrap the SAME source (reference identity),

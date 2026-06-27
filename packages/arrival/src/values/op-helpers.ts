@@ -15,6 +15,7 @@ import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./primitives/RunContext.js";
 
 import { AValue, unionProvenance } from "./primitives/AValue.js";
+import { fromJs } from "./primitives/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
 import { ABool } from "./primitives/ABool.js";
@@ -334,7 +335,7 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   if (result instanceof AValue) return result.withProvenance(prov) as T;
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    return AValue.fromJs(inputs[0].ctx, result, prov) as T;
+    return fromJs(inputs[0].ctx, result, prov) as T;
   }
   return result;
 }

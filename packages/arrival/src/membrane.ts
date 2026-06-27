@@ -24,6 +24,7 @@ import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
+import { fromJs, registerBoxer } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
@@ -574,18 +575,18 @@ export class OperatorRegistry {
 // `typeof [] === "object"`. Arrays cons-up into a proper scheme list; everything
 // else wraps. Provenance stamps the top-level result only; spine elements stay
 // empty until a provenance-aware op touches them.
-AValue.registerBoxer("object", (ctx, v, p) => {
+registerBoxer("object", (ctx, v, p) => {
   if (Array.isArray(v)) {
     let list: AValue = nil;
     for (let i = v.length - 1; i >= 0; i--) {
-      list = new APair(ctx, AValue.fromJs(ctx, v[i]), list) as unknown as AValue;
+      list = new APair(ctx, fromJs(ctx, v[i]), list) as unknown as AValue;
     }
     return p === EMPTY_PROVENANCE ? list : list.withProvenance(p);
   }
   return new AJSObject(ctx, v as object, p);
 });
 
-AValue.registerBoxer("function", (ctx, v, p) => new AJSFunction(ctx, v as (...args: unknown[]) => unknown, p));
+registerBoxer("function", (ctx, v, p) => new AJSFunction(ctx, v as (...args: unknown[]) => unknown, p));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).

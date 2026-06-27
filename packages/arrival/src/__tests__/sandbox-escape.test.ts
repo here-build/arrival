@@ -433,24 +433,15 @@ describe("registry poisoning vectors", () => {
   });
 
   /**
-   * Documents what would happen if the boxer registry were ever poisoned.
-   * Today no sandbox path can reach `registerBoxer` (probe-confirmed above).
-   * This test is here as the canary: the day someone wraps and exposes AValue,
-   * `registerBoxer` becomes a critical attack vector. The test asserts the
-   * registry has NO access-control surface today — a hardening fix should
-   * either:
-   *   (a) freeze the registry after init, OR
-   *   (b) move registerBoxer behind a non-enumerable internal symbol
-   * After such a fix, this test should be updated to assert the new control.
+   * FIXED (was DOCUMENTED — option (b) of the old note): the boxer-registry WRITER
+   * moved off the AValue class to a module function in boxing.ts. Even if AValue
+   * leaks to the sandbox there is no `registerBoxer` to call on it — poisoning a
+   * boxer now requires importing boxing.ts, which needs module access the sandbox
+   * cannot get. The `boxers` Map is module-private; `fromJs` (read-only) is harmless.
    */
-  it("DOCUMENTED: AValue.registerBoxer has no access control today", async () => {
-    // registerBoxer is an exposed static method. No frozen check, no symbol
-    // guard. If AValue ever leaks to the sandbox, this is a direct write to
-    // a global registry. Test pin: any PR that hardens the registry should
-    // flip this assertion.
-    expect(typeof AValue.registerBoxer).toBe("function");
-    // Negative pin — if we ever freeze the class:
-    expect(Object.isFrozen(AValue)).toBe(false);
+  it("the boxer-registry writer is not reachable from the AValue class", () => {
+    expect((AValue as unknown as Record<string, unknown>).registerBoxer).toBeUndefined();
+    expect((AValue as unknown as Record<string, unknown>).fromJs).toBeUndefined();
   });
 });
 

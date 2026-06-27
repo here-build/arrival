@@ -37,6 +37,7 @@ import { exec, parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { fromJs } from "../values/primitives/boxing.js";
 import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
@@ -46,7 +47,7 @@ let seq = 0;
 
 /** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
 const sStr = (s: string, p: number) => new AString(CONSTANT_CTX, s, new Set([p]));
-const sNum = (n: number, p: number) => AValue.fromJs(CONSTANT_CTX, n, new Set([p]));
+const sNum = (n: number, p: number) => fromJs(CONSTANT_CTX, n, new Set([p]));
 
 const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
 const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) });

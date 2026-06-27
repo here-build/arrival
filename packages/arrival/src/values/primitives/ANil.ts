@@ -6,6 +6,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { registerBoxer } from "./boxing.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import type { APairLike } from "../types.js";
 
@@ -126,7 +127,7 @@ export class ANil extends AValue {
 export const nil = new ANil(CONSTANT_CTX, );
 
 // null/undefined → nil (empty list).
-AValue.registerBoxer("null", (ctx, _v, p) => new ANil(ctx, p));
-AValue.registerBoxer("undefined", (ctx, _v, p) => new ANil(ctx, p));
+registerBoxer("null", (ctx, _v, p) => new ANil(ctx, p));
+registerBoxer("undefined", (ctx, _v, p) => new ANil(ctx, p));
 
 markInteropBoundary(ANil);
