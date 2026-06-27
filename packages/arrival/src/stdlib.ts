@@ -16,10 +16,8 @@ import { Lexer } from "./reader/Lexer.js";
 import { _parse } from "./reader/parse.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
-  is_false,
   is_function,
   is_nil,
-  is_null,
   is_plain_object,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -43,7 +41,6 @@ import { Values } from "./values/primitives/Values.js";
 import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
-import { unpromise } from "./utils/promises.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import {
@@ -124,18 +121,7 @@ specials.on(["remove", "append"], function () {
 // Re-export unpromise from utils/promises
 export { unpromise } from "./utils/promises.js";
 
-// ----------------------------------------------------------------------
-// :: Function that return matcher function that match string against string
-// ----------------------------------------------------------------------
-function matcher(name, arg) {
-  if (arg instanceof RegExp) {
-    return (x) => String(x).match(arg);
-  } else if (is_function(arg)) {
-    // it will always be function
-    return arg;
-  }
-  throw new Error("Invalid matcher");
-}
+// `matcher` relocated to env/arrival-extensions.ts (with `find`, its only user).
 
 // `to_array` / `list->array` / `isProperList` / `mapImpl` relocated to env/r7rs/lists.ts
 // alongside `for-each` (their last stdlib user). The pack carries its own byte-identical
@@ -462,20 +448,7 @@ Object.assign(global_env.__env__, {
     // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
     // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
     // ------------------------------------------------------------------
-    find: function find(arg, list) {
-      typecheck("find", arg, ["regex", "function"]);
-      typecheck("find", list, ["pair", "nil"]);
-      if (is_null(list)) {
-        return nil;
-      }
-      const fn = matcher("find", arg);
-      return unpromise(fn(list.car), function (value) {
-        if (!is_false(value) && !is_nil(value)) {
-          return list.car;
-        }
-        return find(arg, list.cdr);
-      });
-    },
+    // `find` relocated to env/arrival-extensions.ts (SRFI-1 + arrival regex extension).
     // `for-each` relocated to env/r7rs/lists.ts (R7RS §6.4, alongside map + its mapImpl).
   } satisfies Record<string, EnvironmentValue>);
 export { global_env, user_env as env };

@@ -27,7 +27,7 @@ import { AExact } from "../values/numbers.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { unpromise } from "../utils/promises.js";
-import { is_false } from "../eval/guards.js";
+import { is_false, is_null, is_nil, is_function } from "../eval/guards.js";
 import { curry } from "../utils/functional.js";
 
 // Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
@@ -35,6 +35,37 @@ import { curry } from "../utils/functional.js";
 // from Scheme (the `.` / `new` / `-->` host-interop the rest of this sweep removes).
 // `string->symbol`'s old `%as.data` mark was vestigial — it set a string `data`
 // property, but the evaluator's data mark is the `__data__` symbol (evaluator.ts).
+
+// `matcher` + `find` relocated VERBATIM from stdlib.ts global_env (husk dissolution).
+// `find` is SRFI-1's first-match search with arrival's regex extension: the predicate
+// may be a host RegExp (matched against String(x)) as well as a procedure — so it lives
+// in TS beside `regex?`, not in the portable-Scheme prelude. find recurses, so it's a
+// module-scope function the `find` symbol binds (mirrors lists.ts's mapImpl). Params are
+// untyped (implicit-any, as in the stdlib original) — the values are dynamic Scheme.
+function matcher(name, arg) {
+  if (arg instanceof RegExp) {
+    return (x) => String(x).match(arg);
+  } else if (is_function(arg)) {
+    // it will always be function
+    return arg;
+  }
+  throw new Error("Invalid matcher");
+}
+
+function findImpl(arg, list) {
+  typecheck("find", arg, ["regex", "function"]);
+  typecheck("find", list, ["pair", "nil"]);
+  if (is_null(list)) {
+    return nil;
+  }
+  const fn = matcher("find", arg);
+  return unpromise(fn(list.car), function (value) {
+    if (!is_false(value) && !is_nil(value)) {
+      return list.car;
+    }
+    return findImpl(arg, list.cdr);
+  });
+}
 
 export default new EnvCapability("arrival/core-extensions", {
   symbols: {
@@ -171,6 +202,12 @@ export default new EnvCapability("arrival/core-extensions", {
     "regex?": symbol.native`regex?: #t iff x is a host regular expression`(
       { input: [z.unknown()], output: [z.boolean] },
       (x: unknown): boolean => withInputProvenance([x], x instanceof RegExp),
+    ),
+    // SRFI-1 `find` with arrival's regex extension (see `matcher`/`findImpl` above):
+    // the first element whose match against the predicate-or-regex is truthy, else nil.
+    find: symbol.native`find: first list element matching the predicate or regex, else nil`(
+      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
+      findImpl,
     ),
   },
   prelude: `
