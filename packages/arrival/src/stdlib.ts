@@ -6,27 +6,21 @@
  */
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import { ctxOf } from "./values/primitives/AValue.js";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "./Environment.js";
 import { global_env, user_env } from "./env-roots.js";
 import { tokenize } from "./reader/tokenize.js";
-import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/primitives/EOF.js";
-import { AHalfBaked } from "./values/primitives/AHalfBaked.js";
 import { Lexer } from "./reader/Lexer.js";
 
 import { _parse } from "./reader/parse.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
-  is_env,
   is_false,
   is_function,
   is_nil,
   is_null,
-  is_pair,
   is_plain_object,
-  is_promise,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
@@ -43,15 +37,13 @@ import {
 } from "./values/primitives.js";
 import { nil } from "./values/primitives/ANil.js";
 import * as specials from "./reader/specials.js";
-import { call_function } from "./eval/call-function.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
 import { Values } from "./values/primitives/Values.js";
 import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
-import { isCircularList, APair, concatPair } from "./values/primitives/APair.js";
-import { promise_all, unpromise } from "./utils/promises.js";
+import { unpromise } from "./utils/promises.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import {
@@ -62,15 +54,12 @@ import {
 } from "./membrane.js";
 import { AJSObject } from "./values/primitives/js-wrappers.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
-import { type EvalContext, currentRunEnv, isSpeculating, ArrivalError } from "./eval/evaluator.js";
 
 
 // Type definitions for dynamic Scheme values
 // Scheme is inherently dynamic - these use `any` intentionally for interpreter interop
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SchemeValue = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SchemeFunction = (...args: any[]) => any;
 
 // -------------------------------------------------------------------------
 
@@ -148,127 +137,10 @@ function matcher(name, arg) {
   throw new Error("Invalid matcher");
 }
 
-// ----------------------------------------------------------------------
-function to_array(name: string, deep = false): SchemeFunction {
-  return function recur(list: SchemeValue): SchemeValue[] {
-    typecheck(name, list, ["pair", "nil"]);
-    if (is_nil(list)) {
-      return [];
-    }
-    // have_cycles() below only catches reader #0= cycles; actively detect a
-    // runtime set-cdr! cycle so we raise a clean error instead of growing the
-    // array until "Invalid array length" (the reverse symptom).
-    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    // Per-run allocation bound: `to_array` is the choke point every collection op (filter/map/append/
-    // join) funnels through, so charging materialized elements HERE catches the O(K²)-churn runaway
-    // that the TICK-cadence wall-clock budget can't preempt (a single native list pass emits no TICK).
-    // Look the meter up ONCE (O(depth)); the per-element check is a bare int compare. Undefined ⇒ no
-    // budget requested ⇒ zero overhead beyond the lookup. The run env comes from the evaluator's
-    // run-scoped `currentRunEnv()` (set at the apply boundary) — env-as-`this` is fully erased.
-    const runEnv = currentRunEnv();
-    const meter = findHeapMeter(runEnv ?? null);
-    const result: SchemeValue[] = [];
-    let node = list;
-    while (true) {
-      if (is_pair(node)) {
-        if (node.have_cycles("cdr")) {
-          break;
-        }
-        let car = node.car;
-        if (deep && is_pair(car)) {
-          // tree->array deep recursion (untested branch): resolve the recursive
-          // fn from the run env (was `this.get(name)`), now `currentRunEnv()`.
-          car = (runEnv?.get(name) as SchemeFunction)(car);
-        }
-        result.push(car);
-        if (meter !== undefined && ++meter.used > meter.max) {
-          throw new ArrivalError(heapBudgetMessage(meter.max), []);
-        }
-        node = node.cdr;
-      } else {
-        invariant(is_nil(node), `${name}: can't convert improper list`);
-        break;
-      }
-    }
-    return result;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Shared list/array core impls — module-scope so sibling builtins (append,
-// reverse, map, join, …) CALL them directly instead of reaching through
-// `global_env.get("list->array")` for a sibling they can't name lexically. The
-// global-env bindings below are these same functions; calling them directly is
-// behavior-identical (already early-bound today) and avoids a per-call env lookup.
-// ---------------------------------------------------------------------------
-const listToArray = to_array("list->array");
-
-function isProperList(obj: SchemeValue): SchemeValue {
-  // A circular list is NOT a proper list (R7RS). Detect runtime cycles
-  // (have_cycles below only catches reader #0= cycles).
-  if (is_pair(obj) && isCircularList(obj)) {
-    return false;
-  }
-  let node = obj;
-  while (true) {
-    if (is_nil(node)) {
-      return true;
-    }
-    if (!is_pair(node)) {
-      return false;
-    }
-    if (node.have_cycles("cdr")) {
-      return false;
-    }
-    node = node.cdr;
-  }
-}
-
-function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
-  typecheck("map", fn, "function");
-  const is_list = isProperList;
-  for (const [i, arg] of lists.entries()) {
-    typecheck("map", arg, ["pair", "nil"], i + 1);
-    // detect cycles
-    invariant(!is_pair(arg) || is_list(arg), `map: argument ${i + 1} is not a list`);
-  }
-  if (lists.length === 0 || lists.some(is_nil)) {
-    return nil;
-  }
-
-  // Convert lists to arrays for parallel processing
-  const arrays = lists.map((l) => listToArray(l));
-  const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
-
-  // Call function for all elements in parallel. (Formerly destructured
-  // {env,dynamic_env,use_dynamic} off env-as-`this` — all always undefined, so
-  // call_function got an empty options bag; passing {} directly is identical and
-  // drops the last `this` read here.)
-  const results: SchemeValue[] = [];
-  for (let i = 0; i < length; i++) {
-    const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-    results.push(call_function(fn, args, {}));
-  }
-
-  // Wait for all and convert back to list
-  const hasPromises = results.some(is_promise);
-
-  // Tier-2 speculation: map's count is known exactly up front (one output
-  // per input → bounds [1,1]), so its `HalfBaked` interval is already a
-  // point — `length` is decidable immediately while values still resolve.
-  // This carries speculation THROUGH a map sitting between filter and the
-  // length/comparison (the values stay lazy; only the count is surfaced).
-  if (hasPromises && isSpeculating()) {
-    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
-  }
-  if (hasPromises) {
-    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
-    );
-  }
-  return APair.fromArray(ctxOf(lists[0]), results);
-}
+// `to_array` / `list->array` / `isProperList` / `mapImpl` relocated to env/r7rs/lists.ts
+// alongside `for-each` (their last stdlib user). The pack carries its own byte-identical
+// to_array/listToArray/isProperList; mapImpl moved verbatim. `matcher` (above) stays — it
+// belongs to `find`, relocated in a later step.
 
 // Old Pair prototype methods are now in the Pair class above
 
@@ -604,20 +476,7 @@ Object.assign(global_env.__env__, {
         return find(arg, list.cdr);
       });
     },
-    // ------------------------------------------------------------------
-    "for-each": function (this: Environment, fn: SchemeFunction, ...lists: SchemeValue[]) {
-      typecheck("for-each", fn, "function");
-      for (const [i, arg] of lists.entries()) {
-        typecheck("for-each", arg, ["pair", "nil"], i + 1);
-      }
-      // we need to use call(this because babel transpile this code into:
-      // var ret = map.apply(void 0, [fn].concat(lists));
-      // it don't work with weakBind
-      const ret = mapImpl.call(this, fn, ...lists);
-      if (is_promise(ret)) {
-        return ret.then(() => {});
-      }
-    },
+    // `for-each` relocated to env/r7rs/lists.ts (R7RS §6.4, alongside map + its mapImpl).
   } satisfies Record<string, EnvironmentValue>);
 export { global_env, user_env as env };
 

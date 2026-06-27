@@ -39,7 +39,7 @@ import { ctxOf } from "../../values/primitives/AValue.js";
 import { is_pair, is_nil, is_null } from "../../eval/guards.js";
 import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
+import { currentRunEnv, ArrivalError, isSpeculating } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { is_false, is_promise } from "../../eval/guards.js";
@@ -175,6 +175,51 @@ function multiListMap(fn: SchemeValue, lists: SchemeValue[], runCtx: RunContext)
   return APair.fromArray(ctxOf(lists[0]), results);
 }
 
+// `mapImpl` — the parallel zip-map that `for-each` runs for its side effects (it
+// discards the result list). Relocated VERBATIM from stdlib.ts (husk dissolution),
+// over this pack's own listToArray/isProperList. It overlaps `multiListMap` above
+// but is kept separate to preserve byte-identical behavior: mapImpl's per-arg
+// `isProperList` cycle-check raises "map: argument N is not a list", whereas
+// multiListMap lets listToArray raise its own circular-list error. Unifying the
+// two is a deferred behavior-preserving cleanup.
+function mapImpl(fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue {
+  typecheck("map", fn, "function");
+  const is_list = isProperList;
+  for (const [i, arg] of lists.entries()) {
+    typecheck("map", arg, ["pair", "nil"], i + 1);
+    // detect cycles
+    invariant(!is_pair(arg) || is_list(arg), `map: argument ${i + 1} is not a list`);
+  }
+  if (lists.length === 0 || lists.some(is_nil)) {
+    return nil;
+  }
+
+  // Convert lists to arrays for parallel processing
+  const arrays = lists.map((l) => listToArray(l));
+  const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
+
+  const results: SchemeValue[] = [];
+  for (let i = 0; i < length; i++) {
+    const args = arrays.map((arr: SchemeValue[]) => arr[i]);
+    results.push(call_function(fn, args, {}));
+  }
+
+  const hasPromises = results.some(is_promise);
+  // Tier-2 speculation: map's count is exact up front (one output per input →
+  // bounds [1,1]), so its HalfBaked interval is already a point — length is
+  // decidable immediately while values still resolve.
+  if (hasPromises && isSpeculating()) {
+    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
+    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
+  }
+  if (hasPromises) {
+    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
+      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
+    );
+  }
+  return APair.fromArray(ctxOf(lists[0]), results);
+}
+
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
@@ -193,6 +238,24 @@ export default new EnvCapability("scheme/lists", {
           return (m as (...a: unknown[]) => unknown).call(seq, fn, runCtx);
         }
         return multiListMap(fn, lists, runCtx);
+      },
+    ),
+    // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
+    "for-each": symbol.native`for-each: apply fn to corresponding elements of one or more lists, for side effects`(
+      { input: z.array(z.unknown()), output: [z.unknown()] },
+      // Relocated from stdlib.ts global_env (husk dissolution): runs mapImpl for its
+      // side effects and discards the result list. The legacy `.call(this)` was a
+      // babel-weakBind workaround — this pack is tsc/ES2022, so a direct call is
+      // behavior-identical (mapImpl never reads `this`).
+      (fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue => {
+        typecheck("for-each", fn, "function");
+        for (const [i, arg] of lists.entries()) {
+          typecheck("for-each", arg, ["pair", "nil"], i + 1);
+        }
+        const ret = mapImpl(fn, ...lists);
+        if (is_promise(ret)) {
+          return ret.then(() => {});
+        }
       },
     ),
     // R7RS 6.4 Pairs and lists
