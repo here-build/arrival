@@ -23,11 +23,11 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec } from "../eval/generator-exec";
-import { get } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import {
   INTEROP_BOUNDARY,
   InteropAccessError,
+  accessMember,
   accessSet,
   isInteropBoundary,
 } from "../interop-access";
@@ -172,23 +172,23 @@ describe("CRITICAL: accessor isolation leaks", () => {
     expect(dunder).not.toBe(Object.getPrototypeOf(() => {}));
   });
 
-  it("lips get() (dot-notation accessor) blocks raw constructor/__proto__ access", async () => {
-    // `get` is the dot-notation property accessor (`foo.bar` → get(foo, "bar"),
-    // routed via Environment.get's dotted resolution). On a raw function its
-    // `else` branch used to do `object[name]` — so get(fn, "constructor") handed
-    // back the Function constructor (RCE). It now routes through accessMember.
+  it("accessMember (the dot-notation / membrane read policy) blocks raw constructor/__proto__ access", () => {
+    // The LIPS `get` dot-notation wrapper was DELETED in the husk dissolution — it
+    // was a dead path (no runtime caller, only this test). Its policy IS
+    // `accessMember` (interop-access): the primitive Environment.get's dotted
+    // resolution (`foo.bar`) AND the `@` membrane reads both call directly. So the
+    // escape vectors are asserted against the live policy. Blocked names and
+    // boundary-crossing inherited props throw InteropAccessError (the callers
+    // collapse that to nil); own data resolves.
     const fn = (x: number) => x;
-    expect(get(fn, "constructor")).toBeUndefined();
-    expect(get(fn, "__proto__")).toBeUndefined();
-    expect(get(fn, "prototype")).toBeUndefined();
-    // Inherited built-in proto methods are past a sandbox boundary → blocked.
-    expect(get([1, 2, 3], "map")).toBeUndefined();
+    expect(() => accessMember(fn, "constructor")).toThrow(InteropAccessError);
+    expect(() => accessMember(fn, "__proto__")).toThrow(InteropAccessError);
+    expect(() => accessMember(fn, "prototype")).toThrow(InteropAccessError);
+    // Inherited built-in proto methods are past an interop boundary → blocked.
+    expect(() => accessMember([1, 2, 3], "map")).toThrow(InteropAccessError);
     // Benign own-property access still resolves (guard against over-blocking).
-    // `get` boxes the result through `patch_value` (numbers → SchemeExact), so
-    // assert "not blocked" + the unboxed value rather than raw identity.
-    expect(get({ a: 1, b: 2 }, "a")).not.toBeUndefined();
-    expect(String(get({ a: 1, b: 2 }, "a"))).toBe("1");
-    expect(String(get([1, 2, 3], "length"))).toBe("3");
+    expect(accessMember({ a: 1, b: 2 }, "a")).toBe(1);
+    expect(accessMember([1, 2, 3], "length")).toBe(3);
   });
 
   it("benign :keyword and dot access on a plain object still resolve", async () => {

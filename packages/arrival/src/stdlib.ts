@@ -9,21 +9,16 @@ import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, type EnvironmentValue } from "./Environment.js";
 import { global_env, user_env } from "./env-roots.js";
-import { tokenize } from "./reader/tokenize.js";
 import { eof } from "./values/primitives/EOF.js";
 import { Lexer } from "./reader/Lexer.js";
 
-import { _parse } from "./reader/parse.js";
-import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
-  is_function,
   is_nil,
   is_plain_object,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { box, patch_value, quote } from "./reader/values-repr.js";
-import { toString, unbox, map_object, symbolize } from "./printer.js";
+import { toString, map_object, symbolize } from "./printer.js";
 import {
   complex_bare_re,
   complex_re,
@@ -43,13 +38,7 @@ import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
 
 import { ABool } from "./values/primitives/ABool.js";
-import {
-  keywordAccessorResolver,
-  NOT_FOUND,
-  accessMember,
-  InteropAccessError,
-} from "./membrane.js";
-import { AJSObject } from "./values/primitives/js-wrappers.js";
+import { keywordAccessorResolver } from "./membrane.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
 
 
@@ -109,14 +98,7 @@ specials.on(["remove", "append"], function () {
   Lexer._cache.rules = null;
 });
 
-// ----------------------------------------------------------------------
-// :: Tokens are the array of strings from tokenizer
-// :: the return value is an array of lips code created out of Pair class.
-// :: env is needed for parser extensions that will invoke the function
-// :: or macro assigned to symbol, this function is async because
-// :: it evaluates the code, from parser extensions, that may return a promise.
-// ----------------------------------------------------------------------
-// _parse moved to reader/parse.ts (imported above); the reader is now a monolith-free leaf.
+// reader machinery (tokenize / tokens / _parse) lives in reader/ leaves now.
 
 // Re-export unpromise from utils/promises
 export { unpromise } from "./utils/promises.js";
@@ -125,8 +107,7 @@ export { unpromise } from "./utils/promises.js";
 
 // `to_array` / `list->array` / `isProperList` / `mapImpl` relocated to env/r7rs/lists.ts
 // alongside `for-each` (their last stdlib user). The pack carries its own byte-identical
-// to_array/listToArray/isProperList; mapImpl moved verbatim. `matcher` (above) stays — it
-// belongs to `find`, relocated in a later step.
+// to_array/listToArray/isProperList; mapImpl moved verbatim.
 
 // Old Pair prototype methods are now in the Pair class above
 
@@ -166,62 +147,12 @@ export { box, patch_value } from "./reader/values-repr.js";
 // quote moved to values-repr.ts; re-exported here to preserve the public barrel.
 export { quote } from "./reader/values-repr.js";
 
-// -------------------------------------------------------------------------------
-const native_lambda = _parse(
-  tokenize(`(lambda ()
-                                        "[native code]"
-                                        (throw "Invalid Invocation"))`),
-)[0];
-// -------------------------------------------------------------------------------
-// Native property accessor — interpreter infrastructure below the membrane. NOT a
-// Scheme-facing builtin: the `.` / `get` verbs that exposed this
-// to Scheme code were removed (the host-language sweep) — Scheme reaches host data
-// only through the blessed `@` / `@?` / `@keys` membrane accessors now. Access still
-// routes through accessMember / SchemeJSObject.get so the membrane is enforced.
-export const get = function get(object, ...args) {
-  let value;
-  while (args.length > 0) {
-    const arg = args.shift();
-    const name = unbox(arg);
-    // the value was set to false to prevent resolving
-    // by Real Promises #153
-    if (name === "then" && object instanceof QuotedPromise) {
-      value = QuotedPromise.prototype.then;
-    } else if (name === "__code__" && is_function(object) && object.__code__ === undefined) {
-      value = native_lambda;
-    } else if (object instanceof AJSObject) {
-      // Use SchemeJSObject.get() for interop membrane access
-      value = object.get(name);
-    } else {
-      // Route raw property access through the SAME isolation as `@` /
-      // SchemeJSObject.get: blocked names (constructor, __proto__, prototype, …)
-      // and inherited props past the interop boundary (Function.prototype.*,
-      // Array.prototype.*) must not be reachable via dot-notation — otherwise
-      // `f.constructor("…")()` is RCE. Absent or blocked → undefined, the
-      // chain-terminator the `value === undefined` check below already handles.
-      const key = typeof name === "symbol" ? name : String(name);
-      try {
-        const accessed = accessMember(object, key);
-        value = accessed === NOT_FOUND ? undefined : accessed;
-      } catch (e) {
-        if (e instanceof InteropAccessError) {
-          value = undefined;
-        } else {
-          throw e;
-        }
-      }
-    }
-    if (value === undefined) {
-      invariant(args.length === 0, () => `Try to get ${args[0]} from undefined`);
-      return value;
-    } else {
-      value = patch_value(value);
-    }
-    object = value;
-  }
-  return value;
-};
-// -------------------------------------------------------------------------
+// `get` (the LIPS dot-notation accessor) + `native_lambda` (its `__code__` "[native
+// code]" stub) DELETED — vestigial host-interop infra, NOT R7RS/SRFI. The `.` / `get`
+// Scheme verbs were removed in the host-language sweep; Scheme reaches host data only via
+// the polyglot `@`/`@?`/`@keys`/`:key` membrane reads, and Environment.get's dotted
+// resolution calls accessMember (interop-access) directly. Neither had any runtime caller.
+
 const internal_env = new Environment(
   "internal",
   {
