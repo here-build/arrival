@@ -18,7 +18,8 @@ import type { EvalSchemeInto, SchemeEnv } from "./common/scheme-env.js";
 import { AHalfBaked, type Interval, is_half_baked } from "./values/primitives/AHalfBaked.js";
 import type { Environment } from "./Environment.js";
 import { schemeFalse, schemeTrue } from "./values/primitives/ABool.js";
-import { coerceNumeric, type AOrd, isOrd, isSchemeNumber, ORD_REL } from "./values/op-helpers.js";
+import { coerceNumeric, type AOrd, isOrd, isSchemeNumber, ORD_REL, nilOrderCompare, withInputProvenance } from "./values/op-helpers.js";
+import { isStrict } from "./eval/evaluator.js";
 // Value-domain primitive clusters — each is the carved-out source of truth for one
 // R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
 // They are no longer spread into `wrappedOps`: `initBridge` ASSEMBLES them onto
@@ -28,7 +29,6 @@ import { coerceNumeric, type AOrd, isOrd, isSchemeNumber, ORD_REL } from "./valu
 import { NATIVE_PACKS } from "./env/native-packs.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
 import { inferenceEnv } from "./inference-env.js";
-import flInterop from "./env/fl-interop.js";
 import { AString } from "./values/primitives/AString.js";
 import type { Codec, Operator } from "./membrane.js";
 import type { ANumeric } from "./values/numbers.js";
@@ -326,6 +326,67 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // per-run isolation lands later when the dynamic holders thread per-run through the trampoline.
 let currentHandlers: unknown = nil;
 
+// ── Loose (nil-tolerant) comparison overlay — CARVED from env/fl-interop.ts ──────────
+// The base numeric comparisons throw on a nil operand (coerceNumeric rejects it). The
+// inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom rather
+// than crashing a proof. `looseCompare` wraps each numeric/speculation core: a nil operand
+// short-circuits to the loose universal order; otherwise the core runs (numbers + the
+// HalfBaked speculative-decide + the non-number type-error). NOTE: the runCtx.strict gate is
+// DROPPED in this carve (the bare operator entry is ctx-free) — loose is now unconditional.
+const isNilOperand = (v) => v == null || (v)?.constructor?.name === "ANil";
+const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
+const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
+const LOOSE_NUM_PAIR = {
+  "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
+  "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
+  ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
+  "<=": (a, b) => flLteNum(a, b),
+  ">=": (a, b) => flLteNum(b, a),
+};
+const ORD_FROM_LE = {
+  "<": (ab, ba) => ab && !ba,
+  ">": (ab, ba) => ba && !ab,
+  "<=": (ab) => ab,
+  ">=": (_ab, ba) => ba,
+};
+const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
+function loosePairOrder(sym, a, b) {
+  const nilCmp = nilOrderCompare(a, b);
+  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
+  if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
+  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
+  const le_ab = Boolean((a)["arrival/tagless-final/lte"](b));
+  const le_ba = Boolean((b)["arrival/tagless-final/lte"](a));
+  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
+  return ORD_FROM_LE[sym](le_ab, le_ba);
+}
+function looseOrderChain(sym, args) {
+  let verdict = true;
+  for (let i = 0; i < args.length - 1; i++) {
+    if (!loosePairOrder(sym, args[i], args[i + 1])) { verdict = false; break; }
+  }
+  return withInputProvenance(args, verdict);
+}
+function looseCompare(sym, core) {
+  const fn = function (...args) {
+    // Run-level strict via the ambient holder (what bridge bare builtins read). For an
+    // all-constant comparison like (= '() '()) there is no operand to carry strict — nil is a
+    // global constant — so the run holder is the only honest source, exactly as car-of-nil reads it.
+    if (isStrict()) {
+      if (!args.every(isNumberOperand)) throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
+      return core(...args);
+    }
+    if (args.some(isNilOperand)) {
+      if (sym === "=") return withInputProvenance(args, args.every(isNilOperand));
+      return looseOrderChain(sym, args);
+    }
+    return core(...args);
+  };
+  if (SPECULATIVE_OPS.has(sym)) fn[SPECULATE] = true;
+  Object.defineProperty(fn, "name", { value: sym });
+  return fn;
+}
+
 export const wrappedOps = {
   "+": wrapOperator(ops.add),
   "-": wrapOperator(ops.sub),
@@ -393,11 +454,11 @@ export const wrappedOps = {
   },
 
   expt: wrapOperator(ops.expt),
-  "=": wrapOperator(ops.numEq),
-  "<": wrapOrd(wrapOperator(ops.lt), "<"),
-  ">": wrapOrd(wrapOperator(ops.gt), ">"),
-  "<=": wrapOrd(wrapOperator(ops.lte), "<="),
-  ">=": wrapOrd(wrapOperator(ops.gte), ">="),
+  "=": looseCompare("=", wrapOperator(ops.numEq)),
+  "<": looseCompare("<", wrapOrd(wrapOperator(ops.lt), "<")),
+  ">": looseCompare(">", wrapOrd(wrapOperator(ops.gt), ">")),
+  "<=": looseCompare("<=", wrapOrd(wrapOperator(ops.lte), "<=")),
+  ">=": looseCompare(">=", wrapOrd(wrapOperator(ops.gte), ">=")),
   max: wrapOperator(ops.max),
   min: wrapOperator(ops.min),
   "zero?": wrapOperator(ops.isZero),
@@ -791,9 +852,6 @@ export function initBridge(): Promise<void> {
       // native assembly and the base packs — so its lazily-captured `builtin*` refs
       // (read at first call from global_env) are guaranteed live. Doing it inside
       // whenBootstrapComplete's chain means a public exec never sees a half-assembled
-      // inferenceEnv. (inferenceEnv + flInterop are imported statically at module top;
-      // the assembly stays HERE in the bootstrap chain so sequencing is preserved.)
-      await assembleEnv(inferenceEnv as unknown as SchemeEnv, [flInterop.lower()]);
       for (const name of [
         "->",
         "->>",

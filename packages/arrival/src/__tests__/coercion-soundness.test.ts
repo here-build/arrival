@@ -34,7 +34,6 @@ import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
 import { AJSArray } from "../values/primitives/js-wrappers.js";
-import flInteropCap from "../env/fl-interop.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -50,7 +49,6 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
       cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
     ).map(([k, v]) => [k, v.impl ?? v.value]),
   );
-const ops = opsOf(flInteropCap);
 const listOps = opsOf(listsCap); // r7rs scheme/lists — assoc lives here now
 
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
