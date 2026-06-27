@@ -3,7 +3,7 @@
 // encoded as the token-pattern `rules` table. Originates from the LIPS formatter.
 import { CLASS } from "../well-known-symbols.js";
 import { is_special, is_symbol_string } from "../eval/guards.js";
-import { tokenize } from "../stdlib.js";
+import { tokenize } from "./tokenize.js";
 import { AString } from "../values/primitives/AString.js";
 import {
   def_lambda_re,
