@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment";
 import run, { exec } from "../eval/evaluator";
@@ -242,7 +243,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return undefined when no else branch and condition is false", async () => {
         // (if #f 1)
         const code = list(sym("if"), false, num(1));
-        expect(await exec(code, { env })).toBe(undefined);
+        expect(await exec(code, { env })).toBe(theVoid);
       });
 
       it("should evaluate nested if expressions", async () => {
@@ -267,7 +268,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return undefined for empty begin", async () => {
         // (begin)
         const code = list(sym("begin"));
-        expect(await exec(code, { env })).toBe(undefined);
+        expect(await exec(code, { env })).toBe(theVoid);
       });
 
       it("should execute side effects", async () => {
@@ -567,7 +568,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
         const code = list(sym("when"), false, num(1), num(2), num(3));
-        expect(await exec(code, { env })).toBe(undefined);
+        expect(await exec(code, { env })).toBe(theVoid);
       });
     });
 
@@ -581,7 +582,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
         const code = list(sym("unless"), true, num(1), num(2), num(3));
-        expect(await exec(code, { env })).toBe(undefined);
+        expect(await exec(code, { env })).toBe(theVoid);
       });
     });
 

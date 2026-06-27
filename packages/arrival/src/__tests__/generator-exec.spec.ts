@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { theVoid } from "../values/primitives/AVoid.js";
 import { exec, execExpr, parse } from "../eval/generator-exec";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -31,8 +32,8 @@ describe("generator-exec", () => {
     it("should handle define and use defined values", async () => {
       const results = await exec("(define x 42) (+ x 8)");
       expect(results).toHaveLength(2);
-      // define returns undefined
-      expect(results[0]).toBeUndefined();
+      // define returns the void value (unspecified)
+      expect(results[0]).toBe(theVoid);
       // x + 8 = 50
       expect((results[1] as AExact).num).toBe(50n);
     });

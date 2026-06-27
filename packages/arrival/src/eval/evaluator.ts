@@ -22,6 +22,7 @@
  */
 
 import invariant from "tiny-invariant";
+import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
@@ -1058,7 +1059,7 @@ function* evalIf(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (elseExpr !== undefined) {
       return yield { call: evaluate(elseExpr, ctx), tail: inTail, onResolve };
     }
-    return undefined; // No else branch, return undefined
+    return theVoid; // No else branch, return undefined
   } else {
     return yield { call: evaluate(thenExpr, ctx), tail: inTail, onResolve };
   }
@@ -1074,7 +1075,7 @@ function* evalIf(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * `(define (loop n) (loop (- n 1)))` tail-recursive.
  */
 function* evalBegin(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  let result: SchemeValue = undefined;
+  let result: SchemeValue = theVoid;
   let node = rest;
 
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
@@ -1303,7 +1304,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     ctx.env.set(name, value);
-    return undefined;
+    return theVoid;
   }
 
   // Simple definition: (define name value)
@@ -1324,7 +1325,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   ctx.env.set(first, value);
-  return undefined;
+  return theVoid;
 }
 
 /** `(set! name value)` — assign an EXISTING binding; unbound is an error (R7RS §5.3.1), not a fresh define. */
@@ -1501,7 +1502,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const macro = new Macro(symbol_name(name), macroFn);
   ctx.env.set(name, macro);
 
-  return undefined;
+  return theVoid;
 }
 
 // ============================================================================
@@ -1955,7 +1956,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // No clause matched
-  return undefined;
+  return theVoid;
 }
 
 /**
@@ -2032,7 +2033,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     node = node.cdr;
   }
 
-  return undefined;
+  return theVoid;
 }
 
 /**
@@ -2074,7 +2075,7 @@ function* evalWhen(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     return yield { call: evalBegin(body, ctx), tail: ctx.tail === true, onResolve: controlFlowResolve(testResult) };
   }
 
-  return undefined;
+  return theVoid;
 }
 
 /** `(unless test expr...)` — the `#f`-guarded mirror of `when`; body in tail position. */
@@ -2096,7 +2097,7 @@ function* evalUnless(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     return yield { call: evalBegin(body, ctx), tail: ctx.tail === true, onResolve: controlFlowResolve(testResult) };
   }
 
-  return undefined;
+  return theVoid;
 }
 
 /**
@@ -2176,7 +2177,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       if (is_pair(resultExprs)) {
         return yield { call: evalBegin(resultExprs, doTail), tail: ctx.tail === true };
       }
-      return undefined;
+      return theVoid;
     }
 
     // Execute body (non-tail — body's value is discarded each iteration).
@@ -2232,7 +2233,7 @@ function* evalWhile(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     if (is_false(testResult)) {
-      return undefined;
+      return theVoid;
     }
 
     if (is_pair(body)) {

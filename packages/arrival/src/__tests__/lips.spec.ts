@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec } from "../eval/generator-exec";
 import { freshEnv } from "./_fresh-env";
@@ -57,26 +58,26 @@ describe("scope", function () {
   describe("lexical", function () {
     it("should evaluate let", async function () {
       const result = await execScope(`(define x 10) (let ((x 10)) x)`);
-      expect(result).toEqual([undefined, new AExact(CONSTANT_CTX, 10n)]);
+      expect(result).toEqual([theVoid, new AExact(CONSTANT_CTX, 10n)]);
     });
     it("should evaluate let over let", async function () {
       var code = `(define x 10)
                         (let ((x 20)) (let ((x 30)) x))`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new AExact(CONSTANT_CTX, 30n)]);
+      expect(result).toEqual([theVoid, new AExact(CONSTANT_CTX, 30n)]);
     });
     it("should evaluate lambda", async function () {
       var code = `(define x 10)
                         ((let ((x 20)) (lambda () x)))`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new AExact(CONSTANT_CTX, 20n)]);
+      expect(result).toEqual([theVoid, new AExact(CONSTANT_CTX, 20n)]);
     });
     it("sould create closure", async function () {
       var code = `(define fn (let ((x 10))
                                       (let ((y 20)) (lambda () (+ x y)))))
                         (fn)`;
       const result = await execScope(code);
-      expect(result).toEqual([undefined, new AExact(CONSTANT_CTX, 30n)]);
+      expect(result).toEqual([theVoid, new AExact(CONSTANT_CTX, 30n)]);
     });
   });
   // Dynamic scope tests removed - dynamic scoping is a legacy feature not used in standard Scheme

@@ -1,3 +1,5 @@
+import { theVoid } from "./AVoid.js";
+
 // The carrier for `(values …)`: a distinct wrapper, not a plain value, so a
 // multiple-values return is distinguishable from a single value that happens
 // to be a collection.
@@ -10,12 +12,13 @@ export class Values {
   }
 
   /**
-   * Empty → undefined; single element → that element unwrapped; ≥2 → a Values.
-   * The unwrap is what keeps a 1-value `(values x)` indistinguishable from `x`.
+   * Empty → void (the unspecified value); single element → that element
+   * unwrapped; ≥2 → a Values. The unwrap is what keeps a 1-value `(values x)`
+   * indistinguishable from `x`.
    */
   static from(values: unknown[]): unknown {
     if (values.length === 0) {
-      return undefined;
+      return theVoid;
     }
     if (values.length === 1) {
       return values[0];

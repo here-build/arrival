@@ -51,6 +51,7 @@ export { ACharacter, ACharacter as AChar } from "./values/primitives/ACharacter.
 // block was removed (barrel-ectomy) so these names are re-surfaced from their
 // real home modules to keep the public API identical.
 export { nil, ANil } from "./values/primitives/ANil.js";
+export { theVoid, AVoid } from "./values/primitives/AVoid.js";
 export { characters } from "./values/primitives/ACharacter.js";
 export { ASymbol } from "./values/primitives/ASymbol.js";
 export { AString } from "./values/primitives/AString.js";

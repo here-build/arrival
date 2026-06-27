@@ -38,6 +38,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact, AInexact } from "../values/numbers";
 import { APair } from "../values/primitives/APair.js";
 import { ANil, nil } from "../values/primitives/ANil";
+import { AVoid } from "../values/primitives/AVoid.js";
 import { ACharacter } from "../values/primitives/ACharacter";
 import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 
@@ -91,19 +92,19 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect([...result.provenance]).toEqual([99]);
   });
 
-  // types.ts:212-213 — null and undefined both → Nil (boxed).
-  // Empty provenance: returns a fresh Nil (NOT the singleton — see types.ts:87
-  // — withProvenance always allocates). This is exactly the clone-leak shape.
+  // The two JS bottoms map to the two distinct Scheme absences (Rosetta
+  // concept-split): null → nil (empty list); undefined → void (unspecified).
+  // Empty provenance still returns a fresh instance (withProvenance always
+  // allocates) — the clone-leak shape.
   it("null → Nil instance", () => {
     const result = fromJs(CONSTANT_CTX, null);
     expect(result).toBeInstanceOf(ANil);
     expect(is_nil(result)).toBe(true);
   });
 
-  it("undefined → Nil instance", () => {
+  it("undefined → Void instance", () => {
     const result = fromJs(CONSTANT_CTX, undefined);
-    expect(result).toBeInstanceOf(ANil);
-    expect(is_nil(result)).toBe(true);
+    expect(result).toBeInstanceOf(AVoid);
   });
 
   // membrane.ts:647-656 — "object" boxer. Arrays cons up into a Pair chain;

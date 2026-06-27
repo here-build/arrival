@@ -1,4 +1,5 @@
 import { characters } from "./primitives/ACharacter.js";
+import { theVoid } from "./primitives/AVoid.js";
 
 export const p_o = /^[[(]$/;
 export const p_e = /^[\])]$/;
@@ -94,8 +95,11 @@ export const complex_bare_re = new RegExp(`^(?:${gen_complex_re("", "[0-9a-f]")}
 export const complex_bare_match_re = make_complex_match_re("", "[0-9a-fA-F]");
 // those constants need to be add as rules to the Lexer to work with vector literals
 export const parsable_contants = {
+  // `#null` → JS null (membrane-translates to nil downstream); `#void` → the void
+  // singleton (the unspecified value). Both are loose-mode reader tolerances — a
+  // follow-up gates them on ctx.strict so the R7RS control rejects the literals.
   "#null": null,
-  "#void": undefined,
+  "#void": theVoid,
 };
 export const directives = ["#!fold-case", "#!no-fold-case"];
 export const hash_literals = ["#t", "#f"];
