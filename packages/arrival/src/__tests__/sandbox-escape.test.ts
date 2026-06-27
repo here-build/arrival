@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
@@ -309,17 +309,26 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * inserts" requires the bound to exist first. Leaving as a documented
    * behavior pin.
    */
-  it("DOCUMENTED: string->symbol of N distinct names creates N intern entries", async () => {
-    const before = Object.keys(ASymbol.list).length;
-    const N = 500;
-    for (let i = 0; i < N; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      new ASymbol(CONSTANT_CTX, `__test-intern-doc-${Date.now()}-${i}`);
-    }
-    const after = Object.keys(ASymbol.list).length;
-    // Current behavior: grows by N. When a bound exists, this should
-    // become `expect(after - before).toBeLessThanOrEqual(BOUND)`.
-    expect(after - before).toBe(N);
+  it("interned symbol minting is heap-bounded + per-run (former intern-table DoS is closed)", () => {
+    // FIXED (was DOCUMENTED): the process-global `ASymbol.list` is gone. Interning is
+    // a per-run-context flyweight table now, and each fresh mint charges the run's heap
+    // meter — so a `(string->symbol unique)` loop hits the budget instead of growing a
+    // permanent global table forever.
+    const ctx = makeRunContext({ heapBudget: 50 });
+    expect(() => {
+      for (let i = 0; i < 1000; i++) new ASymbol(ctx, `__intern-bound-${i}`);
+    }).toThrow(/budget/i);
+    // A flyweight HIT (re-minting an existing name) is no allocation → no charge, so
+    // it never trips even a budget of 1.
+    const tight = makeRunContext({ heapBudget: 1 });
+    const a = new ASymbol(tight, "same-name");
+    const b = new ASymbol(tight, "same-name");
+    expect(a).toBe(b);
+    // Distinct run contexts intern independently (per-run tables, collectable at run
+    // end): distinct instances, still eq? by name.
+    const other = new ASymbol(makeRunContext({}), "same-name");
+    expect(other).not.toBe(a);
+    expect(other["arrival/tagless-final/equals"](a)).toBe(true);
   });
 
   /**
@@ -468,8 +477,10 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     // Object.prototype must remain a clean baseline (no foreign own keys added).
     expect(Object.prototype.hasOwnProperty.call(Object.prototype, "__proto__sentinel__")).toBe(false);
-    // The intern table itself must have a null prototype (no inherited keys).
-    expect(Object.getPrototypeOf(ASymbol.list)).toBeNull();
+    // The per-ctx intern table is a `Map` now (see ASymbol.internTables): a "__proto__"
+    // key is an ordinary Map entry that can't reach Object.prototype, so the former
+    // null-prototype Record guard is unnecessary. Minting still works + round-trips.
+    expect(String(new ASymbol(CONSTANT_CTX, "__proto__"))).toBe("__proto__");
   });
 
   it("sandboxedSet('__proto__', ...) is rejected as a blocked key", async () => {

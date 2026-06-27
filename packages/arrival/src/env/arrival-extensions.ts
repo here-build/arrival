@@ -17,6 +17,7 @@
 // and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../common/capability.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { ctxOf } from "../values/primitives/AValue.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { typecheck } from "../utils/typecheck.js";
 import * as z from "../common/scheme-zod.js";
@@ -196,7 +197,10 @@ export default new EnvCapability("arrival/core-extensions", {
       { input: [z.schemeString], output: [z.symbol] },
       (s: unknown): ASymbol => {
         typecheck("string->symbol", s, "string");
-        return withInputProvenance([s], new ASymbol(CONSTANT_CTX, stringValue(s)));
+        // Mint with the INPUT's ctx (value-carries-ctx), not CONSTANT_CTX: a runtime
+        // symbol then interns in its run's per-run table (heap-charged, GC'd at run end)
+        // rather than the permanent global one — closing the `(string->symbol unique)` DoS.
+        return withInputProvenance([s], new ASymbol(ctxOf(s), stringValue(s)));
       },
     ),
     "regex?": symbol.native`regex?: #t iff x is a host regular expression`(

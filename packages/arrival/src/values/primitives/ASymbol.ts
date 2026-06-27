@@ -2,6 +2,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { markInteropBoundary } from "../../interop-access.js";
+import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike } from "../types.js";
 import { isSchemeString, isString } from "../types.js";
 
@@ -19,15 +20,30 @@ type SchemeSymbolName = string | symbol;
  */
 const UNINTERNED = Symbol("UNINTERNED");
 
+// Per-RUN-CONTEXT flyweight intern tables (replaces the former process-global
+// `ASymbol.list`). The ctx a symbol is minted with decides its table — hence both
+// its LIFETIME and its run PARAMETERS:
+//   • CONSTANT_CTX → the permanent bootstrap table (quote/vector/… — a fixed set).
+//   • a run ctx    → a per-run table, collectable once the run ctx is GC'd, so a
+//     `(string->symbol unique)` loop no longer leaks permanent global entries.
+// A `Map` (not the old null-proto Record) is inherently key-pollution-safe —
+// `(string->symbol "__proto__")` sets a Map entry, never reaching Object.prototype.
+// Interning stays pure flyweight (eq? compares `__name__`, not reference — see
+// `equals`/`is`), so per-ctx scoping changes no symbol semantics.
+const internTables = new WeakMap<RunContext, Map<string, ASymbol>>();
+function internTableFor(ctx: RunContext): Map<string, ASymbol> {
+  let table = internTables.get(ctx);
+  if (table === undefined) {
+    table = new Map();
+    internTables.set(ctx, table);
+  }
+  return table;
+}
+
 export class ASymbol extends AValue {
   static [CLASS] = "symbol";
   readonly kind = "symbol" as const;
-  // Interning table for string-named symbols.
-  // `Object.create(null)` (NOT `{}`): a plain object inherits Object.prototype,
-  // so `(string->symbol "__proto__")` — string->symbol is inference-exposed —
-  // would assign through the inherited setter and pollute Object.prototype.
-  // A null-prototype map has no inherited keys/setters to walk into.
-  static readonly list: Record<string, ASymbol> = Object.create(null);
+  // Interning is per run context — see `internTables` / `internTableFor` above.
   // Note: gensyms store their literal name at this[SchemeSymbol.literal]
   // We can't declare the index signature with esbuild
   // Special symbol markers
@@ -45,15 +61,23 @@ export class ASymbol extends AValue {
     // Unwrap SchemeStringLike to plain string
     const unwrapped: SchemeSymbolName = isSchemeString(name) ? name.valueOf() : name;
 
-    if (intern !== UNINTERNED && typeof unwrapped === "string" && ASymbol.list[unwrapped] instanceof ASymbol) {
-      return ASymbol.list[unwrapped];
+    if (intern !== UNINTERNED && typeof unwrapped === "string") {
+      const table = internTableFor(ctx);
+      const hit = table.get(unwrapped);
+      // Flyweight HIT: return the canonical shared instance — no allocation.
+      if (hit !== undefined) {
+        return hit;
+      }
+      // MISS: a fresh symbol is an allocation — charge the run's heap meter so a
+      // `(string->symbol unique)` mint-loop hits the budget instead of growing
+      // unbounded. An unmetered run (incl. CONSTANT_CTX bootstrap) → chargeHeap no-ops.
+      chargeHeap(ctx, 1);
+      this.__name__ = unwrapped;
+      table.set(unwrapped, this);
+      return;
     }
 
     this.__name__ = unwrapped;
-
-    if (intern !== UNINTERNED && typeof unwrapped === "string") {
-      ASymbol.list[unwrapped] = this;
-    }
   }
 
   static is(symbol: unknown, name: string | ASymbol | RegExp): boolean {
@@ -148,14 +172,13 @@ function is_gensym(symbol: unknown): boolean {
 // ============================================================================
 // INTEROP BOUNDARY
 // ============================================================================
-// War story (2026-05-28 audit): SchemeSymbol carries a process-global intern
-// table (`SchemeSymbol.list`) and tracks gensym/literal metadata via well-known
-// symbols (`SchemeSymbol.literal`, `SchemeSymbol.object`). Symbol-to-field
-// auto-resolution exposes any class-level or prototype-level property to
-// inference-plane scheme — including the static `list` (read-write, would let inference-plane reads
-// poison the intern table) and the literal/object metadata symbols.
-// Marking the boundary blocks inherited-property access on instances; static
-// access via `(.AValue.list)` is already blocked separately by the AValue
-// non-export policy (see registry-poisoning tests in sandbox-escape.test.ts).
+// War story (2026-05-28 audit): SchemeSymbol tracks gensym/literal metadata via
+// well-known symbols (`SchemeSymbol.literal`, `SchemeSymbol.object`), and
+// symbol-to-field auto-resolution would expose any class- or prototype-level
+// property to inference-plane scheme. Marking the boundary blocks inherited-property
+// access on instances. (The former static `list` intern table — a read-write
+// poisoning surface — is gone: interning now lives in the module-scope per-ctx
+// `internTables` WeakMap above, not a class member, so it isn't symbol-field
+// reachable at all.)
 // ============================================================================
 markInteropBoundary(ASymbol);
