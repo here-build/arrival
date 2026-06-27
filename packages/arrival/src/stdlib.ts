@@ -287,13 +287,6 @@ function mapImpl(fn: SchemeFunction, ...lists: SchemeValue[]): SchemeValue {
 const repr = new Map();
 
 // ----------------------------------------------------------------------
-const props = Object.getOwnPropertyNames(Array.prototype);
-const array_methods: SchemeValue[] = [];
-for (const x of props) {
-  array_methods.push((Array as SchemeValue)[x], Array.prototype[x as keyof typeof Array.prototype]);
-}
-
-// ----------------------------------------------------------------------
 function user_repr(obj) {
   const constructor = obj.constructor || Object;
   const plain_object = is_plain_object(obj);
