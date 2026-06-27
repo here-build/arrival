@@ -12,10 +12,8 @@ export class QuotedPromise {
   static rejected_str = "#<js-promise (rejected)>";
 
   declare _promise: Promise<SchemeValue>;
-  declare __promise__: Promise<SchemeValue | void>;
   declare __pending__: boolean;
   declare __rejected__: boolean;
-  declare __fulfilled__: boolean;
   declare __reason__: unknown;
   declare __type__: string | undefined;
   // prevent resolving when returned from real promise #153
@@ -60,11 +58,6 @@ export class QuotedPromise {
         get: () => internal[name as keyof typeof internal],
       });
     }
-    Object.defineProperty(this, "__promise__", {
-      value: trackedPromise,
-      configurable: true,
-      enumerable: true,
-    });
   }
 
   catch(fn: (err: unknown) => SchemeValue): QuotedPromise {
