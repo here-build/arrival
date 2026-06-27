@@ -1,6 +1,6 @@
 /**
- * Public `exec`/`parse` entry point: bridges the parser (in stdlib.ts, the
- * upstream-LIPS-derived reader) to the generator-based evaluator. Self-bootstraps
+ * Public `exec`/`parse` entry point: bridges the reader (now the leaf reader/parse.ts,
+ * the upstream-LIPS-derived reader) to the generator-based evaluator. Self-bootstraps
  * the runtime on first use, then drives each top-level form through `run()`.
  *
  * Usage:
@@ -11,6 +11,7 @@
 
 import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
+import { user_env } from "../env-roots.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
@@ -25,16 +26,6 @@ import type { SchemeValue } from "../values/types.js";
 // static value→eval import edge (the macro-head skip needs it; this module already
 // sits above eval/guards in the DAG). Idempotent — set once at module load.
 installMacroGuard(is_macro);
-
-// Lazy import to avoid circular dependency during module initialization
-let _stdlib: typeof import("../stdlib.js") | null = null;
-
-async function getStdlib() {
-  if (!_stdlib) {
-    _stdlib = await import("../stdlib.js");
-  }
-  return _stdlib;
-}
 
 export interface ExecOptions {
   env?: Environment;
@@ -173,10 +164,11 @@ export async function exec(
     irLineageSources,
   }: ExecOptions = {},
 ): Promise<SchemeValue[]> {
-  const stdlib = await getStdlib();
-
-  // Resolve environment - stdlib.env is the user_env (global_env.inherit("user-env"))
-  const actualEnv = env ?? stdlib.env;
+  // Resolve the default env from the env-roots leaf — `user_env` is arrival's
+  // interaction scope (`global_env.inherit("user-env")`), sourced STATICALLY so this
+  // entry never imports the stdlib monolith. The bootstrap gate below still drives
+  // population: initBridge (via the bridge→stdlib edge) registers the builtins.
+  const actualEnv = env ?? user_env;
 
   // Self-initialize the runtime bootstrap (TS builtins + Scheme prelude) lazily, so
   // embedders never call initBridge() manually. If the bootstrap has already STARTED
@@ -286,7 +278,7 @@ export async function exec(
 }
 
 /**
- * Parse Scheme code without evaluating (delegates to stdlib's reader).
+ * Parse Scheme code without evaluating (delegates to the reader leaf, reader/parse.ts).
  * `source` (a filename / module path) is
  * stamped onto every produced location, so frames built from these forms read as
  * `file:line` — used by `(require …)` to attribute a module's throws to its file.
@@ -305,8 +297,7 @@ export async function execExpr(
   expr: SchemeValue,
   { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, speculate, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
-  const stdlib = await getStdlib();
-  const actualEnv = env ?? stdlib.env;
+  const actualEnv = env ?? user_env;
 
   // See exec() above: await bootstrap COMPLETION, not just the started-flag.
   if (!skipBootstrapWait) {

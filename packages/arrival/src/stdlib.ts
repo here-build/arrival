@@ -8,7 +8,8 @@ import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { ctxOf } from "./values/primitives/AValue.js";
 import { withInputProvenance } from "./values/op-helpers.js";
-import { Environment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
+import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "./Environment.js";
+import { global_env, user_env } from "./env-roots.js";
 import { findHeapMeter, heapBudgetMessage } from "./heap-budget.js";
 import { eof } from "./values/primitives/EOF.js";
 import { AHalfBaked } from "./values/primitives/AHalfBaked.js";
@@ -800,9 +801,13 @@ const is_node = () => typeof process === "object" && !!process.env;
 // on scheme/core; the evaluator dispatches them by resolved-marker value, no husk needed.
 
 // -------------------------------------------------------------------------
-export const global_env = new Environment(
-  "global",
-  {
+// The native root's inline builtins. `global_env` is created EMPTY in the env-roots
+// leaf so the evaluator entry + bridge can source the root without importing this
+// monolith; we register the builtins onto it HERE, at the same module-load point the
+// constructor used to occupy. `Object.assign` onto `__env__` is the faithful
+// equivalent of the old `new Environment("global", {...})` — the ctor stores
+// `__env__` and runs no logic, so the resulting binding set is byte-identical.
+Object.assign(global_env.__env__, {
     undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
     // Spec §5.3 car/cdr element-only provenance.
@@ -1076,11 +1081,8 @@ export const global_env = new Environment(
       const filtered = array.filter((_, i) => !is_false(predicateResults[i]) && !is_nil(predicateResults[i]));
       return APair.fromArray(ctxOf(list), filtered);
     },
-  },
-  undefined,
-);
-const user_env = global_env.inherit("user-env");
-export { user_env as env };
+  } satisfies Record<string, EnvironmentValue>);
+export { global_env, user_env as env };
 
 // -------------------------------------------------------------------------
 function set_interaction_env(interaction, internal) {
