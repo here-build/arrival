@@ -11,7 +11,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec, global_env } from "../stdlib";
+import { exec } from "../eval/generator-exec";
+import { global_env } from "../env-roots";
 import { inferenceEnv } from "../inference-env";
 import { is_nil } from "../eval/guards";
 import { schemeToJs } from "../rosetta";

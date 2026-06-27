@@ -22,7 +22,8 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
-import { exec, get } from "../stdlib";
+import { exec } from "../eval/generator-exec";
+import { get } from "../stdlib";
 import { inferenceEnv } from "../inference-env";
 import {
   INTEROP_BOUNDARY,
