@@ -13,10 +13,10 @@
  * compose-vs-pipe is proven by an order-sensitive lambda pair.
  */
 import { describe, expect, it } from "vitest";
-import { env, exec } from "../stdlib";
-import { initBridge } from "../bridge";
+import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env";
 
-await initBridge();
+const env = await freshEnv();
 
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;

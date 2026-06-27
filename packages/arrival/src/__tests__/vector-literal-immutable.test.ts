@@ -8,11 +8,11 @@
 // throw lives in purity-doors.test.ts). Here we pin the UNIFICATION: literal AND
 // constructed vectors/bytevectors are equally immutable, and reads still work.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
-import { env, exec } from "../stdlib.js";
+import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
-const run = async (form: string) => String((await exec(form, env) as unknown[])[0]);
+const env = await freshEnv();
+const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
 
 describe("vectors/bytevectors are immutable regardless of origin (purity invariant)", () => {
   it("mutating a vector literal is a door", async () => {

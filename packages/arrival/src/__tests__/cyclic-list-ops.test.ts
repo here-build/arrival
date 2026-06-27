@@ -13,11 +13,11 @@
 // that hangs the worker (testTimeout can't interrupt a sync loop). That loud hang
 // IS the regression signal.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
-import { env, exec } from "../stdlib.js";
+import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
-const run = async (form: string) => String((await exec(form, env) as unknown[])[0]);
+const env = await freshEnv();
+const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
 // c = a reader-built circular list: (1 2 3 …) whose last cdr points back at itself.
 const cyclic = (op: string) => `(let ((c '#0=(1 2 3 . #0#))) ${op})`;
 

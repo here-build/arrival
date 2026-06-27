@@ -24,12 +24,13 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../bridge";
+import type { Environment } from "../Environment";
 import { exec } from "../eval/generator-exec";
-import { env as globalEnv } from "../stdlib";
+import { freshEnv } from "./_fresh-env";
 
+let globalEnv: Environment;
 beforeAll(async () => {
-  await initBridge();
+  globalEnv = await freshEnv();
 });
 
 /** A boolean to whatever `is_false` treats as truthy — a JS boolean is fine. */

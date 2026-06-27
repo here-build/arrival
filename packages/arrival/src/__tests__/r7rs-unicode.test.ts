@@ -24,10 +24,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { env, exec } from "../stdlib";
-import { initBridge } from "../bridge";
+import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env";
 
-await initBridge();
+const env = await freshEnv();
 
 /** Coerce a Scheme numeric result to a JS number (handles SchemeExact). */
 const num = (r: unknown): number => {

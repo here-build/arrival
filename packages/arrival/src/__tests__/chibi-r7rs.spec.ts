@@ -29,8 +29,11 @@
 import fs from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { env, exec } from "../stdlib";
-import { initBridge } from "../bridge";
+import type { Environment } from "../Environment";
+import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env";
+
+let env: Environment;
 
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
@@ -624,7 +627,7 @@ describe("Chibi R7RS Official Tests", () => {
     // "EnvironmentTeardownError: Cannot load …/ramda … after the environment was
     // torn down" — an unhandled rejection that taints the exit code (1 error)
     // without failing any test. Awaiting it settles the import before the suite runs.
-    await initBridge();
+    env = await freshEnv();
     await setupTestFramework();
   });
 

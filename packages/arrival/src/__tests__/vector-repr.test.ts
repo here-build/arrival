@@ -5,11 +5,11 @@
 // They must render as the R7RS external representation #(...) / #u8(...). repr of
 // a vector had ZERO test coverage before this.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
-import { env, exec } from "../stdlib.js";
+import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
-const repr = async (form: string) => String((await exec(form, env) as unknown[])[0]);
+const env = await freshEnv();
+const repr = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
 
 describe("vector / bytevector external representation (repr)", () => {
   it("a vector prints #(...) at top level", async () => {

@@ -5,18 +5,20 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec as lipsExec, env as lipsEnv } from "../stdlib";
+import { exec as lipsExec } from "../eval/generator-exec";
 import { parse } from "../eval/generator-exec";
 import { nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { initBridge } from "../bridge";
+import { freshEnv } from "../__tests__/_fresh-env";
+import type { Environment } from "../Environment";
 import { exec as genExec } from "../eval/evaluator";
 import type { SchemeValue } from "../values/types";
 
 // Wait for bridge initialization
+let lipsEnv: Environment;
 beforeAll(async () => {
-  await initBridge();
+  lipsEnv = await freshEnv();
 });
 
 describe("Evaluator Benchmarks", () => {

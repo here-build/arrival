@@ -23,11 +23,11 @@
 //     so the cycle branch never fires). Terminates either way — hence we guard on
 //     termination here.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
-import { env, exec } from "../stdlib.js";
+import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
-const run = async (form: string) => (await exec(form, env) as unknown[])[0];
+const env = await freshEnv();
+const run = async (form: string) => (await exec(form, { env }) as unknown[])[0];
 
 describe("equal? on cyclic vectors terminates (cycle-safety regression)", () => {
   it("two distinct reader-built self-cyclic vectors compare without a stack blow", async () => {

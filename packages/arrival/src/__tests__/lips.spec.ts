@@ -1,15 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { env as global_environment, exec } from "../stdlib";
-import { initBridge } from "../bridge";
+import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env";
 import { AExact } from "../values/numbers";
 
 const execSimple = async (string: string, env?: object, dynamic_env?: object) => {
   return exec(string, { env, dynamic_env, use_dynamic: !!dynamic_env });
 };
-beforeAll(async () => {
-  await initBridge();
-});
+const global_environment = await freshEnv();
 
 describe("environment", function () {
   const env = global_environment;

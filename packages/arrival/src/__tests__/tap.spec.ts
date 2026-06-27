@@ -12,10 +12,16 @@
  * The evaluator threads a `currentInvocation` through EvalContext so that
  * sub-evaluations receive their parent as the second arg to enter().
  */
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec";
-import { env as userEnv } from "../stdlib";
+import { freshEnv } from "./_fresh-env";
+import type { Environment } from "../Environment";
 import type { APair } from "../values/primitives/APair.js";
+
+let userEnv: Environment;
+beforeAll(async () => {
+  userEnv = await freshEnv();
+});
 
 interface TestInv {
   id: number;

@@ -8,11 +8,11 @@
 // any result is a promise, return promise_all(...).then(...) so the trampoline
 // awaits settled values.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
-import { env, exec } from "../stdlib.js";
+import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
-const run = async (form: string) => String((await exec(form, env) as unknown[])[0]);
+const env = await freshEnv();
+const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
 
 // An async proc: a JS function returning a resolved Promise. Mirrors a
 // membrane-crossing callback whose body awaits an async boundary.

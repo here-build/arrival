@@ -16,14 +16,14 @@
 // SEPARATE expander defect (boxing-track S9: needs a SchemeVector unwrap in the
 // matcher/expander, not just the off-by-one). docs/plan-2026-06-10-boxing-track.md.
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../bridge.js";
+import { freshEnv } from "./_fresh-env";
 import { AVector } from "../values/primitives/AVector.js";
-import { env, exec } from "../stdlib.js";
+import { exec } from "../eval/generator-exec";
 
-await initBridge();
+const env = await freshEnv();
 
 async function run(form: string): Promise<unknown> {
-  const r = await exec(form, env);
+  const r = await exec(form, { env });
   return (r as unknown[])[0];
 }
 

@@ -11,13 +11,13 @@
 
 import fs from "fs";
 import { describe, expect, test } from "vitest";
-import { env, exec } from "../stdlib";
+import { exec } from "../eval/generator-exec";
 import { nil } from "../values/primitives/ANil.js";
-import { initBridge } from "../bridge";
+import { freshEnv } from "./_fresh-env";
 import * as path from "node:path";
 
 // Initialize bootstrap (includes all Scheme macros)
-await initBridge();
+const env = await freshEnv();
 
 // Read + exec the harness helpers directly (the `load` builtin was removed in the
 // host-language sweep — file I/O is the loader's job, not a Scheme-reachable verb).
@@ -28,7 +28,7 @@ const helpersScm = fs.readFileSync(
   path.join(import.meta.dirname, "schemeSpec/helpers/helpers.scm"),
   "utf-8",
 );
-await exec(helpersScm);
+await exec(helpersScm, { env });
 
 /**
  * Specs whose *load* (macro expansion at collection time) wedges in an infinite
