@@ -1,5 +1,4 @@
 import { Environment } from "../Environment.js";
-import { LambdaContext } from "./LambdaContext.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { Macro } from "./Macro.js";
 import { AExact, AInexact } from "../values/numbers.js";
@@ -124,11 +123,6 @@ export function is_prototype(obj: unknown): boolean {
     typeof obj.constructor === "function" &&
     obj.constructor.prototype === obj
   );
-}
-
-// ----------------------------------------------------------------------
-export function is_context(o: unknown): o is LambdaContext {
-  return o instanceof LambdaContext;
 }
 
 // ----------------------------------------------------------------------
