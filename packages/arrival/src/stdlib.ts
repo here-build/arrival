@@ -40,7 +40,6 @@ import {
   float_re,
   int_bare_re,
   int_re,
-  parsable_contants,
   rational_bare_re,
   rational_re,
 } from "./values/primitives.js";
@@ -81,7 +80,6 @@ type SchemeValue = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SchemeFunction = (...args: any[]) => any;
 
-let env: Environment;
 // -------------------------------------------------------------------------
 
 // Structured tracer for the syntax-rules expander, gated by the Scheme `DEBUG`
@@ -430,10 +428,6 @@ function symbolize(obj) {
   return obj;
 }
 
-// ----------------------------------------------------------------------
-export function get_props(obj: object): (string | symbol)[] {
-  return (Object.keys(obj) as (string | symbol)[]).concat(Object.getOwnPropertySymbols(obj));
-}
 
 // ----------------------------------------------------------------------
 function has_own_function(obj, name) {
@@ -775,18 +769,6 @@ const internal_env = new Environment(
   undefined,
 );
 // ----------------------------------------------------------------------
-const nan = new AInexact(CONSTANT_CTX, Number.NaN);
-const constants = {
-  "#t": true,
-  "#f": false,
-  "#true": true,
-  "#false": false,
-  "+inf.0": Number.POSITIVE_INFINITY,
-  "-inf.0": Number.NEGATIVE_INFINITY,
-  "+nan.0": nan,
-  "-nan.0": nan,
-  ...parsable_contants,
-};
 
 const is_node = () => typeof process === "object" && !!process.env;
 
