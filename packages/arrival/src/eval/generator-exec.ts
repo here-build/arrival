@@ -90,12 +90,6 @@ export interface ExecOptions {
    */
   strict?: boolean;
   /**
-   * Dev-only: emit a console trace of syntax-rules macro expansion (the expander's
-   * group/log/dir tracer). Off by default. Replaces the former `DEBUG` Scheme variable;
-   * carried per-run on RunContext.debug and threaded to the expander via the macro invoke.
-   */
-  debug?: boolean;
-  /**
    * Internal: set by the bootstrap's own prelude evals (bridge.initBridge's
    * `evalScheme`) to bypass the bootstrap-completion gate below — awaiting it
    * there would deadlock (the prelude eval IS part of the bootstrap it would be
@@ -165,7 +159,6 @@ export async function exec(
     heapBudget,
     speculate,
     strict,
-    debug,
     skipBootstrapWait,
     irLineage,
     irLineageSources,
@@ -226,7 +219,7 @@ export async function exec(
   // strict + the heap meter as scaffolding — `exec` still installs the meter on the env
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, debug });
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate });
   const priorMeter = actualEnv.__heapMeter__;
   // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
   // `operand.ctx.heapMeter` reads the live meter with no behavior change.

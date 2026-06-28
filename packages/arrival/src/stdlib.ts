@@ -12,13 +12,10 @@ import { global_env, user_env } from "./env-roots.js";
 import { eof } from "./values/primitives/EOF.js";
 import { Lexer } from "./reader/Lexer.js";
 
-import {
-  is_nil,
-  is_plain_object,
-} from "./eval/guards.js";
+import { is_nil } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { toString, map_object, symbolize } from "./printer.js";
+import { toString } from "./printer.js";
 import {
   complex_bare_re,
   complex_re,
@@ -49,46 +46,6 @@ type SchemeValue = any;
 // -------------------------------------------------------------------------
 
 // Dev-only structured tracer for the syntax-rules expander. Gated by the per-run
-// `debug` interpreter option (RunContext.debug) — threaded to the expander via the
-// macro invoke's runCtx, NOT a Scheme `DEBUG` variable and NOT module debug-state, so
-// it is inert by default and hermetic across concurrent runs. Mirrors the console API
-// so traces NEST (group/groupEnd) and are TIMED; `debugFmt` renders SchemeValues with
-// full depth, JS-string args passing through as labels.
-/* c8 ignore start */
-let debugSeq = 0;
-function debugFmt(x: SchemeValue): unknown {
-  return typeof x === "string"
-    ? x
-    : is_plain_object(x)
-      ? map_object(x, (value: SchemeValue) => toString(value, true))
-      : toString(x, true);
-}
-// `makeDebugTracer(on)` returns the tracer the expander uses; `on` is this run's
-// RunContext.debug. Off ⇒ every method is a no-op, so the expander stays silent.
-function makeDebugTracer(on: boolean) {
-  return {
-    log: (...args: SchemeValue[]): void => {
-      if (on) console.log(...args.map(debugFmt));
-    },
-    dir: (x: unknown): void => {
-      if (on) console.dir(x, { depth: null });
-    },
-    group: (label: SchemeValue): void => {
-      if (on) console.group(debugFmt(label));
-    },
-    groupEnd: (): void => {
-      if (on) console.groupEnd();
-    },
-    time: (label: string): void => {
-      if (on) console.time(label);
-    },
-    timeEnd: (label: string): void => {
-      if (on) console.timeEnd(label);
-    },
-  };
-}
-/* c8 ignore stop */
-
 // symbol_to_string relocated to printer.ts (used only by its function_to_string).
 
 // ----------------------------------------------------------------------
@@ -262,12 +219,7 @@ Object.assign(global_env.__env__, {
       } else {
         validate_identifiers(macro.car);
       }
-      const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand, runCtx }: SchemeValue) {
-        const debug = makeDebugTracer(runCtx?.debug === true);
-        const trace = `syntax-expand #${++debugSeq}`;
-        debug.group(code);
-        debug.time(trace);
-        debug.log("macro:", macro);
+      const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
         const scope = env.inherit("syntax");
         const dynamic_env = scope;
         let var_scope: Environment = this;
@@ -295,17 +247,12 @@ Object.assign(global_env.__env__, {
           while (!is_nil(rules)) {
             const rule = rules.car.car;
             let expr = rules.car.cdr.car;
-            debug.log("try rule:", rule);
             const bindings = extract_patterns(rule, code, symbols, ellipsis, {
               expansion: this,
               define: env,
               globalEnv: global_env,
             });
             if (bindings) {
-              debug.group("match");
-              debug.dir(symbolize(bindings));
-              debug.log("pattern:", rule);
-              debug.log("macro:", code);
               // name is modified in transform_syntax
               const names = [];
               const new_expr = transform_syntax({
@@ -317,8 +264,6 @@ Object.assign(global_env.__env__, {
                 names,
                 ellipsis,
               });
-              debug.log("output:", new_expr);
-              debug.groupEnd();
               // TODO: if expression is undefined throw an error
               if (new_expr) {
                 expr = new_expr;
@@ -337,14 +282,8 @@ Object.assign(global_env.__env__, {
             rules = rules.cdr;
           }
         } catch (error_) {
-          (error_ as Error).message += `\nin macro:\n  ${macro.toString(true)}`;
+          (error_ as Error).message += `\nin macro:\n  ${macro.toString()}`;
           throw error_;
-        } finally {
-          // Balances `debug.group(code)` opened at entry on every exit path — the two
-          // returns and the catch-rethrow all run this; the no-match `throw` below is
-          // reached only after `finally`, so its group is already closed.
-          debug.timeEnd(trace);
-          debug.groupEnd();
         }
         throw new Error(`syntax-rules: no matching syntax in macro ${code.toString()}`);
       }, env);
