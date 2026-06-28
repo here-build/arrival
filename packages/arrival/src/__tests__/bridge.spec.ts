@@ -1,22 +1,18 @@
 /**
- * Bridge Tests - Verify LIPS ↔ New Types conversion
+ * Bridge Tests - `coerceNumeric` (the SchemeExact/SchemeInexact tower coercion).
  *
- * The `wrappedOps[...]` direct-call numeric tests + the integration scenarios that
- * lived here tested the numeric core's OLD home (the `wrappedOps` object). That core
- * has been carved into the `scheme/numeric` pack (env/r7rs/numeric.ts), and the same
- * behaviors are witnessed at the scheme surface by `numbers.spec` / `r7rs-numbers`
- * (exactness contagion, comparison, bitwise, rounding, the tower predicates). What
- * stays here is what bridge.ts still owns: `coerceNumeric` (the tower coercion,
- * re-exported from op-helpers) and `wrapOperator` (the Operator↔Scheme wrapper, live
- * until the membrane teardown).
+ * The Operator/Codec numeric stack this file used to also test (`wrapOperator`, the
+ * operator instances, the `wrappedOps[...]` entries) has been carved into the
+ * `scheme/numeric` pack (env/r7rs/numeric.ts) and the old machinery deleted; that
+ * behavior is witnessed at the scheme surface by numbers.spec / r7rs-numbers.
+ * `coerceNumeric` survives (re-exported from bridge.ts, real home op-helpers.ts).
  */
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
-import { coerceNumeric, wrapOperator } from "../bridge";
-import { add, mul, sqrt, sub } from "../operators";
+import { coerceNumeric } from "../bridge";
 
 describe("coerceNumeric", () => {
   describe("primitive types", () => {
@@ -78,66 +74,5 @@ describe("coerceNumeric", () => {
     expect(() => coerceNumeric("not a number")).toThrow("Cannot convert");
     expect(() => coerceNumeric(null)).toThrow("Cannot convert");
     expect(() => coerceNumeric(undefined)).toThrow("Cannot convert");
-  });
-});
-
-describe("wrapOperator", () => {
-  it("wraps add operator", () => {
-    const wrappedAdd = wrapOperator(add);
-
-    // Should work with primitive numbers
-    const result = wrappedAdd(1, 2, 3);
-    expect(result).toBeInstanceOf(AExact);
-    expect((result as AExact).num).toBe(6n);
-  });
-
-  it("wraps sub operator", () => {
-    const wrappedSub = wrapOperator(sub);
-
-    // Unary negation
-    const neg = wrappedSub(5);
-    expect(neg).toBeInstanceOf(AExact);
-    expect((neg as AExact).num).toBe(-5n);
-
-    // Binary subtraction
-    const diff = wrappedSub(10, 3);
-    expect(diff).toBeInstanceOf(AExact);
-    expect((diff as AExact).num).toBe(7n);
-  });
-
-  it("wraps mul operator", () => {
-    const wrappedMul = wrapOperator(mul);
-
-    const result = wrappedMul(2, 3, 4);
-    expect(result).toBeInstanceOf(AExact);
-    expect((result as AExact).num).toBe(24n);
-  });
-
-  it("wraps sqrt operator", () => {
-    const wrappedSqrt = wrapOperator(sqrt);
-
-    const result = wrappedSqrt(4);
-    // sqrt(4) = 2, which is a safe integer, so ExactNumber
-    expect((result as AExact).num).toBe(2n);
-  });
-
-  it("handles mixed exact/inexact", () => {
-    const wrappedAdd = wrapOperator(add);
-
-    const result = wrappedAdd(1, 2.5);
-    expect(result).toBeInstanceOf(AInexact);
-    expect((result as AInexact).real).toBe(3.5);
-  });
-
-  it("handles objects with valueOf", () => {
-    const wrappedAdd = wrapOperator(add);
-
-    // Object that returns 0.333... via valueOf
-    const third = { valueOf: () => 1 / 3 };
-
-    // 1/3 + 0.5 = 0.833... (inexact)
-    const result = wrappedAdd(third, 0.5);
-    expect(result).toBeInstanceOf(AInexact);
-    expect((result as AInexact).real).toBeCloseTo(0.833, 2);
   });
 });

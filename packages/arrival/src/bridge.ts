@@ -1,281 +1,41 @@
 /**
- * Bridge - connects the Operator/Profunctor system with the Scheme runtime.
+ * Bridge — the bootstrap assembler + the R7RS exception machinery.
  *
- * This module provides:
- * 1. Strict numeric coercion into the SchemeExact/SchemeInexact tower (`coerceNumeric`)
- * 2. Wrapped operators that work with boxed Scheme values
- * 3. Drop-in replacements for global_env numeric operations
+ * Historically this module bridged the Operator/Profunctor numeric system to the
+ * Scheme runtime (the `wrapOperator` / `Operator` / `Codec` stack). That numeric core
+ * has been carved into the `scheme/numeric` pack (env/r7rs/numeric.ts) and is bound
+ * via `symbol.native`. What remains here:
+ *   1. `initBridge` — assembles the native foundation (NATIVE_PACKS + the exceptions
+ *      pack) onto global_env and the `.scm` base packs onto user_env;
+ *   2. `wrappedOps` — the R7RS §6.11 exception verbs + the exception-handler stack;
+ *   3. the `coerceNumeric` re-export (its home is op-helpers.ts).
  */
 
-import { SPECULATE } from "./well-known-symbols.js";
 import { R7RSError, R7RSReadError, R7RSFileError, RaisedException } from "./errors.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import { AValue, unionProvenance } from "./values/primitives/AValue.js";
 import { isBridgeInitialized, markBridgeInitialized, setBootstrapComplete } from "./boot.js";
 import { EnvCapability } from "./common/capability.js";
 import { assembleEnv } from "./common/kernel.js";
 import { BASE_PACKS } from "./env/base-packs.js";
 import type { EvalSchemeInto, SchemeEnv } from "./common/scheme-env.js";
-import { AHalfBaked, type Interval, is_half_baked } from "./values/primitives/AHalfBaked.js";
 import type { Environment } from "./Environment.js";
-import { schemeFalse, schemeTrue } from "./values/primitives/ABool.js";
-import { coerceNumeric, type AOrd, isOrd, isSchemeNumber, ORD_REL, nilOrderCompare, withInputProvenance } from "./values/op-helpers.js";
-import { isStrict } from "./eval/evaluator.js";
-// Value-domain primitive clusters — each is the carved-out source of truth for one
-// R7RS domain (chars/strings/lists/vectors/bytevectors + combinators + equality).
-// They are no longer spread into `wrappedOps`: `initBridge` ASSEMBLES them onto
-// `global_env` as live capability packs (see `NATIVE_PACKS`). `wrappedOps` keeps only
-// the numeric core + exception machinery bridge.ts is named for (the
-// Operator/Profunctor↔Scheme bridge).
+// The value-domain primitive clusters AND the numeric core are assembled onto
+// global_env by `initBridge` as live capability packs (NATIVE_PACKS). `wrappedOps`
+// now keeps only the R7RS exception machinery.
 import { NATIVE_PACKS } from "./env/native-packs.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
 import { inferenceEnv } from "./inference-env.js";
 import { AString } from "./values/primitives/AString.js";
-import type { Codec, Operator } from "./membrane.js";
-import type { ANumeric } from "./values/numbers.js";
-import { AExact } from "./values/primitives/AExact.js";
-import { AInexact } from "./values/primitives/AInexact.js";
-import * as ops from "./operators/index.js";
-// Import directly from source files to avoid circular dependency during init
 import { APair } from "./values/primitives/APair.js";
 import { nil } from "./values/primitives/ANil.js";
-import { type } from "./utils/typecheck.js";
-import { Values } from "./values/primitives/Values.js";
-import invariant from "tiny-invariant";
 import "./errors.js";
-// Import global environment for initBridge - this is safe because bridge.ts
-// doesn't get imported during lips.ts initialization
 
-// The allocation cap, value-type coercions (charValue/stringValue/toIndex/
-// asVector/asBytevector), eqv, coerceNumeric/isSchemeNumber, and the provenance
-// stamp (withInputProvenance) now live in the leaf `op-helpers.ts` — shared with
-// the value-domain cluster packs. Re-exported below for the external importers
-// (evaluator, tests) that still reach for them via `bridge.js`.
+// `coerceNumeric` (+ the numeric coercion / provenance helpers) lives in the leaf
+// `op-helpers.ts`. Re-exported here for the external importers (evaluator, tests)
+// that still reach for it via `bridge.js`.
 export { coerceNumeric } from "./values/op-helpers.js";
 
 // R7RSError / R7RSReadError / R7RSFileError / RaisedException relocated to errors.ts (the single error home).
-
-/**
- * Wrap an Operator to work with LIPS values.
- * Returns a function that converts args from LIPS, calls the operator, and converts result back.
- *
- * Provenance flows through every builtin routed here. Concretely: when downstream
- * Scheme like `(if (< (length cls) 3) ...)` branches, the boolean produced by `<`
- * must remember it was derived from `cls` so the consumer can attribute behavior
- * back to that source. Comparison/arithmetic results are produced by `op.call`,
- * which has no knowledge of the input AValues — stamping has to happen at this
- * boundary or it would have to be added (and could be forgotten) in ~50 operator
- * sites. Doing it once here covers `+ - * /`, the six comparisons, gcd/lcm,
- * sqrt/log/trig, bitwise, and the dozens of r7rs entries under wrappedOps.
- *
- * Empty-provenance short-circuit: most call sites are parser-produced literals
- * (`(+ 1 2)`) where neither argument carries any source ids. The union is empty,
- * `withProvenance` would just clone, and the clone is observationally identical —
- * skip the allocation. The `instanceof AValue` guard on `result` also covers
- * operators whose `op.call` returns raw JS (no provenance surface to stamp).
- *
- * Comparison-op bool boxing: operators declared with `out: Bool` (numEq/lt/gt/
- * lte/gte, zero?/positive?/negative?/odd?/even?, finite?/infinite?/nan?, the
- * type predicates) produce raw JS `true|false` via `Bool.fromJS = v => v`
- * (membrane.ts:456-462). Without the boxing branch below, `(if (< x 5) ...)`
- * loses lineage at `restrictControlFlowProvenance` (evaluator.ts:629 —
- * `predicate instanceof AValue === false`), because most real `if`/`cond`
- * predicates ARE comparisons. We only box when provenance is non-empty: with
- * empty provenance, the boxed singletons would survive into call sites that
- * still rely on raw `=== false` / `!== false` checks (the same landmine
- * `withInputProvenance` in lips.ts:2042-2054 calls out as sealed).
- */
-export function wrapOperator<In extends any[], InRest extends Codec<any, any> | undefined, Out extends Codec<any, any>>(
-  op: Operator<In, InRest, Out>,
-): (...args: unknown[]) => unknown {
-  // Why stamp coerceNumeric failures HERE: a type error from coercion (e.g. a
-  // string passed to `*`) travels up through several catch paths that swallow or
-  // rewrap it, and a downstream `env.get(first)` retry leaves only the outer
-  // form's name on the message — so the symptom mis-presents as an unbound-symbol
-  // lookup failure on an unrelated operator. This boundary is the only frame that
-  // holds both pieces needed to name the real cause (op.name here, type() on the
-  // args). The original TypeError rides along via `cause` so the membrane stack
-  // still traces the converter's invariant. We don't catch op.call itself —
-  // operator-internal failures already carry `op.name` (see membrane.ts).
-  //
-  // The synchronous numeric core: convert args, apply the operator, stamp
-  // provenance. Factored out so the speculative path can run it either eagerly
-  // or after forcing a HalfBaked carrier.
-  const applyNumeric = (callArgs: unknown[]): unknown => {
-    const provenance = unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue));
-    let converted: ANumeric[];
-    try {
-      converted = callArgs.map(coerceNumeric);
-    } catch (cause) {
-      // Find the first non-numeric arg so the error names what actually failed,
-      // not just "some arg." Mirror isSchemeNumber's contract — anything it
-      // rejects is what coerceNumeric would have thrown on.
-      const badIndex = callArgs.findIndex((a) => !isSchemeNumber(a));
-      const typeNames = callArgs.map(type).join(", ");
-      const detail = badIndex >= 0 ? `argument ${badIndex} is ${type(callArgs[badIndex])}` : "argument type mismatch";
-      throw new TypeError(`Cannot apply ${op.name} to (${typeNames}): ${detail}`, { cause });
-    }
-    const result: unknown = op.call(converted);
-    if (provenance.size > 0) {
-      if (result instanceof AValue) return result.withProvenance(provenance);
-      // Box JS bool coming out of comparison/predicate operators (Bool codec).
-      // Empty-provenance path returns raw bool to keep find/`!== false` callers alive.
-      if (typeof result === "boolean") {
-        return (result ? schemeTrue : schemeFalse).withProvenance(provenance);
-      }
-    }
-    return result;
-  };
-
-  // Use Object.defineProperty to set the name from operator
-  const fn = function (...args: unknown[]): unknown {
-    // ── Tier 2 speculative evaluation ──────────────────────────────────────
-    // A `HalfBaked` reaches this wrapper ONLY for the comparison ops marked
-    // `__speculate__` below (the dispatch choke forces it for every other
-    // numeric op). For a comparison against a still-filling cardinality
-    // interval we can often decide the result EARLY — that early-decision
-    // promise is what collapses the enclosing `if`. If we can't decide here
-    // (both operands HalfBaked, undecidable interval at call time, etc.), we
-    // force the carrier(s) and run the normal numeric path — never wrong,
-    // just not early. `args.some(is_half_baked)` is only ever true here.
-    if (args.some(is_half_baked)) {
-      const decided = SPECULATIVE_OPS.has(op.name) ? speculativeCompare(op.name, args) : undefined;
-      if (decided !== undefined) return decided;
-      return Promise.all(args.map((a) => (is_half_baked(a) ? a.force() : a))).then(applyNumeric);
-    }
-    return applyNumeric(args);
-  };
-  // Mark the comparison ops so the dispatch choke leaves their HalfBaked args
-  // unforced — this wrapper reads the interval instead of a settled value.
-  if (SPECULATIVE_OPS.has(op.name)) {
-    (fn as { [SPECULATE]?: boolean })[SPECULATE] = true;
-  }
-  Object.defineProperty(fn, "name", { value: op.name });
-  return fn;
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// Tier 2 speculative comparison against a HalfBaked cardinality interval.
-// See docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
-// ════════════════════════════════════════════════════════════════════════════
-
-/** The comparison ops that can decide early against a narrowing interval. */
-const SPECULATIVE_OPS = new Set(["=", "<", ">", "<=", ">="]);
-
-/** `(op k hb)` ⟺ `(reflect[op] hb k)` — used to normalize the HalfBaked to the left. */
-const REFLECT: Record<string, string> = { ">=": "<=", "<=": ">=", ">": "<", "<": ">", "=": "=" };
-
-/**
- * The early-decision verdict for `(op interval k)`: returns a definite boolean
- * the instant the interval is decisive, or `undefined` to keep waiting. Sound by
- * construction — every branch only fires when the interval ENTIRELY lies on one
- * side of `k`, so the answer cannot change as the interval narrows further.
- */
-function verdictFor(op: string, k: number): ((iv: Interval) => boolean | undefined) | undefined {
-  switch (op) {
-    case ">=":
-      return (iv) => (iv.lo >= k ? true : iv.hi < k ? false : undefined);
-    case ">":
-      return (iv) => (iv.lo > k ? true : iv.hi <= k ? false : undefined);
-    case "<=":
-      return (iv) => (iv.hi <= k ? true : iv.lo > k ? false : undefined);
-    case "<":
-      return (iv) => (iv.hi < k ? true : iv.lo >= k ? false : undefined);
-    case "=":
-      return (iv) => (iv.lo === iv.hi && iv.lo === k ? true : iv.hi < k || iv.lo > k ? false : undefined);
-    default:
-      return undefined;
-  }
-}
-
-/** Best-effort numeric extraction of the concrete operand; undefined ⇒ can't speculate. */
-function toNumber(v: unknown): number | undefined {
-  if (typeof v === "number") return v;
-  if (typeof v === "bigint") return Number(v);
-  if (v instanceof AValue && typeof (v as { valueOf?: () => unknown }).valueOf === "function") {
-    const n = Number((v as { valueOf: () => unknown }).valueOf());
-    return Number.isNaN(n) ? undefined : n;
-  }
-  return undefined;
-}
-
-/**
- * Try to decide a binary comparison where exactly one operand is a number-domain
- * `HalfBaked` (a narrowing cardinality interval) and the other is a concrete
- * number. Returns an early-decision `Promise<boolean>` (provenance-stamped to
- * match the eager path), or `undefined` when speculation doesn't apply — caller
- * then forces and runs normally.
- */
-function speculativeCompare(name: string, args: unknown[]): unknown | undefined {
-  if (args.length !== 2) return undefined;
-  const [a, b] = args;
-  const aHB = is_half_baked(a);
-  const bHB = is_half_baked(b);
-  if (aHB === bHB) return undefined; // need exactly one HalfBaked operand
-  const hb = (aHB ? a : b) as AHalfBaked;
-  const k = toNumber(aHB ? b : a);
-  if (k === undefined) return undefined;
-  // Normalize so the interval is on the left of the operator.
-  const verdict = verdictFor(aHB ? name : REFLECT[name], k);
-  if (!verdict) return undefined;
-  const provenance = unionProvenance(args.filter((x): x is AValue => x instanceof AValue));
-  return hb
-    .decide(verdict)
-    .then((bool) => (provenance.size > 0 ? (bool ? schemeTrue : schemeFalse).withProvenance(provenance) : bool));
-}
-
-/**
- * Create a type predicate that doesn't throw on non-numbers
- */
-function makeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): unknown {
-  const fn = (value: unknown): boolean => {
-    if (!isSchemeNumber(value)) {
-      return false;
-    }
-    try {
-      const converted = coerceNumeric(value);
-      return predicate(converted);
-    } catch {
-      return false;
-    }
-  };
-  Object.defineProperty(fn, "name", { value: name });
-  return fn;
-}
-
-// The FL-Ord derivation (`isOrd` / `ORD_REL` / `deriveOrd`) lives in op-helpers —
-// shared with the chars + strings clusters, whose `char<?` / `string<?` families
-// ARE `deriveOrd` chains. `wrapOrd` stays here: it wraps a NUMERIC operator with
-// the FL-Ord fallback, so it belongs with the numeric bridge core.
-function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
-  const rel = ORD_REL[sym];
-  // FL-Ord only intercepts NON-NUMERIC ordered entities (string/char/symbol/DateTime/…).
-  // A number is excluded even though it now carries a `arrival/tagless-final/lte` (numbers' Ord is
-  // numeric): ORD_REL is a TOTAL-order shortcut (`<` ≡ `!lte(b,a)`) that is WRONG for the
-  // partial numeric order (NaN-incomparable ⇒ would yield #t for `(< +nan.0 1)`), and the
-  // numeric Operator additionally carries provenance + the speculative early-collapse the
-  // FL branch can't. So numbers fall through to `numeric(...)`, exactly as before numbers
-  // gained an Ord — the invariant this branch always relied on, now made explicit.
-  const isOrdEntity = (x: unknown): x is AOrd => isOrd(x) && !isSchemeNumber(x);
-  const fn = (...args: unknown[]): unknown => {
-    if (args.length >= 2 && args.some(isOrdEntity)) {
-      for (let i = 0; i < args.length - 1; i++) {
-        const a = args[i];
-        const b = args[i + 1];
-        if (!isOrdEntity(a) || !isOrdEntity(b)) return numeric(...args); // mixed → numeric path's clear error
-        if (!rel(a, b)) return schemeFalse;
-      }
-      return schemeTrue;
-    }
-    return numeric(...args);
-  };
-  // Preserve the speculation marker + operator name from the wrapped op so the evaluator's
-  // speculative-eval path still engages (it forces HalfBaked args unless __speculate__ is set,
-  // and keys early-collapse on op.name).
-  (fn as { [SPECULATE]?: boolean })[SPECULATE] = (numeric as { [SPECULATE]?: boolean })[SPECULATE];
-  Object.defineProperty(fn, "name", { value: sym });
-  return fn;
-}
 
 // The R7RS exception handler stack — a module-level holder (the dynamic-holder family,
 // alongside the evaluator's _dynamicCallSite/_currentRunEnv). Replaces the old set!'d
@@ -284,67 +44,6 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // Process-global like the cell was (same dynamic visibility, so a deep `raise` sees it);
 // per-run isolation lands later when the dynamic holders thread per-run through the trampoline.
 let currentHandlers: unknown = nil;
-
-// ── Loose (nil-tolerant) comparison overlay — CARVED from env/fl-interop.ts ──────────
-// The base numeric comparisons throw on a nil operand (coerceNumeric rejects it). The
-// inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom rather
-// than crashing a proof. `looseCompare` wraps each numeric/speculation core: a nil operand
-// short-circuits to the loose universal order; otherwise the core runs (numbers + the
-// HalfBaked speculative-decide + the non-number type-error). NOTE: the runCtx.strict gate is
-// DROPPED in this carve (the bare operator entry is ctx-free) — loose is now unconditional.
-const isNilOperand = (v) => v == null || (v)?.constructor?.name === "ANil";
-const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
-const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
-const LOOSE_NUM_PAIR = {
-  "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
-  "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
-  ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
-  "<=": (a, b) => flLteNum(a, b),
-  ">=": (a, b) => flLteNum(b, a),
-};
-const ORD_FROM_LE = {
-  "<": (ab, ba) => ab && !ba,
-  ">": (ab, ba) => ba && !ab,
-  "<=": (ab) => ab,
-  ">=": (_ab, ba) => ba,
-};
-const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
-function loosePairOrder(sym, a, b) {
-  const nilCmp = nilOrderCompare(a, b);
-  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
-  if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
-  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
-  const le_ab = Boolean((a)["arrival/tagless-final/lte"](b));
-  const le_ba = Boolean((b)["arrival/tagless-final/lte"](a));
-  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
-  return ORD_FROM_LE[sym](le_ab, le_ba);
-}
-function looseOrderChain(sym, args) {
-  let verdict = true;
-  for (let i = 0; i < args.length - 1; i++) {
-    if (!loosePairOrder(sym, args[i], args[i + 1])) { verdict = false; break; }
-  }
-  return withInputProvenance(args, verdict);
-}
-function looseCompare(sym, core) {
-  const fn = function (...args) {
-    // Run-level strict via the ambient holder (what bridge bare builtins read). For an
-    // all-constant comparison like (= '() '()) there is no operand to carry strict — nil is a
-    // global constant — so the run holder is the only honest source, exactly as car-of-nil reads it.
-    if (isStrict()) {
-      if (!args.every(isNumberOperand)) throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
-      return core(...args);
-    }
-    if (args.some(isNilOperand)) {
-      if (sym === "=") return withInputProvenance(args, args.every(isNilOperand));
-      return looseOrderChain(sym, args);
-    }
-    return core(...args);
-  };
-  if (SPECULATIVE_OPS.has(sym)) fn[SPECULATE] = true;
-  Object.defineProperty(fn, "name", { value: sym });
-  return fn;
-}
 
 export const wrappedOps = {
   // The entire numeric core (arithmetic / comparison / tower predicates / exactness
@@ -444,12 +143,11 @@ export const wrappedOps = {
 // Environment Integration
 // ============================================================================
 
-// The R7RS exception verbs in `wrappedOps`. Everything else in `wrappedOps` is the
-// numeric core (the Operator/Profunctor↔Scheme bridge). The two are split into two
-// capability packs below so they assemble like every other domain — no more imperative
-// `applyToEnvironment` monolith. (Defined HERE, not in env/native-packs.ts, because the
-// numeric machinery — wrapOperator / wrapOrd / speculativeCompare — lives in this module;
-// importing it from a native-packs sibling would close the bridge↔native-packs cycle.)
+// The R7RS § 6.11 exception verbs — now the SOLE content of `wrappedOps` (the numeric
+// core was carved into the `scheme/numeric` pack). Sourced into `exceptionsCapability`
+// below so they assemble like every other domain — no imperative `applyToEnvironment`
+// monolith. The `EXCEPTION_VERBS` set is retained as the explicit roster of what this
+// pack owns (and now matches `wrappedOps` in full).
 const EXCEPTION_VERBS = new Set([
   "error-object?",
   "error-object-message",
