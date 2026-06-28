@@ -1264,7 +1264,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       value.__name__ = symbol_name(name);
     }
 
-    ctx.env.set(name, value);
+    ctxResolver(ctx).define(name, value);
     return theVoid;
   }
 
@@ -1285,7 +1285,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value.__name__ = symbol_name(first);
   }
 
-  ctx.env.set(first, value);
+  ctxResolver(ctx).define(first, value);
   return theVoid;
 }
 
@@ -1327,13 +1327,14 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const args = rest.car;
   const body = rest.cdr;
 
-  // Capture the environment at definition time
-  const closureEnv = ctx.env;
+  // Capture the resolver (lexical scope) at definition time
+  const closureResolver = ctxResolver(ctx);
 
   // Create a closure function
   const lambda: LambdaFunction = function (this: unknown, ...values: SchemeValue[]): SchemeValue {
     // Create a new environment frame
-    const callEnv = closureEnv.inherit("lambda");
+    const callResolver = closureResolver.child("lambda", "lambda");
+    const callEnv = callResolver.env;
 
     // Bind arguments
     let argNode: SchemeValue = args;
@@ -1343,7 +1344,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     while (is_pair(argNode)) {
       const argName = argNode.car;
       if (argName instanceof ASymbol) {
-        callEnv.set(argName, values[i]);
+        callResolver.define(argName, values[i]);
       }
       i++;
       argNode = argNode.cdr;
@@ -1352,7 +1353,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Handle rest arg: (lambda (a b . rest) ...)
     if (argNode instanceof ASymbol) {
       // Rest of args go into this symbol as a list
-      callEnv.set(argNode, APair.fromArray(ctx.runCtx ?? CONSTANT_CTX, values.slice(i), false));
+      callResolver.define(argNode, APair.fromArray(ctx.runCtx ?? CONSTANT_CTX, values.slice(i), false));
     }
 
     // Pick up the dynamic call site if evaluatePair set it just before
@@ -1366,7 +1367,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const bodyCtx: EvalContext = {
       ...ctx,
       env: callEnv,
-      resolver: new Resolver(callEnv),
+      resolver: callResolver,
       currentInvocation: dynamicInv,
       tail: true,
     };
@@ -1426,9 +1427,13 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   const body = rest.cdr;
 
+  // Capture the resolver (lexical scope) at definition time.
+  const defResolver = ctxResolver(ctx);
+
   // Create a macro function - receives unevaluated code
   const macroFn = function (this: Environment, code: SchemeValue, evalArgs: EvalContext): SchemeValue {
-    const macroEnv = ctx.env.inherit("macro");
+    const macroResolver = defResolver.child("macro", "macro");
+    const macroEnv = macroResolver.env;
 
     // Bind macro parameters to unevaluated arguments
     let argNode: SchemeValue = args;
@@ -1439,7 +1444,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const argName = argNode.car;
       if (argName instanceof ASymbol) {
         const value = is_pair(codeNode) ? codeNode.car : nil;
-        macroEnv.set(argName, value);
+        macroResolver.define(argName, value);
       }
       i++;
       argNode = argNode.cdr;
@@ -1450,19 +1455,19 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Handle rest arg
     if (argNode instanceof ASymbol) {
-      macroEnv.set(argNode, codeNode);
+      macroResolver.define(argNode, codeNode);
     }
 
     // Evaluate macro body to get expansion.
     // Forward signal so macro expansion is also budget-bounded.
-    return run(evalBegin(body, { ...evalArgs, env: macroEnv, resolver: new Resolver(macroEnv) }), {
+    return run(evalBegin(body, { ...evalArgs, env: macroEnv, resolver: macroResolver }), {
       signal: evalArgs.signal,
     });
   };
 
   // Create and register the macro
   const macro = new Macro(symbol_name(name), macroFn);
-  ctx.env.set(name, macro);
+  ctxResolver(ctx).define(name, macro);
 
   return theVoid;
 }
@@ -1495,7 +1500,8 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Create new environment
-  const letEnv = ctx.env.inherit("let");
+  const letResolver = ctxResolver(ctx).child("let", "let");
+  const letEnv = letResolver.env;
 
   // For named let, we need to create a recursive function
   if (name) {
@@ -1538,17 +1544,18 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // named-let loop honors the same abort budget as the outer `run()` call;
     // in the bounce path the body inherits the outer ctx's signal directly.
     const loopFn: LambdaFunction = function (...values: SchemeValue[]): SchemeValue {
-      const loopEnv = letEnv.inherit("named-let");
+      const loopResolver = letResolver.child("named-let", "named-let");
+      const loopEnv = loopResolver.env;
 
       for (const [i, param] of params.entries()) {
-        loopEnv.set(param, values[i]);
+        loopResolver.define(param, values[i]);
       }
 
       const dynamicInv = _dynamicCallSite ?? ctx.currentInvocation;
       const bodyCtx: EvalContext = {
         ...ctx,
         env: loopEnv,
-        resolver: new Resolver(loopEnv),
+        resolver: loopResolver,
         currentInvocation: dynamicInv,
         // Named-let body is tail w.r.t. its caller (the `(loop ...)` call
         // site). Tail flag propagates structurally to the body's last
@@ -1567,7 +1574,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     loopFn.__name__ = symbol_name(name);
     loopFn.__params__ = params.map((p) => symbol_name(p));
 
-    letEnv.set(name, loopFn);
+    letResolver.define(name, loopFn);
   }
 
   // Evaluate all bindings (in parallel for regular let).
@@ -1603,12 +1610,12 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Bind all values
   for (const [i, varName] of names.entries()) {
-    letEnv.set(varName, values[i]);
+    letResolver.define(varName, values[i]);
   }
 
   // Evaluate body — inherits the let's tail flag via ctx spread; pass-through
   // (tail-collapsible) so a tail call in the body collapses this let frame.
-  return yield { call: evalBegin(body, { ...ctx, env: letEnv, resolver: new Resolver(letEnv) }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: letEnv, resolver: letResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -1622,7 +1629,8 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const body = rest.cdr;
 
   // Create new environment
-  const currentEnv = ctx.env.inherit("let*");
+  const letStarResolver = ctxResolver(ctx).child("let*", "let*");
+  const currentEnv = letStarResolver.env;
 
   // Evaluate bindings sequentially. Bindings are non-tail; only body is.
   let bindNode: SchemeValue = bindings;
@@ -1638,17 +1646,17 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const valExpr = bindingCdr.car;
 
     // Evaluate in current environment (sequential semantics)
-    let value = yield { call: evaluate(valExpr, { ...ctx, env: currentEnv, resolver: new Resolver(currentEnv), tail: false }) };
+    let value = yield { call: evaluate(valExpr, { ...ctx, env: currentEnv, resolver: letStarResolver, tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
 
-    currentEnv.set(varName, value);
+    letStarResolver.define(varName, value);
     bindNode = bindNode.cdr;
   }
 
   // Evaluate body — inherits let*'s tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: currentEnv, resolver: new Resolver(currentEnv) }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: currentEnv, resolver: letStarResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -1662,7 +1670,8 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const body = rest.cdr;
 
   // Create new environment
-  const letrecEnv = ctx.env.inherit("letrec");
+  const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
+  const letrecEnv = letrecResolver.env;
 
   // First pass: bind all names to undefined
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
@@ -1678,7 +1687,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(is_pair(bindingCdr), "letrec: missing value in binding");
     const valExpr = bindingCdr.car;
 
-    letrecEnv.set(varName, undefined);
+    letrecResolver.define(varName, undefined);
     bindingList.push({ name: varName, expr: valExpr });
     bindNode = bindNode.cdr;
   }
@@ -1686,15 +1695,15 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Second pass: evaluate and assign (in the letrec environment).
   // Bindings are non-tail; only body inherits letrec's tail flag.
   for (const { name, expr } of bindingList) {
-    let value = yield { call: evaluate(expr, { ...ctx, env: letrecEnv, resolver: new Resolver(letrecEnv), tail: false }) };
+    let value = yield { call: evaluate(expr, { ...ctx, env: letrecEnv, resolver: letrecResolver, tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
-    letrecEnv.set(name, value);
+    letrecResolver.define(name, value);
   }
 
   // Evaluate body — inherits letrec's tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: letrecEnv, resolver: new Resolver(letrecEnv) }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: letrecEnv, resolver: letrecResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -2077,7 +2086,8 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const resultExprs = testClause.cdr;
 
   // Create environment and collect bindings
-  const doEnv = ctx.env.inherit("do");
+  const doResolver = ctxResolver(ctx).child("do", "do");
+  const doEnv = doResolver.env;
   const vars: Array<{ name: ASymbol; step: SchemeValue | null }> = [];
 
   // do's structural tail-position: ONLY the result-expression(s) are tail.
@@ -2085,7 +2095,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // are explicitly non-tail. (do itself already iterates inside ONE
   // generator's `while (true)` — recursion is flat regardless, so the
   // tail flag matters only for what the result expressions eventually do.)
-  const doResolver = new Resolver(doEnv);
   const doNonTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver, tail: false };
   const doTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver };
 
@@ -2116,7 +2125,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       initValue = yield initValue;
     }
 
-    doEnv.set(varName, initValue);
+    doResolver.define(varName, initValue);
     vars.push({ name: varName, step: stepExpr });
 
     bindNode = bindNode.cdr;
@@ -2161,7 +2170,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Apply updates
     for (const [i, { name, step }] of vars.entries()) {
       if (step !== null) {
-        doEnv.set(name, newValues[i]);
+        doResolver.define(name, newValues[i]);
       }
     }
   }
@@ -2271,7 +2280,8 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const handlers = catchCdr.cdr;
 
       // Create catch environment with error bound
-      const catchEnv = ctx.env.inherit("catch");
+      const catchResolver = ctxResolver(ctx).child("catch", "catch");
+      const catchEnv = catchResolver.env;
 
       // Bind the error - unwrap ArrivalError to get the original raised value.
       let errorValue: SchemeValue =
@@ -2307,12 +2317,12 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         delete errObj.cause;
         delete errObj.fileName;
       }
-      catchEnv.set(varName, errorValue);
+      catchResolver.define(varName, errorValue);
 
       try {
         // Forward signal: a catch handler running an unbounded computation
         // (e.g. a recovery loop) must respect the same budget.
-        result = await run(evalBegin(handlers, { ...ctx, env: catchEnv, resolver: new Resolver(catchEnv), tail: false }), {
+        result = await run(evalBegin(handlers, { ...ctx, env: catchEnv, resolver: catchResolver, tail: false }), {
           signal: ctx.signal,
         });
         caughtError = null; // Error was handled
