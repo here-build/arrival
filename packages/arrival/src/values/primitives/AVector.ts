@@ -23,7 +23,7 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../portability.js";
 import { printValue } from "../print.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
@@ -39,6 +39,7 @@ import { deriveSortCompare } from "../op-helpers.js";
 const TO_JS = Symbol.for("scheme.toJS");
 
 export class AVector extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "vector";
   readonly kind = "vector" as const;
 
@@ -311,4 +312,3 @@ function unwrapForeign(v: unknown): unknown {
 // ============================================================================
 // Same rationale as SchemeString/SchemeBytevector: block inherited-method
 // exposure when interop symbol-to-field resolution walks the prototype chain.
-markInteropBoundary(AVector);

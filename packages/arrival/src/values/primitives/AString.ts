@@ -7,7 +7,7 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { registerBoxer } from "./boxing.js";
 import type { ANumeric } from "../numbers.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ACharacter } from "./ACharacter.js";
 import { typecheck } from "../../utils/typecheck.js";
 import { withInputProvenance } from "../op-helpers.js";
@@ -16,6 +16,7 @@ type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
 
 export class AString extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "string";
   readonly kind = "string" as const;
 
@@ -222,4 +223,3 @@ registerBoxer("string", (ctx, v, p) => new AString(ctx, v as string, p));
 // own, so the boundary only blocks future inherited additions, not the
 // current intended API. Defense-in-depth via the AValue base marker.
 // ============================================================================
-markInteropBoundary(AString);

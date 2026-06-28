@@ -19,7 +19,7 @@
  * "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import type { TaglessMethods } from "../tagless-final.js";
@@ -55,6 +55,7 @@ export type AKind =
   | "keyword";
 
 export abstract class AValue {
+  static [INTEROP_BOUNDARY] = true;
   abstract readonly kind: AKind;
   readonly provenance: ReadonlySet<number>;
   /** Per-run context (RunContext). REQUIRED — a ctx-less value cannot be constructed.
@@ -123,7 +124,6 @@ export { EMPTY_PROVENANCE };
 // boundary from the base prototype chain, so accidental method exposure
 // degrades to "blocked" rather than "exposed."
 // ============================================================================
-markInteropBoundary(AValue);
 
 // ── The global tagless-final algebra, merged onto AValue (declaration merging) ──────────────
 // tagless-final.ts declares the algebra ONCE; this merge gives every AValue (and subclass) the

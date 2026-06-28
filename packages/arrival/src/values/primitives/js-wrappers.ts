@@ -28,7 +28,7 @@ import {
   accessKeys,
   accessMember,
   InteropAccessError,
-  markInteropBoundary,
+  INTEROP_BOUNDARY,
   NOT_FOUND,
 } from "../../interop-access.js";
 import { type SchemeValue } from "../types.js";
@@ -70,6 +70,7 @@ const TO_JS = Symbol.for("scheme.toJS");
  * out raw without materializing.)
  */
 export class AJSArray extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "js-array";
   readonly kind = "vector" as const;
 
@@ -245,6 +246,7 @@ const entryCaches = new WeakMap<AJSObject, Map<string, AValue>>();
  * `(eq? (@ obj :x) (@ obj :x))` holds.
  */
 export class AJSObject extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
@@ -428,8 +430,6 @@ export class AJSObject extends AValue {
 // retired: a borrowed JS function crosses the membrane as #void, never a
 // callable — so there is no `apply`/`call` escape shape left to fence.)
 // ============================================================================
-markInteropBoundary(AJSObject);
 // AJSArray wraps a borrowed foreign array (`source`) — mark it like its membrane
 // siblings so the sandbox symbol-to-field walk stops at this prototype before it can
 // reach `source` (or the delegated vector / its `vec()` builder).
-markInteropBoundary(AJSArray);

@@ -15,7 +15,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { withInputProvenance } from "../op-helpers.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
@@ -57,6 +57,7 @@ function toUint8(source: BytevectorSource): Uint8Array {
 }
 
 export class ABytevector extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 
@@ -188,4 +189,3 @@ export class ABytevector extends AValue {
 // Same rationale as SchemeString (SchemeString.ts): block inherited-method exposure
 // when interop symbol-to-field resolution walks the prototype chain. Own
 // properties (the algebra methods) remain the intended API.
-markInteropBoundary(ABytevector);

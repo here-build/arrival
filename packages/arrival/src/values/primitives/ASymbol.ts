@@ -1,7 +1,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike } from "../types.js";
 import { isSchemeString, isString } from "../types.js";
@@ -41,6 +41,7 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
 }
 
 export class ASymbol extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "symbol";
   readonly kind = "symbol" as const;
   // Interning is per run context — see `internTables` / `internTableFor` above.
@@ -192,4 +193,3 @@ function is_gensym(symbol: unknown): boolean {
 // `internTables` WeakMap above, not a class member, so it isn't symbol-field
 // reachable at all.)
 // ============================================================================
-markInteropBoundary(ASymbol);

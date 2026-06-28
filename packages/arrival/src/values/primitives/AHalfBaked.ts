@@ -43,7 +43,7 @@
 
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
 import { nil } from "./ANil.js";
 
@@ -84,6 +84,7 @@ type SettleListener = () => void;
  *    cardinality (what `length` returns). `force()` folds to a settled count.
  */
 export class AHalfBaked extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   readonly kind = "halfbaked" as const;
 
   private readonly domain: "collection" | "number";
@@ -280,7 +281,6 @@ export class AHalfBaked extends AValue {
   }
 }
 
-markInteropBoundary(AHalfBaked);
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

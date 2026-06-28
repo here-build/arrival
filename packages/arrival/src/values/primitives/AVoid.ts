@@ -21,9 +21,10 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { registerBoxer } from "./boxing.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 
 export class AVoid extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "void";
   readonly kind = "void" as const;
 
@@ -66,4 +67,3 @@ export const theVoid = new AVoid(CONSTANT_CTX);
 // bottoms map to the two Scheme absences rather than collapsing to one.
 registerBoxer("undefined", (ctx, _v, p) => new AVoid(ctx, p));
 
-markInteropBoundary(AVoid);

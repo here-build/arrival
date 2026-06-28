@@ -7,7 +7,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { registerBoxer } from "./boxing.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 // Side-effect: load the void singleton so its `undefined` boxer registers. nil's
 // module is always loaded early, so this guarantees the paired-bottom boxers
 // (null→nil here, undefined→void in AVoid) both fire. No cycle — AVoid ⊄ ANil.
@@ -22,6 +22,7 @@ export function setPairConstructor(ctor: new (ctx: RunContext, car: unknown, cdr
 }
 
 export class ANil extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
@@ -138,4 +139,3 @@ export const nil = new ANil(CONSTANT_CTX, );
 // host bottoms map to the two distinct Scheme absences rather than collapsing to one.
 registerBoxer("null", (ctx, _v, p) => new ANil(ctx, p));
 
-markInteropBoundary(ANil);

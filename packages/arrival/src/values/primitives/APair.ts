@@ -31,7 +31,7 @@ import { AVector } from "./AVector.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact, AInexact } from "../numbers.js";
 import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
-import { markInteropBoundary } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { type APairLike } from "../types.js";
 import { ANil, nil, setPairConstructor } from "./ANil.js";
 import { printValue } from "../print.js";
@@ -184,6 +184,7 @@ function mark_cycles(pair: APair): void {
 // last place carrying a second copy of the universal value renderer.)
 
 export class APair<Car = unknown, Cdr = unknown> extends AValue implements APairLike<Car, Cdr> {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "pair";
   readonly kind = "pair" as const;
   [DATA]?: boolean;
@@ -916,7 +917,6 @@ setPairConstructor(APair);
 // are reachable from any held Pair via symbol-to-field auto-resolution; the
 // ref-tracking helpers in particular would leak host-side identity comparisons.
 // This marker stops the prototype-chain walk at Pair before any helper is reached.
-markInteropBoundary(APair);
 
 /** Element count of a pair's cdr-spine (honoring the empty-pair sentinel) — the heap-charge basis
  *  for the materializing tagless terms. Lives module-side: a plain count, no provenance (unlike the

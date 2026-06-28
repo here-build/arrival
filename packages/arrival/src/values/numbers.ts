@@ -32,7 +32,7 @@ import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { registerBoxer } from "./primitives/boxing.js";
-import { markInteropBoundary } from "../interop-access.js";
+import { INTEROP_BOUNDARY } from "../interop-access.js";
 
 // ============================================================================
 // Complex-subsetting door (errors-as-doors)
@@ -81,6 +81,7 @@ export function bigintISqrt(n: bigint): bigint {
 // ============================================================================
 
 export class AExact extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "number";
   readonly kind = "number" as const;
 
@@ -327,6 +328,7 @@ export class AExact extends AValue {
 // ============================================================================
 
 export class AInexact extends AValue {
+  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "number";
   readonly kind = "number" as const;
 
@@ -1089,5 +1091,3 @@ registerBoxer("number", (ctx, v, p) => {
 // blocked. The arithmetic ops scheme code actually uses (`+`, `*`, `floor`,
 // …) live in the env bindings, not on these prototypes.
 // ============================================================================
-markInteropBoundary(AExact);
-markInteropBoundary(AInexact);
