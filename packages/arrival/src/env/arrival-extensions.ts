@@ -108,42 +108,6 @@ export default new EnvCapability("arrival/core-extensions", {
       },
     ),
 
-    once: symbol.native`once: a wrapper that runs fn at most once, caching its result`(
-      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
-      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
-        let called = false;
-        let result: unknown;
-        const wrapped = (...args: unknown[]) => {
-          if (!called) {
-            called = true;
-            result = fn(...args);
-          }
-          return result;
-        };
-        Object.defineProperty(wrapped, "name", { value: "once" });
-        return wrapped;
-      },
-    ),
-
-    flip: symbol.native`flip: fn with its first two arguments swapped`(
-      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
-      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
-        const result = (a: unknown, b: unknown, ...rest: unknown[]) => fn(b, a, ...rest);
-        Object.defineProperty(result, "name", { value: "flip" });
-        return result;
-      },
-    ),
-
-    "n-ary": symbol.native`n-ary: fn restricted to its first n arguments`(
-      { input: [z.schemeNumber, z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
-      (n: unknown, fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
-        const count = toIndex(n);
-        const result = (...args: unknown[]) => fn(...args.slice(0, count));
-        Object.defineProperty(result, "name", { value: "n-ary" });
-        return result;
-      },
-    ),
-
     // `curry` — relocated VERBATIM from stdlib.ts global_env (husk dissolution). The
     // impl is the shared `utils/functional` curry; it joins its functional-combinator
     // siblings (n-ary / complement / flip / always / once) and its only define-time
@@ -177,60 +141,6 @@ export default new EnvCapability("arrival/core-extensions", {
   prelude: `
     ;; symbol->string / string->symbol are native (below the membrane) — see the
     ;; symbols block at the bottom of this module.
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Higher-order function wrappers using curry
-    ;; -----------------------------------------------------------------------------
-    (define unary (curry n-ary 1))
-    (define binary (curry n-ary 2))
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Tree operations
-    ;; -----------------------------------------------------------------------------
-    (define (tree-map f tree)
-      (if (pair? tree)
-          (cons (tree-map f (car tree)) (tree-map f (cdr tree)))
-          (f tree)))
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Pair utilities
-    ;; -----------------------------------------------------------------------------
-    (define (pair-map fn seq-list)
-      (let iter ((seq-list seq-list) (result '()))
-        (if (null? seq-list)
-            result
-            (if (and (pair? seq-list) (pair? (cdr seq-list)))
-                (let* ((first (car seq-list))
-                       (second (cadr seq-list))
-                       (value (fn first second)))
-                  (if (null? value)
-                      (iter (cddr seq-list) result)
-                      (iter (cddr seq-list) (cons value result))))))))
-    
-    (define (nth-pair l k)
-      (%nth-pair "nth-pair" l k))
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Type predicates
-    ;; -----------------------------------------------------------------------------
-    (define (key? symbol)
-      (and (symbol? symbol) (string=? (substring (symbol->string symbol) 0 1) ":")))
-    
-    (define (key->string symbol)
-      (if (key? symbol)
-          (substring (symbol->string symbol) 1)))
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Aliases
-    ;; -----------------------------------------------------------------------------
-    (define string-join join)
-    (define string-split split)
-    
-    ;; -----------------------------------------------------------------------------
-    ;; Symbol operations
-    ;; -----------------------------------------------------------------------------
-    (define (symbol-append . rest)
-       (string->symbol (apply string-append (map symbol->string rest))))
     
     ;; -----------------------------------------------------------------------------
     ;; Arrival safe head accessors + SRFI-1 remove (core residents)
