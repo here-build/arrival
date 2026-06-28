@@ -51,9 +51,6 @@ export class Lexer {
   static readonly string_escape = Symbol.for("string_escape");
   static readonly symbol = Symbol.for("symbol");
   static readonly comment = Symbol.for("comment");
-  static readonly regex = Symbol.for("regex");
-  static readonly regex_init = Symbol.for("regex_init");
-  static readonly regex_class = Symbol.for("regex_class");
   static readonly character = Symbol.for("character");
   static readonly bracket = Symbol.for("bracket");
   static readonly b_symbol = Symbol.for("b_symbol");
@@ -148,19 +145,6 @@ export class Lexer {
     [/\\/, /#/, /[()[\]{}]/, Lexer.character, Lexer.character],
     [/\s/, /\\/, null, Lexer.character, null],
     [/\S/, null, Lexer.boundary, Lexer.character, null],
-
-    // regex
-    [/#/, Lexer.boundary, /\//, null, Lexer.regex_init],
-    [/./, /\//, null, Lexer.regex_init, Lexer.regex],
-    [/[ \t]/, null, null, Lexer.regex, Lexer.regex],
-    [/\[/, /[^\\]/, null, Lexer.regex, Lexer.regex_class],
-    [/\]/, /[^\\]/, null, Lexer.regex_class, Lexer.regex],
-    [/[()[\]{}]/, null, null, Lexer.regex, Lexer.regex],
-    [/\//, /\\/, null, Lexer.regex, Lexer.regex],
-    [/\//, null, Lexer.boundary, Lexer.regex, null],
-    [/[gimyus]/, /\//, Lexer.boundary, Lexer.regex, null],
-    [/[gimyus]/, /\//, /[gimyus]/, Lexer.regex, Lexer.regex],
-    [/[gimyus]/, /[gimyus]/, Lexer.boundary, Lexer.regex, null],
 
     // comment
     [/;/, /^$|[^#]/, null, null, Lexer.comment],

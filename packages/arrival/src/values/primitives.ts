@@ -39,7 +39,6 @@ export function make_complex_match_re(mnemonic, range) {
     "i",
   );
 } // TODO: extend to ([+-]1/2|float)([+-]1/2|float)
-export const re_re = /^#\/((?:\\\/|[^/]|\[[^/\]]*\/[^\]]*\])+)\/([gimyus]*)$/;
 const float_stre = String.raw`(?:[-+]?(?:[0-9]+(?:[eE][-+]?[0-9]+)|(?:\.[0-9]+|[0-9]+\.[0-9]+)(?:[eE][-+]?[0-9]+)?)|[0-9]+\.)`;
 export const complex_float_stre = `(?:#[ie])?(?:[+-]?(?:[0-9][0-9_]*/[0-9][0-9_]*|nan.0|inf.0|${float_stre}|[+-]?[0-9]+))?(?:${float_stre}|[+-](?:[0-9]+/[0-9]+|[0-9]+|nan.0|inf.0)?)i`;
 export const float_re = new RegExp(`^(#[ie])?${float_stre}$`, "i");

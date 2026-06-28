@@ -16,7 +16,6 @@ import { typecheck } from "../../utils/typecheck.js";
 import { is_false, is_null, is_nil } from "../../eval/guards.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { unpromise } from "../../utils/promises.js";
-import { regexPredicate } from "../../values/regex-predicate.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
 
@@ -228,18 +227,17 @@ export const SRFI1_SCM = `
 // `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
 // list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
 // convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
-// `find` — SRFI-1 first-match search with arrival's regex extension: the predicate may be a host
-// RegExp (coerced via the regex-predicate leaf) as well as a procedure. A JS `symbol.native` (not a
-// scheme prelude define like `find-tail`) because it recurses over the coerced predicate and unwraps
-// an async generator-lambda result. Relocated from arrival-extensions; the regex wrinkle that kept it
-// there now lives in the reusable `regexPredicate` leaf, so the list op no longer knows about RegExp.
+// `find` — SRFI-1 first-match search: the matcher is a PROCEDURE. A JS `symbol.native` (not a scheme
+// prelude define like `find-tail`) because it recurses over the predicate and unwraps an async
+// generator-lambda result. Relocated from arrival-extensions; the host-RegExp matcher it once also
+// accepted was a LIPS-era host leak (a raw JS RegExp, non-R7RS) and has been dissolved — procedure only.
 function findImpl(arg: unknown, list: any): unknown {
-  typecheck("find", arg, ["regex", "function"]);
+  typecheck("find", arg, "function");
   typecheck("find", list, ["pair", "nil"]);
   if (is_null(list)) {
     return nil;
   }
-  const fn = regexPredicate(arg);
+  const fn = arg as (x: unknown) => unknown;
   return unpromise(fn(list.car), function (value: unknown) {
     if (!is_false(value) && !is_nil(value)) {
       return list.car;
@@ -263,7 +261,7 @@ export default new EnvCapability("scheme/srfi-1", {
       },
     ),
     reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
-    find: symbol.native`find: first list element matching the predicate or regex, else nil`(
+    find: symbol.native`find: first list element matching the predicate, else nil`(
       { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
       findImpl,
     ),

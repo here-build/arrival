@@ -252,15 +252,6 @@
     (force x)
     (t.is (repr x) "#<promise - forced with number>")))
 
-(test "core: regex"
-  (lambda (t)
-    (for-each (lambda (str)
-                (let ((re (. (scheme.parse str) 0)))
-                  (t.is (regex? re) true)
-                  (t.is (repr re) str)))
-      '("#/(\\((?:env|dir|help|apropos)[^)]*\\))/g"
-         "#/u[0-9]+/")))) ;; regex for #238
-
 (test "core: try..catch"
   (lambda (t)
     (begin
@@ -423,11 +414,6 @@
       (t.is (nth 2 a) 3)
       (t.is (nth 3 a) 4))))
 
-(test "core: escape-regex"
-  (lambda (t)
-    (t.is (escape-regex ".{}[]")
-      "\\.\\{\\}\\[\\]")))
-
 (test "core: env"
   (lambda (t)
     (let* ((l (env))
@@ -443,13 +429,6 @@
   (lambda (t)
     (t.is (match (new RegExp "(foo|bar)" "g") "foo bar")
       '("foo" "bar"))))
-
-(test "core: search"
-  (lambda (t)
-    (for-each (lambda (regex)
-                (t.is (search regex "foo") 0))
-      '(#/./ #/^f/ #/foo$/))
-    (t.is (search #/bar/ "foo") -1)))
 
 (test "core: join"
   (lambda (t)
