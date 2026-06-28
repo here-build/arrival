@@ -42,7 +42,7 @@ import {
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { Resolver, env_get } from "./Resolver.js";
+import { Resolver } from "./Resolver.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { APair } from "../values/primitives/APair.js";
@@ -614,9 +614,20 @@ function symbol_name(sym: ASymbol): string {
 // ============================================================================
 //
 // `env_get` (the throwing, synth-aware lookup) + its `c[ad]+r` unfold moved to
-// eval/Resolver.ts (ejection P3 3a) — name-resolution is the Resolver's job. The
-// evaluator threads a `Resolver` (ctx.resolver) and calls `resolver.resolve`;
-// `env_get` is re-imported here transitionally for the not-yet-routed call sites.
+// eval/Resolver.ts (ejection P3 3a) — name-resolution is the Resolver's job. Every
+// evaluator lookup now goes through `ctxResolver(ctx).resolve`/`.lookup` (3a.2),
+// which bottoms out in the moved `env_get` over the wrapped, base-linked env.
+
+/**
+ * The ctx's resolver, kept in sync with `ctx.env` at every frame the evaluator
+ * builds (`resolver.env === ctx.env`). `ctx.resolver` is optional only because an
+ * external caller could hand us a bare `EvalContext`; when absent we synthesize a
+ * resolver over `ctx.env`, which is byte-identical to the old `env_get(ctx.env, …)`
+ * direct call. No `!` assertion — the fallback IS the honest type.
+ */
+function ctxResolver(ctx: EvalContext): Resolver {
+  return ctx.resolver ?? new Resolver(ctx.env);
+}
 
 // ============================================================================
 // Flat Trampoline Runner
@@ -2394,7 +2405,7 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Symbol lookup
   if (code instanceof ASymbol) {
-    const value = env_get(ctx.env, code);
+    const value = ctxResolver(ctx).resolve(code);
     ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value as SchemeValue);
     return value;
   }
@@ -2469,7 +2480,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     // hygiene engine bound it under; looking up by the description missed, fell through to
     // application, and tried to CALL the resolved Keyword. symbol_name (the string) stays the
     // SPECIAL_FORMS fallback key for a non-keyworded head (special forms are string-keyed).
-    const resolved = ctx.env._lookupWithResolvers(first.__name__);
+    const resolved = ctxResolver(ctx).lookup(first.__name__);
     const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's
@@ -2490,7 +2501,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       fn = yield fn;
     }
   } else if (first instanceof ASymbol) {
-    fn = env_get(ctx.env, first);
+    fn = ctxResolver(ctx).resolve(first);
     // Fire the tap here too — this is the call-head fast path that bypasses
     // `evaluate()`. Without this, tracers miss the resolved value of every
     // function name (e.g., `(my-hof xs)` never reports `my-hof`'s lambda).
