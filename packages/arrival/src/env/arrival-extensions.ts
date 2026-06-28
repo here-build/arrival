@@ -19,15 +19,6 @@ import { EnvCapability } from "../common/capability.js";
 export default new EnvCapability("arrival/core-extensions", {
   prelude: `
     ;; -----------------------------------------------------------------------------
-    ;; range — arrival's [0, stop) integer list
-    ;; -----------------------------------------------------------------------------
-    ;; Derived over SRFI-1 \`iota\` (co-resident in the assembled base): (range stop) is
-    ;; exactly (iota stop) = 0 .. stop-1. The former native impl was lossy past the JS
-    ;; safe-integer ceiling and redundant with iota; single-arg is the only form used in
-    ;; practice (every spec site calls (range n)). The name is load-bearing — kept.
-    (define (range stop) (iota stop))
-
-    ;; -----------------------------------------------------------------------------
     ;; Arrival safe head accessors
     ;; -----------------------------------------------------------------------------
     ;; The dominant avoidable crash in generated Scheme is (car (filter …)) on an empty

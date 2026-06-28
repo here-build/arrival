@@ -5,10 +5,10 @@
 //
 // SCOPE: the whole SRFI-1 surface lives here — the *completion* set (take-while …
 // length+), `remove` (relocated from arrival-extensions, beside its `delete` twin),
-// and the "missing third" + parallel-list utilities (iota, delete-duplicates,
-// filter-map, count, append-map, some/every, zip, list-index, unfold). The arrival
-// safe-accessors (first?/first-or) stay in arrival-extensions — they are
-// arrival-specific crash-avoidance, not part of SRFI-1.
+// and the "missing third" + parallel-list utilities (iota, range — iota's [0,stop)
+// wrapper, delete-duplicates, filter-map, count, append-map, some/every, zip,
+// list-index, unfold). The arrival safe-accessors (first?/first-or) stay in
+// arrival-extensions — they are arrival-specific crash-avoidance, not part of SRFI-1.
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
@@ -153,6 +153,11 @@ export const SRFI1_SCM = `
     (let loop ((i 0) (acc '()))
       (if (>= i count) (reverse acc)
           (loop (+ i 1) (cons (+ start (* i step)) acc))))))
+
+;; range — arrival's [0, stop) integer list: exactly (iota stop). Relocated from the
+;; dissolved arrival-extensions pack (its FINALE) to sit beside iota, its sole basis. The
+;; single-arg form is the only one used in practice (every spec site calls (range n)).
+(define (range stop) (iota stop))
 
 ;; delete-duplicates — order-preserving dedup by equal?. Retires the O(n²) hand-rolled
 ;; dedupe reinvented across the pipeline.
