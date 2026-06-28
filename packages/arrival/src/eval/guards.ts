@@ -11,7 +11,6 @@ import {
   float_re,
   int_re,
   rational_re,
-  re_re,
 } from "../values/primitives.js";
 import * as specials from "../reader/specials.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -48,7 +47,6 @@ export function is_symbol_string(str: unknown): str is string {
   return (
     is_atom_string(str) &&
     !(
-      re_re.test(str) ||
       /^"[\s\S]*"$/.test(str) ||
       str.match(int_re) ||
       float_re.test(str) ||

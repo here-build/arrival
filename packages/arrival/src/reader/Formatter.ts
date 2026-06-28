@@ -14,7 +14,6 @@ import {
   not_p,
   p_e,
   p_o,
-  re_re,
   string_re,
   syntax_rules,
 } from "../values/primitives.js";
@@ -439,7 +438,7 @@ export class Formatter {
     const code = this.__code__.replaceAll(/\n[ \t]*/g, "\n ").replace(/^\s+/, "");
     // function that work when calling tokenize with meta data or not
     const extractToken = (t: TokenMeta): string => {
-      return t.token.match(string_re) || re_re.test(t.token) ? t.token : t.token.replace(/\s+/, " ");
+      return t.token.match(string_re) ? t.token : t.token.replace(/\s+/, " ");
     };
     const first_token_index = (tokens: string[]): number | undefined => {
       for (let i = tokens.length; i--; ) {

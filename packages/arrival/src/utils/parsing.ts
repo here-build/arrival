@@ -18,7 +18,6 @@ import {
   parsable_contants,
   pre_num_parse_re,
   rational_re,
-  re_re,
 } from "../values/primitives.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 
@@ -323,7 +322,7 @@ const constants: Record<string, unknown> = {
 };
 
 // ── Token → value dispatch ──
-// Constants first, then string, then the `#`-prefixed family (regex/char), then the numeric tower;
+// Constants first, then string, then the `#`-prefixed family (char), then the numeric tower;
 // anything that falls through is a symbol. Order matters — the cheap `Object.hasOwn` and prefix tests
 // gate the expensive numeric regexes.
 export function parse_argument(arg: string, strict = false): unknown {
@@ -339,10 +338,7 @@ export function parse_argument(arg: string, strict = false): unknown {
   if (/^"[\s\S]*"$/.test(arg)) {
     return parse_string(arg);
   } else if (arg[0] === "#") {
-    const regex = arg.match(re_re);
-    if (regex) {
-      return new RegExp(regex[1], regex[2]);
-    } else if (char_re.test(arg)) {
+    if (char_re.test(arg)) {
       return parse_character(arg);
     }
     // characters with more than one codepoint
