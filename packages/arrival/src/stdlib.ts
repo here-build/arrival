@@ -33,7 +33,6 @@ import * as specials from "./reader/specials.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
 import { Values } from "./values/primitives/Values.js";
-import { available_class, class_map } from "./reader/serialize.js";
 import { Macro } from "./eval/Macro.js";
 import { Syntax } from "./eval/Syntax.js";
 
@@ -406,9 +405,6 @@ global_env.registerResolver(keywordAccessorResolver);
 // keep resolving.
 export { exec } from "./eval/generator-exec.js";
 
-for (const [i, cls] of Object.entries(available_class)) {
-  class_map[cls] = +i;
-}
 // -------------------------------------------------------------------------
 
 

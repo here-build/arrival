@@ -18,8 +18,26 @@ import {
   rational_re,
   re_re,
 } from "../values/primitives.js";
-import { parseBigInt } from "../reader/serialize.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
+
+// Radix-aware bigint parser. Moved here from the deleted reader/serialize.ts (this is its only
+// consumer — the exact/rational/float parsers below). The rest of serialize.ts was a deserializer
+// for a compact JSON form nothing ever produced (no serializer existed), so it was dissolved.
+export function parseBigInt(str: string, radix: number = 10): bigint {
+  str = str.trim();
+  const negative = str.startsWith("-");
+  if (negative || str.startsWith("+")) {
+    str = str.slice(1);
+  }
+  let result = 0n;
+  const base = BigInt(radix);
+  for (const char of str.toLowerCase()) {
+    const digit = Number.parseInt(char, radix);
+    invariant(!Number.isNaN(digit), `Invalid digit '${char}' for radix ${radix}`);
+    result = result * base + BigInt(digit);
+  }
+  return negative ? -result : result;
+}
 
 // -------------------------------------------------------------------------
 // :: ref: https://github.com/bestiejs/punycode.js/blob/master/punycode.js
