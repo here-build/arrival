@@ -1,5 +1,5 @@
 /**
- * Official Chibi Scheme R7RS Test Suite Runner
+ * Official Chibi Scheme R7RS Test Suite Runner — native vitest wiring.
  *
  * Runs the official r7rs-tests.scm from chibi-scheme (added as git submodule).
  * This is the canonical R7RS compliance test suite, written by Alex Shinn
@@ -9,31 +9,42 @@
  * don't support (I/O, filesystem, etc.) or SKIPPED_TESTS for known issues
  * we plan to fix.
  *
- * Single `it()` block, not `it.each` per scheme test — investigated 2026-05-28
- * and rejected. Cross-test state is real and load-bearing: top-level
- * `(define integers …)` is reused 7 forms later; `gen-counter` / `add3` /
- * `something-went-wrong` are mutated across multiple `(test …)` calls; a
- * `(let () (define count 0) (define p …) (test 6 (force p)) (test 6 (begin
- * (set! x 10) (force p))))` pair where the second test mathematically
- * REQUIRES the first to have already mutated `count` via the first `force`.
- * Splitting into separate `it`s with per-test env reset is wrong; with shared
- * env it works but disables `concurrent` / `--shuffle`. Net cost ~1-2 days +
- * a sexp walker that coalesces preamble (define/let/set!) with the next
- * `test` form into one executable chunk + ongoing maintenance churn on the
- * vendored submodule. Win is reporter-row granularity, which the now-armed
- * `expect(unexpectedFailures.length).toBe(0)` gate plus war-story reasons in
- * `EXPECTED_FAILURES` already covers in practice. Revisit when row-level CI
- * signal becomes a frequent ask.
+ * ── Two phases: execute once, then report per-test ────────────────────────────────
+ * EXECUTE (phase 1, top-level await): the suite runs ONCE, section by section, on a
+ * single shared `freshEnv()` with the `chibi-harness` capability assembled on top
+ * (`assembleEnv(env, [harness.capability])` — the SAME EnvCapability path the base
+ * stdlib uses). Section-level execution is LOAD-BEARING and preserved verbatim: many
+ * sections legitimately abort partway (a purity door on `set-cdr!`, an omitted
+ * `open-output-string`, an unbound `exact-integer-sqrt`), and cross-test state is real
+ * — top-level `(define integers …)` is reused later, `gen-counter` / `add3` are mutated
+ * across `(test …)` calls, and a `(let () (define count 0) … (test 6 (force p)) (test 6
+ * (begin (set! x 10) (force p))))` pair REQUIRES the first `force` to have mutated
+ * `count`. Running per-form (instead of per-section) would run past those abort points
+ * and surface new failures, so phase 1 keeps the exact section driver.
+ *
+ * REPORT (phase 2): each captured outcome becomes its OWN vitest `it()` — green for a
+ * pass, skipped for an EXCLUDED feature or a documented EXPECTED_FAILURE, RED for any
+ * unexpected failure (the per-row form of the old `unexpectedFailures === 0` gate). So
+ * the reporter now shows ~600 named R7RS rows instead of one opaque blob.
+ *
+ * ── Anti-vacuity ──────────────────────────────────────────────────────────────────
+ * Until this rework the runner silently exercised ZERO tests: the harness prelude was
+ * `exec`'d WITHOUT `{ env }`, so `test` / `test-begin` landed on `user_env` while the
+ * sections ran against a sibling `freshEnv()` — every section threw "Unbound variable
+ * test-begin", `Total: 0`, and the gate passed green. Assembling the harness as a
+ * capability fixes the wiring (the prelude is evaluated INTO the same env), and the
+ * `executed (sanity floor)` test makes the zero-tests failure mode impossible to hide.
  */
 
 import fs from "fs";
 import path from "path";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Environment } from "../Environment";
 import { exec } from "../eval/generator-exec";
+import { assembleEnv } from "../common/kernel.js";
+import type { SchemeEnv } from "../common/scheme-env.js";
 import { freshEnv } from "./_fresh-env";
-
-let env: Environment;
+import { type ChibiTestResult, createChibiHarness } from "./chibi-harness.js";
 
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
@@ -229,19 +240,8 @@ const SKIPPED_TESTS: { pattern: string | RegExp; reason: string }[] = [
   // { pattern: "some-test", reason: "Issue #123: description" },
 ];
 
-// Test results accumulator
-interface TestResult {
-  name: string;
-  group: string;
-  passed: boolean;
-  expected?: unknown;
-  actual?: unknown;
-  error?: string;
-}
-
-let testResults: TestResult[] = [];
-let currentGroup = "R7RS";
-let groupStack: string[] = [];
+// Outcome shape (`ChibiTestResult`) + the results sink + the test-group stack all live
+// in the harness capability now (src/__tests__/chibi-harness.ts).
 
 /**
  * Test groups to exclude entirely - parser/implementation limitations
@@ -296,226 +296,70 @@ function getSkipReason(testName: string): string | null {
 }
 
 /**
- * Set up the (chibi test) compatible framework
+ * Execute the whole vendored suite ONCE against a fresh capability-assembled env.
+ *
+ * Section by section, with the harness assembled as a real `EnvCapability` — the wiring
+ * fix for the old vacuous run (the prelude now evaluates INTO the section-exec env).
+ * Per-section try/catch is preserved: a section that doors / hits an unbound feature
+ * aborts at that point (load-bearing — see the file header), and the next section runs.
  */
-async function setupTestFramework(): Promise<void> {
-  // Register helper functions from JS
-  env.set("format", (fmt: string, ...args: unknown[]) => {
-    let result = String(fmt);
-    let argIndex = 0;
-    result = result.replace(/~[as%~]/g, (match) => {
-      if (match === "~a" || match === "~s") {
-        const arg = args[argIndex++];
-        return arg === undefined ? "" : String(arg);
-      }
-      if (match === "~%") return "\n";
-      if (match === "~~") return "~";
-      return match;
-    });
-    return result;
-  });
-
-  env.set("error-object-message", (err: unknown) => {
-    if (err instanceof Error) return err.message;
-    if (typeof err === "string") return err;
-    return String(err);
-  });
-
-  env.set("error-object?", (obj: unknown) => {
-    return obj instanceof Error || (typeof obj === "object" && obj !== null && "message" in obj);
-  });
-
-  // JS-side test runner that handles errors
-  env.set("js-run-test", async (name: unknown, expected: unknown, thunk: () => unknown) => {
-    const testName = typeof name === "string" ? name : String(name);
-    try {
-      const result = await thunk();
-      // Check approximate equality for inexact numbers
-      const passed = approxEqual(expected, result);
-      if (passed) {
-        testResults.push({ name: testName, group: currentGroup, passed: true, expected, actual: result });
-      } else {
-        testResults.push({ name: testName, group: currentGroup, passed: false, expected, actual: result });
-      }
-    } catch (e) {
-      testResults.push({ name: testName, group: currentGroup, passed: false, error: String(e) });
-    }
-  });
-
-  function approxEqual(a: unknown, b: unknown): boolean {
-    // Handle SchemeInexact (complex numbers) - compare real and imag parts
-    if (a && typeof a === "object" && "real" in a && "imag" in a) {
-      if (b && typeof b === "object" && "real" in b && "imag" in b) {
-        return (
-          approxEqualNum((a as { real: number }).real, (b as { real: number }).real) &&
-          approxEqualNum((a as { imag: number }).imag, (b as { imag: number }).imag)
-        );
-      }
-      // Compare complex with real: only equal if imag is 0
-      const aObj = a as { real: number; imag: number };
-      if (aObj.imag !== 0) return false;
-      return approxEqual(aObj.real, b);
-    }
-    if (b && typeof b === "object" && "real" in b && "imag" in b) {
-      const bObj = b as { real: number; imag: number };
-      if (bObj.imag !== 0) return false;
-      return approxEqual(a, bObj.real);
-    }
-
-    // Handle SchemeExact - use valueOf safely
-    if (a && typeof a === "object" && "valueOf" in a && !("imag" in a)) {
-      a = (a as { valueOf(): unknown }).valueOf();
-    }
-    if (b && typeof b === "object" && "valueOf" in b && !("imag" in b)) {
-      b = (b as { valueOf(): unknown }).valueOf();
-    }
-
-    if (typeof a === "number" && typeof b === "number") {
-      return approxEqualNum(a, b);
-    }
-    // Use strict equality for non-numbers (Scheme equal? would be better)
-    return a === b || String(a) === String(b);
+async function runChibiSuite(): Promise<{
+  results: ChibiTestResult[];
+  complexExcludedCount: number;
+  fileAbsent?: boolean;
+  fatal?: unknown;
+}> {
+  if (!fs.existsSync(CHIBI_TESTS_PATH)) {
+    return { results: [], complexExcludedCount: 0, fileAbsent: true };
   }
+  try {
+    const harness = createChibiHarness();
+    // A fresh capability env (native root + BASE_PACKS scheme layer), then the harness
+    // capability assembled ON TOP — the same `assembleEnv` path production uses. The
+    // prelude runs through `evalScheme` (mirrors _fresh-env): an exec INTO this very env,
+    // so the `test*` macros bind where the sections will look for them.
+    const env: Environment = await freshEnv();
+    const evalScheme = (e: unknown, src: unknown): unknown =>
+      exec(src as string, { env: e as Environment, skipBootstrapWait: true });
+    await assembleEnv(env as unknown as SchemeEnv, [harness.capability.lower({ evalScheme })]);
 
-  function approxEqualNum(a: number, b: number): boolean {
-    if (Number.isNaN(a) && Number.isNaN(b)) return true;
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return a === b;
-    // Use relative epsilon appropriate for IEEE 754 double precision
-    const epsilon = Math.max(1e-12, Math.abs(a) * 1e-6, Math.abs(b) * 1e-6);
-    return Math.abs(a - b) < epsilon;
+    let testContent = fs.readFileSync(CHIBI_TESTS_PATH, "utf-8");
+    testContent = preprocessTestFile(testContent);
+
+    // Per-section progress on stderr (unbuffered, survives a hang): an infinite macro
+    // expansion inside `await exec` is NOT a throw, so the try/catch never fires — the
+    // run just wedges. The last "→ <section>" with no matching "✓ <section>" pinpoints
+    // the offender. Set CHIBI_TRACE=0 to silence once green.
+    const trace = process.env.CHIBI_TRACE !== "0";
+    const sections = testContent.split(/(?=\(test-begin\s+")/);
+    let complexExcludedCount = 0;
+    for (const section of sections) {
+      if (!section.trim()) continue;
+      const sectionMatch = section.match(/\(test-begin\s+"([^"]+)"\)/);
+      const sectionName = sectionMatch?.[1] ?? "(preamble)";
+      // Strip complex-literal / complex-procedure forms BEFORE parsing — a complex
+      // literal (3+4i) doors at READ-time (arrival is reals-only), which would throw
+      // during parse and abort the WHOLE section, losing every sibling test. Eval-time
+      // exclusions (call/cc, ports, …) still run and are filtered post-hoc.
+      const { text: safeSection, stripped } = stripComplexForms(section);
+      complexExcludedCount += stripped.length;
+      if (trace) process.stderr.write(`[chibi] → ${sectionName}\n`);
+      try {
+        await exec(safeSection, { env });
+      } catch (e) {
+        // Section abort (door / unbound feature / read limit). Load-bearing: the rest of
+        // this section is skipped, the next section continues — exactly as before.
+        console.error(`Error in section "${sectionName}":`, (e as Error).message?.slice(0, 100));
+      }
+      if (trace) process.stderr.write(`[chibi] ✓ ${sectionName}\n`);
+    }
+
+    return { results: harness.results, complexExcludedCount };
+  } catch (fatal) {
+    // A catastrophic failure (env build / assembly) — surfaced as one red test in phase 2
+    // rather than a collection crash that hides every row.
+    return { results: [], complexExcludedCount: 0, fatal };
   }
-
-  // Define test macros compatible with chibi test
-  await exec(`
-    ;; Test group tracking
-    (define *current-test-group* "R7RS")
-    (define *test-group-stack* '())
-
-    ;; Test result callbacks (will be set from JS)
-    (define *test-pass-callback* (lambda (name expected actual) #void))
-    (define *test-fail-callback* (lambda (name expected actual) #void))
-    (define *test-error-callback* (lambda (name error) #void))
-    (define *test-begin-callback* (lambda (name) #void))
-    (define *test-end-callback* (lambda (name) #void))
-
-    ;; Approximate equality for floats
-    (define (approx-equal? a b epsilon)
-      (cond
-        ((and (number? a) (number? b))
-         (< (abs (- a b)) epsilon))
-        ((and (pair? a) (pair? b))
-         (and (approx-equal? (car a) (car b) epsilon)
-              (approx-equal? (cdr a) (cdr b) epsilon)))
-        ((and (vector? a) (vector? b)
-              (= (vector-length a) (vector-length b)))
-         (let loop ((i 0))
-           (or (>= i (vector-length a))
-               (and (approx-equal? (vector-ref a i) (vector-ref b i) epsilon)
-                    (loop (+ i 1))))))
-        (else (equal? a b))))
-
-    ;; test-begin starts a new test group
-    (define (test-begin name)
-      (set! *test-group-stack* (cons *current-test-group* *test-group-stack*))
-      (set! *current-test-group* name)
-      (*test-begin-callback* name))
-
-    ;; test-end closes a test group
-    (define (test-end . args)
-      (let ((name (if (null? args) *current-test-group* (car args))))
-        (*test-end-callback* name)
-        (when (pair? *test-group-stack*)
-          (set! *current-test-group* (car *test-group-stack*))
-          (set! *test-group-stack* (cdr *test-group-stack*)))))
-
-    ;; Main test macro - simple version without guard
-    ;; Chibi test format: (test expected expr) or (test name expected expr)
-    (define-syntax test
-      (syntax-rules ()
-        ((test name expected expr)
-         (js-run-test name expected (lambda () expr)))
-        ((test expected expr)
-         (js-run-test 'expr expected (lambda () expr)))))
-
-    ;; test-assert for boolean tests
-    (define-syntax test-assert
-      (syntax-rules ()
-        ((test-assert expr)
-         (test-assert 'expr expr))
-        ((test-assert name expr)
-         (test #t name expr))))
-
-    ;; test-error expects an error to be raised
-    (define-syntax test-error
-      (syntax-rules ()
-        ((test-error expr)
-         (test-error 'expr expr))
-        ((test-error name expr)
-         (guard (err (#t (*test-pass-callback* name "error" "error")))
-           expr
-           (*test-fail-callback* name "error" "no error")))))
-
-    ;; test-values for multiple values
-    (define-syntax test-values
-      (syntax-rules ()
-        ((test-values expected expr)
-         (test (call-with-values (lambda () expected) list)
-               (call-with-values (lambda () expr) list)))))
-
-    ;; Numeric syntax test helper from chibi.
-    ;;
-    ;; The upstream chibi macro round-trips through ports:
-    ;;   (read (open-input-string str)) then (write … out) and checks the
-    ;;   written form is a member of the expected write-strings. We don't
-    ;;   support string ports (see EXCLUDED_TESTS) so we keep only the read
-    ;;   half via (string->number str) — the same parse the reader performs
-    ;;   for a numeric token — and assert it is eqv? to the expected value.
-    ;;   The write-membership half (strs ...) is dropped: it tests port output
-    ;;   formatting, which is out of scope for the sandbox.
-    (define-syntax test-numeric-syntax
-      (syntax-rules ()
-        ((test-numeric-syntax str expect strs ...)
-         (test str expect (string->number str)))))
-  `);
-
-  // Register JS callbacks
-  env.set("*test-pass-callback*", (name: string, expected: unknown, actual: unknown) => {
-    testResults.push({
-      name: String(name),
-      group: currentGroup,
-      passed: true,
-      expected,
-      actual,
-    });
-  });
-
-  env.set("*test-fail-callback*", (name: string, expected: unknown, actual: unknown) => {
-    testResults.push({
-      name: String(name),
-      group: currentGroup,
-      passed: false,
-      expected,
-      actual,
-    });
-  });
-
-  env.set("*test-error-callback*", (name: string, error: unknown) => {
-    testResults.push({
-      name: String(name),
-      group: currentGroup,
-      passed: false,
-      error: String(error),
-    });
-  });
-
-  env.set("*test-begin-callback*", (name: string) => {
-    groupStack.push(currentGroup);
-    currentGroup = String(name);
-  });
-
-  env.set("*test-end-callback*", (_name: string) => {
-    currentGroup = groupStack.pop() ?? "R7RS";
-  });
 }
 
 /**
@@ -619,127 +463,91 @@ function stripComplexForms(section: string): { text: string; stripped: string[] 
   return { text: out, stripped };
 }
 
+// ── PHASE 1: execute the whole suite once (top-level await) ─────────────────────────
+// Awaiting at module scope means execution finishes during collection, BEFORE the
+// per-test rows below are registered — so each `it()` is born already knowing its
+// outcome. (Awaiting also settles freshEnv's lazy initBridge import, avoiding the flaky
+// "ramda loaded after teardown" rejection the old beforeAll guarded against.)
+const suite = await runChibiSuite();
+
+// ── PHASE 2: report each captured outcome as its own vitest row ─────────────────────
 describe("Chibi R7RS Official Tests", () => {
-  beforeAll(async () => {
-    // AWAIT initBridge: it returns the bootstrap promise whose `.then` lazily
-    // `import()`s sandbox-env.js (→ ramda). Left un-awaited, that import can
-    // resolve AFTER vitest tears the environment down, surfacing as a flaky
-    // "EnvironmentTeardownError: Cannot load …/ramda … after the environment was
-    // torn down" — an unhandled rejection that taints the exit code (1 error)
-    // without failing any test. Awaiting it settles the import before the suite runs.
-    env = await freshEnv();
-    await setupTestFramework();
+  if (suite.fileAbsent) {
+    it.skip("r7rs-tests.scm — submodule not initialized (run: git submodule update --init)", () => {});
+    return;
+  }
+  if (suite.fatal !== undefined) {
+    it("r7rs-tests.scm — suite failed to execute", () => {
+      throw suite.fatal instanceof Error ? suite.fatal : new Error(String(suite.fatal));
+    });
+    return;
+  }
+
+  // Classify each outcome with the SAME logic the old aggregate gate used — now per row:
+  //   • excluded (by name or group)  → skipped (feature omitted by design)
+  //   • passed                       → green
+  //   • documented EXPECTED_FAILURE  → skipped (deviation, kept documented, not a gate)
+  //   • SKIPPED_TESTS                → skipped
+  //   • any other failure            → RED  (the per-row form of unexpectedFailures > 0)
+  const summary = { passed: 0, excluded: 0, expected: 0, skipped: 0, unexpected: 0 };
+  const seen = new Map<string, number>();
+  const rowName = (r: ChibiTestResult): string => {
+    const base = `[${r.group}] ${r.name}`.replace(/\s+/g, " ").trim();
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return (n > 1 ? `${base} #${n}` : base).slice(0, 200);
+  };
+
+  for (const r of suite.results) {
+    const display = rowName(r);
+    if (isExcluded(r.name, r.group)) {
+      summary.excluded++;
+      it.skip(display, () => {});
+      continue;
+    }
+    if (r.passed) {
+      summary.passed++;
+      it(display, () => {
+        expect(r.passed).toBe(true);
+      });
+      continue;
+    }
+    const efReason = getExpectedFailureReason(r.name);
+    if (efReason) {
+      summary.expected++;
+      it.skip(`${display} — expected failure: ${efReason}`.slice(0, 240), () => {});
+      continue;
+    }
+    const skipReason = getSkipReason(r.name);
+    if (skipReason) {
+      summary.skipped++;
+      it.skip(`${display} — skipped: ${skipReason}`.slice(0, 240), () => {});
+      continue;
+    }
+    summary.unexpected++;
+    it(display, () => {
+      const detail = r.error ? `ERROR ${r.error}` : `expected ${String(r.expected)}, got ${String(r.actual)}`;
+      throw new Error(`${r.name}: ${detail}`);
+    });
+  }
+
+  // Anti-vacuity sentinel. The pre-rework runner silently exercised ZERO tests yet
+  // passed green (the prelude bound to user_env, not the section-exec env). This makes
+  // that failure mode loud: a broken wiring yields no results and THIS test goes red.
+  it("r7rs-tests.scm executed (sanity floor)", () => {
+    expect(suite.results.length).toBeGreaterThan(500);
+    expect(summary.passed).toBeGreaterThan(500);
   });
 
-  it("runs official r7rs-tests.scm", async () => {
-    // Check if submodule is initialized
-    if (!fs.existsSync(CHIBI_TESTS_PATH)) {
-      console.warn("Chibi scheme submodule not initialized. Run: git submodule update --init");
-      return;
-    }
-
-    // Reset state
-    testResults = [];
-    currentGroup = "R7RS";
-    groupStack = [];
-
-    // Load and preprocess test file
-    let testContent = fs.readFileSync(CHIBI_TESTS_PATH, "utf-8");
-    testContent = preprocessTestFile(testContent);
-
-    // Run tests - split into sections and run each separately to continue on errors.
-    //
-    // Per-section progress on stderr (unbuffered, written synchronously so it
-    // survives a hang): an infinite macro expansion inside `await exec` is NOT a
-    // throw, so the try/catch below never fires — the run just wedges. When that
-    // happens the last "→ <section>" with no matching "✓ <section>" pinpoints the
-    // offending section instead of leaving the whole suite an opaque hang. Set
-    // CHIBI_TRACE= to silence once green. (Found the syntax-rules dispatch hang
-    // this way, 2026-05-31.)
-    const trace = process.env.CHIBI_TRACE !== "0";
-    const sections = testContent.split(/(?=\(test-begin\s+")/);
-    const complexExcluded: string[] = [];
-    for (const section of sections) {
-      if (!section.trim()) continue;
-      const sectionMatch = section.match(/\(test-begin\s+"([^"]+)"\)/);
-      const sectionName = sectionMatch?.[1] ?? "(preamble)";
-      // Strip complex-literal / complex-procedure lines BEFORE parsing. A complex
-      // literal (3+4i) doors at READ-time (arrival is reals-only — see
-      // values/numbers.ts), so leaving it in would throw during parse and abort the
-      // WHOLE section, losing every sibling test. We drop exactly the lines whose
-      // text `isExcluded` already recognizes (the complex patterns added to
-      // EXCLUDED_TESTS) — same list, applied one phase earlier because the failure
-      // is at read-time, not eval-time. Eval-time exclusions (call/cc, etc.) still
-      // run and are filtered post-hoc as before; only read-time-failing lines are
-      // removed here.
-      const { text: safeSection, stripped } = stripComplexForms(section);
-      complexExcluded.push(...stripped);
-      if (trace) process.stderr.write(`[chibi] → ${sectionName}\n`);
-      try {
-        await exec(safeSection, { env });
-      } catch (e) {
-        // Record error and continue
-        console.error(`Error in section "${sectionName}":`, (e as Error).message?.slice(0, 100));
-      }
-      if (trace) process.stderr.write(`[chibi] ✓ ${sectionName}\n`);
-    }
-
-    // Filter results
-    const includedResults = testResults.filter((r) => !isExcluded(r.name, r.group));
-    const passed = includedResults.filter((r) => r.passed);
-    const allFailed = includedResults.filter((r) => !r.passed);
-
-    // Separate expected failures from unexpected failures
-    const expectedFailures = allFailed.filter((r) => getExpectedFailureReason(r.name));
-    const unexpectedFailures = allFailed.filter((r) => !getExpectedFailureReason(r.name));
-
-    // Report
-    console.log(`\n=== Chibi R7RS Test Results ===`);
-    console.log(`Total: ${includedResults.length}`);
-    console.log(`Passed: ${passed.length}`);
-    console.log(`Failed: ${unexpectedFailures.length}`);
-    console.log(`Expected failures: ${expectedFailures.length}`);
-    console.log(`Excluded: ${testResults.length - includedResults.length}`);
-    console.log(`Complex forms excluded (read-time, reals-only): ${complexExcluded.length}`);
-
-    if (expectedFailures.length > 0) {
-      console.log(`\n--- Expected Failures (documented deviations) ---`);
-      for (const f of expectedFailures) {
-        const reason = getExpectedFailureReason(f.name);
-        console.log(`[${f.group}] ${f.name}: ${reason}`);
-      }
-    }
-
-    if (unexpectedFailures.length > 0) {
-      console.log(`\n--- Unexpected Failures ---`);
-      for (const f of unexpectedFailures.slice(0, 50)) {
-        // Limit output
-        if (f.error) {
-          console.log(`[${f.group}] ${f.name}: ERROR - ${f.error}`);
-        } else {
-          console.log(`[${f.group}] ${f.name}: expected ${f.expected}, got ${f.actual}`);
-        }
-      }
-      if (unexpectedFailures.length > 50) {
-        console.log(`... and ${unexpectedFailures.length - 50} more failures`);
-      }
-    }
-
-    // Group failures by section for summary
-    const failuresByGroup = new Map<string, number>();
-    for (const f of unexpectedFailures) {
-      failuresByGroup.set(f.group, (failuresByGroup.get(f.group) ?? 0) + 1);
-    }
-    if (failuresByGroup.size > 0) {
-      console.log(`\n--- Unexpected Failures by Section ---`);
-      for (const [group, count] of failuresByGroup) {
-        console.log(`${group}: ${count}`);
-      }
-    }
-
-    // Gate: pass only when there are NO unexpected failures.
-    // Documented deviations live in EXPECTED_FAILURES — keep them documented,
-    // don't let regressions hide behind a blanket allow-list.
-    expect(unexpectedFailures.length).toBe(0);
-  });
+  // Diagnostic summary (mirrors the old console report).
+  console.log(
+    "\n=== Chibi R7RS Test Results ===\n" +
+      `Total results: ${suite.results.length}\n` +
+      `Passed: ${summary.passed}\n` +
+      `Unexpected failures: ${summary.unexpected}\n` +
+      `Expected failures: ${summary.expected}\n` +
+      `Excluded: ${summary.excluded}\n` +
+      `Skipped (known issues): ${summary.skipped}\n` +
+      `Complex forms excluded (read-time, reals-only): ${suite.complexExcludedCount}`,
+  );
 });
