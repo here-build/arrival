@@ -13,7 +13,6 @@ import { symbol } from "../common/symbol.js";
 import { Macro } from "../eval/Macro.js";
 import { Syntax } from "../eval/Syntax.js";
 import { Environment } from "../Environment.js";
-import { global_env } from "../env-roots.js";
 import { extract_patterns, transform_syntax, restore_data_gensyms } from "../eval/syntax-rules.js";
 import { is_nil } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -63,20 +62,26 @@ const syntaxRules = new Macro(
       validate_identifiers(macro.car);
     }
     const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
-      // Hygiene scope derived via the def-time Resolver pass-through (P3 3a.4):
-      // `defResolver.child("syntax").env` ≡ `env.inherit("syntax")`.
-      const scope = defResolver.child("syntax").env;
+      // The use-site Resolver wraps `this` (the expansion env) — the hygiene-identity root for
+      // the literal check (below) + the merge-frame plumbing (P3 3b.2).
+      const useResolver = new Resolver(this);
+      // The def-time syntax-child Resolver: `defResolver.child("syntax")` ≡ `env.inherit("syntax")`.
+      // Its env is the hygiene scope, shared by-ref into the merge return below.
+      const defChild = defResolver.child("syntax");
+      const scope = defChild.env;
       const dynamic_env = scope;
-      let var_scope: Environment = this;
-      // for macros that define variables used in macro (2 levels nestting)
-      if ((var_scope.__name__ as string | symbol) === Syntax.__merge_env__) {
-        // copy refs for defined gynsyms
-        const props = Object.getOwnPropertySymbols(var_scope.__env__);
-        for (const symbol of props) {
-          var_scope.__parent__!.set(symbol, var_scope.__env__[symbol]);
+      // for macros that define variables used in macro (2 levels nestting): if `this` is itself a
+      // merge frame (from an outer expansion), copy its symbol-keyed gensyms up into the parent and
+      // unwrap. Routed through the LexicalScope surface (kind/ownSymbolEntries/parent.define) — a
+      // byte-identical pass-through over the env today (P3 3b.2).
+      let useScope = useResolver.scope;
+      if (useScope.kind === "merge") {
+        for (const [sym, value] of useScope.ownSymbolEntries()) {
+          useScope.parent!.define(sym, value);
         }
-        var_scope = var_scope.__parent__!;
+        useScope = useScope.parent!;
       }
+      const var_scope: Environment = useScope.env;
       const eval_args = { env: scope, dynamic_env, use_dynamic, error };
       let ellipsis, rules, symbols;
       if (macro.car instanceof ASymbol) {
@@ -93,11 +98,11 @@ const syntaxRules = new Macro(
           const rule = rules.car.car;
           let expr = rules.car.cdr.car;
           const bindings = extract_patterns(rule, code, symbols, ellipsis, {
-            expansion: this,
-            // def env via the Resolver pass-through (≡ env); identity-stable for
-            // the engine's `ref === define` literal check.
-            define: defResolver.env,
-            globalEnv: global_env,
+            // Hygiene-identity handles: use-site Resolver, the captured def Resolver, and its
+            // capabilities (globalRoot = the unshadowed-base identity). See P3 3b.2.
+            useResolver,
+            defResolver,
+            capabilities: defResolver.capabilities,
           });
           if (bindings) {
             // name is modified in transform_syntax
@@ -106,8 +111,7 @@ const syntaxRules = new Macro(
               bindings,
               expr,
               symbols,
-              scope,
-              lex_scope: var_scope,
+              scope: defChild,
               names,
               ellipsis,
             });

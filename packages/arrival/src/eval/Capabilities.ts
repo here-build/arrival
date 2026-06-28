@@ -3,21 +3,43 @@ import type { Environment } from "../Environment.js";
 
 /**
  * The CAPABILITY base — the builtins/preludes/host-supplied resolvers a run is
- * armed with (today, everything reachable from `global_env`/`user_env`). In the
- * eventual (3b) split this is the shared root that a {@link LexicalScope} falls
- * through to: lexical names resolve in the frame chain, everything else (car,
- * map, `:key` accessors, the polyglot resolvers) resolves here.
+ * armed with (today, everything reachable from `global_env`). In the eventual
+ * (3b) split this is the shared root that a {@link LexicalScope} falls through
+ * to: lexical names resolve in the frame chain, everything else (car, map,
+ * `:key` accessors, the polyglot resolvers) resolves here.
  *
- * In 3a this is a thin nominal wrapper over the still-base-linked
- * {@link Environment} — the lexical chain and the capability base are literally
- * the SAME `__parent__`-linked env, so both wrap it. 3b severs them; this type
- * exists now only to name the target. Keep it minimal — do not grow a resolution
- * API here until 3b actually needs one.
+ * In 3b.2 the lexical chain and the capability base are still the SAME
+ * `__parent__`-linked env, so this wraps it. The hygiene engine now consults
+ * `globalRoot` (the unshadowed-builtin identity, kept a STABLE singleton so
+ * `=== globalRoot` survives the topology swap) and `refFrame` (does the base
+ * OWN this name). 3b.3 severs the link; the surface here is already the target.
  */
 export class Capabilities {
   static [CLASS] = "capabilities";
 
   constructor(readonly env: Environment) {}
+
+  /** The capability base = the chain root (`global_env`), found structurally as the
+   *  parent-less top of this scope's chain rather than by an env-roots import (which would
+   *  cycle through the early-loaded eval modules). The hygiene literal check compares a
+   *  resolved frame `=== globalRoot` to mean "an unshadowed base builtin"; the root is a
+   *  stable identity that survives the 3b.3 cut. */
+  private chainRoot(): Environment {
+    let e: Environment = this.env;
+    while (e.__parent__) e = e.__parent__;
+    return e;
+  }
+
+  get globalRoot(): Environment {
+    return this.chainRoot();
+  }
+
+  /** The owning frame of `name` in the base, or `undefined`. The base IS the chain root
+   *  (where `Environment.ref` bottoms out), so this is an own-binding probe on it. */
+  refFrame(name: string): Environment | undefined {
+    const root = this.chainRoot();
+    return root.has(name) ? root : undefined;
+  }
 
   toString(): string {
     return `#<capabilities:${this.env.__name__}>`;

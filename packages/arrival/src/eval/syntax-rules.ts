@@ -218,9 +218,10 @@ export function extract_patterns(
     },
     symbols: {} as SchemeValue,
   };
-  // globalEnv threaded through scope (like `define`) so the engine references no
-  // module-level global_env — injected by the syntax-rules caller. See K3.
-  const { expansion, define, globalEnv } = scope;
+  // The hygiene-identity handles, injected by the syntax-rules caller (the engine references
+  // no module-level env): `useResolver` over the USE site, the captured `defResolver`, and its
+  // `capabilities` (whose `globalRoot` is the unshadowed-base identity). See K3 + P3 3b.2.
+  const { useResolver, defResolver, capabilities } = scope;
   // pattern_names parameter is used to distinguish
   // multiple matches of ((x ...) ...) against ((1 2 3) (1 2 3))
   // in loop we add x to the list so we know that this is not
@@ -237,8 +238,13 @@ export function extract_patterns(
         if (!ASymbol.is(code, literal) && !ASymbol.is(pattern, code)) {
           return false;
         }
-        const ref = expansion.ref(literal);
-        return !ref || ref === define || ref === globalEnv;
+        // refFrame walks USE-site scope frames THEN capabilities, returning the owning frame
+        // (a LexicalScope for a lexical owner, the globalRoot env for an unshadowed builtin).
+        // unbound (!ref) and unshadowed-base (=== globalRoot) match as before; `=== defResolver.scope`
+        // compares the captured def frame. A literal shadowed by an intervening user `let` returns
+        // that user frame (≠ both) → no match, as today. (P3 3b.2.)
+        const ref = useResolver.refFrame(literal);
+        return !ref || ref === defResolver.scope || ref === capabilities.globalRoot;
       }
     }
     // KNOWN LIMITATION (boxing track S9, deferred — docs/plan-2026-06-10-boxing-track.md
@@ -565,7 +571,9 @@ export function restore_data_gensyms(node, gensyms) {
 
 // ----------------------------------------------------------------------
 export function transform_syntax(options: SchemeValue = {}) {
-  const { bindings, expr, scope, symbols, names, ellipsis: ellipsis_symbol } = options;
+  // `scope` is now the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
+  // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set (P3 3b.2).
+  const { bindings, expr, scope: defChild, symbols, names, ellipsis: ellipsis_symbol } = options;
   const gensyms = {};
 
   function valid_symbol(symbol) {
@@ -605,24 +613,24 @@ export function transform_syntax(options: SchemeValue = {}) {
 
   function rename(name, symbol) {
     if (!gensyms[name]) {
-      const ref = scope.ref(name);
+      // Hygiene identity: does `name` resolve to a frame? refFrame-truthiness ≡ the old
+      // scope.ref chain-walk (own bindings, no resolvers/synth, scope-then-capabilities).
+      const found = defChild.refFrame(name);
       // nested syntax-rules needs original symbol to get renamed again
-      if (typeof name === "symbol" && !ref) {
+      if (typeof name === "symbol" && !found) {
         name = symbol.literal();
       }
       if (gensyms[name]) {
         return gensyms[name];
       }
       const gensym_name = gensym(name);
-      if (ref) {
-        const value = scope.get(name);
-        scope.set(gensym_name, value);
-      } else {
-        const value = scope.get(name, { throwError: false });
-        // value is not in scope, but it's JavaScript object
-        if (value !== undefined) {
-          scope.set(gensym_name, value);
-        }
+      // Copy the bound value (if any) onto the gensym so the expansion resolves it. This unifies
+      // the old ref?get(name):get(name,{throwError:false}) split — the ref-truthy value is never
+      // undefined, so "set iff present" matches both arms. lookupSettled is settled (patch_value),
+      // resolver-aware, NON-synth and non-throwing — exactly the old scope.get(name,{throwError:false}).
+      const value = defChild.lookupSettled(name);
+      if (value !== undefined) {
+        defChild.define(gensym_name, value);
       }
       // keep names so they can be restored after evaluation
       // if there are free symbols as output
@@ -946,7 +954,7 @@ export function transform_syntax(options: SchemeValue = {}) {
       let rest;
       let is_syntax;
       if (first instanceof ASymbol) {
-        const value = scope.get(first, { throwError: false });
+        const value = defChild.lookupSettled(first);
         is_syntax = value instanceof Macro && value.__name__ === "syntax-rules";
       }
       const exprAny = expr as SchemeValue;

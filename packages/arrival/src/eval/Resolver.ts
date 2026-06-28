@@ -135,9 +135,14 @@ export class Resolver {
     readonly kind?: ScopeKind,
   ) {}
 
-  /** The lexical-binding view (3b target). Lazy — the hot path never reads it. */
+  /**
+   * The lexical-binding view (3b target). Lazy — the hot path never reads it.
+   * MEMOIZED per env: hygiene compares `refFrame(name) === defResolver.scope` by
+   * identity, so two reads of `.scope` for the same frame must be the SAME object
+   * (and must match what a `refFrame` walk returns for that frame).
+   */
   get scope(): LexicalScope {
-    return new LexicalScope(this.env);
+    return LexicalScope.for(this.env);
   }
 
   /** The capability-base view (3b target). Lazy — the hot path never reads it. */
@@ -161,6 +166,29 @@ export class Resolver {
    */
   lookup(name: string | symbol): EnvironmentValue | undefined {
     return this.env._lookupWithResolvers(name);
+  }
+
+  /**
+   * The frame that OWNS `name` for hygiene IDENTITY — walk the lexical scope frames,
+   * then the capability base. Returns a stable {@link LexicalScope} for a lexical owner
+   * (so `=== defResolver.scope` compares the captured def frame) or the base
+   * {@link Capabilities.globalRoot} env for an unshadowed builtin (so `=== globalRoot`),
+   * `undefined` if unbound. Own bindings only — no resolvers, no synth — exactly like the
+   * old `Environment.ref` walk it replaces. NOT a value read and NOT a mutation path.
+   */
+  refFrame(name: string): LexicalScope | Environment | undefined {
+    return this.scope.refFrame(name) ?? this.capabilities.refFrame(name);
+  }
+
+  /**
+   * A SETTLED value read — the bound value of `name` (scope then capabilities),
+   * patch_value-settled, resolver-aware, NON-synth, `undefined` on a miss (never throws).
+   * ≡ `env.get(name, { throwError: false })`. Used by hygiene's gensym rename to copy a
+   * bound value onto its gensym; distinct from {@link resolve} (which synthesizes c[ad]+r
+   * and throws on a miss), so a template-introduced (unbound) identifier yields undefined.
+   */
+  lookupSettled(name: BindingName): EnvironmentValue | undefined {
+    return this.env.get(name, { throwError: false });
   }
 
   /** Bind a name in the innermost frame (let/lambda/letrec/define). ≡ `env.set`. */
