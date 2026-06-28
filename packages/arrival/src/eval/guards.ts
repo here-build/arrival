@@ -12,7 +12,6 @@ import {
   rational_re,
   re_re,
 } from "../values/primitives.js";
-import { LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
 import { nil } from "../values/primitives/ANil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
@@ -159,11 +158,4 @@ export function is_undef(value: unknown): value is undefined {
 // class was removed) is gone with it.
 export function is_callable(o: unknown): boolean {
   return is_function(o) || is_macro(o);
-}
-
-// ----------------------------------------------------------------------
-export function is_lambda(obj: unknown): boolean {
-  // A Scheme lambda is a FUNCTION carrying the well-known LAMBDA brand. The evaluator
-  // stamps every lambda it creates/wraps with it; the membrane mirrors this check.
-  return typeof obj === "function" && LAMBDA in obj;
 }

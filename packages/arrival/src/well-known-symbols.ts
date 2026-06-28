@@ -20,8 +20,8 @@ export const CLASS = Symbol.for("arrival/class");
 
 /**
  * Marks a JS function as a Scheme lambda (`true`). Set by the evaluator when it
- * wraps/creates lambdas; read by `is_lambda` (guards) and the membrane to
- * decide arg-unboxing. Historically a string/symbol mix — now a single symbol.
+ * wraps/creates lambdas; read INLINE (`typeof fn === "function" && LAMBDA in fn`) by the membrane's
+ * isSchemeValue and the printer's procedure repr. Historically a string/symbol mix — now one symbol.
  */
 export const LAMBDA = Symbol.for("arrival/lambda");
 
