@@ -29,8 +29,8 @@
  *  - isPure: provided for interface completeness, but NOTE `classify()` does not
  *    currently consult it — any op that is not source/opaque/fan falls through to
  *    the pure-application path (combine), so an unlisted pure op is still handled
- *    correctly. Kept honest + minimal rather than chasing builtin-list completeness
- *    (the SAFE_BUILTINS-staleness trap); the pure registry carries the pure ROSETTAS.
+ *    correctly. Rosetta-only: the pure registry (rosettaPureOf) IS the whole story —
+ *    no curated native-builtin list to go stale (the SAFE_BUILTINS-staleness trap).
  */
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
@@ -38,15 +38,6 @@ import type { Classifier } from "./lineage.js";
 
 /** Collection operators that classify to a per-element fan template (see classify). */
 const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
-
-/** Pure builtins for the (currently unused) isPure predicate — the curated
- *  "author assertion" (env-registries.ts): builtins carry no structural purity
- *  flag. Deliberately minimal; the pure-application fallthrough in classify()
- *  handles anything omitted, so this list need not be exhaustive. */
-const PURE_BUILTINS: ReadonlySet<string> = new Set([
-  "+", "-", "*", "/", "<", ">", "=", "<=", ">=", "abs", "min", "max",
-  "car", "cdr", "cons", "list", "length", "not", "string-append",
-]);
 
 /** True iff `op` is a pure rosetta registered anywhere up the env chain
  *  (the pure registry is per-env; this walk supplies the chaining — env-registries.ts). */
@@ -63,7 +54,7 @@ function isPureRosettaInChain(env: Environment, op: string): boolean {
  */
 export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>): Classifier {
   return {
-    isPure: (op) => PURE_BUILTINS.has(op) || isPureRosettaInChain(env, op),
+    isPure: (op) => isPureRosettaInChain(env, op),
     // A source mints iff it is a declared source AND not a pure transform.
     isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
     isFan: (op) => FAN_OPS.has(op),
