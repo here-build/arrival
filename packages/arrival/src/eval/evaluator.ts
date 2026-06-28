@@ -42,6 +42,7 @@ import {
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { resolveMemberPath } from "../member-walk.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { APair } from "../values/primitives/APair.js";
@@ -657,14 +658,21 @@ function env_get(env: Environment, sym: ASymbol): SchemeValue {
     if (cxr !== undefined) return cxr;
   }
 
-  // Direct lookup missed. Dot-notation symbols — `foo.bar.baz` source sugar, or the
-  // syntax-rules gensyms that carry their property path on SchemeSymbol.object — are
-  // resolved by Environment.get's property-splitting path, which _lookupWithResolvers
-  // does not implement. Delegate ONLY after the direct miss (matching Environment.get's
-  // "dot notation only after direct lookup fails" ordering), so the hot path is unchanged.
-  const hasObjectParts = (sym as unknown as { [key: symbol]: unknown })[ASymbol.object] != null;
-  invariant(hasObjectParts || (typeof name === "string" && name.includes(".")), `Unbound variable \`${String(name)}'`);
-  return env.get(sym);
+  // Direct lookup missed. Dot-notation — `foo.bar.baz` source sugar, or syntax-rules gensyms
+  // carrying their property path on `ASymbol.object` — resolve the base NAME in scope, then walk
+  // members through the membrane. Environment.get no longer does this (ejection P1: get is pure
+  // name-resolution); name-resolution lives here, member-access in member-walk.ts.
+  const objectParts = (sym as unknown as { [key: symbol]: string[] | undefined })[ASymbol.object];
+  const parts: string[] | undefined =
+    objectParts ?? (typeof name === "string" && name.includes(".") ? name.split(".").filter(Boolean) : undefined);
+  if (parts && parts.length > 1) {
+    const [first, ...rest] = parts;
+    const base = env._lookupWithResolvers(first);
+    if (base !== undefined) return resolveMemberPath(base, rest);
+  }
+  throw Object.assign(new Error(`Unbound variable \`${String(name)}'`), {
+    publicMessage: `symbol ${String(name)} does not exist - look at list of available functions at tool description`,
+  });
 }
 
 // ============================================================================

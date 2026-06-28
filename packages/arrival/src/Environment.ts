@@ -16,9 +16,6 @@ import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
-import { AJSObject } from "./values/primitives/AJSObject.js";
-import { accessMember, NOT_FOUND } from "./interop-access.js";
-import { InteropAccessError } from "./errors.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 
@@ -71,44 +68,6 @@ function ownProps(obj: object): (string | symbol)[] {
   return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
 
-/**
- * Walk a chain of (string) member keys off a base value, settling each step for
- * Scheme via `patch_value` (a Pair is cycle-marked + quoted, primitives boxed).
- * A foreign value routes through its membrane proxy (`SchemeJSObject.get`); any
- * other value reads through `accessMember`, so blocked names and members past an
- * interop boundary surface as a miss, never as host-internal leakage. A miss
- * yields `undefined`, and only the final key may miss (mid-chain miss throws —
- * "get X from undefined"), preserving the stdlib accessor's contract exactly.
- */
-function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefined {
-  let object: unknown = base;
-  let value: EnvironmentValue | undefined;
-  const remaining = [...keys];
-  while (remaining.length > 0) {
-    const name = remaining.shift()!;
-    if (object instanceof AJSObject) {
-      value = object.get(name) as EnvironmentValue;
-    } else {
-      try {
-        const accessed = accessMember(object, name);
-        value = accessed === NOT_FOUND ? undefined : (accessed as EnvironmentValue);
-      } catch (error) {
-        if (error instanceof InteropAccessError) {
-          value = undefined;
-        } else {
-          throw error;
-        }
-      }
-    }
-    if (value === undefined) {
-      invariant(remaining.length === 0, () => `Try to get ${remaining[0]} from undefined`);
-      return value;
-    }
-    value = patch_value(value) as EnvironmentValue;
-    object = value;
-  }
-  return value;
-}
 // -------------------------------------------------------------------------
 export class Environment {
   static [CLASS] = "environment";
@@ -318,28 +277,6 @@ export class Environment {
     const directValue = this._lookupWithResolvers(name);
     if (directValue !== undefined) {
       return patch_value(directValue);
-    }
-
-    // Determine if this is a dot-notation symbol (e.g., foo.bar.baz)
-    // Only try dot-notation if direct lookup failed
-    let parts: string[] | undefined;
-    if (symbol instanceof ASymbol && (symbol as unknown as { [key: symbol]: string[] })[ASymbol.object]) {
-      // dot notation symbols from syntax-rules that are gensyms
-      parts = (symbol as unknown as { [key: symbol]: string[] })[ASymbol.object];
-    } else if (typeof name === "string" && name.includes(".")) {
-      parts = name.split(".").filter(Boolean);
-    }
-
-    // Handle dot notation: foo.bar.baz
-    if (parts && parts.length > 1) {
-      const [first, ...rest] = parts;
-      // Use _lookupWithResolvers to find the base object
-      const baseValue = this._lookupWithResolvers(first);
-      if (baseValue !== undefined) {
-        // Access nested properties
-        return walkMembers(baseValue, rest) as EnvironmentValue;
-      }
-      // Base not found - fall through to error handling
     }
 
     if (throwError) {
