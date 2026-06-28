@@ -1,8 +1,7 @@
 /**
  * Module & resolver contracts for the Scheme environment.
  *
- * Defines the two interfaces the environment-composition layer
- * (`Environment.fromModules`) consumes:
+ * Defines the two interfaces the environment layer consumes:
  * - `FallbackResolver` — extensible lazy lookup (keyword accessors, dot
  *   notation, auto-imports) tried when a direct binding lookup misses.
  * - `EnvironmentModule` — a composable unit of bindings + resolver +
@@ -39,10 +38,7 @@ export interface FallbackResolver {
 
 /**
  * A composable env layer: eager `bindings`, a lazy `resolver`, and post-binding
- * `bootstrap` Scheme. `dependencies` drive the composition order — a module is
- * chained as a CHILD of (i.e. ABOVE, shadowing) every module it depends on, so its
- * overrides win over the deeper dependency (see `Environment.fromModules` for why
- * that ordering is load-bearing, not cosmetic). Per-layer resolution is
+ * `bootstrap` Scheme, plus the `dependencies` it declares. Per-layer resolution is
  * bindings → resolver → parent (`_lookupWithResolvers`): an explicit binding beats
  * the layer's own catch-all resolver, both beat the dependency below.
  */

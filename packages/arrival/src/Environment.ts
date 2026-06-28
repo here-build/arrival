@@ -1,6 +1,6 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import type { EnvironmentModule, FallbackResolver } from "./bindings.js";
+import type { FallbackResolver } from "./bindings.js";
 import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/primitives/EOF.js";
 import { AString } from "./values/primitives/AString.js";
@@ -91,86 +91,6 @@ export class Environment {
   ) {}
 
   /**
-   * Compose modules into a parent-chained environment, dependency-deepest as the
-   * base. The chain order is load-bearing, not cosmetic: a later module SHADOWS an
-   * earlier one (lookup walks child→parent, see `_lookupWithResolvers`), so a
-   * dependency must sit BELOW its dependents to be overridable by them. The
-   * topological sort is what guarantees that — a module is pushed only after every
-   * module it depends on, so deps are always nearer the base. The cycle guard is not
-   * defensive boilerplate: a dependency cycle has no valid shadowing order (A must be
-   * below B and B below A), so it is an unsatisfiable composition, caught at build
-   * rather than surfacing as a missing binding at lookup.
-   *
-   * Returns the TOP env (where user code runs); the pure-Scheme base auto-loads
-   * unless a module already provides the core primitives.
-   *
-   * @param modules - Modules to compose (dependency order is derived, not assumed)
-   * @param exec - Optional evaluator for each module's bootstrap Scheme
-   * @returns The topmost environment
-   */
-  static fromModules(
-    modules: EnvironmentModule[],
-    exec?: (code: string, env: Environment) => void,
-  ): Environment {
-    const execFn = exec;
-
-    const moduleMap = new Map<string, EnvironmentModule>();
-    for (const mod of modules) {
-      moduleMap.set(mod.id, mod);
-    }
-
-    // DFS post-order = dependency-deepest first (the base-to-top chain order). The
-    // `visiting` set is the back-edge detector: re-entering a node still on the
-    // current DFS path is a cycle (the unsatisfiable shadowing order, see header).
-    const sorted: EnvironmentModule[] = [];
-    const visited = new Set<string>();
-    const visiting = new Set<string>();
-
-    function visit(mod: EnvironmentModule) {
-      if (visited.has(mod.id)) return;
-      invariant(!visiting.has(mod.id), `Circular dependency detected: ${mod.id}`);
-      visiting.add(mod.id);
-
-      for (const depId of mod.dependencies ?? []) {
-        const dep = moduleMap.get(depId);
-        invariant(dep, `Module '${mod.id}' depends on unknown module '${depId}'`);
-        visit(dep);
-      }
-
-      visiting.delete(mod.id);
-      visited.add(mod.id);
-      sorted.push(mod);
-    }
-
-    // Visit all modules
-    for (const mod of modules) {
-      visit(mod);
-    }
-
-    // Build environment chain
-    let env: Environment | null = null;
-
-    for (const mod of sorted) {
-      // Create child environment with this module's bindings
-      env = new Environment(mod.id, mod.bindings ?? {}, env);
-
-      // Register resolver if present
-      if (mod.resolver) {
-        env.registerResolver(mod.resolver);
-      }
-
-      // Run bootstrap code if present and exec is provided
-      if (mod.bootstrap && execFn) {
-        execFn(mod.bootstrap, env);
-      }
-    }
-
-    invariant(env, "No modules provided");
-
-    return env;
-  }
-
-  /**
    * Register a fallback resolver.
    * Resolvers are tried in order when normal lookup fails.
    */
@@ -228,8 +148,7 @@ export class Environment {
    * direct-bindings → resolvers → parent ordering is a precedence contract, not an
    * optimization: a module's explicit binding must WIN over its own lazy resolver
    * (so a pinned override can't be undone by a catch-all fallback in the same layer),
-   * and BOTH must win over the parent (so a closer module shadows a deeper dependency
-   * — the same child-before-parent rule `fromModules` builds the chain to honor). A
+   * and BOTH must win over the parent (so a closer module shadows a deeper dependency). A
    * resolver returns `undefined` to mean "not mine, keep looking"; that is why the
    * loop treats `undefined` as yield rather than as a found nil.
    */
