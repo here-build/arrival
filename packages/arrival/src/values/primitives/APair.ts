@@ -179,67 +179,9 @@ function mark_cycles(pair: APair): void {
   }
 }
 
-interface ObjectWithToString {
-  toString: (quote?: boolean) => string;
-}
-interface FunctionWithName extends Function {
-  __name__?: string | symbol;
-}
-
-function stringifyValue(obj: unknown, quote?: boolean): string {
-  // Handle null/undefined
-  if (obj === null) return "null";
-  if (obj === undefined) return "#void";
-  if (obj === true) return "#t";
-  if (obj === false) return "#f";
-
-  // Handle primitives
-  const t = typeof obj;
-  if (t === "string") return quote ? JSON.stringify(obj) : (obj as string);
-  if (t === "number" || t === "bigint") return String(obj);
-  if (t === "symbol") return (obj as symbol).toString().replace(/^Symbol\(([^)]+)\)/, "$1");
-
-  // Handle objects with toString method (SchemeSymbol, SchemeString, SchemeCharacter, numbers, nil, etc.)
-  if (t === "object" || t === "function") {
-    // Special handling for functions
-    if (t === "function") {
-      const fn = obj as FunctionWithName;
-      if (fn.__name__) {
-        const name =
-          typeof fn.__name__ === "symbol"
-            ? fn.__name__.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1")
-            : fn.__name__;
-        return `#<procedure:${name}>`;
-      }
-      return "#<procedure>";
-    }
-    // Boxed vectors/bytevectors → R7RS external representation #(...)/#u8(...),
-    // recursing through stringifyValue so nested elements (incl. quoting) format
-    // correctly. Without this they fall through to the generic #<ctor.name>
-    // ("#<SchemeVector>") below — the nested-in-a-list repr leak. (The stdlib
-    // toString path is handled symmetrically via get_instances.)
-    if (obj instanceof AVector) {
-      return `#(${obj.__vector__.map((el) => stringifyValue(el, quote)).join(" ")})`;
-    }
-    if (obj instanceof ABytevector) {
-      return `#u8(${Array.from(obj.__bytevector__).join(" ")})`;
-    }
-    // Objects with custom toString
-    const o = obj as ObjectWithToString;
-    if (typeof o.toString === "function" && o.toString !== Object.prototype.toString) {
-      const str = o.toString(quote);
-      return typeof str === "string" ? str : String(str);
-    }
-    // Fallback for plain objects
-    const ctor = (obj as object).constructor;
-    if (ctor?.name) {
-      return `#<${ctor.name}>`;
-    }
-    return "#<Object>";
-  }
-
-  return String(obj);
-}
+// (The local `stringifyValue` renderer + its `ObjectWithToString`/`FunctionWithName` interfaces are
+// gone — dissolved into the per-value `["arrival/print"]()` protocol / `printValue`. APair was the
+// last place carrying a second copy of the universal value renderer.)
 
 export class APair<Car = unknown, Cdr = unknown> extends AValue implements APairLike<Car, Cdr> {
   static [CLASS] = "pair";
@@ -513,65 +455,18 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return is_cycle(this);
   }
 
-  toString(quote?: boolean, { nested = false } = {}): string {
-    const parts: string[] = [];
-    const thisWithCycles = this as PairWithMetadata;
-
-    // Opening paren (with ref marker if present)
-    if (thisWithCycles[REF]) {
-      parts.push(`${thisWithCycles[REF]}(`);
-    } else if (!nested) {
-      parts.push("(");
-    }
-
-    let node: APair = this;
-    let first = true;
-
-    // Iterate through cdr chain (no recursion on cdr = no stack overflow on long lists)
-    while (is_pair(node)) {
-      const nodeWithCycles = node as PairWithMetadata;
-      if (!first) {
-        if (nodeWithCycles[REF]) {
-          // Shared structure in cdr position - print as dotted pair with full notation
-          parts.push(" . ", node.toString(quote));
-          node = nil as unknown as APair;
-          continue;
-        }
-        parts.push(" ");
-      }
-      first = false;
-
-      // Car value (recursive for nested structures - usually shallow)
-      const carValue = nodeWithCycles[CYCLES]?.car ?? stringifyValue(node.car, quote);
-      if (carValue !== undefined) {
-        parts.push(String(carValue));
-      }
-
-      // Check for cdr cycle marker
-      if (nodeWithCycles[CYCLES]?.cdr) {
-        parts.push(" . ", String(nodeWithCycles[CYCLES].cdr));
-        break;
-      }
-
-      node = node.cdr as APair;
-    }
-
-    // Improper list tail (non-nil, non-pair cdr)
-    if (!is_nil(node) && !is_pair(node)) {
-      parts.push(" . ", stringifyValue(node, quote));
-    }
-
-    // Closing paren
-    if (!nested || thisWithCycles[REF]) {
-      parts.push(")");
-    }
-    return parts.join("");
+  // `toString` delegates to the print protocol — there is ONE renderer now: the
+  // `["arrival/print"]()` list-walk below (children via `printValue`). The former `quote`/`nested`
+  // params are gone — `nested` was always false (the internal recursion never set it), and the
+  // write/quoted form is dropped (display-only). A write form, if a REPL ever needs one, becomes a
+  // mode on the print protocol (`printValue(v, { write })`), not a Pair-local duplicate renderer.
+  toString(): string {
+    return this["arrival/print"]();
   }
 
-  // Print protocol — the LIST repr `(elem …)` / `(a . b)`, each element rendered via `printValue`
-  // (NOT the local stringifyValue, which is slated for removal). Behaviour-preserving against the
-  // printer's get_instances APair entry at quote=false: it does `mark_cycles()` then `toString(false)`,
-  // so this mirrors that path (always top-level, never the `nested` form). Cyclic repr is a known gap.
+  // Print protocol — the LIST repr `(elem …)` / `(a . b)`, each element rendered via `printValue`.
+  // This is the SOLE pair renderer now (`toString` delegates here; the old local `stringifyValue`
+  // duplicate is gone). `mark_cycles()` first, then the cdr-chain walk; cyclic repr is a known gap.
   ["arrival/print"](): string {
     this.mark_cycles();
     const parts: string[] = [];

@@ -346,7 +346,7 @@ Object.assign(global_env.__env__, {
           debug.timeEnd(trace);
           debug.groupEnd();
         }
-        throw new Error(`syntax-rules: no matching syntax in macro ${code.toString(true)}`);
+        throw new Error(`syntax-rules: no matching syntax in macro ${code.toString()}`);
       }, env);
       (syntax as SchemeValue).__code__ = macro;
       return syntax;
