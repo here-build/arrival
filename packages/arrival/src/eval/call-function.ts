@@ -29,15 +29,15 @@ type SchemeFunction = (...args: any[]) => any;
 export function call_function(
   fn: SchemeFunction,
   args: SchemeValue[],
-  { env, dynamic_env, use_dynamic }: SchemeValue = {},
+  { use_dynamic }: SchemeValue = {},
 ) {
-  const scope = env?.new_frame(fn, args);
-  const dynamic_scope = dynamic_env?.new_frame(fn, args);
-  const context = new LambdaContext({
-    env: scope,
-    use_dynamic,
-    dynamic_env: dynamic_scope,
-  });
+  // F1/F2 dissolved (P3 3b.3 step 6): the callers (the HOF dispatch in env/r7rs/lists.ts)
+  // always pass `{}`, so `env`/`dynamic_env` were always undefined and `env?.new_frame(...)`
+  // always short-circuited — `new_frame` was a phantom (no definition; the optional-chain
+  // never invoked it) and the call frame vestigial. A generator-lambda carries its own
+  // closure env, a native reads none, so no frame is needed here. Only `use_dynamic` rides
+  // the LambdaContext brand the membrane keys off. Seeds P5.
+  const context = new LambdaContext({ use_dynamic });
   return resolve_promises(fn.apply(context, args));
 }
 
