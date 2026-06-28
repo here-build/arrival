@@ -39,8 +39,11 @@ export class AVector extends AValue {
   static [CLASS] = "vector";
   readonly kind = "vector" as const;
 
-  /** Mutable raw payload — vector-set!/fill!/copy! write through this. */
-  __vector__: SchemeValue[];
+  /** The eager owned payload. Read through the `__vector__` getter below (never
+   *  this field directly) so a lazy subclass can supply the array on demand —
+   *  `AJSArray` overrides `materialize()` to box a borrowed JS array instead of
+   *  holding an eager copy here. */
+  private _payload: SchemeValue[];
 
   /** R7RS: a #(...) literal is immutable. The Parser freezes literals; the
    *  vector mutators reject a frozen target. Constructed vectors stay mutable. */
@@ -48,7 +51,23 @@ export class AVector extends AValue {
 
   constructor(ctx: RunContext, items: SchemeValue[], provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
-    this.__vector__ = items;
+    this._payload = items;
+  }
+
+  /** The element array, materialized. The base owns it eagerly; a lazy subclass
+   *  (`AJSArray`) overrides this to box-over-`source` on first access + cache. MUST
+   *  return a STABLE reference so an in-place write (vector-set! via `asVector`) hits
+   *  the same array across calls. */
+  protected materialize(): SchemeValue[] {
+    return this._payload;
+  }
+
+  /** Raw element payload. A getter (not a field) so the lazy borrowed backing can
+   *  override `materialize()`; every base method reads through here. In-place writes
+   *  go through the stable reference it returns, and only a `#(...)` literal / a
+   *  borrowed view is `frozen` against them. */
+  get __vector__(): SchemeValue[] {
+    return this.materialize();
   }
 
   /** Mark immutable (a literal). Idempotent. */
