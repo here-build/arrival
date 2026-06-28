@@ -10,7 +10,6 @@
 
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
-import { Macro } from "../eval/Macro.js";
 import { Syntax } from "../eval/Syntax.js";
 import { Environment } from "../Environment.js";
 import { extract_patterns, transform_syntax, restore_data_gensyms } from "../eval/syntax-rules.js";
@@ -26,8 +25,7 @@ type SchemeValue = any;
 // `global_env.__env__` blob). Invoked as `(syntax-rules (literals) (pattern template)…)` → returns
 // a Syntax that rewrites a matching form via the engine. `this` is the define-syntax invocation
 // env; global_env supplies the hygiene identity root.
-const syntaxRules = new Macro(
-  "syntax-rules",
+const syntaxRulesDef = symbol.macro`syntax-rules`(
   function (this: Environment, macro: SchemeValue, options: SchemeValue) {
     const { use_dynamic, error } = options;
     // TODO: find identifiers and freeze the scope when defined #172
@@ -145,5 +143,5 @@ const syntaxRules = new Macro(
 
 /** scheme/macros — the macro family that carries a JS expander; today, syntax-rules. */
 export default new EnvCapability("scheme/macros", {
-  symbols: { "syntax-rules": symbol.macro(syntaxRules) },
+  symbols: { "syntax-rules": syntaxRulesDef },
 });

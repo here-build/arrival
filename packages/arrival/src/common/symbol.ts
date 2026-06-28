@@ -44,7 +44,7 @@ import { AValue, pointProvenance, unionProvenance } from "../values/primitives/A
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import type { TaglessOp } from "../values/tagless-final.js";
-import type { Macro } from "../eval/Macro.js";
+import { Macro } from "../eval/Macro.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -639,11 +639,16 @@ function keyword(tpl: TemplateStringsArray, ...sub: unknown[]): KeywordSymbolDef
   return { kind: "keyword", name, doc };
 }
 
-/** A non-evaluating MACRO binding: carries a raw `Macro`/`Syntax` transformer that
- *  assembly binds as-is. Unlike the template-literal kinds it has a JS payload (the
- *  transformer can't be expressed in scheme source), so it takes the macro directly. */
-function macro(theMacro: Macro): MacroSymbolDef {
-  return { kind: "macro", name: theMacro.__name__, macro: theMacro };
+/** A non-evaluating MACRO binding: a `name` template + a `(transformer)` call, mirroring
+ *  the other symbol kinds (`symbol.macro` + a `name` template + `(fn)`). The transformer is a
+ *  raw JS `Macro` expander (not scheme source); assembly binds the constructed `Macro` as-is. */
+function macro(strings: TemplateStringsArray) {
+  const name = strings[0];
+  return (fn: ConstructorParameters<typeof Macro>[1]): MacroSymbolDef => ({
+    kind: "macro",
+    name,
+    macro: new Macro(name, fn),
+  });
 }
 
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
