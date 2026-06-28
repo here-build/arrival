@@ -5,7 +5,7 @@
 //   • symbol/string conversion (symbol->string / string->symbol / %as.data)
 //   • unary/binary curry wrappers · tree-map
 //   • pair utilities (pair-map / nth-pair)
-//   • type predicates (regex? / key? / …)
+//   • type predicates (key? / …)
 //   • aliases (string-join / string-split) · symbol-append
 //   • arrival safe head accessors (first? / first-or) + a standalone SRFI-1 remove
 //
@@ -31,8 +31,8 @@ import { unpromise } from "../utils/promises.js";
 import { is_false } from "../eval/guards.js";
 import { curry } from "../utils/functional.js";
 
-// Native symbols, below the membrane: these touch the SchemeSymbol / RegExp host
-// types directly, so they live in TS rather than reaching back across the membrane
+// Native symbols, below the membrane: these touch the SchemeSymbol host type
+// directly, so they live in TS rather than reaching back across the membrane
 // from Scheme (the `.` / `new` / `-->` host-interop the rest of this sweep removes).
 // `string->symbol`'s old `%as.data` mark was vestigial — it set a string `data`
 // property, but the evaluator's data mark is the `__data__` symbol (evaluator.ts).
@@ -173,10 +173,6 @@ export default new EnvCapability("arrival/core-extensions", {
         return withInputProvenance([s], new ASymbol(ctxOf(s), stringValue(s)));
       },
     ),
-    "regex?": symbol.native`regex?: #t iff x is a host regular expression`(
-      { input: [z.unknown()], output: [z.boolean] },
-      (x: unknown): boolean => withInputProvenance([x], x instanceof RegExp),
-    ),
   },
   prelude: `
     ;; symbol->string / string->symbol are native (below the membrane) — see the
@@ -217,8 +213,6 @@ export default new EnvCapability("arrival/core-extensions", {
     ;; -----------------------------------------------------------------------------
     ;; Type predicates
     ;; -----------------------------------------------------------------------------
-    ;; regex? is native (below the membrane) — see the symbols block below.
-    
     (define (key? symbol)
       (and (symbol? symbol) (string=? (substring (symbol->string symbol) 0 1) ":")))
     
