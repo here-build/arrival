@@ -103,16 +103,6 @@ export { quote } from "./reader/values-repr.js";
 // the polyglot `@`/`@?`/`@keys`/`:key` membrane reads, and Environment.get's dotted
 // resolution calls accessMember (interop-access) directly. Neither had any runtime caller.
 
-const internal_env = new Environment(
-  "internal",
-  {
-    // those will be compiled by babel regex plugin
-    "letter-unicode-regex": /\p{L}/u,
-    "numeral-unicode-regex": /\p{N}/u,
-    "space-unicode-regex": /\s/u,
-  },
-  undefined,
-);
 // ----------------------------------------------------------------------
 
 const is_node = () => typeof process === "object" && !!process.env;
@@ -204,13 +194,6 @@ Object.assign(global_env.__env__, {
   } satisfies Record<string, EnvironmentValue>);
 export { global_env, user_env as env };
 
-// -------------------------------------------------------------------------
-function set_interaction_env(interaction, internal) {
-  interaction.constant("**internal-env**", internal);
-}
-
-// -------------------------------------------------------------------------
-set_interaction_env(user_env, internal_env);
 
 // NOTE: Numeric operations from bridge.ts should be applied by calling initBridge()
 // This cannot be done at module load time due to circular dependency
