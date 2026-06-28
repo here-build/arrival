@@ -15,7 +15,7 @@ import { Lexer } from "./reader/Lexer.js";
 import { is_nil } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
-import { toString } from "./printer.js";
+import { printValue } from "./values/print.js";
 import {
   complex_bare_re,
   complex_re,
@@ -67,12 +67,9 @@ export { unpromise } from "./utils/promises.js";
 
 // Old Pair prototype methods are now in the Pair class above
 
-// The value→string printer — `toString`, its repr registry (get_instances /
-// get_native_types / user_repr / function_to_string / the `repr` map + str_mapping),
-// plus `symbolize` and the `unbox` / `map_object` helpers — relocated to printer.ts.
-// It is a top-level module beside stdlib (it must know every printable type, incl.
-// Environment/Macro/Values, so it is not a values/ leaf); imported above for the
-// builtins/tracer that print. Never exported, so it is not on the public barrel.
+// The value→string printer dissolved into the per-value `["arrival/print"]()` protocol
+// (values/print.ts: `printValue` dispatches, each AValue self-renders, the leaf handles the
+// non-AValue residual). `repr` below calls `printValue` directly — there is no printer module.
 
 // ----------------------------------------------------------------------
 // eq/eqv moved to structural-equal.ts; the macro engine (macro_expand /
@@ -292,8 +289,8 @@ Object.assign(global_env.__env__, {
     }),
     // ------------------------------------------------------------------
     // `list` relocated to env/r7rs/lists.ts (R7RS §6.4, next to cons/make-list).
-    repr: function repr(obj, quote) {
-      return toString(obj, quote);
+    repr: function repr(obj) {
+      return printValue(obj);
     },
     // ------------------------------------------------------------------
     // ------------------------------------------------------------------
