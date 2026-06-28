@@ -28,8 +28,7 @@ import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { Environment as SchemeEnvironment, KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
-import type { ResolverSpec } from "./common/scheme-env.js";
+import { Environment as SchemeEnvironment } from "./Environment.js";
 import { SchemePromise } from "./eval/evaluator.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";
@@ -636,28 +635,6 @@ export function memberKeys(obj: unknown): string[] {
   return accessKeys(source);
 }
 
-/**
- * The `:key` keyword-accessor resolver — the catchall that makes any `:`-prefixed
- * symbol a member accessor. `:foo` resolves to `(lambda (arg) (@ arg :foo))` — the
- * SAME polyglot read as `@` (`readMember`), differing ONLY by the accessor-as-value
- * contract: applied to nothing the pluck returns itself, so it composes
- * (`(compose :a :b)`, `(->> p :versions last :state)`). A `:keyword` is thus a symbol
- * AND an `@`-alias at once. The pluck carries `KEYWORD_ACCESSOR_FIELD` so `dict` can
- * use a keyword as a literal key.
- *
- * Owned by the polyglot capability (env/polyglot.ts lists it in `resolvers`); also
- * registered imperatively on the hand-built bases (global_env / sandboxedEnv) until
- * they are pack-assembled. A catchall resolver, sibling to the `c[ad]+r` family.
- */
-export const keywordAccessorResolver: ResolverSpec = {
-  id: "keyword-accessor",
-  resolve(name: string) {
-    if (!name.startsWith(":")) return undefined;
-    const key = name.slice(1);
-    const pluck = Object.assign((obj: unknown) => (obj == null ? pluck : readMember(obj, key)), {
-      valueOf: () => name,
-      [KEYWORD_ACCESSOR_FIELD]: key,
-    });
-    return pluck;
-  },
-};
+// `keywordAccessorResolver` (the `:key` catchall accessor) MOVED to its owner, the
+// scheme/polyglot capability (env/polyglot.ts). It was already wired there via
+// `resolvers`; the redundant direct global_env / inference-env registrations are gone.

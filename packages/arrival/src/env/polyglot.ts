@@ -31,8 +31,9 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
-import { hasMember, keywordAccessorResolver, memberKeys, readMember } from "../membrane.js";
+import { hasMember, memberKeys, readMember } from "../membrane.js";
 import { KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
+import type { ResolverSpec } from "../common/scheme-env.js";
 
 /** The polyglot idiom pack — the full member-access surface plus the threading family:
  *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. `symbol.native` bindings
@@ -44,12 +45,29 @@ import { KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
 // IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator) that
 // can be MID-INITIALIZATION when this capability's spec object is evaluated — the
 // assembly path imports it via `base-packs → polyglot → membrane → evaluator → …`, a
-// cycle. Reading `readMember` / `keywordAccessorResolver` at module-eval time would
-// freeze the TDZ `undefined` into the spec; assembly would then `set("@", undefined)`
-// and push an undefined resolver. So defer every membrane read to APPLY time (when
-// `initBridge` assembles, all modules are loaded): `symbols` uses the builder form,
-// and the resolver delegates through a stable wrapper whose `resolve` reads the live
-// `keywordAccessorResolver` binding only when called.
+// cycle. Reading `readMember` at module-eval time would freeze the TDZ `undefined`
+// into the spec. So defer every membrane read to APPLY time (when `initBridge`
+// assembles, all modules are loaded): `symbols` uses the builder form, and the
+// keyword-accessor resolver below only calls `readMember` inside its `resolve` body
+// (never at eval).
+
+// The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol
+// resolves to its `@`-alias pluck (the SAME polyglot read as `@`/`readMember`, but
+// applied to nothing it returns itself, so it composes — `(compose :a :b)`). The pluck
+// carries `KEYWORD_ACCESSOR_FIELD` so `dict` can use a keyword as a literal key. A
+// catchall resolver, sibling to the `c[ad]+r` family; listed in `resolvers` below.
+const keywordAccessorResolver: ResolverSpec = {
+  id: "keyword-accessor",
+  resolve(name: string) {
+    if (!name.startsWith(":")) return undefined;
+    const key = name.slice(1);
+    const pluck = Object.assign((obj: unknown) => (obj == null ? pluck : readMember(obj, key)), {
+      valueOf: () => name,
+      [KEYWORD_ACCESSOR_FIELD]: key,
+    });
+    return pluck;
+  },
+};
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
     ;; -----------------------------------------------------------------------------
@@ -103,7 +121,7 @@ export default new EnvCapability("scheme/polyglot", {
     (define-macro (~> x . forms) \`(-> ,x ,@forms))
     (define-macro (~>> x . forms) \`(->> ,x ,@forms))
 `,
-  resolvers: [{ id: "keyword-accessor", resolve: (name: string) => keywordAccessorResolver.resolve(name) }],
+  resolvers: [keywordAccessorResolver],
   symbols: () => ({
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       { input: [z.unknown(), z.unknown()], output: [z.unknown()] },

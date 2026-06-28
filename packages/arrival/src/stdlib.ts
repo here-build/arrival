@@ -31,7 +31,6 @@ import { parse_complex, parse_float, parse_integer, parse_rational } from "./uti
 import { Values } from "./values/primitives/Values.js";
 
 import { ABool } from "./values/primitives/ABool.js";
-import { keywordAccessorResolver } from "./membrane.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
 
 
@@ -199,11 +198,9 @@ export { global_env, user_env as env };
 // This cannot be done at module load time due to circular dependency
 // See: src/bridge.ts initBridge()
 
-// -------------------------------------------------------------------------
-// The `:key` keyword accessor — a catchall sibling to c[ad]+r. Registered on
-// global_env here (and on the inference env in inference-env.ts). Owned by the
-// polyglot capability.
-global_env.registerResolver(keywordAccessorResolver);
+// The `:key` keyword accessor is owned by the scheme/polyglot capability (its
+// `resolvers`); global_env no longer registers it directly (remove-and-check —
+// nothing resolves a `:key` at bare global_env, the gate confirms).
 
 // -------------------------------------------------------------------------
 // `exec` is the single canonical generator-trampoline entry — it lives in

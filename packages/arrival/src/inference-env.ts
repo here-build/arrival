@@ -2,7 +2,6 @@ import { wrappedOps } from "./bridge.js";
 import { Environment } from "./Environment.js";
 import { env as userEnv } from "./stdlib.js";
 import { nil } from "./values/primitives/ANil.js";
-import { keywordAccessorResolver } from "./membrane.js";
 
 // The inference-plane base env: the totalic environment where models author and
 // evaluate Scheme. NOT a security fence — the Graal-thesis sweep deleted every
@@ -75,7 +74,7 @@ export const inferenceEnv = new Environment(
 // The unbounded `c[ad]+r` catchall. SAFE_BUILTINS copies only a hand-maintained
 // (and incomplete) slice of the family above; the resolver makes ANY accessor
 // word the sweet lens can fuse resolve — without inheriting it (null parent).
-// The `:key` keyword accessor catchall (sibling to c[ad]+r). On the inference-env
-// base too, so a `:`-prefixed symbol resolves to its `@`-alias pluck.
-inferenceEnv.registerResolver(keywordAccessorResolver);
+// The `:key` keyword accessor reaches the inference-env via its parent user_env's
+// scheme/polyglot capability resolver (inferenceEnv's parent IS user_env; resolvers
+// walk child→parent) — no direct registration needed.
 
