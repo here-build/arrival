@@ -234,9 +234,10 @@ export function initBridge(): Promise<void> {
   // fails "no matching syntax in macro (50)". Env-specific matcher issue, tracked
   // separately; define-macro (an evaluator special form) is the working path for
   // user macros in the inference plane today.
-  //   • SRFI-1 (the missing third) + safe head accessor first?/first-or — pure list
-  //     procedures. first?/first-or make (car (filter …)) on an empty match — the
-  //     dominant avoidable crash in generated Scheme — unnecessary. `remove` is now
+  //   • SRFI-1 (the missing third), incl. the safe head accessors first?/first-or — pure
+  //     list procedures. first?/first-or (the falsy/default-on-empty twins of `first`, now
+  //     resident in srfi-1) make (car (filter …)) on an empty match safe — a falsy #f, not
+  //     loose car's truthy nil. `remove` is now
   //     the SOLE source of `remove` in the inference plane (it used to shadow a broken Ramda
   //     `remove`; Ramda has since been removed entirely, so this copy is what supplies it).
   //   • Composition + quantifiers compose/comp/pipe/flow (polyglot) and some/every

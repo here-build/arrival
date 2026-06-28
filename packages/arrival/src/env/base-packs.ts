@@ -1,6 +1,6 @@
 // BASE_PACKS — the scheme stdlib as a capability set, the pack-assembled base.
 //
-// These are the `scheme/*` + `arrival/core-extensions` capabilities. `initBridge`
+// These are the `scheme/*` capabilities. `initBridge`
 // ASSEMBLES them onto user_env (assembleEnv) — this IS the scheme-stdlib load path
 // (it replaced the legacy hand-concatenated prelude string). Each pack's prelude +
 // symbols + resolvers become the LIVE source of the env's scheme surface.
@@ -16,7 +16,6 @@ import core from "./core/core.js";
 import macros from "./macros.js";
 import polyglot from "./polyglot.js";
 import { allR7rs } from "./r7rs/index.js";
-import arrivalExtensions from "./arrival-extensions.js";
 import { allSrfi } from "./srfi/index.js";
 
-export const BASE_PACKS: readonly EnvCapability[] = [core, macros, polyglot, ...allR7rs, arrivalExtensions, ...allSrfi];
+export const BASE_PACKS: readonly EnvCapability[] = [core, macros, polyglot, ...allR7rs, ...allSrfi];
