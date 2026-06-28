@@ -15,14 +15,6 @@ export class LambdaContext {
     Object.assign(this, payload);
   }
 
-  get __name__() {
-    return this.env.__name__;
-  }
-
-  get __parent__() {
-    return this.env.__parent__;
-  }
-
   get(symbol: BindingName, options?: { throwError?: boolean }): EnvironmentValue {
     return this.env.get(symbol, options);
   }
