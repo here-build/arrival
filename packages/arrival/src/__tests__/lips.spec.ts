@@ -15,11 +15,12 @@ describe("environment", function () {
   // Native extension fns no longer receive env-as-`this` (that ABI was retired
   // when the evaluator stopped injecting `ctx.env` as the apply-site `this`).
   // A native fn that needs the run env opts into the `__withCtx` channel: the
-  // evaluator appends the EvalContext as the trailing arg, so the body reads
-  // `ctx.env` explicitly and stays `this`-free.
+  // evaluator appends the EvalContext as the trailing arg, so the body reads the
+  // run env off the resolver (`ctx.resolver.env`, the lexical frame — ejection P5
+  // removed the coexisting `ctx.env`) and stays `this`-free.
   const scope_name = Object.assign(
     function scope_name(ctx) {
-      const env = ctx.env;
+      const env = ctx.resolver.env;
       if (env.__name__ === "__frame__") {
         return env.__parent__.__name__;
       }

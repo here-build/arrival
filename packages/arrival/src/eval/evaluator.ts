@@ -124,14 +124,16 @@ export interface EvalTap {
 
 /** Evaluation context passed through the evaluator */
 export interface EvalContext {
-  env: Environment;
   /**
-   * The name-resolution + scope-construction facade (ejection P3 3a). Wraps the
-   * SAME base-linked `env` and stays in sync with it (`resolver.env === env` at
-   * every frame), so threading it is byte-identical to threading `env`. Optional
-   * because a few `EvalContext` literals omit run-level fields; the evaluator's
-   * own frame sites always set it. `env` and `resolver` coexist through all of
-   * 3a/3b — `env` is removed only in P5, once every reader uses `resolver`.
+   * The name-resolution + scope-construction facade (ejection P3 3a, P5). The
+   * SINGLE binding/resolution channel: the lexical {@link LexicalScope} chain
+   * plus the {@link Capabilities} base it falls through to, with `resolver.env`
+   * the underlying lexical frame ({@link Environment} storage). Both exec entries
+   * (generator-exec.ts) and every frame the evaluator builds set it; the macro
+   * seam stages it through {@link MacroInvokeContext}. P5 removed the coexisting
+   * `env` field — the frame env is now reached ONLY as `resolver.env`. Optional
+   * because an external caller could still hand a bare `EvalContext`; the
+   * evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
   dynamic_env?: Environment;
@@ -306,7 +308,8 @@ let _speculate = false;
 export const isSpeculating = (): boolean => _speculate;
 
 /**
- * Run-scoped CURRENT ENV, set to `ctx.env` at the same apply boundary as
+ * Run-scoped CURRENT ENV, set to the resolver's lexical frame (`resolver.env`,
+ * formerly `ctx.env`) at the same apply boundary as
  * `_canBounce`/`_dynamicCallSite`/`_speculate` (saved + restored in the
  * surrounding finally). This is the replacement for env-as-`this`: native
  * builtins that previously read their run env off `this` (the heap-meter
@@ -619,14 +622,16 @@ function symbol_name(sym: ASymbol): string {
 // which bottoms out in the moved `env_get` over the wrapped, base-linked env.
 
 /**
- * The ctx's resolver, kept in sync with `ctx.env` at every frame the evaluator
- * builds (`resolver.env === ctx.env`). `ctx.resolver` is optional only because an
- * external caller could hand us a bare `EvalContext`; when absent we synthesize a
- * resolver over `ctx.env`, which is byte-identical to the old `env_get(ctx.env, …)`
- * direct call. No `!` assertion — the fallback IS the honest type.
+ * The ctx's resolver — the evaluator's sole name-resolution + frame-construction
+ * channel (P5: `EvalContext.env` is gone, so the resolver IS the env, reached as
+ * `resolver.env`). Both exec entries and every frame the evaluator builds set it,
+ * so it is present at every evaluation boundary; the invariant catches a malformed
+ * bare `EvalContext` from an external caller LOUD rather than NPEing on a later
+ * `.scope`/`.env` read.
  */
 function ctxResolver(ctx: EvalContext): Resolver {
-  return ctx.resolver ?? new Resolver(ctx.env);
+  invariant(ctx.resolver, "EvalContext.resolver is required (set by exec / every frame site)");
+  return ctx.resolver;
 }
 
 // ============================================================================
@@ -1274,7 +1279,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // NOT tail position — the value must return HERE so we can bind it. If we
   // let `tail` flow through, a `(define x (some-lambda))` could tail-replace
-  // this slot and skip the `ctx.env.set` below. Strip it.
+  // this slot and skip the `resolver.define` below. Strip it.
   let value = yield { call: evaluate(valueRest.car, ctx.tail ? { ...ctx, tail: false } : ctx) };
   if (is_promise(value)) {
     value = yield value;
@@ -1305,8 +1310,13 @@ function* evalSet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value = yield value;
   }
 
-  // Find the environment where the variable is defined
-  const ref = ctx.env.ref(symbol_name(name));
+  // Find the lexical frame where the variable is defined and rebind it there.
+  // `set!` is a frame REBIND of an existing lexical binding (not value mutation —
+  // that family is doored), so it walks the lexical scope chain (`resolver.env` =
+  // the LexicalScope frame). Under glass this is byte-identical to the old
+  // `ctx.env.ref`; under the cut a `set!` on an unshadowed builtin misses the
+  // lexical chain and throws Unbound below (builtins are not program rebind targets).
+  const ref = ctxResolver(ctx).env.ref(symbol_name(name));
   if (ref) {
     ref.set(name, value);
   } else {
@@ -1334,7 +1344,6 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const lambda: LambdaFunction = function (this: unknown, ...values: SchemeValue[]): SchemeValue {
     // Create a new environment frame
     const callResolver = closureResolver.child("lambda", "lambda");
-    const callEnv = callResolver.env;
 
     // Bind arguments
     let argNode: SchemeValue = args;
@@ -1366,7 +1375,6 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // etc. propagate it to the structurally-terminal expression.
     const bodyCtx: EvalContext = {
       ...ctx,
-      env: callEnv,
       resolver: callResolver,
       currentInvocation: dynamicInv,
       tail: true,
@@ -1433,7 +1441,6 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Create a macro function - receives unevaluated code
   const macroFn = function (this: Environment, code: SchemeValue, evalArgs: EvalContext): SchemeValue {
     const macroResolver = defResolver.child("macro", "macro");
-    const macroEnv = macroResolver.env;
 
     // Bind macro parameters to unevaluated arguments
     let argNode: SchemeValue = args;
@@ -1460,7 +1467,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Evaluate macro body to get expansion.
     // Forward signal so macro expansion is also budget-bounded.
-    return run(evalBegin(body, { ...evalArgs, env: macroEnv, resolver: macroResolver }), {
+    return run(evalBegin(body, { ...evalArgs, resolver: macroResolver }), {
       signal: evalArgs.signal,
     });
   };
@@ -1501,7 +1508,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Create new environment
   const letResolver = ctxResolver(ctx).child("let", "let");
-  const letEnv = letResolver.env;
 
   // For named let, we need to create a recursive function
   if (name) {
@@ -1545,7 +1551,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // in the bounce path the body inherits the outer ctx's signal directly.
     const loopFn: LambdaFunction = function (...values: SchemeValue[]): SchemeValue {
       const loopResolver = letResolver.child("named-let", "named-let");
-      const loopEnv = loopResolver.env;
 
       for (const [i, param] of params.entries()) {
         loopResolver.define(param, values[i]);
@@ -1554,7 +1559,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const dynamicInv = _dynamicCallSite ?? ctx.currentInvocation;
       const bodyCtx: EvalContext = {
         ...ctx,
-        env: loopEnv,
         resolver: loopResolver,
         currentInvocation: dynamicInv,
         // Named-let body is tail w.r.t. its caller (the `(loop ...)` call
@@ -1579,7 +1583,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Evaluate all bindings (in parallel for regular let).
   // Binding RHS expressions are non-tail (their values feed into the
-  // letEnv; only the body is tail w.r.t. the let's parent).
+  // let frame; only the body is tail w.r.t. the let's parent).
   const values: SchemeValue[] = [];
   const names: ASymbol[] = [];
   const bindingCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
@@ -1615,7 +1619,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Evaluate body — inherits the let's tail flag via ctx spread; pass-through
   // (tail-collapsible) so a tail call in the body collapses this let frame.
-  return yield { call: evalBegin(body, { ...ctx, env: letEnv, resolver: letResolver }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, resolver: letResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -1630,7 +1634,6 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Create new environment
   const letStarResolver = ctxResolver(ctx).child("let*", "let*");
-  const currentEnv = letStarResolver.env;
 
   // Evaluate bindings sequentially. Bindings are non-tail; only body is.
   let bindNode: SchemeValue = bindings;
@@ -1646,7 +1649,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const valExpr = bindingCdr.car;
 
     // Evaluate in current environment (sequential semantics)
-    let value = yield { call: evaluate(valExpr, { ...ctx, env: currentEnv, resolver: letStarResolver, tail: false }) };
+    let value = yield { call: evaluate(valExpr, { ...ctx, resolver: letStarResolver, tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
@@ -1656,7 +1659,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Evaluate body — inherits let*'s tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: currentEnv, resolver: letStarResolver }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, resolver: letStarResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -1671,7 +1674,6 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Create new environment
   const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
-  const letrecEnv = letrecResolver.env;
 
   // First pass: bind all names to undefined
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
@@ -1695,7 +1697,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Second pass: evaluate and assign (in the letrec environment).
   // Bindings are non-tail; only body inherits letrec's tail flag.
   for (const { name, expr } of bindingList) {
-    let value = yield { call: evaluate(expr, { ...ctx, env: letrecEnv, resolver: letrecResolver, tail: false }) };
+    let value = yield { call: evaluate(expr, { ...ctx, resolver: letrecResolver, tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
@@ -1703,7 +1705,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Evaluate body — inherits letrec's tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: letrecEnv, resolver: letrecResolver }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, resolver: letrecResolver }), tail: ctx.tail === true };
 }
 
 /**
@@ -2087,7 +2089,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Create environment and collect bindings
   const doResolver = ctxResolver(ctx).child("do", "do");
-  const doEnv = doResolver.env;
   const vars: Array<{ name: ASymbol; step: SchemeValue | null }> = [];
 
   // do's structural tail-position: ONLY the result-expression(s) are tail.
@@ -2095,10 +2096,10 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // are explicitly non-tail. (do itself already iterates inside ONE
   // generator's `while (true)` — recursion is flat regardless, so the
   // tail flag matters only for what the result expressions eventually do.)
-  const doNonTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver, tail: false };
-  const doTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver };
+  const doNonTail: EvalContext = { ...ctx, resolver: doResolver, tail: false };
+  const doTail: EvalContext = { ...ctx, resolver: doResolver };
 
-  // Initialize variables (non-tail — values feed into doEnv).
+  // Initialize variables (non-tail — values feed into the do frame).
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
@@ -2281,7 +2282,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
       // Create catch environment with error bound
       const catchResolver = ctxResolver(ctx).child("catch", "catch");
-      const catchEnv = catchResolver.env;
 
       // Bind the error - unwrap ArrivalError to get the original raised value.
       let errorValue: SchemeValue =
@@ -2322,7 +2322,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       try {
         // Forward signal: a catch handler running an unbounded computation
         // (e.g. a recovery loop) must respect the same budget.
-        result = await run(evalBegin(handlers, { ...ctx, env: catchEnv, resolver: catchResolver, tail: false }), {
+        result = await run(evalBegin(handlers, { ...ctx, resolver: catchResolver, tail: false }), {
           signal: ctx.signal,
         });
         caughtError = null; // Error was handled
@@ -2462,10 +2462,11 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   const first = code.car;
   const rest = code.cdr;
 
-  // Build frame for error reporting
+  // Build frame for error reporting. The debug frame name is the lexical frame's
+  // `__name__` (the LexicalScope env underlying the resolver) — `resolver.env`.
   const frame: StackFrame = {
     code,
-    env_name: ctx.env.__name__,
+    env_name: ctxResolver(ctx).env.__name__,
     procedure: first instanceof ASymbol ? symbol_name(first) : undefined,
   };
 
@@ -2576,7 +2577,11 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     const __savedSpeculate = _speculate;
     _speculate = ctx.speculate === true;
     const __savedRunEnv = _currentRunEnv;
-    _currentRunEnv = ctx.env;
+    // The run's heap meter is installed on the lexical frame chain (exec installs it
+    // on `runResolver.env`); the meter is found by walking `__parent__` from here, so
+    // publish the resolver's lexical frame (`resolver.env`) — byte-identical to the
+    // old `ctx.env`, which was that same frame.
+    _currentRunEnv = ctxResolver(ctx).env;
     const __savedStrict = _currentStrict;
     _currentStrict = ctx.strict === true;
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
@@ -2629,12 +2634,17 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
 
   // Handle Macro - invoke it and evaluate the expansion
   if (is_macro(fn)) {
+    const useResolver = ctxResolver(ctx);
     const evalArgs = {
-      env: ctx.env,
-      // The use-site resolver (synced to ctx.env). Staged through the macro seam
-      // (P3 3a.4) so 3b can drive hygiene from a Resolver; the def-time Resolver a
-      // `Syntax` captures is what hygiene actually consults, this is the call-site one.
-      resolver: ctxResolver(ctx),
+      // The macro's `this` is the use-site LEXICAL frame (a define-macro fexpr body
+      // runs with `env` as `this`; see Macro.invoke). Sourced FROM the resolver
+      // (`resolver.env`) so the `env`/`resolver` pair is structurally synced, not
+      // coincidentally equal — byte-identical to the removed `ctx.env`.
+      env: useResolver.env,
+      // The use-site resolver. Staged through the macro seam (P3 3a.4) so 3b can drive
+      // hygiene from a Resolver; the def-time Resolver a `Syntax` captures is what
+      // hygiene actually consults, this is the call-site one.
+      resolver: useResolver,
       dynamic_env: ctx.dynamic_env,
       use_dynamic: ctx.use_dynamic,
       error: ctx.error,
@@ -2690,7 +2700,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       // builtins through the run's capability base — thread evalArgs.resolver's
       // capabilities, NOT a glass re-derivation from the (post-cut: null-rooted) merge
       // env. Under glass same globalRoot ⇒ byte-identical. (D3)
-      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope, resolver: new Resolver(expanded.scope, evalArgs.resolver.capabilities) }), tail: true };
+      return yield { call: evaluate(expanded.expr, { ...ctx, resolver: new Resolver(expanded.scope, evalArgs.resolver.capabilities) }), tail: true };
     }
 
     // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──
@@ -2760,9 +2770,17 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
 // ============================================================================
 
 /**
- * Execute Scheme code and return the result.
- * This is the main entry point.
+ * Execute Scheme code and return the result. The low-level evaluator entry (the
+ * production seam is generator-exec's `exec`, which assembles the capability base).
+ *
+ * Bootstrap bridge: `EvalContext.resolver` is the single binding channel, but this
+ * entry stays ergonomic for embedders/low-level tests that hand a bare `env` — when
+ * `resolver` is absent it synthesizes a GLASS `Resolver` over that env (the same
+ * glass bridge generator-exec uses for a custom env), byte-identical to the removed
+ * `ctxResolver` env-fallback. With `resolver` already set, `env` is ignored.
  */
-export function exec(code: SchemeValue, ctx: EvalContext): Promise<SchemeValue> {
-  return run(evaluate(code, ctx), { signal: ctx.signal });
+export function exec(code: SchemeValue, ctx: EvalContext & { env?: Environment }): Promise<SchemeValue> {
+  const resolver = ctx.resolver ?? (ctx.env ? new Resolver(ctx.env) : undefined);
+  invariant(resolver, "exec: ctx must carry a resolver or a bootstrap env");
+  return run(evaluate(code, { ...ctx, resolver }), { signal: ctx.signal });
 }

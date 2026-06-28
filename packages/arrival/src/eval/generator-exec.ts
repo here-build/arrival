@@ -336,7 +336,6 @@ export async function exec(
       try {
         result = await run(
           evaluate(expr, {
-            env: execEnv,
             resolver: runResolver,
             dynamic_env,
             use_dynamic,
@@ -413,7 +412,6 @@ export async function execExpr(
   try {
     return await run(
       evaluate(expr, {
-        env: runResolver.env,
         resolver: runResolver,
         dynamic_env,
         use_dynamic,

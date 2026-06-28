@@ -369,19 +369,20 @@ export function jsToScheme(
  * Why this is unambiguous: by the time a wrapper runs under the evaluator, the
  * scheme DATA args are already evaluated scheme values (AValue subclasses,
  * SchemeJSObject, raw arrays/primitives) — the genuine EvalContext is the only
- * raw plain object carrying `env`/`currentInvocation`/`tap`/`signal` that ever
- * reaches here. A scheme value is never an AValue-excluded plain object with an
- * `env` field. `currentInvocation`/`tap`/`signal` may be absent on a minimal
- * ctx, but `env` is required on every EvalContext (evaluator.ts EvalContext),
- * so the `env` probe alone suffices; the others are kept as a belt-and-braces
- * OR for any future ctx shape.
+ * raw plain object carrying `resolver`/`currentInvocation`/`tap`/`signal` that
+ * ever reaches here. A scheme value is never an AValue-excluded plain object with
+ * a `resolver` field. `currentInvocation`/`tap`/`signal` may be absent on a
+ * minimal ctx, but `resolver` is set on every EvalContext the evaluator threads
+ * (ejection P5 made it the sole binding channel, replacing the former required
+ * `env` probe), so the `resolver` probe suffices; the others are kept as a
+ * belt-and-braces OR for any future ctx shape.
  */
 const looksLikeEvalContext = (x: unknown): boolean =>
   x != null &&
   typeof x === "object" &&
   !(x instanceof AValue) &&
   !Array.isArray(x) &&
-  ("env" in x || "currentInvocation" in x || "tap" in x || "signal" in x);
+  ("resolver" in x || "currentInvocation" in x || "tap" in x || "signal" in x);
 
 export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pure = false }: RosettaFunction) => {
   // A `pure: true` rosetta is classified as a PIPE — it propagates its inputs' provenance and mints

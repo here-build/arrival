@@ -336,8 +336,9 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     // Strip the evaluator-appended ctx iff the trailing arg LOOKS like one. By the time
     // the wrapper runs under the evaluator the scheme DATA args are already scheme values
     // (AValue subclasses / raw arrays-primitives); the genuine EvalContext is the only raw
-    // plain object carrying env/currentInvocation/tap/signal that reaches here. Same probe
-    // as createRosettaWrapper's looksLikeEvalContext.
+    // plain object carrying resolver/currentInvocation/tap/signal that reaches here (probe
+    // keys on `resolver` — the single always-present field since ejection P5 removed `env`).
+    // Same probe as createRosettaWrapper's looksLikeEvalContext.
     let ctx: unknown = undefined;
     let schemeArgs = args;
     const last = args[args.length - 1];
@@ -347,7 +348,7 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
       typeof last === "object" &&
       !(last instanceof AValue) &&
       !Array.isArray(last) &&
-      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
     ) {
       ctx = last;
       schemeArgs = args.slice(0, -1);
@@ -458,7 +459,7 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
       typeof last === "object" &&
       !(last instanceof AValue) &&
       !Array.isArray(last) &&
-      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
     ) {
       ctx = last;
       schemeArgs = args.slice(0, -1);
@@ -495,7 +496,7 @@ function bakeTaglessGuard(input: { name: string; doc?: string }): TaglessGuardSy
       typeof last === "object" &&
       !(last instanceof AValue) &&
       !Array.isArray(last) &&
-      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
     ) {
       ctx = last;
       schemeArgs = args.slice(0, -1);
@@ -526,7 +527,7 @@ function bakeSequence(input: SequenceInput): SequenceSymbolDef {
       typeof last === "object" &&
       !(last instanceof AValue) &&
       !Array.isArray(last) &&
-      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
     ) {
       ctx = last;
       schemeArgs = args.slice(0, -1);
