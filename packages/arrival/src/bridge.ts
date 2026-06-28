@@ -406,17 +406,6 @@ export const wrappedOps = {
     return isSchemeNumber(value);
   },
 
-  "complex?": makeTypePredicate("complex?", (n) => n.isComplex),
-  "real?": makeTypePredicate("real?", (n) => n.isReal),
-  "rational?": makeTypePredicate("rational?", (n) => n.isRational),
-  "integer?": makeTypePredicate("integer?", (n) => n.isInteger),
-  "exact?": makeTypePredicate("exact?", (n) => n.isExact),
-  "inexact?": makeTypePredicate("inexact?", (n) => !n.isExact),
-  "exact-integer?": makeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger),
-  "finite?": makeTypePredicate("finite?", (n) => n.isFinite),
-  "infinite?": makeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN),
-  "nan?": makeTypePredicate("nan?", (n) => n.isNaN),
-
   // ============================================================================
   // LIPS-style aliases (for backwards compatibility with global_env)
   // ============================================================================

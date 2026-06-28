@@ -218,6 +218,28 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
   return fn;
 }
 
+/**
+ * The R7RS tower-type predicates (`complex?`/`real?`/`rational?`/`integer?`/`exact?`/
+ * …/`nan?`) — carved from bridge.ts's `makeTypePredicate`. A DIFFERENT shape from
+ * `nativeNumericOp`: total over the value domain (a non-number returns #f, never an
+ * error) and NO provenance box (raw JS bool, exactly as `makeTypePredicate` returned).
+ */
+function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): (...args: unknown[]) => unknown {
+  const fn = (value: unknown): boolean => {
+    if (!isSchemeNumber(value)) {
+      return false;
+    }
+    try {
+      const converted = coerceNumeric(value);
+      return predicate(converted);
+    } catch {
+      return false;
+    }
+  };
+  Object.defineProperty(fn, "name", { value: name });
+  return fn;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Tier-2 speculative comparison against a HalfBaked cardinality interval.
 // Carved verbatim from bridge.ts. See
@@ -694,6 +716,18 @@ export default new EnvCapability("scheme/numeric", {
     "negative?": bind("negative?: #t iff n < 0", nativeNumericOp("negative?", { in: [AnyNum], out: Bool, fn: isNegativeFn })),
     "odd?": bind("odd?: #t iff n is odd", nativeNumericOp("odd?", { in: [Int], out: Bool, fn: isOddFn })),
     "even?": bind("even?: #t iff n is even", nativeNumericOp("even?", { in: [Int], out: Bool, fn: isEvenFn })),
+
+    // ── R7RS tower-type predicates (total — a non-number is #f, not an error) ─────
+    "complex?": bind("complex?: #t for any number", nativeTypePredicate("complex?", (n) => n.isComplex)),
+    "real?": bind("real?: #t for any number (reals-only tower)", nativeTypePredicate("real?", (n) => n.isReal)),
+    "rational?": bind("rational?: #t for finite reals", nativeTypePredicate("rational?", (n) => n.isRational)),
+    "integer?": bind("integer?: #t for integer values (exact or inexact)", nativeTypePredicate("integer?", (n) => n.isInteger)),
+    "exact?": bind("exact?: #t for exact numbers", nativeTypePredicate("exact?", (n) => n.isExact)),
+    "inexact?": bind("inexact?: #t for inexact numbers", nativeTypePredicate("inexact?", (n) => !n.isExact)),
+    "exact-integer?": bind("exact-integer?: #t for exact integers", nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger)),
+    "finite?": bind("finite?: #t for finite numbers", nativeTypePredicate("finite?", (n) => n.isFinite)),
+    "infinite?": bind("infinite?: #t for ±infinity", nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN)),
+    "nan?": bind("nan?: #t for NaN", nativeTypePredicate("nan?", (n) => n.isNaN)),
 
     // ── Rounding ─────────────────────────────────────────────────────────────────
     floor: bind("floor: largest integer ≤ n", nativeNumericOp("floor", { in: [Num], out: Num, fn: Math.floor })),
