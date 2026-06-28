@@ -310,15 +310,6 @@ export { global_env, user_env as env };
 // -------------------------------------------------------------------------
 function set_interaction_env(interaction, internal) {
   interaction.constant("**internal-env**", internal);
-  interaction.doc(
-    "**internal-env**",
-    `**internal-env**
-
-         Constant used to hide stdin, stdout and stderr so they don't interfere
-         with variables with the same name. Constants are an internal type
-         of variable that can't be redefined, defining a variable with the same name
-         will throw an error.`,
-  );
 }
 
 // -------------------------------------------------------------------------

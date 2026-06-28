@@ -77,8 +77,8 @@ export { KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
 // side-tables that used to be fields on the concrete `Environment`, now held OFF the
 // scope-node, keyed by env). `rosettaTypesOf` is the type-lens harvest seam — studio
 // derives its lens roster from `[...rosettaTypesOf(env)]` (was `[...env.__rosettaTypes__]`).
-// `rosettaPureOf`/`docsOf` round out the trio for external readers.
-export { docsOf, rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
+// `rosettaPureOf` rounds out the pair for external readers.
+export { rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `Environment` class). Re-surfaced on the barrel from its real home

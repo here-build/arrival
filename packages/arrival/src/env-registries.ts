@@ -22,22 +22,9 @@
 
 import type { Environment } from "./Environment.js";
 
-// -------------------------------------------------------------------------
-// :: Docstrings — metadata, not scope. Was `Environment.__docs__`; read/written
-// :: only through `Environment.doc()` (which walks `__parent__` on a read miss).
-// -------------------------------------------------------------------------
-const docsByEnv = new WeakMap<Environment, Map<string | symbol, string>>();
-
-/** This env's OWN docstring table (the `doc()` chain-walk queries it per ancestor).
- *  Per-env: a doc set on one env is invisible to a sibling, reachable from a child. */
-export function docsOf(env: Environment): Map<string | symbol, string> {
-  let m = docsByEnv.get(env);
-  if (m === undefined) {
-    m = new Map();
-    docsByEnv.set(env, m);
-  }
-  return m;
-}
+// (The global docstring registry `docsByEnv` / `docsOf` + `Environment.doc()` is GONE — it was a
+// write-only legacy layer, superseded by hermetic symbols that carry their own doc, e.g. Macro's
+// `__doc__`. Nothing ever read it; the only write was one internal-env docstring.)
 
 // -------------------------------------------------------------------------
 // :: Rosetta type signatures — the type-lens HARVEST surface. Was

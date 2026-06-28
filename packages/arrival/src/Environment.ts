@@ -11,7 +11,6 @@ import type { SchemeValue } from "./values/types.js";
 import { nil } from "./values/primitives/ANil.js";
 import type { RosettaFunction } from "./rosetta.js";
 import { createRosettaWrapper } from "./rosetta.js";
-import { trim_lines } from "./utils/trim-lines.js";
 import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
@@ -19,7 +18,7 @@ import { fromJS, isSchemeValue } from "./membrane.js";
 import { AJSObject } from "./values/primitives/js-wrappers.js";
 import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
 import { patch_value } from "./reader/values-repr.js";
-import { docsOf, rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
+import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -263,29 +262,6 @@ export class Environment {
     return new Environment(name, obj, this);
   }
 
-  doc(name: BindingName, value: string | null = null, dump: boolean = false): this | string | undefined {
-    let key: string | symbol;
-    if (name instanceof ASymbol) {
-      key = name.__name__;
-    } else if (name instanceof AString) {
-      key = name.valueOf();
-    } else {
-      key = name;
-    }
-    if (value) {
-      const finalValue = dump ? value : trim_lines(value);
-      docsOf(this).set(key, finalValue);
-      return this;
-    }
-    const own = docsOf(this);
-    if (own.has(key)) {
-      return own.get(key);
-    }
-    if (this.__parent__) {
-      return this.__parent__.doc(name) as string | undefined;
-    }
-  }
-
   /**
    * Resolve a name within one env layer before yielding to its parent. The
    * direct-bindings → resolvers → parent ordering is a precedence contract, not an
@@ -372,7 +348,7 @@ export class Environment {
     return undefined;
   }
 
-  set(name: BindingName, value: EnvironmentValue | number | bigint, docValue: string | null = null): this {
+  set(name: BindingName, value: EnvironmentValue | number | bigint): this {
     typecheck("Environment::set", name, ["string", "symbol"]);
     let storedValue: EnvironmentValue;
 
@@ -416,9 +392,6 @@ export class Environment {
       key = name;
     }
     this.__env__[key as string] = storedValue;
-    if (docValue) {
-      this.doc(name, docValue, true);
-    }
     return this;
   }
 
