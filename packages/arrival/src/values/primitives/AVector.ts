@@ -209,6 +209,18 @@ export class AVector extends AValue {
     return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
 
+  // Vector type-predicate — `(vector? x)` (a `symbol.taglessGuard`) asks the receiver itself
+  // instead of the builtin reaching around the box with `instanceof AVector`. A SchemeVector
+  // answers #t; a value lacking this method answers #f (the guard's graceful default).
+  ["arrival/tagless-final/vector?"](): boolean {
+    return true;
+  }
+
+  // Indexed access — `(vector-ref vec k)` dispatches here (the builtin forwards the index k).
+  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+    return this.__vector__[k];
+  }
+
   // A boxed vector is iterable from JS — spread / for-of / Array.from yield its
   // elements, exactly like a Pair. Delegates to the raw payload's iterator. The
   // membrane never exposes this (Symbol.iterator is a BLOCKED_WELL_KNOWN_SYMBOL),

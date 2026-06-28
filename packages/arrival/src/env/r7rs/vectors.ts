@@ -78,17 +78,11 @@ export default new EnvCapability("scheme/vectors", {
       },
     ),
 
-    "vector?": symbol.native`vector?: #t iff obj is a vector`(
-      { input: [z.unknown()], output: [z.boolean] },
-      (obj: unknown): boolean => {
-        // instanceof-only (S10): a vector is exactly a boxed SchemeVector. Unlike a
-        // raw Uint8Array (which genuinely IS bytevector-like, so bytevector? stays
-        // polymorphic), a raw JS array is an R7RS *list* / FFI array at the membrane,
-        // NOT a vector — so it correctly answers #f here. asVector still coerces a
-        // raw array defensively for any value that bypasses producers.
-        return obj instanceof AVector;
-      },
-    ),
+    // The obj answers `(vector? x)` ITSELF via its own arrival/tagless-final/vector? — both a
+    // boxed SchemeVector and a borrowed AJSArray return #t; everything else declares no such
+    // method, so the guard's graceful default (#f) is the answer. No `instanceof AVector`
+    // reach-around in the builtin (the Family-2 "reached around the box" dissolution).
+    "vector?": symbol.taglessGuard`vector?: #t iff obj is a vector`,
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       { input: [z.svector], output: [z.number] },
@@ -98,11 +92,17 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector-ref": symbol.native`vector-ref: the element of vec at index k`(
-      { input: [z.svector, z.schemeNumber], output: [z.unknown()] },
+      { input: [z.unknown(), z.schemeNumber], output: [z.unknown()] },
+      // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
+      // borrowed AJSArray) — no asVector/instanceof reach-around. A non-vector declares no such
+      // method → a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
       (vec: unknown, k: unknown): unknown => {
-        const arr = asVector(vec, "vector-ref");
+        const m = (vec as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector-ref"];
+        if (typeof m !== "function") {
+          throw new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`);
+        }
         const idx = typeof k === "number" ? k : (k as AExact).valueOf();
-        return arr[idx as number];
+        return (m as (i: number) => unknown).call(vec, idx as number);
       },
     ),
 

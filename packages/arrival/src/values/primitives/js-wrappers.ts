@@ -206,6 +206,17 @@ export class AJSArray extends AValue {
     const prov = unionProvenance(inputs);
     return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
+
+  // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).
+  ["arrival/tagless-final/vector?"](): boolean {
+    return true;
+  }
+
+  // Indexed access — boxes JUST element k through the membrane (no full materialize), the
+  // same lazy crossing as the per-element path; `(vector-ref borrowed k)` dispatches here.
+  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+    return bridge().fromJS(this.source[k]);
+  }
 }
 
 /**

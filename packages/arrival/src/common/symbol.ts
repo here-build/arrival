@@ -144,6 +144,19 @@ export interface TaglessSymbolDef {
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
 }
 
+/** A tagless GUARD — like `symbol.tagless`, but a receiver that declares no such method
+ *  yields `#f` (a graceful predicate) rather than throwing (the hard op). The dispatch form
+ *  for type predicates: `(vector? x)` asks x's OWN `arrival/tagless-final/vector?`, defaulting
+ *  to #f when x can't answer — no host-type `instanceof` reach-around in the builtin. */
+export interface TaglessGuardSymbolDef {
+  readonly kind: "tagless-guard";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+}
+
 /** A ctx-aware op: the impl receives the scheme args AND the run's RunContext (the dual of
  *  `symbol.native`, which is ctx-FREE). For ops that are kernel-logic-bearing — heap-charged,
  *  run-strict-reading — yet are NOT pure per-receiver dispatch (`symbol.tagless`): map/filter/
@@ -175,7 +188,14 @@ export interface KeywordSymbolDef {
   readonly doc?: string;
 }
 
-export type SymbolDef = NativeSymbolDef | RosettaSymbolDef | TaglessSymbolDef | SequenceSymbolDef | DoorSymbolDef | KeywordSymbolDef;
+export type SymbolDef =
+  | NativeSymbolDef
+  | RosettaSymbolDef
+  | TaglessSymbolDef
+  | TaglessGuardSymbolDef
+  | SequenceSymbolDef
+  | DoorSymbolDef
+  | KeywordSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
@@ -437,6 +457,38 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
   return { kind: "tagless", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
 }
 
+/** Bake a tagless GUARD dispatcher. Same receiver-resolution as bakeTagless (last scheme arg),
+ *  but a missing method returns `false` (#f) instead of throwing — the predicate / optional form.
+ *  `(vector? x)` → x's own `arrival/tagless-final/vector?` if present, else #f. The name is FREE
+ *  (a per-type predicate), so — unlike the algebra-keyed `tagless` — it is not a declared op. */
+function bakeTaglessGuard(input: { name: string; doc?: string }): TaglessGuardSymbolDef {
+  const method = `arrival/tagless-final/${input.name}`;
+  const run = async (...args: unknown[]): Promise<unknown> => {
+    let ctx: unknown = undefined;
+    let schemeArgs = args;
+    const last = args[args.length - 1];
+    if (
+      args.length > 0 &&
+      last != null &&
+      typeof last === "object" &&
+      !(last instanceof AValue) &&
+      !Array.isArray(last) &&
+      ("env" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
+    ) {
+      ctx = last;
+      schemeArgs = args.slice(0, -1);
+    }
+    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    const receiver = schemeArgs[schemeArgs.length - 1];
+    const leading = schemeArgs.slice(0, -1);
+    const fn = (receiver as Record<string, unknown> | null | undefined)?.[method];
+    if (typeof fn !== "function") return false; // graceful #f — the receiver simply can't answer
+    return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);
+  };
+  (run as { __withCtx?: boolean }).__withCtx = true;
+  return { kind: "tagless-guard", name: input.name, doc: input.doc, in: z.array(z.unknown()), out: z.unknown(), run };
+}
+
 /** Bake a ctx-aware op. `run` strips the evaluator-appended ctx (same probe as bakeRosetta/
  *  bakeTagless), extracts the run's RunContext, and hands it to the impl alongside the scheme
  *  args — so the impl can charge `runCtx.heapMeter` and read `runCtx.strict` without a holder. */
@@ -538,6 +590,15 @@ function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): SequenceSymbolDef => bakeSequence({ kind: "sequence", name, doc, contract, impl });
 }
 
+/** A tagless GUARD binder — `symbol.taglessGuard\`name: doc\`` binds a predicate that dispatches
+ *  to the receiver's own `arrival/tagless-final/name`, returning #f when it declares none. Unlike
+ *  `tagless` (a Record keyed by the closed algebra), the name is FREE — a per-type predicate
+ *  (`vector?`, `null?`-style), not a declared sequence op. */
+function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessGuardSymbolDef {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return bakeTaglessGuard({ name, doc });
+}
+
 /** errors-as-doors — an OMITTED verb. No contract/impl, just the teaching reason. */
 function notImplemented(tpl: TemplateStringsArray, ...sub: unknown[]): DoorSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
@@ -554,7 +615,7 @@ function keyword(tpl: TemplateStringsArray, ...sub: unknown[]): KeywordSymbolDef
 
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
-export const symbol = { native, rosetta, tagless, sequence, notImplemented, keyword };
+export const symbol = { native, rosetta, tagless, taglessGuard, sequence, notImplemented, keyword };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.

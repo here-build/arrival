@@ -35,6 +35,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
 import { AJSArray } from "../values/primitives/js-wrappers.js";
 import listsCap from "../env/r7rs/lists.js";
+import vectorsCap from "../env/r7rs/vectors.js";
 import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
@@ -244,5 +245,34 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect("arrival/tagless-final/reduce" in mkArr()).toBe(true);
     const n = await force(mkArr()["arrival/tagless-final/reduce"]((_e, acc: number) => acc + 1, 0, CONSTANT_CTX));
     expect(n).toBe(2);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// VECTOR PROTOCOL via dispatch — `vector?` (symbol.taglessGuard) and `vector-ref`
+// ask the operand's OWN arrival/tagless-final/{vector?,vector-ref} instead of the
+// builtin reaching around the box with `instanceof AVector`. Both a real
+// SchemeVector and a borrowed AJSArray answer; a non-vector gracefully #f (vector?)
+// or throws (vector-ref). This is the Family-2 "reached around the box" dissolution.
+// ════════════════════════════════════════════════════════════════════════════
+const vectorSymbols = vectorsCap.spec.symbols as Record<
+  string,
+  { run?: (...a: unknown[]) => unknown; impl?: (...a: unknown[]) => unknown }
+>;
+describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof reach-around)", () => {
+  it("vector? (taglessGuard): a SchemeVector and a borrowed AJSArray both answer #t", async () => {
+    expect(await vectorSymbols["vector?"].run!(mkVec())).toBe(true);
+    expect(await vectorSymbols["vector?"].run!(mkArr())).toBe(true);
+  });
+  it("vector? (taglessGuard): a non-vector declares no method → graceful #f, NOT a throw", async () => {
+    expect(await vectorSymbols["vector?"].run!(mkPair())).toBe(false);
+    expect(await vectorSymbols["vector?"].run!(el("x", 1))).toBe(false);
+  });
+  it("vector-ref dispatches to the operand's method — borrowed array boxes element k lazily", () => {
+    expect(provOf(vectorSymbols["vector-ref"].impl!(mkArr(), 1))).toEqual([101]);
+    expect(provOf(vectorSymbols["vector-ref"].impl!(mkVec(), 0))).toEqual([100]);
+  });
+  it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
+    expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
   });
 });

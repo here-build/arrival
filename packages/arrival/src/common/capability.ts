@@ -68,6 +68,7 @@ const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
   ((m as { kind: unknown }).kind === "native" ||
     (m as { kind: unknown }).kind === "rosetta" ||
     (m as { kind: unknown }).kind === "tagless" ||
+    (m as { kind: unknown }).kind === "tagless-guard" ||
     (m as { kind: unknown }).kind === "sequence" ||
     (m as { kind: unknown }).kind === "door" ||
     (m as { kind: unknown }).kind === "keyword");
@@ -201,6 +202,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               case "sequence":
               case "tagless":
+              case "tagless-guard":
               case "rosetta": {
                 // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper, already
                 // tagged `__withCtx` (so the evaluator appends ctx and the wrapper mints
