@@ -42,7 +42,7 @@ import {
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { resolveMemberPath } from "../member-walk.js";
+import { Resolver, env_get } from "./Resolver.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { APair } from "../values/primitives/APair.js";
@@ -125,6 +125,15 @@ export interface EvalTap {
 /** Evaluation context passed through the evaluator */
 export interface EvalContext {
   env: Environment;
+  /**
+   * The name-resolution + scope-construction facade (ejection P3 3a). Wraps the
+   * SAME base-linked `env` and stays in sync with it (`resolver.env === env` at
+   * every frame), so threading it is byte-identical to threading `env`. Optional
+   * because a few `EvalContext` literals omit run-level fields; the evaluator's
+   * own frame sites always set it. `env` and `resolver` coexist through all of
+   * 3a/3b — `env` is removed only in P5, once every reader uses `resolver`.
+   */
+  resolver?: Resolver;
   dynamic_env?: Environment;
   use_dynamic?: boolean;
   error?: (e: Error, code?: SchemeValue) => void;
@@ -603,77 +612,11 @@ function symbol_name(sym: ASymbol): string {
 // ============================================================================
 // Environment lookup without lips runtime dependency
 // ============================================================================
-
-/**
- * Look up a symbol in the environment without requiring lips runtime.
- * This uses _lookupWithResolvers directly to avoid patch_value.
- * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
- */
-// c[ad]+r is car/cdr COMPOSITION — the kernel unfolds it by composing each receiver's OWN
-// tagless-final car/cdr algebra (innermost letter first), threading the run ctx. car/cdr are
-// the 1-step base case; cadr…caddddr are the deeper compositions. No "aside" resolver, no
-// field-access/typecheck duplication — composites inherit the atoms' nil-tolerance (ANil reads
-// runCtx.strict), provenance (APair re-stamps), and the totalic "primitive does not support
-// car" throw for free. __withCtx so the apply boundary hands it the run ctx.
-const CXR_RE = /^c[ad]+r$/;
-function cxrUnfold(name: string): SchemeValue | undefined {
-  if (!CXR_RE.test(name)) return undefined;
-  const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  const fn = (arg: unknown, ctx?: unknown): unknown => {
-    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
-    let v: unknown = arg;
-    for (const t of steps) {
-      const method = t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr";
-      const m = (v as Record<string, unknown> | null | undefined)?.[method];
-      if (typeof m !== "function") {
-        const kind = v instanceof AValue ? v.kind : v == null ? String(v) : typeof v;
-        throw new TypeError(`${name}: the ${kind} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${method}).`);
-      }
-      v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
-    }
-    return v;
-  };
-  (fn as { __withCtx?: boolean }).__withCtx = true;
-  return fn as SchemeValue;
-}
-
-function env_get(env: Environment, sym: ASymbol): SchemeValue {
-  const name = sym.__name__;
-
-  // Handle keyword symbols (e.g., :name, :projects) — delegate to env.get()
-  // which creates Clojure-style property accessor functions
-  if (typeof name === "string" && name.startsWith(":")) {
-    return env.get(sym);
-  }
-
-  const value = env._lookupWithResolvers(name);
-  if (value !== undefined) {
-    return value;
-  }
-
-  // c[ad]+r — synthesized by the kernel on a binding miss (car/cdr + every composite). No env
-  // binding, no resolver: the family IS car/cdr composition over the unified tagless-final algebra.
-  if (typeof name === "string") {
-    const cxr = cxrUnfold(name);
-    if (cxr !== undefined) return cxr;
-  }
-
-  // Direct lookup missed. Dot-notation — `foo.bar.baz` source sugar, or syntax-rules gensyms
-  // carrying their property path on `ASymbol.object` — resolve the base NAME in scope, then walk
-  // members through the membrane. Environment.get no longer does this (ejection P1: get is pure
-  // name-resolution); name-resolution lives here, member-access in member-walk.ts.
-  const objectParts = (sym as unknown as { [key: symbol]: string[] | undefined })[ASymbol.object];
-  const parts: string[] | undefined =
-    objectParts ?? (typeof name === "string" && name.includes(".") ? name.split(".").filter(Boolean) : undefined);
-  if (parts && parts.length > 1) {
-    const [first, ...rest] = parts;
-    const base = env._lookupWithResolvers(first);
-    if (base !== undefined) return resolveMemberPath(base, rest);
-  }
-  throw Object.assign(new Error(`Unbound variable \`${String(name)}'`), {
-    publicMessage: `symbol ${String(name)} does not exist - look at list of available functions at tool description`,
-  });
-}
+//
+// `env_get` (the throwing, synth-aware lookup) + its `c[ad]+r` unfold moved to
+// eval/Resolver.ts (ejection P3 3a) — name-resolution is the Resolver's job. The
+// evaluator threads a `Resolver` (ctx.resolver) and calls `resolver.resolve`;
+// `env_get` is re-imported here transitionally for the not-yet-routed call sites.
 
 // ============================================================================
 // Flat Trampoline Runner
@@ -1412,6 +1355,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const bodyCtx: EvalContext = {
       ...ctx,
       env: callEnv,
+      resolver: new Resolver(callEnv),
       currentInvocation: dynamicInv,
       tail: true,
     };
@@ -1500,7 +1444,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Evaluate macro body to get expansion.
     // Forward signal so macro expansion is also budget-bounded.
-    return run(evalBegin(body, { ...evalArgs, env: macroEnv }), {
+    return run(evalBegin(body, { ...evalArgs, env: macroEnv, resolver: new Resolver(macroEnv) }), {
       signal: evalArgs.signal,
     });
   };
@@ -1593,6 +1537,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const bodyCtx: EvalContext = {
         ...ctx,
         env: loopEnv,
+        resolver: new Resolver(loopEnv),
         currentInvocation: dynamicInv,
         // Named-let body is tail w.r.t. its caller (the `(loop ...)` call
         // site). Tail flag propagates structurally to the body's last
@@ -1652,7 +1597,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Evaluate body — inherits the let's tail flag via ctx spread; pass-through
   // (tail-collapsible) so a tail call in the body collapses this let frame.
-  return yield { call: evalBegin(body, { ...ctx, env: letEnv }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: letEnv, resolver: new Resolver(letEnv) }), tail: ctx.tail === true };
 }
 
 /**
@@ -1682,7 +1627,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const valExpr = bindingCdr.car;
 
     // Evaluate in current environment (sequential semantics)
-    let value = yield { call: evaluate(valExpr, { ...ctx, env: currentEnv, tail: false }) };
+    let value = yield { call: evaluate(valExpr, { ...ctx, env: currentEnv, resolver: new Resolver(currentEnv), tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
@@ -1692,7 +1637,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Evaluate body — inherits let*'s tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: currentEnv }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: currentEnv, resolver: new Resolver(currentEnv) }), tail: ctx.tail === true };
 }
 
 /**
@@ -1730,7 +1675,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Second pass: evaluate and assign (in the letrec environment).
   // Bindings are non-tail; only body inherits letrec's tail flag.
   for (const { name, expr } of bindingList) {
-    let value = yield { call: evaluate(expr, { ...ctx, env: letrecEnv, tail: false }) };
+    let value = yield { call: evaluate(expr, { ...ctx, env: letrecEnv, resolver: new Resolver(letrecEnv), tail: false }) };
     if (is_promise(value)) {
       value = yield value;
     }
@@ -1738,7 +1683,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Evaluate body — inherits letrec's tail flag; pass-through (tail-collapsible).
-  return yield { call: evalBegin(body, { ...ctx, env: letrecEnv }), tail: ctx.tail === true };
+  return yield { call: evalBegin(body, { ...ctx, env: letrecEnv, resolver: new Resolver(letrecEnv) }), tail: ctx.tail === true };
 }
 
 /**
@@ -2129,8 +2074,9 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // are explicitly non-tail. (do itself already iterates inside ONE
   // generator's `while (true)` — recursion is flat regardless, so the
   // tail flag matters only for what the result expressions eventually do.)
-  const doNonTail: EvalContext = { ...ctx, env: doEnv, tail: false };
-  const doTail: EvalContext = { ...ctx, env: doEnv };
+  const doResolver = new Resolver(doEnv);
+  const doNonTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver, tail: false };
+  const doTail: EvalContext = { ...ctx, env: doEnv, resolver: doResolver };
 
   // Initialize variables (non-tail — values feed into doEnv).
   let bindNode: SchemeValue = bindings;
@@ -2355,7 +2301,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       try {
         // Forward signal: a catch handler running an unbounded computation
         // (e.g. a recovery loop) must respect the same budget.
-        result = await run(evalBegin(handlers, { ...ctx, env: catchEnv, tail: false }), {
+        result = await run(evalBegin(handlers, { ...ctx, env: catchEnv, resolver: new Resolver(catchEnv), tail: false }), {
           signal: ctx.signal,
         });
         caughtError = null; // Error was handled
@@ -2715,7 +2661,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       // fixup, so a syntax-rules macro in tail position has the SAME O(1) TCO as a special
       // form. (A transformer is Exp->Exp; it must never evaluate inside itself.)
       const expanded = fn.invoke(code, evalArgs, true) as { expr: SchemeValue; scope: Environment };
-      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope }), tail: true };
+      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope, resolver: new Resolver(expanded.scope) }), tail: true };
     }
 
     // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──

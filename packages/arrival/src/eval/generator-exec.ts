@@ -13,6 +13,7 @@ import { whenBootstrapComplete } from "../boot.js";
 import type { Environment } from "../Environment.js";
 import { user_env } from "../env-roots.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
+import { Resolver } from "./Resolver.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
@@ -228,6 +229,10 @@ export async function exec(
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns });
+  // The run's ROOT resolver — wraps actualEnv, the source of truth for resolution.
+  // Every nested frame derives a synced child via `resolver.child` (ejection P3 3a);
+  // in 3a it tracks the same base-linked env, so threading it is byte-identical.
+  const runResolver = new Resolver(actualEnv);
   const priorMeter = actualEnv.__heapMeter__;
   // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
   // `operand.ctx.heapMeter` reads the live meter with no behavior change.
@@ -250,6 +255,7 @@ export async function exec(
         result = await run(
           evaluate(expr, {
             env: actualEnv,
+            resolver: runResolver,
             dynamic_env,
             use_dynamic,
             tap,
@@ -319,6 +325,7 @@ export async function execExpr(
     return await run(
       evaluate(expr, {
         env: actualEnv,
+        resolver: new Resolver(actualEnv),
         dynamic_env,
         use_dynamic,
         tap,
