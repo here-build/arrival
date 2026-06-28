@@ -127,11 +127,22 @@ export class AJSArray extends AValue {
     super(ctx, provenance);
   }
 
+  // Freeze the borrowed source the FIRST time Scheme reads it, so the host can't mutate this
+  // borrowed/returned value afterward — prevention by construction, replacing the dev-only purity
+  // assert. Idempotent (Object.freeze no-ops when already frozen); `freezeRosettaReturns:false` in
+  // the run ctx opts out (host keeps it mutable).
+  private freezeSource(): void {
+    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
+      Object.freeze(this.source);
+    }
+  }
+
   // Box the borrowed source into an owned AVector through the membrane, once. The vector
   // algebra below DELEGATES here — AJSArray implements the contract without inheriting it.
   // `new AVector` runs only at call time, so AVector need not be defined when THIS module
   // evaluates (the cycle-avoidance the "implements, not extends" shape buys).
   private vec(): AVector {
+    this.freezeSource();
     // Box each element through jsToScheme carrying THIS borrowed container's provenance — so
     // elements inherit the crossing's lineage (parallel to AJSObject.get, which threads
     // this.provenance to its fields), and nested arrays/objects re-borrow faithfully.
@@ -144,6 +155,7 @@ export class AJSArray extends AValue {
 
   // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
   get length(): number {
+    this.freezeSource();
     return this.source.length;
   }
 
@@ -224,6 +236,7 @@ export class AJSArray extends AValue {
   // (no materialize) — over the raw source where provenance-bearing AValue elements still
   // live (post-box they'd be empty-provenance JS-natives).
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    this.freezeSource();
     const count = this.source.length;
     const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
     if (inputs.length === 0) return count;
@@ -239,6 +252,7 @@ export class AJSArray extends AValue {
   // Indexed access — boxes JUST element k through the membrane (no full materialize), the
   // same lazy crossing as the per-element path; `(vector-ref borrowed k)` dispatches here.
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+    this.freezeSource();
     return bridge().fromJS(this.source[k]);
   }
 }
@@ -282,6 +296,15 @@ export class AJSObject extends AValue {
     super(ctx, provenance);
   }
 
+  // Freeze the borrowed source the FIRST time Scheme reads it (parallel to AJSArray.freezeSource) —
+  // prevention by construction, replacing the dev-only purity assert. Idempotent;
+  // `freezeRosettaReturns:false` in the run ctx opts out (host keeps it mutable).
+  private freezeSource(): void {
+    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
+      Object.freeze(this.source);
+    }
+  }
+
   /** Unwrap to original JS object (TO_JS protocol). */
   [TO_JS](): object {
     return this.source;
@@ -314,6 +337,7 @@ export class AJSObject extends AValue {
    * traversal terminates before re-entering this wrapper.
    */
   get(key: string | symbol): SchemeValue {
+    this.freezeSource();
     // Cache keyed by stringified key — symbol keys are an edge case (the
     // sandbox boundary blocks most symbol access anyway) and skipping the
     // cache for them keeps the Map<string, AValue> shape clean.
@@ -382,6 +406,7 @@ export class AJSObject extends AValue {
    * Returns false for blocked properties and boundary-protected inherited props.
    */
   has(key: string | symbol): boolean {
+    this.freezeSource();
     return accessHas(this.source, key);
   }
 
@@ -400,6 +425,7 @@ export class AJSObject extends AValue {
 
   /** Get own enumerable property keys (never includes inherited). */
   keys(): string[] {
+    this.freezeSource();
     return accessKeys(this.source);
   }
 

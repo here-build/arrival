@@ -14,7 +14,6 @@ import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./va
 import { fromJs } from "./values/primitives/boxing.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
-import { PURITY_ASSERT_ENABLED, snapshotInputs, assertInputsUnmutated, type Fingerprint } from "./purity-assert.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
@@ -395,14 +394,11 @@ const looksLikeEvalContext = (x: unknown): boolean =>
   ("env" in x || "currentInvocation" in x || "tap" in x || "signal" in x);
 
 export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pure = false }: RosettaFunction) => {
-  // CONFLUENCE GUARD (G5, dev-mode): a `pure: true` rosetta is classified as a
-  // PIPE — it propagates its inputs' provenance and mints nothing — which is sound
-  // only if it does NOT mutate those inputs (design §3). We arm a shallow
-  // mutation fingerprint around the fn call iff the marker is set AND the assert is
-  // enabled (ARRIVAL_PURITY_ASSERT=1). The wrapper name is the verb label (the
-  // registered name isn't threaded here; fn.name is the best available handle).
-  const purityChecked = pure === true && PURITY_ASSERT_ENABLED;
-  const pureVerb = fn.name || "<anonymous pure rosetta>";
+  // A `pure: true` rosetta is classified as a PIPE — it propagates its inputs' provenance and mints
+  // nothing — which is sound only if it does NOT mutate those inputs. That soundness is now ENFORCED
+  // BY CONSTRUCTION: borrowed JS inputs (AJSObject/AJSArray) freeze their source on first read, so a
+  // pure rosetta physically cannot mutate them — the old dev-only purity ASSERT is gone. (See
+  // js-wrappers.ts `freezeSource` + the `freezeRosettaReturns` run-ctx opt-out.)
   // THE FLIP: a non-pure rosetta is a Rosetta-IN SOURCE — it mints a fresh point
   // by default (data is born at the membrane crossing); a `pure: true` rosetta is
   // a PIPE that forwards its inputs' provenance and mints nothing. This is already
@@ -451,19 +447,8 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
     const jsArgs = schemeArgs.map((arg) => schemeToJs(arg, options));
     const callArgs = fnWantsCtx ? [ctx, ...jsArgs] : jsArgs;
 
-    // Dev-mode confluence guard: fingerprint the pure rosetta's scheme inputs
-    // (their mutable car/cdr/vector slots) before the call, to detect in-place
-    // mutation after. Empty/no-op unless `purityChecked`. snapshotInputs only
-    // fingerprints AValue args; raw-JS args aren't part of the lineage contract.
-    const purityBefore: readonly Fingerprint[] = purityChecked ? snapshotInputs(schemeArgs) : [];
-
     try {
       const rawResult = await fn(...callArgs);
-
-      // A pure rosetta MUST NOT have mutated an input — catch it at the crossing,
-      // before its falsified lineage propagates. Throws PurityViolation naming the
-      // verb + offending arg. (Sound: a pure fn touches no input slot; depth-1.)
-      if (purityChecked) assertInputsUnmutated(pureVerb, schemeArgs, purityBefore);
 
       const inv = (ctx as CtxWithInvocation | undefined)?.currentInvocation;
 

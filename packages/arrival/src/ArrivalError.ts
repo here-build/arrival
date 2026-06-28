@@ -3,11 +3,11 @@
 // -------------------------------------------------------------------------
 //
 // Was `SchemeError` over a one-field abstract `ArrivalError` base (a dead `args`
-// slot); that redundant layer is dissolved into this concrete class. PurityError /
-// PurityViolation extend it. Kept a LEAF — only the CLASS marker + a TYPE-only
-// StackFrame — so the value terms and the purity classes can throw / extend it
-// without importing the evaluator (the abstract base existed precisely so this
-// stayed cycle-free; the concrete class inherits that discipline).
+// slot); that redundant layer is dissolved into this concrete class. Kept a LEAF —
+// only the CLASS marker + a TYPE-only StackFrame — so the value terms (and any
+// sibling error subclass) can throw / extend it without importing the evaluator (the
+// abstract base existed precisely so this stayed cycle-free; the concrete class
+// inherits that discipline).
 
 import { CLASS, LOCATION } from "./well-known-symbols.js";
 import { formatLocation, type SourceLocation } from "./errors.js";
