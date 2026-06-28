@@ -3,11 +3,11 @@
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { is_inexact, is_int } from "../eval/guards.js";
+import { is_int } from "../eval/guards.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { complexDoor, AExact, AInexact } from "../values/numbers.js";
+import { AExact, AInexact, complexDoor } from "../values/numbers.js";
 import {
   char_re,
   complex_re,
@@ -264,7 +264,7 @@ export function parse_string(string: string): AString {
 
 // ----------------------------------------------------------------------
 export const parse_symbol = (arg: string): ASymbol =>
-  new ASymbol(CONSTANT_CTX, 
+  new ASymbol(CONSTANT_CTX,
     /(?:^|.)\|/.test(arg)
       ? arg
           .split("|")
