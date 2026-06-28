@@ -35,7 +35,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AVector } from "../values/primitives/AVector.js";
+import type { AVector } from "../values/primitives/AVector.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -50,7 +50,13 @@ import { AExact, AInexact } from "../values/numbers.js";
 // ─────────────────────────────────────────────────────────────────────────────
 export const pair = z.instanceof(APair);
 export const symbol = z.instanceof(ASymbol);
-export const svector = z.instanceof(AVector);
+// A vector by PROTOCOL, not class: anything answering `arrival/tagless-final/vector?` — a boxed
+// AVector OR a borrowed AJSArray (which IS a vector). Checking the method's PRESENCE (not calling
+// it) avoids materializing a borrowed view during decode. `z.custom<AVector>` keeps the harvested
+// type AVector; the impls extract the payload via `asVector`, which handles both forms.
+export const svector = z.custom<AVector>(
+  (x) => typeof (x as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function",
+);
 export const sbytevector = z.instanceof(ABytevector);
 export const nil = z.instanceof(ANil);
 export const schemeString = z.instanceof(AString);

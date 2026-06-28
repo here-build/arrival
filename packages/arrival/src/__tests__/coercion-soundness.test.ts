@@ -37,6 +37,7 @@ import { AString } from "../values/primitives/AString.js";
 import { AJSArray } from "../values/primitives/js-wrappers.js";
 import listsCap from "../env/r7rs/lists.js";
 import vectorsCap from "../env/r7rs/vectors.js";
+import { svector } from "../common/scheme-zod.js";
 import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
@@ -275,6 +276,16 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   });
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
     expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
+  });
+  it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
+    expect(vectorSymbols["vector-length"].impl!(mkArr())).toBe(2);
+    expect(elemProvs(vectorSymbols["vector->list"].impl!(mkArr()))).toEqual([[100], [101]]);
+    expect(vectorSymbols["vector-copy"].impl!(mkArr())).toBeInstanceOf(AVector);
+  });
+  it("z.svector accepts a borrowed AJSArray (a vector by PROTOCOL, not class)", () => {
+    expect(svector.safeParse(mkArr()).success).toBe(true);
+    expect(svector.safeParse(mkVec()).success).toBe(true);
+    expect(svector.safeParse(mkPair()).success).toBe(false);
   });
 });
 

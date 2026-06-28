@@ -19,7 +19,6 @@ import { fromJs } from "./primitives/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
 import { ABool } from "./primitives/ABool.js";
-import { AVector } from "./primitives/AVector.js";
 import { AExact, AInexact, type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
@@ -99,19 +98,22 @@ export function toIndex(v: unknown): number {
 
 /**
  * Resolve a vector argument to its raw element array (read/mutate view).
- * Accepts a boxed SchemeVector (returns __vector__ by reference, so in-place
- * mutators write through) or a raw JS array (transition: raw vectors still flow
- * until S7 producers + S10 tighten). Throws on anything else.
+ *
+ * PROTOCOL dispatch — anything answering `arrival/tagless-final/vector?` (a boxed AVector OR a
+ * borrowed AJSArray, which IS a vector) exposes its element payload via `__vector__`. For an
+ * owned vector that's the writable payload by reference (in-place mutators write through); for a
+ * borrowed view the getter materializes its source on first read. No `instanceof AVector`
+ * reach-around. The `frozen` check guards a literal's payload from in-place writes (a borrowed
+ * view has no `frozen` field, and a writable source it never had — the mutators are doored
+ * regardless). A raw JS array is still tolerated (transition; S10 will remove it). Throws otherwise.
  */
 export function asVector(obj: unknown, fnName: string, forMutation = false): SchemeValue[] {
-  if (obj instanceof AVector) {
-    TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable vector literal`);
-    return obj.__vector__;
-  } else if (Array.isArray(obj)) {
-    return obj;
-  } else {
-    throw new TypeError(`${fnName}: expected vector`);
+  if (typeof (obj as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function") {
+    TypeError.invariant(!forMutation || !(obj as { frozen?: boolean }).frozen, `${fnName}: cannot mutate an immutable vector literal`);
+    return (obj as { __vector__: SchemeValue[] }).__vector__;
   }
+  if (Array.isArray(obj)) return obj; // transitional raw-array tolerance (S10 will remove this)
+  throw new TypeError(`${fnName}: expected vector`);
 }
 
 /**
