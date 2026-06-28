@@ -757,16 +757,6 @@ export const exceptionsCapability = new EnvCapability("scheme/exceptions", {
 const GLOBAL_NATIVE_PACKS = [...NATIVE_PACKS, numbersCapability, exceptionsCapability];
 
 /**
- * @deprecated Imperative monolith application — superseded by assembling
- * `GLOBAL_NATIVE_PACKS`. Retained only because a debug script imports it.
- */
-export function applyToEnvironment(lipsEnv: { set: (k: string, v: unknown) => void }): void {
-  for (const [name, fn] of Object.entries(wrappedOps)) {
-    lipsEnv.set(name, fn);
-  }
-}
-
-/**
  * Initialize bridge by applying all wrapped operators to the global LIPS environment
  * and evaluating the bootstrap Scheme code.
  */

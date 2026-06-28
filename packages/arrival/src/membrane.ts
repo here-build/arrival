@@ -201,9 +201,9 @@ export function fromJS(value: unknown): SchemeValue {
   // Already a Scheme value? Pass through (prevents double-wrapping).
   if (isSchemeValue(value)) return value;
 
-  // CONTAINERS keep their membrane-specific handling — NOT routed through jsToScheme (which would
-  // cons an array into a list). Arrays stay raw (transition); binary stays raw (FFI identity —
-  // membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (the evaluator
+  // CONTAINERS keep their membrane-specific handling. An array becomes a borrowed AJSArray vector
+  // (the Array.isArray branch below — a JS array IS an R7RS vector); binary stays raw (FFI identity
+  // — membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (the evaluator
   // trampoline awaits them); a plain object becomes a lazy AJSObject whose fields materialize
   // faithfully on access.
   if (Array.isArray(value)) {
