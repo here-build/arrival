@@ -192,11 +192,15 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
   });
 
-  // The overlay exists FOR AJSArray-aware car/cdr, yet its map/filter/reduce
-  // do NOT handle a AJSArray — they fall through to the LIPS builtins, which
-  // typecheck pair|nil and THROW. (Length/first/sort over a AJSArray work.)
-  it("map(AJSArray) THROWS — the overlay map has no AJSArray branch [CONTESTED]", () => {
-    expect("arrival/tagless-final/map" in mkArr()).toBe(false);
+  // RESOLVED (was CONTESTED): a borrowed JS array is now a VECTOR — it answers the
+  // sequence algebra by DELEGATING to a lazily-materialized vector (js-wrappers.ts),
+  // so `(map f borrowed)` works uniformly with `(map f #(...))`. This is the membrane's
+  // Rosetta promise: iterate the same for real vectors and borrowed JS arrays.
+  it("map(AJSArray) delegates to a vector — a borrowed array answers map [RESOLVED]", async () => {
+    expect("arrival/tagless-final/map" in mkArr()).toBe(true);
+    const r = await force(mkArr()["arrival/tagless-final/map"](idSync, CONSTANT_CTX));
+    expect(r).toBeInstanceOf(AVector);
+    expect((r as AVector).length).toBe(2);
   });
 });
 
@@ -213,14 +217,14 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("car(Pair) projects the head element WITH its box", async () => {
     expect(provOf(await force(mkPair()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
-  it("car(AJSArray) projects the head element WITH its box (the .at(0) carrier path)", async () => {
-    expect(provOf(await force(mkArr()["arrival/tagless-final/car"]()))).toEqual([100]);
+  it("car(AJSArray): a borrowed array is now a faithful vector → NO car algebra (use vector->list)", () => {
+    expect("arrival/tagless-final/car" in mkArr()).toBe(false);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
     expect(elemProvs(await force(mkPair()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
-  it("cdr(AJSArray): the tail wrapper carries the remaining element's box", async () => {
-    expect(elemProvs(await force(mkArr()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
+  it("cdr(AJSArray): a borrowed array is now a faithful vector → NO cdr algebra", () => {
+    expect("arrival/tagless-final/cdr" in mkArr()).toBe(false);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
@@ -229,13 +233,16 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });
 
-  // Wrong-carrier: a SchemeVector has no car algebra and a AJSArray no reduce
-  // overlay branch → the dispatch totalic-throws (the DR4 surface — errors-as-doors,
-  // not a silent box-drop). car/cdr are now the primitives OWN tagless-final algebra.
+  // Wrong-carrier: a SchemeVector — and now a borrowed AJSArray, a faithful vector — has
+  // NO car/cdr algebra → the dispatch totalic-throws (the DR4 surface — errors-as-doors,
+  // not a silent box-drop). car/cdr live on the LIST primitives (Pair/Nil) only.
   it("car(SchemeVector): AVector carries no car algebra → the dispatch totalic-throws [DR4]", () => {
     expect("arrival/tagless-final/car" in mkVec()).toBe(false);
   });
-  it("reduce(AJSArray) THROWS — overlay reduce has no AJSArray branch [CONTESTED]", () => {
-    expect("arrival/tagless-final/reduce" in mkArr()).toBe(false);
+  // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
+  it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
+    expect("arrival/tagless-final/reduce" in mkArr()).toBe(true);
+    const n = await force(mkArr()["arrival/tagless-final/reduce"]((_e, acc: number) => acc + 1, 0, CONSTANT_CTX));
+    expect(n).toBe(2);
   });
 });

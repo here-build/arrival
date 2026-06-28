@@ -37,6 +37,7 @@ import { APair } from "./values/primitives/APair.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AString } from "./values/primitives/AString.js";
 import { AVector } from "./values/primitives/AVector.js";
+import { AJSArray } from "./values/primitives/js-wrappers.js";
 import type { SchemeValue } from "./values/types.js";
 
 // Renders a Symbol's description: strips the `Symbol(...)` wrapper. Used by
@@ -190,6 +191,16 @@ function get_instances() {
         // in the MCP bridge env. Cyclic vectors are not datum-labeled here; repr
         // of a runtime-cyclic vector is a known gap, as for cyclic data generally.)
         AVector,
+        function (vec: AVector, { quote }: any) {
+          return `#(${vec.__vector__.map((el) => toString(el, quote)).join(" ")})`;
+        },
+      ],
+      [
+        // A borrowed JS array is an AVector subclass (frozen + lazy) with its OWN
+        // constructor, so the exact-constructor-keyed lookup needs its own entry. It
+        // renders as the same #(...) vector repr — reading `__vector__` materializes
+        // its borrowed source on demand.
+        AJSArray,
         function (vec: AVector, { quote }: any) {
           return `#(${vec.__vector__.map((el) => toString(el, quote)).join(" ")})`;
         },
