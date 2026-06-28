@@ -99,6 +99,13 @@ export class AHalfBaked extends AValue {
   // ── memoized collapse ──────────────────────────────────────────────────
   private forced?: Promise<SchemeValue>;
 
+  // Print protocol — a speculative carrier with no [CLASS] tag and no own toString, so the printer's
+  // generic branch renders it "#<instance>" (behavior-preserving). Rarely printed: a HalfBaked is
+  // forced before egress, so this is mostly a completeness entry.
+  ["arrival/print"](): string {
+    return "#<instance>";
+  }
+
   private constructor(
     ctx: RunContext,
     domain: "collection" | "number",

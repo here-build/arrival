@@ -101,6 +101,11 @@ export class ASymbol extends AValue {
     return String(str);
   }
 
+  // Print protocol — the bare symbol name (printer get_native_types calls toString(quote=false)).
+  ["arrival/print"](): string {
+    return this.toString();
+  }
+
   literal(): string {
     if (this.is_gensym()) {
       return (this as unknown as Record<symbol, string>)[ASymbol.literal];

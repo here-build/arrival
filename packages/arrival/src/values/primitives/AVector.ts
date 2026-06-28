@@ -25,6 +25,7 @@ import { nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { strictGate } from "../../portability.js";
+import { printValue } from "../print.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
 // deriveSortCompare lives on the op-helpers Ord leaf (alongside isOrd/ORD_REL). op-helpers
@@ -143,6 +144,12 @@ export class AVector extends AValue {
     });
     // loose: the rest as a VECTOR slice (index 1..) — empty/singleton → the empty vector
     return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
+  }
+
+  // Print protocol — R7RS external repr `#(elem …)`, each element via `printValue` (matches the
+  // printer's get_instances AVector entry at quote=false).
+  ["arrival/print"](): string {
+    return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
   // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A

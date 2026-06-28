@@ -114,6 +114,12 @@ export class ABytevector extends AValue {
     return bv;
   }
 
+  // Print protocol — R7RS external repr `#u8(byte …)` (matches the printer's get_instances
+  // ABytevector entry; bytes are raw numbers, no element recursion).
+  ["arrival/print"](): string {
+    return `#u8(${Array.from(this.__bytevector__).join(" ")})`;
+  }
+
   // Setoid (Fantasy Land) — byte-wise value equality. structuralEqual consults
   // arrival/tagless-final/equals first, so (equal? (bytevector 1 2) (bytevector 1 2)) → #t.
   // Non-SchemeBytevector → false.

@@ -38,6 +38,10 @@ export class AVoid extends AValue {
     return "#<void>";
   }
 
+  ["arrival/print"](): string {
+    return this.toString();
+  }
+
   /** Outbound translation: void → JS `undefined` (inverse of the `undefined` boxer). */
   toJs(): undefined {
     return undefined;

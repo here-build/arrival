@@ -4,6 +4,10 @@ export class EOF {
   toString(): string {
     return "#<eof>";
   }
+
+  ["arrival/print"](): string {
+    return this.toString();
+  }
 }
 
 /** The one EOF value — identity-compared everywhere; never construct another. */

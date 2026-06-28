@@ -162,34 +162,8 @@ export function is_callable(o: unknown): boolean {
 }
 
 // ----------------------------------------------------------------------
-export function is_number(o: unknown): o is AExact | AInexact {
-  return o instanceof AExact || o instanceof AInexact;
-}
-
-// ----------------------------------------------------------------------
-export function is_exact(o: unknown): o is AExact {
-  return o instanceof AExact;
-}
-
-// ----------------------------------------------------------------------
-export function is_inexact(o: unknown): o is AInexact {
-  return o instanceof AInexact;
-}
-
-// ----------------------------------------------------------------------
 export function is_lambda(obj: unknown): boolean {
   // A Scheme lambda is a FUNCTION carrying the well-known LAMBDA brand. The evaluator
   // stamps every lambda it creates/wraps with it; the membrane mirrors this check.
   return typeof obj === "function" && LAMBDA in obj;
-}
-
-// ----------------------------------------------------------------------
-export function is_native_function(fn: unknown): boolean {
-  const native = Symbol.for("__native__");
-  if (!is_function(fn)) return false;
-  const f = fn as Function & { name: string; [key: symbol]: unknown };
-  return (
-    f.toString().match(/\{\s*\[native code\]\s*\}/) !== null &&
-    ((f.name.match(/^bound /) && f[native] === true) || (!f.name.startsWith("bound ") && !f[native]))
-  );
 }

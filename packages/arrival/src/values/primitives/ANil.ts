@@ -33,6 +33,10 @@ export class ANil extends AValue {
     return "()";
   }
 
+  ["arrival/print"](): string {
+    return this.toString();
+  }
+
   valueOf(): undefined {
     return undefined;
   }

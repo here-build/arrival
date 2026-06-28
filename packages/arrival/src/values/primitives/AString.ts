@@ -169,6 +169,11 @@ export class AString extends AValue {
     return this.__string__;
   }
 
+  // Print protocol — the raw string (matches printer get_instances AString at quote=false).
+  ["arrival/print"](): string {
+    return this.toString();
+  }
+
   toJs(): string {
     return this.__string__;
   }

@@ -118,6 +118,12 @@ export class ACharacter extends AValue {
     return this.__char__;
   }
 
+  // Print protocol — the RAW char. The printer's get_instances ACharacter entry at quote=false is
+  // `valueOf()`, NOT `toString()` (which is the `#\x` write form).
+  ["arrival/print"](): string {
+    return this.valueOf();
+  }
+
   serialize(): string {
     return this.__char__;
   }

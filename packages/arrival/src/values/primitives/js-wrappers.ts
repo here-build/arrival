@@ -26,6 +26,7 @@ import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { fromJs } from "./boxing.js";
 import { AVector } from "./AVector.js";
 import { nil } from "./ANil.js";
+import { printValue } from "../print.js";
 import {
   accessHas,
   accessKeys,
@@ -204,6 +205,12 @@ export class AJSArray extends AValue {
 
   ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
     return this.vec()["arrival/tagless-final/cdr"](runCtx);
+  }
+
+  // Print protocol — the same #(...) vector repr as AVector (the __vector__ getter materializes the
+  // borrowed source); matches the printer's get_instances AJSArray entry at quote=false.
+  ["arrival/print"](): string {
+    return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
   // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling
@@ -407,6 +414,12 @@ export class AJSObject extends AValue {
 
   toString(): string {
     return "#<js-object>";
+  }
+
+  // Print protocol — opaque foreign-object tag (matches both toString and the printer's CLASS-name
+  // path, which resolves AJSObject's static [CLASS] = "js-object" to `#<js-object>`).
+  ["arrival/print"](): string {
+    return this.toString();
   }
 
   valueOf(): object {

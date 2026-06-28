@@ -185,6 +185,10 @@ export class AExact extends AValue {
     return `${this.num}/${this.denom}`;
   }
 
+  ["arrival/print"](): string {
+    return this.toString();
+  }
+
   // Comparison (same-type)
   cmp(other: AExact): -1 | 0 | 1 {
     const diff = this.num * other.denom - other.num * this.denom;
@@ -426,6 +430,10 @@ export class AInexact extends AValue {
     if (this.real === Infinity) return "+inf.0";
     if (this.real === -Infinity) return "-inf.0";
     return this.real.toString();
+  }
+
+  ["arrival/print"](): string {
+    return this.toString();
   }
 
   // Comparison. Returns NaN when either operand is a NaN inexact: R7RS § 6.2.6 —

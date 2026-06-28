@@ -25,6 +25,10 @@ export class ABool extends AValue {
   toString(): string {
     return this.value ? "#t" : "#f";
   }
+
+  ["arrival/print"](): string {
+    return this.toString();
+  }
   valueOf(): boolean {
     return this.value;
   }

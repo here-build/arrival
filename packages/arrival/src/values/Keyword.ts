@@ -44,4 +44,12 @@ export class Keyword extends AValue {
   toString(): string {
     return `#<keyword:${this.name}>`;
   }
+
+  // Print protocol — BEHAVIOR-PRESERVING. The printer renders a Keyword through its generic
+  // constructor-name branch (`#<Keyword>`), NOT this toString (`#<keyword:name>`): the printer's
+  // own-toString shortcut needs `hasOwnProperty("toString")`, which is false for a prototype
+  // method. (toString's `#<keyword:name>` is more informative — flagged as a wire-up improvement.)
+  ["arrival/print"](): string {
+    return `#<${this.constructor.name}>`;
+  }
 }

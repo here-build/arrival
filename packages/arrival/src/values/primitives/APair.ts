@@ -34,6 +34,7 @@ import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { type APairLike } from "../types.js";
 import { ANil, nil, setPairConstructor } from "./ANil.js";
+import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
@@ -564,6 +565,57 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     if (!nested || thisWithCycles[REF]) {
       parts.push(")");
     }
+    return parts.join("");
+  }
+
+  // Print protocol — the LIST repr `(elem …)` / `(a . b)`, each element rendered via `printValue`
+  // (NOT the local stringifyValue, which is slated for removal). Behaviour-preserving against the
+  // printer's get_instances APair entry at quote=false: it does `mark_cycles()` then `toString(false)`,
+  // so this mirrors that path (always top-level, never the `nested` form). Cyclic repr is a known gap.
+  ["arrival/print"](): string {
+    this.mark_cycles();
+    const parts: string[] = [];
+    const thisWithCycles = this as PairWithMetadata;
+
+    if (thisWithCycles[REF]) {
+      parts.push(`${thisWithCycles[REF]}(`);
+    } else {
+      parts.push("(");
+    }
+
+    let node: APair = this;
+    let first = true;
+
+    while (is_pair(node)) {
+      const nodeWithCycles = node as PairWithMetadata;
+      if (!first) {
+        if (nodeWithCycles[REF]) {
+          parts.push(" . ", printValue(node));
+          node = nil as unknown as APair;
+          continue;
+        }
+        parts.push(" ");
+      }
+      first = false;
+
+      const carValue = nodeWithCycles[CYCLES]?.car ?? printValue(node.car);
+      if (carValue !== undefined) {
+        parts.push(String(carValue));
+      }
+
+      if (nodeWithCycles[CYCLES]?.cdr) {
+        parts.push(" . ", String(nodeWithCycles[CYCLES].cdr));
+        break;
+      }
+
+      node = node.cdr as APair;
+    }
+
+    if (!is_nil(node) && !is_pair(node)) {
+      parts.push(" . ", printValue(node));
+    }
+
+    parts.push(")");
     return parts.join("");
   }
 
