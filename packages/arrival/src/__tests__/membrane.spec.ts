@@ -19,7 +19,7 @@ import {
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane";
-import { AJSObject } from "../values/primitives/js-wrappers.js";
+import { AJSObject, AJSArray } from "../values/primitives/js-wrappers.js";
 import { nil } from "../values/primitives/ANil";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -412,9 +412,11 @@ describe("Wrapper Layer", () => {
       expect(fromJS(pair)).toBe(pair);
     });
 
-    it("passes through arrays", () => {
+    it("borrows arrays as a vector (AJSArray) keeping source identity", () => {
       const arr = [1, 2, 3];
-      expect(fromJS(arr)).toBe(arr);
+      const wrapped = fromJS(arr);
+      expect(wrapped).toBeInstanceOf(AJSArray);
+      expect((wrapped as AJSArray).source).toBe(arr); // borrow keeps the source by identity
     });
 
     it("passes through bytevector-like types", () => {
@@ -599,10 +601,11 @@ describe("Wrapper Layer", () => {
       expect(fromJS(() => 42)).toBe(theVoid);
     });
 
-    it("preserves array identity (pass-through)", () => {
+    it("preserves array identity through the borrow (.source + toJS round-trip)", () => {
       const original = [1, 2, 3];
       const wrapped = fromJS(original);
-      expect(wrapped).toBe(original);
+      expect((wrapped as AJSArray).source).toBe(original);
+      expect(toJS(wrapped)).toBe(original); // toJS unwraps via the TO_JS protocol → the same array
     });
 
     it("preserves Uint8Array identity (pass-through)", () => {

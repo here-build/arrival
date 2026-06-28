@@ -131,7 +131,14 @@ export class AJSArray extends AValue {
   // `new AVector` runs only at call time, so AVector need not be defined when THIS module
   // evaluates (the cycle-avoidance the "implements, not extends" shape buys).
   private vec(): AVector {
-    return (this.boxedVec ??= new AVector(this.ctx, this.source.map((v) => bridge().fromJS(v)), this.provenance));
+    // Box each element through jsToScheme carrying THIS borrowed container's provenance — so
+    // elements inherit the crossing's lineage (parallel to AJSObject.get, which threads
+    // this.provenance to its fields), and nested arrays/objects re-borrow faithfully.
+    return (this.boxedVec ??= new AVector(
+      this.ctx,
+      this.source.map((v) => bridge().jsToScheme(this.ctx, v, {}, this.provenance)),
+      this.provenance,
+    ));
   }
 
   // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
@@ -187,6 +194,16 @@ export class AJSArray extends AValue {
 
   ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AValue {
     return this.vec()["arrival/tagless-final/sort"](comparator, runCtx);
+  }
+
+  // car/cdr — loose-mode list-like reading of the borrowed array (strict throws via the
+  // vector's gate); delegated so `(car borrowed-array)` works again in non-strict mode.
+  ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
+    return this.vec()["arrival/tagless-final/car"](runCtx);
+  }
+
+  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
+    return this.vec()["arrival/tagless-final/cdr"](runCtx);
   }
 
   // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling

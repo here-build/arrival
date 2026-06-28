@@ -324,13 +324,11 @@ export function jsToScheme(
     return value.withProvenance(provenance);
   }
 
-  // JS array → Pair-chain, each cons + each leaf stamped on the way down.
+  // JS array → borrowed VECTOR (a JS array IS an R7RS vector — the faithful Rosetta
+  // mapping; the old array→list cons was LIPS-era data coercion, now dissolved). AJSArray
+  // keeps the source reference and boxes its elements lazily through the membrane on access.
   if (Array.isArray(value)) {
-    let list: AValue = provenance === EMPTY_PROVENANCE ? nil : new ANil(ctx, provenance);
-    for (let i = value.length - 1; i >= 0; i--) {
-      list = new APair(ctx, jsToScheme(ctx, value[i], options, provenance, seen), list, provenance);
-    }
-    return list;
+    return new AJSArray(ctx, value, provenance);
   }
 
   // Plain JS object → SchemeJSObject (lazy entries via .get cache).

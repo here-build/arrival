@@ -220,14 +220,18 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("car(Pair) projects the head element WITH its box", async () => {
     expect(provOf(await force(mkPair()["arrival/tagless-final/car"]()))).toEqual([100]);
   });
-  it("car(AJSArray): a borrowed array is now a faithful vector → NO car algebra (use vector->list)", () => {
-    expect("arrival/tagless-final/car" in mkArr()).toBe(false);
+  it("car(AJSArray): loose projects index 0 WITH its box; strict throws (a vector is not a pair)", async () => {
+    expect("arrival/tagless-final/car" in mkArr()).toBe(true);
+    expect(provOf(await force(mkArr()["arrival/tagless-final/car"](CONSTANT_CTX)))).toEqual([100]);
+    expect(() => mkArr()["arrival/tagless-final/car"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
     expect(elemProvs(await force(mkPair()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
   });
-  it("cdr(AJSArray): a borrowed array is now a faithful vector → NO cdr algebra", () => {
-    expect("arrival/tagless-final/cdr" in mkArr()).toBe(false);
+  it("cdr(AJSArray): loose returns the rest as a vector (boxes preserved); strict throws", async () => {
+    expect("arrival/tagless-final/cdr" in mkArr()).toBe(true);
+    expect(elemProvs(await force(mkArr()["arrival/tagless-final/cdr"](CONSTANT_CTX)))).toEqual([[101]]);
+    expect(() => mkArr()["arrival/tagless-final/cdr"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
@@ -236,11 +240,13 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });
 
-  // Wrong-carrier: a SchemeVector — and now a borrowed AJSArray, a faithful vector — has
-  // NO car/cdr algebra → the dispatch totalic-throws (the DR4 surface — errors-as-doors,
-  // not a silent box-drop). car/cdr live on the LIST primitives (Pair/Nil) only.
-  it("car(SchemeVector): AVector carries no car algebra → the dispatch totalic-throws [DR4]", () => {
-    expect("arrival/tagless-final/car" in mkVec()).toBe(false);
+  // A SchemeVector (and a borrowed AJSArray) DOES answer car/cdr now — but as a TOLERANT-LOOSE
+  // reading (car → index 0 WITH its box, cdr → a vector slice). In STRICT mode the gate fires
+  // (a vector is not a pair → vector-ref) — the DR4 errors-as-doors surface, now mode-gated.
+  it("car(SchemeVector): loose projects index 0 WITH its box; strict throws [DR4 — not a pair]", () => {
+    expect("arrival/tagless-final/car" in mkVec()).toBe(true);
+    expect(provOf(mkVec()["arrival/tagless-final/car"](CONSTANT_CTX))).toEqual([100]);
+    expect(() => mkVec()["arrival/tagless-final/car"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {

@@ -29,7 +29,7 @@ import { AValue } from "../values/primitives/AValue.js";
 import { fromJs } from "../values/primitives/boxing.js";
 import { is_nil } from "../eval/guards";
 import { fromJS, isSchemeValue, toJS } from "../membrane";
-import { AJSObject } from "../values/primitives/js-wrappers.js";
+import { AJSObject, AJSArray } from "../values/primitives/js-wrappers.js";
 import { jsToScheme, schemeToJs } from "../rosetta";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
@@ -107,13 +107,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(result).toBeInstanceOf(AVoid);
   });
 
-  // membrane.ts:647-656 — "object" boxer. Arrays cons up into a Pair chain;
-  // plain objects wrap as SchemeJSObject.
-  it("array → Pair chain", () => {
+  // the "object" boxer. A JS array IS an R7RS vector → a borrowed AJSArray (no more list
+  // coercion); a plain object wraps as SchemeJSObject.
+  it("array → borrowed AJSArray vector (boxes lazily on access)", () => {
     const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
-    expect(result).toBeInstanceOf(APair);
-    const p = result as APair;
-    expect((p.car as AExact).num).toBe(1n);
+    expect(result).toBeInstanceOf(AJSArray);
+    expect((result as { kind: string }).kind).toBe("vector");
+    expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1n);
   });
 
   it("plain object → SchemeJSObject wrapper", () => {

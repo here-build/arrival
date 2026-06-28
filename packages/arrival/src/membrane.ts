@@ -125,8 +125,11 @@ export function isSchemeValue(value: unknown): boolean {
     case typeof value !== "object" && typeof value !== "function":
       return false;
 
-    // Wrapper classes first
+    // Wrapper classes first — AJSArray (a borrowed array re-presented as a vector) sits
+    // beside AJSObject; omitting it mis-routes a borrowed array back through fromJS into an
+    // AJSObject wrap (the "any subtype not listed mis-routes" hazard the symmetry test pins).
     case value instanceof AJSObject:
+    case value instanceof AJSArray:
 
     // Native Scheme types
     case value instanceof APair:
@@ -205,7 +208,16 @@ export function fromJS(value: unknown): SchemeValue {
   // membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (use '> for
   // QuotedPromise); a plain object becomes a lazy AJSObject whose fields materialize faithfully
   // on access.
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    // A JS array IS an R7RS vector → a borrowed AJSArray (lazy view; keeps `.source` so the
+    // round-trip back out preserves identity). Cached so the same JS array → the same wrapper
+    // (`eq?` stability), matching the AJSObject path below.
+    const cached = jsToWrapper.get(value);
+    if (cached) return cached;
+    const wrapper: SchemeValue = new AJSArray(CONSTANT_CTX, value);
+    jsToWrapper.set(value, wrapper);
+    return wrapper;
+  }
   if (isBytevectorLike(value)) return value;
   if (value instanceof Promise) return value;
   if (value !== null && typeof value === "object") {
@@ -555,16 +567,12 @@ export class OperatorRegistry {
 }
 
 // One boxer for both arrays and plain objects — registry keys by `typeof`, and
-// `typeof [] === "object"`. Arrays cons-up into a proper scheme list; everything
-// else wraps. Provenance stamps the top-level result only; spine elements stay
-// empty until a provenance-aware op touches them.
+// `typeof [] === "object"`. A JS array IS an R7RS vector → a borrowed AJSArray (the
+// faithful Rosetta mapping; the old array→list cons was LIPS-era data coercion). A plain
+// object wraps as a lazy AJSObject. Provenance stamps the borrowed container.
 registerBoxer("object", (ctx, v, p) => {
   if (Array.isArray(v)) {
-    let list: AValue = nil;
-    for (let i = v.length - 1; i >= 0; i--) {
-      list = new APair(ctx, fromJs(ctx, v[i]), list) as unknown as AValue;
-    }
-    return p === EMPTY_PROVENANCE ? list : list.withProvenance(p);
+    return new AJSArray(ctx, v, p);
   }
   return new AJSObject(ctx, v as object, p);
 });

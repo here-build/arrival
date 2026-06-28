@@ -21,6 +21,7 @@ import { chargeHeap } from "../../heap-budget.js";
 import { is_false, is_nil, is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
+import { nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
 import { markInteropBoundary } from "../../interop-access.js";
 import { strictGate } from "../../portability.js";
@@ -117,6 +118,31 @@ export class AVector extends AValue {
   // the Setoid above.
   ["arrival/tagless-final/concat"](other: AVector): AVector {
     return new AVector(this.ctx, [...this.__vector__, ...other.__vector__]);
+  }
+
+  // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. LOOSE mode reads
+  // a vector list-like (car → the element at index 0; cdr → the rest, AS A VECTOR slice), so
+  // `(car borrowed-array)` keeps working and cXr composes (`(cadr v)` = `(car (cdr v))` = the
+  // element at index 1). STRICT flags it non-portable and points at vector-ref / slicing — the
+  // same tolerant-loose / faithful-strict split as map/filter. Mirrors ANil's nil-tolerance.
+  ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
+    strictGate(runCtx, {
+      op: "car",
+      rule: "R7RS `car` requires a pair; a vector is not a pair",
+      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
+    });
+    // loose: first element; empty → nil (tolerant, exactly like `(car '())` loose)
+    return this.__vector__.length > 0 ? this.__vector__[0] : nil;
+  }
+
+  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
+    strictGate(runCtx, {
+      op: "cdr",
+      rule: "R7RS `cdr` requires a pair; a vector is not a pair",
+      alternative: "use vector slicing or `(vector->list v)`",
+    });
+    // loose: the rest as a VECTOR slice (index 1..) — empty/singleton → the empty vector
+    return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
   }
 
   // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A

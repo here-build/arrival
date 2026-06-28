@@ -35,8 +35,9 @@ const run = (code: string, strict: boolean) =>
 
 // Args that are NEITHER a list/pair NOR the absent value -> type errors (throw in BOTH modes).
 // #f is included deliberately: it is a real boolean, NOT "absent", so projecting it is a type error.
+// A vector is NOT here: in LOOSE mode car/cdr read it list-like (see the dedicated block below).
+// These are genuinely non-pair, non-vector, non-absent values → a type error in BOTH modes.
 const TYPE_ERRORS: [string, string][] = [
-  ["a vector", "#(1 2 3)"],
   ["a string", `"ab"`],
   ["a number", "5"],
   ["true", "#t"],
@@ -67,6 +68,20 @@ describe.each([false, true])("non-list non-absent args throw in BOTH modes — s
   it.each(TYPE_ERRORS)("(car %s) and (cdr %s) throw", async (_label, expr) => {
     await expect(run(`(car ${expr})`, strict)).rejects.toThrow();
     await expect(run(`(cdr ${expr})`, strict)).rejects.toThrow();
+  });
+});
+
+// A vector is not a pair, but LOOSE mode reads it list-like (car → index 0, cdr → a vector
+// slice) — the tolerant-loose / faithful-strict split, same as map/filter on a vector. STRICT
+// throws (a vector is not a pair → vector-ref). So `(car borrowed-array)` keeps working loose.
+describe("car/cdr on a vector — loose reads it list-like, strict throws", () => {
+  it("loose: (car #(1 2 3)) → 1 and (cdr #(1 2 3)) → #(2 3)", async () => {
+    expect(is_false((await run("(equal? (car #(1 2 3)) 1)", false))[0])).toBe(false);
+    expect(is_false((await run("(equal? (cdr #(1 2 3)) #(2 3))", false))[0])).toBe(false);
+  });
+  it("strict: (car #(1 2 3)) and (cdr #(1 2 3)) throw (a vector is not a pair)", async () => {
+    await expect(run("(car #(1 2 3))", true)).rejects.toThrow();
+    await expect(run("(cdr #(1 2 3))", true)).rejects.toThrow();
   });
 });
 

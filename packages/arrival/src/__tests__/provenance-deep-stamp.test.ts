@@ -20,7 +20,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
-import { AJSObject } from "../values/primitives/js-wrappers.js";
+import { AJSObject, AJSArray } from "../values/primitives/js-wrappers.js";
 import { AExact, AInexact } from "../values/numbers";
 import { APair } from "../values/primitives/APair.js";
 import { jsToScheme } from "../rosetta";
@@ -31,32 +31,30 @@ import { ANil, nil } from "../values/primitives/ANil";
 const PROV = new Set<number>([42]);
 
 describe("jsToScheme deep-stamps every constructed AValue", () => {
-  it("array → Pair-chain — each cons has provenance, each leaf SchemeString has provenance", () => {
+  it("array → borrowed AJSArray vector — container + each lazily-boxed leaf carry provenance", () => {
     const result = jsToScheme(CONSTANT_CTX, ["a", "b"], {}, PROV);
-    expect(result).toBeInstanceOf(APair);
-    const pair = result as APair;
-    expect([...pair.provenance]).toEqual([42]);
-    // Leaf strings boxed via boxer registry — SchemeString with provenance.
-    expect(pair.car).toBeInstanceOf(AString);
-    expect([...(pair.car as AString).provenance]).toEqual([42]);
-    const second = pair.cdr as APair;
-    expect(second).toBeInstanceOf(APair);
-    expect([...second.provenance]).toEqual([42]);
-    expect(second.car).toBeInstanceOf(AString);
-    expect([...(second.car as AString).provenance]).toEqual([42]);
-    // Tail Nil also carries provenance.
-    expect(second.cdr).toBeInstanceOf(ANil);
-    expect([...(second.cdr as ANil).provenance]).toEqual([42]);
+    // A JS array IS a vector → a borrowed AJSArray (parallel to a plain object → AJSObject below),
+    // NOT a deep-stamped Pair-chain. The container carries the crossing provenance; elements box
+    // LAZILY through vec(), which threads that provenance — so each materialized leaf carries [42].
+    expect(result).toBeInstanceOf(AJSArray);
+    expect([...(result as AJSArray).provenance]).toEqual([42]);
+    const elems = (result as unknown as { __vector__: AString[] }).__vector__;
+    expect(elems[0]).toBeInstanceOf(AString);
+    expect([...elems[0].provenance]).toEqual([42]);
+    expect(elems[1]).toBeInstanceOf(AString);
+    expect([...elems[1].provenance]).toEqual([42]);
   });
 
-  it("nested array deep-stamps recursively", () => {
-    const result = jsToScheme(CONSTANT_CTX, [[1], [2, 3]], {}, PROV) as APair;
-    expect([...result.provenance]).toEqual([42]);
-    const inner = result.car as APair;
-    expect(inner).toBeInstanceOf(APair);
+  it("nested array → nested borrowed AJSArray; leaves carry provenance through the lazy borrow", () => {
+    const result = jsToScheme(CONSTANT_CTX, [[1], [2, 3]], {}, PROV);
+    expect(result).toBeInstanceOf(AJSArray);
+    expect([...(result as AJSArray).provenance]).toEqual([42]);
+    const inner = (result as unknown as { __vector__: AJSArray[] }).__vector__[0];
+    expect(inner).toBeInstanceOf(AJSArray);
     expect([...inner.provenance]).toEqual([42]);
-    expect(inner.car).toBeInstanceOf(AExact);
-    expect([...(inner.car as AExact).provenance]).toEqual([42]);
+    const innerElems = (inner as unknown as { __vector__: AExact[] }).__vector__;
+    expect(innerElems[0]).toBeInstanceOf(AExact);
+    expect([...innerElems[0].provenance]).toEqual([42]);
   });
 
   it("plain object → SchemeJSObject with provenance; entries lazy-boxed", () => {

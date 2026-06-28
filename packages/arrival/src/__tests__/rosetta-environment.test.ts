@@ -93,28 +93,25 @@ describe("Rosetta Environment", () => {
   });
 
   describe("JS → LIPS Conversion", () => {
-    it("should convert JS arrays to LIPS lists", () => {
+    it("should convert JS arrays to borrowed vectors (AJSArray), not lists", () => {
       const jsArray = [1, 2, 3, 4];
-      const lipsList = jsToScheme(CONSTANT_CTX, jsArray, {});
+      const vec = jsToScheme(CONSTANT_CTX, jsArray, {});
 
-      console.log("JS array:", jsArray);
-      console.log("LIPS list:", lipsList);
+      // A JS array IS an R7RS vector → a borrowed AJSArray (the old array→list coercion is gone).
+      expect(vec.constructor.name).toBe("AJSArray");
 
-      expect(lipsList.constructor.name).toBe("APair");
-
-      // Convert back to verify
-      const backToJs = schemeToJs(lipsList, {});
+      // schemeToJs still casts the vector back to a JS array (JS's single sequence type).
+      const backToJs = schemeToJs(vec, {});
       expect(backToJs).toEqual(jsArray);
     });
 
-    it("should convert empty JS array to LIPS nil", () => {
+    it("should convert an empty JS array to an empty vector (AJSArray), not nil", () => {
       const emptyArray: any[] = [];
-      const lipsList = jsToScheme(CONSTANT_CTX, emptyArray, {});
+      const vec = jsToScheme(CONSTANT_CTX, emptyArray, {});
 
-      console.log("Empty JS array:", emptyArray);
-      console.log("LIPS nil:", lipsList);
-
-      expect(lipsList.constructor.name).toBe("ANil");
+      // An empty array is the empty VECTOR now (not the empty list / nil).
+      expect(vec.constructor.name).toBe("AJSArray");
+      expect((vec as { length: number }).length).toBe(0);
     });
 
     it("should convert nested JS arrays", () => {
@@ -145,7 +142,7 @@ describe("Rosetta Environment", () => {
       expect(lipsObject.constructor.name).toBe("AJSObject");
       expect(lipsObject.get("name").valueOf()).toBe("test");
       expect(lipsObject.get("value").valueOf()).toBe(42);
-      expect(lipsObject.get("items").constructor.name).toBe("APair"); // Array became LIPS list
+      expect(lipsObject.get("items").constructor.name).toBe("AJSArray"); // array field → borrowed vector
 
       // Convert back to verify
       const backToJs = schemeToJs(lipsObject, {});
@@ -168,8 +165,9 @@ describe("Rosetta Environment", () => {
       console.log("Original LIPS list:", lipsList);
       console.log("Rosetta result:", result);
 
-      // Result should be LIPS list with doubled values
-      expect(result.constructor.name).toBe("APair");
+      // The JS-array result crosses back as a borrowed vector (AJSArray); schemeToJs casts it
+      // to a JS array.
+      expect(result.constructor.name).toBe("AJSArray");
       const jsResult = schemeToJs(result, {});
       expect(jsResult).toEqual([2, 4, 6, 8]);
     });
