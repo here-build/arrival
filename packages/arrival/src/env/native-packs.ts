@@ -19,6 +19,7 @@ import type { EnvCapability } from "../common/capability.js";
 import bytevectors from "./r7rs/bytevectors.js";
 import chars from "./r7rs/chars.js";
 import equality from "./r7rs/equality.js";
+import numeric from "./r7rs/numeric.js";
 import strings from "./r7rs/strings.js";
 import vectors from "./r7rs/vectors.js";
 
@@ -28,4 +29,5 @@ export const NATIVE_PACKS: readonly EnvCapability[] = [
   vectors,
   bytevectors,
   equality,
+  numeric,
 ];

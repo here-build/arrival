@@ -347,18 +347,12 @@ function looseCompare(sym, core) {
 }
 
 export const wrappedOps = {
-  "+": wrapOperator(ops.add),
-  "-": wrapOperator(ops.sub),
-  "*": wrapOperator(ops.mul),
-  "/": wrapOperator(ops.div),
-  quotient: wrapOperator(ops.quotient),
-  remainder: wrapOperator(ops.remainder),
-  modulo: wrapOperator(ops.modulo),
-  "floor-quotient": wrapOperator(ops.floorQuotient),
-  "floor-remainder": wrapOperator(ops.floorRemainder),
-  "truncate-quotient": wrapOperator(ops.truncateQuotient),
-  "truncate-remainder": wrapOperator(ops.truncateRemainder),
-
+  // ── The numeric core (arithmetic / comparison / predicates / conversions) has
+  //    been carved into the `scheme/numeric` pack (env/r7rs/numeric.ts), bound via
+  //    `symbol.native`. What remains here are the inline `ops.X.call`-based misc ops
+  //    (floor//truncate//lcm/1+/1-/>>/<<), the makeTypePredicate tower predicates,
+  //    the comparison overlay, the exactness conversions, and the R7RS exception
+  //    machinery — each carved out in its own later phase. (See the carve phases.)
   "floor/"(n1: unknown, n2: unknown): unknown {
     const a = coerceNumeric(n1);
     const b = coerceNumeric(n2);
@@ -383,17 +377,6 @@ export const wrappedOps = {
     return Values.from([qNum, rNum]);
   },
 
-  numerator: wrapOperator(ops.numerator),
-  denominator: wrapOperator(ops.denominator),
-  "make-rectangular": wrapOperator(ops.makeRectangular),
-  "make-polar": wrapOperator(ops.makePolar),
-  "real-part": wrapOperator(ops.realPart),
-  "imag-part": wrapOperator(ops.imagPart),
-  magnitude: wrapOperator(ops.magnitude),
-  angle: wrapOperator(ops.angle),
-  abs: wrapOperator(ops.abs),
-  gcd: wrapOperator(ops.gcd),
-
   lcm(...args: unknown[]): ANumeric {
     if (args.length === 0) return new AExact(CONSTANT_CTX, 1n);
     let hasInexact = false;
@@ -412,37 +395,11 @@ export const wrappedOps = {
     return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
   },
 
-  expt: wrapOperator(ops.expt),
   "=": looseCompare("=", wrapOperator(ops.numEq)),
   "<": looseCompare("<", wrapOrd(wrapOperator(ops.lt), "<")),
   ">": looseCompare(">", wrapOrd(wrapOperator(ops.gt), ">")),
   "<=": looseCompare("<=", wrapOrd(wrapOperator(ops.lte), "<=")),
   ">=": looseCompare(">=", wrapOrd(wrapOperator(ops.gte), ">=")),
-  max: wrapOperator(ops.max),
-  min: wrapOperator(ops.min),
-  "zero?": wrapOperator(ops.isZero),
-  "positive?": wrapOperator(ops.isPositive),
-  "negative?": wrapOperator(ops.isNegative),
-  "odd?": wrapOperator(ops.isOdd),
-  "even?": wrapOperator(ops.isEven),
-  floor: wrapOperator(ops.floor),
-  ceiling: wrapOperator(ops.ceiling),
-  truncate: wrapOperator(ops.truncate),
-  round: wrapOperator(ops.round),
-  sqrt: wrapOperator(ops.sqrt),
-  exp: wrapOperator(ops.exp),
-  log: wrapOperator(ops.log),
-  sin: wrapOperator(ops.sin),
-  cos: wrapOperator(ops.cos),
-  tan: wrapOperator(ops.tan),
-  asin: wrapOperator(ops.asin),
-  acos: wrapOperator(ops.acos),
-  atan: wrapOperator(ops.atan),
-  "bitwise-and": wrapOperator(ops.bitwiseAnd),
-  "bitwise-ior": wrapOperator(ops.bitwiseIor),
-  "bitwise-xor": wrapOperator(ops.bitwiseXor),
-  "bitwise-not": wrapOperator(ops.bitwiseNot),
-  "arithmetic-shift": wrapOperator(ops.arithmeticShift),
 
   // R7RS Type predicates
   "number?"(value: unknown): boolean {
@@ -464,8 +421,6 @@ export const wrappedOps = {
   // LIPS-style aliases (for backwards compatibility with global_env)
   // ============================================================================
 
-  "**": wrapOperator(ops.expt),
-
   "1+"(n: unknown): ANumeric {
     const converted = coerceNumeric(n);
     const one = new AExact(converted.ctx, 1n);
@@ -477,12 +432,6 @@ export const wrappedOps = {
     const one = new AExact(converted.ctx, 1n);
     return ops.sub.call([converted, one]);
   },
-
-  "%": wrapOperator(ops.remainder),
-  "==": wrapOperator(ops.numEq),
-  "|": wrapOperator(ops.bitwiseIor),
-  "&": wrapOperator(ops.bitwiseAnd),
-  "~": wrapOperator(ops.bitwiseNot),
 
   ">>"(a: unknown, b: unknown): ANumeric {
     const aNum = coerceNumeric(a);
