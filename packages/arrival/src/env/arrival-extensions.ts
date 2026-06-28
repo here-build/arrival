@@ -109,25 +109,17 @@ export default new EnvCapability("arrival/core-extensions", {
   },
   prelude: `
     ;; -----------------------------------------------------------------------------
-    ;; Arrival safe head accessors + SRFI-1 remove (core residents)
+    ;; Arrival safe head accessors
     ;; -----------------------------------------------------------------------------
     ;; The dominant avoidable crash in generated Scheme is (car (filter …)) on an empty
-    ;; match — (car '()) throws. These give a head accessor that CANNOT crash. The rest
-    ;; of the SRFI-1 surface now lives in env/srfi/srfi-1.ts; these stay in core because
-    ;; they are arrival-specific (crash-avoidance) or, for remove, were authored here to
-    ;; supply the SRFI-1 binding directly.
+    ;; match — (car '()) throws. These give a head accessor that CANNOT crash. They stay
+    ;; here (not SRFI-1) because they are arrival-specific crash-avoidance; the rest of the
+    ;; SRFI-1 surface — including \`remove\` — lives in env/srfi/srfi-1.ts.
     ;;
     ;; first? — head of a list, or #f when empty. (first? '()) => #f, never a crash. The
     ;; blessed safe accessor that makes (car (filter …)) unnecessary.
     (define (first? xs) (if (pair? xs) (car xs) #f))
     ;; first-or — head of a list, or a supplied default when empty.
     (define (first-or xs default) (if (pair? xs) (car xs) default))
-    
-    ;; remove — SRFI-1: keep elements that DON'T satisfy pred. The base sandbox carries no
-    ;; external collection library, so this is the sole remove binding (it once existed to
-    ;; override a curried Ramda remove that returned null for this call shape; Ramda is now
-    ;; gone entirely, leaving this plain SRFI-1 definition).
-    (define (remove pred xs)
-      (filter (lambda (x) (not (pred x))) xs))
 `,
 });

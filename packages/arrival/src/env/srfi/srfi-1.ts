@@ -3,13 +3,12 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `SRFI1_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// SCOPE: the whole SRFI-1 surface lives here in two blocks — the *completion*
-// set (take-while … length+) and the "missing third" + parallel-list utilities
-// (iota, delete-duplicates, filter-map, count, append-map, some/every, zip,
-// list-index, unfold). The arrival safe-accessors (first?/first-or) and the
-// SRFI-1 `remove` deliberately stay in core (`core.ts`): the accessors are
-// arrival-specific crash-avoidance, and `remove` is authored there directly
-// (it once shadowed a Ramda `remove`, since removed entirely).
+// SCOPE: the whole SRFI-1 surface lives here — the *completion* set (take-while …
+// length+), `remove` (relocated from arrival-extensions, beside its `delete` twin),
+// and the "missing third" + parallel-list utilities (iota, delete-duplicates,
+// filter-map, count, append-map, some/every, zip, list-index, unfold). The arrival
+// safe-accessors (first?/first-or) stay in arrival-extensions — they are
+// arrival-specific crash-avoidance, not part of SRFI-1.
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
@@ -122,6 +121,14 @@ export const SRFI1_SCM = `
     (cond ((null? xs) (reverse acc))
           ((equal? x (car xs)) (loop (cdr xs) acc))
           (else (loop (cdr xs) (cons (car xs) acc))))))
+
+;; remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
+;; delete). The base sandbox carries no external collection library, so this is the sole
+;; remove binding — it once shadowed a curried Ramda remove that returned null for this
+;; call shape; Ramda is gone, leaving this plain SRFI-1 definition. Relocated from
+;; arrival-extensions (husk dissolution); the inference plane copies it by name (bridge.ts).
+(define (remove pred xs)
+  (filter (lambda (x) (not (pred x))) xs))
 
 ;; length+ — list length, or #f for a circular list (Floyd cycle detection).
 (define (length+ xs)
