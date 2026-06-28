@@ -28,7 +28,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
+import { PortabilityError } from "../portability.js";
 import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -274,5 +275,34 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   });
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
     expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// STRICT-MODE DIVERGENCE via the tagless methods — because each term method gets
+// the run's RunContext, a loose tolerance gates itself: generic map/filter/reduce
+// are R7RS/SRFI-1 LIST ops, so on a vector they work in LOOSE mode but throw a
+// PortabilityError in STRICT (the R7RS-portability control). sort is NOT gated
+// (SRFI-132 accepts vectors). Generalizes ANil's car/cdr nil-tolerance.
+// ════════════════════════════════════════════════════════════════════════════
+describe("strict mode gates generic list-ops on a vector (loose tolerates, strict explains)", () => {
+  const strict = makeRunContext({ strict: true });
+  it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
+    expect(await force(mkVec()["arrival/tagless-final/map"](idSync, CONSTANT_CTX))).toBeInstanceOf(AVector);
+    // map is sync up to the gate → it throws synchronously, not a rejected promise
+    expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(PortabilityError);
+    expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(/vector-map/);
+  });
+  it("filter/reduce(vector): strict rejects them (SRFI-1 list-ops)", async () => {
+    await expect(mkVec()["arrival/tagless-final/filter"](keepAll, strict)).rejects.toThrow(PortabilityError);
+    await expect(mkVec()["arrival/tagless-final/reduce"]((_e: unknown, a: number) => a, 0, strict)).rejects.toThrow(
+      PortabilityError,
+    );
+  });
+  it("sort(vector) is NOT gated — SRFI-132 accepts vectors", () => {
+    expect(mkVec()["arrival/tagless-final/sort"](cmp, strict)).toBeInstanceOf(AVector);
+  });
+  it("a borrowed AJSArray inherits the gate via delegation (strict map throws)", () => {
+    expect(() => mkArr()["arrival/tagless-final/map"](idSync, strict)).toThrow(PortabilityError);
   });
 });

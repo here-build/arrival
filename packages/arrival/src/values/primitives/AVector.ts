@@ -23,6 +23,7 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { fromJs } from "./boxing.js";
 import { markInteropBoundary } from "../../interop-access.js";
+import { strictGate } from "../../portability.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
 // deriveSortCompare lives on the op-helpers Ord leaf (alongside isOrd/ORD_REL). op-helpers
@@ -130,6 +131,14 @@ export class AVector extends AValue {
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
   ): AVector | Promise<AVector> {
+    // STRICT divergence: generic `map` is a LIST op in R7RS — a vector is not a list. Loose
+    // mode tolerates it (the term answers map); strict flags it non-portable. `vector-map` is
+    // the faithful vector op (a SEPARATE builtin, NOT this method → never gated).
+    strictGate(runCtx, {
+      op: "map",
+      rule: "R7RS `map` operates on lists; a vector is not a list",
+      alternative: "use `vector-map` for vectors",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => fn(v));
     if (results.some(is_promise)) {
@@ -150,6 +159,12 @@ export class AVector extends AValue {
     arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
   ): Promise<AVector> {
+    // STRICT divergence: `filter` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "filter",
+      rule: "`filter` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "filter the list form: (list->vector (filter pred (vector->list v)))",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
@@ -170,6 +185,12 @@ export class AVector extends AValue {
     initial: Acc,
     runCtx?: RunContext,
   ): Promise<Acc> {
+    // STRICT divergence: `reduce` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "reduce",
+      rule: "`reduce` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "reduce the list form via (vector->list v)",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
     for (const v of this.__vector__) acc = await fn(v, acc);
