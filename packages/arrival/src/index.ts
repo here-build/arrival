@@ -134,6 +134,13 @@ export {
   type ExecOptions,
 } from "./eval/generator-exec.js";
 
+// Reader lexer entry. `tokenize(source, true)` lifts source into `{ token, col, offset, line }`
+// meta-tokens off the real FSM lexer, so `#\(`, string literals, `#|…|#`, datum comments, and
+// quote prefixes are counted correctly (a hand-scanner would miscount `#\(`). arrival-mcp's
+// DiscoveryTool slices REPL top-level statements by token start-offsets — the reader is the one
+// place that lexes Scheme faithfully, so it must consume the offsets rather than re-scan.
+export { tokenize } from "./reader/tokenize.js";
+
 // The ONE way to make an env allocation-bounded — every eval loop that owns an env (Project.run, the
 // studio kernel) installs the meter through this, so "bounded" is a single named act, not ad-hoc.
 export { installHeapMeter, findHeapMeter, type HeapMeter } from "./heap-budget.js";
