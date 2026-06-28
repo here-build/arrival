@@ -14,7 +14,6 @@ import { Lexer } from "./reader/Lexer.js";
 
 import { is_nil } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
-import { restore_data_gensyms, extract_patterns, transform_syntax } from "./eval/syntax-rules.js";
 import { printValue } from "./values/print.js";
 import {
   complex_bare_re,
@@ -30,8 +29,6 @@ import * as specials from "./reader/specials.js";
 import { type, typecheck, typeErrorMessage } from "./utils/typecheck.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "./utils/parsing.js";
 import { Values } from "./values/primitives/Values.js";
-import { Macro } from "./eval/Macro.js";
-import { Syntax } from "./eval/Syntax.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import { keywordAccessorResolver } from "./membrane.js";
@@ -188,105 +185,8 @@ Object.assign(global_env.__env__, {
     // define-macro — VESTIGIAL: shadowed by the `define-macro` SPECIAL_FORM
     // (evalDefineMacro) before env lookup; no first-class reader. Deleted.
     // ------------------------------------------------------------------
-    "syntax-rules": new Macro("syntax-rules", function (this: Environment, macro: SchemeValue, options: SchemeValue) {
-      const { use_dynamic, error } = options;
-      // TODO: find identifiers and freeze the scope when defined #172
-      const env = this;
-
-      function get_identifiers(node: SchemeValue) {
-        const symbols: SchemeValue[] = [];
-        while (!is_nil(node)) {
-          const x = node.car;
-          symbols.push(x.valueOf());
-          node = node.cdr;
-        }
-        return symbols;
-      }
-
-      function validate_identifiers(node) {
-        while (!is_nil(node)) {
-          const x = node.car;
-          TypeError.invariant(x instanceof ASymbol, "syntax-rules: wrong identifier");
-          node = node.cdr;
-        }
-      }
-
-      if (macro.car instanceof ASymbol) {
-        validate_identifiers(macro.cdr.car);
-      } else {
-        validate_identifiers(macro.car);
-      }
-      const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
-        const scope = env.inherit("syntax");
-        const dynamic_env = scope;
-        let var_scope: Environment = this;
-        // for macros that define variables used in macro (2 levels nestting)
-        if ((var_scope.__name__ as string | symbol) === Syntax.__merge_env__) {
-          // copy refs for defined gynsyms
-          const props = Object.getOwnPropertySymbols(var_scope.__env__);
-          for (const symbol of props) {
-            var_scope.__parent__!.set(symbol, var_scope.__env__[symbol]);
-          }
-          var_scope = var_scope.__parent__!;
-        }
-        const eval_args = { env: scope, dynamic_env, use_dynamic, error };
-        let ellipsis, rules, symbols;
-        if (macro.car instanceof ASymbol) {
-          ellipsis = macro.car;
-          symbols = get_identifiers(macro.cdr.car);
-          rules = macro.cdr.cdr;
-        } else {
-          ellipsis = "...";
-          symbols = get_identifiers(macro.car);
-          rules = macro.cdr;
-        }
-        try {
-          while (!is_nil(rules)) {
-            const rule = rules.car.car;
-            let expr = rules.car.cdr.car;
-            const bindings = extract_patterns(rule, code, symbols, ellipsis, {
-              expansion: this,
-              define: env,
-              globalEnv: global_env,
-            });
-            if (bindings) {
-              // name is modified in transform_syntax
-              const names = [];
-              const new_expr = transform_syntax({
-                bindings,
-                expr,
-                symbols,
-                scope,
-                lex_scope: var_scope,
-                names,
-                ellipsis,
-              });
-              // TODO: if expression is undefined throw an error
-              if (new_expr) {
-                expr = new_expr;
-              }
-              const new_env = var_scope.merge(scope, Syntax.__merge_env__ as unknown as string);
-              // FORM-RETURNING (always): hand back the transcribed FORM + its hygiene scope.
-              // The evaluator yields this form into the flat trampoline (tail position) and the
-              // macroexpand traverse re-expands it — the transformer NEVER evaluates inside
-              // itself, so a macro in tail position stays tail-proper (no nested run() frame).
-              // restore_data_gensyms un-renames the template's DATA-position gensyms (under
-              // quote/quasiquote) so quote yields literal symbols with no post-eval fixup.
-              // `macro_expand` no longer changes the return — both callers want the form.
-              void macro_expand;
-              return { expr: restore_data_gensyms(expr, names), scope: new_env };
-            }
-            rules = rules.cdr;
-          }
-        } catch (error_) {
-          (error_ as Error).message += `\nin macro:\n  ${macro.toString()}`;
-          throw error_;
-        }
-        throw new Error(`syntax-rules: no matching syntax in macro ${code.toString()}`);
-      }, env);
-      (syntax as SchemeValue).__code__ = macro;
-      return syntax;
-    }),
+    // `syntax-rules` relocated to env/macros.ts (scheme/macros pack), bound via the new
+    // symbol.macro def-kind — the last macro-family member out of this husk blob.
     // ------------------------------------------------------------------
     // `list` relocated to env/r7rs/lists.ts (R7RS §6.4, next to cons/make-list).
     repr: function repr(obj) {

@@ -44,6 +44,7 @@ import { AValue, pointProvenance, unionProvenance } from "../values/primitives/A
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import type { TaglessOp } from "../values/tagless-final.js";
+import type { Macro } from "../eval/Macro.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -188,6 +189,16 @@ export interface KeywordSymbolDef {
   readonly doc?: string;
 }
 
+/** A non-evaluating MACRO form: the impl is a raw JS transformer (a `Macro`/`Syntax`),
+ *  bound as-is by assembly — NOT arg-evaluating (native/rosetta) nor evaluator-dispatched
+ *  (keyword). The home for syntax-rules + the macro family that carries a JS expander; the
+ *  generic `is_macro`/`is_syntax` eval hook expands whatever it binds. */
+export interface MacroSymbolDef {
+  readonly kind: "macro";
+  readonly name: string;
+  readonly macro: Macro;
+}
+
 export type SymbolDef =
   | NativeSymbolDef
   | RosettaSymbolDef
@@ -195,7 +206,8 @@ export type SymbolDef =
   | TaglessGuardSymbolDef
   | SequenceSymbolDef
   | DoorSymbolDef
-  | KeywordSymbolDef;
+  | KeywordSymbolDef
+  | MacroSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
@@ -614,9 +626,16 @@ function keyword(tpl: TemplateStringsArray, ...sub: unknown[]): KeywordSymbolDef
   return { kind: "keyword", name, doc };
 }
 
+/** A non-evaluating MACRO binding: carries a raw `Macro`/`Syntax` transformer that
+ *  assembly binds as-is. Unlike the template-literal kinds it has a JS payload (the
+ *  transformer can't be expressed in scheme source), so it takes the macro directly. */
+function macro(theMacro: Macro): MacroSymbolDef {
+  return { kind: "macro", name: theMacro.__name__, macro: theMacro };
+}
+
 /** The authored-extension symbol API. `import * as arrival from "./symbol.js"` →
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
-export const symbol = { native, rosetta, tagless, taglessGuard, sequence, notImplemented, keyword };
+export const symbol = { native, rosetta, tagless, taglessGuard, sequence, notImplemented, keyword, macro };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.

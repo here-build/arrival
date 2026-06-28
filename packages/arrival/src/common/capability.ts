@@ -71,7 +71,8 @@ const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
     (m as { kind: unknown }).kind === "tagless-guard" ||
     (m as { kind: unknown }).kind === "sequence" ||
     (m as { kind: unknown }).kind === "door" ||
-    (m as { kind: unknown }).kind === "keyword");
+    (m as { kind: unknown }).kind === "keyword" ||
+    (m as { kind: unknown }).kind === "macro");
 
 // ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
 const isValueDef = (m: SymbolDef): m is { value: unknown } => typeof m === "object" && m !== null && "value" in m;
@@ -238,6 +239,12 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // cxr): the special form is aliasable + lexically shadowable, unlike the
                 // name-matched-before-lookup table it replaces.
                 env.set(verb, new Keyword(def.name));
+                break;
+              case "macro":
+                // A non-evaluating MACRO form: bind the raw transformer (Macro/Syntax) as-is.
+                // Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) — the
+                // generic is_macro/is_syntax eval hook expands it. Home of syntax-rules.
+                env.set(verb, def.macro);
                 break;
             }
             continue;
