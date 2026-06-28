@@ -128,33 +128,3 @@ export function type(obj): string {
   }
   return typeof obj;
 }
-// -------------------------------------------------------------------------
-export function typecheck_args(fn, args, expected) {
-  for (const [i, arg] of args.entries()) {
-    typecheck(fn, arg, expected, i + 1);
-  }
-} // -------------------------------------------------------------------------
-// Type for Scheme numbers that have __type__ property
-type ANumeric = { __type__: string; valueOf(): unknown };
-
-export function typecheck_number(fn: Valuable, arg: ANumeric, expected: Valuable, position: number | null = null) {
-  typecheck(fn, arg, "number", position);
-  const arg_type = arg.__type__;
-  let match = false;
-  let exp: unknown = expected;
-  if (is_pair(exp)) {
-    exp = exp.to_array();
-  }
-  if (Array.isArray(exp)) {
-    exp = exp.map((x: Valuable) => x.valueOf());
-  }
-  if (Array.isArray(exp)) {
-    const expArr = exp.map((x: Valuable) => String(x.valueOf()).toLowerCase());
-    if (expArr.includes(arg_type)) {
-      match = true;
-    }
-  } else {
-    exp = String((exp as Valuable).valueOf()).toLowerCase();
-  }
-  invariant(match || arg_type === exp, typeErrorMessage(fn.valueOf(), arg_type, exp, position));
-}
