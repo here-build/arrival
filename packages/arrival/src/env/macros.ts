@@ -29,14 +29,18 @@ type SchemeValue = any;
 const syntaxRules = new Macro(
   "syntax-rules",
   function (this: Environment, macro: SchemeValue, options: SchemeValue) {
-    const { use_dynamic, error } = options;
+    // `resolver` is the EVALUATOR's resolver at define-syntax time (threaded through
+    // Macro.invoke), carrying the run's capability base. (D2)
+    const { use_dynamic, error, resolver: defSiteResolver } = options;
     // TODO: find identifiers and freeze the scope when defined #172
     const env = this;
-    // The def-time Resolver (P3 3a.4) — wraps the define-syntax env, the hygiene
-    // identity root. The transformer derives its `scope`/`define` through this
-    // facade; in 3a it bottoms out in the same base-linked env, so hygiene is
-    // byte-identical. 3b swaps the algorithm behind this seam.
-    const defResolver = new Resolver(env);
+    // The def-time Resolver — scope = the define-syntax env (the hygiene identity
+    // root), capabilities = the EVALUATOR's threaded base (NOT re-derived from `env`
+    // via chainRoot: under the 3b.3 cut `env` is null-rooted, so chainRoot would
+    // return the lexical root, not the base, and `globalRoot` would be wrong). Under
+    // glass `defSiteResolver.capabilities` and `new Capabilities(env)` share the same
+    // `globalRoot` (global_env), so this is byte-identical.
+    const defResolver = new Resolver(env, defSiteResolver?.capabilities);
 
     function get_identifiers(node: SchemeValue) {
       const symbols: SchemeValue[] = [];
@@ -61,10 +65,13 @@ const syntaxRules = new Macro(
     } else {
       validate_identifiers(macro.car);
     }
-    const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
-      // The use-site Resolver wraps `this` (the expansion env) — the hygiene-identity root for
-      // the literal check (below) + the merge-frame plumbing (P3 3b.2).
-      const useResolver = new Resolver(this);
+    const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand, resolver: useSiteResolver }: SchemeValue) {
+      // The use-site Resolver — the EVALUATOR's resolver at expansion time (threaded
+      // through Syntax.invoke), carrying the run's capability base. NOT a fresh glass
+      // `new Resolver(this)`, which under the 3b.3 cut would re-derive a wrong globalRoot
+      // from the null-rooted `this`. Its env IS `this` (the expansion env), so the
+      // merge-frame plumbing below is unchanged; under glass byte-identical. (D1)
+      const useResolver = useSiteResolver ?? new Resolver(this);
       // The def-time syntax-child Resolver: `defResolver.child("syntax")` ≡ `env.inherit("syntax")`.
       // Its env is the hygiene scope, shared by-ref into the merge return below.
       const defChild = defResolver.child("syntax");

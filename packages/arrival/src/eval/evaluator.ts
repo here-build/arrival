@@ -2686,7 +2686,11 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       // fixup, so a syntax-rules macro in tail position has the SAME O(1) TCO as a special
       // form. (A transformer is Exp->Exp; it must never evaluate inside itself.)
       const expanded = fn.invoke(code, evalArgs, true) as { expr: SchemeValue; scope: Environment };
-      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope, resolver: new Resolver(expanded.scope) }), tail: true };
+      // The expansion evaluates in its hygiene scope (`expanded.scope`) but resolves
+      // builtins through the run's capability base — thread evalArgs.resolver's
+      // capabilities, NOT a glass re-derivation from the (post-cut: null-rooted) merge
+      // env. Under glass same globalRoot ⇒ byte-identical. (D3)
+      return yield { call: evaluate(expanded.expr, { ...ctx, env: expanded.scope, resolver: new Resolver(expanded.scope, evalArgs.resolver.capabilities) }), tail: true };
     }
 
     // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──
