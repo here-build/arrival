@@ -22,7 +22,6 @@
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import type { TaglessMethods } from "../tagless-final.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -125,9 +124,25 @@ export { EMPTY_PROVENANCE };
 // degrades to "blocked" rather than "exposed."
 // ============================================================================
 
-// ── The global tagless-final algebra, merged onto AValue (declaration merging) ──────────────
-// tagless-final.ts declares the algebra ONCE; this merge gives every AValue (and subclass) the
-// optional `arrival/tagless-final/<op>` members, so each entity's override is type-checked
-// against the single declared signature and an entity simply omits the ops it cannot handle.
-// `equals` is additionally `abstract` on the class above (required — every value is a Setoid).
-export interface AValue extends TaglessMethods {}
+// ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
+// Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
+// implements the SUBSET it can handle and omits the rest (the `symbol.taglessGuard` presence
+// check is what dispatches). The `undefined` lives in the `?` — declared METHOD-style on purpose:
+// a subclass may override an optional method, but overriding a function-typed *property*
+// (`?: (…) => …`) trips TS2425, so these stay methods. `equals` is additionally `abstract` on the
+// class above (required — every value is a Setoid). tagless-final.ts derives the op-name type +
+// runtime lock-step from `keyof AValue` — add an op by declaring it here.
+export interface AValue {
+  /** Order — the ≤ of an Ord type (numbers, strings, chars, symbols, bytevectors). */
+  ["arrival/tagless-final/lte"]?(other: unknown): boolean;
+  /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
+  ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
+  /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */
+  ["arrival/tagless-final/map"]?(fn: (x: unknown) => unknown | Promise<unknown>, runCtx?: RunContext): AValue | Promise<AValue>;
+  /** Filterable — keep elements matching a pred (or RegExp). */
+  ["arrival/tagless-final/filter"]?(pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp, runCtx?: RunContext): AValue | Promise<AValue>;
+  /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. */
+  ["arrival/tagless-final/reduce"]?<Acc>(fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>, initial: Acc, runCtx?: RunContext): Acc | Promise<Acc>;
+  /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
+  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AValue;
+}

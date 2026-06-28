@@ -550,7 +550,8 @@ function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
 type TaglessBinder = (tpl: TemplateStringsArray, ...sub: unknown[]) => TaglessSymbolDef;
 
 /** Tagless dispatch is pure (NO impl, NO validation) — the contract is only the placeholder harvest
- *  surface; the real per-op types live in `ArrivalTaglessFinal` (tagless-final.ts), the source of truth. */
+ *  surface; the real per-op types live as optional `arrival/tagless-final/<op>` members on `AValue`
+ *  (primitives/AValue.ts), the source of truth (tagless-final.ts derives the op-name type from it). */
 const TAGLESS_HARVEST_CONTRACT: Contract<VectorSpec, VectorSpec> = {
   input: z.array(z.unknown()),
   output: [z.unknown()],
