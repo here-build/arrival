@@ -10,8 +10,7 @@
 // `is_promise` comes from guards.ts (a *false leaf*: it carries a pre-existing
 // transitive path to Environment), which is type-only at the values-repr edge,
 // so no runtime cycle. Promoting is_promise into the value-guards true-leaf is
-// a separate task — it would drag QuotedPromise → guards into the leaf until
-// QuotedPromise is itself repointed.
+// a separate task.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";

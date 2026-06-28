@@ -38,7 +38,6 @@ import { Macro } from "./eval/Macro.js";
 import { AExact, AInexact, type ANumeric } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { LAMBDA } from "./well-known-symbols.js";
-import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
 // rosetta.ts statically imports `SchemeJSObject` from this file. ES module
 // resolution lets the cycle close at definition time (both functions are
@@ -141,7 +140,6 @@ export function isSchemeValue(value: unknown): boolean {
     case value instanceof AExact:
     case value instanceof AInexact:
     case value instanceof ABool:
-    case value instanceof QuotedPromise:
     case value instanceof SchemePromise:
     case value instanceof Macro:
     case value instanceof Syntax:
@@ -256,7 +254,6 @@ export function toJS(value: unknown): unknown {
   if (value instanceof ACharacter) return value.valueOf();
   if (value instanceof AExact) return value.valueOf();
   if (value instanceof AInexact) return value.valueOf();
-  if (value instanceof QuotedPromise) return value.valueOf();
 
   // SchemeSymbol stays as-is (JS can call .toString() if needed)
   // Pair stays as-is (JS can work with car/cdr)

@@ -12,7 +12,6 @@ import {
   rational_re,
   re_re,
 } from "../values/primitives.js";
-import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { CLASS, LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -142,9 +141,6 @@ export function is_syntax(o: unknown): o is Syntax {
 
 // ----------------------------------------------------------------------
 export function is_promise(o: unknown): o is Promise<unknown> {
-  if (o instanceof QuotedPromise) {
-    return false;
-  }
   if (o instanceof Promise) {
     return true;
   }

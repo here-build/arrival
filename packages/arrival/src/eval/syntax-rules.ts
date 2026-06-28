@@ -21,7 +21,6 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
 import { APair, concatPair } from "../values/primitives/APair.js";
-import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 import { Syntax } from "./Syntax.js";
 import { is_nil, is_pair } from "./guards.js";
 import { isNumeric, AExact, AInexact } from "../values/numbers.js";
@@ -985,7 +984,6 @@ export function self_evaluated(obj) {
   return (
     ["string", "function"].includes(type) ||
     typeof obj === "symbol" ||
-    obj instanceof QuotedPromise ||
     obj instanceof ASymbol ||
     obj instanceof AString ||
     obj instanceof RegExp ||

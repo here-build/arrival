@@ -18,7 +18,6 @@
 import invariant from "tiny-invariant";
 import { Environment } from "./Environment.js";
 import { eof } from "./values/primitives/EOF.js";
-import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
   is_function,
   is_lambda,
@@ -221,7 +220,7 @@ function get_instances() {
 let _native_types: any[] | null = null;
 function get_native_types() {
   if (!_native_types) {
-    _native_types = [ASymbol, Macro, Values, Environment, QuotedPromise];
+    _native_types = [ASymbol, Macro, Values, Environment];
   }
   return _native_types;
 }
@@ -333,9 +332,6 @@ export function unbox(object) {
   }
   if (Array.isArray(object)) {
     return object.map(unbox);
-  }
-  if (object instanceof QuotedPromise) {
-    delete (object as SchemeValue).then;
   }
   if (is_plain_object(object)) {
     return map_object(object, unbox);

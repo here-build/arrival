@@ -14,7 +14,6 @@ import { createRosettaWrapper } from "./rosetta.js";
 import { trim_lines } from "./utils/trim-lines.js";
 import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
-import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { AJSObject } from "./values/primitives/js-wrappers.js";
@@ -54,7 +53,7 @@ export interface LipsFunction extends Function {
  * Value that can be stored in an environment.
  * This includes all SchemeValues plus runtime-specific types like Macro, Syntax, etc.
  */
-export type EnvironmentValue = SchemeValue | LipsFunction | Macro | Syntax | QuotedPromise | EOF | Environment | RegExp;
+export type EnvironmentValue = SchemeValue | LipsFunction | Macro | Syntax | EOF | Environment | RegExp;
 
 // -------------------------------------------------------------------------
 // :: Member access — formerly reached up into the stdlib monolith through a
@@ -86,11 +85,7 @@ function walkMembers(base: unknown, keys: string[]): EnvironmentValue | undefine
   const remaining = [...keys];
   while (remaining.length > 0) {
     const name = remaining.shift()!;
-    // `then` on a QuotedPromise must yield the prototype's lazy `then` (instance
-    // `then` is `false` to keep real-promise resolution from firing, see #153).
-    if (name === "then" && object instanceof QuotedPromise) {
-      value = QuotedPromise.prototype.then as unknown as EnvironmentValue;
-    } else if (object instanceof AJSObject) {
+    if (object instanceof AJSObject) {
       value = object.get(name) as EnvironmentValue;
     } else {
       try {

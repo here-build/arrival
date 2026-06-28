@@ -40,7 +40,6 @@ import { ANil, nil } from "../values/primitives/ANil";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { ACharacter } from "../values/primitives/ACharacter";
-import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 
 // =========================================================================
 // AValue.fromJs boxer dispatch — coverage of every registered tag
@@ -250,10 +249,6 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 
   it("SchemeJSObject → true", () => {
     expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
-  });
-
-  it("QuotedPromise → true", () => {
-    expect(isSchemeValue(new QuotedPromise(Promise.resolve(1)))).toBe(true);
   });
 
   // Nil clones — should be recognized but aren't. See clone-identity.test.ts

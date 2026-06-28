@@ -69,7 +69,6 @@ const defined_specials = [
   ["`", new ASymbol(CONSTANT_CTX, "quasiquote"), LITERAL],
   [",@", new ASymbol(CONSTANT_CTX, "unquote-splicing"), LITERAL],
   [",", new ASymbol(CONSTANT_CTX, "unquote"), LITERAL],
-  ["'>", new ASymbol(CONSTANT_CTX, "quote-promise"), LITERAL],
   ["#(", new ASymbol(CONSTANT_CTX, "vector"), LITERAL],
   ["#u8(", new ASymbol(CONSTANT_CTX, "bytevector"), LITERAL],
 ];

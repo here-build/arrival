@@ -1,41 +1,18 @@
 // -------------------------------------------------------------------------
 // :: Promise utilities for handling async values in the interpreter
 // -------------------------------------------------------------------------
-import { EnvLookup } from "../EnvLookup.js";
 import { is_plain_object, is_promise } from "../eval/guards.js";
-import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
 
 // ----------------------------------------------------------------------
-// wrapper over Promise.all that ignores quoted promises
+// Promise.all over a value array (non-arrays pass through). The old
+// escape/unescape dance existed only to keep `Promise.all` from forcing a
+// QuotedPromise; with that class dissolved, this is a plain `Promise.all`.
 // ----------------------------------------------------------------------
 export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
   if (Array.isArray(arg)) {
-    return Promise.all(escape_quoted_promises(arg)).then(unescape_quoted_promises);
+    return Promise.all(arg);
   }
   return arg;
-}
-
-// ----------------------------------------------------------------------
-export function escape_quoted_promises(array: unknown[]): unknown[] {
-  // using loops for performance
-  const escaped: unknown[] = Array.from({ length: array.length });
-  let i = array.length;
-  while (i--) {
-    const value = array[i];
-    escaped[i] = value instanceof QuotedPromise ? new EnvLookup(value) : value;
-  }
-  return escaped;
-}
-
-// ----------------------------------------------------------------------
-export function unescape_quoted_promises(array: unknown[]): unknown[] {
-  const unescaped: unknown[] = Array.from({ length: array.length });
-  let i = array.length;
-  while (i--) {
-    const value = array[i];
-    unescaped[i] = value instanceof EnvLookup ? value.valueOf() : value;
-  }
-  return unescaped;
 }
 
 // ----------------------------------------------------------------------
