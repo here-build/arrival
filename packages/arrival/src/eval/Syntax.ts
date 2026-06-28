@@ -1,5 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
 import type { MacroInvokeContext } from "./Macro.js";
+import type { Resolver } from "./Resolver.js";
 
 // Type for syntax object (can be Syntax or Function)
 type SyntaxLike = Syntax | Function;
@@ -43,16 +44,24 @@ export class Syntax {
   __fn__: Function;
   __defmacro__: boolean;
   __env__: unknown;
+  /**
+   * The def-time Resolver (P3 3a.4) — wraps `__env__`, the hygiene identity root.
+   * Captured here (and closed over by the transformer in env/macros.ts) so 3b can
+   * swap the hygiene ALGORITHM without re-plumbing this seam. In 3a it is a glass
+   * over the same base-linked def env; hygiene still reaches base the old way.
+   */
+  __resolver__: Resolver | undefined;
 
-  constructor(fn: Function, env: unknown) {
+  constructor(fn: Function, env: unknown, resolver?: Resolver) {
     this.__name__ = "";
     this.__fn__ = fn;
     this.__env__ = env;
+    this.__resolver__ = resolver;
     // allow macroexpand
     this.__defmacro__ = true;
   }
 
-  invoke(code: unknown, { error, env, use_dynamic, runCtx }: MacroInvokeContext, macro_expand: unknown): unknown {
+  invoke(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext, macro_expand: unknown): unknown {
     const args = {
       error,
       env,
@@ -60,6 +69,11 @@ export class Syntax {
       dynamic_env: this.__env__,
       macro_expand,
       runCtx,
+      // Use-site resolver (from the dispatch) + the def-time one captured on this
+      // Syntax. Both staged for 3b; the 3a transformer closes over its own def
+      // Resolver for hygiene, so threading these changes nothing observable.
+      resolver,
+      defResolver: this.__resolver__,
     };
     return this.__fn__.call(env, code, args, this.__name__ || "syntax");
   }

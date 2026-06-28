@@ -2,6 +2,7 @@ import { CLASS } from "../well-known-symbols.js";
 import { trim_lines } from "../utils/trim-lines.js";
 import { typecheck } from "../utils/typecheck.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
+import type { Resolver } from "./Resolver.js";
 
 export interface MacroInvokeContext {
   env: unknown;
@@ -11,6 +12,10 @@ export interface MacroInvokeContext {
   /** The per-run context, threaded to syntax-rules so the expander can read its
    *  per-run `debug` option without an env variable or module holder. */
   runCtx?: RunContext;
+  /** The use-site resolver (synced to `env`). Staged through the seam (P3 3a.4) so
+   *  3b can drive hygiene from a Resolver; today the expander uses the def-time
+   *  Resolver a `Syntax` captures. Optional — define-macro fexprs ignore it. */
+  resolver?: Resolver;
   [key: string]: unknown;
 }
 

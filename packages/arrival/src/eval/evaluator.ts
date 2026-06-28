@@ -2631,6 +2631,10 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   if (is_macro(fn)) {
     const evalArgs = {
       env: ctx.env,
+      // The use-site resolver (synced to ctx.env). Staged through the macro seam
+      // (P3 3a.4) so 3b can drive hygiene from a Resolver; the def-time Resolver a
+      // `Syntax` captures is what hygiene actually consults, this is the call-site one.
+      resolver: ctxResolver(ctx),
       dynamic_env: ctx.dynamic_env,
       use_dynamic: ctx.use_dynamic,
       error: ctx.error,

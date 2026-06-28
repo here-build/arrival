@@ -17,6 +17,7 @@ import { global_env } from "../env-roots.js";
 import { extract_patterns, transform_syntax, restore_data_gensyms } from "../eval/syntax-rules.js";
 import { is_nil } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { Resolver } from "../eval/Resolver.js";
 
 // Scheme is inherently dynamic — these use `any` intentionally for interpreter interop.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +33,11 @@ const syntaxRules = new Macro(
     const { use_dynamic, error } = options;
     // TODO: find identifiers and freeze the scope when defined #172
     const env = this;
+    // The def-time Resolver (P3 3a.4) — wraps the define-syntax env, the hygiene
+    // identity root. The transformer derives its `scope`/`define` through this
+    // facade; in 3a it bottoms out in the same base-linked env, so hygiene is
+    // byte-identical. 3b swaps the algorithm behind this seam.
+    const defResolver = new Resolver(env);
 
     function get_identifiers(node: SchemeValue) {
       const symbols: SchemeValue[] = [];
@@ -57,7 +63,9 @@ const syntaxRules = new Macro(
       validate_identifiers(macro.car);
     }
     const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand }: SchemeValue) {
-      const scope = env.inherit("syntax");
+      // Hygiene scope derived via the def-time Resolver pass-through (P3 3a.4):
+      // `defResolver.child("syntax").env` ≡ `env.inherit("syntax")`.
+      const scope = defResolver.child("syntax").env;
       const dynamic_env = scope;
       let var_scope: Environment = this;
       // for macros that define variables used in macro (2 levels nestting)
@@ -86,7 +94,9 @@ const syntaxRules = new Macro(
           let expr = rules.car.cdr.car;
           const bindings = extract_patterns(rule, code, symbols, ellipsis, {
             expansion: this,
-            define: env,
+            // def env via the Resolver pass-through (≡ env); identity-stable for
+            // the engine's `ref === define` literal check.
+            define: defResolver.env,
             globalEnv: global_env,
           });
           if (bindings) {
@@ -123,7 +133,7 @@ const syntaxRules = new Macro(
         throw error_;
       }
       throw new Error(`syntax-rules: no matching syntax in macro ${code.toString()}`);
-    }, env);
+    }, env, defResolver);
     (syntax as SchemeValue).__code__ = macro;
     return syntax;
   },
