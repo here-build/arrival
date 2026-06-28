@@ -73,6 +73,17 @@ export class LexicalScope {
     return undefined;
   }
 
+  /**
+   * The raw LEXICAL bindings walk (`undefined` on a miss, no synth) — the lexical
+   * half of the Resolver's composed `scope.lookup(name) ?? capabilities.lookup(name)`.
+   * Null-rooted post-cut → lexical-only. In 3b.2 the env is still base-linked, so this
+   * walks through to the base too; the Resolver's `?? capabilities.lookup` is then never
+   * reached on a hit, keeping the glass path byte-identical to `env._lookupWithResolvers`.
+   */
+  lookup(name: string | symbol): EnvironmentValue | undefined {
+    return this.env._lookupWithResolvers(name);
+  }
+
   /** This frame's OWN symbol-keyed bindings as [symbol, value] pairs. ≡ `getOwnPropertySymbols(env.__env__)` + reads. */
   ownSymbolEntries(): [symbol, EnvironmentValue][] {
     const env = this.env.__env__;

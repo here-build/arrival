@@ -1,21 +1,21 @@
 /**
  * Resolver — the evaluator's name-resolution + scope-construction facade.
  *
- * EJECTION P3, phase 3a: this is a thin wrapper over the existing base-linked
- * {@link Environment} chain, so behavior is byte-identical to threading a raw
- * `Environment`. The mapping is exact:
+ * EJECTION P3, phase 3b.3: the Resolver holds a {@link LexicalScope} and a
+ * {@link Capabilities} base as TWO separate fields, and resolution COMPOSES them
+ * (`scope.lookup(name) ?? capabilities.lookup(name)`, with the keyword/cxr/dotted
+ * synth wrapping that same composed lookup). Two modes, one code path:
  *
- *   resolve(sym) ≡ env_get(env, sym)            (the throwing, synth-aware lookup)
- *   lookup(name) ≡ env._lookupWithResolvers     (the raw, undefined-on-miss walk)
- *   define(n, v) ≡ env.set(n, v)                (innermost-frame rebind)
- *   child(name)  ≡ new Resolver(env.inherit())  (a fresh nested frame)
+ *   GLASS (custom-env + bare-ctx fallback): no explicit base, so `capabilities`
+ *     wraps the SAME base-linked env the scope wraps. The scope walk already reaches
+ *     the base, so the `?? capabilities` half never fires on a hit and the composition
+ *     collapses to `env_get(env, sym)` — byte-identical to 3b.2.
+ *   CUT (the default exec path): an explicit assembled base + a null-rooted lexical
+ *     root, so the scope resolves program names and the base resolves builtins —
+ *     genuinely decoupled. The base propagates verbatim through {@link Resolver.child}.
  *
- * The point of the facade is NOT to change resolution (3a changes nothing — the
- * gate stays green throughout) but to give the evaluator ONE object to thread
- * instead of a raw env, so 3b can swap the *implementation* (cut the lexical
- * chain from the capability base, rewrite hygiene) without re-touching every
- * evaluator site. The {@link LexicalScope}/{@link Capabilities} accessors name
- * the eventual 3b split; in 3a both wrap the same base-linked `env`.
+ * The facade gives the evaluator ONE object to thread, so the seam wiring (glass vs
+ * cut) lives only at the exec entry — not at every evaluator site.
  *
  * IMMUTABILITY: arrival is a pure-dataflow interpreter — `set!` is doored
  * (PurityError). There is deliberately NO `assign`/`ref`/`set!` method here;
@@ -64,9 +64,46 @@ function cxrUnfold(name: string): SchemeValue | undefined {
 }
 
 /**
+ * The synth tail shared by the glass {@link env_get} and the composed
+ * {@link Resolver.resolve}: after a DIRECT binding miss, synthesize. First c[ad]+r
+ * composition (no env binding, no resolver — the family IS car/cdr composition over
+ * the unified tagless-final algebra). Then dot-notation — `foo.bar.baz` source sugar,
+ * or syntax-rules gensyms carrying their property path on `ASymbol.object` — resolving
+ * the base NAME through the SAME `lookup` (load-bearing under the cut: a dotted/cxr base
+ * that is a let-bound lexical name must still resolve), then walking members through the
+ * membrane. Else throw Unbound. `lookup` is the raw bindings probe: a single-env
+ * `_lookupWithResolvers` for the glass standalone, `scope.lookup ?? capabilities.lookup`
+ * for the Resolver. Environment.get no longer does the member walk (ejection P1: get is
+ * pure name-resolution); name-resolution lives here, member-access in member-walk.ts.
+ */
+function resolveSynth(
+  sym: ASymbol,
+  name: string | symbol,
+  lookup: (n: string | symbol) => EnvironmentValue | undefined,
+): SchemeValue {
+  if (typeof name === "string") {
+    const cxr = cxrUnfold(name);
+    if (cxr !== undefined) return cxr;
+  }
+
+  const objectParts = (sym as unknown as { [key: symbol]: string[] | undefined })[ASymbol.object];
+  const parts: string[] | undefined =
+    objectParts ?? (typeof name === "string" && name.includes(".") ? name.split(".").filter(Boolean) : undefined);
+  if (parts && parts.length > 1) {
+    const [first, ...rest] = parts;
+    const base = lookup(first);
+    if (base !== undefined) return resolveMemberPath(base, rest);
+  }
+  throw Object.assign(new Error(`Unbound variable \`${String(name)}'`), {
+    publicMessage: `symbol ${String(name)} does not exist - look at list of available functions at tool description`,
+  });
+}
+
+/**
  * Look up a symbol in the environment without requiring lips runtime.
  * This uses _lookupWithResolvers directly to avoid patch_value.
  * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
+ * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
 export function env_get(env: Environment, sym: ASymbol): SchemeValue {
   const name = sym.__name__;
@@ -82,28 +119,7 @@ export function env_get(env: Environment, sym: ASymbol): SchemeValue {
     return value;
   }
 
-  // c[ad]+r — synthesized by the kernel on a binding miss (car/cdr + every composite). No env
-  // binding, no resolver: the family IS car/cdr composition over the unified tagless-final algebra.
-  if (typeof name === "string") {
-    const cxr = cxrUnfold(name);
-    if (cxr !== undefined) return cxr;
-  }
-
-  // Direct lookup missed. Dot-notation — `foo.bar.baz` source sugar, or syntax-rules gensyms
-  // carrying their property path on `ASymbol.object` — resolve the base NAME in scope, then walk
-  // members through the membrane. Environment.get no longer does this (ejection P1: get is pure
-  // name-resolution); name-resolution lives here, member-access in member-walk.ts.
-  const objectParts = (sym as unknown as { [key: symbol]: string[] | undefined })[ASymbol.object];
-  const parts: string[] | undefined =
-    objectParts ?? (typeof name === "string" && name.includes(".") ? name.split(".").filter(Boolean) : undefined);
-  if (parts && parts.length > 1) {
-    const [first, ...rest] = parts;
-    const base = env._lookupWithResolvers(first);
-    if (base !== undefined) return resolveMemberPath(base, rest);
-  }
-  throw Object.assign(new Error(`Unbound variable \`${String(name)}'`), {
-    publicMessage: `symbol ${String(name)} does not exist - look at list of available functions at tool description`,
-  });
+  return resolveSynth(sym, name, (n) => env._lookupWithResolvers(n));
 }
 
 /**
@@ -125,47 +141,70 @@ export type ScopeKind =
   | "user";
 
 export class Resolver {
+  /** The lexical-binding chain (let/lambda/letrec/… frames). */
+  readonly scope: LexicalScope;
+  /** The capability base (builtins/preludes/polyglot resolvers) the scope falls through to. */
+  readonly capabilities: Capabilities;
+
   /**
-   * In 3a the wrapped env IS both the lexical chain and the capability base (one
-   * `__parent__`-linked chain). 3b splits them; until then `env` is the single
-   * source of truth and `scope`/`capabilities` are glass over it.
+   * Hold the lexical scope and the capability base SEPARATELY. WITH an explicit
+   * `capabilities` (the cut) → `scope` wraps the given (post-cut: null-rooted) lexical
+   * env, `capabilities` is the assembled base, propagated unchanged to every child.
+   * WITHOUT (glass) → `capabilities = new Capabilities(scopeEnv)`, the SAME base-linked
+   * env the scope wraps, so the composed `scope.lookup ?? capabilities.lookup` collapses
+   * to one `scopeEnv._lookupWithResolvers` walk (byte-identical to 3b.2 — the scope walk
+   * already reaches the base, so the `??` half never fires on a hit). `scope` is memoized
+   * per env ({@link LexicalScope.for}) so hygiene's `refFrame(name) === defResolver.scope`
+   * identity compare holds.
    */
   constructor(
-    readonly env: Environment,
+    scopeEnv: Environment,
+    capabilities?: Capabilities,
     readonly kind?: ScopeKind,
-  ) {}
-
-  /**
-   * The lexical-binding view (3b target). Lazy — the hot path never reads it.
-   * MEMOIZED per env: hygiene compares `refFrame(name) === defResolver.scope` by
-   * identity, so two reads of `.scope` for the same frame must be the SAME object
-   * (and must match what a `refFrame` walk returns for that frame).
-   */
-  get scope(): LexicalScope {
-    return LexicalScope.for(this.env);
+  ) {
+    this.scope = LexicalScope.for(scopeEnv);
+    this.capabilities = capabilities ?? new Capabilities(scopeEnv);
   }
 
-  /** The capability-base view (3b target). Lazy — the hot path never reads it. */
-  get capabilities(): Capabilities {
-    return new Capabilities(this.env);
+  /** The lexical frame env — the ride-along consumers' `resolver.env` expectation (removed at P5). */
+  get env(): Environment {
+    return this.scope.env;
   }
 
   /**
    * Full name resolution — the throwing, synth-aware lookup (`:key` accessors,
-   * c[ad]+r composition, dotted member walk). Byte-identical to `env_get(env, sym)`.
+   * c[ad]+r composition, dotted member walk) over the COMPOSED `scope.lookup ??
+   * capabilities.lookup`. Glass: `scope.env === capabilities.env`, so this is
+   * byte-identical to `env_get(env, sym)`. Cut: the lexical chain wins for program
+   * names, the base for builtins; the keyword/cxr/dotted synth wraps the SAME
+   * composed lookup, so a `:key` accessor or a dotted base resolves against the base
+   * even though the lexical root is null-rooted.
    */
   resolve(sym: ASymbol): SchemeValue {
-    return env_get(this.env, sym);
+    const name = sym.__name__;
+    // `:key` keyword accessors are synthesized by a resolver in the capability BASE
+    // (membrane), not the lexical chain — consult scope THEN capabilities so the cut's
+    // null-rooted lexical root still reaches it. Glass: scope.env === base, left hits,
+    // byte-identical to `env.get(sym)` (same patch_value).
+    if (typeof name === "string" && name.startsWith(":")) {
+      return this.scope.env.get(sym, { throwError: false }) ?? this.capabilities.env.get(sym);
+    }
+    const lookup = (n: string | symbol): EnvironmentValue | undefined =>
+      this.scope.lookup(n) ?? this.capabilities.lookup(n);
+    const value = lookup(name);
+    if (value !== undefined) return value;
+    return resolveSynth(sym, name, lookup);
   }
 
   /**
    * The raw direct-bindings → resolvers → parent walk; `undefined` on miss, no
    * synth. Used by the keyword/special-form dispatch, which must distinguish a
-   * miss (fall through to string-keyed SPECIAL_FORMS) from a found value.
-   * Byte-identical to `env._lookupWithResolvers(name)`.
+   * miss (fall through to string-keyed SPECIAL_FORMS) from a found value. The
+   * composed `scope.lookup ?? capabilities.lookup`; glass collapses to
+   * `env._lookupWithResolvers(name)`.
    */
   lookup(name: string | symbol): EnvironmentValue | undefined {
-    return this.env._lookupWithResolvers(name);
+    return this.scope.lookup(name) ?? this.capabilities.lookup(name);
   }
 
   /**
@@ -196,9 +235,14 @@ export class Resolver {
     this.env.set(name, value);
   }
 
-  /** A fresh nested frame. ≡ `new Resolver(env.inherit(name))`. */
+  /**
+   * A fresh nested lexical frame carrying the SAME capability base. ★The linchpin:
+   * children no longer re-derive the base from their (post-cut: null-rooted) env —
+   * `this.capabilities` propagates verbatim, so the macro/hygiene seam keeps a stable
+   * `globalRoot` across expansion frames. ≡ `new Resolver(env.inherit(name), caps, kind)`.
+   */
   child(name?: string, kind?: ScopeKind): Resolver {
-    return new Resolver(this.env.inherit(name), kind);
+    return new Resolver(this.env.inherit(name), this.capabilities, kind);
   }
 
   /** Whether `name` is bound in THIS frame (not the chain). ≡ `env.has`. */

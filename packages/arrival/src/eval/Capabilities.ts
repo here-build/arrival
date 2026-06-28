@@ -1,5 +1,5 @@
 import { CLASS } from "../well-known-symbols.js";
-import type { Environment } from "../Environment.js";
+import type { Environment, EnvironmentValue } from "../Environment.js";
 
 /**
  * The CAPABILITY base — the builtins/preludes/host-supplied resolvers a run is
@@ -18,6 +18,30 @@ export class Capabilities {
   static [CLASS] = "capabilities";
 
   constructor(readonly env: Environment) {}
+
+  /**
+   * The ASSEMBLED capability base — the two-frame `user_env → global_env` chain.
+   * `base` is the run's base leaf (`user_env` from env-roots.ts), passed BY THE
+   * CALLER (generator-exec, which already imports the leaf safely) rather than
+   * imported here: a value import of env-roots into this module would cycle through
+   * the early-loaded eval chain (`Resolver → Capabilities → env-roots → new
+   * Environment`, before `Environment` is constructed). In 3b.2 this is a glass over
+   * `base`: `globalRoot`/`refFrame` still chainRoot to `global_env` (so it is
+   * additive/inert — `assembled()` is unused until the 3b.3 flip), `lookup` walks
+   * `base → global_env`. 3b.3 step 4 repoints `globalRoot`/`refFrame` onto the
+   * stable `base` sentinel that survives the topology cut.
+   */
+  static assembled(base: Environment): Capabilities {
+    return new Capabilities(base);
+  }
+
+  /** The raw base bindings walk (`undefined` on a miss, no synth) — the capability
+   *  half of the Resolver's composed `scope.lookup(name) ?? capabilities.lookup(name)`.
+   *  Glass: walks this scope's whole `__parent__` chain (the lexical half never reaches
+   *  here on a hit). Assembled: walks `user_env → global_env` (the base only). */
+  lookup(name: string | symbol): EnvironmentValue | undefined {
+    return this.env._lookupWithResolvers(name);
+  }
 
   /** The capability base = the chain root (`global_env`), found structurally as the
    *  parent-less top of this scope's chain rather than by an env-roots import (which would
