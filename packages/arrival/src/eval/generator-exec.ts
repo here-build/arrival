@@ -10,10 +10,11 @@
  */
 
 import { whenBootstrapComplete } from "../boot.js";
-import type { Environment } from "../Environment.js";
+import { Environment } from "../Environment.js";
 import { user_env } from "../env-roots.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
 import { Resolver } from "./Resolver.js";
+import { Capabilities } from "./Capabilities.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
@@ -27,6 +28,19 @@ import type { SchemeValue } from "../values/types.js";
 // static value→eval import edge (the macro-head skip needs it; this module already
 // sits above eval/guards in the DAG). Idempotent — set once at module load.
 installMacroGuard(is_macro);
+
+/**
+ * The realm-cached lexical root for DEFAULT (no-env) exec — a null-rooted scratch frame
+ * where top-level user `define`s land, CUT from the capability base. Builtins resolve through
+ * the assembled Resolver (`scope.lookup ?? capabilities.lookup`), NOT this env's `__parent__`
+ * chain (it has none). Cached as a realm singleton so default defines ACCUMULATE across exec
+ * calls — matching the pre-cut `user_env` accumulation. Custom-env (`exec({ env })`) callers
+ * stay glass and never touch it. Lazily built so its identity is a leaf (no env-roots cycle).
+ */
+let _defaultLexicalRoot: Environment | undefined;
+function defaultLexicalRoot(): Environment {
+  return (_defaultLexicalRoot ??= new Environment("user-program", {}, null));
+}
 
 export interface ExecOptions {
   env?: Environment;
@@ -229,14 +243,24 @@ export async function exec(
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns });
-  // The run's ROOT resolver — wraps actualEnv, the source of truth for resolution.
-  // Every nested frame derives a synced child via `resolver.child` (ejection P3 3a);
-  // in 3a it tracks the same base-linked env, so threading it is byte-identical.
-  const runResolver = new Resolver(actualEnv);
-  const priorMeter = actualEnv.__heapMeter__;
+  // ── THE EXEC SEAM (3b.3 step 5): glass-for-custom-env, cut-for-default ───────────────
+  // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
+  // up its base-linked chain — byte-identical to 3b.2 (zero change for arrival-chain/inhuman).
+  // No env → THE CUT: a fresh null-rooted lexicalRoot (realm-cached) holds user defines, the
+  // assembled base supplies builtins, the Resolver composes the two. `actualEnv` (the BASE)
+  // still drives bootstrap + the classifier above; only the resolution topology changes.
+  const runResolver =
+    env !== undefined
+      ? new Resolver(actualEnv)
+      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
+  // The run's exec frame = the resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
+  // Defines land here, the evaluator's `ctx.env` is here, and the heap meter installs here —
+  // found by `findHeapMeter` walking the parent chain from a nested `_currentRunEnv`.
+  const execEnv = runResolver.env;
+  const priorMeter = execEnv.__heapMeter__;
   // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
   // `operand.ctx.heapMeter` reads the live meter with no behavior change.
-  if (runCtx.heapMeter !== undefined) actualEnv.__heapMeter__ = runCtx.heapMeter;
+  if (runCtx.heapMeter !== undefined) execEnv.__heapMeter__ = runCtx.heapMeter;
 
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
@@ -254,7 +278,7 @@ export async function exec(
       try {
         result = await run(
           evaluate(expr, {
-            env: actualEnv,
+            env: execEnv,
             resolver: runResolver,
             dynamic_env,
             use_dynamic,
@@ -287,7 +311,7 @@ export async function exec(
       }
     }
   } finally {
-    if (heapBudget !== undefined) actualEnv.__heapMeter__ = priorMeter;
+    if (heapBudget !== undefined) execEnv.__heapMeter__ = priorMeter;
   }
 
   return results;
@@ -321,11 +345,18 @@ export async function execExpr(
     else await (whenBootstrapComplete() ?? actualEnv.init());
   }
 
+  // THE EXEC SEAM (see exec): glass for custom env, the cut for default (fresh null-rooted
+  // lexicalRoot + the assembled base). `actualEnv` still drives bootstrap above.
+  const runResolver =
+    env !== undefined
+      ? new Resolver(actualEnv)
+      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
+
   try {
     return await run(
       evaluate(expr, {
-        env: actualEnv,
-        resolver: new Resolver(actualEnv),
+        env: runResolver.env,
+        resolver: runResolver,
         dynamic_env,
         use_dynamic,
         tap,
