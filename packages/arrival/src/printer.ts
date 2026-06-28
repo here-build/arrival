@@ -21,11 +21,9 @@ import { eof } from "./values/primitives/EOF.js";
 import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 import {
   is_function,
-  is_iterator,
   is_lambda,
   is_native_function,
   is_plain_object,
-  is_prototype,
 } from "./eval/guards.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { CLASS } from "./well-known-symbols.js";
@@ -222,9 +220,6 @@ export function toString(obj: unknown, quote = false, skip_cycles = false, ...pa
   if (str_mapping.has(obj)) {
     return str_mapping.get(obj);
   }
-  if (is_prototype(obj)) {
-    return "#<prototype>";
-  }
   if (obj) {
     const cls = obj.constructor;
     const instances = get_instances();
@@ -244,9 +239,6 @@ export function toString(obj: unknown, quote = false, skip_cycles = false, ...pa
   // constants
   if ([nil, eof].includes(obj as typeof nil)) {
     return (obj as SchemeValue).toString();
-  }
-  if (obj === globalThis) {
-    return "#<js:global>";
   }
   if (obj === null) {
     return "null";
@@ -289,18 +281,6 @@ export function toString(obj: unknown, quote = false, skip_cycles = false, ...pa
       } else if (!is_native_function(constructor)) {
         name = "instance";
       }
-    }
-    if (is_iterator(obj, Symbol.iterator)) {
-      if (name) {
-        return `#<iterator(${name})>`;
-      }
-      return "#<iterator>";
-    }
-    if (is_iterator(obj, Symbol.asyncIterator)) {
-      if (name) {
-        return `#<asyncIterator(${name})>`;
-      }
-      return "#<asyncIterator>";
     }
     if (name !== "") {
       return `#<${name}>`;
