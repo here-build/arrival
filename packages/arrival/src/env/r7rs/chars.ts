@@ -22,7 +22,7 @@ import invariant from "tiny-invariant";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { charValue, coerceNumeric, deriveOrd } from "../../values/op-helpers.js";
-import { AExact } from "../../values/numbers.js";
+import { AExact } from "../../values/primitives/AExact.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { EnvCapability } from "../../common/capability.js";
 

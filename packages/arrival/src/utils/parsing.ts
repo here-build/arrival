@@ -7,7 +7,9 @@ import { is_int } from "../eval/guards.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact, AInexact, complexDoor } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
+import { complexDoor } from "../values/numbers.js";
 import {
   char_re,
   complex_re,

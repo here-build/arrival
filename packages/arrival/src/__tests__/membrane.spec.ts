@@ -5,7 +5,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { setMembraneWarnings } from "../membrane-warn";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import {
   AnyNum,
   OperatorRegistry,

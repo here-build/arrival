@@ -10,7 +10,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { exec, execExpr, parse } from "../eval/generator-exec";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
 import { APair } from "../values/primitives/APair.js";
 
 describe("generator-exec", () => {

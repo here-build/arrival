@@ -34,7 +34,7 @@ import {
 } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
-import { AExact } from "../../values/numbers.js";
+import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
@@ -46,7 +46,7 @@ import { is_pair, is_nil } from "../../eval/guards.js";
 import { isCircularList } from "../../values/primitives/APair.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
 import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
-import { AInexact } from "../../values/numbers.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import {
   complex_bare_re,
   complex_re,

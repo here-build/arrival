@@ -17,7 +17,7 @@ import { initBridge } from "../bridge";
 import { exec } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { AString } from "../values/primitives/AString.js";
-import { AExact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));

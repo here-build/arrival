@@ -4,7 +4,8 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact, AInexact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 

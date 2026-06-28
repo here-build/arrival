@@ -40,7 +40,8 @@ import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
-import { AExact, AInexact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEME-IDENTITY PRIMITIVES — for `arrival.symbol` (native).

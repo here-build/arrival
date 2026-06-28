@@ -13,7 +13,8 @@ import run, { exec } from "../eval/evaluator";
 // minimal hand-rolled `env` above.
 import { exec as execSource } from "../eval/generator-exec";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact, AInexact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil";
 import { list, num, sym } from "./helpers";

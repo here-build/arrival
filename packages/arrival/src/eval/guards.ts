@@ -1,7 +1,8 @@
 import { Environment } from "../Environment.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { Macro } from "./Macro.js";
-import { AExact, AInexact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { Syntax } from "./Syntax.js";
 import {
   char_re,

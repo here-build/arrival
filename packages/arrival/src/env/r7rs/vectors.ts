@@ -27,7 +27,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import type { AExact } from "../../values/numbers.js";
+import type { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";

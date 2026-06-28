@@ -4,7 +4,8 @@
 
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
 import { type SchemeValue } from "../values/types";
 import { nil } from "../values/primitives/ANil";

@@ -3,7 +3,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec } from "../eval/generator-exec";
 import { freshEnv } from "./_fresh-env";
-import { AExact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
 
 const execSimple = async (string: string, env?: object, dynamic_env?: object) => {
   return exec(string, { env, dynamic_env, use_dynamic: !!dynamic_env });

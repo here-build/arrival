@@ -15,7 +15,8 @@ import * as arrival from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
-import { AExact, AInexact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { nil } from "../values/primitives/ANil.js";
 
 const { symbol } = arrival;

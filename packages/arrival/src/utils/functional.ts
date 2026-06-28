@@ -3,7 +3,8 @@
 // -------------------------------------------------------------------------
 import { is_null } from "../eval/guards.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { typecheck } from "./typecheck.js";
 
 type AnyFunction = (...args: unknown[]) => unknown;

@@ -33,7 +33,8 @@ import { inferenceEnv } from "./inference-env.js";
 import { AString } from "./values/primitives/AString.js";
 import type { Codec, Operator } from "./membrane.js";
 import type { ANumeric } from "./values/numbers.js";
-import { AExact, AInexact } from "./values/numbers.js";
+import { AExact } from "./values/primitives/AExact.js";
+import { AInexact } from "./values/primitives/AInexact.js";
 import * as ops from "./operators/index.js";
 // Import directly from source files to avoid circular dependency during init
 import { APair } from "./values/primitives/APair.js";

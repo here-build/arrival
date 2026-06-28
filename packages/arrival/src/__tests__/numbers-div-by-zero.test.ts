@@ -5,7 +5,7 @@
 // of the R7RS +inf.0 / -inf.0 / +nan.0.
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AInexact } from "../values/numbers.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 
 const inx = (real: number) => new AInexact(CONSTANT_CTX, real);
 

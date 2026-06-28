@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { coerceNumeric, wrapOperator, wrappedOps } from "../bridge";
 import { add, mul, sqrt, sub } from "../operators";
 

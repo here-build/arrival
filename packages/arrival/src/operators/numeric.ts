@@ -9,7 +9,9 @@ import type { Codec } from "../membrane.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AnyNum, Bool, OperatorRegistry, Int, Num, Operator, SafeInt } from "../membrane.js";
 import type { ANumeric } from "../values/numbers.js";
-import { bigintISqrt, complexDoor, schemeCompare, AExact, AInexact, toReal } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
+import { bigintISqrt, complexDoor, schemeCompare, toReal } from "../values/numbers.js";
 import invariant from "tiny-invariant";
 
 // ============================================================================

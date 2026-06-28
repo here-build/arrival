@@ -85,12 +85,9 @@ export {
 } from "./common/scheme-env.js";
 
 // Number system - SchemeExact (rationals) and SchemeInexact (floats/complex)
-export {
-  AExact,
-  AInexact,
-  type ANumeric,
-  parseNumber as parseNumber,
-} from "./values/numbers.js";
+export { AExact } from "./values/primitives/AExact.js";
+export { AInexact } from "./values/primitives/AInexact.js";
+export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 
 // Membrane (Codec-based boundary crossing)
 export {

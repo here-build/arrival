@@ -20,7 +20,8 @@ import { symbol, type RosettaSymbolDef } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import { AString } from "../../values/primitives/AString.js";
-import { AExact, AInexact } from "../../values/numbers.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
 
 type WithCtxFn = ((...a: unknown[]) => unknown) & { __withCtx?: boolean };

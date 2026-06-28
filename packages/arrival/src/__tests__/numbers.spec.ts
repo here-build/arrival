@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact, parseNumber } from "../values/numbers";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
+import { parseNumber } from "../values/numbers.js";
 
 describe("ExactNumber", () => {
   it("creates integers", () => {

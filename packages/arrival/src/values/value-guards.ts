@@ -15,7 +15,8 @@
 // evaluated at call time, never at module-init.
 // ----------------------------------------------------------------------
 import { AString } from "./primitives/AString.js";
-import { AExact, AInexact } from "./numbers.js";
+import { AExact } from "./primitives/AExact.js";
+import { AInexact } from "./primitives/AInexact.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";

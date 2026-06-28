@@ -24,7 +24,7 @@ import * as z from "../common/scheme-zod.js";
 import { symbol } from "../common/symbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { stringValue, withInputProvenance, toIndex } from "../values/op-helpers.js";
-import { AExact } from "../values/numbers.js";
+import { AExact } from "../values/primitives/AExact.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { unpromise } from "../utils/promises.js";

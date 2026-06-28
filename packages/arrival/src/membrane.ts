@@ -34,7 +34,9 @@ import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { Macro } from "./eval/Macro.js";
-import { AExact, AInexact, type ANumeric } from "./values/numbers.js";
+import { AExact } from "./values/primitives/AExact.js";
+import { AInexact } from "./values/primitives/AInexact.js";
+import { type ANumeric } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { LAMBDA } from "./well-known-symbols.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
