@@ -7,17 +7,13 @@
  * rest of the term family (ANil/APair/AVector). They were lifted out of
  * membrane.ts in Stage B of the membrane-wrapper unification.
  *
- * CYCLE-BREAK (the reason this file is not a trivial move):
- *   - interop-access.ts is a true LEAF (imports only an external pkg), so the
- *     member-access primitives are imported DIRECTLY below — no cycle.
- *   - fromJS/toJS live in membrane.ts and jsToScheme lives in rosetta.ts. Both
- *     of those modules statically import these wrapper classes, so importing
- *     them HERE would close a module-eval cycle. Instead they are LATE-BOUND:
- *     membrane.ts calls `setMembraneBridge({ fromJS, toJS, jsToScheme })` at its
- *     module init (after fromJS is defined and jsToScheme is imported from
- *     rosetta). The wrapper methods below only run at runtime — long after every
- *     module has finished loading — so the bridge is always populated by the
- *     time they fire. This mirrors the `setPairConstructor` late-bind in ANil.ts.
+ * IMPORT CYCLE (benign): interop-access.ts is a true LEAF (imports only an external pkg), so the
+ * member-access primitives below are a clean direct import. `fromJS` (membrane.ts) and `jsToScheme`
+ * (rosetta.ts) are hoisted `export function` declarations whose modules statically import these
+ * wrapper classes — so importing them here closes a runtime import cycle. It is safe: the wrapper
+ * methods call them only at runtime (long after every module finishes loading), and a hoisted
+ * function binding is never in TDZ. Mirrors membrane.ts's own `jsToScheme` runtime-cycle import —
+ * no late-bind ceremony needed (the former `setMembraneBridge` bridge is gone).
  */
 
 import { CLASS } from "../../well-known-symbols.js";
@@ -36,52 +32,16 @@ import {
   NOT_FOUND,
 } from "../../interop-access.js";
 import { type SchemeValue } from "../types.js";
+// Runtime import cycle (benign — see header): both are hoisted `export function` declarations,
+// called only inside wrapper methods at runtime. Replaces the former setMembraneBridge late-bind.
+import { jsToScheme } from "../../rosetta.js";
+import { fromJS } from "../../membrane.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // (same rationale as AVector.ts / ABytevector.ts — a module-local const resolving
 // the same `Symbol.for("scheme.toJS")` keeps the membrane's `export const TO_JS`
 // off this value-class import graph, since `[TO_JS]()` is a computed key).
 const TO_JS = Symbol.for("scheme.toJS");
-
-// ============================================================================
-// Late-bound membrane bridge
-// ============================================================================
-//
-// fromJS/toJS (membrane.ts) and jsToScheme (rosetta.ts) all statically import
-// these wrapper classes, so they cannot be imported here without a module-eval
-// cycle. membrane.ts populates this bridge at its module init (see
-// setMembraneBridge call there); wrapper methods read it only at runtime.
-
-interface MembraneBridge {
-  fromJS(value: unknown): SchemeValue;
-  toJS(value: unknown): unknown;
-  jsToScheme(
-    ctx: RunContext,
-    value: unknown,
-    options: Record<string, unknown>,
-    provenance: ReadonlySet<number>,
-  ): SchemeValue;
-}
-
-let membraneBridge: MembraneBridge | undefined;
-
-/** Wire the membrane↔rosetta functions into the wrappers (called by membrane.ts at init). */
-export function setMembraneBridge(bridge: MembraneBridge): void {
-  membraneBridge = bridge;
-}
-
-function bridge(): MembraneBridge {
-  // Defensive: the bridge is set at membrane.ts module init, long before any
-  // wrapper method can run. An undefined bridge here means membrane.ts never
-  // loaded — a programmer error (a wrapper reached without the membrane), not a
-  // runtime condition.
-  if (membraneBridge === undefined) {
-    throw new Error(
-      "js-wrappers: membrane bridge not set — membrane.ts must call setMembraneBridge() at module init before any wrapper method runs",
-    );
-  }
-  return membraneBridge;
-}
 
 // ============================================================================
 // WRAPPER LAYER: General JS↔Scheme Value Crossing
@@ -148,7 +108,7 @@ export class AJSArray extends AValue {
     // this.provenance to its fields), and nested arrays/objects re-borrow faithfully.
     return (this.boxedVec ??= new AVector(
       this.ctx,
-      this.source.map((v) => bridge().jsToScheme(this.ctx, v, {}, this.provenance)),
+      this.source.map((v) => jsToScheme(this.ctx, v, {}, this.provenance)),
       this.provenance,
     ));
   }
@@ -253,7 +213,7 @@ export class AJSArray extends AValue {
   // same lazy crossing as the per-element path; `(vector-ref borrowed k)` dispatches here.
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
     this.freezeSource();
-    return bridge().fromJS(this.source[k]);
+    return fromJS(this.source[k]);
   }
 }
 
@@ -373,7 +333,7 @@ export class AJSObject extends AValue {
     // through rosetta deep-stamping for the common case (jsToScheme reached
     // here on the way down); direct construction with empty provenance keeps
     // the empty-provenance fast-path everywhere.
-    const boxed = bridge().jsToScheme(this.ctx, raw, {}, this.provenance);
+    const boxed = jsToScheme(this.ctx, raw, {}, this.provenance);
     if (cacheKey !== undefined && boxed instanceof AValue) {
       if (cache === undefined) {
         cache = new Map();

@@ -59,12 +59,11 @@ import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
 // The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
 // borrowed arrays-as-vectors) live in primitives/ with the rest of the term
-// family. They late-bind fromJS/toJS/jsToScheme back through setMembraneBridge
-// (below) to avoid a module-eval cycle — see js-wrappers.ts.
+// family. They import fromJS/jsToScheme directly (a benign runtime cycle, both
+// hoisted function declarations) — see js-wrappers.ts.
 import {
   AJSArray,
   AJSObject,
-  setMembraneBridge,
 } from "./values/primitives/js-wrappers.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 
@@ -89,11 +88,6 @@ export {
   markInteropBoundary as markAsSandboxBoundary,
 } from "./interop-access.js";
 
-// Late-bind the membrane↔rosetta functions into the relocated wrapper classes.
-// fromJS is a hoisted function declaration and jsToScheme/toJS resolve at module
-// init; wrapper methods only read the bridge at runtime, so it is always set in
-// time. (Mirrors ANil.setPairConstructor.)
-setMembraneBridge({ fromJS, toJS, jsToScheme });
 
 // ============================================================================
 // WRAPPER LAYER: General JS↔Scheme Value Crossing
