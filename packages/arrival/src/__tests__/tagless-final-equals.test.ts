@@ -10,7 +10,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AExact, AInexact } from "../values/numbers.js";
 import { AHalfBaked } from "../values/primitives/AHalfBaked.js";
-import { AJSObject, AJSFunction } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/js-wrappers.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
@@ -77,7 +77,6 @@ function representativeValues(): { name: string; value: AValue }[] {
     { name: "SchemeBytevector", value: new ABytevector(CONSTANT_CTX, [1, 2, 3]) },
     { name: "HalfBaked", value: AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([])], () => [0, 1]) },
     { name: "SchemeJSObject", value: new AJSObject(CONSTANT_CTX, { a: 1 }) },
-    { name: "SchemeJSFunction", value: new AJSFunction(CONSTANT_CTX, () => 1) },
   ];
   return reps;
 }

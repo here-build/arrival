@@ -41,7 +41,6 @@ import {
   is_syntax,
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
-import { AJSFunction } from "../values/primitives/js-wrappers.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
@@ -1874,14 +1873,9 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     return result;
   }
 
-  // Builtins / SchemeJSFunction: direct apply (no Scheme body to tail into).
-  let result: SchemeValue;
-  if (proc instanceof AJSFunction) {
-    result = proc.call(arg);
-  } else {
-    invariant(is_function(proc), "=> requires a procedure");
-    result = proc(arg);
-  }
+  // Builtins: direct apply (no Scheme body to tail into).
+  invariant(is_function(proc), "=> requires a procedure");
+  let result: SchemeValue = proc(arg);
   if (is_promise(result)) {
     result = yield result;
   }
@@ -2744,38 +2738,9 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     return result;
   }
 
-  // Handle SchemeJSFunction - wrapped JS functions from membrane
-  if (fn instanceof AJSFunction) {
-    // Evaluate args then call via the wrapper's apply method
-    const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
-    invariant(Array.isArray(argsResult), "evaluateArgs must return array");
-    const args = argsResult;
-
-    // SchemeJSFunction.apply handles toJS/fromJS boundary crossing.
-    // Thread dynamic call site (see comment in regular function path above).
-    // SchemeJSFunction wraps a JS function across the membrane — it's never
-    // a Scheme lambda, so the bounce protocol doesn't apply here (the JS
-    // function inside the membrane wouldn't know how to produce a Bounce
-    // anyway). Leave _canBounce alone.
-    const dynSite = ctx.currentInvocation;
-    const __savedDynamicCallSite = _dynamicCallSite;
-    _dynamicCallSite = dynSite;
-    const wrappedArgs = wrapLambdaArgs(args, dynSite);
-    let result: SchemeValue;
-    try {
-      result = fn.apply(undefined, wrappedArgs);
-    } finally {
-      _dynamicCallSite = __savedDynamicCallSite;
-    }
-
-    // If result is a promise, yield it for the runner to await
-    if (is_promise(result)) {
-      return yield result;
-    }
-    return result;
-  }
-
-  // Nothing above matched — fn is not a callable value kind.
+  // Nothing above matched — fn is not a callable value kind. (A borrowed JS
+  // function is no longer callable: it crosses the membrane as #void, so it
+  // never reaches here as a call head.)
   invariant(false, `Not callable: ${typeof fn}`);
 }
 

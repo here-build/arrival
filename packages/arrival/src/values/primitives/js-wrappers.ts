@@ -88,7 +88,7 @@ function bridge(): MembraneBridge {
 
 /**
  * A borrowed JS array, re-presented as a vector. It is an `AValue` (a sibling of
- * AJSObject / AJSFunction) that *implements* the vector algebra — it does NOT inherit
+ * AJSObject) that *implements* the vector algebra — it does NOT inherit
  * `AVector`. Inheriting (`extends AVector`) would force the AVector class to be DEFINED
  * at this module's eval time, closing a module-init cycle
  * (js-wrappers → AVector → … → js-wrappers → `extends AVector(undefined)`). Implementing
@@ -104,7 +104,7 @@ function bridge(): MembraneBridge {
  * The Rosetta translation: a JS array IS an R7RS vector, so the membrane presents it as
  * one — `kind` is "vector". It used to answer car/cdr; a faithful vector has neither, so
  * `(car it)` now throws like `(car #(1 2 3))` — use `(vector->list it)`. `equals` stays
- * reference-identity, matching its opaque-view siblings AJSObject / AJSFunction.
+ * reference-identity, matching its opaque-view sibling AJSObject.
  * (`source` is kept as the borrowed reference so rosetta's `schemeToJs` crosses it back
  * out raw without materializing.)
  */
@@ -189,8 +189,8 @@ export class AJSArray extends AValue {
     return this.vec()["arrival/tagless-final/sort"](comparator, runCtx);
   }
 
-  // Setoid — reference identity (SAME borrowed source), matching the opaque-view siblings
-  // AJSObject / AJSFunction. A borrowed foreign array is a read-only view; deep-comparing
+  // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling
+  // AJSObject. A borrowed foreign array is a read-only view; deep-comparing
   // its source is the deep semantics the membrane exists to avoid.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSArray && other.source === this.source;
@@ -397,82 +397,22 @@ export class AJSObject extends AValue {
   }
 }
 
-/**
- * Wrapper for JS functions. Handles boundary crossing on invocation.
- */
-export class AJSFunction extends AValue {
-  static [CLASS] = "js-function";
-  readonly kind = "procedure" as const;
-
-  constructor(
-    ctx: RunContext,
-    readonly source: (...args: unknown[]) => unknown,
-    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-  ) {
-    super(ctx, provenance);
-  }
-
-  /** Unwrap to original JS function (TO_JS protocol). */
-  [TO_JS](): (...args: unknown[]) => unknown {
-    return this.source;
-  }
-
-  /** Procedures are not serializable. */
-  toJs(): never {
-    throw new Error("SchemeJSFunction: not serializable");
-  }
-
-  withProvenance(p: ReadonlySet<number>): AJSFunction {
-    return new AJSFunction(this.ctx, this.source, p);
-  }
-
-  /** Invoke the wrapped function with Scheme values. */
-  apply(thisArg: unknown, args: SchemeValue[]): SchemeValue {
-    const b = bridge();
-    const jsThis = b.toJS(thisArg);
-    const jsArgs = args.map(b.toJS);
-    const result = this.source.apply(jsThis, jsArgs);
-    return b.fromJS(result);
-  }
-
-  /** Call with no this binding. */
-  call(...args: SchemeValue[]): SchemeValue {
-    return this.apply(undefined, args);
-  }
-
-  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME function
-  // (reference identity); functions have no structural equality. The abstract AValue
-  // Setoid forces this; reference compare is faithful, minimal, and matches pre-B2 equal?.
-  ["arrival/tagless-final/equals"](other: unknown): boolean {
-    return other instanceof AJSFunction && this.source === other.source;
-  }
-
-  toString(): string {
-    return `#<js-function ${this.source.name || "anonymous"}>`;
-  }
-
-  valueOf(): (...args: unknown[]) => unknown {
-    return this.source;
-  }
-}
-
 // ============================================================================
-// SANDBOX BOUNDARIES — SchemeJSObject, SchemeJSFunction
+// SANDBOX BOUNDARIES — SchemeJSObject
 // ============================================================================
-// War story (2026-05-28 audit): these two wrappers are explicitly the
-// JS↔Scheme membrane — every JS value crossing into the sandbox becomes one
-// of them. Their own `get/set/has/delete/keys` already route through
-// `accessMember` for the WRAPPED value, but the WRAPPER's prototype
-// itself is reachable via symbol-to-field auto-resolution. Without a boundary
-// marker, sandbox code could read the wrapper's `apply`, `call`, or
-// `toString` to reach the underlying `source` Function or Object. (`apply`
-// taking the wrapped source and running it with sandbox-controlled args is
-// the canonical escape shape.) Marking the wrapper classes ensures the
-// prototype chain stops here — only own sandbox-safe properties on the
-// wrapped value flow through.
+// War story (2026-05-28 audit): this wrapper is explicitly the JS↔Scheme
+// membrane — every JS object crossing into the sandbox becomes one. Its own
+// `get/set/has/delete/keys` already route through `accessMember` for the
+// WRAPPED value, but the WRAPPER's prototype itself is reachable via
+// symbol-to-field auto-resolution. Without a boundary marker, sandbox code
+// could read the wrapper's `get` or `toString` to reach the underlying
+// `source` Object. Marking the wrapper class ensures the prototype chain
+// stops here — only own sandbox-safe properties on the wrapped value flow
+// through. (The borrowed-function wrapper that once lived alongside it is
+// retired: a borrowed JS function crosses the membrane as #void, never a
+// callable — so there is no `apply`/`call` escape shape left to fence.)
 // ============================================================================
 markInteropBoundary(AJSObject);
-markInteropBoundary(AJSFunction);
 // AJSArray wraps a borrowed foreign array (`source`) — mark it like its membrane
 // siblings so the sandbox symbol-to-field walk stops at this prototype before it can
 // reach `source` (or the delegated vector / its `vec()` builder).

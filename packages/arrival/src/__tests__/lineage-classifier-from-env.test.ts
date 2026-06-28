@@ -6,13 +6,11 @@
  * test-only until Slice 2 (the --ir-lineage load hook).
  */
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge";
 import { parse } from "../eval/generator-exec";
 import { inferenceEnv } from "../inference-env";
 import { classify, fullCone, type LineageNode } from "../values/lineage";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env";
-import { AJSFunction } from "../values/primitives/js-wrappers.js";
 
 let seq = 0;
 const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
@@ -71,14 +69,10 @@ describe("classifierFromEnv — reproduces the hand-built classifier from live e
     expect(filtered.lengthPreserving).toBe(false);
   });
 
-  it("isOpaque: a name bound to a SchemeJSFunction (foreign call) → opaque black box", async () => {
-    await initBridge();
-    const e = env();
-    e.set("ext-call", new AJSFunction(CONSTANT_CTX, (...xs: unknown[]) => xs) as unknown as never);
-    const n = await node("(ext-call a b)", e);
-    expect(n.kind).toBe("opaque");
-    expect(fullCone(n, { a: [1], b: [2] })).toEqual([1, 2]); // holistic merge of inputs
-  });
+  // (The env-structural `isOpaque` path is retired: a name can no longer be bound to a
+  // foreign-call wrapper — AJSFunction is gone, borrowed JS functions are #void. The opaque
+  // walk itself is still covered via named-let recursion and the hand-built test classifiers
+  // in lineage-spike/-field/-checkpoint.)
 
   it("a pure builtin (+) classifies as a pure application (merge/pipe), never a source or opaque", async () => {
     await initBridge();

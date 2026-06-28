@@ -29,7 +29,7 @@ import { AValue } from "../values/primitives/AValue.js";
 import { fromJs } from "../values/primitives/boxing.js";
 import { is_nil } from "../eval/guards";
 import { fromJS, isSchemeValue, toJS } from "../membrane";
-import { AJSFunction, AJSObject } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/js-wrappers.js";
 import { jsToScheme, schemeToJs } from "../rosetta";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
@@ -250,10 +250,6 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 
   it("SchemeJSObject → true", () => {
     expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
-  });
-
-  it("SchemeJSFunction → true", () => {
-    expect(isSchemeValue(new AJSFunction(CONSTANT_CTX, () => 1))).toBe(true);
   });
 
   it("QuotedPromise → true", () => {

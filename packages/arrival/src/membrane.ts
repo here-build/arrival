@@ -58,13 +58,13 @@ import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
-// The 3 JS membrane value-wrappers live in primitives/ with the rest of the term
+// The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
+// borrowed arrays-as-vectors) live in primitives/ with the rest of the term
 // family. They late-bind fromJS/toJS/jsToScheme back through setMembraneBridge
 // (below) to avoid a module-eval cycle — see js-wrappers.ts.
 import {
   AJSArray,
   AJSObject,
-  AJSFunction,
   setMembraneBridge,
 } from "./values/primitives/js-wrappers.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
@@ -127,7 +127,6 @@ export function isSchemeValue(value: unknown): boolean {
 
     // Wrapper classes first
     case value instanceof AJSObject:
-    case value instanceof AJSFunction:
 
     // Native Scheme types
     case value instanceof APair:

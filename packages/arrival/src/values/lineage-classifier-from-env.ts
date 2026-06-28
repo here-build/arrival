@@ -6,7 +6,7 @@
  * hand-built test classifiers (lineage-spike.test.ts, rosetta-pure-marker.test.ts).
  *
  * Lives apart from lineage.ts so that module stays dependency-light (value-guards
- * only); this one imports Environment + the membrane's SchemeJSFunction.
+ * only); this one imports Environment.
  *
  * THE PREDICATES, and how much each is genuinely env-derived:
  *  - isRosettaIn (THE load-bearing cut — `classify` keys source-vs-pure on it):
@@ -18,8 +18,11 @@
  *    this seam is an env `__rosettaSources__` populated in `defineRosetta` when a
  *    rosetta carries the provenance-point/mint marker — then `sources` is derived,
  *    not passed. Until then, explicit-and-honest beats a hidden stale list.
- *  - isOpaque: STRUCTURAL — a name bound to a `SchemeJSFunction` (membrane/foreign
- *    call) is an irreducible black box. Fully env-derived, no list.
+ *  - isOpaque: always false. It once classified a name bound to a `SchemeJSFunction`
+ *    (membrane/foreign call) as an irreducible black box, but that wrapper is retired
+ *    — a borrowed JS function now crosses the membrane as #void, never a callable head,
+ *    so no env binding is structurally opaque. (The `opaque` lineage kind still arises
+ *    from named-let recursion and from the hand-built test classifiers.)
  *  - isFan: a NAME match (`map`/`filter`/`vector-map`). Fan-ness is not structural
  *    (they resolve to plain fl-interop callables), so this is an enumerated set —
  *    the same shape `classify`'s lengthPreserving cut already assumes.
@@ -31,7 +34,6 @@
  */
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
-import { AJSFunction } from "./primitives/js-wrappers.js";
 import type { Classifier } from "./lineage.js";
 
 /** Collection operators that classify to a per-element fan template (see classify). */
@@ -65,7 +67,10 @@ export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>
     // A source mints iff it is a declared source AND not a pure transform.
     isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
     isFan: (op) => FAN_OPS.has(op),
-    // Structural: a foreign-call membrane wrapper is an opaque black box.
-    isOpaque: (op) => env.get(op, { throwError: false }) instanceof AJSFunction,
+    // No foreign-call membrane wrapper exists anymore (AJSFunction retired — a
+    // borrowed JS function crosses the membrane as #void, never a callable head),
+    // so nothing in the env is a structural opaque black box. The `opaque` lineage
+    // kind still arises elsewhere (named-let recursion; custom test classifiers).
+    isOpaque: () => false,
   };
 }

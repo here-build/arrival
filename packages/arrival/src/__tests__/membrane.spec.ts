@@ -19,7 +19,7 @@ import {
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane";
-import { AJSObject, AJSFunction } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/js-wrappers.js";
 import { nil } from "../values/primitives/ANil";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -356,7 +356,6 @@ describe("Wrapper Layer", () => {
 
     it("recognizes wrappers as Scheme values", () => {
       expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
-      expect(isSchemeValue(new AJSFunction(CONSTANT_CTX, () => {}))).toBe(true);
     });
 
     it("rejects JS primitives and objects", () => {
@@ -485,12 +484,6 @@ describe("Wrapper Layer", () => {
       expect(toJS(wrapped)).toBe(obj);
     });
 
-    it("unwraps SchemeJSFunction", () => {
-      const fn = () => 42;
-      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-      expect(toJS(wrapped)).toBe(fn);
-    });
-
     it("converts SchemeString to string", () => {
       expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
     });
@@ -591,50 +584,6 @@ describe("Wrapper Layer", () => {
     it("has toString", () => {
       const obj = new AJSObject(CONSTANT_CTX, {});
       expect(obj.toString()).toBe("#<js-object>");
-    });
-  });
-
-  describe("SchemeJSFunction", () => {
-    it("has TO_JS symbol", () => {
-      const fn = () => 42;
-      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-      expect(TO_JS in wrapped).toBe(true);
-      expect(wrapped[TO_JS]()).toBe(fn);
-    });
-
-    it("calls function with unwrapped args (the result crosses back MATERIALIZED)", () => {
-      const fn = (a: number, b: number) => a + b;
-      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-      // the JS return crosses the membrane via fromJS → boxed (host-agnostic); unwrap to check.
-      expect(toJS(wrapped.call(1, 2))).toBe(3);
-    });
-
-    it("wraps return value", () => {
-      const fn = () => ({ a: 1 });
-      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-
-      const result = wrapped.call();
-      expect(result).toBeInstanceOf(AJSObject);
-    });
-
-    it("unwraps SchemeJSObject args", () => {
-      const fn = (obj: any) => obj.a;
-      const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-
-      const arg = new AJSObject(CONSTANT_CTX, { a: 42 });
-      const result = wrapped.call(arg);
-      expect(toJS(result)).toBe(42);
-    });
-
-    it("has toString with function name", () => {
-      function namedFn() {}
-      const wrapped = new AJSFunction(CONSTANT_CTX, namedFn);
-      expect(wrapped.toString()).toBe("#<js-function namedFn>");
-    });
-
-    it("has toString for anonymous functions", () => {
-      const wrapped = new AJSFunction(CONSTANT_CTX, () => {});
-      expect(wrapped.toString()).toBe("#<js-function anonymous>");
     });
   });
 
