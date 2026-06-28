@@ -4,8 +4,7 @@
  * ARCHITECTURAL INVARIANTS:
  * 1. ExactNumber class always exists - minimum capability is integers (denom=1)
  * 2. InexactNumber class always exists - it is a boxed IEEE-754 real
- * 3. Classes are constants, behaviors are variables
- * 4. Tower predicates check values, not types: integer ⊂ rational ⊂ real
+ * 3. Tower predicates check values, not types: integer ⊂ rational ⊂ real
  *
  * Two fundamental classes based on exactness:
  * - ExactNumber: arbitrary precision (bigint num/denom), represents integers AND rationals
@@ -18,11 +17,6 @@
  * real-part / imag-part / magnitude / angle are likewise doored. complex? still
  * answers #t for every real (real ⊂ complex by spec — the predicate stays total;
  * only the imaginary axis is gone).
- *
- * Behaviors control what OPERATIONS produce, not what values can exist:
- * - IntegerExact: 1/3 → InexactNumber (demotes non-integer results)
- * - RationalExact: 1/3 → ExactNumber(1n,3n) (keeps exact fractions)
- * - RealInexact: sqrt(-4) → door (complex not supported)
  *
  * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real, exact/inexact);
  * inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
@@ -217,7 +211,7 @@ export class AExact extends AValue {
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       (other instanceof AExact || other instanceof AInexact) &&
-      schemeCompare(this, other, "<=") <= 0
+      schemeCompare(this, other) <= 0
     );
   }
 
@@ -468,7 +462,7 @@ export class AInexact extends AValue {
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       (other instanceof AExact || other instanceof AInexact) &&
-      schemeCompare(this, other, "<=") <= 0
+      schemeCompare(this, other) <= 0
     );
   }
 
@@ -579,7 +573,7 @@ export class AInexact extends AValue {
  * Lives in the value layer (not operators/numeric.ts) so the number classes' own
  * `arrival/tagless-final/lte` Ord can compute by-value without the operators→numbers cycle.
  */
-export function toReal(n: ANumeric, _opName: string): number {
+export function toReal(n: ANumeric): number {
   if (n instanceof AExact) {
     return Number(n.num) / Number(n.denom);
   }
@@ -597,310 +591,22 @@ export function toReal(n: ANumeric, _opName: string): number {
  * the precision is already gone and float comparison is the correct semantics
  * (and NaN naturally propagates → every comparison against it is #f).
  */
-export function schemeCompare(a: ANumeric, b: ANumeric, opName: string): number {
+export function schemeCompare(a: ANumeric, b: ANumeric): number {
   if (a instanceof AExact && b instanceof AExact) {
     return a.cmp(b);
   }
-  const ar = toReal(a, opName);
-  const br = toReal(b, opName);
+  const ar = toReal(a);
+  const br = toReal(b);
   if (ar < br) return -1;
   if (ar > br) return 1;
   if (ar === br) return 0;
   return Number.NaN; // a NaN operand → incomparable; all chained tests fail
 }
 
-// ============================================================================
-// Behaviors - Configurable operation policies
-// ============================================================================
-
-export interface ExactBehavior {
-  /** What to do when exact division doesn't produce an integer */
-  div(a: AExact, b: AExact): ANumeric;
-
-  /** How to handle square root of exact number */
-  sqrt(a: AExact): ANumeric;
-}
-
-export interface InexactBehavior {
-  /** How to handle square root of negative real */
-  sqrtNegative(a: AInexact): ANumeric;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Rational-enabled exact behavior: keep fractions
-// ─────────────────────────────────────────────────────────────────────────────
-export const RationalExact: ExactBehavior = {
-  div(a: AExact, b: AExact): ANumeric {
-    return a.div(b); // keeps as exact rational
-  },
-
-  sqrt(a: AExact): ANumeric {
-    // sqrt of a negative is complex → doored (complex not supported).
-    if (a.isNegative) {
-      complexDoor();
-    }
-    if (a.isInteger) {
-      const n = a.num;
-      const root = bigintISqrt(n);
-      if (root * root === n) {
-        return new AExact(a.ctx, root);
-      }
-    }
-    // Not a perfect square, return inexact
-    return a.toInexact().sqrt();
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Integer-only exact behavior: demote fractions to inexact
-// ─────────────────────────────────────────────────────────────────────────────
-export const IntegerExact: ExactBehavior = {
-  div(a: AExact, b: AExact): ANumeric {
-    const result = a.div(b);
-    if (result.isInteger) {
-      return result;
-    }
-    // Can't represent as exact integer, demote to inexact
-    return result.toInexact();
-  },
-
-  sqrt(a: AExact): ANumeric {
-    if (a.isNegative) {
-      complexDoor();
-    }
-    if (a.isInteger) {
-      const n = a.num;
-      const root = bigintISqrt(n);
-      if (root * root === n) {
-        return new AExact(a.ctx, root);
-      }
-    }
-    return a.toInexact().sqrt();
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Real-only inexact behavior: complex results are doored (the only behavior now)
-// ─────────────────────────────────────────────────────────────────────────────
-export const RealInexact: InexactBehavior = {
-  sqrtNegative(_a: AInexact): ANumeric {
-    return complexDoor();
-  },
-};
-
-// ============================================================================
-// Number Registry - Coordinates operations across types
-// ============================================================================
-
-export interface NumberConfig {
-  exact: ExactBehavior;
-  inexact: InexactBehavior;
-}
-
-export const SchemeConfig: NumberConfig = {
-  exact: RationalExact,
-  inexact: RealInexact,
-};
-
-export const RosettaConfig: NumberConfig = {
-  exact: IntegerExact,
-  inexact: RealInexact,
-};
-
-export class NumberRegistry {
-  constructor(public config: NumberConfig) {}
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Factory methods
-  // ──────────────────────────────────────────────────────────────────────────
-
-  fromInteger(n: bigint | number): AExact {
-    return new AExact(CONSTANT_CTX, BigInt(n));
-  }
-
-  fromRational(num: bigint | number, denom: bigint | number): ANumeric {
-    const exact = new AExact(CONSTANT_CTX, BigInt(num), BigInt(denom));
-    // If rationals aren't supported, check if we need to demote
-    if (this.config.exact === IntegerExact && !exact.isInteger) {
-      return exact.toInexact();
-    }
-    return exact;
-  }
-
-  fromFloat(n: number): AInexact {
-    return new AInexact(CONSTANT_CTX, n);
-  }
-
-  /**
-   * Constructing a number with an imaginary part is DOORED — arrival is reals-only
-   * (complexDoor). A zero imaginary part is just the real number.
-   */
-  fromComplex(real: number, imag: number): ANumeric {
-    if (imag === 0) {
-      return new AInexact(CONSTANT_CTX, real);
-    }
-    return complexDoor();
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Coercion
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Coerce to common type for binary operations */
-  coerce(
-    a: ANumeric,
-    b: ANumeric,
-  ): { kind: "exact"; a: AExact; b: AExact } | { kind: "inexact"; a: AInexact; b: AInexact } {
-    if (a instanceof AExact && b instanceof AExact) {
-      return { kind: "exact", a, b };
-    }
-    // One or both inexact: both become inexact
-    const ia = a instanceof AInexact ? a : a.toInexact();
-    const ib = b instanceof AInexact ? b : b.toInexact();
-    return { kind: "inexact", a: ia, b: ib };
-  }
-
-  /** Convert inexact to exact */
-  toExact(n: ANumeric): AExact {
-    if (n instanceof AExact) return n;
-    return n.toExact();
-  }
-
-  /** Convert exact to inexact */
-  toInexact(n: ANumeric): AInexact {
-    if (n instanceof AInexact) return n;
-    return n.toInexact();
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Binary operations with coercion
-  // ──────────────────────────────────────────────────────────────────────────
-
-  add(a: ANumeric, b: ANumeric): ANumeric {
-    const c = this.coerce(a, b);
-    return c.kind === "exact" ? c.a.add(c.b) : c.a.add(c.b);
-  }
-
-  sub(a: ANumeric, b: ANumeric): ANumeric {
-    const c = this.coerce(a, b);
-    return c.kind === "exact" ? c.a.sub(c.b) : c.a.sub(c.b);
-  }
-
-  mul(a: ANumeric, b: ANumeric): ANumeric {
-    const c = this.coerce(a, b);
-    return c.kind === "exact" ? c.a.mul(c.b) : c.a.mul(c.b);
-  }
-
-  div(a: ANumeric, b: ANumeric): ANumeric {
-    const c = this.coerce(a, b);
-    if (c.kind === "exact") {
-      return this.config.exact.div(c.a, c.b);
-    }
-    return c.a.div(c.b);
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Unary operations
-  // ──────────────────────────────────────────────────────────────────────────
-
-  neg(a: ANumeric): ANumeric {
-    return a.neg();
-  }
-
-  abs(a: ANumeric): ANumeric {
-    return a.abs();
-  }
-
-  sqrt(a: ANumeric): ANumeric {
-    if (a instanceof AExact) {
-      return this.config.exact.sqrt(a);
-    }
-    if (a.real < 0) {
-      return this.config.inexact.sqrtNegative(a);
-    }
-    return a.sqrt();
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Comparison
-  // ──────────────────────────────────────────────────────────────────────────
-
-  // May return NaN when an operand is a NaN inexact (incomparable) — callers
-  // here use `< 0` / `> 0` which correctly yield #f for NaN.
-  compare(a: ANumeric, b: ANumeric): number {
-    const c = this.coerce(a, b);
-    return c.kind === "exact" ? c.a.cmp(c.b) : c.a.cmp(c.b);
-  }
-
-  equals(a: ANumeric, b: ANumeric): boolean {
-    const c = this.coerce(a, b);
-    return c.kind === "exact" ? c.a.equals(c.b) : c.a.equals(c.b);
-  }
-
-  lessThan(a: ANumeric, b: ANumeric): boolean {
-    return this.compare(a, b) < 0;
-  }
-
-  greaterThan(a: ANumeric, b: ANumeric): boolean {
-    return this.compare(a, b) > 0;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Tower predicates
-  // ──────────────────────────────────────────────────────────────────────────
-
-  isInteger(n: ANumeric): boolean {
-    return n.isInteger;
-  }
-
-  isRational(n: ANumeric): boolean {
-    return n.isRational;
-  }
-
-  isReal(n: ANumeric): boolean {
-    return n.isReal;
-  }
-
-  isComplex(n: ANumeric): boolean {
-    return n.isComplex;
-  }
-
-  isExact(n: ANumeric): boolean {
-    return n.isExact;
-  }
-
-  isZero(n: ANumeric): boolean {
-    return n.isZero;
-  }
-
-  isPositive(n: ANumeric): boolean {
-    return n.isPositive;
-  }
-
-  isNegative(n: ANumeric): boolean {
-    return n.isNegative;
-  }
-
-  isNaN(n: ANumeric): boolean {
-    return n.isNaN;
-  }
-
-  isFinite(n: ANumeric): boolean {
-    return n.isFinite;
-  }
-}
-
-// ============================================================================
-// Default registry (Scheme mode)
-// ============================================================================
-
-export const schemeNumbers = new NumberRegistry(SchemeConfig);
-export const rosettaNumbers = new NumberRegistry(RosettaConfig);
-
 /**
  * Parse a number from string representation
  */
-export function parseNumber(str: string, registry: NumberRegistry = schemeNumbers): ANumeric {
+export function parseNumber(str: string): ANumeric {
   str = str.trim();
 
   // Handle exactness prefixes
@@ -955,7 +661,7 @@ export function parseNumber(str: string, registry: NumberRegistry = schemeNumber
   if (rationalMatch) {
     const num = BigInt(rationalMatch[1]);
     const denom = BigInt(rationalMatch[2]);
-    const result = registry.fromRational(num, denom);
+    const result = new AExact(CONSTANT_CTX, num, denom);
     if (forceInexact && result instanceof AExact) {
       return result.toInexact();
     }

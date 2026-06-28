@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact, AInexact, parseNumber, rosettaNumbers, schemeNumbers } from "../values/numbers";
+import { AExact, AInexact, parseNumber } from "../values/numbers";
 
 describe("ExactNumber", () => {
   it("creates integers", () => {
@@ -84,52 +84,6 @@ describe("InexactNumber", () => {
     expect(new AInexact(CONSTANT_CTX, Infinity).toString()).toBe("+inf.0");
     expect(new AInexact(CONSTANT_CTX, -Infinity).toString()).toBe("-inf.0");
     expect(new AInexact(CONSTANT_CTX, NaN).toString()).toBe("+nan.0");
-  });
-});
-
-describe("NumberRegistry - Scheme mode", () => {
-  const reg = schemeNumbers;
-
-  it("keeps exact rationals", () => {
-    const a = new AExact(CONSTANT_CTX, 1n);
-    const b = new AExact(CONSTANT_CTX, 2n);
-    const result = reg.div(a, b);
-    expect(result).toBeInstanceOf(AExact);
-    expect(result.toString()).toBe("1/2");
-  });
-
-  it("doors on sqrt of negative (complex not supported)", () => {
-    const n = new AInexact(CONSTANT_CTX, -4);
-    expect(() => reg.sqrt(n)).toThrow("complex");
-  });
-
-  it("coerces exact + inexact → inexact", () => {
-    const exact = new AExact(CONSTANT_CTX, 1n, 2n);
-    const inexact = new AInexact(CONSTANT_CTX, 0.5);
-    const result = reg.add(exact, inexact);
-    expect(result).toBeInstanceOf(AInexact);
-    expect((result as AInexact).real).toBe(1);
-  });
-});
-
-describe("NumberRegistry - Rosetta mode", () => {
-  const reg = rosettaNumbers;
-
-  it("demotes rationals to inexact", () => {
-    const a = new AExact(CONSTANT_CTX, 1n);
-    const b = new AExact(CONSTANT_CTX, 2n);
-    const result = reg.div(a, b);
-    expect(result).toBeInstanceOf(AInexact);
-    expect((result as AInexact).real).toBe(0.5);
-  });
-
-  it("throws on sqrt of negative", () => {
-    const n = new AInexact(CONSTANT_CTX, -4);
-    expect(() => reg.sqrt(n)).toThrow("complex");
-  });
-
-  it("throws on complex creation", () => {
-    expect(() => reg.fromComplex(3, 4)).toThrow("complex");
   });
 });
 

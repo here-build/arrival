@@ -383,7 +383,7 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
     return new AExact(base.ctx, base.denom ** m, base.num ** m);
   }
   // Inexact (or non-integer exponent): float exponentiation is correct here.
-  return new AInexact(base.ctx, Math.pow(toReal(base, "expt"), toReal(power, "expt")));
+  return new AInexact(base.ctx, Math.pow(toReal(base), toReal(power)));
 }
 
 export const expt = new Operator("expt", {
@@ -433,7 +433,7 @@ export const lt = new Operator("<", {
   fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
-      if (!(schemeCompare(prev, x, "<") < 0)) return false;
+      if (!(schemeCompare(prev, x) < 0)) return false;
       prev = x;
     }
     return true;
@@ -448,7 +448,7 @@ export const gt = new Operator(">", {
   fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
-      if (!(schemeCompare(prev, x, ">") > 0)) return false;
+      if (!(schemeCompare(prev, x) > 0)) return false;
       prev = x;
     }
     return true;
@@ -464,7 +464,7 @@ export const lte = new Operator("<=", {
     let prev = first;
     for (const x of rest) {
       // NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is false ⇒ short-circuit.
-      if (!(schemeCompare(prev, x, "<=") <= 0)) return false;
+      if (!(schemeCompare(prev, x) <= 0)) return false;
       prev = x;
     }
     return true;
@@ -479,7 +479,7 @@ export const gte = new Operator(">=", {
   fn: (first: ANumeric, ...rest: ANumeric[]) => {
     let prev = first;
     for (const x of rest) {
-      if (!(schemeCompare(prev, x, ">=") >= 0)) return false;
+      if (!(schemeCompare(prev, x) >= 0)) return false;
       prev = x;
     }
     return true;
@@ -500,7 +500,7 @@ export const max = new Operator("max", {
     let hasInexact = first instanceof AInexact;
     for (const x of rest) {
       if (x instanceof AInexact) hasInexact = true;
-      if (schemeCompare(x, extreme, "max") > 0) extreme = x;
+      if (schemeCompare(x, extreme) > 0) extreme = x;
     }
     return hasInexact && extreme instanceof AExact ? extreme.toInexact() : extreme;
   },
@@ -516,7 +516,7 @@ export const min = new Operator("min", {
     let hasInexact = first instanceof AInexact;
     for (const x of rest) {
       if (x instanceof AInexact) hasInexact = true;
-      if (schemeCompare(x, extreme, "min") < 0) extreme = x;
+      if (schemeCompare(x, extreme) < 0) extreme = x;
     }
     return hasInexact && extreme instanceof AExact ? extreme.toInexact() : extreme;
   },

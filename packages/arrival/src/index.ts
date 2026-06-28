@@ -89,7 +89,6 @@ export {
   AExact,
   AInexact,
   type ANumeric,
-  RosettaConfig as RosettaConfig,
   parseNumber as parseNumber,
 } from "./values/numbers.js";
 
