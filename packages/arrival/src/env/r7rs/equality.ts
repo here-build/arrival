@@ -131,12 +131,9 @@ export default new EnvCapability("scheme/equality", {
       },
     ),
 
-    "pair?": symbol.native`pair?: cons-cell test`(
-      { input: [z.unknown()], output: [z.boolean] },
-      (obj: unknown): boolean => {
-        return is_pair(obj);
-      },
-    ),
+    // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
+    // guard's graceful default (#f) covers everything else — no `instanceof APair` reach-around.
+    "pair?": symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`,
 
     "null?": symbol.native`null?: empty-list test`(
       { input: [z.unknown()], output: [z.boolean] },
@@ -155,12 +152,7 @@ export default new EnvCapability("scheme/equality", {
       },
     ),
 
-    "symbol?": symbol.native`symbol?: interned-symbol test`(
-      { input: [z.unknown()], output: [z.boolean] },
-      (obj: unknown): boolean => {
-        return obj instanceof ASymbol;
-      },
-    ),
+    "symbol?": symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
       { input: [z.unknown()], output: [z.boolean] },

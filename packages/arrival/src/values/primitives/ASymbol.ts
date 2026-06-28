@@ -138,6 +138,12 @@ export class ASymbol extends AValue {
     return other instanceof ASymbol && String(this.__name__) <= String(other.__name__);
   }
 
+  // Type predicate — `(symbol? x)` (a `symbol.taglessGuard`) asks the receiver instead of the
+  // builtin reaching around with `instanceof ASymbol`. A Symbol answers #t; others default #f.
+  ["arrival/tagless-final/symbol?"](): boolean {
+    return true;
+  }
+
   is_gensym(): boolean {
     return is_gensym(this.__name__);
   }

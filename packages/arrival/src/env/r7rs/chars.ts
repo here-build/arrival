@@ -28,12 +28,7 @@ import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/chars", {
   symbols: {
-    "char?": symbol.native`char?: #t iff the object is a character`(
-      { input: [z.unknown()], output: [z.boolean] },
-      (obj: unknown): boolean => {
-        return obj instanceof ACharacter;
-      },
-    ),
+    "char?": symbol.taglessGuard`char?: #t iff obj is a character`,
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: z.array(z.unknown()), output: [z.boolean] },

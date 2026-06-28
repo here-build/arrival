@@ -144,6 +144,12 @@ export class ACharacter extends AValue {
       (this.__char__.codePointAt(0) ?? 0) <= (other.__char__.codePointAt(0) ?? 0)
     );
   }
+
+  // Type predicate — `(char? x)` (a `symbol.taglessGuard`) asks the receiver instead of the
+  // builtin reaching around with `instanceof ACharacter`. A Character answers #t; others #f.
+  ["arrival/tagless-final/char?"](): boolean {
+    return true;
+  }
 }
 
 // SchemeCharacter has no JS-primitive source — it only exists post-parse, so no boxer.

@@ -843,6 +843,13 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return withInputProvenance([this.cdr], this.cdr);
   }
 
+  // Type predicate — `(pair? x)` (a `symbol.taglessGuard`) asks the receiver itself instead of
+  // the builtin reaching around the box with `instanceof APair`. A Pair answers #t; a value
+  // lacking this method answers #f (the guard's graceful default).
+  ["arrival/tagless-final/pair?"](): boolean {
+    return true;
+  }
+
   // Traversable — effectful traversal; `of` lifts into the applicative.
   ["arrival/tagless-final/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
     return traversePair(this.ctx, of, f, this);
