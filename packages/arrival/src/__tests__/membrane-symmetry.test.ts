@@ -123,11 +123,8 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AJSObject).source).toBe(obj);
   });
 
-  it("function → SchemeJSFunction wrapper", () => {
-    const fn = () => 42;
-    const result = fromJs(CONSTANT_CTX, fn);
-    expect(result).toBeInstanceOf(AJSFunction);
-    expect((result as AJSFunction).source).toBe(fn);
+  it("function → #void (the boxer registry never mints a callable wrapper)", () => {
+    expect(fromJs(CONSTANT_CTX, () => 42)).toBe(theVoid);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.

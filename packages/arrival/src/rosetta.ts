@@ -35,7 +35,7 @@ let membraneWarningsEnabled = true;
 export function setMembraneWarnings(enabled: boolean): void {
   membraneWarningsEnabled = enabled;
 }
-function warnMembrane(what: string): void {
+export function warnMembrane(what: string): void {
   if (membraneWarningsEnabled) {
     console.warn(
       `[arrival membrane] ${what} crossed into Scheme and materialized to #void — it has no portable ` +

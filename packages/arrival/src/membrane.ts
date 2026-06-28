@@ -44,7 +44,8 @@ import { QuotedPromise } from "./values/primitives/QuotedPromise.js";
 // resolution lets the cycle close at definition time (both functions are
 // declared before any call site fires); the lazy `.get` body below only
 // reads `jsToScheme` when actually invoked.
-import { jsToScheme } from "./rosetta.js";
+import { jsToScheme, warnMembrane } from "./rosetta.js";
+import { theVoid } from "./values/primitives/AVoid.js";
 import {
   accessHas,
   accessKeys,
@@ -569,7 +570,12 @@ registerBoxer("object", (ctx, v, p) => {
   return new AJSObject(ctx, v as object, p);
 });
 
-registerBoxer("function", (ctx, v, p) => new AJSFunction(ctx, v as (...args: unknown[]) => unknown, p));
+// A borrowed JS function is NOT a portable Scheme value → #void + warn, the same as the inbound
+// crossings (fromJS/jsToScheme). The boxer registry never mints a callable AJSFunction.
+registerBoxer("function", () => {
+  warnMembrane("a JS function");
+  return theVoid;
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).
