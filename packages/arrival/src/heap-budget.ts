@@ -28,7 +28,7 @@
 
 import type { Environment } from "./Environment.js";
 import type { RunContext } from "./values/primitives/RunContext.js";
-import { ArrivalError } from "./ArrivalError.js";
+import { ArrivalError } from "./errors.js";
 
 /** A run's cumulative allocation meter. `used` counts elements materialized through `to_array` OR
  *  the fl-interop sequence-op dispatch (the two collection-op chokepoints); once it passes `max` the

@@ -24,7 +24,7 @@ import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
-import { strictGate } from "../../portability.js";
+import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";

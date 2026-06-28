@@ -3,16 +3,14 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { assembleEnv, createRuntimeAssembler, type EnvPack } from "../kernel.js";
 import {
-  assembleEnv,
   AssembleCycleError,
   AssembleConfigConflictError,
   AssembleLinearizationError,
   AssemblePackError,
   AssemblePackTimeoutError,
-  createRuntimeAssembler,
-  type EnvPack,
-} from "../kernel.js";
+} from "../../errors.js";
 
 // A stub env: records the order packs applied + the symbols they set.
 interface Stub {

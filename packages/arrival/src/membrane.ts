@@ -48,10 +48,10 @@ import {
   accessHas,
   accessKeys,
   accessMember,
-  InteropAccessError,
   markInteropBoundary,
   NOT_FOUND,
 } from "./interop-access.js";
+import { InteropAccessError } from "./errors.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
@@ -67,23 +67,23 @@ import { ACharacter } from "./values/primitives/ACharacter.js";
 // Re-export the interop-access primitives for consumers.
 export {
   INTEROP_BOUNDARY,
-  InteropAccessError,
   accessMember,
   accessHas,
   accessSet,
   NOT_FOUND,
   markInteropBoundary,
 } from "./interop-access.js";
+export { InteropAccessError } from "./errors.js";
 // Deprecated pre-rename aliases — kept so existing importers (stdlib) keep working
 // through the sandbox→interop migration window; removed once they codemod over.
 export {
   accessMember as sandboxedAccess,
   accessHas as sandboxedHas,
   accessSet as sandboxedSet,
-  InteropAccessError as SandboxViolationError,
   INTEROP_BOUNDARY as SANDBOX_BOUNDARY,
   markInteropBoundary as markAsSandboxBoundary,
 } from "./interop-access.js";
+export { InteropAccessError as SandboxViolationError } from "./errors.js";
 
 
 // ============================================================================

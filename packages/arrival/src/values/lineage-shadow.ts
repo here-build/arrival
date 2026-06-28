@@ -42,6 +42,7 @@ import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type Li
 import type { Environment } from "../Environment.js";
 import type { APair } from "./primitives/APair.js";
 import type { SchemeValue } from "./types.js";
+import { ProvenanceShadowDivergence } from "../errors.js";
 
 /** Provenance ids on a value, sorted — `[]` for a non-AValue. Mirrors the
  *  golden-prov / checkpoint `provOf`; this is the UNTAPPED eager stamp (mechanism 1). */
@@ -143,22 +144,7 @@ export function bindingsForSkeleton(skeleton: LineageNode, env: Environment): Bi
   return b;
 }
 
-/** Thrown (behind the flag) when the static `fullCone` and the untapped eager
- *  stamp disagree on an IN-SCOPE form — a real classifier/bindings bug, named. */
-export class ProvenanceShadowDivergence extends Error {
-  constructor(
-    readonly form: string,
-    readonly staticCone: readonly number[],
-    readonly eagerCone: readonly number[],
-  ) {
-    super(
-      `PROVENANCE-SHADOW-DIVERGENCE on \`${form}\`: static fullCone ${JSON.stringify(
-        staticCone,
-      )} != untapped eager provenance ${JSON.stringify(eagerCone)}`,
-    );
-    this.name = "ProvenanceShadowDivergence";
-  }
-}
+// ProvenanceShadowDivergence relocated to errors.ts (the single error home).
 
 /**
  * The shadow assert (slice 3). For an IN-SCOPE form, throw on `fullCone != provOf`.

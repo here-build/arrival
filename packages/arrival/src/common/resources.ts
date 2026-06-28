@@ -49,17 +49,8 @@ export interface Ref<H> {
   readonly isLive: boolean;
 }
 
-/** A method touched a resource that the env accessor should have pre-spawned. */
-export class ResourceNotLiveError extends Error {
-  constructor(public readonly kind: string) {
-    super(
-      `resource "${kind}" was accessed via .live before it was spawned. The env accessor pre-spawns a ` +
-        `capability's resources on first symbol touch — if you see this, the method ran outside that gate ` +
-        `(use .get() for an explicit lazy acquire instead).`,
-    );
-    this.name = "ResourceNotLiveError";
-  }
-}
+// ResourceNotLiveError relocated to errors.ts (the single error home); imported for the throw below.
+import { ResourceNotLiveError } from "../errors.js";
 
 /** Wrap a plain `value + close()` into a disposable handle — so a driver author
  *  needn't implement the symbol by hand. `(s) => s.close()` is the usual closer. */

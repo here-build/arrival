@@ -16,7 +16,8 @@ import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
-import { accessMember, InteropAccessError, NOT_FOUND } from "./interop-access.js";
+import { accessMember, NOT_FOUND } from "./interop-access.js";
+import { InteropAccessError } from "./errors.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 

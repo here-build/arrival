@@ -6,7 +6,7 @@
 // alternative.
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec";
-import { PurityError } from "../purity.js";
+import { PurityError } from "../errors.js";
 
 // The evaluator wraps a thrown error in ArrivalError (stack trace) but preserves
 // the message and chains the original as `.cause`. A door is "fired" if the

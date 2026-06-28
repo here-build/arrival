@@ -18,7 +18,7 @@ import type { EnvPack } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
-import { PurityError } from "../purity.js";
+import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
 import invariant from "tiny-invariant";
 

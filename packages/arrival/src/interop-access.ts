@@ -22,6 +22,8 @@
 // throughout this module and the interpreter at large (side-effect import).
 import "@here.build/error-invariant";
 
+import { InteropAccessError } from "./errors.js";
+
 // ============================================================================
 // Interop Boundary Marker
 // ============================================================================
@@ -48,20 +50,7 @@ export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
 // Interop Access Error
 // ============================================================================
 
-/**
- * Error thrown when Scheme code attempts to access a property
- * that would require crossing a interop boundary.
- */
-export class InteropAccessError extends Error {
-  constructor(
-    message: string,
-    public readonly key: string | symbol,
-    public readonly boundaryType: string,
-  ) {
-    super(message);
-    this.name = "InteropAccessError";
-  }
-}
+// InteropAccessError relocated to errors.ts (the single error home).
 
 // ============================================================================
 // Built-in Boundaries

@@ -25,10 +25,10 @@ import {
   accessHas,
   accessKeys,
   accessMember,
-  InteropAccessError,
   INTEROP_BOUNDARY,
   NOT_FOUND,
 } from "../../interop-access.js";
+import { InteropAccessError } from "../../errors.js";
 import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.

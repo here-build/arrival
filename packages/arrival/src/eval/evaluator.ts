@@ -28,7 +28,7 @@ import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
-import { ArrivalError } from "../ArrivalError.js";
+import { ArrivalError } from "../errors.js";
 export { ArrivalError };
 import {
   is_callable,
@@ -2329,7 +2329,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // actually thrown, every module is fully initialized, so the dynamic
       // import resolves synchronously from the registry.
       if (errorValue instanceof Error) {
-        const { R7RSError } = await import("../bridge.js");
+        const { R7RSError } = await import("../errors.js");
         if (!(errorValue instanceof R7RSError)) {
           errorValue = new R7RSError(errorValue.message);
         }

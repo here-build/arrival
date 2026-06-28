@@ -8,6 +8,7 @@
  */
 
 import { SPECULATE } from "./well-known-symbols.js";
+import { R7RSError, R7RSReadError, R7RSFileError, RaisedException } from "./errors.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "./values/primitives/AValue.js";
 import { isBridgeInitialized, markBridgeInitialized, setBootstrapComplete } from "./boot.js";
@@ -51,50 +52,7 @@ import "./errors.js";
 // (evaluator, tests) that still reach for them via `bridge.js`.
 export { coerceNumeric } from "./values/op-helpers.js";
 
-// ============================================================================
-// R7RS Error Types (Section 6.11)
-// ============================================================================
-
-/**
- * R7RS error object - represents errors created by the `error` procedure
- */
-export class R7RSError extends Error {
-  readonly irritants: unknown[];
-  readonly name: string = "R7RSError";
-
-  constructor(message: string, ...irritants: unknown[]) {
-    super(message);
-    this.irritants = irritants;
-  }
-}
-
-/**
- * R7RS read error - represents errors during reading/parsing
- */
-export class R7RSReadError extends R7RSError {
-  readonly name = "R7RSReadError";
-}
-
-/**
- * R7RS file error - represents file I/O errors
- */
-export class R7RSFileError extends R7RSError {
-  readonly name = "R7RSFileError";
-}
-
-/**
- * Raised exception wrapper - used to carry non-Error exceptions through JS try/catch
- */
-export class RaisedException extends Error {
-  readonly name = "RaisedException";
-
-  constructor(
-    public readonly value: unknown,
-    public readonly continuable: boolean = false,
-  ) {
-    super(value instanceof Error ? value.message : String(value));
-  }
-}
+// R7RSError / R7RSReadError / R7RSFileError / RaisedException relocated to errors.ts (the single error home).
 
 /**
  * Wrap an Operator to work with LIPS values.

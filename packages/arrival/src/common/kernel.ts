@@ -38,52 +38,15 @@ export interface AssembledEnv<E = unknown> {
   dispose(): Promise<void>;
 }
 
-// ── Errors (teaching, errors-as-doors) ───────────────────────────────────────
-export class AssembleCycleError extends Error {
-  constructor(public readonly cycle: readonly string[]) {
-    super(
-      `env-pack dependency cycle: ${cycle.join(" → ")}. Packs form a DAG; break the edge ` +
-        `(or model a genuine mutual as a declare-then-wire two-phase pack).`,
-    );
-    this.name = "AssembleCycleError";
-  }
-}
-export class AssembleConfigConflictError extends Error {
-  constructor(public readonly packName: string) {
-    super(
-      `env-pack "${packName}" appears twice in one assembly with different config. One name = one ` +
-        `config per assembly — you armed the same capability two ways. Dedup the pack or unify the config.`,
-    );
-    this.name = "AssembleConfigConflictError";
-  }
-}
-export class AssembleLinearizationError extends Error {
-  constructor(public readonly packName: string) {
-    super(
-      `env-pack "${packName}" has an inconsistent dependency precedence (C3 merge failed): a dep ` +
-        `ordering contradicts another. Reorder the conflicting deps so a single linearization exists.`,
-    );
-    this.name = "AssembleLinearizationError";
-  }
-}
-export class AssemblePackError extends Error {
-  constructor(
-    public readonly packName: string,
-    public readonly cause: unknown,
-  ) {
-    super(`env-pack "${packName}" failed to apply: ${cause instanceof Error ? cause.message : String(cause)}`);
-    this.name = "AssemblePackError";
-  }
-}
-export class AssemblePackTimeoutError extends Error {
-  constructor(
-    public readonly packName: string,
-    public readonly ms: number,
-  ) {
-    super(`env-pack "${packName}" did not finish applying within ${ms}ms (a wedged await import?).`);
-    this.name = "AssemblePackTimeoutError";
-  }
-}
+// ── Errors (teaching, errors-as-doors) — Assemble{Cycle,ConfigConflict,Linearization,Pack,PackTimeout}Error
+//    relocated to errors.ts (the single error home); imported here for the throws below.
+import {
+  AssembleConfigConflictError,
+  AssembleCycleError,
+  AssembleLinearizationError,
+  AssemblePackError,
+  AssemblePackTimeoutError,
+} from "../errors.js";
 
 const packTimeoutMs = (): number => Number(process.env.ASSEMBLE_PACK_TIMEOUT_MS) || 30_000;
 
