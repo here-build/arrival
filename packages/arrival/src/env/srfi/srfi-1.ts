@@ -7,8 +7,9 @@
 // length+), `remove` (relocated from arrival-extensions, beside its `delete` twin),
 // and the "missing third" + parallel-list utilities (iota, range — iota's [0,stop)
 // wrapper, delete-duplicates, filter-map, count, append-map, some/every, zip,
-// list-index, unfold). The arrival safe-accessors (first?/first-or) stay in
-// arrival-extensions — they are arrival-specific crash-avoidance, not part of SRFI-1.
+// list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
+// here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
+// SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
@@ -129,6 +130,20 @@ export const SRFI1_SCM = `
 ;; arrival-extensions (husk dissolution); the inference plane copies it by name (bridge.ts).
 (define (remove pred xs)
   (filter (lambda (x) (not (pred x))) xs))
+
+;; first? / first-or — safe list-head accessors: the head, or a falsy / default sentinel
+;; on empty. Relocated from the dissolved arrival-extensions pack (its FINALE).
+;;
+;; NOT redundant with loose \`car\`, though both dodge the (car '()) crash: loose car on an
+;; empty list projects to nil — an ANil OBJECT, which is Scheme-TRUTHY — so a guard like
+;; (let ((p (car xs))) (if p …)) takes the present-branch on empty and then crashes on the
+;; field access. first? returns #f (FALSY), so the same guard correctly skips. That falsy-
+;; on-empty contract is the load-bearing semantics, and car cannot supply it — these are
+;; the safe twins of SRFI-1 \`first\`, not crash-avoidance vestiges. (first-or is the
+;; defaulted twin; it earns the same one-line home rather than a wrong (or (car xs) default)
+;; derivation, which would mask a genuinely-falsy first element.)
+(define (first? xs) (if (pair? xs) (car xs) #f))
+(define (first-or xs default) (if (pair? xs) (car xs) default))
 
 ;; length+ — list length, or #f for a circular list (Floyd cycle detection).
 (define (length+ xs)

@@ -17,17 +17,5 @@
 import { EnvCapability } from "../common/capability.js";
 
 export default new EnvCapability("arrival/core-extensions", {
-  prelude: `
-    ;; -----------------------------------------------------------------------------
-    ;; Arrival safe head accessors
-    ;; -----------------------------------------------------------------------------
-    ;; The dominant avoidable crash in generated Scheme is (car (filter …)) on an empty
-    ;; match — (car '()) throws. These give a head accessor that CANNOT crash. They stay
-    ;; here (not SRFI-1) because they are arrival-specific crash-avoidance.
-    ;;
-    ;; first? — head of a list, or #f when empty. (first? '()) => #f, never a crash.
-    (define (first? xs) (if (pair? xs) (car xs) #f))
-    ;; first-or — head of a list, or a supplied default when empty.
-    (define (first-or xs default) (if (pair? xs) (car xs) default))
-`,
+  prelude: ``,
 });
