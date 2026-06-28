@@ -395,12 +395,6 @@ export const wrappedOps = {
     return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
   },
 
-  "=": looseCompare("=", wrapOperator(ops.numEq)),
-  "<": looseCompare("<", wrapOrd(wrapOperator(ops.lt), "<")),
-  ">": looseCompare(">", wrapOrd(wrapOperator(ops.gt), ">")),
-  "<=": looseCompare("<=", wrapOrd(wrapOperator(ops.lte), "<=")),
-  ">=": looseCompare(">=", wrapOrd(wrapOperator(ops.gte), ">=")),
-
   // R7RS Type predicates
   "number?"(value: unknown): boolean {
     return isSchemeNumber(value);

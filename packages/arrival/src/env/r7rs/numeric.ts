@@ -34,7 +34,8 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
-import { coerceNumeric, isSchemeNumber } from "../../values/op-helpers.js";
+import { coerceNumeric, isSchemeNumber, isOrd, ORD_REL, nilOrderCompare, withInputProvenance, type AOrd } from "../../values/op-helpers.js";
+import { isStrict } from "../../eval/evaluator.js";
 import { type } from "../../utils/typecheck.js";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -531,6 +532,43 @@ const numEqFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
   return rest.every((x) => schemeNumEq(first, x));
 };
 
+const ltFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
+  let prev = first;
+  for (const x of rest) {
+    if (!(schemeCompare(prev, x) < 0)) return false;
+    prev = x;
+  }
+  return true;
+};
+
+const gtFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
+  let prev = first;
+  for (const x of rest) {
+    if (!(schemeCompare(prev, x) > 0)) return false;
+    prev = x;
+  }
+  return true;
+};
+
+const lteFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
+  let prev = first;
+  for (const x of rest) {
+    // NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is false ⇒ short-circuit.
+    if (!(schemeCompare(prev, x) <= 0)) return false;
+    prev = x;
+  }
+  return true;
+};
+
+const gteFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
+  let prev = first;
+  for (const x of rest) {
+    if (!(schemeCompare(prev, x) >= 0)) return false;
+    prev = x;
+  }
+  return true;
+};
+
 // ── max / min ────────────────────────────────────────────────────────────────────
 
 const maxFn = (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
@@ -668,6 +706,104 @@ const bitwiseIorOp = nativeNumericOp("bitwise-ior", { in: [], inRest: Int, out: 
 const bitwiseAndOp = nativeNumericOp("bitwise-and", { in: [], inRest: Int, out: Int, fn: bitwiseAndFn });
 const bitwiseNotOp = nativeNumericOp("bitwise-not", { in: [Int], out: Int, fn: bitwiseNotFn });
 
+// The numeric comparison cores (provenance + speculation), wrapped by `wrapOrd`
+// (FL-Ord fallback) and `looseCompare` (nil-tolerant overlay) below.
+const ltOp = nativeNumericOp("<", { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: ltFn });
+const gtOp = nativeNumericOp(">", { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: gtFn });
+const lteOp = nativeNumericOp("<=", { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: lteFn });
+const gteOp = nativeNumericOp(">=", { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: gteFn });
+
+// ════════════════════════════════════════════════════════════════════════════
+// Comparison overlay — carved VERBATIM from bridge.ts. `wrapOrd` adds the FL-Ord
+// fallback (non-numeric ordered entities: strings/chars/DateTime/…); `looseCompare`
+// adds the nil-tolerant inference-plane overlay + the strict-mode gate. Numbers fall
+// through to the numeric/speculative core.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wrap a NUMERIC operator with the FL-Ord fallback. FL-Ord only intercepts
+ * NON-NUMERIC ordered entities; a number falls through to `numeric(...)` (ORD_REL is a
+ * TOTAL-order shortcut that is WRONG for the partial numeric order, and the numeric op
+ * carries provenance + the speculative early-collapse the FL branch can't).
+ */
+function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
+  const rel = ORD_REL[sym];
+  const isOrdEntity = (x: unknown): x is AOrd => isOrd(x) && !isSchemeNumber(x);
+  const fn = (...args: unknown[]): unknown => {
+    if (args.length >= 2 && args.some(isOrdEntity)) {
+      for (let i = 0; i < args.length - 1; i++) {
+        const a = args[i];
+        const b = args[i + 1];
+        if (!isOrdEntity(a) || !isOrdEntity(b)) return numeric(...args); // mixed → numeric path's clear error
+        if (!rel(a, b)) return schemeFalse;
+      }
+      return schemeTrue;
+    }
+    return numeric(...args);
+  };
+  // Preserve the speculation marker + name so the evaluator's speculative-eval path engages.
+  (fn as { [SPECULATE]?: boolean })[SPECULATE] = (numeric as { [SPECULATE]?: boolean })[SPECULATE];
+  Object.defineProperty(fn, "name", { value: sym });
+  return fn;
+}
+
+// ── Loose (nil-tolerant) comparison overlay ──────────────────────────────────────
+// The base comparisons throw on a nil operand (coerceNumeric rejects it). The
+// inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom.
+// Under strict mode (RunContext.strict via the ambient `isStrict()` holder) loose is
+// gated off — an all-constant comparison like `(= '() '())` carries no operand to
+// thread strict, so the run holder is the only honest source.
+const isNilOperand = (v) => v == null || (v)?.constructor?.name === "ANil";
+const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
+const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
+const LOOSE_NUM_PAIR = {
+  "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
+  "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
+  ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
+  "<=": (a, b) => flLteNum(a, b),
+  ">=": (a, b) => flLteNum(b, a),
+};
+const ORD_FROM_LE = {
+  "<": (ab, ba) => ab && !ba,
+  ">": (ab, ba) => ba && !ab,
+  "<=": (ab) => ab,
+  ">=": (_ab, ba) => ba,
+};
+const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
+function loosePairOrder(sym, a, b) {
+  const nilCmp = nilOrderCompare(a, b);
+  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
+  if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
+  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
+  const le_ab = Boolean((a)["arrival/tagless-final/lte"](b));
+  const le_ba = Boolean((b)["arrival/tagless-final/lte"](a));
+  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
+  return ORD_FROM_LE[sym](le_ab, le_ba);
+}
+function looseOrderChain(sym, args) {
+  let verdict = true;
+  for (let i = 0; i < args.length - 1; i++) {
+    if (!loosePairOrder(sym, args[i], args[i + 1])) { verdict = false; break; }
+  }
+  return withInputProvenance(args, verdict);
+}
+function looseCompare(sym, core) {
+  const fn = function (...args) {
+    if (isStrict()) {
+      if (!args.every(isNumberOperand)) throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
+      return core(...args);
+    }
+    if (args.some(isNilOperand)) {
+      if (sym === "=") return withInputProvenance(args, args.every(isNilOperand));
+      return looseOrderChain(sym, args);
+    }
+    return core(...args);
+  };
+  if (SPECULATIVE_OPS.has(sym)) fn[SPECULATE] = true;
+  Object.defineProperty(fn, "name", { value: sym });
+  return fn;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // The pack. Each op is bound via `symbol.native` under a LOOSE types-only
 // contract — no per-op zod authoring; the impl IS the binding.
@@ -709,6 +845,13 @@ export default new EnvCapability("scheme/numeric", {
     expt: bind("expt: exponentiation", exptOp),
     max: bind("max: maximum (inexactness contagious)", nativeNumericOp("max", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: maxFn })),
     min: bind("min: minimum (inexactness contagious)", nativeNumericOp("min", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: minFn })),
+
+    // ── Comparison (numeric core + FL-Ord fallback + nil-tolerant overlay) ────────
+    "=": bind("=: numeric equality (nil-tolerant)", looseCompare("=", numEqOp)),
+    "<": bind("<: strictly increasing (FL-Ord fallback, nil-tolerant)", looseCompare("<", wrapOrd(ltOp, "<"))),
+    ">": bind(">: strictly decreasing", looseCompare(">", wrapOrd(gtOp, ">"))),
+    "<=": bind("<=: non-decreasing", looseCompare("<=", wrapOrd(lteOp, "<="))),
+    ">=": bind(">=: non-increasing", looseCompare(">=", wrapOrd(gteOp, ">="))),
 
     // ── Sign / parity predicates (throwing — coerce then test) ───────────────────
     "zero?": bind("zero?: #t iff n is zero", nativeNumericOp("zero?", { in: [AnyNum], out: Bool, fn: isZeroFn })),
