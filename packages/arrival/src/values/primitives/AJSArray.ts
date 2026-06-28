@@ -40,7 +40,7 @@ const TO_JS = Symbol.for("scheme.toJS");
  * AJSObject) that *implements* the vector algebra — it does NOT inherit
  * `AVector`. Inheriting (`extends AVector`) would force the AVector class to be DEFINED
  * at this module's eval time, closing a module-init cycle
- * (js-wrappers → AVector → … → js-wrappers → `extends AVector(undefined)`). Implementing
+ * (AJSArray.ts → AVector → … → AJSArray.ts → `extends AVector(undefined)`). Implementing
  * by DELEGATION touches AVector only at RUNTIME (`new AVector` inside `vec()`), so the
  * binding need not exist yet when this module loads — the cycle stays benign, exactly
  * like every other function-body op-helpers↔AVector edge.
