@@ -233,10 +233,15 @@ export async function exec(
   // Every nested frame derives a synced child via `resolver.child` (ejection P3 3a);
   // in 3a it tracks the same base-linked env, so threading it is byte-identical.
   const runResolver = new Resolver(actualEnv);
-  const priorMeter = actualEnv.__heapMeter__;
+  // The run's TOP LEXICAL frame — where the heap meter lives, found by `findHeapMeter`
+  // walking the parent chain from a nested `_currentRunEnv`. It is the resolver's env, so
+  // when step 5 cuts the default path (resolver wraps a null-rooted lexicalRoot) the meter
+  // lands on lexicalRoot automatically. Under glass `runResolver.env === actualEnv`.
+  const meterEnv = runResolver.env;
+  const priorMeter = meterEnv.__heapMeter__;
   // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
   // `operand.ctx.heapMeter` reads the live meter with no behavior change.
-  if (runCtx.heapMeter !== undefined) actualEnv.__heapMeter__ = runCtx.heapMeter;
+  if (runCtx.heapMeter !== undefined) meterEnv.__heapMeter__ = runCtx.heapMeter;
 
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
@@ -287,7 +292,7 @@ export async function exec(
       }
     }
   } finally {
-    if (heapBudget !== undefined) actualEnv.__heapMeter__ = priorMeter;
+    if (heapBudget !== undefined) meterEnv.__heapMeter__ = priorMeter;
   }
 
   return results;
