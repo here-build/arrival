@@ -2664,7 +2664,8 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     };
 
     // Invoke the macro with unevaluated code.
-    // is_macro narrowed fn to Macro, so we can access invoke directly.
+    // is_macro narrowed fn to Macro | Syntax, so we can access invoke directly
+    // (both carry it); the is_syntax branch below splits them.
     //
     // THE MATCHER OFF-BY-ONE FIX (`is_syntax(fn) ? code : rest`), landed 2026-06-11.
     // syntax-rules patterns carry a keyword slot as their FIRST element, so the

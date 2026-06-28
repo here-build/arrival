@@ -113,7 +113,8 @@ export function macro_expand(): SchemeFunction {
     }
 
     function is_macro(name, value) {
-      return value instanceof Macro && value.__defmacro__ && !bindings.includes(name);
+      // Syntax no longer extends Macro — list both (a Syntax carries __defmacro__ too).
+      return (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ && !bindings.includes(name);
     }
 
     async function expand_let_binding(node: SchemeValue, n?: number): Promise<SchemeValue> {

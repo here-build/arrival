@@ -130,8 +130,11 @@ export function is_env(o: unknown): o is Environment {
 }
 
 // ----------------------------------------------------------------------
-export function is_macro(o: unknown): o is Macro {
-  return o instanceof Macro || o instanceof Syntax.Parameter;
+// `Macro | Syntax`: since Syntax no longer extends Macro, both arms are listed
+// explicitly (plus the SRFI-139 Syntax.Parameter). The evaluator's expand hook
+// narrows on this then on `is_syntax` — see evaluator.ts.
+export function is_macro(o: unknown): o is Macro | Syntax {
+  return o instanceof Macro || o instanceof Syntax || o instanceof Syntax.Parameter;
 }
 
 // ----------------------------------------------------------------------
