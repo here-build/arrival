@@ -17,7 +17,7 @@ import { inferenceEnv } from "../inference-env";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
-import { AJSArray } from "../values/primitives/js-wrappers.js";
+import { AJSArray } from "../values/primitives/AJSArray.js";
 import { nil } from "../values/primitives/ANil";
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));

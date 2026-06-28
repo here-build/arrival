@@ -29,7 +29,7 @@ import { AValue } from "./values/primitives/AValue.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { APair } from "./values/primitives/APair.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { AJSArray } from "./values/primitives/js-wrappers.js";
+import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AString } from "./values/primitives/AString.js";
 
 /** Union the provenance point-ids of every AValue reachable in `vals`, deep-walking

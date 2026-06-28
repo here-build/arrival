@@ -17,7 +17,8 @@ import { deepProvenance } from "./values/deep-provenance.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { AJSArray, AJSObject } from "./values/primitives/js-wrappers.js";
+import { AJSArray } from "./values/primitives/AJSArray.js";
+import { AJSObject } from "./values/primitives/AJSObject.js";
 import { AExact, AInexact } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
@@ -398,7 +399,7 @@ export const createRosettaWrapper = ({ fn, options = {}, withContext = false, pu
   // nothing — which is sound only if it does NOT mutate those inputs. That soundness is now ENFORCED
   // BY CONSTRUCTION: borrowed JS inputs (AJSObject/AJSArray) freeze their source on first read, so a
   // pure rosetta physically cannot mutate them — the old dev-only purity ASSERT is gone. (See
-  // js-wrappers.ts `freezeSource` + the `freezeRosettaReturns` run-ctx opt-out.)
+  // AJSArray/AJSObject `freezeSource` + the `freezeRosettaReturns` run-ctx opt-out.)
   // THE FLIP: a non-pure rosetta is a Rosetta-IN SOURCE — it mints a fresh point
   // by default (data is born at the membrane crossing); a `pure: true` rosetta is
   // a PIPE that forwards its inputs' provenance and mints nothing. This is already

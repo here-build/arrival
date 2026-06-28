@@ -10,12 +10,12 @@
 // exactly the lineage-soundness guarantee the old assert merely *detected* after the fact.
 
 import { describe, it, expect } from "vitest";
-// Force the canonical module-init order before importing the wrappers directly. js-wrappers sits in
-// the membrane↔wrappers↔Environment import cycle; entered cold (as this test's first import) it trips
-// a `membraneBridge` TDZ. The package entry sequences the bridge bootstrap (`void initBridge()`), so
-// the wrappers module is fully initialized by the time we name it below.
+// Import the package entry first so the membrane↔wrappers↔Environment module cycle is fully
+// initialized before we construct AJSArray/AJSObject directly below — the wrappers call jsToScheme/
+// fromJS from that cycle at runtime, and the entry sequences the bridge bootstrap (`void initBridge()`).
 import "../index.js";
-import { AJSObject, AJSArray } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
+import { AJSArray } from "../values/primitives/AJSArray.js";
 import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
 
 describe("borrowed-source freeze (rosetta-return prevention)", () => {

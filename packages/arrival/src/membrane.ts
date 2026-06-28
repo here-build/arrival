@@ -60,11 +60,9 @@ import { Keyword } from "./values/Keyword.js";
 // The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
 // borrowed arrays-as-vectors) live in primitives/ with the rest of the term
 // family. They import fromJS/jsToScheme directly (a benign runtime cycle, both
-// hoisted function declarations) — see js-wrappers.ts.
-import {
-  AJSArray,
-  AJSObject,
-} from "./values/primitives/js-wrappers.js";
+// hoisted function declarations) — see AJSArray.ts / AJSObject.ts.
+import { AJSArray } from "./values/primitives/AJSArray.js";
+import { AJSObject } from "./values/primitives/AJSObject.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 
 // Re-export the interop-access primitives for consumers.

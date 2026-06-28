@@ -19,7 +19,8 @@ import {
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane";
-import { AJSObject, AJSArray } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
+import { AJSArray } from "../values/primitives/AJSArray.js";
 import { nil } from "../values/primitives/ANil";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ABool } from "../values/primitives/ABool.js";

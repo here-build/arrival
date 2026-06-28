@@ -10,7 +10,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AExact, AInexact } from "../values/numbers.js";
 import { AHalfBaked } from "../values/primitives/AHalfBaked.js";
-import { AJSObject } from "../values/primitives/js-wrappers.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";

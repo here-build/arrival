@@ -34,7 +34,7 @@ import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
-import { AJSArray } from "../values/primitives/js-wrappers.js";
+import { AJSArray } from "../values/primitives/AJSArray.js";
 import listsCap from "../env/r7rs/lists.js";
 import vectorsCap from "../env/r7rs/vectors.js";
 import { svector } from "../common/scheme-zod.js";
@@ -196,7 +196,7 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   });
 
   // RESOLVED (was CONTESTED): a borrowed JS array is now a VECTOR — it answers the
-  // sequence algebra by DELEGATING to a lazily-materialized vector (js-wrappers.ts),
+  // sequence algebra by DELEGATING to a lazily-materialized vector (AJSArray.ts),
   // so `(map f borrowed)` works uniformly with `(map f #(...))`. This is the membrane's
   // Rosetta promise: iterate the same for real vectors and borrowed JS arrays.
   it("map(AJSArray) delegates to a vector — a borrowed array answers map [RESOLVED]", async () => {
