@@ -101,7 +101,7 @@
   (lambda (t)
     (t.is (if (newline) 1 2) 1)
     (t.is (if 0 1 2) 1)
-    (t.is (if #null 1 2) 2)
+    (t.is (if #null 1 2) 1) ;; #null reads as nil — truthy (was Kawa-style false)
     (t.is (if #void 1 2) 1)
     (t.is (if () 1 2) 1)
     (t.is (if #f 1 2) 2)))
@@ -110,13 +110,12 @@
   (lambda (t)
     (t.is (and) #t)
     (t.is (or) #f)
-    ;; #void should be true values
-    ;; according to spec #f should be the only false value
-    ;; but Kawa use #!null constants that is also false
+    ;; #void and #null are both TRUTHY — per R7RS only #f is the false value.
+    ;; (The former Kawa-style #null-is-false behavior is dissolved: #null reads as nil.)
     (t.is (and 1 #void) #void)
     (t.is (and 1 #null) #null)
     (t.is (or (begin) 1) #void)
-    (t.is (or #null 1) 1)))
+    (t.is (or #null 1) #null)))
 
 (test "core: do macro"
   (lambda (t)
