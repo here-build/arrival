@@ -39,6 +39,10 @@ import { is_callable, is_false, is_macro, is_null } from "../../eval/guards.js";
 import { is_nil, is_pair } from "../../values/value-guards.js";
 import { AString } from "../../values/primitives/AString.js";
 import { isCircularList } from "../../values/primitives/APair.js";
+import { typecheck } from "../../utils/typecheck.js";
+import { stringValue, withInputProvenance } from "../../values/op-helpers.js";
+import { ctxOf } from "../../values/primitives/AValue.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -71,6 +75,30 @@ export default new EnvCapability("scheme/equality", {
         if (!(first instanceof ASymbol)) return false;
         const firstName = first.__name__;
         return syms.every((s) => s instanceof ASymbol && s.__name__ === firstName);
+      },
+    ),
+
+    // R7RS 6.5 — symbol/string conversion. NATIVE (below the membrane): they touch the
+    // SchemeSymbol host type directly. Relocated VERBATIM from arrival-extensions (husk
+    // dissolution) — genuine R7RS 6.5 base, just misfiled, so they join symbol=? here.
+    // Provenance PLUMBING: forward the input's provenance via withInputProvenance, never mint.
+    "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
+      { input: [z.symbol], output: [z.schemeString] },
+      (s: unknown): AString => {
+        typecheck("symbol->string", s, "symbol");
+        const name = (s as ASymbol).__name__;
+        const str = typeof name === "string" ? name : (name as symbol).toString();
+        return withInputProvenance([s], new AString(CONSTANT_CTX, str));
+      },
+    ),
+    "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
+      { input: [z.schemeString], output: [z.symbol] },
+      (s: unknown): ASymbol => {
+        typecheck("string->symbol", s, "string");
+        // Mint with the INPUT's ctx (value-carries-ctx), not CONSTANT_CTX: a runtime
+        // symbol then interns in its run's per-run table (heap-charged, GC'd at run end)
+        // rather than the permanent global one — closing the `(string->symbol unique)` DoS.
+        return withInputProvenance([s], new ASymbol(ctxOf(s), stringValue(s)));
       },
     ),
 
