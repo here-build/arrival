@@ -347,174 +347,10 @@ function looseCompare(sym, core) {
 }
 
 export const wrappedOps = {
-  // ── The numeric core (arithmetic / comparison / predicates / conversions) has
-  //    been carved into the `scheme/numeric` pack (env/r7rs/numeric.ts), bound via
-  //    `symbol.native`. What remains here are the inline `ops.X.call`-based misc ops
-  //    (floor//truncate//lcm/1+/1-/>>/<<), the makeTypePredicate tower predicates,
-  //    the comparison overlay, the exactness conversions, and the R7RS exception
-  //    machinery — each carved out in its own later phase. (See the carve phases.)
-  "floor/"(n1: unknown, n2: unknown): unknown {
-    const a = coerceNumeric(n1);
-    const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-    const q = ops.floorQuotient.call([aExact, bExact]);
-    const r = ops.floorRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
-    return Values.from([qNum, rNum]);
-  },
-
-  "truncate/"(n1: unknown, n2: unknown): unknown {
-    const a = coerceNumeric(n1);
-    const b = coerceNumeric(n2);
-    const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
-    const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-    const q = ops.truncateQuotient.call([aExact, bExact]);
-    const r = ops.truncateRemainder.call([aExact, bExact]);
-    const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
-    const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
-    return Values.from([qNum, rNum]);
-  },
-
-  lcm(...args: unknown[]): ANumeric {
-    if (args.length === 0) return new AExact(CONSTANT_CTX, 1n);
-    let hasInexact = false;
-    const exactArgs: AExact[] = [];
-    for (const arg of args) {
-      const n = coerceNumeric(arg);
-      if (n instanceof AInexact) {
-        hasInexact = true;
-        exactArgs.push(new AExact(n.ctx, BigInt(Math.trunc(n.real))));
-      } else {
-        exactArgs.push(new AExact(n.ctx, n.num / n.denom));
-      }
-    }
-    const result = ops.lcm.call(exactArgs);
-    const resultBigint = result instanceof AExact ? result.num : (result as bigint);
-    return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
-  },
-
-  // R7RS Type predicates
-  "number?"(value: unknown): boolean {
-    return isSchemeNumber(value);
-  },
-
-  // ============================================================================
-  // LIPS-style aliases (for backwards compatibility with global_env)
-  // ============================================================================
-
-  "1+"(n: unknown): ANumeric {
-    const converted = coerceNumeric(n);
-    const one = new AExact(converted.ctx, 1n);
-    return ops.add.call([converted, one]);
-  },
-
-  "1-"(n: unknown): ANumeric {
-    const converted = coerceNumeric(n);
-    const one = new AExact(converted.ctx, 1n);
-    return ops.sub.call([converted, one]);
-  },
-
-  ">>"(a: unknown, b: unknown): ANumeric {
-    const aNum = coerceNumeric(a);
-    const bNum = coerceNumeric(b);
-    return ops.arithmeticShift.call([aNum, bNum]);
-  },
-
-  "<<"(a: unknown, b: unknown): ANumeric {
-    const aNum = coerceNumeric(a);
-    const bNum = coerceNumeric(b);
-    const negB = ops.sub.call([bNum]);
-    return ops.arithmeticShift.call([aNum, negB]);
-  },
-
-  // R7RS exactness conversion
-  inexact(z: unknown): AInexact {
-    const n = coerceNumeric(z);
-    if (n instanceof AInexact) return n;
-    const exact = n;
-    if (exact.denom === 1n) return new AInexact(exact.ctx, Number(exact.num));
-    return new AInexact(exact.ctx, Number(exact.num) / Number(exact.denom));
-  },
-
-  exact(z: unknown): AExact {
-    const n = coerceNumeric(z);
-    if (n instanceof AExact) return n;
-    const inexact = n;
-    const real = inexact.real;
-    TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-    if (Number.isInteger(real)) return new AExact(inexact.ctx, BigInt(real));
-    // JS Number.toString picks between fixed (`0.5`) and exponential (`1e-10`,
-    // `1e+21`) notations based on magnitude. The fixed-notation path uses the
-    // decimal-place count to derive the denominator. The exponential path was
-    // unhandled — `indexOf(".") === -1` short-circuited to `BigInt(real)` and
-    // threw RangeError on the non-integer float. Parse the mantissa+exponent
-    // and combine into a single power-of-10 denominator.
-    const str = real.toString();
-    const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
-    if (expMatch) {
-      const [, sign, intPart, fracPart = "", expStr] = expMatch;
-      const exp = Number(expStr);
-      // Combine: value = sign * (intPart.fracPart) * 10^exp
-      //                = sign * (intPart fracPart) * 10^(exp - fracPart.length)
-      const digits = intPart + fracPart;
-      const netExp = exp - fracPart.length;
-      const mantissa = BigInt(`${sign}${digits}`);
-      const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
-      if (netExp >= 0) {
-        return new AExact(inexact.ctx, mantissa * 10n ** BigInt(netExp));
-      }
-      const denomBig = 10n ** BigInt(-netExp);
-      const absNum = mantissa < 0n ? -mantissa : mantissa;
-      const g = gcd(absNum, denomBig);
-      return new AExact(inexact.ctx, mantissa / g, denomBig / g);
-    }
-    const decimalIndex = str.indexOf(".");
-    if (decimalIndex === -1) return new AExact(inexact.ctx, BigInt(real));
-    const decimals = str.length - decimalIndex - 1;
-    const scale = 10n ** BigInt(decimals);
-    const num = BigInt(Math.round(real * Number(scale)));
-    const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
-    const g = gcd(num < 0n ? -num : num, scale);
-    return new AExact(inexact.ctx, num / g, scale / g);
-  },
-
-  // R5RS § 6.2.5 arrow-form aliases for the R7RS § 6.2 `exact`/`inexact` conversions
-  // above. Relocated from stdlib.ts global_env (husk dissolution): they now sit next to
-  // their targets and call them directly, so they ship in `numbersCapability` and bind
-  // onto global_env in the same Phase-1 pass — no more call-time `global_env.get("exact")`
-  // round-trip. The R7RS-renamed `exact`/`inexact` stay canonical; these are the
-  // R5RS-compat spellings (chibi/gambit/racket) every Scheme that takes legacy code
-  // seriously keeps.
-  "exact->inexact"(z: unknown): AInexact {
-    return wrappedOps.inexact(z);
-  },
-
-  "inexact->exact"(z: unknown): AExact {
-    return wrappedOps.exact(z);
-  },
-
-  "number->string"(z: unknown, radix?: unknown): string {
-    const n = coerceNumeric(z);
-    const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
-    if (n instanceof AExact) {
-      if (n.denom === 1n) return n.num.toString(base);
-      return `${n.num.toString(base)}/${n.denom.toString(base)}`;
-    }
-    const inexact = n;
-    // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must NOT
-    // return "5" — round-tripping through `string->number` would yield an
-    // exact integer, violating the exactness contract. `SchemeInexact.toString()`
-    // already appends `.0` to integers and emits the chibi-compatible
-    // `+inf.0` / `+nan.0` markers. Delegate for base-10 (the only base R7RS
-    // actually specifies for inexact formatting); for non-decimal bases the
-    // JS Number formatter is the only realistic option.
-    if (base === 10) {
-      return inexact.toString();
-    }
-    return inexact.real.toString(base);
-  },
+  // The entire numeric core (arithmetic / comparison / tower predicates / exactness
+  // conversions / the inline misc ops) has been carved into the `scheme/numeric`
+  // pack (env/r7rs/numeric.ts), bound via `symbol.native`. What remains here is the
+  // R7RS § 6.11 exception machinery — sourced into `exceptionsCapability` below.
 
   // ============================================================================
   // R7RS Exception Handling (Section 6.11)
@@ -633,19 +469,17 @@ const EXCEPTION_VERBS = new Set([
 
 const symbolsFrom = (entries: [string, unknown][]) => Object.fromEntries(entries.map(([k, v]) => [k, { value: v }]));
 
-/** The numeric core (arithmetic, comparison, numeric predicates, conversions) as a pack. */
-export const numbersCapability = new EnvCapability("scheme/numbers", {
-  symbols: symbolsFrom(Object.entries(wrappedOps).filter(([k]) => !EXCEPTION_VERBS.has(k))),
-});
-
-/** The R7RS § 6.11 exception verbs as a pack. */
+/** The R7RS § 6.11 exception verbs as a pack. The numeric core that used to share
+ *  `wrappedOps` with these has been carved into the `scheme/numeric` pack (NATIVE_PACKS),
+ *  so `wrappedOps` is now ALL exception verbs and the `EXCEPTION_VERBS` filter keeps them
+ *  all — retained as documentation of the cut. */
 export const exceptionsCapability = new EnvCapability("scheme/exceptions", {
   symbols: symbolsFrom(Object.entries(wrappedOps).filter(([k]) => EXCEPTION_VERBS.has(k))),
 });
 
-/** The full native foundation assembled onto global_env: value-domain clusters + the
- *  bridge's own numbers + exceptions packs. */
-const GLOBAL_NATIVE_PACKS = [...NATIVE_PACKS, numbersCapability, exceptionsCapability];
+/** The full native foundation assembled onto global_env: the value-domain clusters +
+ *  the numeric pack (both in NATIVE_PACKS) + the bridge's own exceptions pack. */
+const GLOBAL_NATIVE_PACKS = [...NATIVE_PACKS, exceptionsCapability];
 
 /**
  * Initialize bridge by applying all wrapped operators to the global LIPS environment

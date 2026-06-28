@@ -33,6 +33,7 @@ import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
+import { Values } from "../../values/primitives/Values.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
 import { coerceNumeric, isSchemeNumber, isOrd, ORD_REL, nilOrderCompare, withInputProvenance, type AOrd } from "../../values/op-helpers.js";
 import { isStrict } from "../../eval/evaluator.js";
@@ -805,6 +806,150 @@ function looseCompare(sym, core) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Inline misc ops — carved VERBATIM from bridge.ts's `wrappedOps` methods. These
+// did their own coercion and called `ops.X.call(...)` directly (the marshalling
+// layer, bypassing the provenance layer), so they map to the carved fns / a
+// `marshalCall` against the carved spec — never `nativeNumericOp`.
+// ════════════════════════════════════════════════════════════════════════════
+
+const lcmCoreFn = (...args: bigint[]): bigint => {
+  if (args.length === 0) return 1n;
+  const lcm2 = (a: bigint, b: bigint): bigint => {
+    const g = gcd2(a, b);
+    return g === 0n ? 0n : (a / g) * b;
+  };
+  // Seed with 1n and abs each operand so the result is non-negative.
+  return args.reduce((a, b) => lcm2(a, b < 0n ? -b : b), 1n);
+};
+const lcmSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: lcmCoreFn };
+
+const floorSlashFn = (n1: unknown, n2: unknown): unknown => {
+  const a = coerceNumeric(n1);
+  const b = coerceNumeric(n2);
+  const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
+  const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
+  const q = floorQuotientFn(aExact, bExact);
+  const r = floorRemainderFn(aExact, bExact);
+  const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
+  const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
+  return Values.from([qNum, rNum]);
+};
+
+const truncateSlashFn = (n1: unknown, n2: unknown): unknown => {
+  const a = coerceNumeric(n1);
+  const b = coerceNumeric(n2);
+  const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
+  const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
+  const q = truncateQuotientFn(aExact, bExact);
+  const r = truncateRemainderFn(aExact, bExact);
+  const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
+  const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
+  return Values.from([qNum, rNum]);
+};
+
+const lcmFn = (...args: unknown[]): ANumeric => {
+  if (args.length === 0) return new AExact(CONSTANT_CTX, 1n);
+  let hasInexact = false;
+  const exactArgs: AExact[] = [];
+  for (const arg of args) {
+    const n = coerceNumeric(arg);
+    if (n instanceof AInexact) {
+      hasInexact = true;
+      exactArgs.push(new AExact(n.ctx, BigInt(Math.trunc(n.real))));
+    } else {
+      exactArgs.push(new AExact(n.ctx, n.num / n.denom));
+    }
+  }
+  const result = marshalCall("lcm", lcmSpec, exactArgs);
+  const resultBigint = result instanceof AExact ? result.num : (result as bigint);
+  return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
+};
+
+const onePlusFn = (n: unknown): ANumeric => {
+  const converted = coerceNumeric(n);
+  const one = new AExact(converted.ctx, 1n);
+  return addFn(converted, one);
+};
+
+const oneMinusFn = (n: unknown): ANumeric => {
+  const converted = coerceNumeric(n);
+  const one = new AExact(converted.ctx, 1n);
+  return subFn(converted, one);
+};
+
+const shiftRightFn = (a: unknown, b: unknown): ANumeric => {
+  const aNum = coerceNumeric(a);
+  const bNum = coerceNumeric(b);
+  return marshalCall("arithmetic-shift", arithmeticShiftSpec, [aNum, bNum]) as ANumeric;
+};
+
+const shiftLeftFn = (a: unknown, b: unknown): ANumeric => {
+  const aNum = coerceNumeric(a);
+  const bNum = coerceNumeric(b);
+  const negB = subFn(bNum);
+  return marshalCall("arithmetic-shift", arithmeticShiftSpec, [aNum, negB]) as ANumeric;
+};
+
+const inexactFn = (z: unknown): AInexact => {
+  const n = coerceNumeric(z);
+  if (n instanceof AInexact) return n;
+  const exact = n;
+  if (exact.denom === 1n) return new AInexact(exact.ctx, Number(exact.num));
+  return new AInexact(exact.ctx, Number(exact.num) / Number(exact.denom));
+};
+
+const exactFn = (z: unknown): AExact => {
+  const n = coerceNumeric(z);
+  if (n instanceof AExact) return n;
+  const inexact = n;
+  const real = inexact.real;
+  TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
+  if (Number.isInteger(real)) return new AExact(inexact.ctx, BigInt(real));
+  // JS Number.toString picks fixed (`0.5`) vs exponential (`1e-10`/`1e+21`) by
+  // magnitude. Parse the mantissa+exponent and combine into a power-of-10 denom.
+  const str = real.toString();
+  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  if (expMatch) {
+    const [, sign, intPart, fracPart = "", expStr] = expMatch;
+    const exp = Number(expStr);
+    const digits = intPart + fracPart;
+    const netExp = exp - fracPart.length;
+    const mantissa = BigInt(`${sign}${digits}`);
+    const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
+    if (netExp >= 0) {
+      return new AExact(inexact.ctx, mantissa * 10n ** BigInt(netExp));
+    }
+    const denomBig = 10n ** BigInt(-netExp);
+    const absNum = mantissa < 0n ? -mantissa : mantissa;
+    const g = gcd(absNum, denomBig);
+    return new AExact(inexact.ctx, mantissa / g, denomBig / g);
+  }
+  const decimalIndex = str.indexOf(".");
+  if (decimalIndex === -1) return new AExact(inexact.ctx, BigInt(real));
+  const decimals = str.length - decimalIndex - 1;
+  const scale = 10n ** BigInt(decimals);
+  const num = BigInt(Math.round(real * Number(scale)));
+  const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
+  const g = gcd(num < 0n ? -num : num, scale);
+  return new AExact(inexact.ctx, num / g, scale / g);
+};
+
+const numberToStringFn = (z: unknown, radix?: unknown): string => {
+  const n = coerceNumeric(z);
+  const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
+  if (n instanceof AExact) {
+    if (n.denom === 1n) return n.num.toString(base);
+    return `${n.num.toString(base)}/${n.denom.toString(base)}`;
+  }
+  const inexact = n;
+  // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
+  if (base === 10) {
+    return inexact.toString();
+  }
+  return inexact.real.toString(base);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 // The pack. Each op is bound via `symbol.native` under a LOOSE types-only
 // contract — no per-op zod authoring; the impl IS the binding.
 // ════════════════════════════════════════════════════════════════════════════
@@ -903,5 +1048,20 @@ export default new EnvCapability("scheme/numeric", {
     "|": bind("|: bitwise inclusive OR (alias)", bitwiseIorOp),
     "&": bind("&: bitwise AND (alias)", bitwiseAndOp),
     "~": bind("~: bitwise NOT (alias)", bitwiseNotOp),
+
+    // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
+    "floor/": bind("floor/: floor quotient and remainder (two values)", floorSlashFn),
+    "truncate/": bind("truncate/: truncate quotient and remainder (two values)", truncateSlashFn),
+    lcm: bind("lcm: least common multiple (non-negative)", lcmFn),
+    "number?": bind("number?: #t for any number", (value: unknown) => isSchemeNumber(value)),
+    "1+": bind("1+: increment by one", onePlusFn),
+    "1-": bind("1-: decrement by one", oneMinusFn),
+    ">>": bind(">>: arithmetic-shift by the count", shiftRightFn),
+    "<<": bind("<<: arithmetic-shift by the negated count", shiftLeftFn),
+    inexact: bind("inexact: exact→inexact conversion", inexactFn),
+    exact: bind("exact: inexact→exact conversion", exactFn),
+    "exact->inexact": bind("exact->inexact: R5RS spelling of inexact", inexactFn),
+    "inexact->exact": bind("inexact->exact: R5RS spelling of exact", exactFn),
+    "number->string": bind("number->string: format a number in a radix", numberToStringFn),
   },
 });
