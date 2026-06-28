@@ -203,9 +203,9 @@ export function fromJS(value: unknown): SchemeValue {
 
   // CONTAINERS keep their membrane-specific handling — NOT routed through jsToScheme (which would
   // cons an array into a list). Arrays stay raw (transition); binary stays raw (FFI identity —
-  // membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (use '> for
-  // QuotedPromise); a plain object becomes a lazy AJSObject whose fields materialize faithfully
-  // on access.
+  // membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (the evaluator
+  // trampoline awaits them); a plain object becomes a lazy AJSObject whose fields materialize
+  // faithfully on access.
   if (Array.isArray(value)) {
     // A JS array IS an R7RS vector → a borrowed AJSArray (lazy view; keeps `.source` so the
     // round-trip back out preserves identity). Cached so the same JS array → the same wrapper
