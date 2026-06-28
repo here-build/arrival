@@ -15,6 +15,10 @@ import { user_env } from "../env-roots.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
+import type { LexicalScope } from "./LexicalScope.js";
+import { assembleEnv } from "../common/kernel.js";
+import type { EnvCapability } from "../common/capability.js";
+import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
@@ -42,8 +46,51 @@ function defaultLexicalRoot(): Environment {
   return (_defaultLexicalRoot ??= new Environment("user-program", {}, null));
 }
 
+// Evaluator injected into a capability's prelude during `exec({ capabilities })`
+// assembly — mirrors bridge.initBridge's / _fresh-env's evalScheme. `skipBootstrapWait`:
+// the assembly happens AFTER `exec`'s own bootstrap gate (below), so the prelude eval must
+// not re-await the (already-settled) bootstrap promise.
+const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
+  exec(src as string, { env: env as Environment, skipBootstrapWait: true });
+
+/**
+ * Build the capability base for `exec({ capabilities })`: a fresh `user_env` child with the
+ * supplied capabilities assembled on top, so they AUGMENT the standard assembled base
+ * (`user_env → global_env`) rather than replace it. A fresh child per call keeps the user's
+ * capabilities out of the shared `user_env` (no cross-call bleed); a caller wanting a
+ * persistent capability env builds it once with `assembleEnv` and passes it as `{ env }`.
+ */
+async function assembleCapabilityBase(capabilities: readonly EnvCapability[]): Promise<Environment> {
+  const base = user_env.inherit("exec-capabilities");
+  await assembleEnv(
+    base as unknown as SchemeEnv,
+    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme })),
+  );
+  return base;
+}
+
 export interface ExecOptions {
+  /**
+   * GLASS — a custom base env. When set, the resolver wraps it directly: defines land in it
+   * and builtins resolve up its `__parent__` chain (byte-identical to pre-cut behavior). Takes
+   * precedence over `capabilities`/`scope` (the cut refinements); use `env` OR the cut options.
+   */
   env?: Environment;
+  /**
+   * THE CUT, capability-refined. EnvCapability packs assembled onto the standard base
+   * (`user_env → global_env`) for THIS run — the inference plane's nil-compat, an MCP/infer
+   * capability, etc. — instead of the bare default base. Assembled per call onto a fresh
+   * `user_env` child (no cross-call bleed). Ignored when `env` (glass) is set.
+   */
+  capabilities?: readonly EnvCapability[];
+  /**
+   * THE CUT, scope-refined. The lexical root the run's top-level `define`s land in. Pass a
+   * persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls for REPL-style
+   * multi-step accumulation, instead of the realm-cached default scratch frame. Builtins still
+   * resolve through the capability base (composed `scope.lookup ?? capabilities.lookup`).
+   * Ignored when `env` (glass) is set.
+   */
+  scope?: LexicalScope;
   dynamic_env?: Environment;
   use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
@@ -172,6 +219,8 @@ export async function exec(
   code: string | SchemeValue,
   {
     env,
+    capabilities,
+    scope,
     dynamic_env,
     use_dynamic,
     tap,
@@ -243,16 +292,25 @@ export async function exec(
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns });
-  // ── THE EXEC SEAM (3b.3 step 5): glass-for-custom-env, cut-for-default ───────────────
+  // ── THE EXEC SEAM (P4): glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
-  // up its base-linked chain — byte-identical to 3b.2 (zero change for arrival-chain/inhuman).
-  // No env → THE CUT: a fresh null-rooted lexicalRoot (realm-cached) holds user defines, the
-  // assembled base supplies builtins, the Resolver composes the two. `actualEnv` (the BASE)
-  // still drives bootstrap + the classifier above; only the resolution topology changes.
-  const runResolver =
-    env !== undefined
-      ? new Resolver(actualEnv)
-      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
+  // up its base-linked chain — byte-identical (zero change for arrival-chain/inhuman). `env`
+  // wins over the cut refinements (capabilities/scope), which are ignored when it is set.
+  // No env → THE CUT: a lexical root (`scope.env` for REPL accumulation, else the realm-cached
+  // null-rooted scratch frame) holds user defines; the assembled base (`actualEnv`, optionally
+  // AUGMENTED with `capabilities`) supplies builtins; the Resolver composes the two. `actualEnv`
+  // (the BASE) still drives bootstrap + the classifier above; only the resolution topology changes.
+  let runResolver: Resolver;
+  if (env !== undefined) {
+    runResolver = new Resolver(actualEnv);
+  } else {
+    const capabilityBase =
+      capabilities !== undefined
+        ? Capabilities.assembled(await assembleCapabilityBase(capabilities))
+        : Capabilities.assembled(actualEnv);
+    const lexicalRoot = scope !== undefined ? scope.env : defaultLexicalRoot();
+    runResolver = new Resolver(lexicalRoot, capabilityBase);
+  }
   // The run's exec frame = the resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
   // Defines land here, the evaluator's `ctx.env` is here, and the heap meter installs here —
   // found by `findHeapMeter` walking the parent chain from a nested `_currentRunEnv`.

@@ -122,6 +122,11 @@ export {
   type ExecOptions,
 } from "./eval/generator-exec.js";
 
+// The lexical-binding scope handle, public for `exec({ scope })` — a caller holds a
+// `LexicalScope.for(env)` across calls for REPL-style multi-step define accumulation.
+// (EnvCapability for `exec({ capabilities })` is public via the `./capability` subpath.)
+export { LexicalScope } from "./eval/LexicalScope.js";
+
 // Reader lexer entry. `tokenize(source, true)` lifts source into `{ token, col, offset, line }`
 // meta-tokens off the real FSM lexer, so `#\(`, string literals, `#|…|#`, datum comments, and
 // quote prefixes are counted correctly (a hand-scanner would miscount `#\(`). arrival-mcp's
