@@ -303,9 +303,8 @@ function unwrapForeign(v: unknown): unknown {
 }
 
 // NOTE: producer-minted (#(...) literal / make-vector / vector / vector-copy /
-// list->vector / ...), NOT registered via AValue.registerBoxer — the "object"
-// typeof tag is taken by the membrane's list-conser (boxing plan R6). Boxing is
-// producer-driven.
+// list->vector / ...), NOT boxed from JS — fromJs's "object" arm maps a JS array to a
+// borrowed AJSArray, not an AVector. Boxing is producer-driven.
 
 // ============================================================================
 // INTEROP BOUNDARY

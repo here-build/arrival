@@ -20,7 +20,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { registerBoxer } from "./boxing.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 
 export class AVoid extends AValue {
@@ -62,8 +61,4 @@ export class AVoid extends AValue {
 /** The one unspecified value — identity-compared; returned for every "no useful
  *  value" site. Carries CONSTANT_CTX, exactly as `nil`/`eof` do. */
 export const theVoid = new AVoid(CONSTANT_CTX);
-
-// JS `undefined` (no value) → void. (`null` → nil stays in ANil.ts.) The two host
-// bottoms map to the two Scheme absences rather than collapsing to one.
-registerBoxer("undefined", (ctx, _v, p) => new AVoid(ctx, p));
 

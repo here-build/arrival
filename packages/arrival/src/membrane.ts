@@ -24,7 +24,7 @@ import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
-import { fromJs, registerBoxer } from "./values/primitives/boxing.js";
+import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
@@ -43,8 +43,7 @@ import { LAMBDA } from "./well-known-symbols.js";
 // resolution lets the cycle close at definition time (both functions are
 // declared before any call site fires); the lazy `.get` body below only
 // reads `jsToScheme` when actually invoked.
-import { jsToScheme, warnMembrane } from "./rosetta.js";
-import { theVoid } from "./values/primitives/AVoid.js";
+import { jsToScheme } from "./rosetta.js";
 import {
   accessHas,
   accessKeys,
@@ -555,23 +554,8 @@ export class OperatorRegistry {
   }
 }
 
-// One boxer for both arrays and plain objects — registry keys by `typeof`, and
-// `typeof [] === "object"`. A JS array IS an R7RS vector → a borrowed AJSArray (the
-// faithful Rosetta mapping; the old array→list cons was LIPS-era data coercion). A plain
-// object wraps as a lazy AJSObject. Provenance stamps the borrowed container.
-registerBoxer("object", (ctx, v, p) => {
-  if (Array.isArray(v)) {
-    return new AJSArray(ctx, v, p);
-  }
-  return new AJSObject(ctx, v as object, p);
-});
-
-// A borrowed JS function is NOT a portable Scheme value → #void + warn, the same as the inbound
-// crossings (fromJS/jsToScheme). The boxer registry never mints a callable AJSFunction.
-registerBoxer("function", () => {
-  warnMembrane("a JS function");
-  return theVoid;
-});
+// (The "object" boxer — array→AJSArray / plain-object→AJSObject — and the "function" boxer
+// — function→#void+warn — moved into fromJs's direct switch when the boxer registry dissolved.)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polyglot member access — the interop read protocol (Graal `InteropLibrary`).

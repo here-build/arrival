@@ -6,12 +6,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { registerBoxer } from "./boxing.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
-// Side-effect: load the void singleton so its `undefined` boxer registers. nil's
-// module is always loaded early, so this guarantees the paired-bottom boxers
-// (null→nil here, undefined→void in AVoid) both fire. No cycle — AVoid ⊄ ANil.
-import "./AVoid.js";
 import type { APairLike } from "../types.js";
 
 // Pair constructor type - will be set by Pair.ts
@@ -134,8 +129,4 @@ export class ANil extends AValue {
 }
 
 export const nil = new ANil(CONSTANT_CTX, );
-
-// JS null → nil (empty list). JS undefined → void (registered in AVoid.ts): the two
-// host bottoms map to the two distinct Scheme absences rather than collapsing to one.
-registerBoxer("null", (ctx, _v, p) => new ANil(ctx, p));
 

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { setMembraneWarnings } from "../rosetta";
+import { setMembraneWarnings } from "../membrane-warn";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact, AInexact } from "../values/numbers";
 import {

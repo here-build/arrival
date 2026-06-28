@@ -180,8 +180,8 @@ export class ABytevector extends AValue {
 }
 
 // NOTE: producer-minted (bytevector/make-bytevector/string->utf8/Parser #u8(...)),
-// NOT registered via AValue.registerBoxer — the "object" typeof tag is taken by
-// the membrane's list-conser (R6). Boxing is producer-driven.
+// NOT boxed from JS — fromJs's "object" arm maps a JS array/object to AJSArray/AJSObject,
+// never a bytevector. Boxing is producer-driven.
 
 // ============================================================================
 // INTEROP BOUNDARY

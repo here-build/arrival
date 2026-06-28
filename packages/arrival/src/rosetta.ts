@@ -25,24 +25,12 @@ import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 
-// ── Membrane warnings ────────────────────────────────────────────────────────
-// A non-portable JS value (a function, `undefined`, or a UNIQUE symbol) crossing INTO Scheme
-// has no faithful representation in a host-agnostic interpreter → it materializes to #void. We
-// warn so the interop edge is VISIBLE (a silent #void would hide a portability bug). Gated by a
-// module toggle (default ON — "if logging is not disabled") so a host that knows it is doing
-// this can silence the noise.
-let membraneWarningsEnabled = true;
-export function setMembraneWarnings(enabled: boolean): void {
-  membraneWarningsEnabled = enabled;
-}
-export function warnMembrane(what: string): void {
-  if (membraneWarningsEnabled) {
-    console.warn(
-      `[arrival membrane] ${what} crossed into Scheme and materialized to #void — it has no portable ` +
-        `representation (the interpreter is host-agnostic; JS functions / undefined / unique symbols are not Scheme values).`,
-    );
-  }
-}
+// Membrane warnings (warnMembrane / setMembraneWarnings) now live in the leaf `membrane-warn.ts`,
+// shared with boxing.ts's `function` boxer — extracted so the value layer needn't import this
+// evaluator-heavy module just to warn. A non-portable JS value (a function, `undefined`, or a
+// UNIQUE symbol) crossing INTO Scheme has no faithful representation → it materializes to #void,
+// and `warnMembrane` makes that interop edge VISIBLE (a silent #void would hide a portability bug).
+import { warnMembrane } from "./membrane-warn.js";
 
 interface RosettaOptions {
   forceBigInt?: boolean;

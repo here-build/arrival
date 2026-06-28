@@ -1,51 +1,72 @@
 import invariant from "tiny-invariant";
 import type { RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AString } from "./AString.js";
+import { AExact, AInexact } from "../numbers.js";
+import { ABool, schemeTrue, schemeFalse } from "./ABool.js";
+import { ANil } from "./ANil.js";
+import { AVoid, theVoid } from "./AVoid.js";
+import { AJSArray } from "./AJSArray.js";
+import { AJSObject } from "./AJSObject.js";
+import { warnMembrane } from "../../membrane-warn.js";
 
 /**
- * The JS → Scheme boxing membrane: a `typeof`-tag → boxer registry, populated by
- * each value-type module at load. Registration is BOOT-ONLY — the tag set is JS's
- * fixed `typeof` family (string/number/bigint/boolean/object/function + the two
- * null-ish tags), nothing registers at runtime, and there are no plugins.
+ * The JS → Scheme boxing membrane: a single `typeof`-tag `switch` that constructs the
+ * right AValue subtype for a raw host value (already-AValue input short-circuits). The
+ * tag set is JS's fixed `typeof` family + the two null-ish tags — closed, no plugins.
  *
- * Why a registry, not a `switch` in `fromJs`: a switch would force `fromJs` to
- * import every subtype — but subtypes already `extends AValue` (cycle) — AND it
- * would drag the heavy membrane (the object/function boxers live in membrane.ts,
- * which pulls the evaluator) into the value layer. The registry inverts the
- * dependency: subtypes and the membrane self-register; this module imports only
- * AValue.
- *
- * Why this lives OFF the AValue class: `registerBoxer` is a write into the
- * membrane's core conversion path, and AValue is the class most likely to leak to
- * the sandbox. As a class static (`AValue.registerBoxer`) it was a poison handle on
- * a leakable surface. As a module function it is structurally unreachable — the
- * `boxers` Map is module-private, and only a module IMPORTER (never the sandbox)
- * can call `registerBoxer`. `fromJs` (read-only) is harmless and stays public.
- */
-type Boxer = (ctx: RunContext, v: unknown, p: ReadonlySet<number>) => AValue;
-
-const boxers = new Map<string, Boxer>();
-
-/** Subtype modules call this at top-level. Registration order is not significant. */
-export function registerBoxer(typeofTag: string, fn: Boxer): void {
-  boxers.set(typeofTag, fn);
-}
-
-/**
- * Single JS-input membrane. Already-AValue input is returned as-is unless a
- * non-empty provenance is supplied (then `withProvenance` mints a copy); the
- * same-instance fast path is what makes this safe to call on the hot path. Throws
- * if the subtype module hasn't loaded yet — a programmer error, not a runtime one.
+ * History: this was a `registerBoxer` registry that inverted the dependency (each subtype
+ * + the membrane self-registered its boxer) so this module imported only `AValue`. Two
+ * reasons drove that — (1) the subtypes `extends AValue`, and (2) the object/function
+ * boxers lived in membrane.ts (which pulls the evaluator). Both dissolved: the cycles are
+ * benign RUNTIME cycles (the setMembraneBridge removal proved hoisted-function call edges
+ * close fine — here only `AJSArray` calls `fromJs` back, in a method body), and the
+ * object/function boxers are plain value-class construction now that AJSArray/AJSObject
+ * are value-primitive files. The one membrane-side arm (`function` → #void warn) uses the
+ * leaf `membrane-warn`, so no evaluator is pulled into the value layer. Hence: a switch.
  */
 export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
+  // Same-instance fast path: already a Scheme value. Re-stamp only when a distinct,
+  // non-empty provenance is supplied (then `withProvenance` mints a copy).
   if (v instanceof AValue) {
     return provenance === EMPTY_PROVENANCE || provenance === v.provenance ? v : v.withProvenance(provenance);
   }
 
   const tag = resolveTypeofTag(v);
-  const boxer = boxers.get(tag);
-  invariant(boxer !== undefined, `fromJs: no boxer registered for tag "${tag}" — subtype module not loaded`);
-  return boxer(ctx, v, provenance);
+  switch (tag) {
+    case "string":
+      return new AString(ctx, v as string, provenance);
+    case "number": {
+      // Safe-integer JS numbers route to exact (precision-preserving through scheme
+      // arithmetic); anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
+      const n = v as number;
+      return Number.isSafeInteger(n) ? new AExact(ctx, BigInt(n), 1n, provenance) : new AInexact(ctx, n, provenance);
+    }
+    case "bigint":
+      return new AExact(ctx, v as bigint, 1n, provenance);
+    case "boolean":
+      // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
+      return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v as boolean, provenance);
+    case "null":
+      // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
+      // the two distinct Scheme absences rather than collapsing to one.
+      return new ANil(ctx, provenance);
+    case "undefined":
+      return new AVoid(ctx, provenance);
+    case "object":
+      // `typeof [] === "object"`: a JS array IS an R7RS vector → a borrowed AJSArray (the
+      // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
+      return Array.isArray(v) ? new AJSArray(ctx, v, provenance) : new AJSObject(ctx, v as object, provenance);
+    case "function":
+      // A borrowed JS function is NOT a portable Scheme value → #void + warn, the same as
+      // the inbound crossings (fromJS/jsToScheme). Never mints a callable wrapper.
+      warnMembrane("a JS function");
+      return theVoid;
+    default:
+      // "symbol" and any future tag: not boxable here (symbols cross via the membrane's
+      // keyword/Symbol.for path, never fromJs). A programmer error, not a runtime one.
+      invariant(false, `fromJs: no boxer for typeof tag "${tag}"`);
+  }
 }
 
 /** `null` gets its own tag — JS quirk: `typeof null === "object"`. */
