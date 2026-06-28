@@ -58,12 +58,6 @@ export { AString } from "./values/primitives/AString.js";
 export { APair } from "./values/primitives/APair.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
 
-// Scheme namespace - canonical API for Scheme types
-// Usage: import { Scheme } from 'arrival-scheme'
-//        const s = new Scheme.String("hello")
-//        const n = new Scheme.Exact(42n)
-export * as Scheme from "./Scheme.js";
-
 void initBridge();
 
 // Classes that may be needed for type checking or extension
