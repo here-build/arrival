@@ -69,6 +69,27 @@ function ownProps(obj: object): (string | symbol)[] {
 }
 
 // -------------------------------------------------------------------------
+/**
+ * The low-level lexical FRAME-STORAGE primitive: a `__name__`/`__env__` binding
+ * record with a `__parent__` link and its own fallback resolvers, plus a run-scoped
+ * heap meter. One `__parent__`-linked chain is a scope.
+ *
+ * It is the storage the evaluator's resolution model wraps — NOT the model itself
+ * (ejection P3/P5):
+ *   - {@link LexicalScope} (eval/LexicalScope.ts) wraps an Environment as the
+ *     lexical-binding chain (let/lambda/letrec/… frames a program introduces).
+ *   - {@link Capabilities} (eval/Capabilities.ts) wraps the assembled base
+ *     (builtins/preludes/host resolvers) a run is armed with.
+ *   - {@link Resolver} (eval/Resolver.ts) composes the two — `scope.lookup ??
+ *     capabilities.lookup` — and is the single object the evaluator threads
+ *     (`EvalContext.resolver`). `resolver.env` is the underlying lexical frame.
+ *
+ * INTERNAL-ONLY: not on the public surface (see index.ts). Cross-package consumers
+ * type against the structural `SchemeEnv` contract (common/scheme-env.ts), never
+ * this concrete class — so the name "Environment" is an impl detail under the
+ * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
+ * (which {@link LexicalScope} owns) or "Frame".
+ */
 export class Environment {
   static [CLASS] = "environment";
   private __resolvers__: FallbackResolver[] = [];
