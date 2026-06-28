@@ -39,7 +39,8 @@ export interface AssembledEnv<E = unknown> {
 }
 
 // ── Errors (teaching, errors-as-doors) — Assemble{Cycle,ConfigConflict,Linearization,Pack,PackTimeout}Error
-//    relocated to errors.ts (the single error home); imported here for the throws below.
+//    relocated to errors.ts (the single error home); imported here for the throws below and
+//    re-exported so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
 import {
   AssembleConfigConflictError,
   AssembleCycleError,
@@ -47,6 +48,13 @@ import {
   AssemblePackError,
   AssemblePackTimeoutError,
 } from "../errors.js";
+export {
+  AssembleConfigConflictError,
+  AssembleCycleError,
+  AssembleLinearizationError,
+  AssemblePackError,
+  AssemblePackTimeoutError,
+};
 
 const packTimeoutMs = (): number => Number(process.env.ASSEMBLE_PACK_TIMEOUT_MS) || 30_000;
 
