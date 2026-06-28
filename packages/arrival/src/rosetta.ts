@@ -22,6 +22,27 @@ import { AJSArray, AJSObject } from "./values/primitives/js-wrappers.js";
 import { AExact, AInexact } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
+import { theVoid } from "./values/primitives/AVoid.js";
+import { ASymbol } from "./values/primitives/ASymbol.js";
+
+// ── Membrane warnings ────────────────────────────────────────────────────────
+// A non-portable JS value (a function, `undefined`, or a UNIQUE symbol) crossing INTO Scheme
+// has no faithful representation in a host-agnostic interpreter → it materializes to #void. We
+// warn so the interop edge is VISIBLE (a silent #void would hide a portability bug). Gated by a
+// module toggle (default ON — "if logging is not disabled") so a host that knows it is doing
+// this can silence the noise.
+let membraneWarningsEnabled = true;
+export function setMembraneWarnings(enabled: boolean): void {
+  membraneWarningsEnabled = enabled;
+}
+function warnMembrane(what: string): void {
+  if (membraneWarningsEnabled) {
+    console.warn(
+      `[arrival membrane] ${what} crossed into Scheme and materialized to #void — it has no portable ` +
+        `representation (the interpreter is host-agnostic; JS functions / undefined / unique symbols are not Scheme values).`,
+    );
+  }
+}
 
 interface RosettaOptions {
   forceBigInt?: boolean;
@@ -264,8 +285,15 @@ export function jsToScheme(
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   seen: WeakSet<object> = new WeakSet(),
 ): any {
-  if (value === null || value === undefined) {
+  // null → nil. undefined → #void + warn: `undefined` has no portable Scheme value (the
+  // interpreter is host-agnostic), so a borrowed `undefined` materializes to the unspecified
+  // value, loudly. (Was: both collapsed to nil.)
+  if (value === null) {
     return provenance === EMPTY_PROVENANCE ? nil : new ANil(ctx, provenance);
+  }
+  if (value === undefined) {
+    warnMembrane("a JS `undefined`");
+    return theVoid;
   }
 
   // Cycle in JS-side input — return as-is. The caller's outer wrapper already
@@ -313,13 +341,31 @@ export function jsToScheme(
     return new AJSObject(ctx, value as object, provenance);
   }
 
-  // JS primitives → AValue.fromJs (boxer registry handles bool/number/string/bigint).
+  // JS primitives → the boxer registry (number/bigint→exact/inexact, boolean→ABool,
+  // string→AString) — never raw, so the sandbox only ever holds boxed AValues.
   const tag = typeof value;
   if (tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint") {
     return fromJs(ctx, value, provenance);
   }
 
-  // Functions, exotic objects (Promise, Buffer, …): the caller's responsibility.
+  // A REGISTERED JS symbol (`Symbol.for('x')`) has a portable string key → the keyword `:x`.
+  // A UNIQUE symbol (`Symbol('x')`) has no portable identity → #void + warn (like a function).
+  if (tag === "symbol") {
+    const key = Symbol.keyFor(value as symbol);
+    if (key !== undefined) return new ASymbol(ctx, ":" + key, provenance);
+    warnMembrane("a unique JS symbol");
+    return theVoid;
+  }
+
+  // A borrowed JS function is NOT a Scheme value (and exposing it as callable would let Scheme
+  // escape the host-agnostic sandbox into uncontrolled JS) → #void + warn. The deliberate,
+  // generalized narrowing of JS interop: borrowed functions are not portable. (Was raw.)
+  if (tag === "function") {
+    warnMembrane("a JS function");
+    return theVoid;
+  }
+
+  // Exotic objects (Promise, Buffer, …): the caller's responsibility (unchanged).
   return value;
 }
 

@@ -10,12 +10,11 @@
  * They should compose: jsToScheme → schemeToJs round-trips, fromJs → toJs round-trips,
  * and the two APIs agree on the SHAPE of converted values.
  *
- * They don't, today, in several places. These tests document the divergence:
- *  - rosetta `jsToScheme` does NOT box `string`/`number`/`boolean`/`bigint`
- *    primitives (returns them raw). schemeToJs unwraps the same primitives by
- *    type-checking specific AValue subtypes — so a primitive in/primitive out
- *    looks "round-trip correct" by accident even though the cross-membrane
- *    SHAPE is different from what `AValue.fromJs` would produce.
+ * The membrane now MATERIALIZES faithfully: BOTH `jsToScheme` and `fromJS` box every
+ * primitive (number/bigint→exact, boolean→ABool, string→AString) through the boxer
+ * registry, map undefined / function / unique-symbol → #void (+ a console warning), and
+ * Symbol.for('x') → the keyword `:x`. The sandbox never holds a raw JS value — the
+ * deliberate, host-agnostic narrowing of JS interop. These tests pin that. Remaining notes:
  *  - membrane `isSchemeValue` lists AValue subtypes by explicit
  *    `instanceof` checks. Any AValue subtype that isn't listed will mis-route.
  *    Nil is technically listed by `=== nil`, but clones miss (see
@@ -38,6 +37,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact, AInexact } from "../values/numbers";
 import { APair } from "../values/primitives/APair.js";
 import { ANil, nil } from "../values/primitives/ANil";
+import { theVoid } from "../values/primitives/AVoid.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { ACharacter } from "../values/primitives/ACharacter";
 import { QuotedPromise } from "../values/primitives/QuotedPromise.js";
@@ -311,8 +311,11 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(42))).toBe(42);
   });
 
-  it("primitive round-trips: bigint", () => {
-    expect(toJS(fromJS(10n))).toBe(10n);
+  it("bigint materializes to an exact integer (JS bigint-vs-number is normalized)", () => {
+    // host-agnostic: 10n is the exact integer 10. fromJS boxes it to AExact; toJS gives back the
+    // exact value as a JS number (the bigint type is a host detail arrival does not preserve).
+    expect(fromJS(10n)).toBeInstanceOf(AExact);
+    expect(toJS(fromJS(10n))).toBe(10);
   });
 
   it("null round-trips through nil", () => {
@@ -327,11 +330,8 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(wrapped)).toBe(obj);
   });
 
-  it("function round-trips through SchemeJSFunction (same source reference)", () => {
-    const fn = () => 42;
-    const wrapped = fromJS(fn);
-    expect(wrapped).toBeInstanceOf(AJSFunction);
-    expect(toJS(wrapped)).toBe(fn);
+  it("a borrowed function does NOT cross — it materializes to #void (not a portable value)", () => {
+    expect(fromJS(() => 42)).toBe(theVoid);
   });
 
   it("wrapper cache: same JS object → same wrapper instance", () => {

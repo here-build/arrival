@@ -197,47 +197,30 @@ const jsToWrapper = new WeakMap<object, SchemeValue>();
  * Entry point for JS → Scheme boundary crossing.
  */
 export function fromJS(value: unknown): SchemeValue {
-  // Null/undefined → nil
-  if (value === null || value === undefined) return nil;
-
-  // Primitives pass through (including JS Symbol)
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return value;
-  if (typeof value === "bigint") return value;
-  if (typeof value === "symbol") return value;
-
-  // Already a Scheme value? Pass through (prevents double-wrapping)
+  // Already a Scheme value? Pass through (prevents double-wrapping).
   if (isSchemeValue(value)) return value;
 
-  // Arrays pass through (shared mutation OK, vectors are JS arrays in R7RS)
+  // CONTAINERS keep their membrane-specific handling — NOT routed through jsToScheme (which would
+  // cons an array into a list). Arrays stay raw (transition); binary stays raw (FFI identity —
+  // membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (use '> for
+  // QuotedPromise); a plain object becomes a lazy AJSObject whose fields materialize faithfully
+  // on access.
   if (Array.isArray(value)) return value;
-
-  // Binary types pass through raw (polymorphic ops). This is an intentional
-  // membrane contract (membrane.spec.ts: "passes through bytevector-like types",
-  // "preserves Uint8Array identity") — FFI identity must be preserved, so the
-  // membrane does NOT box them. Scheme producers mint SchemeBytevector; raw
-  // binary that bypasses producers (FFI) stays raw and is coerced on use by
-  // asBytevector. bytevector? therefore stays polymorphic (boxed OR raw).
   if (isBytevectorLike(value)) return value;
-
-  // Promises pass through (use '> for QuotedPromise)
   if (value instanceof Promise) return value;
-
-  // Check wrapper cache for objects
-  const cached = jsToWrapper.get(value as object);
-  if (cached) return cached;
-
-  // Create appropriate wrapper
-  let wrapper: SchemeValue;
-  if (typeof value === "function") {
-    wrapper = new AJSFunction(CONSTANT_CTX, value as (...args: unknown[]) => unknown);
-  } else {
-    wrapper = new AJSObject(CONSTANT_CTX, value as object);
+  if (value !== null && typeof value === "object") {
+    const cached = jsToWrapper.get(value as object);
+    if (cached) return cached;
+    const wrapper: SchemeValue = new AJSObject(CONSTANT_CTX, value as object);
+    jsToWrapper.set(value as object, wrapper);
+    return wrapper;
   }
 
-  jsToWrapper.set(value as object, wrapper);
-  return wrapper;
+  // LEAVES — null/undefined/boolean/number/string/bigint/symbol/function — go through the SINGLE
+  // faithful materialization (jsToScheme): primitives box (no raw leak), null→nil, undefined/
+  // function/unique-symbol→#void+warn, Symbol.for→:keyword. Generalized rosetta behavior — a
+  // borrowed JS function is no longer a callable AJSFunction (it is not portable; it is #void).
+  return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE);
 }
 
 /**

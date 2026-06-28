@@ -2,7 +2,8 @@
  * Membrane and Operator Tests
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { setMembraneWarnings } from "../rosetta";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact, AInexact } from "../values/numbers";
 import {
@@ -20,6 +21,8 @@ import {
 } from "../membrane";
 import { AJSObject, AJSFunction } from "../values/primitives/js-wrappers.js";
 import { nil } from "../values/primitives/ANil";
+import { theVoid } from "../values/primitives/AVoid.js";
+import { ABool } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
@@ -387,18 +390,19 @@ describe("Wrapper Layer", () => {
   });
 
   describe("fromJS", () => {
-    it("converts null/undefined to nil", () => {
+    it("converts null to nil; undefined to #void (no portable representation)", () => {
       expect(fromJS(null)).toBe(nil);
-      expect(fromJS(undefined)).toBe(nil);
+      expect(fromJS(undefined)).toBe(theVoid);
     });
 
-    it("passes through primitives", () => {
-      expect(fromJS(true)).toBe(true);
-      expect(fromJS(42)).toBe(42);
-      expect(fromJS("hello")).toBe("hello");
-      expect(fromJS(42n)).toBe(42n);
-      const sym = Symbol("test");
-      expect(fromJS(sym)).toBe(sym);
+    it("MATERIALIZES primitives to boxed AValues (host-agnostic — never a raw leak)", () => {
+      expect(fromJS(true)).toBeInstanceOf(ABool);
+      expect(fromJS(42)).toBeInstanceOf(AExact);
+      expect(fromJS("hello")).toBeInstanceOf(AString);
+      expect(fromJS(42n)).toBeInstanceOf(AExact);
+      // a UNIQUE symbol has no portable identity → #void; a REGISTERED one → the keyword :test
+      expect(fromJS(Symbol("test"))).toBe(theVoid);
+      expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
     it("passes through Scheme values", () => {
@@ -427,11 +431,25 @@ describe("Wrapper Layer", () => {
       expect(fromJS(p)).toBe(p);
     });
 
-    it("wraps functions in SchemeJSFunction", () => {
-      const fn = () => 42;
-      const wrapped = fromJS(fn);
-      expect(wrapped).toBeInstanceOf(AJSFunction);
-      expect((wrapped as AJSFunction).source).toBe(fn);
+    it("materializes a borrowed function to #void (not callable — not a portable value)", () => {
+      expect(fromJS(() => 42)).toBe(theVoid);
+    });
+
+    it("warns when a non-portable value materializes to #void; setMembraneWarnings(false) silences it", () => {
+      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        fromJS(() => 42); // a function
+        fromJS(undefined); // undefined
+        fromJS(Symbol("x")); // a unique symbol
+        expect(spy).toHaveBeenCalledTimes(3);
+        spy.mockClear();
+        setMembraneWarnings(false);
+        fromJS(() => 42);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        setMembraneWarnings(true);
+        spy.mockRestore();
+      }
     });
 
     it("wraps objects in SchemeJSObject", () => {
@@ -535,7 +553,7 @@ describe("Wrapper Layer", () => {
       expect(source.a).toBe(1);
     });
 
-    it("blocks method (function-valued) reads but allows getter reads", () => {
+    it("materializes a function-valued field to #void (visible, not callable), allows getter reads", () => {
       const source = {
         data: 7,
         get computed() {
@@ -546,9 +564,9 @@ describe("Wrapper Layer", () => {
         },
       };
       const obj = new AJSObject(CONSTANT_CTX, source);
-      expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read
+      expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read (boxed)
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value
-      expect(obj.get("method")).toBe(nil); // method → invisible (no foreign invocations)
+      expect(obj.get("method")).toBe(theVoid); // method → #void + warn (was invisible nil; now visible, still uncallable)
     });
 
     it("checks property existence (own properties only)", () => {
@@ -584,12 +602,11 @@ describe("Wrapper Layer", () => {
       expect(wrapped[TO_JS]()).toBe(fn);
     });
 
-    it("calls function with unwrapped args", () => {
+    it("calls function with unwrapped args (the result crosses back MATERIALIZED)", () => {
       const fn = (a: number, b: number) => a + b;
       const wrapped = new AJSFunction(CONSTANT_CTX, fn);
-
-      const result = wrapped.call(1, 2);
-      expect(result).toBe(3);
+      // the JS return crosses the membrane via fromJS → boxed (host-agnostic); unwrap to check.
+      expect(toJS(wrapped.call(1, 2))).toBe(3);
     });
 
     it("wraps return value", () => {
@@ -606,7 +623,7 @@ describe("Wrapper Layer", () => {
 
       const arg = new AJSObject(CONSTANT_CTX, { a: 42 });
       const result = wrapped.call(arg);
-      expect(result).toBe(42);
+      expect(toJS(result)).toBe(42);
     });
 
     it("has toString with function name", () => {
@@ -629,11 +646,8 @@ describe("Wrapper Layer", () => {
       expect(unwrapped).toBe(original);
     });
 
-    it("preserves function identity through roundtrip", () => {
-      const original = () => 42;
-      const wrapped = fromJS(original);
-      const unwrapped = toJS(wrapped);
-      expect(unwrapped).toBe(original);
+    it("does NOT round-trip a borrowed function — it materializes to #void (retired interop)", () => {
+      expect(fromJS(() => 42)).toBe(theVoid);
     });
 
     it("preserves array identity (pass-through)", () => {

@@ -313,15 +313,12 @@ export class AJSObject extends AValue {
     }
     if (raw === NOT_FOUND) return nil;
 
-    // Method-call ban: a function-valued property IS a method. The pure-dataflow
-    // sandbox has no representation for a foreign invocation, and returning a
-    // callable would let Scheme escape into uncontrolled JS — so methods are
-    // invisible (same `nil` as absent). Getter/accessor reads are unaffected:
-    // `accessMember` (via `Reflect.get`) has already INVOKED the getter to a
-    // value above, so a getter that yields data passes through here; only an
-    // actual function result (a method, or the rare getter-returns-a-function)
-    // is blocked.
-    if (typeof raw === "function") return nil;
+    // A function-valued property is a foreign method. It used to vanish to `nil` (invisible);
+    // now it falls through to jsToScheme, which materializes it to #void + a membrane warning —
+    // the violation is VISIBLE, and #void is not callable so the sandbox still cannot invoke
+    // foreign JS. (The generalized rosetta narrowing: a borrowed JS function is not a portable
+    // Scheme value. Getter/accessor reads are unaffected — `accessMember` already invoked the
+    // getter to a value above, so only an actual function RESULT lands here.)
 
     // Box through jsToScheme so primitives become AValue subtypes stamped with
     // this wrapper's provenance. SchemeJSObject's instance was constructed
