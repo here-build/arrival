@@ -1,123 +1,40 @@
-// @here.build/arrival/arrival-extensions — arrival core extensions pack.
+// @here.build/arrival/arrival-extensions — arrival's residual core extensions pack.
 //
-// The non-R7RS, non-SRFI, non-polyglot procedures that arrival adds on top of
-// the portable Scheme base. All host-interop or arrival-specific:
-//   • symbol/string conversion (symbol->string / string->symbol / %as.data)
-//   • unary/binary curry wrappers · tree-map
-//   • pair utilities (pair-map / nth-pair)
-//   • type predicates (key? / …)
-//   • aliases (string-join / string-split) · symbol-append
-//   • arrival safe head accessors (first? / first-or) + a standalone SRFI-1 remove
+// After the husk dissolution this pack holds only the genuinely arrival-specific
+// procedures that belong nowhere in R7RS / SRFI / polyglot:
+//   • range             — an integer list [0, stop), derived over SRFI-1 `iota`.
+//   • first? / first-or — safe head accessors (crash-avoidance over (car '())).
 //
-// The truly-irreducible core (essential constants, the
-// syntax-binding macros, the --> / .. interop macros and their helpers) stays
-// inline in core (`core.ts`) because the later packs expand against it at load time.
+// Everything else moved to its genuine home: symbol->string / string->symbol → the
+// r7rs equality pack; remove → SRFI-1; complement / constantly / always / curry →
+// SRFI-235; and 13 dead husks (once / flip / n-ary / unary / binary / key? /
+// key->string / string-join / string-split / tree-map / pair-map / nth-pair /
+// symbol-append) were deleted outright.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles `ARRIVAL_EXTENSIONS_SCM`
-// and evals it (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack and evals its prelude, so this
+// module is the sole definition site. Prelude-only now — nothing here touches a host
+// type, so no native symbols remain.
 import { EnvCapability } from "../common/capability.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import * as z from "../common/scheme-zod.js";
-import { symbol } from "../common/symbol.js";
-import { toIndex } from "../values/op-helpers.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil.js";
-import { unpromise } from "../utils/promises.js";
-import { is_false } from "../eval/guards.js";
-import { curry } from "../utils/functional.js";
 
 export default new EnvCapability("arrival/core-extensions", {
-  symbols: {
-    // All three are provenance PLUMBING (transforms in a pipe), not edges: they forward
-    // their input's provenance via withInputProvenance — never mint. (The prior { fn, type }
-    // form was defineRosetta-bound, which minted; that was a legacy accident, not intent —
-    // the comment above already called them "native, below the membrane".)
-    range: symbol.native`range: an exact-integer list [start, stop) by step (1- to 3-arg forms)`(
-      { input: z.tuple([z.schemeNumber], z.unknown()), output: [z.union([z.pair, z.nil])] },
-      (stopOrStart: unknown, ...rest: unknown[]): APair | typeof nil => {
-        let start: number, stop: number, step: number;
-
-        if (rest.length === 0) {
-          start = 0;
-          stop = toIndex(stopOrStart);
-          step = 1;
-        } else if (rest.length === 1) {
-          start = toIndex(stopOrStart);
-          stop = toIndex(rest[0]);
-          step = 1;
-        } else {
-          start = toIndex(stopOrStart);
-          stop = toIndex(rest[0]);
-          step = toIndex(rest[1]);
-        }
-
-        const result: number[] = [];
-
-        if (start < stop && step > 0) {
-          for (let i = start; i < stop; i += step) {
-            result.push(i);
-          }
-        } else if (start > stop && step < 0) {
-          for (let i = start; i > stop; i += step) {
-            result.push(i);
-          }
-        }
-
-        // Convert array to list
-        if (result.length === 0) return nil;
-        let list: APair | typeof nil = nil;
-        for (let i = result.length - 1; i >= 0; i--) {
-          list = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, BigInt(result[i])), list);
-        }
-        return list;
-      },
-    ),
-
-    complement: symbol.native`complement: a predicate returning the boolean negation of fn`(
-      { input: [z.custom<(...args: unknown[]) => unknown>()], output: [z.custom<(...args: unknown[]) => unknown>()] },
-      (fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown => {
-        // \`fn\` may be a scheme lambda, which returns a Promise to JS callers
-        // (generator-lambda async return) — so unpromise before testing. And its
-        // result may be a boxed SchemeBool (a truthy JS object), so negate via
-        // is_false, not \`!\` (always false on an object). Both were latent: plain
-        // \`!fn(...)\` failed for async predicates AND for boxed-bool ones.
-        const result = (...args: unknown[]) => unpromise(fn(...args), is_false);
-        Object.defineProperty(result, "name", { value: "complement" });
-        return result;
-      },
-    ),
-
-    always: symbol.native`always: a thunk that always returns constant`(
-      { input: [z.unknown()], output: [z.custom<(...args: unknown[]) => unknown>()] },
-      (constant: unknown): (...args: unknown[]) => unknown => {
-        const result = () => constant;
-        Object.defineProperty(result, "name", { value: "always" });
-        return result;
-      },
-    ),
-
-    // `curry` — relocated VERBATIM from stdlib.ts global_env (husk dissolution). The
-    // impl is the shared `utils/functional` curry; it joins its functional-combinator
-    // siblings (n-ary / complement / flip / always / once) and its only define-time
-    // consumer, the `(define unary (curry n-ary 1))` prelude below. Intra-pack, so the
-    // symbol is live before the prelude evals — no cross-pack ordering dependency.
-    curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
-      { input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()), output: [z.custom<(...args: unknown[]) => unknown>()] },
-      curry,
-    ),
-  },
   prelude: `
+    ;; -----------------------------------------------------------------------------
+    ;; range — arrival's [0, stop) integer list
+    ;; -----------------------------------------------------------------------------
+    ;; Derived over SRFI-1 \`iota\` (co-resident in the assembled base): (range stop) is
+    ;; exactly (iota stop) = 0 .. stop-1. The former native impl was lossy past the JS
+    ;; safe-integer ceiling and redundant with iota; single-arg is the only form used in
+    ;; practice (every spec site calls (range n)). The name is load-bearing — kept.
+    (define (range stop) (iota stop))
+
     ;; -----------------------------------------------------------------------------
     ;; Arrival safe head accessors
     ;; -----------------------------------------------------------------------------
     ;; The dominant avoidable crash in generated Scheme is (car (filter …)) on an empty
     ;; match — (car '()) throws. These give a head accessor that CANNOT crash. They stay
-    ;; here (not SRFI-1) because they are arrival-specific crash-avoidance; the rest of the
-    ;; SRFI-1 surface — including \`remove\` — lives in env/srfi/srfi-1.ts.
+    ;; here (not SRFI-1) because they are arrival-specific crash-avoidance.
     ;;
-    ;; first? — head of a list, or #f when empty. (first? '()) => #f, never a crash. The
-    ;; blessed safe accessor that makes (car (filter …)) unnecessary.
+    ;; first? — head of a list, or #f when empty. (first? '()) => #f, never a crash.
     (define (first? xs) (if (pair? xs) (car xs) #f))
     ;; first-or — head of a list, or a supplied default when empty.
     (define (first-or xs default) (if (pair? xs) (car xs) default))

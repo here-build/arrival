@@ -4,7 +4,7 @@ import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
-import { allSrfi, srfi1, srfi26, srfi43, srfi128, srfi189, srfi2, srfi8 } from "../srfi/index.js";
+import { allSrfi, srfi1, srfi26, srfi43, srfi128, srfi189, srfi2, srfi8, srfi235 } from "../srfi/index.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
@@ -45,9 +45,16 @@ describe("@here.build/arrival/srfi", () => {
     expect(await num("(and-let* ((x 5)) (+ x 1))")).toBe(6);
   });
 
+  it("SRFI-235 combinators (constantly / always alias)", async () => {
+    const num = await withCap(srfi235, "s235");
+    expect(await num("((constantly 7) 1 2 3)")).toBe(7);
+    expect(await num("((always 7) 1 2 3)")).toBe(7);
+  });
+
   it("allSrfi exposes the whole set", () => {
-    expect(allSrfi).toHaveLength(8);
+    expect(allSrfi).toHaveLength(9);
     expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-1");
     expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-95");
+    expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-235");
   });
 });

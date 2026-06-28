@@ -1,0 +1,47 @@
+// SRFI-235 — Combinators. Scheme-bootstrap capability.
+//
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via allSrfi) and evals its
+// prelude, so this module is the sole definition site.
+//
+// The combinator survivors relocated from arrival-extensions (husk dissolution):
+//   • complement  — SRFI-235: the boolean negation of a predicate.
+//   • constantly  — SRFI-235: the K combinator (ignore args, return the constant).
+//   • always      — arrival's historical name for `constantly`, kept as an alias.
+//   • curry       — NOT SRFI-235, but combinator kin; arrival's arity-aware partial
+//                   application, kept NATIVE (the arity detection can't be pure scheme).
+//
+// NAMING HAZARD: SRFI-235's own `always` is a DIFFERENT procedure. Arrival's `always`
+// has always meant `constantly`, so the spec-faithful name is `constantly` and `always`
+// is preserved only as a back-compat alias (a type-lens probe references it by name).
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { curry } from "../../utils/functional.js";
+
+export default new EnvCapability("scheme/srfi-235", {
+  prelude: `
+;; ============ SRFI-235 (combinators) ============
+;; complement — the boolean negation of fn. (compose not fn): \`not\` (native, is_false)
+;; handles a boxed SchemeBool, and the evaluator unwraps an async generator-lambda
+;; result before \`not\` sees it — so this pure-scheme form needs no JS unpromise/is_false
+;; closure (the leak the former native impl carried). compose is co-resident (polyglot).
+(define (complement fn) (compose not fn))
+
+;; constantly — the K combinator: ignore the arguments and always return x. (SRFI-235's
+;; \`constantly\` is variadic over values; arrival only ever uses the single-value form.)
+(define (constantly x) (lambda args x))
+;; always — arrival's historical name for constantly. Kept as an alias for back-compat
+;; (and the type-lens probe that references \`always\` by name). NOT SRFI-235's own \`always\`.
+(define always constantly)
+`,
+  symbols: {
+    // `curry` — arrival's arity-aware partial application (the shared utils/functional
+    // curry: it auto-applies once \`fn.length\` args have arrived). Combinator kin to the
+    // prelude above, but kept NATIVE because the arity detection can't be expressed in
+    // pure scheme. Relocated VERBATIM from arrival-extensions (husk dissolution).
+    curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
+      { input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()), output: [z.custom<(...args: unknown[]) => unknown>()] },
+      curry,
+    ),
+  },
+});
