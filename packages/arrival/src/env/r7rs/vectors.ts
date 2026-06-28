@@ -181,7 +181,7 @@ export default new EnvCapability("scheme/vectors", {
     // other vector mutators; the non-mutating vector-copy above returns a fresh copy.)
 
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
-      { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.unknown()), output: [z.svector] },
+      { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.unknown()), output: [z.svector], fanout: true },
       (proc: (...args: unknown[]) => SchemeValue, ...vectors: unknown[]): AVector | Promise<AVector> => {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));

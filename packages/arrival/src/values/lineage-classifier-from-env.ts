@@ -23,9 +23,10 @@
  *    — a borrowed JS function now crosses the membrane as #void, never a callable head,
  *    so no env binding is structurally opaque. (The `opaque` lineage kind still arises
  *    from named-let recursion and from the hand-built test classifiers.)
- *  - isFan: a NAME match (`map`/`filter`/`vector-map`). Fan-ness is not structural
- *    (they resolve to plain fl-interop callables), so this is an enumerated set —
- *    the same shape `classify`'s lengthPreserving cut already assumes.
+ *  - isFan: read off the bound fn — `env.get(op).fanout`. Fan ops (map/filter/vector-map)
+ *    declare `fanout: true` on their symbol-def contract; bake stamps a plain `.fanout` on the
+ *    bound fn (the `SPECULATE` shape, minus the Symbol). So fan-ness FOLLOWS THE BINDING
+ *    (alias-correct — an alias of `map` is still fan, a shadowing local `map` is not), not a name list.
  *  - isPure: provided for interface completeness, but NOTE `classify()` does not
  *    currently consult it — any op that is not source/opaque/fan falls through to
  *    the pure-application path (combine), so an unlisted pure op is still handled
@@ -35,9 +36,6 @@
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
 import type { Classifier } from "./lineage.js";
-
-/** Collection operators that classify to a per-element fan template (see classify). */
-const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
 
 /** True iff `op` is a pure rosetta registered anywhere up the env chain
  *  (the pure registry is per-env; this walk supplies the chaining — env-registries.ts). */
@@ -57,7 +55,10 @@ export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>
     isPure: (op) => isPureRosettaInChain(env, op),
     // A source mints iff it is a declared source AND not a pure transform.
     isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
-    isFan: (op) => FAN_OPS.has(op),
+    // Fan-ness follows the BINDING: bake stamps `.fanout` on the bound fn when the def's
+    // contract declares `fanout: true` (map/filter/vector-map). Non-throwing lookup — the
+    // classifier sees arbitrary op names, an unbound one is simply not fan.
+    isFan: (op) => (env.get(op, { throwError: false }) as { fanout?: boolean } | undefined)?.fanout === true,
     // No foreign-call membrane wrapper exists anymore (AJSFunction retired — a
     // borrowed JS function crosses the membrane as #void, never a callable head),
     // so nothing in the env is a structural opaque black box. The `opaque` lineage

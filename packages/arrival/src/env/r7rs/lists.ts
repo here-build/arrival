@@ -226,7 +226,7 @@ export default new EnvCapability("scheme/lists", {
     // map (Pair preserves boxes + speculates [1,1]; Vector strips boxes, eager) — the term owns the
     // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
     map: symbol.sequence`map: fn over one list (its own term map — box discipline + speculation) or a zip over several`(
-      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()] },
+      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
       (args, runCtx) => {
         const [fn, ...lists] = args;
         if (lists.length === 1) {

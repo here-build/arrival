@@ -18,6 +18,13 @@ import { nil } from "../../values/primitives/ANil.js";
 import { unpromise } from "../../utils/promises.js";
 import { regexPredicate } from "../../values/regex-predicate.js";
 import * as z from "../../common/scheme-zod.js";
+import { tf } from "../../values/tagless-final.js";
+
+// `filter` is re-kinded tagless→sequence so it can carry the `fanout` contract option. The
+// sequence impl dispatches to the receiver's own `arrival/tagless-final/filter` term method —
+// the SAME forward the `symbol.tagless` binder did, now written manually so the def has a
+// contract slot (mirrors lists.ts's MAP_METHOD single-list branch; the term still charges heap).
+const FILTER_METHOD = tf("filter");
 
 export const SRFI1_SCM = `
 ;; ============ SRFI-1 (list library completion) ============
@@ -244,7 +251,17 @@ function findImpl(arg: unknown, list: any): unknown {
 export default new EnvCapability("scheme/srfi-1", {
   prelude: SRFI1_SCM,
   symbols: {
-    filter: symbol.tagless.filter`keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`,
+    filter: symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
+      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
+      (args, runCtx) => {
+        const [pred, seq] = args;
+        const m = (seq as Record<string, unknown> | null | undefined)?.[FILTER_METHOD];
+        if (typeof m !== "function") {
+          throw new TypeError(`filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${FILTER_METHOD}).`);
+        }
+        return (m as (...a: unknown[]) => unknown).call(seq, pred, runCtx);
+      },
+    ),
     reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
     find: symbol.native`find: first list element matching the predicate or regex, else nil`(
       { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },

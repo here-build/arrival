@@ -86,6 +86,12 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec> {
    *  legacy defineRosetta `pure: true`). Strict `=== true` — undefined/false = source (the
    *  default, mints). Ignored by `symbol.native` (native ops never mint). */
   readonly pure?: boolean;
+  /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map) — one whose
+   *  lineage classifies to a per-element fan template. `bakeNative`/`bakeSequence` stamp a plain
+   *  `.fanout = true` on the bound fn; the lineage classifier reads it off `env.get(op)` (the
+   *  `SPECULATE` shape, minus the Symbol). Declared here on the contract, not in a name-list —
+   *  so fan-ness follows the binding (alias-correct), not a string match. */
+  readonly fanout?: boolean;
 }
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
@@ -292,6 +298,10 @@ export interface BakeRuntimeOpts {
 }
 
 function bakeNative(input: NativeInput): NativeSymbolDef {
+  const impl = input.impl;
+  // `fanout: true` → stamp the bound fn (capability binds def.impl raw; the lineage classifier
+  // reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
+  if (input.contract.fanout) (impl as { fanout?: boolean }).fanout = true;
   return {
     kind: "native",
     name: input.name,
@@ -300,7 +310,7 @@ function bakeNative(input: NativeInput): NativeSymbolDef {
     out: normalizeVector(input.contract.output),
     // NO runtime validation, NO codec — the impl works on scheme values directly.
     // "zod for types purely": the schemas live on the def for inference + the harvest.
-    impl: input.impl,
+    impl,
   };
 }
 
@@ -525,6 +535,9 @@ function bakeSequence(input: SequenceInput): SequenceSymbolDef {
     return await impl(schemeArgs, runCtx);
   };
   (run as { __withCtx?: boolean }).__withCtx = true;
+  // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
+  // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
+  if (input.contract.fanout) (run as { fanout?: boolean }).fanout = true;
   return { kind: "sequence", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
 }
 
