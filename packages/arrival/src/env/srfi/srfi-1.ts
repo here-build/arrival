@@ -12,6 +12,12 @@
 // (it once shadowed a Ramda `remove`, since removed entirely).
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import { typecheck } from "../../utils/typecheck.js";
+import { is_false, is_null, is_nil } from "../../eval/guards.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { unpromise } from "../../utils/promises.js";
+import { regexPredicate } from "../../values/regex-predicate.js";
+import * as z from "../../common/scheme-zod.js";
 
 export const SRFI1_SCM = `
 ;; ============ SRFI-1 (list library completion) ============
@@ -215,10 +221,34 @@ export const SRFI1_SCM = `
 // `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
 // list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
 // convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
+// `find` — SRFI-1 first-match search with arrival's regex extension: the predicate may be a host
+// RegExp (coerced via the regex-predicate leaf) as well as a procedure. A JS `symbol.native` (not a
+// scheme prelude define like `find-tail`) because it recurses over the coerced predicate and unwraps
+// an async generator-lambda result. Relocated from arrival-extensions; the regex wrinkle that kept it
+// there now lives in the reusable `regexPredicate` leaf, so the list op no longer knows about RegExp.
+function findImpl(arg: unknown, list: any): unknown {
+  typecheck("find", arg, ["regex", "function"]);
+  typecheck("find", list, ["pair", "nil"]);
+  if (is_null(list)) {
+    return nil;
+  }
+  const fn = regexPredicate(arg);
+  return unpromise(fn(list.car), function (value: unknown) {
+    if (!is_false(value) && !is_nil(value)) {
+      return list.car;
+    }
+    return findImpl(arg, list.cdr);
+  });
+}
+
 export default new EnvCapability("scheme/srfi-1", {
   prelude: SRFI1_SCM,
   symbols: {
     filter: symbol.tagless.filter`keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`,
     reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
+    find: symbol.native`find: first list element matching the predicate or regex, else nil`(
+      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
+      findImpl,
+    ),
   },
 });
