@@ -12,7 +12,7 @@ import {
   rational_re,
   re_re,
 } from "../values/primitives.js";
-import { CLASS, LAMBDA } from "../well-known-symbols.js";
+import { LAMBDA } from "../well-known-symbols.js";
 import * as specials from "../reader/specials.js";
 import { nil } from "../values/primitives/ANil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
@@ -152,19 +152,13 @@ export function is_undef(value: unknown): value is undefined {
 }
 
 // ----------------------------------------------------------------------
+// A procedure: a JS function (a Scheme lambda carries the LAMBDA brand; native builtins / rosettas
+// are bare functions) or a macro. There is no borrowed-JS-function wrapper anymore — the membrane
+// materializes a borrowed JS function to #void (uncallable), so the old `is_js_function_wrapper`
+// disjunct (a duck-type check for the deleted AJSFunction "js-function" tag — always false once the
+// class was removed) is gone with it.
 export function is_callable(o: unknown): boolean {
-  return is_function(o) || is_macro(o) || is_js_function_wrapper(o);
-}
-
-// Check for SchemeJSFunction without importing (avoids circular dep)
-function is_js_function_wrapper(o: unknown): boolean {
-  return (
-    o !== null &&
-    typeof o === "object" &&
-    "source" in o &&
-    typeof (o as { source: unknown }).source === "function" &&
-    (o as { constructor?: { [CLASS]?: string } }).constructor?.[CLASS] === "js-function"
-  );
+  return is_function(o) || is_macro(o);
 }
 
 // ----------------------------------------------------------------------

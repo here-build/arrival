@@ -104,9 +104,7 @@ export function type(obj): string {
     }
     if (obj.constructor) {
       if (obj.constructor[CLASS]) {
-        // Treat js-function as function for type checking (membrane wrapper)
-        const cls = obj.constructor[CLASS];
-        return cls === "js-function" ? "function" : cls;
+        return obj.constructor[CLASS];
       }
       if (obj.constructor === Object) {
         if (is_iterator(obj, Symbol.iterator)) {
