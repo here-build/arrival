@@ -1,4 +1,3 @@
-import { wrappedOps } from "./bridge.js";
 import { Environment } from "./Environment.js";
 import { env as userEnv } from "./stdlib.js";
 import { nil } from "./values/primitives/ANil.js";
@@ -12,7 +11,10 @@ import { nil } from "./values/primitives/ANil.js";
 // audit was built around. The only language-crossing door is the always-on
 // polyglot membrane (`@` / `@?` / `@keys` + the interop member-access policy).
 //
-// `wrappedOps` is spread directly onto this base.
+// The numeric core + the R7RS exception verbs are NO LONGER spread here: they live
+// in the `scheme/numeric` + `scheme/exceptions` packs assembled onto global_env, and
+// this env reaches them by inheritance (inferenceEnv → user_env → global_env) — the
+// same way it reaches every other native cluster (chars / strings / lists / …).
 //
 // The old `SAFE_BUILTINS` snapshot — `global_env.get(name)` for each whitelisted
 // name, eagerly at module load — is GONE. It was a relic of the null-parent island:
@@ -25,7 +27,6 @@ import { nil } from "./values/primitives/ANil.js";
 export const inferenceEnv = new Environment(
   "inference",
   {
-    ...wrappedOps,
     nil,
     // car/cdr/filter/map/reduce — the AJSArray-aware + FL-dispatching interop
     // overlay — moved to the `scheme/fl-interop` capability (env/fl-interop.ts),
@@ -37,7 +38,7 @@ export const inferenceEnv = new Environment(
     // the numeric predicates (`zero?`/`positive?`/`negative?`/`max`/`min`), and the
     // string ops (`string-length`/`string-upcase`/`string-downcase`/`string-ref`) —
     // are dropped. Each returned a RAW JS value (number/string/bool) that shadowed the
-    // sound base binding: the numeric core (wrappedOps, spread above) and the string/
+    // sound base binding: the numeric core (the scheme/numeric pack, inherited) and the string/
     // arrival-extensions packs return provenance-carrying BOXED Scheme values. The
     // base versions surface by inheritance / the spread; the loose copies only erased
     // lineage and the proper Scheme type.

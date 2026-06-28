@@ -1,23 +1,26 @@
 /**
  * Membrane - Typed boundary crossing for Scheme ↔ JS interop
  *
- * This module provides two layers of interop:
+ * This module provides:
  *
  * 1. WRAPPER LAYER (fromJS/toJS): General JS↔Scheme value crossing
  *    - Thin wrappers (cljs-bean style) for objects/functions
  *    - WeakMap identity cache (Miller/Van Cutsem pattern)
  *    - Primitives pass through without wrapping
  *
- * 2. CODEC LAYER (Codec/Operator): Typed bidirectional conversion at FFI boundaries
- *    - Bidirectional type converters at the boundary
- *    - Type-safe FFI between Scheme and JavaScript
+ * 2. POLYGLOT MEMBER ACCESS (readMember/hasMember/memberKeys): the interop read
+ *    protocol backing `@`/`@?`/`@keys` and the `:key` accessor.
+ *
+ * (The former CODEC LAYER — the `Codec` family + `Operator`/`OperatorRegistry` FFI
+ * marshalling — has been dissolved: the numeric core it served is carved into the
+ * `scheme/numeric` pack, bound via `symbol.native`.)
  *
  * See docs/membrane-design.md for full design rationale.
  *
  * Lineage: object-capability membranes (Miller, "Robust Composition", 2006; Van
- * Cutsem & Miller, "Trustworthy Proxies — Membranes", 2013); the CODEC layer is
- * foreign-function-interface marshalling. The member-read protocol mirrors GraalVM
- * Truffle's InteropLibrary (Würthinger et al. 2013/2017) — see interop-access.ts.
+ * Cutsem & Miller, "Trustworthy Proxies — Membranes", 2013). The member-read protocol
+ * mirrors GraalVM Truffle's InteropLibrary (Würthinger et al. 2013/2017) — see
+ * interop-access.ts.
  */
 
 import { CLASS } from "./well-known-symbols.js";
@@ -36,7 +39,6 @@ import { ASymbol } from "./values/primitives/ASymbol.js";
 import { Macro } from "./eval/Macro.js";
 import { AExact } from "./values/primitives/AExact.js";
 import { AInexact } from "./values/primitives/AInexact.js";
-import { type ANumeric } from "./values/numbers.js";
 import { APair } from "./values/primitives/APair.js";
 import { LAMBDA } from "./well-known-symbols.js";
 // `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
@@ -252,307 +254,6 @@ export function toJS(value: unknown): unknown {
 
   // Everything else passes through
   return value;
-}
-
-// ============================================================================
-// CODEC LAYER: Typed Bidirectional Conversion at FFI Boundaries
-// ============================================================================
-
-/**
- * Bidirectional type codec for FFI boundaries.
- *
- * Each codec co-locates three concerns at the definition site:
- * - match: runtime type guard (which values does this codec handle?)
- * - toJS: forward conversion (Scheme → JS)
- * - fromJS: backward conversion (JS → Scheme)
- *
- * @template S - Scheme side type
- * @template J - JavaScript side type
- */
-export interface Codec<S, J> {
-  /** Type guard: can this codec handle this value? */
-  match(value: unknown): value is S;
-
-  /** Forward: Scheme → JS */
-  toJS(value: S): J;
-
-  /** Backward: JS → Scheme */
-  fromJS(value: J): S;
-}
-
-// ============================================================================
-// Number Codecs
-// ============================================================================
-
-/** Any Scheme number ↔ JS number/bigint */
-export const AnyNum: Codec<ANumeric, number | bigint> = {
-  match(v): v is ANumeric {
-    return v instanceof AExact || v instanceof AInexact;
-  },
-
-  toJS(v) {
-    if (v instanceof AExact) {
-      if (v.isInteger && v.num >= BigInt(Number.MIN_SAFE_INTEGER) && v.num <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(v.num);
-      }
-      if (v.isInteger) return v.num;
-      return Number(v.num) / Number(v.denom);
-    }
-    return v.real;
-  },
-
-  fromJS(v) {
-    if (typeof v === "bigint") {
-      return new AExact(CONSTANT_CTX, v);
-    }
-    if (Number.isSafeInteger(v)) {
-      return new AExact(CONSTANT_CTX, BigInt(v));
-    }
-    return new AInexact(CONSTANT_CTX, v);
-  },
-};
-
-/** Exact integers ↔ JS bigint */
-export const Int: Codec<AExact, bigint> = {
-  match(v): v is AExact {
-    return v instanceof AExact && v.isInteger;
-  },
-  toJS: (v) => v.num,
-  fromJS: (v) => new AExact(CONSTANT_CTX, v),
-};
-
-/** Safe integers ↔ JS number (for bitwise ops etc.) */
-export const SafeInt: Codec<AExact, number> = {
-  match(v): v is AExact {
-    return (
-      v instanceof AExact &&
-      v.isInteger &&
-      v.num >= BigInt(Number.MIN_SAFE_INTEGER) &&
-      v.num <= BigInt(Number.MAX_SAFE_INTEGER)
-    );
-  },
-  toJS: (v) => Number(v.num),
-  fromJS: (v) => new AExact(CONSTANT_CTX, BigInt(v)),
-};
-
-/** Inexact reals ↔ JS number */
-export const Real: Codec<AInexact, number> = {
-  match(v): v is AInexact {
-    return v instanceof AInexact && v.isReal;
-  },
-  toJS: (v) => v.real,
-  fromJS: (v) => new AInexact(CONSTANT_CTX, v),
-};
-
-/** Any number as JS number (lossy for bigints and rationals) */
-export const Num: Codec<ANumeric, number> = {
-  match(v): v is ANumeric {
-    return v instanceof AExact || v instanceof AInexact;
-  },
-  toJS(v) {
-    if (v instanceof AExact) {
-      return Number(v.num) / Number(v.denom);
-    }
-    return v.real;
-  },
-  fromJS(v) {
-    if (Number.isSafeInteger(v)) {
-      return new AExact(CONSTANT_CTX, BigInt(v));
-    }
-    return new AInexact(CONSTANT_CTX, v);
-  },
-};
-
-// ============================================================================
-// Boolean Profunctor
-// ============================================================================
-
-/** Scheme boolean ↔ JS boolean */
-export const Bool: Codec<boolean, boolean> = {
-  match(v): v is boolean {
-    return typeof v === "boolean";
-  },
-  toJS: (v) => v,
-  fromJS: (v) => v,
-};
-
-// ============================================================================
-// String Profunctor
-// ============================================================================
-
-/** Scheme string ↔ JS string */
-export const Str: Codec<string, string> = {
-  match(v): v is string {
-    return typeof v === "string";
-  },
-  toJS: (v) => v,
-  fromJS: (v) => v,
-};
-
-// ============================================================================
-// Void Profunctor (for side-effect functions)
-// ============================================================================
-
-/** Void/undefined ↔ undefined */
-export const Void: Codec<undefined, undefined> = {
-  match(v): v is undefined {
-    return v === undefined;
-  },
-  toJS: () => {},
-  fromJS: () => {},
-};
-
-// ============================================================================
-// Type Utilities
-// ============================================================================
-
-type ExtractJS<P extends Codec<any, any>[]> = {
-  [K in keyof P]: P[K] extends Codec<any, infer J> ? J : never;
-};
-
-type ExtractScheme<P extends Codec<any, any>> = P extends Codec<infer S, any> ? S : never;
-
-type OperatorArgs<In extends Codec<any, any>[], InRest extends Codec<any, any> | undefined> =
-  InRest extends Codec<any, infer J> ? [...ExtractJS<In>, ...J[]] : ExtractJS<In>;
-
-// ============================================================================
-// Operator Class
-// ============================================================================
-
-export interface OperatorConfig<
-  In extends Codec<any, any>[],
-  InRest extends Codec<any, any> | undefined,
-  Out extends Codec<any, any>,
-> {
-  in: In;
-  inRest?: InRest;
-  out: Out;
-  fn: (...args: OperatorArgs<In, InRest>) => ExtractJS<[Out]>[0];
-}
-
-export class Operator<
-  In extends Codec<any, any>[] = Codec<any, any>[],
-  InRest extends Codec<any, any> | undefined = undefined,
-  Out extends Codec<any, any> = Codec<any, any>,
-> {
-  readonly in: In;
-  readonly inRest?: InRest;
-  readonly out: Out;
-  readonly fn: (...args: OperatorArgs<In, InRest>) => ExtractJS<[Out]>[0];
-
-  constructor(
-    readonly name: string,
-    config: OperatorConfig<In, InRest, Out>,
-  ) {
-    this.in = config.in;
-    this.inRest = config.inRest;
-    this.out = config.out;
-    this.fn = config.fn;
-  }
-
-  /** Arity info for documentation/introspection */
-  get arity(): { min: number; max: number | null } {
-    return {
-      min: this.in.length,
-      max: this.inRest ? null : this.in.length,
-    };
-  }
-
-  /** Factory with better generic inference */
-  static create<
-    const In extends Codec<any, any>[],
-    const InRest extends Codec<any, any> | undefined,
-    const Out extends Codec<any, any>,
-  >(name: string, config: OperatorConfig<In, InRest, Out>): Operator<In, InRest, Out> {
-    return new Operator(name, config);
-  }
-
-  call(args: unknown[]): ExtractScheme<Out> {
-    const minArgs = this.in.length;
-
-    TypeError.invariant(args.length >= minArgs, `${this.name}: expected at least ${minArgs} args, got ${args.length}`);
-    TypeError.invariant(
-      this.inRest || args.length <= minArgs,
-      `${this.name}: expected ${minArgs} args, got ${args.length}`,
-    );
-
-    const jsArgs = args.map((arg, i) => {
-      const prof = i < this.in.length ? this.in[i] : this.inRest!;
-      TypeError.invariant(prof.match(arg), `${this.name}: argument ${i} type mismatch`);
-      return prof.toJS(arg as any);
-    });
-
-    const jsResult = this.fn(...(jsArgs as any));
-    return this.out.fromJS(jsResult);
-  }
-}
-
-// ============================================================================
-// Operator Registry
-// ============================================================================
-
-export class OperatorRegistry {
-  private readonly operators = new Map<string, Operator<any, any, any>>();
-
-  constructor(readonly name: string = "default") {}
-
-  /** Register an operator */
-  register(op: Operator<any, any, any>): this {
-    this.operators.set(op.name, op);
-    return this;
-  }
-
-  /** Register multiple operators */
-  registerAll(...ops: Operator<any, any, any>[]): this {
-    for (const op of ops) {
-      this.register(op);
-    }
-    return this;
-  }
-
-  /** Get an operator by name */
-  get(name: string): Operator<any, any, any> | undefined {
-    return this.operators.get(name);
-  }
-
-  /** Check if operator exists */
-  has(name: string): boolean {
-    return this.operators.has(name);
-  }
-
-  /** Call an operator by name */
-  call(name: string, args: unknown[]): unknown {
-    const op = this.get(name);
-    invariant(op, `${this.name}: unknown operator '${name}'`);
-    return op.call(args);
-  }
-
-  /** List all operator names */
-  keys(): string[] {
-    return [...this.operators.keys()];
-  }
-
-  /** Create a child environment that inherits from this one */
-  extend(name: string): OperatorRegistry {
-    const child = new OperatorRegistry(name);
-    // Copy all operators from parent
-    for (const [key, op] of this.operators) {
-      child.operators.set(key, op);
-    }
-    return child;
-  }
-
-  /** Create a restricted environment with only specified operators */
-  restrict(name: string, allowList: string[]): OperatorRegistry {
-    const restricted = new OperatorRegistry(name);
-    for (const key of allowList) {
-      const op = this.operators.get(key);
-      if (op) {
-        restricted.operators.set(key, op);
-      }
-    }
-    return restricted;
-  }
 }
 
 // (The "object" boxer — array→AJSArray / plain-object→AJSObject — and the "function" boxer

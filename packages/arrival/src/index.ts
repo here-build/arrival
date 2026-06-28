@@ -89,23 +89,11 @@ export { AExact } from "./values/primitives/AExact.js";
 export { AInexact } from "./values/primitives/AInexact.js";
 export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 
-// Membrane (Codec-based boundary crossing)
-export {
-  AnyNum as AnyNum,
-  Real as Real,
-  Num as Num,
-  Bool as Bool,
-  Str as Str,
-  Operator as Operator,
-} from "./membrane.js";
-
-// Operators
-export * from "./operators/index.js";
-
-// Bridge (numeric coercion + wrapped operators)
+// Bridge (numeric coercion re-export + the R7RS exception verbs + bootstrap). The
+// numeric core (the former Operator/Codec stack + the operator instances) is carved
+// into the `scheme/numeric` pack and is no longer part of the public surface.
 export {
   coerceNumeric,
-  wrapOperator as wrapOperator,
   wrappedOps as wrappedOps,
   initBridge as initBridge,
 } from "./bridge.js";
