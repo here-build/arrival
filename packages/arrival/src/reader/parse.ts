@@ -11,12 +11,12 @@ import type { SchemeValue } from "../values/types.js";
 
 // `_parse` is the async datum generator; `parse` collects it into an array. stdlib's
 // bootstrap still consumes the generator form for one native-lambda literal.
-export async function* _parse(arg: SchemeValue, source?: string) {
+export async function* _parse(arg: SchemeValue, source?: string, strict = false) {
   let parser;
   if (arg instanceof Parser) {
     parser = arg;
   } else {
-    parser = new Parser({ source });
+    parser = new Parser({ source, strict });
     parser.parse(arg);
   }
   let prev;
@@ -34,9 +34,9 @@ export async function* _parse(arg: SchemeValue, source?: string) {
 }
 
 // unwrap the async datum generator into Promise<Array>
-export const parse = async (arg: SchemeValue, source?: string): Promise<SchemeValue[]> => {
+export const parse = async (arg: SchemeValue, source?: string, strict = false): Promise<SchemeValue[]> => {
   const result: SchemeValue[] = [];
-  for await (const item of _parse(arg, source)) {
+  for await (const item of _parse(arg, source, strict)) {
     result.push(item);
   }
   return result;

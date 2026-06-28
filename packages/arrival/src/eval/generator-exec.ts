@@ -191,7 +191,9 @@ export async function exec(
   // Parse if string, otherwise wrap single value in array
   let parsed: SchemeValue[];
   if (typeof code === "string") {
-    parsed = await readerParse(code);
+    // Thread strict into the reader so the R7RS control rejects loose-mode literals
+    // (#void/#null) at parse time. Default false ⇒ loose parse, unchanged.
+    parsed = await readerParse(code, undefined, strict ?? false);
   } else if (is_pair(code)) {
     // Single expression - evaluate directly
     parsed = [code];

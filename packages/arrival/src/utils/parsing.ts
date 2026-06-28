@@ -306,7 +306,13 @@ const constants: Record<string, unknown> = {
 // Constants first, then string, then the `#`-prefixed family (regex/char), then the numeric tower;
 // anything that falls through is a symbol. Order matters — the cheap `Object.hasOwn` and prefix tests
 // gate the expensive numeric regexes.
-export function parse_argument(arg: string): unknown {
+export function parse_argument(arg: string, strict = false): unknown {
+  // Strict (the R7RS portability control) rejects the loose-mode `#void`/`#null`
+  // reader literals — a program that writes them is not portable to a stock Scheme.
+  // The VALUES (void/nil) still exist; only the non-standard readable LITERAL is gated.
+  if (strict && (arg === "#void" || arg === "#null")) {
+    throw new Error(`reader: \`${arg}' is not portable R7RS — strict mode rejects this loose-mode literal`);
+  }
   if (Object.hasOwn(constants, arg)) {
     return constants[arg];
   }

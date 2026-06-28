@@ -82,6 +82,9 @@ interface ParserOptions {
   /** Source identifier (filename / module path) stamped onto every location this
    *  parser produces — so a throw inside a required module reads as `file:line`. */
   source?: string;
+  /** Strict (R7RS-faithful) parse — rejects loose-mode reader tolerances like
+   *  `#void`/`#null`. Defaults false (loose), the studio default. */
+  strict?: boolean;
 }
 
 function defaultFormatter(token: { token: string; col: number; offset: number; line: number }) {
@@ -96,13 +99,14 @@ export class Parser {
   private readonly _formatter!: (token: TokenMeta) => TokenMeta;
   private readonly _meta!: boolean;
   private readonly _source?: string;
+  private readonly _strict!: boolean;
   private _refs!: (SchemeValue | Promise<SchemeValue>)[];
   // `parentheses` is the live descent depth (the nesting-cap counter); `brackets`
   // is the typed open-delimiter stack holding each open's EXPECTED close char, so
   // a close must match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
   private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
-  constructor({ meta = false, formatter = defaultFormatter, source }: ParserOptions = {}) {
+  constructor({ meta = false, formatter = defaultFormatter, source, strict = false }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
       value: formatter,
       configurable: true,
@@ -115,6 +119,11 @@ export class Parser {
     });
     Object.defineProperty(this, "_meta", {
       value: meta,
+      configurable: true,
+      enumerable: false,
+    });
+    Object.defineProperty(this, "_strict", {
+      value: strict,
       configurable: true,
       enumerable: false,
     });
@@ -344,7 +353,7 @@ export class Parser {
   async read_value() {
     const token = await this.read();
     invariant(token !== eof, "Parser: Expected token eof found");
-    return parse_argument(token);
+    return parse_argument(token, this._strict);
   }
 
   is_comment(token: string) {
