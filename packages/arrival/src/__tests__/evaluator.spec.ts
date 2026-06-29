@@ -16,8 +16,11 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
+import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
+import { LAMBDA } from "../well-known-symbols.js";
+import { type SchemeValue } from "../values/types.js";
 import { list, num, sym } from "./helpers.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
@@ -98,8 +101,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       cons: (a: unknown, b: unknown) => new APair(CONSTANT_CTX, a, b),
       "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as ANil).toString?.() === "()"),
       not: (x: unknown) => x === false || x === nil,
-      "#t": true,
-      "#f": false,
+      "#t": schemeTrue,
+      "#f": schemeFalse,
     });
   });
 
@@ -136,7 +139,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   describe("evaluate()", () => {
     it("should evaluate atoms to themselves", async () => {
       expect(await exec(num(42), { env })).toEqual(num(42));
-      expect(await exec("hello", { env })).toBe("hello");
+      const hello = new AString(CONSTANT_CTX, "hello");
+      expect(await exec(hello, { env })).toBe(hello);
       expect(await exec(nil, { env })).toBe(nil);
     });
 
@@ -226,13 +230,13 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     describe("if", () => {
       it("should evaluate then branch when condition is true", async () => {
         // (if #t 1 2)
-        const code = list(sym("if"), true, num(1), num(2));
+        const code = list(sym("if"), schemeTrue, num(1), num(2));
         expect(await exec(code, { env })).toEqual(num(1));
       });
 
       it("should evaluate else branch when condition is false", async () => {
         // (if #f 1 2)
-        const code = list(sym("if"), false, num(1), num(2));
+        const code = list(sym("if"), schemeFalse, num(1), num(2));
         expect(await exec(code, { env })).toEqual(num(2));
       });
 
@@ -244,7 +248,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
       it("should return undefined when no else branch and condition is false", async () => {
         // (if #f 1)
-        const code = list(sym("if"), false, num(1));
+        const code = list(sym("if"), schemeFalse, num(1));
         expect(await exec(code, { env })).toBe(theVoid);
       });
 
@@ -323,7 +327,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const code = list(sym("lambda"), list(sym("x")), sym("x"));
         const fn = (await exec(code, { env })) as Function;
         expect(typeof fn).toBe("function");
-        expect((fn as { [k: symbol]: unknown })[Symbol.for("arrival/lambda")]).toBe(true);
+        expect(LAMBDA in fn).toBe(true);
       });
 
       it("should execute lambda with arguments", async () => {
@@ -442,8 +446,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           return true;
         });
         // (and #f (side-effect))
-        const code = list(sym("and"), false, list(sym("side-effect")));
-        expect(await exec(code, { env })).toBe(false);
+        const code = list(sym("and"), schemeFalse, list(sym("side-effect")));
+        expect(await exec(code, { env })).toBe(schemeFalse);
         expect(called).toBe(false);
       });
 
@@ -475,7 +479,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
       it("should return last value if all false", async () => {
         // (or #f #f 0) - 0 is truthy in Scheme
-        const code = list(sym("or"), false, false, num(0));
+        const code = list(sym("or"), schemeFalse, schemeFalse, num(0));
         expect(await exec(code, { env })).toEqual(num(0));
       });
     });
@@ -550,13 +554,13 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     describe("when", () => {
       it("should execute body when test is true", async () => {
         // (when #t 1 2 3)
-        const code = list(sym("when"), true, num(1), num(2), num(3));
+        const code = list(sym("when"), schemeTrue, num(1), num(2), num(3));
         expect(await exec(code, { env })).toEqual(num(3));
       });
 
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
-        const code = list(sym("when"), false, num(1), num(2), num(3));
+        const code = list(sym("when"), schemeFalse, num(1), num(2), num(3));
         expect(await exec(code, { env })).toBe(theVoid);
       });
     });
@@ -564,13 +568,13 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     describe("unless", () => {
       it("should execute body when test is false", async () => {
         // (unless #f 1 2 3)
-        const code = list(sym("unless"), false, num(1), num(2), num(3));
+        const code = list(sym("unless"), schemeFalse, num(1), num(2), num(3));
         expect(await exec(code, { env })).toEqual(num(3));
       });
 
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
-        const code = list(sym("unless"), true, num(1), num(2), num(3));
+        const code = list(sym("unless"), schemeTrue, num(1), num(2), num(3));
         expect(await exec(code, { env })).toBe(theVoid);
       });
     });
@@ -623,7 +627,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         );
         await exec(defineMacro, { env });
 
-        const code = list(sym("my-when"), true, num(1), num(2), num(3));
+        const code = list(sym("my-when"), schemeTrue, num(1), num(2), num(3));
         expect(await exec(code, { env })).toEqual(num(3));
       });
     });
@@ -671,7 +675,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       let code: SchemeValue = num(42);
 
       for (let i = 0; i < 10000; i++) {
-        code = list(sym("if"), true, code, num(0));
+        code = list(sym("if"), schemeTrue, code, num(0));
       }
 
       const result = await exec(code, { env });
