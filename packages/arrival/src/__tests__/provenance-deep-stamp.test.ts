@@ -150,7 +150,7 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
     const first = obj.get("x") as AExact;
     expect(first.valueOf()).toBe(1);
     // Writing the foreign peer is not dataflow — the membrane is read-only.
-    expect(() => obj.set("x", 99)).toThrow(/writes are banned/);
+    expect(() => obj.set("x", new AExact(CONSTANT_CTX, 99n))).toThrow(/writes are banned/);
     expect(source.x).toBe(1); // nothing was written
     // The cached read remains the same stable AValue.
     expect(obj.get("x")).toBe(first);
