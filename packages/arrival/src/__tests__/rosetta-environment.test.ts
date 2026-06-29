@@ -1,8 +1,10 @@
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { AString } from "../values/primitives/AString.js";
 /**
  * Test Rosetta Environment - seamless LIPS ↔ JS interop
  */
 
+import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../inference-env.js";
 import { createRosettaWrapper, jsToScheme, schemeToJs } from "../rosetta.js";
@@ -12,6 +14,15 @@ import { exec } from "../eval/generator-exec.js";
 async function execOne(expr: string): Promise<any> {
   const results = await exec(expr, { env: inferenceEnv });
   return results[0];
+}
+
+// `Environment.get` returns the wide `EnvironmentValue` union, which now carries
+// several distinct callable shapes (LipsFunction + two builtin signatures). A bare
+// `typeof === "function"` narrows to that union-of-functions, which TS refuses to
+// invoke (incompatible call signatures). This guard collapses a hit to ONE coherent
+// callable signature — the honest shape of a rosetta wrapper (variadic args in).
+function isCallable(value: unknown): value is (...args: any[]) => unknown {
+  return typeof value === "function";
 }
 
 describe("Rosetta Environment", () => {
@@ -255,6 +266,7 @@ describe("Rosetta Environment", () => {
       // Convert to LIPS and call function
       const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
       const rosettaFn = inferenceEnv.get("extract-values");
+      invariant(isCallable(rosettaFn), "extract-values must resolve to a callable rosetta wrapper");
       const result = await rosettaFn(lipsData);
 
       console.log("Complex data result:", result);
@@ -284,7 +296,10 @@ describe("Rosetta Environment", () => {
       // Convert to LIPS and filter
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const filterFn = inferenceEnv.get("filter-by-css-property");
-      const result = await filterFn(lipsNodes, "overflow", "hidden");
+      invariant(isCallable(filterFn), "filter-by-css-property must resolve to a callable rosetta wrapper");
+      // Args cross the membrane as Scheme values: the wrapper runs schemeToJs on each
+      // before invoking the underlying fn, so the property/value strings are boxed AStrings.
+      const result = await filterFn(lipsNodes, new AString(CONSTANT_CTX, "overflow"), new AString(CONSTANT_CTX, "hidden"));
 
       console.log("CSS filtering result:", result);
 
@@ -318,6 +333,7 @@ describe("Rosetta Environment", () => {
 
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const statsFn = inferenceEnv.get("css-property-stats");
+      invariant(isCallable(statsFn), "css-property-stats must resolve to a callable rosetta wrapper");
       const result = await statsFn(lipsNodes);
 
       console.log("CSS stats result:", result);

@@ -17,15 +17,17 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { pointProvenance } from "../values/primitives/AValue.js";
+import { AExact } from "../values/primitives/AExact.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { exec } from "../eval/generator-exec.js";
+import type { SchemeValue } from "../values/types.js";
 
 const flushMicrotasks = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe("deferred egress — the carrier captures its PRODUCING run (ctx can't undo it)", () => {
   it("AHalfBaked.records is MUTABLE cross-run state, settled by a microtask .then untethered to any run", async () => {
-    let settle!: (items: number[]) => void;
-    const slot = new Promise<number[]>((res) => {
+    let settle!: (items: SchemeValue[]) => void;
+    const slot = new Promise<SchemeValue[]>((res) => {
       settle = res;
     });
     // A filter slot: cardinality [0,1] until the predicate's promise settles.
@@ -34,7 +36,7 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
     expect(hb.isFullySettled).toBe(false);
     expect(hb.interval()).toEqual({ lo: 0, hi: 1 });
 
-    settle([42]); // the slot keeps its element
+    settle([new AExact(CONSTANT_CTX, 42n)]); // the slot keeps its element
     await flushMicrotasks(); // let the carrier's internal .then mutate `records`
 
     // The interval narrowed via a callback that fired on the microtask queue with no run
@@ -47,14 +49,18 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
 
 describe("deferred egress — un-forced escape is structurally detectable", () => {
   it("AHalfBaked.toJs() is the interval, never the collapsed value", () => {
-    const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([1])], () => [1, 1]);
+    const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([new AExact(CONSTANT_CTX, 1n)])], () => [1, 1]);
     expect(hb.toJs()).toMatchObject({ __halfBaked__: "collection" });
   });
 });
 
 describe("deferred egress — the force mechanism force-on-egress will call", () => {
   it("AHalfBaked.force() is idempotent — forcing at two boundaries folds once", async () => {
-    const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([1]), Promise.resolve([2])], () => [1, 1]);
+    const hb = AHalfBaked.collection(
+      CONSTANT_CTX,
+      [Promise.resolve([new AExact(CONSTANT_CTX, 1n)]), Promise.resolve([new AExact(CONSTANT_CTX, 2n)])],
+      () => [1, 1],
+    );
     const a = hb.force();
     const b = hb.force();
     expect(a).toBe(b); // same memoized promise — the fold runs once
