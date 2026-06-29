@@ -4,7 +4,6 @@ import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
-import type { SchemeValue } from "./types.js";
 
 /**
  * Cycle-safe structural deep-equality for Scheme values — the ONE `equal?`
@@ -138,7 +137,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // checks so clones still compare eq? (else an `if`-induced clone of nil/#f fails
 // eq? against the singleton, breaking `(eq? x '())`).
 // ----------------------------------------------------------------------
-export function eq(x: SchemeValue, y: SchemeValue): boolean {
+export function eq(x: unknown, y: unknown): boolean {
   // Identity first — also the only true-answer for the pointer-grade types below
   // (Pair / vector / SchemeString / plain object). Then the SCALAR types route
   // their value-comparison THROUGH their own Setoid (`arrival/tagless-final/equals`): the
@@ -168,7 +167,7 @@ export function eq(x: SchemeValue, y: SchemeValue): boolean {
   return false;
 }
 
-export function eqv(x: SchemeValue, y: SchemeValue): boolean {
+export function eqv(x: unknown, y: unknown): boolean {
   // eqv? = eq? + explicit number/char equality, both already in eq() above.
   return eq(x, y);
 }
