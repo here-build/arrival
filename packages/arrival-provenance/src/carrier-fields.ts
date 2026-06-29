@@ -167,7 +167,10 @@ export function classifierFromTrace(trace: EvalTrace): Classifier {
  * classifier defaults to `classifierFromTrace` — the trace self-describes its sources, so the dag
  * needs no env or source list.
  */
-export function carrierFieldEdges(trace: EvalTrace, classifier: Classifier = classifierFromTrace(trace)): Map<string, Set<string>> {
+export function carrierFieldEdges(
+  trace: EvalTrace,
+  classifier: Classifier = classifierFromTrace(trace),
+): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   const auto = trace.autoBindings;
   if (!auto) return out; // flag OFF — the carrier contributes nothing
