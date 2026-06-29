@@ -26,14 +26,15 @@ import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import {
   INTEROP_BOUNDARY,
-  InteropAccessError,
   accessMember,
   accessSet,
   isInteropBoundary,
 } from "../interop-access.js";
+import { InteropAccessError } from "../errors.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { jsToScheme } from "../rosetta.js";
 import { exec as gexec } from "../eval/generator-exec.js";
 
 // ============================================================================
@@ -126,7 +127,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // Direct check, two ways the marker can be present:
     const protoMarked =
       Object.prototype.hasOwnProperty.call(AString.prototype, INTEROP_BOUNDARY) &&
-      (AString.prototype as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
+      Reflect.get(AString.prototype, INTEROP_BOUNDARY) === true;
     const ctorMarked =
       Object.prototype.hasOwnProperty.call(AString, INTEROP_BOUNDARY) &&
       (AString as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
@@ -195,7 +196,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
     await initBridge();
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
-    inferenceEnv.set("__probe_obj", { name: "maya", nested: { city: "lisbon" } });
+    inferenceEnv.set("__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
     const [byKeyword] = await exec("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
@@ -377,8 +378,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     a.self = a;
     const b: Record<string, unknown> = {};
     b.self = b;
-    inferenceEnv.set("__cyc_a", a);
-    inferenceEnv.set("__cyc_b", b);
+    inferenceEnv.set("__cyc_a", jsToScheme(CONSTANT_CTX, a));
+    inferenceEnv.set("__cyc_b", jsToScheme(CONSTANT_CTX, b));
 
     let err: Error | undefined;
     let result: unknown;

@@ -12,6 +12,9 @@ function recorder(): { env: SchemeEnv; log: string[] } {
     get: () => undefined,
     defineRosetta: (name) => log.push(`rosetta:${name}`),
     inherit: () => env,
+    registerResolver: (resolver) => void log.push(`resolver:${resolver.id}`),
+    list: () => [],
+    allBoundNames: () => [],
   };
   return { env, log };
 }
@@ -45,7 +48,7 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     const make = schemePacks<SchemeEnv>((_e, src) => void log.push(`scm:${src}`));
 
     const schemePack = make({ name: "scheme", bootstrap: "DEFS" });
-    const jsPack: EnvPack<SchemeEnv> = { name: "js", apply: (e) => e.set("native", 1) };
+    const jsPack: EnvPack<SchemeEnv> = { name: "js", apply: (e) => void e.set("native", 1) };
     await assembleEnv(env, [jsPack, schemePack]);
 
     expect(log.sort()).toEqual(["scm:DEFS", "set:native"]);
@@ -54,7 +57,7 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
   it("a bootstrap-less pack is just its wire (no eval)", async () => {
     const { env, log } = recorder();
     const make = schemePacks<SchemeEnv>(() => void log.push("EVAL-SHOULD-NOT-RUN"));
-    await assembleEnv(env, [make({ name: "wire-only", wire: (e) => e.set("x", 1) })]);
+    await assembleEnv(env, [make({ name: "wire-only", wire: (e) => void e.set("x", 1) })]);
     expect(log).toEqual(["set:x"]);
   });
 });
