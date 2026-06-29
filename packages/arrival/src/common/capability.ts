@@ -92,14 +92,30 @@ export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unkn
  *  → a rosetta symbol; `set` → a `{ value }` binding. */
 export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, SymbolDef> {
   const out: Record<string, SymbolDef> = {};
-  const host = {
+  // A recording host: the SUBSET of SchemeEnv a `defineXRosettas` helper actually
+  // exercises (defineRosetta → a rosetta symbol; set → a `{ value }` binding) is wired
+  // to capture into `out`. The scope-shaping verbs (registerResolver / list /
+  // allBoundNames / inherit-into-a-new-scope) have no meaning while RECORDING — a helper
+  // reaching for them during capture is a misuse, so they throw LOUD rather than silently
+  // mis-record. `inherit` returns the same recorder so a chained `.inherit().set(…)` lands
+  // in the same `out`. This genuinely satisfies SchemeEnv (no cast) — it is a faithful,
+  // capture-only implementation, not a laundered partial.
+  const recorderError = (verb: string) => new Error(`captureSymbols: ${verb} is not recordable`);
+  const host: SchemeEnv = {
     defineRosetta: (name: string, cfg: RosettaSpec) => void (out[name] = cfg as SymbolDef),
     set: (name: string, value: unknown) => void (out[name] = { value }),
     get: () => undefined,
-    inherit() {
-      return host as unknown as SchemeEnv;
+    inherit: () => host,
+    registerResolver: () => {
+      throw recorderError("registerResolver");
     },
-  } as unknown as SchemeEnv;
+    list: () => {
+      throw recorderError("list");
+    },
+    allBoundNames: () => {
+      throw recorderError("allBoundNames");
+    },
+  };
   wire(host);
   return out;
 }

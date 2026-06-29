@@ -17,7 +17,7 @@ import { Capabilities } from "./Capabilities.js";
 import type { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv } from "../common/kernel.js";
 import type { EnvCapability } from "../common/capability.js";
-import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
+import type { EvalSchemeInto } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { is_pair, is_macro } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
@@ -85,11 +85,11 @@ export function ensureBaseAssembled(): Promise<void> {
     const evalScheme: EvalSchemeInto = (env, src) =>
       exec(src as string, { env: env as Environment, skipBootstrapWait: true });
     await assembleEnv(
-      global_env as unknown as SchemeEnv,
+      global_env,
       GLOBAL_NATIVE_PACKS.map((pack) => pack.lower()),
     );
     await assembleEnv(
-      user_env as unknown as SchemeEnv,
+      user_env,
       BASE_PACKS.map((pack) => pack.lower({ evalScheme })),
     );
   })());
@@ -112,7 +112,7 @@ const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
 async function assembleCapabilityBase(capabilities: readonly EnvCapability[]): Promise<Environment> {
   const base = user_env.inherit("exec-capabilities");
   await assembleEnv(
-    base as unknown as SchemeEnv,
+    base,
     capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme })),
   );
   return base;
