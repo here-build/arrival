@@ -36,12 +36,14 @@ import { withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import { is_false, is_nil, is_pair, is_promise } from "../../eval/guards.js";
+import { is_false, is_function, is_nil, is_pair as is_pair_raw, is_promise } from "../../eval/guards.js";
 import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError, currentRunEnv, isSpeculating } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
+import { AExact } from "../../values/primitives/AExact.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AHalfBaked, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { SPECULATE } from "../../well-known-symbols.js";
@@ -50,13 +52,37 @@ import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
+// List-domain refinement of `is_pair`. The shared `is_pair` (value-guards) narrows
+// only to `APair<unknown, unknown>`, so `.car`/`.cdr` come back `unknown`. Every
+// pair this pack walks is a Scheme cons cell whose slots are SchemeValue, so the
+// file-local shadow refines the narrow to that slot truth — same runtime predicate,
+// zero call-site churn (the proven evaluator.ts pattern).
+const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
+
+// A JS value used as a Scheme procedure IS the SchemeValue function member
+// `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
+// over `unknown` only yield the bare `Function` type, which lacks the call
+// signature `call_function`/`apply` need — this refines the predicate to the
+// procedure shape the union already names.
+const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue =>
+  is_function(o);
+
 // Pack-local copies of the list<->array bridge helpers. The stdlib originals
 // (`listToArray`/`arrayToList`/`to_array`/`isProperList`) stay in stdlib.ts for
 // its remaining consumers; these reproduce the same logic byte-for-byte (incl.
 // the per-run heap-meter charge `to_array` levies at the collection choke) so
 // the relocated defs are behavior-identical.
-function to_array(name: string, deep = false): (list: SchemeValue) => SchemeValue[] {
-  return function recur(list: SchemeValue): SchemeValue[] {
+// `deep` decides the ELEMENT type: a shallow walk yields a flat `SchemeValue[]`
+// (each list element is a value); a deep walk splices nested lists in as nested
+// JS arrays, so an element is `SchemeValue | NestedArray` — captured by the
+// recursive `NestedArray` (a value, or an array of such). A flat `SchemeValue[]`
+// is itself a valid `NestedArray[]`, so the shallow caller (`listToArray`) keeps
+// its precise `SchemeValue[]` while the deep caller (`treeToArray`) gets the tree.
+type NestedArray = SchemeValue | NestedArray[];
+function to_array(name: string): (list: unknown) => SchemeValue[];
+function to_array(name: string, deep: true): (list: unknown) => NestedArray[];
+function to_array(name: string, deep = false): (list: unknown) => NestedArray[] {
+  return function recur(list: unknown): NestedArray[] {
     typecheck(name, list, ["pair", "nil"]);
     if (is_nil(list)) {
       return [];
@@ -64,14 +90,14 @@ function to_array(name: string, deep = false): (list: SchemeValue) => SchemeValu
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
     const runEnv = currentRunEnv();
     const meter = findHeapMeter(runEnv ?? null);
-    const result: SchemeValue[] = [];
-    let node = list;
+    const result: NestedArray[] = [];
+    let node: unknown = list;
     while (true) {
       if (is_pair(node)) {
         if (node.have_cycles("cdr")) {
           break;
         }
-        let car = node.car;
+        let car: NestedArray = node.car;
         if (deep && is_pair(car)) {
           car = recur(car);
         }
@@ -91,12 +117,12 @@ function to_array(name: string, deep = false): (list: SchemeValue) => SchemeValu
 const listToArray = to_array("list->array");
 const treeToArray = to_array("tree->array", true);
 
-function arrayToList(array: SchemeValue): SchemeValue {
+function arrayToList(array: unknown): SchemeValue {
   typecheck("array->list", array, "array");
   return APair.fromArray(CONSTANT_CTX, array);
 }
 
-function isProperList(obj: SchemeValue): SchemeValue {
+function isProperList(obj: SchemeValue): boolean {
   // A circular list is NOT a proper list (R7RS). Detect runtime cycles.
   if (is_pair(obj) && isCircularList(obj)) {
     return false;
@@ -115,8 +141,11 @@ function isProperList(obj: SchemeValue): SchemeValue {
 // [SPECULATE]=true, so length reads the lazy cardinality interval itself instead of a
 // settled value (see evaluator.ts dispatch). Relocated VERBATIM from stdlib.ts
 // global_env, where the `speculative()` helper set the same symbol on the bound fn.
-const lengthImpl = (obj: SchemeValue): SchemeValue => {
-  if (obj == null) return 0;
+const lengthImpl = (obj: unknown): SchemeValue => {
+  // R7RS length is an exact integer. The relocated body returned raw JS numbers (the
+  // membrane boxed them downstream); box to AExact here so the value IS a SchemeValue,
+  // matching the string-length sibling (`new AExact(ctx, BigInt(...))`).
+  if (obj == null) return new AExact(CONSTANT_CTX, 0n);
   // Tier 2 speculation: length of a still-filling collection is its narrowing cardinality INTERVAL,
   // surfaced as a number-domain HalfBaked the comparison ops read for early collapse (reached only
   // when speculation is on — the choke leaves a HalfBaked unforced solely for this marked op).
@@ -133,7 +162,8 @@ const lengthImpl = (obj: SchemeValue): SchemeValue => {
     return (m as () => SchemeValue).call(obj);
   }
   if (typeof obj === "object" && "length" in obj) {
-    return withInputProvenance([obj], obj.length);
+    const len = obj.length;
+    if (typeof len === "number") return withInputProvenance([obj], new AExact(CONSTANT_CTX, BigInt(len)));
   }
   throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
 };
@@ -145,7 +175,11 @@ const lengthImpl = (obj: SchemeValue): SchemeValue => {
 // map carries NO global_env capture (the lazy builtinMap grab fl-interop needed is gone). Speculation
 // rides here too (cardBounds [1,1], the count is exact up front), carrying early-collapse through a
 // multi-list map.
-function multiListMap(fn: SchemeValue, lists: SchemeValue[], runCtx: RunContext): SchemeValue {
+function multiListMap(fn: unknown, lists: readonly unknown[], runCtx: RunContext): SchemeValue | Promise<SchemeValue> {
+  // `call_function` requires a JS-callable; narrow `fn` to one. An un-callable `fn`
+  // would throw inside `fn.apply` regardless — this surfaces the same failure as a
+  // typed assertion, with no behavior change for the procedure case map always sees.
+  invariant(is_callable(fn), `map: the first argument is not a procedure`);
   for (const [i, arg] of lists.entries()) {
     typecheck("map", arg, ["pair", "nil"], i + 1);
   }
@@ -175,8 +209,11 @@ function multiListMap(fn: SchemeValue, lists: SchemeValue[], runCtx: RunContext)
 // `isProperList` cycle-check raises "map: argument N is not a list", whereas
 // multiListMap lets listToArray raise its own circular-list error. Unifying the
 // two is a deferred behavior-preserving cleanup.
-function mapImpl(fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue {
+function mapImpl(fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue | Promise<SchemeValue> {
   typecheck("map", fn, "function");
+  // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
+  // as a type-level assertion so `call_function` sees the JS-callable it needs.
+  invariant(is_callable(fn), `map: the first argument is not a procedure`);
   const is_list = isProperList;
   for (const [i, arg] of lists.entries()) {
     typecheck("map", arg, ["pair", "nil"], i + 1);
@@ -240,15 +277,19 @@ export default new EnvCapability("scheme/lists", {
       // side effects and discards the result list. The legacy `.call(this)` was a
       // babel-weakBind workaround — this pack is tsc/ES2022, so a direct call is
       // behavior-identical (mapImpl never reads `this`).
-      (fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue => {
+      (fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue | Promise<SchemeValue> => {
         typecheck("for-each", fn, "function");
         for (const [i, arg] of lists.entries()) {
           typecheck("for-each", arg, ["pair", "nil"], i + 1);
         }
         const ret = mapImpl(fn, ...lists);
+        // for-each returns unspecified (R7RS §6.4). The relocated body fell off the
+        // end returning bare `undefined`, which the membrane boxed to `theVoid`; emit
+        // that in-language unspecified directly so the contract's value-return holds.
         if (is_promise(ret)) {
-          return ret.then(() => {});
+          return ret.then(() => theVoid);
         }
+        return theVoid;
       },
     ),
     // R7RS 6.4 Pairs and lists
@@ -298,6 +339,8 @@ export default new EnvCapability("scheme/lists", {
       // Uses the pack-local `listToArray` (same byte-for-byte to_array the bridge used).
       (fn: SchemeValue, ...args: SchemeValue[]): SchemeValue => {
         typecheck("apply", fn, "function", 1);
+        // `typecheck` is not a TS guard; re-state callability so `.apply` resolves.
+        invariant(is_callable(fn), `apply: the first argument is not a procedure`);
         const last = args.pop();
         typecheck("apply", last, ["pair", "nil"], args.length + 2);
         args = args.concat(listToArray(last));
@@ -403,11 +446,13 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     memv: symbol.native`memv: first sublist whose car is eqv? to obj, else #f`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: unknown, list: unknown): unknown => {
-        let current = list;
+      // `eqv` compares Scheme values, so the search key is `z.value` (not the
+      // representation-blind `z.unknown` memq uses for its `===` identity test).
+      { input: [z.value, z.union([z.pair, z.nil])], output: [z.unknown()] },
+      (obj: SchemeValue, list: unknown): unknown => {
+        let current: unknown = list;
         TypeError.invariant(!isCircularList(list), "memv: circular list");
-        while (current instanceof APair) {
+        while (is_pair(current)) {
           if (eqv(current.car, obj)) return current;
           current = current.cdr;
         }
@@ -430,13 +475,14 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: unknown, alist: unknown): unknown => {
-        let current = alist;
+      // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
+      { input: [z.value, z.union([z.pair, z.nil])], output: [z.unknown()] },
+      (obj: SchemeValue, alist: unknown): unknown => {
+        let current: unknown = alist;
         TypeError.invariant(!isCircularList(alist), "assv: circular list");
-        while (current instanceof APair) {
+        while (is_pair(current)) {
           const pair = current.car;
-          if (pair instanceof APair && eqv(pair.car, obj)) return pair;
+          if (is_pair(pair) && eqv(pair.car, obj)) return pair;
           current = current.cdr;
         }
         return false;
@@ -496,6 +542,9 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value], output: [z.value] },
       (list: SchemeValue): SchemeValue => {
         typecheck("clone", list, "pair");
+        // `typecheck` proves pairhood at runtime but is not a TS guard; re-state it so
+        // `.clone()` (an APair method) resolves on the narrowed receiver.
+        invariant(is_pair(list), typeErrorMessage("clone", type(list), "pair"));
         return list.clone();
       },
     ),
@@ -530,8 +579,10 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     reverse: symbol.native`reverse: the list (or array) reversed (LIPS-polymorphic)`(
-      { input: [z.value], output: [z.value] },
-      (arg: SchemeValue): SchemeValue => {
+      // LIPS-polymorphic over pair | nil | raw JS array; a borrowed array is not a
+      // SchemeValue, so the contract is representation-blind (`z.unknown`).
+      { input: [z.unknown()], output: [z.unknown()] },
+      (arg: unknown): unknown => {
         typecheck("reverse", arg, ["array", "pair", "nil"]);
         if (is_nil(arg)) {
           return nil;
@@ -548,23 +599,34 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
-      { input: [z.value, z.value], output: [z.value] },
-      (index: SchemeValue, obj: SchemeValue): SchemeValue => {
+      // LIPS-polymorphic over pair | raw JS array (and a number-like index); a borrowed
+      // array isn't a SchemeValue, so the contract is representation-blind.
+      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      (index: unknown, obj: unknown): unknown => {
         typecheck("nth", index, "number");
         typecheck("nth", obj, ["array", "pair"]);
+        // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed
+        // AExact resolves through valueOf), exactly as the bare `count < index` did.
+        const idx = Number(index);
         if (is_pair(obj)) {
-          let node = obj;
+          let node: APair<SchemeValue, SchemeValue> = obj;
           let count = 0;
-          while (count < index) {
-            if (!node.cdr || is_nil(node.cdr) || node.have_cycles("cdr")) {
+          while (count < idx) {
+            const next = node.cdr;
+            if (!next || is_nil(next) || node.have_cycles("cdr")) {
               return nil;
             }
-            node = node.cdr as APair;
+            // An improper tail at the index reproduces the old `(<non-pair>).car`
+            // read — bare `undefined`, which the membrane boxed to void.
+            if (!is_pair(next)) {
+              return theVoid;
+            }
+            node = next;
             count++;
           }
           return node.car;
         } else if (Array.isArray(obj)) {
-          return obj[index];
+          return obj[idx];
         } else {
           throw new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2));
         }
@@ -572,26 +634,34 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     flatten: symbol.native`flatten: the list with nested lists spliced in (LIPS extension)`(
-      { input: [z.value], output: [z.value] },
-      (list: SchemeValue): SchemeValue => {
+      // `.flatten()` may yield a nested JS array (LIPS), not just a pair/nil, so the
+      // output is representation-blind.
+      { input: [z.value], output: [z.unknown()] },
+      (list: SchemeValue): unknown => {
         typecheck("flatten", list, "pair");
+        // `typecheck` proves pairhood at runtime but is not a TS guard; re-state it so
+        // `.flatten()` (an APair method) resolves on the narrowed receiver.
+        invariant(is_pair(list), typeErrorMessage("flatten", type(list), "pair"));
         return list.flatten();
       },
     ),
 
     "array->list": symbol.native`array->list: a proper list built from a JS array`(
-      { input: [z.value], output: [z.value] },
-      (array: SchemeValue): SchemeValue => arrayToList(array),
+      // Input is a borrowed JS array (not a SchemeValue); output is a real list.
+      { input: [z.unknown()], output: [z.value] },
+      (array: unknown): SchemeValue => arrayToList(array),
     ),
 
     "tree->array": symbol.native`tree->array: a nested JS array built from a tree of pairs`(
-      { input: [z.value], output: [z.value] },
-      (list: SchemeValue): SchemeValue => treeToArray(list),
+      // Output is a nested JS array (not a single SchemeValue) → representation-blind.
+      { input: [z.value], output: [z.unknown()] },
+      (list: unknown): unknown => treeToArray(list),
     ),
 
     "list->array": symbol.native`list->array: a JS array built from a proper list`(
-      { input: [z.value], output: [z.value] },
-      (list: SchemeValue): SchemeValue => listToArray(list),
+      // Output is a JS array (not a single SchemeValue) → representation-blind.
+      { input: [z.value], output: [z.unknown()] },
+      (list: unknown): unknown => listToArray(list),
     ),
   },
 });
