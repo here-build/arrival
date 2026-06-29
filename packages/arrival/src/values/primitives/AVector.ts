@@ -259,7 +259,12 @@ export class AVector extends AValue {
   // heap-charge / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     const count = this.__vector__.length;
-    const inputs = this.__vector__.filter((e): e is AValue => e instanceof AValue);
+    // `__vector__` is `SchemeValue[]`; `Extract<…, AValue>` keeps exactly the
+    // AValue-subclass arms (drops the function arm), so the predicate type is
+    // assignable to both the element type (TS2677) and `unionProvenance`'s
+    // `readonly AValue[]` (TS2345). Runtime `instanceof AValue` excludes the
+    // function arm identically.
+    const inputs = this.__vector__.filter((e): e is Extract<SchemeValue, AValue> => e instanceof AValue);
     if (inputs.length === 0) return count;
     const prov = unionProvenance(inputs);
     return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
