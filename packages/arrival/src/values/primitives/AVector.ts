@@ -18,7 +18,8 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { chargeHeap } from "../../heap-budget.js";
-import { is_false, is_nil, is_promise } from "../../eval/guards.js";
+import { is_nil, is_promise } from "../../eval/guards.js";
+import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { nil } from "./ANil.js";

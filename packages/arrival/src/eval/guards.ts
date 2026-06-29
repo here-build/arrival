@@ -1,4 +1,3 @@
-import { ABool } from "../values/primitives/ABool.js";
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
@@ -8,6 +7,7 @@ import { is_function } from "../values/value-guards.js";
 
 export {
   has_own_symbol,
+  is_false,
   is_function,
   is_instance,
   is_iterator,
@@ -19,19 +19,6 @@ export {
 
 export function is_int(value: unknown): value is number {
   return typeof value === "number" && Number.parseInt(value.toString(), 10) === value;
-}
-
-// ----------------------------------------------------------------------------
-export function is_false(o: unknown): o is false | null | ABool {
-  switch (true) {
-    case o === false:
-    case o === null:
-      return true;
-    case o instanceof ABool:
-      return o.value === false;
-    default:
-      return false;
-  }
 }
 
 // ----------------------------------------------------------------------

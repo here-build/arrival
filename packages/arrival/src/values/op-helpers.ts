@@ -18,9 +18,9 @@ import { AValue, unionProvenance } from "./primitives/AValue.js";
 import { fromJs } from "./primitives/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
-import { ABool } from "./primitives/ABool.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
+import { is_false } from "./value-guards.js";
 import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
@@ -220,13 +220,6 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
   };
 }
 
-// The Scheme-falsiness a `sort` comparator's verdict is read with — the value-layer
-// twin of eval/guards.ts is_false (false / null / a boxed ABool(#f)). Re-implemented
-// here rather than imported because op-helpers is the cluster leaf (down-only to value
-// classes); importing eval/guards would drag the evaluator world into it.
-const isSchemeFalse = (v: unknown): boolean =>
-  v === false || v === null || (v instanceof ABool && v.value === false);
-
 /** Human kind-name of an element that can't be ordered — its scheme `kind` (an AValue:
  *  "pair"/"vector"/…) else the JS shape. Mirrors symbol.ts describeReceiver. */
 const describeOrdElement = (v: unknown): string =>
@@ -259,7 +252,7 @@ export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unkno
       if (typeof v === "number") return v;
       if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
       // `less?` predicate: a truthy verdict means a precedes b.
-      return !isSchemeFalse(v) ? -1 : !isSchemeFalse(comparator(b, a)) ? 1 : 0;
+      return !is_false(v) ? -1 : !is_false(comparator(b, a)) ? 1 : 0;
     };
   }
   return (a, b) => {

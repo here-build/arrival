@@ -17,6 +17,7 @@
 import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
+import { ABool } from "./primitives/ABool.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
@@ -53,6 +54,22 @@ export function is_nil(value: unknown): value is ANil {
 // ----------------------------------------------------------------------
 export function is_pair(o: unknown): o is APair {
   return o instanceof APair;
+}
+
+// ----------------------------------------------------------------------
+/**
+ * Scheme falsiness — the ONLY scheme-falsy value is `#f` (R7RS §6.3): a raw JS
+ * `false`, a JS `null` (the membrane's #f sibling), or a boxed `ABool(false)`
+ * (#f post-L1). Everything else — nil, 0, "", the empty list — is TRUTHY. This
+ * is NOT JS falsiness; reading a scheme value with `!x` would wrongly treat 0/""
+ * as false. Lives here (value-kernel leaf) rather than guards.ts so the value
+ * primitives (APair/AVector filter, op-helpers' sort comparator) read truthiness
+ * without dragging the evaluator world in; guards.ts re-exports it for the
+ * evaluator/env call sites. Replaces op-helpers' former private `isSchemeFalse`
+ * twin, now collapsed into this single predicate.
+ */
+export function is_false(o: unknown): o is false | null | ABool {
+  return o === false || o === null || (o instanceof ABool && o.value === false);
 }
 
 // ----------------------------------------------------------------------
