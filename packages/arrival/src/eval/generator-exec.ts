@@ -19,18 +19,18 @@ import { assembleEnv } from "../common/kernel.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalSchemeInto } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
-import { is_pair, is_macro } from "./guards.js";
+import { is_pair } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
-import { assertShadowCone, installMacroGuard } from "../values/lineage-shadow.js";
+import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import type { APair } from "../values/primitives/APair.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
-// Give the value-layer shadow module the evaluator's own `is_macro` without a
-// static value→eval import edge (the macro-head skip needs it; this module already
-// sits above eval/guards in the DAG). Idempotent — set once at module load.
-installMacroGuard(is_macro);
+// (Former `installMacroGuard(is_macro)` injection removed: the value-layer
+// shadow-cone skip now reads the macro classes' `[CLASS]` brand directly via
+// `is_macro_value` in value-guards.ts — a downward, eval-import-free test, so no
+// runtime DI is needed. This was the last top-level bare-call side effect.)
 
 /**
  * The realm-cached lexical root for DEFAULT (no-env) exec — a null-rooted scratch frame

@@ -35,14 +35,12 @@
  * control-flow superset, fan-cardinality over-attribution). Shadow asserts strictly:
  * a divergence outside the two skip categories is a THROW, never a silent pass.
  */
-import { is_pair } from "./value-guards.js";
+import { is_pair, is_macro_value } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
 import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
 import type { APair } from "./primitives/APair.js";
-import type { Macro } from "../eval/Macro.js";
-import type { Syntax } from "../eval/Syntax.js";
 import type { SchemeValue } from "./types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
 
@@ -79,24 +77,12 @@ export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSki
 
   // A genuine macro head (a user/library macro that expands to something classify
   // cannot see statically): out of scope. The static classifier never expands.
+  // `is_macro_value` reads the macro classes' `[CLASS]` brand off `constructor`
+  // (value-guards.ts) — a downward, eval-import-free test, so no value→eval edge.
   const bound = env.get(op, { throwError: false });
-  if (isMacroValue(bound)) return { kind: "macro-head", op };
+  if (is_macro_value(bound)) return { kind: "macro-head", op };
 
   return null;
-}
-
-/** is_macro without importing eval/guards (keeps this value-layer module from
- *  reaching up into the evaluator): a Macro / syntax Parameter exposes `__name__`
- *  + an `invoke`/`transform`. We probe structurally via the same `is_macro` the
- *  evaluator uses, imported lazily to dodge the value↔eval cycle. */
-function isMacroValue(v: unknown): v is Macro | Syntax {
-  return _isMacro !== null && _isMacro(v);
-}
-let _isMacro: ((o: unknown) => o is Macro | Syntax) | null = null;
-/** Wired once by generator-exec (which already lives above eval/guards in the
- *  import DAG) so this module needs no static edge into the evaluator. */
-export function installMacroGuard(fn: (o: unknown) => o is Macro | Syntax): void {
-  _isMacro = fn;
 }
 
 /** Collect the input-leaf slots (`leaf.slot` + `source.op`) the skeleton references,
