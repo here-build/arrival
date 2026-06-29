@@ -43,6 +43,7 @@ import { typecheck } from "../../utils/typecheck.js";
 import { stringValue, withInputProvenance } from "../../values/op-helpers.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { printValue } from "../../values/print.js";
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -109,6 +110,21 @@ export default new EnvCapability("scheme/equality", {
       (obj: unknown): boolean => {
         return is_callable(obj) && !is_macro(obj);
       },
+    ),
+
+    // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
+    // `printValue` dispatches each AValue's own `["arrival/print"]()`, the leaf handles the
+    // non-AValue residual). Representation-blind and value-domain-agnostic — it renders ANY
+    // value to its R7RS external representation — so it belongs here with the other
+    // value-agnostic natives relocated VERBATIM from the legacy stdlib.ts global_env, not in
+    // any one type cluster. The output is the `z.string` codec (decoded type `string`),
+    // matching `printValue`'s JS-string return, bound raw exactly as the old `{ value }` form.
+    // (DEFERRED: the 2-arg `(repr x write?)` write-mode form exists only in skipped schemeSpec
+    // .scm and was never honored — the prior stub ignored the 2nd arg and `printValue` has no
+    // write-mode flag. Matches the current 1-arg behavior.)
+    repr: symbol.native`repr: render a value to its external representation string`(
+      { input: [z.unknown()], output: [z.string] },
+      (obj: unknown): string => printValue(obj),
     ),
 
     "equal?": symbol.native`equal?: representation-blind structural equality`(

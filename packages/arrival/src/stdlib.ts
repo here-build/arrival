@@ -103,83 +103,15 @@ const is_node = () => typeof process === "object" && !!process.env;
 // on scheme/core; the evaluator dispatches them by resolved-marker value, no husk needed.
 
 // -------------------------------------------------------------------------
-// The native root's inline builtins. `global_env` is created EMPTY in the env-roots
-// leaf so the evaluator entry + bridge can source the root without importing this
-// monolith; we register the builtins onto it HERE, at the same module-load point the
-// constructor used to occupy. `Object.assign` onto `__env__` is the faithful
-// equivalent of the old `new Environment("global", {...})` — the ctor stores
-// `__env__` and runs no logic, so the resulting binding set is byte-identical.
-Object.assign(global_env.__env__, {
-    // ------------------------------------------------------------------
-    // Spec §5.3 car/cdr element-only provenance.
-    //
-    // War story: previously `withInputProvenance([list], list.car)` unioned
-    // the *container*'s provenance into the *element*'s — so `(car xs)`
-    // returned a value stamped with every id that contributed to xs, even
-    // those carried by sibling cdr elements or the spine itself. That violates
-    // the spec §5.3 rule that car/cdr are *projections*: the result inherits
-    // ONLY the element's own provenance, not the container's. The audit
-    // surfaced this as the algebra gap behind a class of phantom-contributor
-    // attributions in downstream consumers.
-    //
-    // Fix: pass `list.car` (resp. `list.cdr`) as the single provenance input.
-    // - If element is an AValue, `withInputProvenance` re-stamps with its own
-    //   provenance (effectively a no-op clone — preserves element identity).
-    // - If element is raw JS (string/bool/number), `withInputProvenance`
-    //   skips work because `inputs.length === 0`; the element is returned
-    //   unchanged, which is correct because raw values have no container-
-    //   borrowed provenance to incorrectly carry.
-    //
-    // `cons`, `list`, and `length` are CONSTRUCTORS / aggregations, not
-    // projections — they correctly retain `withInputProvenance([car, cdr], …)`
-    // unioning over all inputs.
-    // `dict` relocated to env/polyglot.ts (the Scheme companion to its `:key` accessor).
-    // ------------------------------------------------------------------
-    // set-car! / set-cdr! / append! — OMITTED by the purity invariant (every
-    // entity is frozen by design). Doored in r7rs/lists. See plan-2026-06-11.
-    // set! / do / if / letrec / letrec* / let* / let / begin / parameterize —
-    // VESTIGIAL global_env registrations of forms the evaluator's SPECIAL_FORMS
-    // table already shadows before env lookup (parameterize is doored in r7rs/control).
-    // Deleted: no first-class lookup reaches them, and macro_expand's traverse
-    // only special-cases `lambda`/`define` by identity (the `let` family by name),
-    // so the bindings are unreferenced. See husk-dissolution pass.
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-
-    // ------------------------------------------------------------------
-    // define / lambda — now KERNEL KEYWORDS (symbol.keyword markers) on the
-    // scheme/core pack (env/core/core.ts), NOT genMacroWrapper husks here. The
-    // evaluator resolves a call head through the env and dispatches on the marker
-    // VALUE (SPECIAL_FORMS[kw.name]) — so special-ness travels with the value:
-    // `(define => lambda)` aliases the marker, lexical shadowing un-specials it,
-    // and macro_expand's `value === env.get("lambda")` identity check resolves to
-    // the same marker by inheritance. No first-class husk needed here.
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    // define-macro — VESTIGIAL: shadowed by the `define-macro` SPECIAL_FORM
-    // (evalDefineMacro) before env lookup; no first-class reader. Deleted.
-    // ------------------------------------------------------------------
-    // `syntax-rules` relocated to env/macros.ts (scheme/macros pack), bound via the new
-    // symbol.macro def-kind — the last macro-family member out of this husk blob.
-    // ------------------------------------------------------------------
-    // `list` relocated to env/r7rs/lists.ts (R7RS §6.4, next to cons/make-list).
-    repr: function repr(obj) {
-      return printValue(obj);
-    },
-    // ------------------------------------------------------------------
-    // ------------------------------------------------------------------
-    // `vector` and `vector-append` live in bridge.ts (wrappedOps), minting boxed
-    // SchemeVector. The former stdlib `vector` here was DEAD (initBridge applies
-    // wrappedOps over global_env after stdlib builds, so bridge's always won) AND
-    // wrong (it typecheck'd args as numbers — non-R7RS). Removed (boxing S7, R11).
-    // ------------------------------------------------------------------
-    // `find` relocated to env/arrival-extensions.ts (SRFI-1 + arrival regex extension).
-    // `for-each` relocated to env/r7rs/lists.ts (R7RS §6.4, alongside map + its mapImpl).
-  } satisfies Record<string, EnvironmentValue>);
-// global_env / user_env are NOT re-exported here — their true home is env-roots.ts, and
-// the package barrel + inference-env now source them from there directly. This module's
-// only remaining job is the native-root population above (the `Object.assign` side-effect,
-// triggered on demand by `ensureBaseAssembled`), not re-exporting the roots.
+// The native root's inline-builtin `Object.assign` is GONE. Its last surviving
+// entry, `repr`, moved to the scheme/equality pack (env/r7rs/equality.ts) — the
+// home for value-domain-agnostic natives relocated out of this husk; everything
+// else had already migrated to a pack (the block was pure comments around it).
+// `global_env` is created EMPTY in env-roots.ts and is now populated ENTIRELY by
+// the assembled capability packs (NATIVE_PACKS / BASE_PACKS via assembleEnv), so
+// this module no longer mutates it at load — the last module-eval side-effect here
+// is dissolved. global_env / user_env are sourced from env-roots.ts directly by the
+// package barrel + inference-env; this module is not their home.
 
 
 // NOTE: Numeric operations from bridge.ts should be applied by calling initBridge()
