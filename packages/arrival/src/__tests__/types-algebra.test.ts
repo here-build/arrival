@@ -30,33 +30,33 @@ setoidLaws("Nil", { arb: nilArb, equalClone: () => new ANil(CONSTANT_CTX, ) });
 
 describe("SchemeCharacter Setoid/Ord — value semantics", () => {
   it("equal iff same grapheme", () => {
-    expect((new ACharacter(CONSTANT_CTX, "a") as never)[FL](new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
-    expect((new ACharacter(CONSTANT_CTX, "a") as never)[FL](new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
+    expect(new ACharacter(CONSTANT_CTX, "a")[FL](new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
+    expect(new ACharacter(CONSTANT_CTX, "a")[FL](new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
   });
 
   it("totality across the codepoint ordering", () => {
     const lo = new ACharacter(CONSTANT_CTX, "a");
     const hi = new ACharacter(CONSTANT_CTX, "b");
-    expect((lo as never)[LTE](hi)).toBe(true);
-    expect((hi as never)[LTE](lo)).toBe(false);
+    expect(lo[LTE](hi)).toBe(true);
+    expect(hi[LTE](lo)).toBe(false);
   });
 
   it("FL methods are total — non-char input returns false", () => {
-    expect((new ACharacter(CONSTANT_CTX, "a") as never)[FL](42)).toBe(false);
-    expect((new ACharacter(CONSTANT_CTX, "a") as never)[FL](nil)).toBe(false);
-    expect((new ACharacter(CONSTANT_CTX, "a") as never)[LTE]("a")).toBe(false);
+    expect(new ACharacter(CONSTANT_CTX, "a")[FL](42)).toBe(false);
+    expect(new ACharacter(CONSTANT_CTX, "a")[FL](nil)).toBe(false);
+    expect(new ACharacter(CONSTANT_CTX, "a")[LTE]("a")).toBe(false);
   });
 });
 
 describe("Nil Setoid — every Nil is equal", () => {
   it("singleton, fresh, and provenance-clone Nils all compare equal", () => {
-    expect((nil as never)[FL](new ANil(CONSTANT_CTX, ))).toBe(true);
-    expect((new ANil(CONSTANT_CTX, ) as never)[FL](nil)).toBe(true);
-    expect((new ANil(CONSTANT_CTX, new Set([7])) as never)[FL](new ANil(CONSTANT_CTX, ))).toBe(true);
+    expect(nil[FL](new ANil(CONSTANT_CTX))).toBe(true);
+    expect(new ANil(CONSTANT_CTX)[FL](nil)).toBe(true);
+    expect(new ANil(CONSTANT_CTX, new Set([7]))[FL](new ANil(CONSTANT_CTX))).toBe(true);
   });
 
   it("FL method is total — non-Nil input returns false", () => {
-    expect((nil as never)[FL](new ACharacter(CONSTANT_CTX, "a"))).toBe(false);
-    expect((nil as never)[FL](null)).toBe(false);
+    expect(nil[FL](new ACharacter(CONSTANT_CTX, "a"))).toBe(false);
+    expect(nil[FL](null)).toBe(false);
   });
 });
