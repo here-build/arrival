@@ -1,7 +1,6 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import type { FallbackResolver } from "./bindings.js";
-import { isBridgeInitialized } from "./boot.js";
 import type { EOF } from "./values/primitives/EOF.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -300,29 +299,10 @@ export class Environment {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // :: Runtime bootstrap (lazy, realm-level)
-  // -------------------------------------------------------------------------
-
-  /**
-   * Whether the runtime bootstrap (bridge: TS builtins + assembled pack preludes
-   * + sandbox seeding) has run for this realm. Realm-global: the bootstrap mutates
-   * global singletons once, so every Environment reads the same flag. `exec` checks
-   * this and calls `init()` when it's down, so embedders never call `initBridge()`.
-   */
-  get initialized(): boolean {
-    return isBridgeInitialized();
-  }
-
-  /**
-   * Ensure the runtime bootstrap has run. Idempotent and cheap once settled —
-   * delegates to the bridge's `initBridge`, which memoizes via a single promise.
-   * Dynamic import avoids a static Environment→bridge cycle (bridge imports
-   * Environment); the edge is call-time only.
-   */
-  async init(): Promise<void> {
-    const { initBridge } = await import("./bridge.js");
-    await initBridge();
-  }
-
+  // The runtime bootstrap is NO LONGER an Environment concern. It used to live here as
+  // `init()` / `initialized` — a per-env trigger indirection that `exec` drove and that
+  // dynamic-imported the bridge. That ceremony is gone: the lazy, realm-cached base
+  // assembly lives in the one entry point that needs it (`ensureBaseAssembled` in
+  // eval/generator-exec.ts, exposed publicly as `initBridge`), driven directly by `exec`.
+  // The scope-node is just a scope again.
 }

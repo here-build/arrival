@@ -1,6 +1,4 @@
 // Re-export all LIPS interpreter functionality
-import { initBridge } from "./bridge.js";
-
 export * from "./stdlib.js";
 // The inference-plane base env — the assembled totalic env every cross-package
 // consumer inherits from (`sandboxedEnv.inherit(name)`) and types against
@@ -62,7 +60,10 @@ export { AString } from "./values/primitives/AString.js";
 export { APair } from "./values/primitives/APair.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
 
-void initBridge();
+// No eager bootstrap kick. The runtime base assembles lazily on the first `exec`
+// (the realm-cached `ensureBaseAssembled`, exposed as `initBridge` below), so there is
+// no module-load ceremony — importing the package no longer fires an async assembly.
+// Callers that want the base warm before their first exec can still `await initBridge()`.
 
 // Classes that may be needed for type checking or extension
 export { EOF as EOF } from "./values/primitives/EOF.js";

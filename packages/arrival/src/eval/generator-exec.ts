@@ -9,9 +9,8 @@
  *   const results = await exec("(+ 1 2)", { env: myEnv });
  */
 
-import { whenBootstrapComplete } from "../boot.js";
 import { Environment } from "../Environment.js";
-import { user_env } from "../env-roots.js";
+import { user_env, global_env } from "../env-roots.js";
 import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
@@ -46,8 +45,58 @@ function defaultLexicalRoot(): Environment {
   return (_defaultLexicalRoot ??= new Environment("user-program", {}, null));
 }
 
+/**
+ * The realm-cached runtime bootstrap — the lazy base assembly, driven directly by `exec`.
+ *
+ * This REPLACES the old `bridge.initBridge` ceremony (a bespoke realm-flag dance in boot.ts
+ * + a separate eager `void initBridge()` kick). It folds the base `assembleEnv` into a
+ * realm-cached promise — exactly the `defaultLexicalRoot()` pattern above, async-flavoured:
+ * the `??=` assigns the in-flight promise synchronously, so the cache IS the once-only guard
+ * (a second `exec`, or a re-entrant prelude exec, sees the same settled/in-flight promise).
+ *
+ * Two steps, order-significant:
+ *   1. GLOBAL_NATIVE_PACKS (value-domain clusters + numeric + exceptions) onto global_env,
+ *      symbol-only (no prelude → no evalScheme).
+ *   2. BASE_PACKS (the `.scm` stdlib: core/macros/polyglot/r7rs/srfi, `nil` among them) onto
+ *      user_env. A base-pack prelude may call a native primitive (`+`, `string-length`), which
+ *      resolves user_env → global_env, so the natives in step 1 must already be live.
+ *
+ * The pack rosters are imported DYNAMICALLY (like the old `Environment.init`'s `import(bridge)`):
+ * `BASE_PACKS`/polyglot transitively pull the evaluator (membrane), so a static import here would
+ * close a module-eval cycle. The dynamic import is awaited exactly once (promise-cached), so it
+ * costs nothing after warm-up.
+ *
+ * `skipBootstrapWait: true` on the prelude evalScheme: those execs ARE this assembly, so they
+ * must not re-enter the gate (which would await the very promise they are part of — deadlock).
+ */
+let _baseAssembled: Promise<void> | undefined;
+export function ensureBaseAssembled(): Promise<void> {
+  return (_baseAssembled ??= (async () => {
+    // FIRST, populate the native root's inline builtins. stdlib.ts registers `undefined`
+    // (the parser constant) and `repr` onto global_env via a module-LOAD side effect
+    // (`Object.assign(global_env.__env__, …)`). Loading it here makes the bootstrap
+    // self-sufficient: it used to ride in only because the old bridge→stdlib edge (now
+    // removed) forced stdlib to evaluate, so a deep-import entry path (a test importing
+    // `generator-exec`/`_fresh-env` but not the barrel) would otherwise miss `repr`. The
+    // side-effect import is idempotent (ES modules evaluate once) and promise-cached here.
+    await import("../stdlib.js");
+    const { GLOBAL_NATIVE_PACKS } = await import("../bridge.js");
+    const { BASE_PACKS } = await import("../env/base-packs.js");
+    const evalScheme: EvalSchemeInto = (env, src) =>
+      exec(src as string, { env: env as Environment, skipBootstrapWait: true });
+    await assembleEnv(
+      global_env as unknown as SchemeEnv,
+      GLOBAL_NATIVE_PACKS.map((pack) => pack.lower()),
+    );
+    await assembleEnv(
+      user_env as unknown as SchemeEnv,
+      BASE_PACKS.map((pack) => pack.lower({ evalScheme })),
+    );
+  })());
+}
+
 // Evaluator injected into a capability's prelude during `exec({ capabilities })`
-// assembly — mirrors bridge.initBridge's / _fresh-env's evalScheme. `skipBootstrapWait`:
+// assembly — mirrors `ensureBaseAssembled`'s / _fresh-env's evalScheme. `skipBootstrapWait`:
 // the assembly happens AFTER `exec`'s own bootstrap gate (below), so the prelude eval must
 // not re-await the (already-settled) bootstrap promise.
 const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
@@ -159,10 +208,10 @@ export interface ExecOptions {
    */
   freezeRosettaReturns?: boolean;
   /**
-   * Internal: set by the bootstrap's own prelude evals (bridge.initBridge's
-   * `evalScheme`) to bypass the bootstrap-completion gate below — awaiting it
-   * there would deadlock (the prelude eval IS part of the bootstrap it would be
-   * waiting on). Formerly lived on the now-removed stdlib.ts `exec`.
+   * Internal: set by the bootstrap's own prelude evals (`ensureBaseAssembled`'s
+   * `evalScheme`) to bypass the bootstrap gate below — awaiting `ensureBaseAssembled`
+   * there would deadlock (the prelude eval IS part of the realm-cached promise it would
+   * be waiting on). Formerly lived on the now-removed stdlib.ts `exec`.
    */
   skipBootstrapWait?: boolean;
   /**
@@ -238,20 +287,16 @@ export async function exec(
 ): Promise<SchemeValue[]> {
   // Resolve the default env from the env-roots leaf — `user_env` is arrival's
   // interaction scope (`global_env.inherit("user-env")`), sourced STATICALLY so this
-  // entry never imports the stdlib monolith. The bootstrap gate below still drives
-  // population: initBridge (via the bridge→stdlib edge) registers the builtins.
+  // entry never imports the stdlib monolith. The bootstrap gate below drives
+  // population: `ensureBaseAssembled` assembles the native packs + the `.scm` base.
   const actualEnv = env ?? user_env;
 
-  // Self-initialize the runtime bootstrap (TS builtins + Scheme prelude) lazily, so
-  // embedders never call initBridge() manually. If the bootstrap has already STARTED
-  // (e.g. index.ts's fire-and-forget `void initBridge()`), await its COMPLETION
-  // promise — the pack assembly is async, so the started-flag alone would let a racing
-  // exec observe a half-assembled env. `skipBootstrapWait` is the one exception: a
-  // prelude eval that IS the bootstrap can't await its own completion.
-  if (!skipBootstrapWait) {
-    if (!actualEnv.initialized) await actualEnv.init();
-    else await (whenBootstrapComplete() ?? actualEnv.init());
-  }
+  // Self-initialize the runtime bootstrap (native packs + the `.scm` base) lazily, so
+  // embedders never trigger it manually. `ensureBaseAssembled` is realm-cached (a single
+  // in-flight/settled promise), so the first exec assembles and every later exec awaits the
+  // same settled promise — no half-assembled env can be observed. `skipBootstrapWait` is the
+  // one exception: a base-pack prelude eval IS the bootstrap and must not await its own promise.
+  if (!skipBootstrapWait) await ensureBaseAssembled();
 
   // Parse if string, otherwise wrap single value in array
   let parsed: SchemeValue[];
@@ -396,14 +441,11 @@ export async function execExpr(
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
 
-  // See exec() above: await bootstrap COMPLETION, not just the started-flag.
-  if (!skipBootstrapWait) {
-    if (!actualEnv.initialized) await actualEnv.init();
-    else await (whenBootstrapComplete() ?? actualEnv.init());
-  }
+  // See exec() above: the realm-cached lazy bootstrap, awaited once.
+  if (!skipBootstrapWait) await ensureBaseAssembled();
 
   // THE EXEC SEAM (see exec): glass for custom env, the cut for default (fresh null-rooted
-  // lexicalRoot + the assembled base). `actualEnv` still drives bootstrap above.
+  // lexicalRoot + the assembled base).
   const runResolver =
     env !== undefined
       ? new Resolver(actualEnv)
