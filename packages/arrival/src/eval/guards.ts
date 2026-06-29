@@ -1,8 +1,5 @@
-import { Environment } from "../Environment.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { Macro } from "./Macro.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
 import { Syntax } from "./Syntax.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
@@ -35,22 +32,6 @@ export function is_false(o: unknown): o is false | null | ABool {
     default:
       return false;
   }
-}
-
-// ----------------------------------------------------------------------------
-export function is_prototype(obj: unknown): boolean {
-  return (
-    obj !== null &&
-    typeof obj === "object" &&
-    "constructor" in obj &&
-    typeof obj.constructor === "function" &&
-    obj.constructor.prototype === obj
-  );
-}
-
-// ----------------------------------------------------------------------
-export function is_env(o: unknown): o is Environment {
-  return o instanceof Environment;
 }
 
 // ----------------------------------------------------------------------
