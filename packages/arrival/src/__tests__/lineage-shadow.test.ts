@@ -31,14 +31,17 @@
  * eager goldens in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc).
  */
 import { describe, it, expect } from "vitest";
+import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
 import { exec, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
-import { AValue } from "../values/primitives/AValue.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
 import { fromJs } from "../values/primitives/boxing.js";
 import { APair } from "../values/primitives/APair.js";
+import type { SchemeValue } from "../values/types.js";
 import { classify, fullCone } from "../values/lineage.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
@@ -46,8 +49,16 @@ import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
 let seq = 0;
 
 /** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
-const sStr = (s: string, p: number) => new AString(CONSTANT_CTX, s, new Set([p]));
-const sNum = (n: number, p: number) => fromJs(CONSTANT_CTX, n, new Set([p]));
+const sStr = (s: string, p: number): AString => new AString(CONSTANT_CTX, s, new Set([p]));
+/** Box a JS number into its concrete numeric leaf — `fromJs` is typed to the abstract
+ *  `AValue` base, but boxing a `number` always mints an `AExact`/`AInexact` at runtime;
+ *  narrow honestly with a guard (the boxing.ts:38 idiom) so the binding maps stay
+ *  `SchemeValue`-typed and flow into `env.set` without a cast. */
+const sNum = (n: number, p: number): AExact | AInexact => {
+  const boxed = fromJs(CONSTANT_CTX, n, new Set([p]));
+  invariant(boxed instanceof AExact || boxed instanceof AInexact, "sNum: a boxed JS number must be AExact/AInexact");
+  return boxed;
+};
 
 const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
 const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) });
@@ -58,10 +69,10 @@ const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) })
  * we ALSO recompute the static cone out-of-band so the agreement is asserted at the
  * call site against the golden ids. Source-free by default (empty sources).
  */
-async function shadow(src: string, binds: Record<string, unknown>): Promise<{ staticCone: number[]; eager: number[] }> {
+async function shadow(src: string, binds: Record<string, SchemeValue>): Promise<{ staticCone: number[]; eager: number[] }> {
   await initBridge();
   const env = inferenceEnv.inherit(`shadow-${seq++}`);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
+  for (const [k, v] of Object.entries(binds)) env.set(k, v);
 
   // exec under the flag: this is the in-engine shadow assert (slices 2+3). If the
   // static cone diverged from the eager stamp on any form, exec would throw here.
@@ -76,7 +87,7 @@ async function shadow(src: string, binds: Record<string, unknown>): Promise<{ st
 }
 
 /** Assert the static cone, the eager stamp, AND the frozen golden are all equal. */
-async function expectCone(src: string, binds: Record<string, unknown>, golden: number[]): Promise<void> {
+async function expectCone(src: string, binds: Record<string, SchemeValue>, golden: number[]): Promise<void> {
   const { staticCone, eager } = await shadow(src, binds);
   expect(eager).toEqual(golden); // the eager stamp matches what golden-prov-* froze
   expect(staticCone).toEqual(golden); // and the static fullCone reproduces it (no divergence)
@@ -218,7 +229,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]); // eager spine
     const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
@@ -228,7 +239,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
   it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
-    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
     expect(provOf(result)).toEqual([]);
     const [ast] = await parse(`(filter (lambda (e) (not (string=? e "b"))) xs)`, env);
@@ -245,10 +256,10 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
 // v0.1 provable set. These are the eager goldens in golden-prov-* + the v0.2 line.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict, not swallowed)", () => {
-  async function runFlagged(src: string, binds: Record<string, unknown>): Promise<void> {
+  async function runFlagged(src: string, binds: Record<string, SchemeValue>): Promise<void> {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
-    for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
+    for (const [k, v] of Object.entries(binds)) env.set(k, v);
     await exec(src, { env, irLineage: true });
   }
 
@@ -273,7 +284,7 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
-    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as never);
+    env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
       /PROVENANCE-SHADOW-DIVERGENCE/,
     );
