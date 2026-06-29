@@ -2,10 +2,14 @@
 import { initBridge } from "./bridge.js";
 
 export * from "./stdlib.js";
-// The inference-plane base env. `sandboxedEnv` is the deprecated pre-rename alias
-// (it was never a security sandbox); cross-package consumers retarget to
-// `inferenceEnv` over the migration window. Both name the same value/type.
-export { inferenceEnv, inferenceEnv as sandboxedEnv } from "./inference-env.js";
+// The inference-plane base env — the assembled totalic env every cross-package
+// consumer inherits from (`sandboxedEnv.inherit(name)`) and types against
+// (`ReturnType<typeof sandboxedEnv.inherit>`). `sandboxedEnv` is the public name
+// (it was never a security sandbox — the name predates the Graal sweep that deleted
+// the host-reaching verbs). The `inferenceEnv` spelling was an internal-only alias
+// with zero external importers; it is gone from the public surface, leaving the one
+// name external code actually uses.
+export { inferenceEnv as sandboxedEnv } from "./inference-env.js";
 // Interop sealing — `@arrival.private` (+ the underlying `markInteropBoundary`), the correct,
 // exported way to mark a class opaque to a Scheme member-read (`(@ x :internal)` → nil). The
 // `markSandboxPrivate`/`markAsSandboxBoundary` spellings are deprecated pre-rename aliases kept
