@@ -22,17 +22,21 @@
 //
 //   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). bake.rosetta
 //                       produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
-//                       skippable/gated) → impl(decodedArgs) → await (async implicit) →
-//                       encode return (codec) → build the scheme values-list. This mirrors
-//                       createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
+//                       skippable/gated) → impl.call(invCtx, decodedArgs) → await (async
+//                       implicit) → encode return (codec) → build the scheme values-list. This
+//                       mirrors createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
 //                       the codecs standing in for the generic schemeToJs/jsToScheme.
-//                       The impl is CTX-FREE: (decodedArgs) => result. withContext /
-//                       argProvenance are DROPPED here — the impl never receives ctx.
-//                       PROVENANCE MINTING is RESOLVED: the run-wrapper is `__withCtx` at the
-//                       binding level (lower() binds it raw; the evaluator appends ctx), so it
-//                       reads ctx.currentInvocation and mints/deep-stamps EXACTLY as
-//                       createRosettaWrapper does (a non-pure rosetta SymbolDef = a source). The
-//                       IMPL stays ctx-free — the wrapper strips ctx before decode.
+//                       The impl receives ONLY the decoded scheme args POSITIONALLY — ctx is
+//                       never a param. ctx-coupled verbs read run-state lazily off a per-call
+//                       invocation-`this` (`this.aborted` / `this.abortSignal` / `this.invocation`
+//                       — accessor getters over the captured ctx); a pure verb is an arrow that
+//                       ignores `this`, so the call is byte-identical to `impl(decodedArgs)` and
+//                       materializes nothing. (This lazy invocation-`this` REPLACES the planned
+//                       `symbol.contextual`.) PROVENANCE MINTING is RESOLVED: the run-wrapper is
+//                       `__withCtx` at the binding level (lower() binds it raw; the evaluator
+//                       appends ctx), so it reads ctx.currentInvocation and mints/deep-stamps
+//                       EXACTLY as createRosettaWrapper does (a non-pure rosetta SymbolDef = a
+//                       source). withContext / argProvenance contract knobs are DROPPED here.
 //
 //   symbol.notImplemented — no contract/impl, just `name: reason`. bake → a door:
 //                       { kind: "door", name, reason } (the %purity-door story).
@@ -297,6 +301,52 @@ export interface BakeRuntimeOpts {
   validate?: boolean;
 }
 
+/** The structural slice of EvalContext the invocation-`this` reads. Duck-typed (the full
+ *  `EvalContext` lives in eval/evaluator.ts; pulling it here would be a layering cycle —
+ *  same reason rosetta.ts duck-types `InvocationLike`). All optional: a direct-JS call
+ *  (tests, host) hands NO ctx, so every getter must tolerate `undefined`. */
+interface InvocationCtxSlice {
+  signal?: AbortSignal;
+  currentInvocation?: unknown;
+}
+
+/** The per-call **invocation context** — the lazy `this` a rosetta impl is called with.
+ *  Verbs that need run-state declare a `function` impl and read `this.abortSignal` /
+ *  `this.aborted` / `this.invocation`; the 50+ pure verbs are arrows that ignore `this`
+ *  entirely (so `impl.call(invCtx, …)` is byte-identical to `impl(…)` for them).
+ *
+ *  Every member is an **accessor getter** that reads the captured `ctx` on access, so a verb
+ *  that never touches them materializes NOTHING — zero cost on the pure-verb hot path. */
+export interface InvocationContext {
+  /** Has the run been aborted? `ctx.signal?.aborted`, coerced to a real boolean (no signal /
+   *  no ctx ⇒ `false`: a run with no budget signal is, by definition, not aborted). */
+  readonly aborted: boolean;
+  /** The run's `AbortSignal` (for `fetch(url, { signal: this.abortSignal })` and friends), or
+   *  `undefined` when the run carries no budget signal / the impl was called direct-JS. */
+  readonly abortSignal: AbortSignal | undefined;
+  /** The ctx's middleware/invocation context — the inference seam (infer / mcp / agentic) reads
+   *  the effect resolver + currentInvocation off it. `undefined` direct-JS. Shape TBD by the
+   *  inference-seam migration; left as `unknown` until those verbs move onto this `this`. */
+  readonly invocation: unknown;
+}
+
+/** Build the lazy invocation-`this` over a captured ctx (or `undefined` for a direct-JS call).
+ *  The getters close over `ctx` and read it on access — nothing is computed until a verb that
+ *  declared a `function` impl actually touches `this.*`. */
+function makeInvocationContext(ctx: InvocationCtxSlice | undefined): InvocationContext {
+  return {
+    get aborted(): boolean {
+      return ctx?.signal?.aborted ?? false;
+    },
+    get abortSignal(): AbortSignal | undefined {
+      return ctx?.signal;
+    },
+    get invocation(): unknown {
+      return ctx?.currentInvocation;
+    },
+  };
+}
+
 function bakeNative(input: NativeInput): NativeSymbolDef {
   const impl = input.impl;
   // `fanout: true` → stamp the bound fn (capability binds def.impl raw; the lineage classifier
@@ -374,8 +424,14 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     void defaultValidate;
     const decodedArgs = z.decode(inSchema, schemeArgs) as readonly unknown[];
 
-    // 2. RUN the (ctx-free) impl. async is implicit.
-    const result = await input.impl(...decodedArgs);
+    // 2. RUN the impl with a per-call **invocation `this`** (the lazy invocation-context). The
+    //    impl still receives ONLY the decoded scheme args positionally — ctx is NOT a param. A
+    //    ctx-coupled verb declares a `function` impl and reads run-state lazily off `this`
+    //    (`this.aborted` / `this.abortSignal` / `this.invocation`); a pure verb is an arrow that
+    //    ignores `this`, so `impl.call(invCtx, …)` is byte-identical to `impl(…)`. The getters
+    //    read the captured `ctx` ON ACCESS, so a pure verb materializes nothing. async is implicit.
+    const invCtx = makeInvocationContext(ctx as InvocationCtxSlice | undefined);
+    const result = await input.impl.call(invCtx, ...decodedArgs);
 
     // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A SOURCE rosetta (default)
     //    MINTS a fresh point off ctx.currentInvocation; a PURE rosetta (`pure: true`) is a

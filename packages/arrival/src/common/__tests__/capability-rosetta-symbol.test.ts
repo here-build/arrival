@@ -148,6 +148,49 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
 
+  it("invocation-`this`: a `function` impl reads run-state lazily off `this` (abortSignal / aborted)", async () => {
+    // A ctx-coupled verb declares a `function` impl (NOT an arrow) and reads the run's abort
+    // state off the lazy invocation-`this`. The wrapper builds that `this` from the captured ctx.
+    type InvThis = { aborted: boolean; abortSignal: AbortSignal | undefined; invocation: unknown };
+    const def = symbol.rosetta`probe: report the run's abort state`(
+      { input: [z.string], output: [z.string] },
+      function (this: InvThis, s: string) {
+        // `this.abortSignal` is the ctx's signal; `this.aborted` is its `.aborted` (false here).
+        const tag = this.abortSignal ? (this.aborted ? "aborted" : "live") : "no-signal";
+        return `${s}:${tag}`;
+      },
+    );
+    const verb = await wireRosetta(def);
+
+    // ctx carrying a (not-yet-aborted) AbortSignal — the shape the evaluator appends.
+    const ac = new AbortController();
+    const ctx = { env: {}, signal: ac.signal };
+    const out = (await verb(new AString(CONSTANT_CTX, "x"), ctx)) as AString;
+    expect(out.toJs()).toBe("x:live"); // signal present, not aborted
+
+    // After abort, the SAME getter reads the now-aborted signal (lazy — read on access).
+    ac.abort();
+    const out2 = (await verb(new AString(CONSTANT_CTX, "y"), ctx)) as AString;
+    expect(out2.toJs()).toBe("y:aborted");
+  });
+
+  it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
+    // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(invCtx, …)` is
+    // exactly `impl(…)`. Proven both WITH a ctx (signal present) and direct-JS (no ctx).
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
+    const verb = await wireRosetta(def);
+
+    // direct-JS (no ctx → invCtx getters tolerate undefined; the arrow never looks)
+    const direct = (await verb(new AString(CONSTANT_CTX, "hello"))) as AInexact;
+    expect(direct.real).toBe(5);
+
+    // with a ctx carrying an aborted signal — a pure arrow STILL ignores it (no early-out, same value)
+    const ac = new AbortController();
+    ac.abort();
+    const withCtx = (await verb(new AString(CONSTANT_CTX, "world"), { env: {}, signal: ac.signal })) as AInexact;
+    expect(withCtx.real).toBe(5);
+  });
+
   it("pure: true FORWARDS input provenance even WITH a ctx invocation (transform, not source — never mints)", async () => {
     // The contrast to the mint test above: SAME ctx.currentInvocation(42) + SAME tagged input {99},
     // but `pure: true` makes it a TRANSFORM — the output carries the FORWARDED input union {99},
