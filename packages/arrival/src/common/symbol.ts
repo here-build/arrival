@@ -324,10 +324,16 @@ export interface InvocationContext {
   /** The run's `AbortSignal` (for `fetch(url, { signal: this.abortSignal })` and friends), or
    *  `undefined` when the run carries no budget signal / the impl was called direct-JS. */
   readonly abortSignal: AbortSignal | undefined;
-  /** The ctx's middleware/invocation context — the inference seam (infer / mcp / agentic) reads
-   *  the effect resolver + currentInvocation off it. `undefined` direct-JS. Shape TBD by the
-   *  inference-seam migration; left as `unknown` until those verbs move onto this `this`. */
-  readonly invocation: unknown;
+  /** The invocation CARRIER the inference seam (infer / mcp / agentic) forwards to its host
+   *  resolver — `{ currentInvocation }`, the exact `{ currentInvocation?: unknown }` shape `InferFn`
+   *  / `McpEffectContext` are typed for (and the only field those resolvers structurally read, to
+   *  mark/trace the provenance node). It mirrors what the legacy `withContext` path forwarded as
+   *  its `ctx` arg: `createRosettaWrapper` handed the raw EvalContext, off which the resolver read
+   *  `.currentInvocation` — this is that field, re-wrapped to the minimal carrier. Direct-JS (no
+   *  ctx) ⇒ `{ currentInvocation: undefined }` (the resolver's `ctx?.currentInvocation` ⇒ absent).
+   *  Provenance MINTING is independent: `bakeRosetta` mints off the REAL captured ctx, so a verb
+   *  reading `this.invocation` and the wrapper's mint both reach the same `currentInvocation`. */
+  readonly invocation: { currentInvocation: unknown };
 }
 
 /** Build the lazy invocation-`this` over a captured ctx (or `undefined` for a direct-JS call).
@@ -341,8 +347,12 @@ function makeInvocationContext(ctx: InvocationCtxSlice | undefined): InvocationC
     get abortSignal(): AbortSignal | undefined {
       return ctx?.signal;
     },
-    get invocation(): unknown {
-      return ctx?.currentInvocation;
+    get invocation(): { currentInvocation: unknown } {
+      // The minimal `{ currentInvocation }` carrier the inference seam forwards to its host
+      // resolver — structurally the `InferFn` / `McpEffectContext` ctx. Re-wrap (not the raw
+      // `ctx.currentInvocation`) so the resolver's `ctx?.currentInvocation` reaches the same
+      // Invocation the legacy `withContext` path delivered via the whole EvalContext.
+      return { currentInvocation: ctx?.currentInvocation };
     },
   };
 }
