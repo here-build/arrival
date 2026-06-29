@@ -11,7 +11,7 @@ import { DatumReference } from "../values/DatumReference.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
-import { is_nil, is_pair, is_plain_object } from "../eval/guards.js";
+import { is_nil, is_pair } from "../eval/guards.js";
 import {
   is_builtin,
   is_bytevector_literal,
@@ -29,7 +29,6 @@ import { Lexer } from "./Lexer.js";
 // resolve it, since they're referenced only inside methods, not at module-eval time.
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { unpromise } from "../utils/promises.js";
 import { parse_argument } from "../utils/parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -362,18 +361,20 @@ export class Parser {
   // self-referential literal terminates instead of looping during later traversal.
   async read_object(): Promise<SchemeValue | EOF> {
     this.reset();
-    let object = await this._read_object();
-    if (object instanceof DatumReference) {
-      object = object.valueOf();
-    }
-    if (this._refs.length > 0) {
-      return unpromise(this._resolve_object(object as SchemeValue), (resolved: SchemeValue) => {
-        if (is_pair(resolved)) {
-          // mark cycles on parser level
-          resolved.mark_cycles();
-        }
-        return resolved;
-      });
+    const read = await this._read_object();
+    // `_read_object` may hand back a reader-internal DatumReference (a `#n#` label);
+    // unwrap it to the value it points at. `valueOf()` is `any`, so pin the result
+    // to the public datum union here.
+    const object: SchemeValue | EOF = read instanceof DatumReference ? read.valueOf() : read;
+    if (this._refs.length > 0 && object !== eof) {
+      // The method is async, so awaiting the resolver is the direct equivalent of the
+      // former `unpromise` then-callback (`_resolve_object` always returns a Promise).
+      const resolved = await this._resolve_object(object);
+      if (is_pair(resolved)) {
+        // mark cycles on parser level
+        resolved.mark_cycles();
+      }
+      return resolved;
     }
     return object;
   }
@@ -396,18 +397,15 @@ export class Parser {
     throw e;
   }
 
-  // TODO: Cover This function (array and object branch)
+  // Resolves any nested reader-internal DatumReference placeholders inside a freshly
+  // parsed datum. The only structure the reader emits that can carry a nested ref is an
+  // APair, so that is the sole recursive case; every other SchemeValue is a leaf and
+  // passes through. (A top-level ref is already unwrapped by read_object before this
+  // runs.) The former raw-array / plain-object branches were LIPS-era dead code — the
+  // reader no longer emits bare JS containers, so under the SchemeValue union they were
+  // both unreachable and type-incoherent (they built `SchemeValue[]` / `Record<…>`
+  // values that are not SchemeValue); removed rather than hardened with a cast.
   async _resolve_object(object: SchemeValue): Promise<SchemeValue> {
-    if (Array.isArray(object)) {
-      return Promise.all(object.map((item) => this._resolve_object(item)));
-    }
-    if (is_plain_object(object)) {
-      const result: Record<string, SchemeValue> = {};
-      for (const key of Object.keys(object)) {
-        result[key] = await this._resolve_object(object[key] as SchemeValue);
-      }
-      return result as unknown as SchemeValue;
-    }
     if (is_pair(object)) {
       return this._resolve_pair(object);
     }
@@ -430,7 +428,11 @@ export class Parser {
     return pair;
   }
 
-  async _read_object(): Promise<SchemeValue | EOF> {
+  // Internal read of one datum. Broader than the public `read_object` return: this may
+  // hand back a reader-internal `DatumReference` (a `#n#` label placeholder) which
+  // `read_object` resolves away before exposing the value — so DatumReference is part of
+  // this signature but deliberately excluded from the public SchemeValue union.
+  async _read_object(): Promise<SchemeValue | EOF | DatumReference> {
     const token = await this.peek();
     if (token === eof) {
       return token;
@@ -528,15 +530,15 @@ export class Parser {
     } else if (this.is_curly_close(token)) {
       // a stray/mismatched `}` (read_curly_elements consumes its OWN close);
       // _exitNesting reports the mismatch — e.g. a `}` inside a `(` list — or the
-      // unmatched close.
+      // unmatched close. It always throws on this path (the close is unmatched here),
+      // so this branch never produces a datum; the post-chain throw below makes that
+      // non-return explicit for the type checker.
       this._exitNesting(token, loc ?? undefined);
-      this.skip();
     } else if (this.is_close(token)) {
       // a stray/mismatched `)` — e.g. a `)` inside `{…}`, or a top-level close
       // with nothing open. Strict pairing rejects it (the old code silently
-      // rebalanced and returned nothing).
+      // rebalanced and returned nothing). Like the `}` case, _exitNesting throws here.
       this._exitNesting(token, loc ?? undefined);
-      this.skip();
     } else if (this.is_open(token)) {
       this._enterNesting(")");
       this.skip();
@@ -548,5 +550,9 @@ export class Parser {
     } else {
       return this.read_value();
     }
+    // Unreachable for a well-formed token: every value-producing case above returns and
+    // the two stray-close cases throw via _exitNesting. Kept as an explicit terminal so
+    // the function is total without widening the return type to include `undefined`.
+    throw new ParseError(`unexpected token '${token}'`, loc ?? undefined);
   }
 }
