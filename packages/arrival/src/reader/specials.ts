@@ -1,8 +1,10 @@
 /**
  * Reader-macro registry: maps a source prefix (`'`, `` ` ``, `,`, `,@`, `#(`, …)
  * to the SchemeSymbol it expands to and an expansion `type`. The lexer consults
- * this table — and its `on`/`off`/`trigger` events — to recognize special syntax
- * at read time, before the evaluator ever sees a form. Derived from upstream LIPS.
+ * this table to recognize special syntax at read time, before the evaluator ever
+ * sees a form. The table is FIXED (no runtime add/remove reader-macro verb exists),
+ * so the upstream-LIPS `on`/`off`/`trigger` event system was dissolved. Derived
+ * from upstream LIPS.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -25,43 +27,13 @@ export function type(name) {
 export function get(name) {
   return __list__[name];
 }
-// events are used in Lexer dynamic rules
-export function off(name: string | string[], fn: ((...args: unknown[]) => unknown) | null = null) {
-  if (Array.isArray(name)) {
-    name.forEach((n) => off(n, fn));
-  } else if (fn === null) {
-    delete __events__[name];
-  } else if (__events__[name]) {
-    __events__[name] = __events__[name].filter((test) => test !== fn);
-  }
-}
-export function on(name, fn) {
-  if (Array.isArray(name)) {
-    name.forEach((name) => on(name, fn));
-  } else if (__events__[name]) {
-    __events__[name].push(fn);
-  } else {
-    __events__[name] = [fn];
-  }
-}
-export function trigger(name, ...args) {
-  if (__events__[name]) {
-    for (const fn of __events__[name]) fn(...args);
-  }
-}
-export function remove(name) {
-  delete __list__[name];
-  trigger("remove");
-}
-export function append(name, value, type) {
+function append(name, value, type) {
   __list__[name] = {
     seq: name,
     symbol: value,
     type,
   };
-  trigger("append");
 }
-export let __events__: Record<string, Function[]> = {};
 export const __list__ = {};
 
 const defined_specials = [

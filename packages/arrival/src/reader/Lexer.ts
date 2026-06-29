@@ -70,12 +70,10 @@ export class Lexer {
     [/\S/, null, null, null, Lexer.symbol],
     [/\S/, null, Lexer.boundary, Lexer.symbol, null],
   ];
-  // Assembled rule list is memoized; invalidated when `specials` gains/drops a syntax extension
-  // (see the `specials.on` registration at the bottom of the file).
-  static _cache: { valid: boolean; rules: LexerRule[] | null } = {
-    valid: false,
-    rules: null,
-  };
+  // Assembled rule list is memoized ONCE. The reader-macro registry (reader/specials.ts) is a
+  // frozen literal — it can never gain or drop a syntax extension at runtime — so the built list
+  // is permanently valid and never needs invalidation (the old `valid` flag + cache-buster are gone).
+  static _rulesCache: LexerRule[] | null = null;
   // Class-internal: the source text being lexed. Installed via Object.defineProperty
   // in the constructor. `private` is compile-time only (the defineProperty + runtime
   // shape are unchanged); it just blocks cross-module reads, of which there are none.
@@ -178,8 +176,8 @@ export class Lexer {
   ];
 
   static get rules() {
-    if (Lexer._cache.valid) {
-      return Lexer._cache.rules;
+    if (Lexer._rulesCache !== null) {
+      return Lexer._rulesCache;
     }
     const parsable = [...Object.keys(parsable_contants), ...directives, ...hash_literals];
     const tokens = [...specials.names(), ...parsable].sort((a, b) => {
@@ -208,10 +206,8 @@ export class Lexer {
       return [...acc, ...Lexer.literal_rule(token, sym, null, after)];
     }, []);
 
-    Lexer._cache.rules = [...Lexer._rules, ...Lexer._brackets, ...special_rules, ...Lexer._symbol_rules];
-
-    Lexer._cache.valid = true;
-    return Lexer._cache.rules;
+    Lexer._rulesCache = [...Lexer._rules, ...Lexer._brackets, ...special_rules, ...Lexer._symbol_rules];
+    return Lexer._rulesCache;
   }
 
   static literal_rule(
@@ -436,8 +432,7 @@ export class Lexer {
   }
 }
 
-// A syntax extension added/removed at runtime changes the special-rules layer → drop the memoized list.
-specials.on(["remove", "append"], function () {
-  Lexer._cache.valid = false;
-  Lexer._cache.rules = null;
-});
+// The reader-macro registry is now a frozen data literal (reader/specials.ts) — it cannot
+// gain or drop a syntax extension at runtime, so the special-rules layer is permanently
+// valid and the memoized rule list never needs invalidation. The old `specials.on([…])`
+// cache-buster (and the whole specials event system) is dissolved.

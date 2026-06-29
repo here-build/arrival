@@ -44,10 +44,8 @@ type SchemeValue = any;
 // symbol_to_string relocated to printer.ts (used only by its function_to_string).
 
 // ----------------------------------------------------------------------
-specials.on(["remove", "append"], function () {
-  Lexer._cache.valid = false;
-  Lexer._cache.rules = null;
-});
+// (The `specials.on(["remove","append"], …)` Lexer-cache buster lived here — dissolved
+// with the specials event system; the reader-macro registry is now a frozen literal.)
 
 // reader machinery (tokenize / tokens / _parse) lives in reader/ leaves now.
 
