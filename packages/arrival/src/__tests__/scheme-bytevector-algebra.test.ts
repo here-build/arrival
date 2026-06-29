@@ -32,35 +32,35 @@ describe("SchemeBytevector Setoid/Ord/Semigroup — boundaries", () => {
   it("value equality over distinct heap payloads", () => {
     const a = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 2, 3]));
     const b = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 2, 3]));
-    expect((a as never)[FL](b)).toBe(true);
+    expect(a[FL](b)).toBe(true);
   });
 
   it("non-SchemeBytevector other → false for equals and lte", () => {
     const a = new ABytevector(CONSTANT_CTX, Uint8Array.from([1]));
-    expect((a as never)[FL](Uint8Array.from([1]))).toBe(false);
-    expect((a as never)[FL](42)).toBe(false);
-    expect((a as never)[LTE](Uint8Array.from([1]))).toBe(false);
-    expect((a as never)[LTE](null)).toBe(false);
+    expect(a[FL](Uint8Array.from([1]))).toBe(false);
+    expect(a[FL](42)).toBe(false);
+    expect(a[LTE](Uint8Array.from([1]))).toBe(false);
+    expect(a[LTE](null)).toBe(false);
   });
 
   it("lexicographic lte: a proper prefix precedes its extension", () => {
     const a = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 2]));
     const b = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 2, 0]));
-    expect((a as never)[LTE](b)).toBe(true);
-    expect((b as never)[LTE](a)).toBe(false);
+    expect(a[LTE](b)).toBe(true);
+    expect(b[LTE](a)).toBe(false);
   });
 
   it("lexicographic lte: first differing byte decides (unsigned)", () => {
     const a = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 200]));
     const b = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 255]));
-    expect((a as never)[LTE](b)).toBe(true);
-    expect((b as never)[LTE](a)).toBe(false);
+    expect(a[LTE](b)).toBe(true);
+    expect(b[LTE](a)).toBe(false);
   });
 
   it("concat appends bytes and is length-additive", () => {
     const a = new ABytevector(CONSTANT_CTX, Uint8Array.from([1, 2]));
     const b = new ABytevector(CONSTANT_CTX, Uint8Array.from([3]));
-    const c = (a as never)[CONCAT](b) as ABytevector;
+    const c = a[CONCAT](b);
     expect([...c.__bytevector__]).toEqual([1, 2, 3]);
     expect(c.length).toBe(3);
   });
