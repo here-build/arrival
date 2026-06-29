@@ -29,7 +29,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
     const result = await execOne(
       "(:pasword obj)",
       inferenceEnv.inherit("keyword-test", {
-        obj: { pasword: "swordfish" },
+        obj: jsToScheme(CONSTANT_CTX, { pasword: "swordfish" }),
       }),
     );
     expect(result.toString()).toBe("swordfish"); // Just log, don't fail
@@ -47,7 +47,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
 
   it("should test what Claude's actual query needs", async () => {
     const testObj = { name: "test-value", id: "test-id" };
-    inferenceEnv.set("project", testObj);
+    inferenceEnv.set("project", jsToScheme(CONSTANT_CTX, testObj));
 
     // Try different syntaxes
     const tests = [
@@ -71,7 +71,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
     const result = await execOne(
       `(list |24|)`,
       inferenceEnv.inherit("quotation-test", {
-        "24": "unqouted",
+        "24": jsToScheme(CONSTANT_CTX, "unqouted"),
       }),
     );
 
@@ -109,7 +109,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
 
   it("should handle missing keys gracefully", async () => {
     const obj = { name: "test" };
-    inferenceEnv.set("obj", obj);
+    inferenceEnv.set("obj", jsToScheme(CONSTANT_CTX, obj));
 
     const result = await execOne(`(:missing obj)`);
     expect(result.constructor.name).toBe("ANil");
