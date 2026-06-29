@@ -211,6 +211,84 @@ const EXPECTED_FAILURES: { pattern: string | RegExp; reason: string }[] = [
     reason: "Local define-syntax + set! inside the rewrite — pre-L1 hygiene gap",
   },
   // -----------------------------------------------------------------------
+  // 4.3 Macros — torture rows UN-MASKED by the merge-frame symbol-display fix.
+  // The whole "4.3 Macros" section is exec'd as one blob (the harness catches per
+  // SECTION, not per form), and the FIRST macro expansion used to throw at runtime —
+  // `Cannot convert a Symbol value to a string` — when a repr/toString interpolated
+  // the merge-frame name (`Symbol.for("merge")`). That crash aborted the rest of the
+  // section, so these rows were never generated. Widening `Environment.__name__` to
+  // `string | symbol` and wrapping the display sites in `String(...)` removed the
+  // crash; the section now runs to completion and these PRE-EXISTING macro-engine /
+  // hygiene gaps surface as their own rows (same family as the let-syntax / swap!
+  // entries above; cf. the "matcher off-by-one un-masked these" note higher up).
+  // Reproduced in isolation (not a harness-cascade artifact). Exact-string patterns
+  // so a pattern can never over-match a sibling that PASSES (count-to-2 vs count-to-2_,
+  // proper part-2x vs the `. tail` improper variant, elli-esc-1 with args vs without).
+  // -----------------------------------------------------------------------
+  {
+    // use-site shadows `let`/`if` with values; the macro's hygienically-introduced
+    // `let`/`if` must still bind the real special forms. They don't → the expanded
+    // `(let ((temp e1)) …)` parses against the shadowed `let`.
+    pattern: "(let odd?) (if even?)",
+    reason: "Hygienic shadowing of let/if at the use site — pre-L1 hygiene gap (un-masked by merge-frame display fix)",
+  },
+  {
+    pattern: "(let ((=> #f)) (cond",
+    reason: "Hygienic shadowing of cond's => auxiliary keyword — pre-L1 hygiene gap (un-masked)",
+  },
+  {
+    // be-like-begin{1,2,3}: a define-syntax whose template is itself a define-syntax —
+    // the inner macro (`sequence{1,2,3}`) never binds.
+    pattern: "(sequence1 ",
+    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(sequence2 ",
+    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(sequence3 ",
+    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(mad-hatter)",
+    reason: "Nested define-syntax (jabberwocky → hatter) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(bar 1)",
+    reason: "Nested define-syntax (foo → bar) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(ff 10)",
+    reason: "Nested define-syntax (ffoo → ff) — inner macro unbound — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    // `(... ...)` ellipsis-escape and ellipsis-as-literal in the template.
+    pattern: "(elli-esc-1 100",
+    reason: "Ellipsis-escape (... ...) in the syntax-rules template — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(elli-lit-1 100",
+    reason: "Ellipsis used as a literal in the template — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    // improper-list pattern with a dotted tail under ellipsis.
+    pattern: ". tail))",
+    reason: "Improper-list (dotted-tail) ellipsis pattern — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(underscore foo)",
+    reason: "`_` wildcard in a syntax-rules pattern — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "count-to-2_",
+    reason: "`_` wildcard counting pattern (count-to-2_) — pre-L1 macro engine gap (un-masked)",
+  },
+  {
+    pattern: "(m k)",
+    reason: "let-syntax + bound-identifier=? hygiene comparison — pre-L1 hygiene gap (un-masked)",
+  },
+  // -----------------------------------------------------------------------
   // Function identity — pre-L1, evaluating `p` twice through the lookup/eval
   // path yields distinct closures, so `(eq? p p)` sees two objects. (This is
   // NOT the old LIPS bind/unbind machinery — that whole cluster was removed
