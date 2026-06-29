@@ -49,7 +49,9 @@ export class LexicalScope {
    * ≡ the old `env.__name__ === Syntax.__merge_env__` check.
    */
   get kind(): "merge" | undefined {
-    return (this.env.__name__ as string | symbol) === MERGE_SCOPE ? "merge" : undefined;
+    // `__name__` is `string | symbol`, so the merge-frame's `Symbol.for("merge")`
+    // identity compares directly — no cast needed (Environment.ts widening).
+    return this.env.__name__ === MERGE_SCOPE ? "merge" : undefined;
   }
 
   /** This frame's parent as a LexicalScope (memoized), or null at the root. ≡ `env.__parent__`. */

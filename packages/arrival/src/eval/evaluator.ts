@@ -2440,7 +2440,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
   // `__name__` (the LexicalScope env underlying the resolver) — `resolver.env`.
   const frame: StackFrame = {
     code,
-    env_name: ctxResolver(ctx).env.__name__,
+    env_name: String(ctxResolver(ctx).env.__name__),
     procedure: first instanceof ASymbol ? symbol_name(first) : undefined,
   };
 

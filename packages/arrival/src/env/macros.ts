@@ -124,7 +124,7 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(
             if (new_expr) {
               expr = new_expr;
             }
-            const new_env = var_scope.merge(scope, Syntax.__merge_env__ as unknown as string);
+            const new_env = var_scope.merge(scope, Syntax.__merge_env__);
             // FORM-RETURNING (always): hand back the transcribed FORM + its hygiene scope.
             // The evaluator yields this form into the flat trampoline (tail position) and the
             // macroexpand traverse re-expands it — the transformer NEVER evaluates inside

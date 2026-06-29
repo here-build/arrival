@@ -55,7 +55,7 @@ export interface SchemeEnv {
   set(name: string, value: unknown, docValue?: string | null): unknown;
   get(name: string, options?: { throwError?: boolean }): unknown;
   defineRosetta(name: string, config: RosettaSpec): void;
-  inherit(name?: string, obj?: Record<string, unknown>): SchemeEnv;
+  inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). */
   registerResolver(resolver: ResolverSpec): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The

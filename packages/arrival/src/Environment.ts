@@ -106,7 +106,11 @@ export class Environment implements SchemeEnv {
   // -------------------------------------------------------------------------
 
   constructor(
-    public __name__: string = "anonymous",
+    // `string | symbol`: a merge-frame's identity IS `Symbol.for("merge")`
+    // (Syntax.__merge_env__), and LexicalScope.kind compares it by symbol-IDENTITY
+    // — coercing to string would break hygiene. Display sites (toString, the
+    // Resolver/Capabilities reprs, the StackFrame name) wrap it in `String(...)`.
+    public __name__: string | symbol = "anonymous",
     public __env__: Record<string | symbol, EnvironmentValue> = {},
     public __parent__: Environment | null = null,
   ) {}
@@ -158,7 +162,7 @@ export class Environment implements SchemeEnv {
   }
 
   inherit(
-    name: string = `child of ${this.__name__ || "unknown"}`,
+    name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
     obj: Record<string, EnvironmentValue> = {},
   ): Environment {
     return new Environment(name, obj, this);
@@ -191,10 +195,10 @@ export class Environment implements SchemeEnv {
   }
 
   toString(): string {
-    return `#<environment:${this.__name__}>`;
+    return `#<environment:${String(this.__name__)}>`;
   }
 
-  merge(env: Environment, name: string = "merge"): Environment {
+  merge(env: Environment, name: string | symbol = "merge"): Environment {
     typecheck("Environment::merge", env, "environment");
     return this.inherit(name, env.__env__);
   }

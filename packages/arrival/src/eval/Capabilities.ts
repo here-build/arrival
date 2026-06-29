@@ -84,6 +84,6 @@ export class Capabilities {
   }
 
   toString(): string {
-    return `#<capabilities:${this.env.__name__}>`;
+    return `#<capabilities:${String(this.env.__name__)}>`;
   }
 }

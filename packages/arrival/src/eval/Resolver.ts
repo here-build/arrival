@@ -241,7 +241,7 @@ export class Resolver {
    * `this.capabilities` propagates verbatim, so the macro/hygiene seam keeps a stable
    * `globalRoot` across expansion frames. ≡ `new Resolver(env.inherit(name), caps, kind)`.
    */
-  child(name?: string, kind?: ScopeKind): Resolver {
+  child(name?: string | symbol, kind?: ScopeKind): Resolver {
     return new Resolver(this.env.inherit(name), this.capabilities, kind);
   }
 
@@ -251,6 +251,6 @@ export class Resolver {
   }
 
   toString(): string {
-    return `#<resolver:${this.env.__name__}>`;
+    return `#<resolver:${String(this.env.__name__)}>`;
   }
 }
