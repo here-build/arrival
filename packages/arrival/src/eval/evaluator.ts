@@ -38,13 +38,13 @@ import {
   is_nil,
   is_pair,
   is_promise,
-  is_syntax,
 } from "./guards.js";
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "./Resolver.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
+import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
 import { type SchemeValue } from "../values/types.js";
@@ -2664,7 +2664,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     // expansion (and any tail call inside it) collapses on the existing trampoline, so a macro
     // in tail position gets the SAME O(1) TCO as a special form. (A transformer is Exp->Exp;
     // it must never evaluate inside itself.)
-    if (is_syntax(fn)) {
+    if (fn instanceof Syntax) {
       // FORM-RETURNING: macro-expand mode -> { expr, scope } (the transcribed FORM + its
       // hygiene scope, with data-position gensyms already restored by the transformer), then
       // evaluate it in THIS flat trampoline in TAIL position. No nested run, no onResolve

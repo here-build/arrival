@@ -46,11 +46,6 @@ export function is_false(o: unknown): o is false | null | ABool {
 }
 
 // ----------------------------------------------------------------------------
-export function is_string(o: unknown): o is string {
-  return typeof o === "string";
-}
-
-// ----------------------------------------------------------------------------
 export function is_prototype(obj: unknown): boolean {
   return (
     obj !== null &&
@@ -69,14 +64,9 @@ export function is_env(o: unknown): o is Environment {
 // ----------------------------------------------------------------------
 // `Macro | Syntax`: since Syntax no longer extends Macro, both arms are listed
 // explicitly (plus the SRFI-139 Syntax.Parameter). The evaluator's expand hook
-// narrows on this then on `is_syntax` — see evaluator.ts.
+// narrows on this then on `instanceof Syntax` — see evaluator.ts.
 export function is_macro(o: unknown): o is Macro | Syntax {
   return o instanceof Macro || o instanceof Syntax || o instanceof Syntax.Parameter;
-}
-
-// ----------------------------------------------------------------------
-export function is_syntax(o: unknown): o is Syntax {
-  return o instanceof Syntax;
 }
 
 // ----------------------------------------------------------------------

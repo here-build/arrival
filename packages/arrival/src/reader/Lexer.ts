@@ -10,7 +10,6 @@
 import invariant from "tiny-invariant";
 import { eof } from "../values/primitives/EOF.js";
 import { Unterminated } from "../errors.js";
-import { is_string } from "../eval/guards.js";
 import { directives, hash_literals, parsable_contants } from "../values/primitives.js";
 import * as specials from "./specials.js";
 
@@ -309,7 +308,7 @@ export class Lexer {
     const [re, prev_re, next_re, state] = rule;
     invariant(rule.length === 5, `Lexer: Invalid rule of length ${rule.length}`);
     switch (true) {
-      case is_string(re) ? re !== char : !char.match(re):
+      case typeof re === "string" ? re !== char : !char.match(re):
       case !match_or_null(prev_re, prev_char):
       case !match_or_null(next_re, next_char):
       case state !== this._state:
