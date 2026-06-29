@@ -1,6 +1,6 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import type { FallbackResolver } from "./bindings.js";
+import type { ResolverSpec } from "./common/scheme-env.js";
 import type { EOF } from "./values/primitives/EOF.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -92,7 +92,7 @@ function ownProps(obj: object): (string | symbol)[] {
  */
 export class Environment implements SchemeEnv {
   static [CLASS] = "environment";
-  private __resolvers__: FallbackResolver[] = [];
+  private __resolvers__: ResolverSpec[] = [];
   /**
    * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
    * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
@@ -119,7 +119,7 @@ export class Environment implements SchemeEnv {
    * Register a fallback resolver.
    * Resolvers are tried in order when normal lookup fails.
    */
-  registerResolver(resolver: FallbackResolver): this {
+  registerResolver(resolver: ResolverSpec): this {
     // Fail LOUD on a malformed resolver. An `undefined`/`.resolve`-less entry would
     // otherwise push silently (an empty `__resolvers__.some(...)` short-circuits before
     // it could throw) and only surface much later as a "cannot read 'resolve'" crash at
@@ -185,7 +185,7 @@ export class Environment implements SchemeEnv {
     // Resolvers fire only AFTER a direct miss — a generated binding never masks an
     // explicit one in the same layer. `undefined` = "not mine"; anything else is the hit.
     for (const resolver of this.__resolvers__) {
-      const result = resolver.resolve(String(name), this);
+      const result = resolver.resolve(String(name));
       if (result !== undefined) {
         return result as EnvironmentValue;
       }
@@ -203,7 +203,7 @@ export class Environment implements SchemeEnv {
     return this.inherit(name, env.__env__);
   }
 
-  get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue {
+  get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue | undefined {
     // `:key` keyword accessors are no longer special-cased here: a `:`-prefixed symbol
     // is never a binding, so it falls through to `_lookupWithResolvers` (below) where
     // the polyglot capability's `keyword-accessor` resolver (membrane.ts) maps it to
