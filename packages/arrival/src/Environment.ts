@@ -11,6 +11,7 @@ import type { SchemeValue } from "./values/types.js";
 import { nil } from "./values/primitives/ANil.js";
 import type { RosettaFunction } from "./rosetta.js";
 import { createRosettaWrapper } from "./rosetta.js";
+import type { SchemeEnv } from "./common/scheme-env.js";
 import { typecheck } from "./utils/typecheck.js";
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
@@ -89,7 +90,7 @@ function ownProps(obj: object): (string | symbol)[] {
  * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
  * (which {@link LexicalScope} owns) or "Frame".
  */
-export class Environment {
+export class Environment implements SchemeEnv {
   static [CLASS] = "environment";
   private __resolvers__: FallbackResolver[] = [];
   /**
