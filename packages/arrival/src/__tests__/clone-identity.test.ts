@@ -32,13 +32,13 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { is_nil } from "../eval/guards";
-import { hasMember, isSchemeValue, readMember, toJS } from "../membrane";
-import { schemeToJs } from "../rosetta";
-import listsCap from "../env/r7rs/lists";
-import type { EnvCapability } from "../common/capability";
+import { is_nil } from "../eval/guards.js";
+import { hasMember, isSchemeValue, readMember, toJS } from "../membrane.js";
+import { schemeToJs } from "../rosetta.js";
+import listsCap from "../env/r7rs/lists.js";
+import type { EnvCapability } from "../common/capability.js";
 import { APair } from "../values/primitives/APair.js";
-import { ANil, nil } from "../values/primitives/ANil";
+import { ANil, nil } from "../values/primitives/ANil.js";
 
 // A nil clone carrying non-empty provenance — exactly what
 // `restrictControlFlowProvenance` (evaluator.ts:627) hands back when an `if`

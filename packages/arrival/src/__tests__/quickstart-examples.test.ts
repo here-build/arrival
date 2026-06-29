@@ -4,7 +4,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, jsToScheme, schemeToJs, sandboxedEnv } from "../index";
+import { exec, jsToScheme, schemeToJs, sandboxedEnv } from "../index.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {

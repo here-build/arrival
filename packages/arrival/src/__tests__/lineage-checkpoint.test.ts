@@ -13,14 +13,14 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  * STOP before building the IR. It doesn't fail.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { parse } from "../eval/generator-exec";
-import { exec } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { initBridge } from "../bridge.js";
+import { parse } from "../eval/generator-exec.js";
+import { exec } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import { APair } from "../values/primitives/APair.js";
-import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage";
-import { provOf } from "../values/lineage-shadow";
-import { sStr } from "./_lineage-test-helpers";
+import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage.js";
+import { provOf } from "../values/lineage-shadow.js";
+import { sStr } from "./_lineage-test-helpers.js";
 
 const C: Classifier = {
   isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length"].includes(op),

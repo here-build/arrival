@@ -10,7 +10,7 @@
 // catches a non-keyword head by name. That win lands when the fallback is removed (the
 // macro-cut pass, once every special form is a keyword marker).
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs, sandboxedEnv } from "../index";
+import { exec, schemeToJs, sandboxedEnv } from "../index.js";
 
 describe("kernel keywords — value-carried special-form dispatch", () => {
   it("(define => lambda) — the alias IS lambda (aliasing falls out of value-carried dispatch)", async () => {

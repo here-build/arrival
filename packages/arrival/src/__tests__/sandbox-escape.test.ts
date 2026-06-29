@@ -21,20 +21,20 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge";
-import { exec } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { initBridge } from "../bridge.js";
+import { exec } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import {
   INTEROP_BOUNDARY,
   InteropAccessError,
   accessMember,
   accessSet,
   isInteropBoundary,
-} from "../interop-access";
+} from "../interop-access.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { exec as gexec } from "../eval/generator-exec";
+import { exec as gexec } from "../eval/generator-exec.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors

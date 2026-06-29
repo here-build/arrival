@@ -8,8 +8,8 @@
 // throw lives in purity-doors.test.ts). Here we pin the UNIFICATION: literal AND
 // constructed vectors/bytevectors are equally immutable, and reads still work.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
-import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env.js";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);

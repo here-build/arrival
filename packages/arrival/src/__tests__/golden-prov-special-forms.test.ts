@@ -31,11 +31,11 @@
  *   path with the taken arm, NOT a node that discards the predicate.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
-import { classify, fullCone, type Classifier } from "../values/lineage";
-import { sNum, run } from "./_lineage-test-helpers";
+import { initBridge } from "../bridge.js";
+import { parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { classify, fullCone, type Classifier } from "../values/lineage.js";
+import { sNum, run } from "./_lineage-test-helpers.js";
 
 /** STATIC classifier for the gate checks below — the control forms here use only
  *  arithmetic/comparison pures (no Rosetta-in, no fans). */

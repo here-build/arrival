@@ -32,16 +32,16 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge";
-import { exec, parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { initBridge } from "../bridge.js";
+import { exec, parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { fromJs } from "../values/primitives/boxing.js";
 import { APair } from "../values/primitives/APair.js";
-import { classify, fullCone } from "../values/lineage";
-import { classifierFromEnv } from "../values/lineage-classifier-from-env";
-import { provOf, bindingsForSkeleton } from "../values/lineage-shadow";
+import { classify, fullCone } from "../values/lineage.js";
+import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
+import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
 
 let seq = 0;
 

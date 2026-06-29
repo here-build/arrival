@@ -27,21 +27,21 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { fromJs } from "../values/primitives/boxing.js";
-import { is_nil } from "../eval/guards";
-import { fromJS, isSchemeValue, toJS } from "../membrane";
+import { is_nil } from "../eval/guards.js";
+import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
-import { jsToScheme, schemeToJs } from "../rosetta";
+import { jsToScheme, schemeToJs } from "../rosetta.js";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { ANil, nil } from "../values/primitives/ANil";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { AVoid } from "../values/primitives/AVoid.js";
-import { ACharacter } from "../values/primitives/ACharacter";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 
 // =========================================================================
 // AValue.fromJs boxer dispatch — coverage of every registered tag

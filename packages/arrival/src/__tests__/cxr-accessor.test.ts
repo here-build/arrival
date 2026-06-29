@@ -11,11 +11,11 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../eval/generator-exec";
-import { global_env } from "../env-roots";
-import { inferenceEnv } from "../inference-env";
-import { is_nil } from "../eval/guards";
-import { schemeToJs } from "../rosetta";
+import { exec } from "../eval/generator-exec.js";
+import { global_env } from "../env-roots.js";
+import { inferenceEnv } from "../inference-env.js";
+import { is_nil } from "../eval/guards.js";
+import { schemeToJs } from "../rosetta.js";
 
 const evalIn = (env: typeof global_env) => async (expr: string): Promise<unknown> =>
   schemeToJs((await exec(expr, { env }))[0], {});

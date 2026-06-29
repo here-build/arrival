@@ -23,8 +23,8 @@
 //     so the cycle branch never fires). Terminates either way — hence we guard on
 //     termination here.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
-import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env.js";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 const run = async (form: string) => (await exec(form, { env }) as unknown[])[0];

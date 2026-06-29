@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
-import { is_nil, is_false } from "../eval/guards";
+import { exec } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { is_nil, is_false } from "../eval/guards.js";
 
 /**
  * car/cdr nil-tolerance across interpreter modes × all primitive types.

@@ -30,8 +30,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec";
-import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec.js";
+import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 

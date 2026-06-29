@@ -7,8 +7,8 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { type SchemeValue } from "../values/types";
-import { nil } from "../values/primitives/ANil";
+import { type SchemeValue } from "../values/types.js";
+import { nil } from "../values/primitives/ANil.js";
 
 /**
  * Create a Scheme list from JS values

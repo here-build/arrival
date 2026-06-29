@@ -13,9 +13,9 @@
  * sub-evaluations receive their parent as the second arg to enter().
  */
 import { beforeAll, describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec";
-import { freshEnv } from "./_fresh-env";
-import type { Environment } from "../Environment";
+import { exec } from "../eval/generator-exec.js";
+import { freshEnv } from "./_fresh-env.js";
+import type { Environment } from "../Environment.js";
 import type { APair } from "../values/primitives/APair.js";
 
 let userEnv: Environment;

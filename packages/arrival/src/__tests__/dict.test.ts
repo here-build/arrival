@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import type { Environment } from "../Environment";
-import { exec } from "../eval/generator-exec";
-import { freshEnv } from "./_fresh-env";
+import type { Environment } from "../Environment.js";
+import { exec } from "../eval/generator-exec.js";
+import { freshEnv } from "./_fresh-env.js";
 
 /**
  * The runtime `dict` constructor — the canonical open-key map form

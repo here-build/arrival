@@ -25,10 +25,10 @@ import { AJSArray } from "../values/primitives/AJSArray.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { jsToScheme } from "../rosetta";
-import { inferenceEnv } from "../inference-env";
-import { exec } from "../eval/generator-exec";
-import { ANil, nil } from "../values/primitives/ANil";
+import { jsToScheme } from "../rosetta.js";
+import { inferenceEnv } from "../inference-env.js";
+import { exec } from "../eval/generator-exec.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 
 const PROV = new Set<number>([42]);
 

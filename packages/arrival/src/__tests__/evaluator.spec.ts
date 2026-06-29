@@ -5,20 +5,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { Environment } from "../Environment";
-import run, { exec } from "../eval/evaluator";
+import { Environment } from "../Environment.js";
+import run, { exec } from "../eval/evaluator.js";
 // String-based exec with the full default env (provides `=`, `-`, etc.) — used
 // only by the tail-call optimization test, which exercises the trampoline's
 // cross-`run()` recursion shape and needs real `if`/`=`/`-` rather than the
 // minimal hand-rolled `env` above.
-import { exec as execSource } from "../eval/generator-exec";
+import { exec as execSource } from "../eval/generator-exec.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
 import { APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil";
-import { list, num, sym } from "./helpers";
+import { nil } from "../values/primitives/ANil.js";
+import { list, num, sym } from "./helpers.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   let env: Environment;

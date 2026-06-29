@@ -23,9 +23,9 @@
  * untouched; its retirement is a later phase.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { initBridge } from "../bridge.js";
+import { parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import {
   classify,
   fullCone,
@@ -33,7 +33,7 @@ import {
   fieldCone,
   type Classifier,
   type LineageNode,
-} from "../values/lineage";
+} from "../values/lineage.js";
 
 const C: Classifier = {
   // `dict` is treated as a pure constructor here so the fan×lens body classifies.

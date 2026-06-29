@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec } from "../eval/generator-exec";
-import { freshEnv } from "./_fresh-env";
+import { exec } from "../eval/generator-exec.js";
+import { freshEnv } from "./_fresh-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 
 const execSimple = async (string: string, env?: object, dynamic_env?: object) => {

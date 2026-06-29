@@ -39,8 +39,8 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, it, expect } from "vitest";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { provOf } from "../values/lineage-shadow";
-import { sStr, runRaw } from "./_lineage-test-helpers";
+import { provOf } from "../values/lineage-shadow.js";
+import { sStr, runRaw } from "./_lineage-test-helpers.js";
 
 // provenance of the result
 async function prov(src: string, binds: Record<string, unknown> = {}): Promise<number[]> {

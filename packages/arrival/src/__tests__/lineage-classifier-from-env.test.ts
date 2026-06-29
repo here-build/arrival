@@ -6,11 +6,11 @@
  * test-only until Slice 2 (the --ir-lineage load hook).
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
-import { classify, fullCone, type LineageNode } from "../values/lineage";
-import { classifierFromEnv } from "../values/lineage-classifier-from-env";
+import { initBridge } from "../bridge.js";
+import { parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { classify, fullCone, type LineageNode } from "../values/lineage.js";
+import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 
 let seq = 0;
 const env = () => inferenceEnv.inherit(`cfe-${seq++}`);

@@ -7,14 +7,14 @@
 
 import { describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
-import { exec, execExpr, parse } from "../eval/generator-exec";
+import { exec, execExpr, parse } from "../eval/generator-exec.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
 import { nil } from "../values/primitives/ANil.js";
-import { freshEnv } from "./_fresh-env";
+import { freshEnv } from "./_fresh-env.js";
 
 describe("generator-exec", () => {
   describe("exec() - basic operations", () => {

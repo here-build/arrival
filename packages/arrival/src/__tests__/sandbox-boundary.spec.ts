@@ -10,7 +10,7 @@ import {
   NOT_FOUND,
   markInteropBoundary,
   isInteropBoundary,
-} from "../interop-access";
+} from "../interop-access.js";
 
 describe("Sandbox Boundary", () => {
   describe("sandboxedAccess", () => {

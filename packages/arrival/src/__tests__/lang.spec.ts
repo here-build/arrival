@@ -11,9 +11,9 @@
 
 import fs from "fs";
 import { describe, expect, test } from "vitest";
-import { exec } from "../eval/generator-exec";
+import { exec } from "../eval/generator-exec.js";
 import { nil } from "../values/primitives/ANil.js";
-import { freshEnv } from "./_fresh-env";
+import { freshEnv } from "./_fresh-env.js";
 import * as path from "node:path";
 
 // Initialize bootstrap (includes all Scheme macros)

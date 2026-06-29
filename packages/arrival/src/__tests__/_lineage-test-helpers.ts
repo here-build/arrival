@@ -20,7 +20,7 @@
  */
 import { initBridge } from "../bridge.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec } from "../eval/generator-exec";
+import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";

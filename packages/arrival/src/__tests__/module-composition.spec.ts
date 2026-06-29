@@ -11,8 +11,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Environment } from "../Environment";
-import type { FallbackResolver } from "../bindings";
+import { Environment } from "../Environment.js";
+import type { FallbackResolver } from "../bindings.js";
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);

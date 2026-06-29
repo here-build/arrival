@@ -39,11 +39,11 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import type { Environment } from "../Environment";
-import { exec } from "../eval/generator-exec";
+import type { Environment } from "../Environment.js";
+import { exec } from "../eval/generator-exec.js";
 import { assembleEnv } from "../common/kernel.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
-import { freshEnv } from "./_fresh-env";
+import { freshEnv } from "./_fresh-env.js";
 import { type ChibiTestResult, createChibiHarness } from "./chibi-harness.js";
 
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../vendor/chibi-scheme/tests/r7rs-tests.scm");

@@ -60,8 +60,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec as execSource } from "../eval/generator-exec";
-import { freshEnv } from "./_fresh-env";
+import { exec as execSource } from "../eval/generator-exec.js";
+import { freshEnv } from "./_fresh-env.js";
 import { nil } from "../values/primitives/ANil.js";
 
 /**

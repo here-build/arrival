@@ -12,12 +12,12 @@
  * against the full test suite.
  */
 
-import type { Environment } from "../Environment";
-import type { SchemeValue } from "../values/types";
+import type { Environment } from "../Environment.js";
+import type { SchemeValue } from "../values/types.js";
 
 // Import both evaluator implementations
-import { exec as lipsExec } from "../eval/generator-exec";
-import { exec as generatorExec } from "../eval/generator-exec";
+import { exec as lipsExec } from "../eval/generator-exec.js";
+import { exec as generatorExec } from "../eval/generator-exec.js";
 
 // Check environment variable at module load time
 const USE_GENERATOR = process.env.USE_GENERATOR === "1";

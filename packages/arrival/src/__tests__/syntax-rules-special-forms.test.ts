@@ -13,7 +13,7 @@
 // for a gensym), NOT symbol_name's string description — the two differ for gensyms, and
 // looking up by the description silently fell through to (failed) application.
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs, sandboxedEnv } from "../index";
+import { exec, schemeToJs, sandboxedEnv } from "../index.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 

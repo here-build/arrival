@@ -10,7 +10,7 @@
 // literal symbols by restore_data_gensyms ON THE FORM (once per expansion), so quote yields
 // the literal symbol with no post-eval, O(depth)-composing fixup.
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs, sandboxedEnv } from "../index";
+import { exec, schemeToJs, sandboxedEnv } from "../index.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);

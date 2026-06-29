@@ -4,9 +4,9 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
-import { jsToScheme, schemeToJs } from "../rosetta";
+import { exec } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { jsToScheme, schemeToJs } from "../rosetta.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });

@@ -13,8 +13,8 @@
 // that hangs the worker (testTimeout can't interrupt a sync loop). That loud hang
 // IS the regression signal.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
-import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env.js";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);

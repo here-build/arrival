@@ -7,11 +7,11 @@
  * the live runtime propagation are deferred; this is the starting-point foothold.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge";
-import { parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
-import { classify, fullCone, type Classifier } from "../values/lineage";
-import { rosettaPureOf } from "../env-registries";
+import { initBridge } from "../bridge.js";
+import { parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { classify, fullCone, type Classifier } from "../values/lineage.js";
+import { rosettaPureOf } from "../env-registries.js";
 
 describe("rosetta pure marker", () => {
   it("round-trips into the pure registry (sibling to the type registry), default is NOT pure", async () => {

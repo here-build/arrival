@@ -27,7 +27,7 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil";
+import { nil } from "../values/primitives/ANil.js";
 
 describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {

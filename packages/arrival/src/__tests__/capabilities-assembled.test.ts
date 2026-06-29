@@ -12,9 +12,9 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../eval/generator-exec";
-import { user_env, global_env } from "../env-roots";
-import { Capabilities } from "../eval/Capabilities";
+import { exec } from "../eval/generator-exec.js";
+import { user_env, global_env } from "../env-roots.js";
+import { Capabilities } from "../eval/Capabilities.js";
 
 describe("Capabilities.assembled (3b.3 — assembled base sentinel)", () => {
   it("refFrame of any base-owned builtin === globalRoot (the stable sentinel)", async () => {

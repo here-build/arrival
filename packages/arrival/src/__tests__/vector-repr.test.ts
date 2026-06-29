@@ -5,8 +5,8 @@
 // They must render as the R7RS external representation #(...) / #u8(...). repr of
 // a vector had ZERO test coverage before this.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
-import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env.js";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 const repr = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);

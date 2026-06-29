@@ -10,15 +10,15 @@
 
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { collapseProvenance } from "../provenance-collapse";
-import { initBridge } from "../bridge";
-import { exec } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { collapseProvenance } from "../provenance-collapse.js";
+import { initBridge } from "../bridge.js";
+import { exec } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
-import { nil } from "../values/primitives/ANil";
+import { nil } from "../values/primitives/ANil.js";
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

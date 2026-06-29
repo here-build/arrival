@@ -8,16 +8,16 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge";
-import { exec } from "../eval/generator-exec";
-import { parse } from "../eval/generator-exec";
-import { inferenceEnv } from "../inference-env";
+import { initBridge } from "../bridge.js";
+import { exec } from "../eval/generator-exec.js";
+import { parse } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { classify, fullCone, type Classifier } from "../values/lineage";
-import { provOf } from "../values/lineage-shadow";
-import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers";
+import { classify, fullCone, type Classifier } from "../values/lineage.js";
+import { provOf } from "../values/lineage-shadow.js";
+import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers.js";
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
 // a `defineRosetta` fixture); the shared run/runRaw own a separate counter.

@@ -16,9 +16,9 @@
 // SEPARATE expander defect (boxing-track S9: needs a SchemeVector unwrap in the
 // matcher/expander, not just the off-by-one). docs/plan-2026-06-10-boxing-track.md.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
+import { freshEnv } from "./_fresh-env.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { exec } from "../eval/generator-exec";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 

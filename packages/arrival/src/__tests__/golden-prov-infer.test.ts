@@ -47,8 +47,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { AValue } from "../values/primitives/AValue.js";
-import { provOf } from "../values/lineage-shadow";
-import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers";
+import { provOf } from "../values/lineage-shadow.js";
+import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 // The SHAPE of how they flow (born / propagate / merge / narrow) is the invariant;

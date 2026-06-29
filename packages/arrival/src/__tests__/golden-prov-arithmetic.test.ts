@@ -26,7 +26,7 @@
  * fixtures (strs/nums) stay local.
  */
 import { describe, it, expect } from "vitest";
-import { sStr, sNum, run } from "./_lineage-test-helpers";
+import { sStr, sNum, run } from "./_lineage-test-helpers.js";
 
 // Standard stamped fixtures, fresh per call (AValues are immutable, but a fresh
 // object keeps each test independent and the intent readable at the call site).

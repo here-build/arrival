@@ -12,7 +12,7 @@
 // handler). The auxiliary keywords `else`/`=>` survive hygiene because evalCond/evalCase
 // match them by `.literal()` (the un-renamed name), not the renamed symbol description.
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs, sandboxedEnv } from "../index";
+import { exec, schemeToJs, sandboxedEnv } from "../index.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);

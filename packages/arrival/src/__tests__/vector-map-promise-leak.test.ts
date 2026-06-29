@@ -8,8 +8,8 @@
 // any result is a promise, return promise_all(...).then(...) so the trampoline
 // awaits settled values.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env";
-import { exec } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env.js";
+import { exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);

@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { setMembraneWarnings } from "../membrane-warn";
+import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
@@ -21,10 +21,10 @@ import {
   toJS,
   isSchemeValue,
   isBytevectorLike,
-} from "../membrane";
+} from "../membrane.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
-import { nil } from "../values/primitives/ANil";
+import { nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
