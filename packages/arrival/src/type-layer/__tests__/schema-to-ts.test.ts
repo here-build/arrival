@@ -3,8 +3,8 @@
 // family, compounds (object/array/tuple/union), and the full `signatureOf` over a
 // sampled native def, a rosetta def, and a multiple-values output.
 import { describe, expect, it } from "vitest";
-import * as z from "../scheme-zod.js";
-import { symbol } from "../symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
 import { printType, signatureOf } from "../schema-to-ts.js";
 
 describe("printType — native identity primitives (z.instanceof → class name)", () => {

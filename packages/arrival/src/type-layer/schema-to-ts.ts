@@ -42,8 +42,8 @@
 
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
-import * as z from "./scheme-zod.js";
-import type { SymbolDef } from "./symbol.js";
+import * as z from "../common/scheme-zod.js";
+import type { SymbolDef } from "../common/symbol.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The scheme-primitive STATIC fallback (defensive).

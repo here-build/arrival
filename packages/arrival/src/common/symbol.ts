@@ -2,7 +2,7 @@
 //
 // One zod contract, read (eventually) four ways: runtime validation (z.parse), static
 // impl types (z.infer via the generics here), the harvested .d.ts (printed from the
-// schema — printer BUILT in schema-to-ts.ts; type-lens wiring pending), and the JS↔Scheme membrane (each
+// schema — printer BUILT in type-layer/schema-to-ts.ts; type-lens wiring pending), and the JS↔Scheme membrane (each
 // schema is the per-arg codec). This file builds the AUTHORED-extension layer:
 //
 //   const symbol = { native, rosetta, tagless, notImplemented }
