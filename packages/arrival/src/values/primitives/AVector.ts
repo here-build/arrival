@@ -24,6 +24,15 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
+// The membrane's JS→Scheme boxing fn — used by the cross-out Functor `map` to re-present
+// the stripped-raw results array as a lazy auto-wrapping AJSArray (raw `.source` inside,
+// each element boxed ON ACCESS). A hoisted `export function` declaration, so importing it
+// here closes a BENIGN runtime cycle (AVector → rosetta → AVector): rosetta touches AVector
+// only in function bodies (`new AVector`), so the binding need not exist at this module's
+// eval. (A direct `import { AJSArray }` would NOT be safe — AJSArray `extends AVector`, so
+// that edge bites at module-eval as `Class extends value undefined`; routing through this
+// hoisted fn is the same cycle-avoidance AJSArray itself uses for `jsToScheme`.)
+import { jsToScheme } from "../../rosetta.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
@@ -154,18 +163,28 @@ export class AVector extends AValue {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
-  // Arrival's async-aware Functor — `map` over the elements into a fresh vector. A
-  // vector crosses OUT to a foreign Functor, so each mapped element is UNWRAPPED to
-  // its raw JS value (a SchemeString/SchemeExact/ASymbol/ANil → string/number/string/
-  // null) — the DR4 box-strip, pinned GOLDEN by coercion-soundness's "SchemeVector ·
-  // map STRIPS element boxes". This is DELIBERATELY the opposite of APair's box-PRESERVING
-  // map (a Pair stays an arrival list, never crossing out). `fn` is awaited per element
-  // (live LIPS lambdas return Promises). (The N-ary vector-map builtin is a separate,
-  // non-Functor observation — it carries arity the bare Functor underfits.)
+  // Arrival's async-aware Functor — `map` over the elements, crossing OUT to a foreign
+  // Functor. Each mapped element is STRIPPED to its raw JS value (a SchemeString/SchemeExact/
+  // ASymbol/ANil → string/number/string/null) — the DR4 box-strip. But the stripped array is
+  // re-presented as an AJSArray (the "impersonator"): the raw values live in `.source` (still
+  // reachable for a genuinely-foreign Functor via `.source`/`[TO_JS]`), while Scheme-level
+  // access boxes each element BACK ON DEMAND (AJSArray's `vec()`/`vector-ref` run `jsToScheme`
+  // per element). That dual nature is what reconciles the cross-out with the Functor identity
+  // law `map(id) ≡ id`: the raw is exposed for interop, yet `(vector-ref (map id v) i)` yields
+  // the element's box again, so the mapped structure is element-wise equal to the source. This
+  // is DELIBERATELY softer than APair's box-PRESERVING map (a Pair stays an arrival list, never
+  // crossing out): a vector crosses out, but to an auto-rewrapping view rather than to dead raw.
+  // `fn` is awaited per element (live LIPS lambdas return Promises). (The N-ary vector-map
+  // builtin is a separate, non-Functor observation — it carries arity the bare Functor underfits.)
+  //
+  // The result is the membrane's AJSArray, NOT an AVector — so the honest return type is the
+  // `SchemeValue` union (the method "crosses OUT to a foreign Functor"), matching AValue's base
+  // declaration. `jsToScheme` boxes a raw JS array into an AJSArray (typed `any` — rosetta legacy
+  // debt — so the result is annotated to the honest union, the same shape as AJSArray.vector-ref).
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
-  ): AVector | Promise<AVector> {
+  ): SchemeValue | Promise<SchemeValue> {
     // STRICT divergence: generic `map` is a LIST op in R7RS — a vector is not a list. Loose
     // mode tolerates it (the term answers map); strict flags it non-portable. `vector-map` is
     // the faithful vector op (a SEPARATE builtin, NOT this method → never gated).
@@ -177,11 +196,13 @@ export class AVector extends AValue {
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => fn(v));
     if (results.some(is_promise)) {
-      return (promise_all(results) as Promise<SchemeValue[]>).then(
-        (resolved) => new AVector(this.ctx, resolved.map((v) => unwrapForeign(v) as SchemeValue)),
-      );
+      return (promise_all(results) as Promise<SchemeValue[]>).then((resolved): SchemeValue => {
+        const boxed: SchemeValue = jsToScheme(this.ctx, resolved.map((v) => unwrapForeign(v)));
+        return boxed;
+      });
     }
-    return new AVector(this.ctx, results.map((v) => unwrapForeign(v) as SchemeValue));
+    const boxed: SchemeValue = jsToScheme(this.ctx, results.map((v) => unwrapForeign(v)));
+    return boxed;
   }
 
   // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a

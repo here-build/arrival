@@ -168,17 +168,36 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     expect(provOf(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([]);
   });
 
-  it("SchemeVector · map STRIPS element boxes [CONTESTED: AVector TF-map unwrapForeign — DR4]", async () => {
-    // The overlay `map` delegates a SchemeVector to its OWN arrival/tagless-final/map,
-    // whose `unwrapForeign` (the relocated box-strip) turns a SchemeString → raw JS
-    // string, DROPPING its provenance — a vector crosses OUT to a foreign Functor. This
-    // is the DR4 box-strip; it is NOT eager parity with the proper `vector-map` (stdlib,
-    // which preserves element boxes), so it is a candidate G6 fix — but flipping it would
-    // change the documented cross-out contract. Pinned as the current reality + escalated.
-    // (`filter` over a vector — the term's arrival/tagless-final/filter — does NOT unwrap,
-    // so it is sound — see stratum 1.)
+  it("SchemeVector · map crosses out to the AUTO-WRAPPING AJSArray (raw inside, boxes on access) [RESOLVED: DR4]", async () => {
+    // RESOLVED (was CONTESTED): a vector's `map` still crosses OUT to a foreign Functor — its
+    // `unwrapForeign` strips each SchemeString → raw JS string, DROPPING that raw value's
+    // provenance — but the stripped array is now re-presented as the "impersonator" AJSArray:
+    // the raw values live in `.source` (still reachable for a genuinely-foreign Functor / the
+    // `[TO_JS]`/`toJs` egress), while Scheme-level access boxes each element BACK ON DEMAND.
+    // This reconciles the DR4 cross-out with the Functor identity law (`map(id) ≡ id`): the raw
+    // is exposed for interop, yet `(vector-ref (map id v) i)` yields a box again, so the mapped
+    // structure is element-wise equal to the source (scheme-vector-algebra.test.ts pins the law).
     const r = await force(mkVec()["arrival/tagless-final/map"](idSync));
-    expect(elemProvs(r)).toEqual([[], []]); // boxes dropped — the bug, captured
+
+    // (a) it crossed out to the membrane's AJSArray, NOT a fresh AVector — the impersonator.
+    expect(r).toBeInstanceOf(AJSArray);
+
+    // (b) DR4 cross-out: the RAW source holds bare JS strings (foreign-reachable), provenance
+    // stripped at the raw layer (`elemProvs` walks `.source` → the raw values carry no box).
+    const arr = r as AJSArray;
+    expect(arr.source).toEqual(["a", "b"]);
+    expect(arr.source.every((x) => typeof x === "string")).toBe(true);
+    expect(elemProvs(r)).toEqual([[], []]); // raw layer carries no provenance — the cross-out
+
+    // (c) the raw-for-foreign egress still holds: `toJs`/`[TO_JS]` cross back out as the raw array.
+    expect(arr.toJs()).toEqual(["a", "b"]);
+
+    // (d) the Functor side: Scheme-level access (`__vector__`, dispatched by vector-ref/->list)
+    // BOXES each element back — a raw "a" re-boxes to an AString, so the mapped structure answers
+    // the value algebra as a vector of boxes (the law-satisfying half of the dual nature).
+    const accessed = arr.__vector__;
+    expect(accessed.every((e) => e instanceof AString)).toBe(true);
+    expect(accessed.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
   });
 });
 
@@ -203,12 +222,16 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // RESOLVED (was CONTESTED): a borrowed JS array is now a VECTOR — it answers the
   // sequence algebra by DELEGATING to a lazily-materialized vector (AJSArray.ts),
   // so `(map f borrowed)` works uniformly with `(map f #(...))`. This is the membrane's
-  // Rosetta promise: iterate the same for real vectors and borrowed JS arrays.
-  it("map(AJSArray) delegates to a vector — a borrowed array answers map [RESOLVED]", async () => {
+  // Rosetta promise: iterate the same for real vectors and borrowed JS arrays. The
+  // delegated `map` is the cross-out Functor, so the result is the AUTO-WRAPPING AJSArray
+  // (raw inside, boxes on access) — identical to `map` over a native vector above.
+  it("map(AJSArray) delegates to the cross-out Functor — a borrowed array answers map [RESOLVED]", async () => {
     expect("arrival/tagless-final/map" in mkArr()).toBe(true);
     const r = await force(mkArr()["arrival/tagless-final/map"](idSync, CONSTANT_CTX));
-    expect(r).toBeInstanceOf(AVector);
-    expect((r as AVector).length).toBe(2);
+    expect(r).toBeInstanceOf(AJSArray); // the cross-out impersonator (raw inside, boxes on access)
+    expect((r as AJSArray).length).toBe(2);
+    // Scheme-level access boxes the stripped elements back (the Functor half).
+    expect((r as AJSArray).__vector__.every((e) => e instanceof AString)).toBe(true);
   });
 });
 
@@ -310,7 +333,9 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
 describe("strict mode gates generic list-ops on a vector (loose tolerates, strict explains)", () => {
   const strict = makeRunContext({ strict: true });
   it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
-    expect(await force(mkVec()["arrival/tagless-final/map"](idSync, CONSTANT_CTX))).toBeInstanceOf(AVector);
+    // loose tolerates: the cross-out Functor returns the auto-wrapping AJSArray (raw inside,
+    // boxes on access) — getting a value back at all is the "loose works" signal.
+    expect(await force(mkVec()["arrival/tagless-final/map"](idSync, CONSTANT_CTX))).toBeInstanceOf(AJSArray);
     // map is sync up to the gate → it throws synchronously, not a rejected promise
     expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(PortabilityError);
     expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(/vector-map/);
