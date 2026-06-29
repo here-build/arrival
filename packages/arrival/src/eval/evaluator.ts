@@ -26,7 +26,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
-import { Environment } from "../Environment.js";
+import { Environment, type EnvironmentValue } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
 import { ArrivalError } from "../errors.js";
 export { ArrivalError };
@@ -60,7 +60,7 @@ import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
-import { type SchemeValue } from "../values/types.js";
+import { type SchemeValue, type SchemeBounceMarker } from "../values/types.js";
 import { nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
 
@@ -472,6 +472,20 @@ function is_lambda_function(o: unknown): o is LambdaFunction {
 /** The evaluator generator type - third param is what yield returns */
 export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
 
+/**
+ * `evaluate`'s return widens `EvalGenerator`'s to also admit a `Macro`/`Syntax`:
+ * evaluating a bare symbol can resolve a transformer object — the `define-syntax`
+ * mechanism expands to `(define name (let ((g <transformer>)) (typecheck …) g))`,
+ * so the `let`-body evaluates the gensym `g`, resolves a `Syntax`, and returns it
+ * to be bound. Only the terminal return widens; the yield-send type stays
+ * `SchemeValue`, so the trampoline `{ call }` consumers (the inner `let`/`define`
+ * eval) receive it as `SchemeValue` and the expander never escapes the value
+ * union through them. A direct `run(evaluate(...))` sees the wider value and
+ * seals it back with `expectValue` (a run/top-level result is never a bare
+ * expander — that would be a structural error).
+ */
+export type EvaluateGenerator = Generator<unknown, SchemeValue | Macro | Syntax, SchemeValue>;
+
 /** Symbol to mark a yield as "need to check time" vs "await this promise" */
 const TICK = Symbol("tick");
 
@@ -574,12 +588,22 @@ function is_tailCall(o: unknown): o is TailCall {
  * per recursive call. See `_canBounce`'s war story for why HOF callbacks
  * must NOT see this token.
  */
-interface Bounce {
-  __bounce: true;
+interface Bounce extends SchemeBounceMarker {
   generator: Generator<unknown, unknown, unknown>;
 }
 
 function is_bounce(o: unknown): o is Bounce {
+  return o !== null && typeof o === "object" && (o as { __bounce?: unknown }).__bounce === true;
+}
+
+/**
+ * Brand-only bounce check, narrowing to `SchemeBounceMarker` (no `generator`).
+ * Used where a value-typed callable's return surfaces the union's bounce arm
+ * (`SchemeBounceMarker`) rather than the local `Bounce`: negating `is_bounce`
+ * (a `Bounce` guard) can't remove the structurally-wider marker, so a value
+ * boundary that must rule the bounce out narrows on the brand instead.
+ */
+function is_bounce_marker(o: unknown): o is SchemeBounceMarker {
   return o !== null && typeof o === "object" && (o as { __bounce?: unknown }).__bounce === true;
 }
 
@@ -590,6 +614,55 @@ function is_bounce(o: unknown): o is Bounce {
  */
 function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
   return { __bounce: true, generator };
+}
+
+/**
+ * Narrow a resolved environment binding to what the evaluator can carry: a value,
+ * or a `Macro`/`Syntax` expander.
+ *
+ * `Resolver.resolve`/`lookup` return an `EnvironmentValue | undefined`. Three of
+ * those members can never be carried by the evaluator and are thrown with a clear
+ * message: an unbound name (`undefined`), an `Environment` (a scope is neither a
+ * value nor an operator), and a `RegExp` (internal-only — number-parsing and
+ * syntax-rules patterns — never resolved as a binding). What remains is a value
+ * (`SchemeValue`, which includes a `LipsFunction` procedure) OR a `Macro`/`Syntax`.
+ *
+ * A `Macro`/`Syntax` is admitted on BOTH the operator and the value path: at a
+ * call head it is the operator (`(my-macro …)`, split downstream by `is_macro`);
+ * in value position it is the expander object itself — `define-syntax` expands to
+ * `(define name (let ((g <transformer>)) (typecheck …) g))`, so evaluating the
+ * gensym `g` resolves a `Syntax` and returns it to be bound. So this is not the
+ * decision's "macro referenced as a value is an error" case — it is the mechanism
+ * by which a macro binding is installed. Callers split value vs expander with
+ * `is_macro` where they care (the value-channel tap skips an expander).
+ */
+function resolvedBindingOrThrow(binding: EnvironmentValue | undefined, sym: ASymbol): SchemeValue | Macro | Syntax {
+  if (binding === undefined) {
+    throw new Error(`Unbound variable \`${symbol_name(sym)}'`);
+  }
+  if (binding instanceof Environment) {
+    throw new Error(`\`${symbol_name(sym)}' is an environment — neither a value nor applicable`);
+  }
+  if (binding instanceof RegExp) {
+    throw new Error(`\`${symbol_name(sym)}' resolved to a regular expression — neither a value nor applicable`);
+  }
+  return binding;
+}
+
+/**
+ * Seal an `evaluate` result back to a `SchemeValue` at a boundary where a
+ * `Macro`/`Syntax` cannot legitimately appear. `evaluate`'s return admits a bare
+ * expander only as the internal `define-syntax` mechanism (its `let`-body returns
+ * a resolved transformer); that flow is always consumed through the trampoline
+ * yield channel and immediately bound. A top-level / `run(evaluate(...))` result
+ * is never a bare expander, so an expander here is a structural error — throw
+ * rather than leak a non-value into the value surface.
+ */
+export function expectValue(result: SchemeValue | Macro | Syntax): SchemeValue {
+  if (is_macro(result)) {
+    throw new Error("evaluate produced a macro/syntax where a value was required");
+  }
+  return result;
 }
 
 /**
@@ -1857,7 +1930,16 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 
   // Builtins: direct apply (no Scheme body to tail into).
   invariant(is_function(proc), "=> requires a procedure");
-  let result: SchemeValue = proc(arg);
+  // `proc` is the non-lambda arm here — the lambda branch above returned. The
+  // SchemeValue callable surface is heterogeneous (a metadata-bearing
+  // `LipsFunction`, the plain arm, the lambda arm) and shares no single call
+  // signature, so a direct `proc(arg)` isn't expressible; invoke reflectively —
+  // `Reflect.apply` takes the arg array honestly (no cast), the same convention
+  // the main apply path uses. A builtin yields a value or a Promise, never a
+  // Bounce; rule the bounce arm out explicitly (a builtin handing back a bounce
+  // sentinel is a real invariant violation, not a value to thread).
+  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = Reflect.apply(proc, undefined, [arg]);
+  invariant(!is_bounce_marker(result), "=> builtin returned a bounce sentinel");
   if (is_promise(result)) {
     result = yield result;
   }
@@ -2281,7 +2363,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Execute body. Forward signal so the body of a try/catch is bounded.
     try {
-      result = await run(evaluate(body, bodyCtx), { signal: ctx.signal });
+      result = expectValue(await run(evaluate(body, bodyCtx), { signal: ctx.signal }));
     } catch (error) {
       caughtError = error instanceof Error ? error : new Error(String(error));
     }
@@ -2303,8 +2385,11 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // Create catch environment with error bound
       const catchResolver = ctxResolver(ctx).child("catch", "catch");
 
-      // Bind the error - unwrap ArrivalError to get the original raised value.
-      let errorValue: SchemeValue =
+      // Bind the error. Unwrap an ArrivalError to the original raised value;
+      // the catch path only ever surfaces host `Error`s here (a raised Scheme
+      // value arrives wrapped, and `ArrivalError.cause` is typed `Error`), so
+      // `caught` is an `Error`.
+      const caught: Error =
         caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
       // X3 (conformance + security): a value that reaches here as a RAW host
       // `Error` (a JS TypeError from a primitive, the wrapping ArrivalError, etc.)
@@ -2312,9 +2397,9 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // (b) leak host file paths, since `.stack`/`.fileName` are OWN properties on
       // V8 Errors and the membrane's own-property fast path hands them across.
       // Re-present such errors as an R7RS error object carrying only the message
-      // (no `.stack`/`.cause`/`.fileName`). Deliberately raised Scheme values —
-      // already-conformant `R7RSError`s and arbitrary non-Error objects (R7RS
-      // allows `(raise <any>)`) — pass through untouched.
+      // (no `.stack`/`.cause`/`.fileName`). An already-conformant `R7RSError`
+      // passes through. Either way the bound value is an `R7RSError` — the one
+      // Error subtype the SchemeValue union admits as a value (`error-object?`).
       //
       // `R7RSError` is loaded LAZILY (dynamic import) rather than at the top of
       // this module: a static `import ... from "../bridge.js"` pulls bridge's
@@ -2323,20 +2408,16 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // not be imported during stdlib bootstrap init). By the time a `try` body has
       // actually thrown, every module is fully initialized, so the dynamic
       // import resolves synchronously from the registry.
-      if (errorValue instanceof Error) {
-        const { R7RSError } = await import("../errors.js");
-        if (!(errorValue instanceof R7RSError)) {
-          errorValue = new R7RSError(errorValue.message);
-        }
-        // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
-        // construction) plus any inherited `.cause`/`.fileName`. The membrane's
-        // own-property fast path would hand those host frames to Scheme code, so
-        // strip them — the message is the only datum a §6.11 handler needs.
-        const errObj = errorValue as { stack?: unknown; cause?: unknown; fileName?: unknown };
-        delete errObj.stack;
-        delete errObj.cause;
-        delete errObj.fileName;
-      }
+      const { R7RSError } = await import("../errors.js");
+      const errorValue: SchemeValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
+      // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
+      // construction) plus any inherited `.cause`/`.fileName`. The membrane's
+      // own-property fast path would hand those host frames to Scheme code, so
+      // strip them — the message is the only datum a §6.11 handler needs.
+      const errObj = errorValue as { stack?: unknown; cause?: unknown; fileName?: unknown };
+      delete errObj.stack;
+      delete errObj.cause;
+      delete errObj.fileName;
       catchResolver.define(varName, errorValue);
 
       try {
@@ -2428,7 +2509,7 @@ const SPECIAL_FORMS: Record<string, (rest: SchemeValue, ctx: EvalContext) => Eva
  * - { call: generator, frame?: StackFrame } for recursive evaluation (FLAT - no stack growth!)
  * - Promises when JS returns them (for interop)
  */
-export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
+export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerator {
   // Periodic tick for event loop breathing
   yield TICK;
 
@@ -2437,10 +2518,15 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
     return code;
   }
 
-  // Symbol lookup
+  // Symbol lookup. A symbol can resolve to a value OR — via the define-syntax
+  // mechanism (a `let`-bound transformer returned to be bound) — a Macro/Syntax.
   if (code instanceof ASymbol) {
-    const value = ctxResolver(ctx).resolve(code);
-    ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value as SchemeValue);
+    const value = resolvedBindingOrThrow(ctxResolver(ctx).resolve(code), code);
+    // The tap reports resolved VALUES; a macro/syntax binding has no value to
+    // report, so skip it for an expander.
+    if (!is_macro(value)) {
+      ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value);
+    }
     return value;
   }
 
@@ -2530,8 +2616,12 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     }
   }
 
-  // If first is a pair, evaluate it to get the function
-  let fn: SchemeValue;
+  // If first is a pair, evaluate it to get the function. The operator position
+  // admits a value (procedure) OR — when the head is a symbol resolving to one —
+  // a `Macro`/`Syntax` expander; the dispatch below splits them with
+  // `is_function`/`is_macro`. A computed head (pair) or a literal head can only
+  // be a value, since macros are not first-class.
+  let fn: SchemeValue | Macro | Syntax;
   if (is_pair(first)) {
     // FLAT: yield { call } instead of yield*
     fn = yield { call: evaluate(first, nonTailCtx), frame };
@@ -2540,11 +2630,14 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       fn = yield fn;
     }
   } else if (first instanceof ASymbol) {
-    fn = ctxResolver(ctx).resolve(first);
+    fn = resolvedBindingOrThrow(ctxResolver(ctx).resolve(first), first);
     // Fire the tap here too — this is the call-head fast path that bypasses
     // `evaluate()`. Without this, tracers miss the resolved value of every
-    // function name (e.g., `(my-hof xs)` never reports `my-hof`'s lambda).
-    ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn as SchemeValue);
+    // function name (e.g., `(my-hof xs)` never reports `my-hof`'s lambda). The
+    // tap reports resolved VALUES, so skip it for a macro/syntax operator.
+    if (!is_macro(fn)) {
+      ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn);
+    }
   } else {
     invariant(is_function(first), `Cannot apply ${typeof first}: ${first}`);
     fn = first;
@@ -2816,5 +2909,6 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
 export function exec(code: SchemeValue, ctx: EvalContext & { env?: Environment }): Promise<SchemeValue> {
   const resolver = ctx.resolver ?? (ctx.env ? new Resolver(ctx.env) : undefined);
   invariant(resolver, "exec: ctx must carry a resolver or a bootstrap env");
-  return run(evaluate(code, { ...ctx, resolver }), { signal: ctx.signal });
+  // A top-level form evaluates to a value, never a bare expander — seal it.
+  return run(evaluate(code, { ...ctx, resolver }), { signal: ctx.signal }).then(expectValue);
 }

@@ -11,7 +11,7 @@
 
 import { Environment } from "../Environment.js";
 import { user_env, global_env } from "../env-roots.js";
-import run, { evaluate, ArrivalError, type EvalTap } from "./evaluator.js";
+import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import type { LexicalScope } from "./LexicalScope.js";
@@ -379,22 +379,25 @@ export async function exec(
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
       try {
-        result = await run(
-          evaluate(expr, {
-            resolver: runResolver,
-            dynamic_env,
-            use_dynamic,
-            tap,
-            nodeFilter,
-            signal,
-            speculate,
-            // Default false ⇒ today's tolerant nil-projection. No consumer reads
-            // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
-            strict: strict ?? false,
-            // The per-run handle, threaded as data (unread scaffold; N2 reads it).
-            runCtx,
-          }),
-          { signal, budgetMs: remaining },
+        // A top-level form evaluates to a value, never a bare expander — seal it.
+        result = expectValue(
+          await run(
+            evaluate(expr, {
+              resolver: runResolver,
+              dynamic_env,
+              use_dynamic,
+              tap,
+              nodeFilter,
+              signal,
+              speculate,
+              // Default false ⇒ today's tolerant nil-projection. No consumer reads
+              // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
+              strict: strict ?? false,
+              // The per-run handle, threaded as data (unread scaffold; N2 reads it).
+              runCtx,
+            }),
+            { signal, budgetMs: remaining },
+          ),
         );
       } catch (e) {
         if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
@@ -452,17 +455,20 @@ export async function execExpr(
       : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
 
   try {
-    return await run(
-      evaluate(expr, {
-        resolver: runResolver,
-        dynamic_env,
-        use_dynamic,
-        tap,
-        nodeFilter,
-        signal,
-        speculate,
-      }),
-      { signal, budgetMs },
+    // A top-level form evaluates to a value, never a bare expander — seal it.
+    return expectValue(
+      await run(
+        evaluate(expr, {
+          resolver: runResolver,
+          dynamic_env,
+          use_dynamic,
+          tap,
+          nodeFilter,
+          signal,
+          speculate,
+        }),
+        { signal, budgetMs },
+      ),
     );
   } catch (e) {
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;

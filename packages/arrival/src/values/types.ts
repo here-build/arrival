@@ -25,6 +25,32 @@ import type { AJSObject } from "./primitives/AJSObject.js";
 import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
 import type { Keyword } from "./Keyword.js";
+// A caught condition that reaches a `(catch (e) …)` binding is an R7RS error
+// object — `error-object?` is exactly `obj instanceof R7RSError` (bridge.ts).
+// `import type` keeps this erased at runtime, so the type-only edge back to
+// errors.ts (which already `import type { SchemeValue }`s from here) is a pure
+// compile-time cycle TS resolves with no runtime circular dependency.
+import type { R7RSError } from "../errors.js";
+// A `LipsFunction` is a JS function used as a Scheme procedure carrying optional
+// LIPS metadata — the metadata-bearing form of the bare callable arm below, and
+// a first-class *value* (unlike Macro/Syntax/Environment, which are env bindings
+// but never values). It has no runtime brand distinguishing it from a plain
+// procedure, so a value resolved from the env arrives typed as one and must be
+// admitted here. `import type` keeps the edge to Environment.ts (which itself
+// `import type { SchemeValue }`s from here) a pure compile-time cycle.
+import type { LipsFunction } from "../Environment.js";
+
+/**
+ * Opaque marker for the trampoline's bounce sentinel. The real `Bounce`
+ * (`{ __bounce: true; generator }`, declared in eval/evaluator.ts) can't be
+ * imported here without a value cycle, and the value channel never needs its
+ * `generator` field — only its brand. A `LambdaFunction`'s call may return one,
+ * so the lambda-as-value arm of the union admits it; the call boundary narrows
+ * it out (`is_bounce`) before any value use, so it never reaches a value slot.
+ */
+export interface SchemeBounceMarker {
+  readonly __bounce: true;
+}
 
 export type SchemeValue =
   | AExact
@@ -44,7 +70,17 @@ export type SchemeValue =
   | Keyword
   | EOF
   | Values
-  | ((...args: SchemeValue[]) => SchemeValue);
+  // A caught R7RS condition object, bound as the catch variable.
+  | R7RSError
+  // A JS function used as a Scheme procedure, with optional LIPS metadata.
+  | LipsFunction
+  // A plain procedure value (builtin): args in, one value out.
+  | ((...args: SchemeValue[]) => SchemeValue)
+  // A Scheme lambda value: its body may return a value synchronously, a bounce
+  // token (under the trampoline's bounce protocol), or a Promise (JS-host entry
+  // path). The trampolined/async return is the honest truth of a lambda's call;
+  // the non-value returns are narrowed out at the call boundary before any use.
+  | ((...args: SchemeValue[]) => SchemeValue | SchemeBounceMarker | Promise<SchemeValue>);
 
 // -------------------------------------------------------------------------
 // :: SchemeStringLike interface - duck-typing for SchemeString class
