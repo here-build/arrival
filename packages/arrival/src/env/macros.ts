@@ -108,7 +108,13 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
           TypeError.invariant(is_pair(rules.car), "syntax-rules: malformed rule");
           const rule = rules.car.car as SchemeValue;
           TypeError.invariant(is_pair(rules.car.cdr), "syntax-rules: malformed rule");
-          let expr = rules.car.cdr.car as SchemeValue;
+          // `expr` is a TEMPLATE HANDLE, not a proven SchemeValue: it is the template
+          // form read from the rule, fed straight into `transform_syntax` (whose
+          // `TransformOptions.expr` is `unknown`) and `restore_data_gensyms` (untyped
+          // node). `transform_syntax` also returns `unknown` (its `traverse` yields
+          // scheme forms OR intermediate arrays), so the reassignment below is `unknown`
+          // → `unknown`. Typing it `unknown` is the honest contract — no `as SchemeValue`.
+          let expr: unknown = rules.car.cdr.car;
           const bindings = extract_patterns(rule, code, symbols, ellipsis, {
             // Hygiene-identity handles: use-site Resolver, the captured def Resolver, and its
             // capabilities (globalRoot = the unshadowed-base identity). See P3 3b.2.
