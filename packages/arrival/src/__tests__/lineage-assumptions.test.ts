@@ -235,7 +235,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
       const env = inferenceEnv.inherit(`la-${seq++}`);
-      env.set("xs", mkVec() as unknown as AValue);
+      env.set("xs", mkVec());
       const [r] = await exec(src, { env });
       return summary(r);
     };
