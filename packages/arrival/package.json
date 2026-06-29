@@ -56,6 +56,10 @@
       "types": "./dist/common/scheme-zod.d.ts",
       "default": "./dist/common/scheme-zod.js"
     },
+    "./type-layer": {
+      "types": "./dist/type-layer/index.d.ts",
+      "default": "./dist/type-layer/index.js"
+    },
     "./srfi": {
       "types": "./dist/env/srfi/index.d.ts",
       "default": "./dist/env/srfi/index.js"
