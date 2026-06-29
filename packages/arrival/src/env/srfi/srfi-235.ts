@@ -40,7 +40,10 @@ export default new EnvCapability("scheme/srfi-235", {
     // prelude above, but kept NATIVE because the arity detection can't be expressed in
     // pure scheme. Relocated VERBATIM from arrival-extensions (husk dissolution).
     curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
-      { input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()), output: [z.custom<(...args: unknown[]) => unknown>()] },
+      {
+        input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()),
+        output: [z.custom<(...args: unknown[]) => unknown>()],
+      },
       curry,
     ),
   },
