@@ -47,6 +47,14 @@
       "types": "./dist/common/scheme-env.d.ts",
       "default": "./dist/common/scheme-env.js"
     },
+    "./symbol": {
+      "types": "./dist/common/symbol.d.ts",
+      "default": "./dist/common/symbol.js"
+    },
+    "./scheme-zod": {
+      "types": "./dist/common/scheme-zod.d.ts",
+      "default": "./dist/common/scheme-zod.js"
+    },
     "./srfi": {
       "types": "./dist/env/srfi/index.d.ts",
       "default": "./dist/env/srfi/index.js"
