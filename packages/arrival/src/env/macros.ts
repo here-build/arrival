@@ -13,9 +13,10 @@ import { symbol } from "../common/symbol.js";
 import { Syntax } from "../eval/Syntax.js";
 import { Environment } from "../Environment.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eval/syntax-rules.js";
-import { is_nil } from "../values/value-guards.js";
+import { is_nil, is_pair } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "../eval/Resolver.js";
+import type { MacroInvokeContext } from "../eval/Macro.js";
 import type { SchemeValue } from "../values/types.js";
 
 // The syntax-rules transformer-constructor, relocated VERBATIM from the stdlib husk (was the
@@ -25,7 +26,7 @@ import type { SchemeValue } from "../values/types.js";
 const syntaxRulesDef = symbol.macro`syntax-rules`(function (
   this: Environment,
   macro: SchemeValue,
-  options: SchemeValue,
+  options: MacroInvokeContext,
 ) {
   // `resolver` is the EVALUATOR's resolver at define-syntax time (threaded through
   // Macro.invoke), carrying the run's capability base. (D2)
@@ -41,11 +42,13 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
   const defResolver = new Resolver(env, defSiteResolver?.capabilities);
 
   function get_identifiers(node: SchemeValue) {
-    const symbols: SchemeValue[] = [];
-    while (!is_nil(node)) {
+    // Collects the unwrapped identifier NAMES (string | symbol from each
+    // ASymbol's valueOf), consumed downstream as a name-list via `.includes`.
+    const symbols: unknown[] = [];
+    while (is_pair(node)) {
       const x = node.car;
-      symbols.push(x.valueOf());
-      node = node.cdr;
+      symbols.push((x as SchemeValue).valueOf());
+      node = node.cdr as SchemeValue;
     }
     return symbols;
   }
@@ -58,13 +61,15 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
     }
   }
 
+  TypeError.invariant(is_pair(macro), "syntax-rules: malformed macro form");
   if (macro.car instanceof ASymbol) {
+    TypeError.invariant(is_pair(macro.cdr), "syntax-rules: malformed macro form");
     validate_identifiers(macro.cdr.car);
   } else {
     validate_identifiers(macro.car);
   }
   const syntax = new Syntax(
-    function (this: Environment, code: SchemeValue, { macro_expand, resolver: useSiteResolver }: SchemeValue) {
+    function (this: Environment, code: SchemeValue, { macro_expand, resolver: useSiteResolver }: MacroInvokeContext) {
       // The use-site Resolver — the EVALUATOR's resolver at expansion time (threaded
       // through Syntax.expand), carrying the run's capability base. NOT a fresh glass
       // `new Resolver(this)`, which under the 3b.3 cut would re-derive a wrong globalRoot
@@ -87,19 +92,23 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
       }
       const var_scope: Environment = useScope.env;
       let ellipsis, rules, symbols;
+      TypeError.invariant(is_pair(macro), "syntax-rules: malformed macro form");
       if (macro.car instanceof ASymbol) {
         ellipsis = macro.car;
-        symbols = get_identifiers(macro.cdr.car);
-        rules = macro.cdr.cdr;
+        TypeError.invariant(is_pair(macro.cdr), "syntax-rules: malformed macro form");
+        symbols = get_identifiers(macro.cdr.car as SchemeValue);
+        rules = macro.cdr.cdr as SchemeValue;
       } else {
         ellipsis = "...";
-        symbols = get_identifiers(macro.car);
-        rules = macro.cdr;
+        symbols = get_identifiers(macro.car as SchemeValue);
+        rules = macro.cdr as SchemeValue;
       }
       try {
-        while (!is_nil(rules)) {
-          const rule = rules.car.car;
-          let expr = rules.car.cdr.car;
+        while (is_pair(rules)) {
+          TypeError.invariant(is_pair(rules.car), "syntax-rules: malformed rule");
+          const rule = rules.car.car as SchemeValue;
+          TypeError.invariant(is_pair(rules.car.cdr), "syntax-rules: malformed rule");
+          let expr = rules.car.cdr.car as SchemeValue;
           const bindings = extract_patterns(rule, code, symbols, ellipsis, {
             // Hygiene-identity handles: use-site Resolver, the captured def Resolver, and its
             // capabilities (globalRoot = the unshadowed-base identity). See P3 3b.2.
@@ -133,7 +142,7 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
             void macro_expand;
             return { expr: restore_data_gensyms(expr, names), scope: new_env };
           }
-          rules = rules.cdr;
+          rules = rules.cdr as SchemeValue;
         }
       } catch (error_) {
         (error_ as Error).message += `\nin macro:\n  ${macro.toString()}`;
@@ -144,7 +153,7 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
     env,
     defResolver,
   );
-  (syntax as SchemeValue).__code__ = macro;
+  syntax.__code__ = macro;
   return syntax;
 });
 
