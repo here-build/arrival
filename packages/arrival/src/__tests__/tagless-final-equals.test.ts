@@ -17,6 +17,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
+import type { SchemeValue } from "../values/types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.
@@ -48,10 +49,15 @@ const EQ = "arrival/tagless-final/equals";
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
     // Migrated packs expose `symbol.native` defs (`{ kind: "native", impl }`); the legacy
-    // `{ value }` form is the fallback for any entry not yet on the symbol.* API.
+    // `{ value }` form is the fallback for any entry not yet on the symbol.* API. Entries
+    // resolving to neither (no `impl`, no `value`) are DROPPED so the record's values are
+    // honestly all-functions — the op-helpers below call them as such.
     Object.entries(
       cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
-    ).map(([k, v]) => [k, v.impl ?? v.value]),
+    ).flatMap(([k, v]) => {
+      const op = v.impl ?? v.value;
+      return op ? [[k, op] as const] : [];
+    }),
   );
 const LIST_OPS = opsOf(listsCap);
 
@@ -129,20 +135,22 @@ describe("G2 Pair Setoid", () => {
   });
 
   it("self-cyclic pairs (a.cdr=a, b.cdr=b) compare equal AND terminate", () => {
-    const a = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    // A `set-cdr!` cycle: the cdr slot holds any SchemeValue at runtime (here the pair
+    // itself), so the locals carry the real slot type rather than the nil-narrowed infer.
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
     a.cdr = a;
-    const b = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
     b.cdr = b;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("mutually-cyclic pairs (a↔b vs c↔d) compare equal AND terminate", () => {
-    const a = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
-    const b = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
     a.cdr = b;
     b.cdr = a;
-    const c = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
-    const d = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
+    const c: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const d: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
     c.cdr = d;
     d.cdr = c;
     expect(pairEq(a, c)).toBe(true);
@@ -208,9 +216,9 @@ describe("G4 equal? regression — structuralEqual", () => {
   });
 
   it("cyclic list via structuralEqual terminates", () => {
-    const a = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
     a.cdr = a;
-    const b = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
     b.cdr = b;
     expect(structuralEqual(a, b)).toBe(true);
     // self-equality on a cyclic list must also terminate (the bridge.ts war story)
