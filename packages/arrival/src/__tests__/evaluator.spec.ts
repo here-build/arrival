@@ -15,6 +15,7 @@ import { exec as execSource } from "../eval/generator-exec";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
+import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil";
 import { list, num, sym } from "./helpers";
@@ -429,8 +430,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
     describe("and", () => {
       it("should return true for empty and", async () => {
+        // (and) ⇒ #t (R7RS §6.3): the boxed schemeTrue singleton IS the Scheme #t.
         const code = list(sym("and"));
-        expect(await exec(code, { env })).toBe(true);
+        expect(await exec(code, { env })).toBe(schemeTrue);
       });
 
       it("should short-circuit on false", async () => {
@@ -454,8 +456,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
     describe("or", () => {
       it("should return false for empty or", async () => {
+        // (or) ⇒ #f (R7RS §6.3): the boxed schemeFalse singleton IS the Scheme #f.
         const code = list(sym("or"));
-        expect(await exec(code, { env })).toBe(false);
+        expect(await exec(code, { env })).toBe(schemeFalse);
       });
 
       it("should short-circuit on true", async () => {

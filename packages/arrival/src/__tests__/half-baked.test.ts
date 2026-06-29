@@ -14,6 +14,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 
 import { AHalfBaked, is_half_baked, type Interval } from "../values/primitives/AHalfBaked.js";
+import { AExact } from "../values/primitives/AExact.js";
 import { is_promise } from "../eval/guards.js";
 
 /** A promise plus its resolver, so a test can settle slots one at a time. */
@@ -138,7 +139,9 @@ describe("HalfBaked — force / refine fold", () => {
   it("number force folds to the settled count", async () => {
     const list = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([1]), Promise.resolve([]), Promise.resolve([3])], filterBounds);
     const len = list.toCardinalityNumber();
-    expect(await len.force()).toBe(2);
+    // A count IS a Scheme integer: number-domain force boxes the cardinality as
+    // AExact (the contract-honest SchemeValue), not a raw JS number.
+    expect(await len.force()).toEqual(new AExact(CONSTANT_CTX, 2n));
   });
 
   it("force is memoized — same promise instance at repeated boundaries", () => {
