@@ -48,7 +48,7 @@ const TO_JS = Symbol.for("scheme.toJS");
  * `importHelpers: true` triggers on TS6 `#`-private slots in this build.
  * GC-correct: cache entry disappears with the wrapper.
  */
-const entryCaches = new WeakMap<AJSObject, Map<string, AValue>>();
+const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
 
 /**
  * Thin wrapper for JS objects. Lazy property access — entries box on
@@ -124,7 +124,7 @@ export class AJSObject extends AValue {
     this.freezeSource();
     // Cache keyed by stringified key — symbol keys are an edge case (the
     // sandbox boundary blocks most symbol access anyway) and skipping the
-    // cache for them keeps the Map<string, AValue> shape clean.
+    // cache for them keeps the Map<string, SchemeValue> shape clean.
     const cacheKey = typeof key === "string" ? key : undefined;
     let cache = cacheKey !== undefined ? entryCaches.get(this) : undefined;
     if (cacheKey !== undefined && cache !== undefined) {
@@ -157,7 +157,11 @@ export class AJSObject extends AValue {
     // through rosetta deep-stamping for the common case (jsToScheme reached
     // here on the way down); direct construction with empty provenance keeps
     // the empty-provenance fast-path everywhere.
-    const boxed = jsToScheme(this.ctx, raw, {}, this.provenance);
+    // jsToScheme is typed `any` (legacy debt in rosetta.ts) but its contract is to
+    // produce a boxed Scheme value — annotate to the honest union so the cache store
+    // below type-checks without a cast. The `instanceof AValue` gate then narrows to
+    // the cacheable (class-backed) members, dropping the never-here function/orphan arms.
+    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
     if (cacheKey !== undefined && boxed instanceof AValue) {
       if (cache === undefined) {
         cache = new Map();
