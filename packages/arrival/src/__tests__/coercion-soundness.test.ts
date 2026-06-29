@@ -50,7 +50,12 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
     Object.entries(
       cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
-    ).map(([k, v]) => [k, v.impl ?? v.value]),
+    )
+      .map(([k, v]) => [k, v.impl ?? v.value] as const)
+      // A def may carry neither `impl` nor `value` (a baked bare-`Fn` def) — that's
+      // not a callable op for this test's purposes, so drop it rather than admit an
+      // `undefined` into the op map (honest narrowing, not a cast over the union).
+      .filter((e): e is [string, (...a: any[]) => any] => e[1] !== undefined),
   );
 const listOps = opsOf(listsCap); // r7rs scheme/lists — assoc lives here now
 
@@ -80,7 +85,7 @@ const elemProvs = (r: unknown): number[][] => {
 /** Awaits the FL-interop result (live ops may return a Promise). */
 const force = async (r: unknown): Promise<unknown> => (r && typeof (r as any).then === "function" ? await r : r);
 
-const idSync = (x: unknown) => x;
+const idSync = <T>(x: T): T => x;
 const keepAll = () => true;
 const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
 

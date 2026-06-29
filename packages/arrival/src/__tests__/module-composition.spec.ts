@@ -12,7 +12,9 @@
 
 import { describe, expect, it } from "vitest";
 import { Environment } from "../Environment.js";
-import type { FallbackResolver } from "../bindings.js";
+import type { ResolverSpec } from "../common/scheme-env.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);
@@ -23,7 +25,7 @@ describe("Environment Module Composition", () => {
     it("should try multiple resolvers in order until one returns a value", () => {
       const callOrder: string[] = [];
 
-      const resolver1: FallbackResolver = {
+      const resolver1: ResolverSpec = {
         id: "resolver-1",
         resolve: (name) => {
           callOrder.push("resolver-1");
@@ -31,7 +33,7 @@ describe("Environment Module Composition", () => {
         },
       };
 
-      const resolver2: FallbackResolver = {
+      const resolver2: ResolverSpec = {
         id: "resolver-2",
         resolve: (name) => {
           callOrder.push("resolver-2");
@@ -48,7 +50,7 @@ describe("Environment Module Composition", () => {
     });
 
     it("should distinguish between undefined (yield) and null/nil (found)", () => {
-      const resolver: FallbackResolver = {
+      const resolver: ResolverSpec = {
         id: "null-resolver",
         resolve: (name) => (name === "null-value" ? null : undefined),
       };
@@ -63,26 +65,29 @@ describe("Environment Module Composition", () => {
 
   describe("_lookupWithResolvers", () => {
     it("should implement correct per-module resolution order", () => {
-      const env = new Environment("parent", { x: 1 }, null);
+      // Bindings are boxed SchemeValues (an env binds AExact, not a raw JS number);
+      // the resolver returns below stay raw — _lookupWithResolvers is contract'd to
+      // pass a resolver hit (typed `unknown`) straight through.
+      const env = new Environment("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
       env.registerResolver({
         id: "parent-resolver",
         resolve: (name) => (name === "y" ? 2 : undefined),
       });
 
-      const child = new Environment("child", { z: 3 }, env);
+      const child = new Environment("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
       child.registerResolver({
         id: "child-resolver",
         resolve: (name) => (name === "w" ? 4 : undefined),
       });
 
       // Direct binding in child
-      expect(child._lookupWithResolvers("z")).toBe(3);
+      expect(child._lookupWithResolvers("z")).toEqual(new AExact(CONSTANT_CTX, 3n));
 
       // Resolver in child
       expect(child._lookupWithResolvers("w")).toBe(4);
 
       // Direct binding in parent (after child resolver yields)
-      expect(child._lookupWithResolvers("x")).toBe(1);
+      expect(child._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 1n));
 
       // Resolver in parent (after child resolver yields)
       expect(child._lookupWithResolvers("y")).toBe(2);
