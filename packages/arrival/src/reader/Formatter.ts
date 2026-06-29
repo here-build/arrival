@@ -27,6 +27,30 @@ export interface TokenMeta {
   line: number;
 }
 
+/** `tokenize(code, true)` is the lexer's meta mode: it always yields `{token, col, offset, line}`
+ *  records (see `src/index.ts` boundary note + `Lexer.token(true)`). Its inferred return is the
+ *  broad `SchemeValue[] | string[]` because the boolean `meta` flag isn't an overload, so narrow
+ *  the meta-mode result back to its real `TokenMeta[]` shape through a guard rather than a blind
+ *  cast. (The cleaner fix — overloading `tokenize` itself — lives in the shared `reader/tokenize.ts`.) */
+function isTokenMeta(value: unknown): value is TokenMeta {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as TokenMeta).token === "string" &&
+    typeof (value as TokenMeta).col === "number"
+  );
+}
+
+function tokenizeMeta(code: string): TokenMeta[] {
+  // `tokenize(_, true)` yields the lexer's meta records; collect them as `unknown[]` (a widening,
+  // not a cast) so each element can be honestly shape-checked into a TokenMeta below.
+  const raw: readonly unknown[] = tokenize(code, true);
+  return raw.map((token) => {
+    invariant(isTokenMeta(token), "tokenizeMeta: lexer meta mode yielded a non-TokenMeta token");
+    return token;
+  });
+}
+
 export interface FormatterExceptions {
   specials: (string | RegExp)[];
   shift: Record<number, (string | RegExp)[]>;
@@ -370,7 +394,7 @@ export class Formatter {
   }
 
   indent(options?: FormatterOptions): number {
-    const tokens = tokenize(this.__code__, true) as TokenMeta[];
+    const tokens = tokenizeMeta(this.__code__);
     return this._indent(tokens, options);
   }
 
@@ -450,7 +474,9 @@ export class Formatter {
     };
     // Tokenize is part of the parser/lexer that split code into tokens and includes
     // meta data like number of column or line
-    const tokens: string[] = (tokenize(code, true) as TokenMeta[]).map(extractToken).filter((t: string) => t !== "\n");
+    const tokens: string[] = tokenizeMeta(code)
+      .map(extractToken)
+      .filter((t: string) => t !== "\n");
     const { rules } = Formatter;
     outer: for (let i = 1; i < tokens.length; ++i) {
       if (!tokens[i].trim()) {
@@ -497,7 +523,7 @@ export class Formatter {
     // prepare code with single space after newline
     // so we have space token to align
     const code = this.__code__.replaceAll(/[ \t]*\n[ \t]*/g, "\n ");
-    const tokens = tokenize(code, true) as TokenMeta[];
+    const tokens = tokenizeMeta(code);
     const settings = this._options(options);
     let indent = 0;
     let offset = 0;
