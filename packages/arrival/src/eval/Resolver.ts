@@ -80,7 +80,7 @@ function resolveSynth(
   sym: ASymbol,
   name: string | symbol,
   lookup: (n: string | symbol) => EnvironmentValue | undefined,
-): SchemeValue {
+): EnvironmentValue | undefined {
   if (typeof name === "string") {
     const cxr = cxrUnfold(name);
     if (cxr !== undefined) return cxr;
@@ -105,7 +105,7 @@ function resolveSynth(
  * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
  * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
-export function env_get(env: Environment, sym: ASymbol): SchemeValue {
+export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | undefined {
   const name = sym.__name__;
 
   // Handle keyword symbols (e.g., :name, :projects) — delegate to env.get()
@@ -180,7 +180,7 @@ export class Resolver {
    * composed lookup, so a `:key` accessor or a dotted base resolves against the base
    * even though the lexical root is null-rooted.
    */
-  resolve(sym: ASymbol): SchemeValue {
+  resolve(sym: ASymbol): EnvironmentValue | undefined {
     const name = sym.__name__;
     // `:key` keyword accessors are synthesized by a resolver in the capability BASE
     // (membrane), not the lexical chain — consult scope THEN capabilities so the cut's
