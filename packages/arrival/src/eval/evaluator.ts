@@ -372,7 +372,7 @@ function isStrictDescendant(a: Invocation | undefined, b: Invocation | undefined
 }
 
 function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): LambdaFunction {
-  const wrapped: LambdaFunction = function (this: unknown, ...values: SchemeValue[]): SchemeValue {
+  const wrapped: LambdaFunction = function (this: unknown, ...values: SchemeValue[]) {
     const saved = _dynamicCallSite;
     // Prefer the DEEPER of the two candidate dynamic parents. `dynSite` is the
     // HOF boundary — where the lambda was passed in (e.g. `index-map`'s call
@@ -423,7 +423,14 @@ interface LambdaFunction {
    */
   __params__?: readonly string[];
 
-  (...args: SchemeValue[]): SchemeValue;
+  // A lambda body returns a `SchemeValue` synchronously, OR — when invoked under
+  // the bounce protocol (`_canBounce === true`) — a `Bounce` token for the
+  // trampoline to drive (see `Bounce`/`makeBounce`), OR — on the JS-host entry
+  // path (`_canBounce === false`) — a `Promise<SchemeValue>` from `run(...)`.
+  // Neither the `Bounce` token nor the `Promise` is a value: the call boundary
+  // narrows them out (`is_bounce`, then `is_promise`/`yield`) before any value
+  // use (see `applyArrowProc`), so neither leaks into the value channel.
+  (...args: SchemeValue[]): SchemeValue | Bounce | Promise<SchemeValue>;
 }
 
 /** Interface for macro expansion result */
@@ -1314,7 +1321,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const closureResolver = ctxResolver(ctx);
 
   // Create a closure function
-  const lambda: LambdaFunction = function (this: unknown, ...values: SchemeValue[]): SchemeValue {
+  const lambda: LambdaFunction = function (this: unknown, ...values: SchemeValue[]) {
     // Create a new environment frame
     const callResolver = closureResolver.child("lambda", "lambda");
 
@@ -1366,7 +1373,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // we fall through to the original `run(...)` path so its return shape
     // is unchanged.
     if (_canBounce) {
-      return makeBounce(evalBegin(body, bodyCtx)) as SchemeValue;
+      return makeBounce(evalBegin(body, bodyCtx));
     }
 
     // Evaluate body - returns a promise that runs the generator.
@@ -1522,7 +1529,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // We forward `signal` in the non-bounce path so that any *bounded*
     // named-let loop honors the same abort budget as the outer `run()` call;
     // in the bounce path the body inherits the outer ctx's signal directly.
-    const loopFn: LambdaFunction = function (...values: SchemeValue[]): SchemeValue {
+    const loopFn: LambdaFunction = function (...values: SchemeValue[]) {
       const loopResolver = letResolver.child("named-let", "named-let");
 
       for (const [i, param] of params.entries()) {
@@ -1541,7 +1548,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         tail: true,
       };
       if (_canBounce) {
-        return makeBounce(evalBegin(body, bodyCtx)) as SchemeValue;
+        return makeBounce(evalBegin(body, bodyCtx));
       }
       return run(evalBegin(body, bodyCtx), {
         signal: ctx.signal,
@@ -1798,7 +1805,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     const __savedSpeculate = _speculate;
     _speculate = ctx.speculate === true;
     const wrappedArgs = wrapLambdaArgs([arg], dynSite);
-    let result: SchemeValue;
+    let result: SchemeValue | Bounce | Promise<SchemeValue>;
     try {
       result = (proc as LambdaFunction)(...wrappedArgs);
     } finally {
