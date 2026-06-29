@@ -16,17 +16,17 @@ import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { tf } from "../../values/tagless-final.js";
 
-const SORT = tf("sort");
-
 export default new EnvCapability("scheme/srfi-95", {
   symbols: {
     sort: symbol.sequence`sort: a sorted sequence (list→list, vector→vector); default order is the elements' own ≤; comparator is a SRFI-95 less?`(
       { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
       (args, runCtx) => {
         const [seq, comparator] = args;
-        const m = (seq as Record<string, unknown> | null | undefined)?.[SORT];
+        const m = (seq as Record<string, unknown> | null | undefined)?.[tf("sort")];
         if (typeof m !== "function") {
-          throw new TypeError(`sort: the ${seq == null ? String(seq) : typeof seq} operand does not support sort (no ${SORT}).`);
+          throw new TypeError(
+            `sort: the ${seq == null ? String(seq) : typeof seq} operand does not support sort (no ${tf("sort")}).`,
+          );
         }
         return (m as (...a: unknown[]) => unknown).call(seq, comparator, runCtx);
       },

@@ -101,12 +101,6 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
     return result;
   };
 }
-const listToArray = to_array("list->array");
-
-function arrayToList(array: SchemeValue): SchemeValue {
-  typecheck("array->list", array, "array");
-  return APair.fromArray(CONSTANT_CTX, array);
-}
 
 export default new EnvCapability("scheme/strings", {
   symbols: {
@@ -428,7 +422,7 @@ export default new EnvCapability("scheme/strings", {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
         // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
         // strips the provenance the trace wires on. See provenance-collapse.ts.
-        const joined = listToArray(list).join(separator);
+        const joined = to_array("list->array")(list).join(separator);
         return taintString(String(joined), collapseProvenance(separator, list));
       },
     ),
@@ -438,7 +432,9 @@ export default new EnvCapability("scheme/strings", {
       (separator: SchemeValue, string: SchemeValue): SchemeValue => {
         typecheck("split", separator, ["regex", "string"]);
         typecheck("split", string, "string");
-        return arrayToList(string.split(separator));
+        const array = string.split(separator);
+        typecheck("array->list", array, "array");
+        return APair.fromArray(CONSTANT_CTX, array);
       },
     ),
 

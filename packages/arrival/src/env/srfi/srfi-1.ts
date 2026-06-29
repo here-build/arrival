@@ -13,7 +13,7 @@
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
-import { is_false, is_null, is_nil } from "../../eval/guards.js";
+import { is_false, is_nil, is_null } from "../../eval/guards.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { unpromise } from "../../utils/promises.js";
 import * as z from "../../common/scheme-zod.js";
@@ -23,9 +23,57 @@ import { tf } from "../../values/tagless-final.js";
 // sequence impl dispatches to the receiver's own `arrival/tagless-final/filter` term method —
 // the SAME forward the `symbol.tagless` binder did, now written manually so the def has a
 // contract slot (mirrors lists.ts's MAP_METHOD single-list branch; the term still charges heap).
-const FILTER_METHOD = tf("filter");
 
-export const SRFI1_SCM = `
+
+// reduce — SRFI-1's higher-order list fold, RELOCATED from stdlib.ts global_env (stdlib
+// elimination) as a pure `symbol.tagless` dispatcher. NO impl: it forwards to the receiver's
+// own `arrival/tagless-final/reduce` term method (APair/AVector declare the left-fold;
+// ANil returns the seed), threading the run ctx. Scheme places the collection LAST —
+// `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
+// list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
+// convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
+// `find` — SRFI-1 first-match search: the matcher is a PROCEDURE. A JS `symbol.native` (not a scheme
+// prelude define like `find-tail`) because it recurses over the predicate and unwraps an async
+// generator-lambda result. Relocated from arrival-extensions; the host-RegExp matcher it once also
+// accepted was a LIPS-era host leak (a raw JS RegExp, non-R7RS) and has been dissolved — procedure only.
+function findImpl(arg: unknown, list: any): unknown {
+  typecheck("find", arg, "function");
+  typecheck("find", list, ["pair", "nil"]);
+  if (is_null(list)) {
+    return nil;
+  }
+  const fn = arg as (x: unknown) => unknown;
+  return unpromise(fn(list.car), function (value: unknown) {
+    if (!is_false(value) && !is_nil(value)) {
+      return list.car;
+    }
+    return findImpl(arg, list.cdr);
+  });
+}
+
+export default new EnvCapability("scheme/srfi-1", {
+  symbols: {
+    filter:
+      symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
+        { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
+        (args, runCtx) => {
+          const [pred, seq] = args;
+          const m = (seq as Record<string, unknown> | null | undefined)?.[tf("filter")];
+          if (typeof m !== "function") {
+            throw new TypeError(
+              `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${(tf("filter"))}).`,
+            );
+          }
+          return (m as (...a: unknown[]) => unknown).call(seq, pred, runCtx);
+        },
+      ),
+    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+    find: symbol.native`find: first list element matching the predicate, else nil`(
+      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
+      findImpl,
+    ),
+  },
+  prelude: `
 ;; ============ SRFI-1 (list library completion) ============
 ;; take-while — longest prefix of xs satisfying pred.
 (define (take-while pred xs)
@@ -245,52 +293,5 @@ export const SRFI1_SCM = `
     (if (not pair)
         (reverse result)
         (iter (fn (cdr pair)) (cons (car pair) result)))))
-`;
-
-// reduce — SRFI-1's higher-order list fold, RELOCATED from stdlib.ts global_env (stdlib
-// elimination) as a pure `symbol.tagless` dispatcher. NO impl: it forwards to the receiver's
-// own `arrival/tagless-final/reduce` term method (APair/AVector declare the left-fold;
-// ANil returns the seed), threading the run ctx. Scheme places the collection LAST —
-// `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
-// list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
-// convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
-// `find` — SRFI-1 first-match search: the matcher is a PROCEDURE. A JS `symbol.native` (not a scheme
-// prelude define like `find-tail`) because it recurses over the predicate and unwraps an async
-// generator-lambda result. Relocated from arrival-extensions; the host-RegExp matcher it once also
-// accepted was a LIPS-era host leak (a raw JS RegExp, non-R7RS) and has been dissolved — procedure only.
-function findImpl(arg: unknown, list: any): unknown {
-  typecheck("find", arg, "function");
-  typecheck("find", list, ["pair", "nil"]);
-  if (is_null(list)) {
-    return nil;
-  }
-  const fn = arg as (x: unknown) => unknown;
-  return unpromise(fn(list.car), function (value: unknown) {
-    if (!is_false(value) && !is_nil(value)) {
-      return list.car;
-    }
-    return findImpl(arg, list.cdr);
-  });
-}
-
-export default new EnvCapability("scheme/srfi-1", {
-  prelude: SRFI1_SCM,
-  symbols: {
-    filter: symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
-      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
-      (args, runCtx) => {
-        const [pred, seq] = args;
-        const m = (seq as Record<string, unknown> | null | undefined)?.[FILTER_METHOD];
-        if (typeof m !== "function") {
-          throw new TypeError(`filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${FILTER_METHOD}).`);
-        }
-        return (m as (...a: unknown[]) => unknown).call(seq, pred, runCtx);
-      },
-    ),
-    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
-    find: symbol.native`find: first list element matching the predicate, else nil`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
-      findImpl,
-    ),
-  },
+`,
 });

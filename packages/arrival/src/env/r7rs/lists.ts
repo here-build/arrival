@@ -34,15 +34,14 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
-import { isCircularList, APair, concatPair } from "../../values/primitives/APair.js";
+import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import { is_pair, is_nil, is_null } from "../../eval/guards.js";
+import { is_false, is_nil, is_null, is_pair, is_promise } from "../../eval/guards.js";
 import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { currentRunEnv, ArrivalError, isSpeculating } from "../../eval/evaluator.js";
+import { ArrivalError, currentRunEnv, isSpeculating } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
-import { is_false, is_promise } from "../../eval/guards.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AHalfBaked, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { SPECULATE } from "../../well-known-symbols.js";
@@ -145,7 +144,6 @@ const lengthImpl = (obj: SchemeValue): SchemeValue => {
 };
 (lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
 
-const MAP_METHOD = tf("map");
 
 // Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements across the lists,
 // truncating to the shortest. PACK-LOCAL — uses lists.ts's own listToArray + call_function, so §6.10
@@ -231,9 +229,9 @@ export default new EnvCapability("scheme/lists", {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
           const seq = lists[0];
-          const m = (seq as Record<string, unknown> | null | undefined)?.[MAP_METHOD];
+          const m = (seq as Record<string, unknown> | null | undefined)?.[tf("map")];
           if (typeof m !== "function") {
-            throw new TypeError(`map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${MAP_METHOD}).`);
+            throw new TypeError(`map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${(tf("map"))}).`);
           }
           return (m as (...a: unknown[]) => unknown).call(seq, fn, runCtx);
         }
