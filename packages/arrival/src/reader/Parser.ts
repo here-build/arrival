@@ -11,18 +11,16 @@ import { DatumReference } from "../values/DatumReference.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
+import { is_nil, is_pair, is_plain_object } from "../eval/guards.js";
 import {
   is_builtin,
   is_bytevector_literal,
   is_directive,
   is_literal,
-  is_nil,
-  is_pair,
-  is_plain_object,
   is_special,
   is_symbol_extension,
   is_vector_literal,
-} from "../eval/guards.js";
+} from "./token-guards.js";
 import type { EOF } from "../values/primitives/EOF.js";
 import { eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";

@@ -2,7 +2,7 @@
 // token) — the indentation model follows the community Scheme style guide and GNU Emacs scheme-mode,
 // encoded as the token-pattern `rules` table. Originates from the LIPS formatter.
 import { CLASS } from "../well-known-symbols.js";
-import { is_special, is_symbol_string } from "../eval/guards.js";
+import { is_special, is_symbol_string } from "./token-guards.js";
 import { tokenize } from "./tokenize.js";
 import { AString } from "../values/primitives/AString.js";
 import {

@@ -4,15 +4,6 @@ import { Macro } from "./Macro.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { Syntax } from "./Syntax.js";
-import {
-  char_re,
-  complex_re,
-  directives,
-  float_re,
-  int_re,
-  rational_re,
-} from "../values/primitives.js";
-import * as specials from "../reader/specials.js";
 import { nil } from "../values/primitives/ANil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
@@ -30,67 +21,15 @@ export {
   is_plain_object,
 } from "../values/value-guards.js";
 
-// Import directly from source files to avoid circular dependency with lips.ts
-
 export function is_int(value: unknown): value is number {
   return typeof value === "number" && Number.parseInt(value.toString(), 10) === value;
 }
 
 // ----------------------------------------------------------------------
-function is_atom_string(str: string): boolean {
-  return !(["(", ")", "[", "]"].includes(str) || specials.names().includes(str));
-}
-
-// ----------------------------------------------------------------------
-export function is_symbol_string(str: unknown): str is string {
-  if (typeof str !== "string") return false;
-  return (
-    is_atom_string(str) &&
-    !(
-      /^"[\s\S]*"$/.test(str) ||
-      str.match(int_re) ||
-      float_re.test(str) ||
-      str.match(complex_re) ||
-      str.match(rational_re) ||
-      char_re.test(str) ||
-      ["#t", "#f", "nil"].includes(str)
-    )
-  );
-}
-
-export function is_special(token: unknown): boolean {
-  return typeof token === "string" && specials.names().includes(token);
-}
-
-export function is_vector_literal(token: unknown): token is "#(" {
-  return token === "#(";
-}
-
-export function is_bytevector_literal(token: unknown): token is "#u8(" {
-  return token === "#u8(";
-}
-
-export function is_builtin(token: unknown): boolean {
-  return typeof token === "string" && specials.__builtins__.includes(token);
-}
-
-export function is_literal(special: unknown): boolean {
-  return typeof special === "string" && specials.type(special) === specials.LITERAL;
-}
-
-export function is_symbol_extension(special: unknown): boolean {
-  return typeof special === "string" && specials.type(special) === specials.SYMBOL;
-}
-// ----------------------------------------------------------------------
 // :: Check for nullish values
 // ----------------------------------------------------------------------
 export function is_null(value: unknown): value is null | undefined | typeof nil {
   return is_undef(value) || is_nil(value) || value === null;
-}
-
-// ----------------------------------------------------------------------------
-export function is_directive(token: unknown): boolean {
-  return typeof token === "string" && directives.includes(token);
 }
 
 // ----------------------------------------------------------------------------
