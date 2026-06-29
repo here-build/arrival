@@ -33,41 +33,29 @@ const IO_REASON =
 const SYSTEM_REASON =
   "the system interface is omitted from arrival by design — clock, environment, command line and exit are ambient and non-deterministic, with no construction-site to root a value's lineage at; pass any context you need in explicitly";
 
-/** A teaching door for one omitted host verb (interpolated name + shared per-section reason). */
-const door = (name: string, reason: string): SymbolDef => symbol.notImplemented`${name}: ${reason}`;
-
-// §6.13 Input and output — ports, character/string IO, EOF objects.
-const IO_VERBS = [
-  "current-output-port",
-  "current-input-port",
-  "current-error-port",
-  "open-input-string",
-  "open-output-string",
-  "read",
-  "read-char",
-  "write-char",
-  "write-string",
-  "write",
-  "display",
-  "newline",
-  "eof-object",
-  "eof-object?",
-];
-
-// §6.14 System interface — clock, environment, command line, process exit.
-const SYSTEM_VERBS = [
-  "current-second",
-  "current-jiffy",
-  "jiffies-per-second",
-  "get-environment-variable",
-  "get-environment-variables",
-  "command-line",
-  "exit",
-  "emergency-exit",
-];
-
-const symbols: Record<string, SymbolDef> = {};
-for (const verb of IO_VERBS) symbols[verb] = door(verb, IO_REASON);
-for (const verb of SYSTEM_VERBS) symbols[verb] = door(verb, SYSTEM_REASON);
-
-export default new EnvCapability("scheme/r7rs/host", { symbols });
+export default new EnvCapability("scheme/r7rs/host", {
+  symbols: {
+    "current-output-port": symbol.notImplemented`current-output-port: ${IO_REASON}`,
+    "current-input-port": symbol.notImplemented`current-input-port: ${IO_REASON}`,
+    "current-error-port": symbol.notImplemented`current-error-port: ${IO_REASON}`,
+    "open-input-string": symbol.notImplemented`open-input-string: ${IO_REASON}`,
+    "open-output-string": symbol.notImplemented`open-output-string: ${IO_REASON}`,
+    read: symbol.notImplemented`read: ${IO_REASON}`,
+    "read-char": symbol.notImplemented`read-char: ${IO_REASON}`,
+    "write-char": symbol.notImplemented`write-char: ${IO_REASON}`,
+    "write-string": symbol.notImplemented`write-string: ${IO_REASON}`,
+    write: symbol.notImplemented`write: ${IO_REASON}`,
+    display: symbol.notImplemented`display: ${IO_REASON}`,
+    newline: symbol.notImplemented`newline: ${IO_REASON}`,
+    "eof-object": symbol.notImplemented`eof-object: ${IO_REASON}`,
+    "eof-object?": symbol.notImplemented`eof-object?: ${IO_REASON}`,
+    "current-second": symbol.notImplemented`current-second: ${SYSTEM_REASON}`,
+    "current-jiffy": symbol.notImplemented`current-jiffy: ${SYSTEM_REASON}`,
+    "jiffies-per-second": symbol.notImplemented`jiffies-per-second: ${SYSTEM_REASON}`,
+    "get-environment-variable": symbol.notImplemented`get-environment-variable: ${SYSTEM_REASON}`,
+    "get-environment-variables": symbol.notImplemented`get-environment-variables: ${SYSTEM_REASON}`,
+    "command-line": symbol.notImplemented`command-line: ${SYSTEM_REASON}`,
+    exit: symbol.notImplemented`exit: ${SYSTEM_REASON}`,
+    "emergency-exit": symbol.notImplemented`emergency-exit: ${SYSTEM_REASON}`,
+  },
+});
