@@ -34,6 +34,13 @@ const makeRoute = symbol.rosetta`make-route: build a fresh route`(
   { input: [], output: [z.union([z.pair, z.nil])] },
   () => nil,
 );
+//   plan_route   (a: "fast" | "scenic",          — a DIRECT closed string-literal enum slot
+//                 b: ("fast" | "scenic")[],       — an ARRAY-of-enum slot (element is the enum)
+//                 c: string)        => Promise<string>  — a free-form string slot
+const planRoute = symbol.rosetta`plan-route: choose a routing mode`(
+  { input: [z.enum(["fast", "scenic"]), z.array(z.enum(["fast", "scenic"])), z.string], output: [z.string] },
+  () => "",
+);
 
 const lens = createQueryLens(
   assembleHarvestedPrelude([
@@ -41,6 +48,7 @@ const lens = createQueryLens(
     ["sum_readings", sumReadings],
     ["set_timer", setTimer],
     ["make_route", makeRoute],
+    ["plan_route", planRoute],
   ]),
 );
 
@@ -58,6 +66,18 @@ const valid = (marked: string, cands: readonly string[]): string[] => {
 const kind = (marked: string): "list" | "vector" | "scalar" | null => {
   const [scheme, offset] = at(marked);
   return lens.getSlotArrayKind(scheme, offset);
+};
+const element = (marked: string): { isStringy: boolean | null; enum: readonly string[] | null } => {
+  const [scheme, offset] = at(marked);
+  return lens.getSlotElementType(scheme, offset);
+};
+const bareWord = (marked: string): boolean | null => {
+  const [scheme, offset] = at(marked);
+  return lens.getSlotAcceptsBareWord(scheme, offset);
+};
+const stringTyped = (marked: string): boolean | null => {
+  const [scheme, offset] = at(marked);
+  return lens.getSlotIsStringTyped(scheme, offset);
 };
 
 describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
@@ -151,5 +171,89 @@ describe("getSlotArrayKind — the 3-way value verdict", () => {
 
   it("a top / no-call cursor → null", () => {
     expect(kind("|")).toBeNull();
+  });
+});
+
+describe("getSlotElementType — the ENUM / closed-domain narrow (the highest-value axis)", () => {
+  it("a DIRECT enum param → its members as enum (isStringy null)", () => {
+    // plan_route arg 0 is `\"fast\" | \"scenic\"`. The domain is the slot itself (ElemOf is never
+    // for a scalar) → a PROVED closed string set → its two members.
+    expect(element("(plan_route |)")).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
+  });
+
+  it("an ARRAY-of-enum param → the ELEMENT's members as enum", () => {
+    // plan_route arg 1 is `(\"fast\" | \"scenic\")[]`. ElemOf recovers the enum element → same members.
+    expect(element("(plan_route 'x |)")).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
+  });
+
+  it("a free-form string param → isStringy true, enum null", () => {
+    // plan_route arg 2 is `string` (ElemOf never → domain is the slot → free-form string).
+    expect(element("(plan_route 'x (list) |)")).toEqual({ isStringy: true, enum: null });
+    // get_route arg 1 is also `string`.
+    expect(element("(get_route 1 |)")).toEqual({ isStringy: true, enum: null });
+  });
+
+  it("a number param → both null (a non-string domain narrows nothing)", () => {
+    expect(element("(set_timer |)")).toEqual({ isStringy: null, enum: null });
+  });
+
+  it("a List<unknown> / vector<number> param → both null (the element isn't a string set)", () => {
+    expect(element("(get_route |)")).toEqual({ isStringy: null, enum: null }); // element is `unknown`
+    expect(element("(sum_readings |)")).toEqual({ isStringy: null, enum: null }); // element is `number`
+  });
+
+  // ★SUPERSET-SAFE: an unresolved slot and a no-call cursor BOTH return both-null, so a consumer
+  // never narrows a domain we could not resolve.
+  it("an unresolved slot (unknown callee) / a top cursor → both null", () => {
+    expect(element("(no_such_tool |)")).toEqual({ isStringy: null, enum: null });
+    expect(element("|")).toEqual({ isStringy: null, enum: null });
+    expect(element("(|)")).toEqual({ isStringy: null, enum: null }); // operator slot
+  });
+});
+
+describe("getSlotAcceptsBareWord — a bare word is admissible as a string", () => {
+  it("a free-form string slot → true", () => {
+    expect(bareWord("(get_route 1 |)")).toBe(true);
+    expect(bareWord("(plan_route 'x (list) |)")).toBe(true);
+  });
+
+  it("a closed enum slot → false (a bare word is NOT any string here)", () => {
+    expect(bareWord("(plan_route |)")).toBe(false);
+  });
+
+  it("a list / vector / number slot → false (not a string slot)", () => {
+    expect(bareWord("(get_route |)")).toBe(false); // List<unknown>
+    expect(bareWord("(sum_readings |)")).toBe(false); // number[]
+    expect(bareWord("(set_timer |)")).toBe(false); // number
+  });
+
+  // ★SUPERSET-SAFE: unresolved → null (the gate no-ops), never a guessed boolean.
+  it("an unresolved slot / a top cursor → null", () => {
+    expect(bareWord("(no_such_tool |)")).toBeNull();
+    expect(bareWord("|")).toBeNull();
+    expect(bareWord("(|)")).toBeNull();
+  });
+});
+
+describe("getSlotIsStringTyped — the slot is a string subtype, not an array", () => {
+  it("a free-form string slot → true", () => {
+    expect(stringTyped("(get_route 1 |)")).toBe(true);
+  });
+
+  it("a closed enum slot → true (an enum IS a string subtype)", () => {
+    expect(stringTyped("(plan_route |)")).toBe(true);
+  });
+
+  it("a number / list / vector slot → false (not a string subtype)", () => {
+    expect(stringTyped("(set_timer |)")).toBe(false); // number
+    expect(stringTyped("(get_route |)")).toBe(false); // List<unknown>
+    expect(stringTyped("(sum_readings |)")).toBe(false); // number[]
+  });
+
+  // ★SUPERSET-SAFE: unresolved → null.
+  it("an unresolved slot / a top cursor → null", () => {
+    expect(stringTyped("(no_such_tool |)")).toBeNull();
+    expect(stringTyped("|")).toBeNull();
+    expect(stringTyped("(|)")).toBeNull();
   });
 });

@@ -2,12 +2,23 @@
 //
 // "Scheme is a TS subset except lists and pairs." The lens lowers a scheme prefix to TS
 // (lower.ts), compiles it against the harvested prelude (prelude.ts), and reads the TYPE
-// at the cursor's argument slot back off the checker. It answers two questions:
+// at the cursor's argument slot back off the checker. It answers five questions:
 //
-//   • getTypeValidCandidates — the subset of the sampler's Σ candidates that are TYPE-VALID
+//   • getTypeValidCandidates  — the subset of the sampler's Σ candidates that are TYPE-VALID
 //     as the next token of the slot under the cursor (the Σ∩T mask).
-//   • getSlotArrayKind       — the slot's 3-way value verdict: list / vector / scalar (null
+//   • getSlotArrayKind        — the slot's 3-way value verdict: list / vector / scalar (null
 //     when unresolved).
+//   • getSlotElementType      — the slot's element-DOMAIN: a PROVABLY CLOSED string-literal
+//     `enum` (the highest-value narrow — an enum/closed-domain arg → its member set), or a
+//     free-form-`string` `isStringy` flag (both null on uncertainty).
+//   • getSlotAcceptsBareWord  — is a bare value-word admissible here as a string (null when
+//     unresolved).
+//   • getSlotIsStringTyped    — is the slot a string subtype, not an array (null when unresolved).
+//
+// All five honor ONE invariant: SUPERSET-SAFE / DROPS-ONLY. An axis narrows ONLY when it can
+// PROVE the constraint; on ANY uncertainty it returns the unresolved value (the candidate list
+// unchanged, or null) so the gate no-ops. A wrongly-applied constraint is a defect, never a
+// tradeoff — every keep/null path below is annotated with the uncertainty it absorbs.
 //
 // ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY. The narrow may drop a candidate ONLY
 // when that candidate is PROVABLY ill-typed at the slot. On ANY uncertainty — an unresolved
@@ -49,6 +60,22 @@ type Role = { kind: "argument"; calleeText: string; argIndex: number } | { kind:
  *  string is a scalar value, not an array). `null` = unresolved (superset-safe). */
 export type SlotArrayKind = "list" | "vector" | "scalar";
 
+/**
+ * The slot's element-domain verdict (the highest-value narrowing axis). The "domain" is the
+ * element type for a list/vector/quote slot (`ElemOf<__E>`), else the slot type itself.
+ *   • `enum`      — the members of a PROVABLY CLOSED string-literal domain (`"fast" | "scenic"`).
+ *                   A consumer narrows the slot to exactly these words. `null` unless every
+ *                   constituent is a string literal — one non-literal constituent reopens the
+ *                   domain → `null` (superset-safe; never narrow a domain we can't close).
+ *   • `isStringy` — `true` iff the domain is the FREE-FORM `string` type (a bare word is an
+ *                   admissible value); `null` otherwise. Mutually exclusive with `enum`.
+ * Both `null` on any uncertainty (no call, unknown callee, an `any`/`unknown` domain).
+ */
+export interface SlotElementType {
+  readonly isStringy: boolean | null;
+  readonly enum: readonly string[] | null;
+}
+
 export interface QueryLens {
   /**
    * The Σ∩T mask. Given the cursor and the sampler's `candidates`, return the subset that is
@@ -62,6 +89,24 @@ export interface QueryLens {
    * unresolved (not a typed-call argument, unknown callee, an un-nameable / `any`/`unknown` slot).
    */
   getSlotArrayKind(scheme: string, cursorOffset: number): SlotArrayKind | null;
+  /**
+   * The slot's element-DOMAIN verdict — the closed-enum / free-form-string axis. For a
+   * list/vector/quote slot the domain is its element (`ElemOf<__E>`); otherwise the slot type
+   * itself. A PROVABLY CLOSED string-literal domain yields its members as `enum`; a free-form
+   * `string` domain yields `isStringy: true`. Both `null` on any uncertainty — the highest-value
+   * narrow, held to the same drops-only discipline (never close a domain we can't prove closed).
+   */
+  getSlotElementType(scheme: string, cursorOffset: number): SlotElementType;
+  /**
+   * Does the slot admit a BARE WORD as a string (a free-form string slot)? `true`/`false` via the
+   * `AcceptsBareWord<__E>` carrier; `null` when the slot is unresolved (superset-safe).
+   */
+  getSlotAcceptsBareWord(scheme: string, cursorOffset: number): boolean | null;
+  /**
+   * Is the slot STRING-TYPED (a string subtype, not an array) via the `IsStringTyped<__E>`
+   * carrier? `true`/`false` for a resolved slot; `null` when unresolved (superset-safe).
+   */
+  getSlotIsStringTyped(scheme: string, cursorOffset: number): boolean | null;
 }
 
 /** Build a query lens over a harvested prelude (carrier vocabulary + one `declare const` per
@@ -81,6 +126,32 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       return { kind: "none" }; // a prefix that won't lower → no slot → keep everything
     }
     return findRole(loweredTs);
+  }
+
+  /** Compile ONE probe over the slot under the cursor: the prelude + `__E = Parameters<…>[i]` +
+   *  `declare const __slot: __E` + the caller's extra declarations; return the checker/sourceFile.
+   *  Returns `null` (a superset-safe no-op for every caller) when there is no argument slot, the
+   *  compile host fails, OR the slot is UNRESOLVED (`any`/`unknown`/`never`/`undefined` — unknown
+   *  callee, out-of-range index, a door callee). The `__slot` uncertainty gate is the single
+   *  choke-point that makes all three narrowing axes drops-only. */
+  function probeSlot(
+    scheme: string,
+    cursorOffset: number,
+    extra: readonly string[],
+  ): { checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
+    const role = roleAt(scheme, cursorOffset);
+    if (role.kind !== "argument") return null; // operator / top / unparseable → no T narrowing
+    const probe = [
+      preludeText,
+      `type __E = Parameters<typeof ${role.calleeText}>[${role.argIndex}];`,
+      `declare const __slot: __E;`,
+      ...extra,
+    ].join("\n");
+    const compiled = compile(probe);
+    if (compiled === null) return null; // compile host failure → uncertain
+    const slot = typeAt(compiled.checker, compiled.sourceFile, "__slot");
+    if (slot === null || isUncertain(slot)) return null; // unresolved slot → superset-safe no-op
+    return compiled;
   }
 
   return {
@@ -132,7 +203,68 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       if (kind === null || !kind.isStringLiteral()) return null; // a union/non-literal → unresolved
       return collapseKind(kind.value);
     },
+
+    getSlotElementType(scheme, cursorOffset): SlotElementType {
+      // The DOMAIN to inspect: a list/vector/quote slot's ELEMENT (`ElemOf<__E>`), else the slot
+      // type itself. `ElemOf<__E>` is `never` for a scalar slot (`string`, an enum, a number), so
+      // the `[ElemOf<__E>] extends [never]` fork falls back to `NonNullable<__E>` — letting a
+      // DIRECT enum/string param and an ARRAY-of-enum/string param fold to the same domain query.
+      const compiled = probeSlot(scheme, cursorOffset, [
+        `type __Domain = [ElemOf<__E>] extends [never] ? NonNullable<__E> : ElemOf<__E>;`,
+        `declare const __domain: __Domain;`,
+      ]);
+      if (compiled === null) return UNRESOLVED_ELEMENT; // no slot / unresolved → both null
+      const domain = typeAt(compiled.checker, compiled.sourceFile, "__domain");
+      // An `unknown` element (a `List<unknown>` / `readonly unknown[]` slot) is uncertain → no proof.
+      if (domain === null || isUncertain(domain)) return UNRESOLVED_ELEMENT;
+
+      const members = closedStringEnum(domain);
+      if (members !== null) return { isStringy: null, enum: members }; // a PROVED closed string set
+      if ((domain.flags & ts.TypeFlags.String) !== 0) return { isStringy: true, enum: null }; // free-form `string`
+      return UNRESOLVED_ELEMENT; // a number / boolean / opaque element → narrow nothing
+    },
+
+    getSlotAcceptsBareWord(scheme, cursorOffset): boolean | null {
+      const compiled = probeSlot(scheme, cursorOffset, [`declare const __bare: AcceptsBareWord<__E>;`]);
+      if (compiled === null) return null; // no slot / unresolved → null (superset-safe)
+      return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__bare"));
+    },
+
+    getSlotIsStringTyped(scheme, cursorOffset): boolean | null {
+      const compiled = probeSlot(scheme, cursorOffset, [`declare const __str: IsStringTyped<__E>;`]);
+      if (compiled === null) return null; // no slot / unresolved → null (superset-safe)
+      return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__str"));
+    },
   };
+}
+
+/** The both-null element verdict — returned on every uncertainty path (frozen so callers can't
+ *  mutate the shared sentinel). */
+const UNRESOLVED_ELEMENT: SlotElementType = Object.freeze({ isStringy: null, enum: null });
+
+/** Enumerate a PROVABLY CLOSED string-literal domain's members. A union is closed iff EVERY
+ *  constituent is a string literal (one `string`/`number`/symbol constituent reopens it →
+ *  `null`); a single string-literal type is a one-member closed domain. Anything else → `null`.
+ *  This is the proof that makes the enum narrow drops-only: we return members ONLY when the
+ *  whole domain is provably this finite word set. */
+function closedStringEnum(t: ts.Type): readonly string[] | null {
+  if (t.isStringLiteral()) return [t.value];
+  if (!t.isUnion()) return null;
+  const members: string[] = [];
+  for (const c of t.types) {
+    if (!c.isStringLiteral()) return null; // a non-string-literal constituent → not a closed string set
+    members.push(c.value);
+  }
+  return members.length > 0 ? members : null;
+}
+
+/** Read a carrier predicate's resolved `true`/`false` literal off the checker. A resolved slot
+ *  collapses `AcceptsBareWord`/`IsStringTyped` to exactly one boolean-LITERAL type; anything else
+ *  (a `boolean` union, an absent declaration, a non-boolean) is uncertain → `null`. */
+function readBoolLiteral(checker: ts.TypeChecker, t: ts.Type | null): boolean | null {
+  if (t === null || (t.flags & ts.TypeFlags.BooleanLiteral) === 0) return null;
+  const s = checker.typeToString(t);
+  return s === "true" ? true : s === "false" ? false : null;
 }
 
 // ── candidate / slot assignability ───────────────────────────────────────────
