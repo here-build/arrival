@@ -42,7 +42,7 @@ import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
-import { is_pair, is_nil } from "../../eval/guards.js";
+import { is_pair as is_pair_raw, is_nil } from "../../eval/guards.js";
 import { isCircularList } from "../../values/primitives/APair.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
 import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
@@ -58,6 +58,14 @@ import {
 } from "../../values/primitives.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
 import type { SchemeValue } from "../../values/types.js";
+
+// Pack-local refinement of `is_pair` (same shadow the evaluator carries). The shared
+// `is_pair` (value-guards) narrows only to `APair<unknown, unknown>` because `APair` is
+// generic over its slot types for the membrane/reader boundary. Every list `to_array`
+// walks here is a fully-boxed scheme list — its car/cdr ARE `SchemeValue`s — so this
+// SAME runtime predicate, refined to the slot truth, lets the `.car`/`.cdr` reads in
+// `to_array` produce `SchemeValue` (the array's element type) with zero call-site churn.
+const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
 
 // Pack-local copies of the list<->array bridge helpers `join`/`split` need. The
 // stdlib originals (`listToArray`/`arrayToList`/`to_array`) stay in stdlib.ts for
@@ -392,11 +400,18 @@ export default new EnvCapability("scheme/strings", {
     // ---------------------------------------------------------------------
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.schemeString, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
-      (string: SchemeValue, start: SchemeValue, end: SchemeValue): SchemeValue => {
+      (string: unknown, start: unknown, end?: unknown): string => {
         typecheck("substring", string, "string");
         typecheck("substring", start, "number");
         typecheck("substring", end, ["number", "void"]);
-        return string.substring(start.valueOf(), end?.valueOf());
+        // `string` is an AString (grafted String.prototype), the indices AExact/AInexact —
+        // unwrap to the JS string + numeric indices the slice operates on (byte-identical to
+        // the old `string.substring(start.valueOf(), end?.valueOf())`). `substring(s,
+        // undefined)` means "to the end", so a missing `end` stays undefined.
+        return stringValue(string).substring(
+          Number(coerceNumeric(start).valueOf()),
+          end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
+        );
       },
     ),
 
@@ -416,17 +431,21 @@ export default new EnvCapability("scheme/strings", {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
         // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
         // strips the provenance the trace wires on. See provenance-collapse.ts.
-        const joined = to_array("list->array")(list).join(separator);
+        const joined = to_array("list->array")(list).join(stringValue(separator));
         return taintString(String(joined), collapseProvenance(separator, list));
       },
     ),
 
     split: symbol.native`split: a list of the string's pieces around the separator (LIPS extension)`(
       { input: [z.value, z.schemeString], output: [z.value] },
-      (separator: SchemeValue, string: SchemeValue): SchemeValue => {
+      (separator: unknown, string: unknown): APair | typeof nil => {
         typecheck("split", separator, ["regex", "string"]);
         typecheck("split", string, "string");
-        const array = string.split(separator);
+        // `string` is an AString (grafted String.prototype); `separator` is a RegExp or an
+        // AString. Unwrap to the JS string + a real RegExp|string separator the split takes
+        // (byte-identical to the old `string.split(separator)`).
+        const sep = separator instanceof RegExp ? separator : stringValue(separator);
+        const array = stringValue(string).split(sep);
         typecheck("array->list", array, "array");
         return APair.fromArray(CONSTANT_CTX, array);
       },
@@ -434,28 +453,31 @@ export default new EnvCapability("scheme/strings", {
 
     "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
       { input: [z.schemeString, z.schemeNumber.optional()], output: [z.union([z.schemeNumber, z.boolean])] },
-      (arg: SchemeValue, radix: SchemeValue = 10): AExact | AInexact | boolean => {
+      (arg: unknown, radix: unknown = 10): AExact | AInexact | boolean => {
         typecheck("string->number", arg, "string", 1);
         typecheck("string->number", radix, "number", 2);
-        arg = arg.valueOf();
-        radix = radix.valueOf();
+        // `arg` is an AString, `radix` an AExact/AInexact (or the JS-number default) — unwrap
+        // to the JS string + number the regex tests and parse_* helpers consume (byte-identical
+        // to the old `arg = arg.valueOf(); radix = radix.valueOf()`).
+        const str = stringValue(arg);
+        const base = Number(coerceNumeric(radix).valueOf());
         try {
-          if (arg.match(rational_bare_re) || arg.match(rational_re)) {
-            return parse_rational(arg, radix);
-          } else if (arg.match(complex_bare_re) || arg.match(complex_re)) {
+          if (str.match(rational_bare_re) || str.match(rational_re)) {
+            return parse_rational(str, base);
+          } else if (str.match(complex_bare_re) || str.match(complex_re)) {
             // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
             // Reject patterns like "3i", "33i", "3.3i" without leading sign
-            if (/^#?[iexobd]*[0-9.]+i$/i.test(arg)) {
+            if (/^#?[iexobd]*[0-9.]+i$/i.test(str)) {
               return false;
             }
-            return parse_complex(arg, radix);
+            return parse_complex(str, base);
           } else {
-            const valid_bare = (radix === 10 && !/e/i.test(arg)) || radix === 16;
-            if ((arg.match(int_bare_re) && valid_bare) || arg.match(int_re)) {
-              return parse_integer(arg, radix);
+            const valid_bare = (base === 10 && !/e/i.test(str)) || base === 16;
+            if ((str.match(int_bare_re) && valid_bare) || str.match(int_re)) {
+              return parse_integer(str, base);
             }
-            if (float_re.test(arg)) {
-              return parse_float(arg);
+            if (float_re.test(str)) {
+              return parse_float(str);
             }
           }
         } catch {
