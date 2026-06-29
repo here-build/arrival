@@ -35,8 +35,9 @@ import { ABool } from "../../values/primitives/ABool.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
-import { is_callable, is_false, is_macro, is_null } from "../../eval/guards.js";
+import { is_callable, is_false, is_macro } from "../../eval/guards.js";
 import { is_nil, is_pair } from "../../values/value-guards.js";
+import { ANil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { isCircularList } from "../../values/primitives/APair.js";
 import { typecheck } from "../../utils/typecheck.js";
@@ -181,9 +182,12 @@ export default new EnvCapability("scheme/equality", {
 
     "null?": symbol.native`null?: empty-list test`(
       { input: [z.unknown()], output: [z.boolean] },
-      // is_null is nil OR JS null/undefined — matches the legacy global_env body exactly.
+      // The empty list is the ANil singleton (and its provenance clones). Raw JS
+      // null/undefined no longer reach here — the membrane boxes JS null→nil and
+      // undefined→theVoid before any value enters the language — so the legacy
+      // global_env's `|| null || undefined` nullish tolerance is dissolved.
       (obj: unknown): boolean => {
-        return is_null(obj);
+        return obj instanceof ANil;
       },
     ),
 

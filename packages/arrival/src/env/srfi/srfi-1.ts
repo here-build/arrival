@@ -13,8 +13,8 @@
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
-import { is_false, is_nil, is_null } from "../../eval/guards.js";
-import { nil } from "../../values/primitives/ANil.js";
+import { is_false, is_nil } from "../../eval/guards.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
 import { unpromise } from "../../utils/promises.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
@@ -39,7 +39,7 @@ import { tf } from "../../values/tagless-final.js";
 function findImpl(arg: unknown, list: any): unknown {
   typecheck("find", arg, "function");
   typecheck("find", list, ["pair", "nil"]);
-  if (is_null(list)) {
+  if (list instanceof ANil) {
     return nil;
   }
   const fn = arg as (x: unknown) => unknown;

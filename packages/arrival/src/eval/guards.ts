@@ -4,11 +4,10 @@ import { Macro } from "./Macro.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { Syntax } from "./Syntax.js";
-import { nil } from "../values/primitives/ANil.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
-import { is_function, is_nil } from "../values/value-guards.js";
+import { is_function } from "../values/value-guards.js";
 
 export {
   has_own_symbol,
@@ -23,13 +22,6 @@ export {
 
 export function is_int(value: unknown): value is number {
   return typeof value === "number" && Number.parseInt(value.toString(), 10) === value;
-}
-
-// ----------------------------------------------------------------------
-// :: Check for nullish values
-// ----------------------------------------------------------------------
-export function is_null(value: unknown): value is null | undefined | typeof nil {
-  return is_undef(value) || is_nil(value) || value === null;
 }
 
 // ----------------------------------------------------------------------------
@@ -75,10 +67,6 @@ export function is_promise(o: unknown): o is Promise<unknown> {
     return true;
   }
   return !!o && typeof o === "object" && "then" in o && is_function(o.then);
-}
-
-export function is_undef(value: unknown): value is undefined {
-  return value === undefined;
 }
 
 // ----------------------------------------------------------------------

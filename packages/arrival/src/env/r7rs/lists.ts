@@ -36,7 +36,7 @@ import { withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import { is_false, is_nil, is_null, is_pair, is_promise } from "../../eval/guards.js";
+import { is_false, is_nil, is_pair, is_promise } from "../../eval/guards.js";
 import { type, typecheck, typeErrorMessage } from "../../utils/typecheck.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError, currentRunEnv, isSpeculating } from "../../eval/evaluator.js";
@@ -526,7 +526,7 @@ export default new EnvCapability("scheme/lists", {
           if (is_nil(acc)) {
             return is_nil(item) ? nil : item;
           }
-          if (is_null(item)) {
+          if (item instanceof ANil) {
             return acc;
           }
           return concatPair(ctxOf(item), acc, item);

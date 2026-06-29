@@ -1,8 +1,8 @@
 // -------------------------------------------------------------------------
 // :: Functional programming utilities
 // -------------------------------------------------------------------------
-import { is_null } from "../eval/guards.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { ANil } from "../values/primitives/ANil.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { typecheck } from "./typecheck.js";
@@ -40,7 +40,7 @@ export function fold(
   const self = this;
   const recur = function (fn: AnyFunction, init: unknown, ...lists: unknown[]): unknown {
     typecheck(name, fn, "function");
-    if (lists.some(is_null)) {
+    if (lists.some((x) => x instanceof ANil)) {
       if (typeof init === "number") {
         return Number.isSafeInteger(init) ? new AExact(CONSTANT_CTX, BigInt(init)) : new AInexact(CONSTANT_CTX, init);
       }
