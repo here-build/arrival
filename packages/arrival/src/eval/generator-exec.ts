@@ -72,13 +72,13 @@ function defaultLexicalRoot(): Environment {
 let _baseAssembled: Promise<void> | undefined;
 export function ensureBaseAssembled(): Promise<void> {
   return (_baseAssembled ??= (async () => {
-    // FIRST, populate the native root's inline builtins. stdlib.ts registers `undefined`
-    // (the parser constant) and `repr` onto global_env via a module-LOAD side effect
-    // (`Object.assign(global_env.__env__, …)`). Loading it here makes the bootstrap
-    // self-sufficient: it used to ride in only because the old bridge→stdlib edge (now
-    // removed) forced stdlib to evaluate, so a deep-import entry path (a test importing
-    // `generator-exec`/`_fresh-env` but not the barrel) would otherwise miss `repr`. The
-    // side-effect import is idempotent (ES modules evaluate once) and promise-cached here.
+    // stdlib.ts is now a side-effect-FREE husk: its native-root `Object.assign` is gone
+    // (`undefined` was dropped as a LIPS vestige; `repr` moved to the scheme/equality pack;
+    // every other entry had already migrated to a capability pack). The native root is
+    // populated ENTIRELY by the assembled packs below (GLOBAL_NATIVE_PACKS + BASE_PACKS), so
+    // this import no longer registers anything — it is kept only as a load-order anchor and is
+    // a no-op (ES modules evaluate once). The whole module is dynamic-import-only by design
+    // (no static importer), which is what lets the package declare `sideEffects: false`.
     await import("../stdlib.js");
     const { GLOBAL_NATIVE_PACKS } = await import("../bridge.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");

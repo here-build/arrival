@@ -22,6 +22,7 @@
   "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
