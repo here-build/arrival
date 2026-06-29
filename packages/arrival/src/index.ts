@@ -129,8 +129,26 @@ export {
 
 // The lexical-binding scope handle, public for `exec({ scope })` — a caller holds a
 // `LexicalScope.for(env)` across calls for REPL-style multi-step define accumulation.
-// (EnvCapability for `exec({ capabilities })` is public via the `./capability` subpath.)
 export { LexicalScope } from "./eval/LexicalScope.js";
+
+// The EnvCapability DECLARATION API — root-surfaced so a consumer declares a typed
+// capability from ONE module specifier (`@here.build/arrival`) instead of fanning across
+// `/capability` + `/env` + `/symbol` + `/scheme-zod`. The split mattered: when a consumer's
+// test resolved the root to source but a subpath to dist, the typed codecs' `instanceof
+// AString` rejected cross-realm args (the dual-package hazard). Root-exposing the codecs
+// alongside the `A*` classes they guard collapses both onto a single module graph, so
+// `instanceof` holds and no per-consumer vitest alias is needed. The `/symbol` + `/scheme-zod`
+// subpaths stay (additive) for callers that prefer granular, tree-shaken imports.
+//   • `EnvCapability` — the capability class (`exec({ capabilities })`, `assembleEnv` roots).
+//   • `assembleEnv`   — the C3 kernel assembler that spins packs/capabilities onto a base env.
+//   • `symbol`        — the typed-symbol factory ({ native, rosetta, tagless, … }) from common/symbol.
+//   • `z`             — the scheme-zod codec namespace (`z.string`/`z.number`/… JS↔Scheme membrane
+//                       codecs + the re-exported zod surface). Namespaced (not `export *`) so the
+//                       `z.symbol` CODEC stays distinct from the top-level `symbol` FACTORY.
+export { EnvCapability } from "./common/capability.js";
+export { assembleEnv } from "./common/kernel.js";
+export { symbol } from "./common/symbol.js";
+export * as z from "./common/scheme-zod.js";
 
 // Reader lexer entry. `tokenize(source, true)` lifts source into `{ token, col, offset, line }`
 // meta-tokens off the real FSM lexer, so `#\(`, string literals, `#|…|#`, datum comments, and
