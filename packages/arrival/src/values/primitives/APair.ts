@@ -635,13 +635,17 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     runCtx?: RunContext,
   ): APair | ANil | AHalfBaked | Promise<APair | ANil> {
     chargeHeap(runCtx, countPairElements(this));
-    const elements: SchemeValue[] = [];
+    // Spine-walk surfacing elements as `unknown` — the file's canonical convention
+    // (`to_array(): unknown[]`, lineage.ts list-walks): a list element's union
+    // membership is narrowed at the point of consumption, not asserted at the slot.
+    // `is_pair` replaces the prior `node as APair` cast so `.car`/`.cdr` access is
+    // guarded, not laundered.
+    const elements: unknown[] = [];
     let node: unknown = this;
-    while (node && !(node instanceof ANil)) {
-      const p = node as APair;
-      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
-      elements.push(p.car);
-      node = p.cdr;
+    while (is_pair(node)) {
+      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      elements.push(node.car);
+      node = node.cdr;
     }
     const results = elements.map((x) => fn(x));
     if (runCtx?.speculate && results.some(is_promise)) {
@@ -684,13 +688,16 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   ): APair | ANil | AHalfBaked | Promise<APair | ANil> {
     chargeHeap(runCtx, countPairElements(this));
     const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
+    // `is_pair` guards `.car`/`.cdr` instead of the prior `node as APair` cast.
+    // `elements` is SchemeValue[] because the speculative slot below
+    // (`AHalfBaked.collection`, items: SchemeValue[]) and the eager re-cons both
+    // re-emit these as the materialised filtered list.
     const elements: SchemeValue[] = [];
     let node: unknown = this;
-    while (node && !(node instanceof ANil)) {
-      const p = node as APair;
-      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
-      elements.push(p.car);
-      node = p.cdr;
+    while (is_pair(node)) {
+      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      elements.push(node.car);
+      node = node.cdr;
     }
     const verdicts = elements.map((x) => pred(x));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !is_nil(verdict);
