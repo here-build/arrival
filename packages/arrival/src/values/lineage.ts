@@ -129,7 +129,7 @@ export interface Classifier {
   isOpaque(op: string): boolean; // membrane / foreign call — irreducible black box
 }
 
-function opName(x: SchemeValue): string {
+function opName(x: unknown): string {
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
   return typeof v === "string" || typeof v === "symbol" ? String(v) : String(x);
 }
@@ -166,16 +166,23 @@ export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
 ]);
 
 /** Surface-form heads dispatched by SPECIAL_FORMS, recognised by name. */
-const isSym = (x: SchemeValue, name: string): boolean => x instanceof ASymbol && opName(x) === name;
+const isSym = (x: unknown, name: string): boolean => x instanceof ASymbol && opName(x) === name;
 
 /** A datum that is neither a variable (SchemeSymbol) nor an application (Pair). */
-function isLiteral(x: SchemeValue): boolean {
+function isLiteral(x: unknown): boolean {
   return !(x instanceof ASymbol) && !is_pair(x);
 }
 
-function operands(app: APair): SchemeValue[] {
-  const out: SchemeValue[] = [];
-  let n: SchemeValue = app.cdr;
+// A reader AST datum is `unknown` at an arbitrary car/cdr slot: `APair`'s
+// car/cdr are typed `unknown` (the cons cell is structurally heterogeneous —
+// APair<Car = unknown, Cdr = unknown>), so the spine-walk carries `unknown` and
+// each node is narrowed by guard (`is_pair` / `instanceof ASymbol` / `opName`)
+// before use. Annotating these slots `SchemeValue` would over-claim a union
+// membership the reader never promises at the slot; `unknown` is the honest
+// type, narrowed at the point of dispatch in `classifyWith`.
+function operands(app: APair): unknown[] {
+  const out: unknown[] = [];
+  let n: unknown = app.cdr;
   while (is_pair(n)) {
     out.push(n.car);
     n = n.cdr;
@@ -188,7 +195,7 @@ const isProvBearing = (n: LineageNode): boolean => n.kind !== "literal";
 /** A LITERAL integer datum's value (`(vector-ref x 1)` → `1`), else null. The
  *  index must be a self-evaluating exact integer; a variable index (`(vector-ref
  *  x n)`) leaves the form a plain op (no static field — the key isn't known). */
-function literalIndex(x: SchemeValue): number | null {
+function literalIndex(x: unknown): number | null {
   if (x instanceof ASymbol || is_pair(x)) return null;
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
   return typeof v === "number" && Number.isInteger(v) ? v : null;
@@ -206,7 +213,7 @@ function literalIndex(x: SchemeValue): number | null {
  * The emitted node is uniform regardless of which surface produced it; the
  * no-lookahead property the sampler relies on lives at this canonical level.
  */
-function memberRead(head: SchemeValue, args: SchemeValue[]): { step: PathStep; argExpr: SchemeValue } | null {
+function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: unknown } | null {
   if (!(head instanceof ASymbol)) return null;
   const name = opName(head);
 
@@ -247,9 +254,9 @@ function memberRead(head: SchemeValue, args: SchemeValue[]): { step: PathStep; a
 /** Pull the parameter symbols out of a lambda's formal list — `(it)` → ["it"],
  *  `(a b)` → ["a","b"]. A variadic/rest tail (`(a . r)`, or a bare symbol formal)
  *  is ignored for binding (the element flows in via the leading positionals only).*/
-function lambdaParams(formals: SchemeValue): string[] {
+function lambdaParams(formals: unknown): string[] {
   const out: string[] = [];
-  let n: SchemeValue = formals;
+  let n: unknown = formals;
   while (is_pair(n)) {
     if (n.car instanceof ASymbol) out.push(opName(n.car));
     n = n.cdr;
@@ -265,7 +272,7 @@ function lambdaParams(formals: SchemeValue): string[] {
  * template-less fan, byte-identical to before. The template is a viz-/carrier-
  * shaping structure; walk() never descends it (cone neutrality).
  */
-function classifyFanTemplate(fn: SchemeValue, c: Classifier, subst: Subst): LineageNode | undefined {
+function classifyFanTemplate(fn: unknown, c: Classifier, subst: Subst): LineageNode | undefined {
   if (!is_pair(fn) || !isSym(fn.car, "lambda")) return undefined;
   const afterKw = fn.cdr;
   if (!is_pair(afterKw)) return undefined;
@@ -315,7 +322,7 @@ export function classify(ast: SchemeValue, c: Classifier): LineageNode {
   return classifyWith(ast, c, NO_SUBST);
 }
 
-function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNode {
+function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   if (isLiteral(ast)) return { kind: "literal" };
   if (ast instanceof ASymbol) {
     const slot = opName(ast);
@@ -433,19 +440,19 @@ function classifyWith(ast: SchemeValue, c: Classifier, subst: Subst): LineageNod
 }
 
 /** `(if test then else?)` → mux(selector=test, arms=[then, else?]). */
-function classifyIf(rest: SchemeValue, c: Classifier, subst: Subst): LineageNode {
+function classifyIf(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   if (!is_pair(rest)) return { kind: "literal" };
   const test = rest.car;
   const afterTest = rest.cdr;
   const then_ = is_pair(afterTest) ? afterTest.car : undefined;
   const elseRest = is_pair(afterTest) ? afterTest.cdr : undefined;
   const else_ = is_pair(elseRest) ? elseRest.car : undefined;
-  const arms = [then_, else_].filter((a): a is SchemeValue => a !== undefined).map((a) => classifyWith(a, c, subst));
+  const arms = [then_, else_].filter((a) => a !== undefined).map((a) => classifyWith(a, c, subst));
   return { kind: "mux", op: "if", selector: classifyWith(test, c, subst), arms };
 }
 
 /** `(when/unless test body…)` ≡ a one-armed `if` over `(begin body…)`. */
-function classifyGuardedBody(rest: SchemeValue, c: Classifier, subst: Subst, op: string): LineageNode {
+function classifyGuardedBody(rest: unknown, c: Classifier, subst: Subst, op: string): LineageNode {
   if (!is_pair(rest)) return { kind: "literal" };
   const test = rest.car;
   const body = classifyBegin(rest.cdr, c, subst);
@@ -459,10 +466,10 @@ function classifyGuardedBody(rest: SchemeValue, c: Classifier, subst: Subst, op:
  * `(proc test)`). The static cone is selector ∪ arms (conservative — the
  * matched-clause-only "why" stays eager per DR3).
  */
-function classifyCond(rest: SchemeValue, c: Classifier, subst: Subst): LineageNode {
+function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   const tests: LineageNode[] = [];
   const arms: LineageNode[] = [];
-  let node: SchemeValue = rest;
+  let node: unknown = rest;
   while (is_pair(node)) {
     const clause = node.car;
     node = node.cdr;
@@ -500,7 +507,7 @@ function classifyCond(rest: SchemeValue, c: Classifier, subst: Subst): LineageNo
  * left-to-right (later RHSs see earlier bindings). A *named* let is recursive —
  * not transparently inlineable — so it stays opaque over its RHSs + body.
  */
-function classifyLet(rest: SchemeValue, c: Classifier, subst: Subst, sequential: boolean): LineageNode {
+function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boolean): LineageNode {
   if (!is_pair(rest)) return { kind: "literal" };
 
   // Named let: (let name (bindings) body…) — recursion ⇒ opaque (not inlineable).
@@ -518,7 +525,7 @@ function classifyLet(rest: SchemeValue, c: Classifier, subst: Subst, sequential:
   // Build the substitution: leaf-slot ← classify(RHS). `let` classifies every
   // RHS in the OUTER subst (parallel); `let*`/`letrec` extend as they go.
   const extended = new Map(subst);
-  let bindNode: SchemeValue = bindings;
+  let bindNode: unknown = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
     bindNode = bindNode.cdr;
@@ -534,9 +541,9 @@ function classifyLet(rest: SchemeValue, c: Classifier, subst: Subst, sequential:
 }
 
 /** Pull the RHS expressions out of a `let` binding list (named-let helper). */
-function letBindingValues(bindings: SchemeValue): SchemeValue[] {
-  const out: SchemeValue[] = [];
-  let n: SchemeValue = bindings;
+function letBindingValues(bindings: unknown): unknown[] {
+  const out: unknown[] = [];
+  let n: unknown = bindings;
   while (is_pair(n)) {
     const b = n.car;
     if (is_pair(b) && is_pair(b.cdr)) out.push(b.cdr.car);
@@ -546,9 +553,9 @@ function letBindingValues(bindings: SchemeValue): SchemeValue[] {
 }
 
 /** `(begin e…)` — pass-through of the LAST expression (earlier values dropped). */
-function classifyBegin(body: SchemeValue, c: Classifier, subst: Subst): LineageNode {
-  let last: SchemeValue | undefined;
-  let n: SchemeValue = body;
+function classifyBegin(body: unknown, c: Classifier, subst: Subst): LineageNode {
+  let last: unknown;
+  let n: unknown = body;
   while (is_pair(n)) {
     last = n.car;
     n = n.cdr;
