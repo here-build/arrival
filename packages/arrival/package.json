@@ -71,6 +71,7 @@
     "!**/__custdev__",
     "!**/__visual__",
     "!**/*.test.*",
+    "!**/*.test-d.*",
     "!**/*.stories.*"
   ],
   "scripts": {
@@ -80,8 +81,9 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test-d": "vitest run --config vitest.typecheck.config.ts",
     "benchmarks": "vitest run --config vitest.benchmarks.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && vitest run --config vitest.typecheck.config.ts"
   },
   "dependencies": {
     "@here.build/arrival-env": "workspace:^",

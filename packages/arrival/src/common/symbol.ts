@@ -43,7 +43,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "./scheme-zod.js";
-import type { APair } from "../values/primitives/APair.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
@@ -722,74 +721,9 @@ function macro(strings: TemplateStringsArray) {
  *  `arrival.symbol.native` + a `name: doc` template + `(contract, impl)`. */
 export const symbol = { native, rosetta, tagless, taglessGuard, sequence, notImplemented, keyword, macro };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPE-LEVEL PROOFS — the load-bearing inference, checked by `pnpm typecheck`.
-//
-// These live HERE (not in *.test.ts) because both tsconfigs EXCLUDE `src/**/*.test.ts`
-// — the test file's `@ts-expect-error` lines are NOT compiled by `pnpm typecheck`. The
-// generic inference is the whole point of the API, so its proof must sit where tsc runs.
-// Entirely type-level + a dead-code block: ZERO runtime cost, not exported, tree-shaken.
-// ─────────────────────────────────────────────────────────────────────────────
-
-type _Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type _Expect<T extends true> = T;
-
-// native: an identity-schema tuple infers the impl arg as the SCHEME TERM.
-type _NativeArgs = DecodedArgs<[typeof z.pair]>;
-type _NativeArgsProof = _Expect<_Equal<_NativeArgs, [APair]>>;
-
-// rosetta: a codec tuple infers the impl arg as the DECODED JS value.
-type _RosettaArgs = DecodedArgs<[typeof z.string]>;
-type _RosettaArgsProof = _Expect<_Equal<_RosettaArgs, [string]>>;
-
-// the number family decodes to the codec's declared JS type.
-type _NumArgs = DecodedArgs<[typeof z.number]>;
-type _NumProof = _Expect<_Equal<_NumArgs, [number]>>;
-type _BigIntArgs = DecodedArgs<[typeof z.bigint]>;
-type _BigIntProof = _Expect<_Equal<_BigIntArgs, [bigint]>>;
-
-// a 1-tuple output → a single decoded return.
-type _SingleRet = DecodedReturn<[typeof z.number]>;
-type _SingleRetProof = _Expect<_Equal<_SingleRet, number>>;
-
-// variadic: z.array input → the element-array as the impl's rest params.
-type _VariadicArgs = DecodedArgs<ReturnType<typeof z.array<typeof z.number>>>;
-type _VariadicProof = _Expect<_Equal<_VariadicArgs, number[]>>;
-
-// Exercise the negative direction: a wrong-typed impl must be a COMPILE error. Guarded
-// by a `false` const so it never runs; each `@ts-expect-error` asserts the line below
-// it does NOT typecheck.
-const __RUN_TYPE_PROOFS__ = false;
-function __typeProofs__(): void {
-  if (__RUN_TYPE_PROOFS__) {
-    // native: impl receives a Pair (identity), not a string.
-    symbol.native`p: proof`(
-      { input: [z.pair], output: [z.pair] },
-      // @ts-expect-error — arg is Pair, annotating it string is wrong
-      (p: string) => p as unknown as APair,
-    );
-    // rosetta: impl receives a decoded string, not a Pair.
-    symbol.rosetta`r: proof`(
-      { input: [z.string], output: [z.number] },
-      // @ts-expect-error — arg is string, annotating it Pair is wrong
-      (s: APair) => 1,
-    );
-    // rosetta return: output codec wants number; returning a string is wrong.
-    symbol.rosetta`rr: proof`(
-      { input: [z.string], output: [z.number] },
-      // @ts-expect-error — return must be number, not string
-      (s) => s,
-    );
-  }
-}
-
-// Keep the proof aliases "used" so noUnusedLocals (if ever on) stays quiet; type-only.
-void __typeProofs__;
-export type __SymbolTypeProofs = [
-  _NativeArgsProof,
-  _RosettaArgsProof,
-  _NumProof,
-  _BigIntProof,
-  _SingleRetProof,
-  _VariadicProof,
-];
+// TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return
+// types) now live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under
+// `vitest --typecheck` (the `test-d` script / vitest.typecheck.config.ts). They used to be
+// inline here because both package tsconfigs EXCLUDE the test dirs — so a plain `*.test.ts`
+// was never compiled by `pnpm typecheck`. The dedicated `tsconfig.typecheck.json` re-includes
+// the `*.test-d.ts` proofs, so a type regression fails CI as a real test instead of riding the build.
