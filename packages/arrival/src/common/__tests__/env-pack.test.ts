@@ -127,7 +127,9 @@ describe("env-pack assembly core (P0)", () => {
     const ok: EnvPack<Stub> = {
       name: "ok",
       apply: (_e, ctx) => {
-        ctx.onDispose(() => disposed.push("ok"));
+        ctx.onDispose(() => {
+          disposed.push("ok");
+        });
       },
     };
     const boom: EnvPack<Stub> = {
@@ -151,7 +153,13 @@ describe("env-pack assembly core (P0)", () => {
     // Regression: dep-name dups must collapse to one C3 node, else the [deps] list has a duplicate
     // with no valid 'good head' and C3 wrongly throws. (Bug surfaced during the lint refactor.)
     const a = pack("a");
-    const dupDep: EnvPack<Stub> = { name: "b", deps: [a, a], apply: (env) => env.appliedOrder.push("b") };
+    const dupDep: EnvPack<Stub> = {
+      name: "b",
+      deps: [a, a],
+      apply: (env) => {
+        env.appliedOrder.push("b");
+      },
+    };
     const r = await assembleEnv(stub(), [dupDep]);
     expect(r.order).toEqual(["b", "a"]);
     expect(r.env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
