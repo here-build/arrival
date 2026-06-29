@@ -20,7 +20,7 @@ import { fromJs } from "./boxing.js";
 import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
 import { structuralEqual, type SeenMap } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
-import { is_false, is_native, is_nil, is_pair, is_plain_object } from "../value-guards.js";
+import { is_false, is_native, is_nil, is_pair as is_pair_raw, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AHalfBaked } from "./AHalfBaked.js";
@@ -37,6 +37,13 @@ import { type APairLike } from "../types.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
+
+// The shared `is_pair` narrows only to `APair<unknown, unknown>`, leaving every
+// guarded `.car`/`.cdr` typed `unknown`. In a live cons cell both slots hold a
+// `SchemeValue` (that IS the union of everything the interpreter can hold), so a
+// file-local shadow refines the guard to the slot truth — same runtime predicate
+// (`o instanceof APair`), zero call-site churn. (Same fix evaluator.ts applies.)
+const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
   [CYCLES]?: { car?: string | APair; cdr?: string | APair };
