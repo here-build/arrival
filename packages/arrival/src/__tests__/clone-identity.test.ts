@@ -52,10 +52,13 @@ const cloneNil = (origin = 42) => nil.withProvenance(new Set<number>([origin]));
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
     // Migrated packs expose `symbol.native` defs (`{ kind: "native", impl }`); the legacy
-    // `{ value }` form is the fallback for any entry not yet on the symbol.* API.
-    Object.entries(
-      cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
-    ).map(([k, v]) => [k, v.impl ?? v.value]),
+    // `{ value }` form is the fallback for any entry not yet on the symbol.* API. A symbol
+    // whose def is neither (a rosetta `{ fn }`, a `door`, etc.) carries no bare op fn — it
+    // is not an "op" in the sense these tests exercise, so it is filtered out, leaving a
+    // record of genuine callables (no `undefined` slips into the result type).
+    Object.entries(cap.spec.symbols as Record<string, { impl?: unknown; value?: unknown }>)
+      .map(([k, v]) => [k, v.impl ?? v.value] as const)
+      .filter((entry): entry is [string, (...a: any[]) => any] => typeof entry[1] === "function"),
   );
 const LIST_OPS = opsOf(listsCap);
 
