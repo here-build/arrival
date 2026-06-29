@@ -672,11 +672,14 @@ export function transform_syntax(options: SchemeValue = {}) {
         if (is_pair(bindings[name])) {
           const { car, cdr } = bindings[name];
           if (nested) {
-            const { car: caar, cdr: cadr } = car as SchemeValue;
-            if (!is_nil(cadr)) {
-              next(name, new APair(CONSTANT_CTX, cadr, nil));
+            if (is_pair(car)) {
+              const { car: caar, cdr: cadr } = car;
+              if (!is_nil(cadr)) {
+                next(name, new APair(CONSTANT_CTX, cadr, nil));
+              }
+              return caar;
             }
-            return caar;
+            return car;
           }
           if (!is_nil(cdr)) {
             next(name, cdr);
@@ -710,8 +713,13 @@ export function transform_syntax(options: SchemeValue = {}) {
               }
               if ((is_array && rest_expr.length > 0) || (!is_nil(rest_expr) && !is_array)) {
                 const rest = transform_ellipsis_expr(rest_expr, bindings, state, next);
-                if (is_array) {
-                  return (car as SchemeValue).concat(rest);
+                // Dispatch on the runtime shape of `car`, not the template's
+                // shape (`is_array` is about `expr`). A JS-array `car` concats
+                // with Array.prototype.concat; a pair `car` concats with
+                // concatPair. Discriminating on `car` keeps a pair from ever
+                // reaching `.concat` (which APair does not have → throw).
+                if (Array.isArray(car)) {
+                  return car.concat(rest);
                 } else if (is_pair(car)) {
                   return concatPair(CONSTANT_CTX, car, rest);
                 } else {
@@ -797,9 +805,12 @@ export function transform_syntax(options: SchemeValue = {}) {
         second = exprVal.cdr.car;
         rest_second = exprVal.cdr.cdr;
       }
-      // escape ellispsis from R7RS e.g. (... ...)
-      if (!disabled && is_pair(first) && ASymbol.is(first.car, ellipsis_symbol)) {
-        return new APair(CONSTANT_CTX, (first.cdr as SchemeValue).car, traverse(exprVal.cdr));
+      // escape ellispsis from R7RS e.g. (... ...): the escape form is
+      // `(... <template>)`, so `first.cdr` must itself be a pair carrying
+      // <template> in its car. Guard it before reading `.car` — a bare
+      // `(...)` would leave `first.cdr` as nil, whose `.car` is undefined.
+      if (!disabled && is_pair(first) && ASymbol.is(first.car, ellipsis_symbol) && is_pair(first.cdr)) {
+        return new APair(CONSTANT_CTX, first.cdr.car, traverse(exprVal.cdr));
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
