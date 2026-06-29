@@ -56,11 +56,14 @@ describe("Escaped Symbol Resolution", () => {
       const result = await execOne(
         `(@ test-obj :|24|)`,
         inferenceEnv.inherit("escaped-test", {
-          "test-obj": {
+          // Box the host object through the membrane — `inherit` stores its record
+          // values raw, so the binding must already be a Scheme value (it is read
+          // back through `@`/keyword-access as an AJSObject).
+          "test-obj": jsToScheme(CONSTANT_CTX, {
             "24": "value-24",
             "42": "value-42",
             normal: "normal-value",
-          },
+          }),
         }),
       );
       expect(schemeToJs(result, {})).toBe("value-24");
@@ -93,7 +96,7 @@ describe("Escaped Symbol Resolution", () => {
         "24": "numeric key value",
       };
 
-      inferenceEnv.set("test-obj", testObj);
+      inferenceEnv.set("test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       // :24 should be treated as keyword and converted to "24" by @ function
       const result1 = await execOne(`(@ test-obj :24)`);
@@ -110,7 +113,7 @@ describe("Escaped Symbol Resolution", () => {
         foo_bar: "underscored",
       };
 
-      inferenceEnv.set("test-obj", testObj);
+      inferenceEnv.set("test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       const result = await execOne(`
         (list
@@ -185,7 +188,7 @@ describe("Escaped Symbol Resolution", () => {
         },
       };
 
-      inferenceEnv.set("components", component);
+      inferenceEnv.set("components", jsToScheme(CONSTANT_CTX, component));
 
       const result = await execOne(`
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
@@ -206,7 +209,7 @@ describe("Escaped Symbol Resolution", () => {
         ],
       };
 
-      inferenceEnv.set("data", data);
+      inferenceEnv.set("data", jsToScheme(CONSTANT_CTX, data));
 
       const result = await execOne(`
         (begin
