@@ -61,6 +61,8 @@
 
 import { describe, expect, it } from "vitest";
 import { exec as execSource } from "../eval/generator-exec";
+import { freshEnv } from "./_fresh-env";
+import { nil } from "../values/primitives/ANil.js";
 
 /**
  * Execute Scheme source through the full default-env trampoline and return the
@@ -237,17 +239,24 @@ describe("tail-call optimization (R7RS §3.5)", () => {
     }, T);
 
     it("non-last expr in begin — trailing expr after the recursive call still runs, in order (§3.5: only begin's last is tail)", async () => {
-      // The recursive (f (- n 1)) is NOT the last begin expr, so it is non-tail;
-      // the trailing (set! c (+ c 1)) must run after each recursion returns. A
-      // wrongly-collapsed call would replace the frame mid-sequence and lose the
-      // 5000 trailing increments.
-      const r = await run(
-        `(define c 0)
-         (define (f n) (if (= n 0) 0 (begin (f (- n 1)) (set! c (+ c 1)))))
-         (f 5000)
-         c`,
+      // The recursive (f (- n 1)) is the begin's FIRST (non-last ⇒ non-tail) expr;
+      // the trailing (tick) must run after each recursion returns. A wrongly-collapsed
+      // call would replace the frame mid-sequence and lose the 5000 trailing ticks.
+      // Observation is a JS-side counter (the same NO-scheme-set! technique arrival's
+      // own chibi-harness uses for its bookkeeping) — pure dataflow from the guest:
+      // it just calls a bound function; the count lives in JS, not a mutated binding.
+      let ticks = 0;
+      const env = await freshEnv();
+      env.set("tick", () => {
+        ticks += 1;
+        return nil;
+      });
+      await execSource(
+        `(define (f n) (if (= n 0) 0 (begin (f (- n 1)) (tick))))
+         (f 5000)`,
+        { env },
       );
-      expect(String(r)).toBe("5000");
+      expect(ticks).toBe(5000);
     }, T);
 
     it("non-last begin expr — sequencing intact, trailing expr is the returned value (§3.5)", async () => {

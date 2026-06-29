@@ -12,6 +12,9 @@ import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { APair } from "../values/primitives/APair.js";
+import { AString } from "../values/primitives/AString.js";
+import { nil } from "../values/primitives/ANil.js";
+import { freshEnv } from "./_fresh-env";
 
 describe("generator-exec", () => {
   describe("exec() - basic operations", () => {
@@ -257,29 +260,43 @@ describe("generator-exec", () => {
       expect(typeof result).toBe("string");
     });
 
+    // Clause-execution/ordering is observed with a JS-side log (the same NO-scheme-set!
+    // technique arrival's chibi-harness uses): each clause calls a bound `log` function,
+    // so the order lives in JS, not in a mutated guest binding (set! is doored under the
+    // purity invariant). Pure dataflow from the guest — it just calls a function.
     it("should run finally clause after success", async () => {
-      const results = await exec(`
-        (define x 0)
-        (try
-          (set! x 1)
-          (finally (set! x (+ x 10))))
-        x
-      `);
-      // x should be 11 (1 + 10 from finally)
-      expect((results[2] as AExact).num).toBe(11n);
+      const log: string[] = [];
+      const env = await freshEnv();
+      env.set("log", (tag: AString) => {
+        log.push(String(tag.valueOf()));
+        return nil;
+      });
+      await exec(
+        `(try
+           (log "body")
+           (finally (log "finally")))`,
+        { env },
+      );
+      // body runs, then finally runs after it
+      expect(log).toEqual(["body", "finally"]);
     });
 
     it("should run finally clause after catch", async () => {
-      const results = await exec(`
-        (define x 0)
-        (try
-          (begin (set! x 1) (raise "error"))
-          (catch (e) (set! x (+ x 100)))
-          (finally (set! x (+ x 10))))
-        x
-      `);
-      // x should be 111 (1 + 100 from catch + 10 from finally)
-      expect((results[2] as AExact).num).toBe(111n);
+      const log: string[] = [];
+      const env = await freshEnv();
+      env.set("log", (tag: AString) => {
+        log.push(String(tag.valueOf()));
+        return nil;
+      });
+      await exec(
+        `(try
+           (begin (log "body") (raise "error"))
+           (catch (e) (log "catch"))
+           (finally (log "finally")))`,
+        { env },
+      );
+      // body runs and raises, catch handles it, finally runs last — in order
+      expect(log).toEqual(["body", "catch", "finally"]);
     });
   });
 
