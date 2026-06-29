@@ -42,6 +42,7 @@ import { ABool } from "../values/primitives/ABool.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
+import type { SchemeValue } from "../values/types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEME-IDENTITY PRIMITIVES — for `arrival.symbol` (native).
@@ -49,6 +50,19 @@ import { AInexact } from "../values/primitives/AInexact.js";
 // (`Pair`, `SchemeString`, …), exactly like today's `{ value: fn }` ops. No codec,
 // no decode — `z.output<typeof pair> = Pair`.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** The representation-BLIND scheme-value identity primitive: any value the interpreter
+ *  can hold, with `z.output<typeof value> = SchemeValue` (the honest union of every
+ *  AValue subclass + the live orphans + a JS procedure). This is the typed replacement
+ *  for `z.unknown()` at a native scheme-value slot — a slot that takes/returns "any scheme
+ *  value" by design (the searched object, a copied/returned cell, a polymorphic accessor's
+ *  operand). `z.custom<SchemeValue>()` with no refinement accepts anything at runtime
+ *  (byte-identical to `z.unknown()` — and native ops run NO validation anyway), but its
+ *  STATIC output is `SchemeValue`, so a native impl declaring `(x: SchemeValue)` matches the
+ *  decoded-arg type instead of fighting `unknown`. Use `z.unknown()` only where the slot is
+ *  GENUINELY representation-blind beyond scheme (a predicate that classifies host JS too —
+ *  `eq?`, `bytevector?`), where the impl really wants `unknown`. */
+export const value = z.custom<SchemeValue>();
 export const pair = z.instanceof(APair);
 export const symbol = z.instanceof(ASymbol);
 // A vector by PROTOCOL, not class: anything answering `arrival/tagless-final/vector?` — a boxed

@@ -235,7 +235,7 @@ export default new EnvCapability("scheme/lists", {
     ),
     // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
     "for-each": symbol.native`for-each: apply fn to corresponding elements of one or more lists, for side effects`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
+      { input: z.array(z.value), output: [z.value] },
       // Relocated from stdlib.ts global_env (husk dissolution): runs mapImpl for its
       // side effects and discards the result list. The legacy `.call(this)` was a
       // babel-weakBind workaround — this pack is tsc/ES2022, so a direct call is
@@ -265,7 +265,7 @@ export default new EnvCapability("scheme/lists", {
     // from stdlib.ts global_env (husk dissolution): a constructor, so — like cons
     // and make-list — it unions the inputs' provenance over the produced head only.
     list: symbol.native`list: a proper list of its arguments`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
+      { input: z.array(z.value), output: [z.value] },
       (...args: SchemeValue[]): SchemeValue => {
         const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
         return withInputProvenance(args, result);
@@ -286,12 +286,12 @@ export default new EnvCapability("scheme/lists", {
     // R7RS 6.4 — length is the speculation-marked impl declared at module scope above
     // (the inline arrow form cannot carry the [SPECULATE] symbol the dispatch choke reads).
     "length": symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       lengthImpl,
     ),
 
     apply: symbol.native`apply: call fn with args, the last of which is a list spliced in`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
+      { input: z.array(z.value), output: [z.value] },
       // Relocated VERBATIM from stdlib.ts global_env (husk dissolution). The legacy
       // body took `this: Environment` but never read it — apply's env-as-this was
       // already erased, so the native bind (this === undefined) is behavior-identical.
@@ -493,7 +493,7 @@ export default new EnvCapability("scheme/lists", {
     // exactly as the old `doc({ value })` form did.
     // ---------------------------------------------------------------------
     clone: symbol.native`clone: a deep copy of the list spine (LIPS extension)`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (list: SchemeValue): SchemeValue => {
         typecheck("clone", list, "pair");
         return list.clone();
@@ -501,7 +501,7 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
+      { input: z.array(z.value), output: [z.value] },
       (...items: SchemeValue[]): SchemeValue => {
         // `append` builds a FRESH list (pure). It clones every segment first, then
         // splices the CLONES together via Pair.append. Because every cell touched
@@ -530,7 +530,7 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     reverse: symbol.native`reverse: the list (or array) reversed (LIPS-polymorphic)`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (arg: SchemeValue): SchemeValue => {
         typecheck("reverse", arg, ["array", "pair", "nil"]);
         if (is_nil(arg)) {
@@ -548,7 +548,7 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
-      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      { input: [z.value, z.value], output: [z.value] },
       (index: SchemeValue, obj: SchemeValue): SchemeValue => {
         typecheck("nth", index, "number");
         typecheck("nth", obj, ["array", "pair"]);
@@ -572,7 +572,7 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     flatten: symbol.native`flatten: the list with nested lists spliced in (LIPS extension)`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (list: SchemeValue): SchemeValue => {
         typecheck("flatten", list, "pair");
         return list.flatten();
@@ -580,17 +580,17 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "array->list": symbol.native`array->list: a proper list built from a JS array`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (array: SchemeValue): SchemeValue => arrayToList(array),
     ),
 
     "tree->array": symbol.native`tree->array: a nested JS array built from a tree of pairs`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (list: SchemeValue): SchemeValue => treeToArray(list),
     ),
 
     "list->array": symbol.native`list->array: a JS array built from a proper list`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       (list: SchemeValue): SchemeValue => listToArray(list),
     ),
   },

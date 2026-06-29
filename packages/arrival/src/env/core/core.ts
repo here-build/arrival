@@ -93,7 +93,7 @@ export default new EnvCapability("scheme/core", {
     when: symbol.keyword`when: evaluate the body when the test passes`,
     unless: symbol.keyword`unless: evaluate the body when the test fails`,
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
+      { input: z.array(z.value), output: [z.value] },
       gensym,
     ),
 

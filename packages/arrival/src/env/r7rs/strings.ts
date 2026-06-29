@@ -401,16 +401,16 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     concat: symbol.native`concat: the concatenation of all string arguments (LIPS extension)`(
-      { input: z.array(z.unknown()), output: [z.string] },
-      (...args: SchemeValue[]): SchemeValue => {
+      { input: z.array(z.value), output: [z.string] },
+      (...args: SchemeValue[]): string => {
         for (const [i, arg] of args.entries()) typecheck("concat", arg, "string", i + 1);
         return args.join("");
       },
     ),
 
     join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
-      { input: [z.schemeString, z.unknown()], output: [z.union([z.string, z.schemeString])] },
-      (separator: SchemeValue, list: SchemeValue): SchemeValue => {
+      { input: [z.schemeString, z.value], output: [z.union([z.string, z.schemeString])] },
+      (separator: SchemeValue, list: SchemeValue): string | AString => {
         typecheck("join", separator, "string");
         typecheck("join", list, ["pair", "nil"]);
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
@@ -422,7 +422,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     split: symbol.native`split: a list of the string's pieces around the separator (LIPS extension)`(
-      { input: [z.unknown(), z.schemeString], output: [z.unknown()] },
+      { input: [z.value, z.schemeString], output: [z.value] },
       (separator: SchemeValue, string: SchemeValue): SchemeValue => {
         typecheck("split", separator, ["regex", "string"]);
         typecheck("split", string, "string");
