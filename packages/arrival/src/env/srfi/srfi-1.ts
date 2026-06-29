@@ -287,7 +287,7 @@ export default new EnvCapability("scheme/srfi-1", {
         return (m as (...a: unknown[]) => unknown).call(seq, pred, runCtx);
       },
     ),
-    reduce: symbol.tagless.reduce`left fold in scheme convention fn(element, acc); ridentity if empty`,
+    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
     find: symbol.native`find: first list element matching the predicate, else nil`(
       { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
       findImpl,

@@ -46,7 +46,6 @@ import * as z from "./scheme-zod.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
-import type { TaglessOp } from "../values/tagless-final.js";
 import { Macro } from "../eval/Macro.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,7 +281,6 @@ interface TaglessInput {
   kind: "tagless";
   name: string;
   doc?: string;
-  contract: Contract<VectorSpec, VectorSpec>;
 }
 interface SequenceInput {
   kind: "sequence";
@@ -542,7 +540,10 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
     return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);
   };
   (run as { __withCtx?: boolean }).__withCtx = true;
-  return { kind: "tagless", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
+  // No contract: the placeholder harvest surface is fixed (like `bakeTaglessGuard`). The real
+  // per-op types live on the receiver's `arrival/tagless-final/<name>` member (AValue), the
+  // source of truth — `tagless-final.ts` derives the op-name type from there.
+  return { kind: "tagless", name: input.name, doc: input.doc, in: z.array(z.unknown()), out: z.unknown(), run };
 }
 
 /** Bake a tagless GUARD dispatcher. Same receiver-resolution as bakeTagless (last scheme arg),
@@ -635,42 +636,17 @@ function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl: impl as AnyFn }, opts);
 }
 
-/** A tagless binder — the tagged-template fn `symbol.tagless.<op>` exposes. It takes only the
- *  human description; the op NAME comes from the key, so a symbol can only ever be bound for an op
- *  the algebra DECLARES. */
-type TaglessBinder = (tpl: TemplateStringsArray, ...sub: unknown[]) => TaglessSymbolDef;
-
-/** Tagless dispatch is pure (NO impl, NO validation) — the contract is only the placeholder harvest
- *  surface; the real per-op types live as optional `arrival/tagless-final/<op>` members on `AValue`
- *  (primitives/AValue.ts), the source of truth (tagless-final.ts derives the op-name type from it). */
-const TAGLESS_HARVEST_CONTRACT: Contract<VectorSpec, VectorSpec> = {
-  input: z.array(z.unknown()),
-  output: [z.unknown()],
-};
-const taglessBinder =
-  (name: TaglessOp): TaglessBinder =>
-  (tpl, ...sub) => {
-    let doc = "";
-    for (let i = 0; i < tpl.length; i++) {
-      doc += tpl[i];
-      if (i < sub.length) doc += String(sub[i]);
-    }
-    return bakeTagless({ kind: "tagless", name, doc: doc.trim(), contract: TAGLESS_HARVEST_CONTRACT });
-  };
-
-/** Tagless host ops — KEYED by the declared algebra (tagless-final.ts): `symbol.tagless.map\`…\``
- *  binds a symbol that dispatches to the receiver's own `arrival/tagless-final/map`. The
- *  `Record<TaglessOp, …>` forces a binder for EVERY declared op — add an op to the algebra and this
- *  object won't compile until it gets one (no cast, drift-proof). */
-const tagless: Record<TaglessOp, TaglessBinder> = {
-  equals: taglessBinder("equals"),
-  lte: taglessBinder("lte"),
-  length: taglessBinder("length"),
-  map: taglessBinder("map"),
-  filter: taglessBinder("filter"),
-  reduce: taglessBinder("reduce"),
-  sort: taglessBinder("sort"),
-};
+/** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
+ *  own `arrival/tagless-final/name` term method (the LAST scheme arg is the receiver; a missing
+ *  method THROWS — the hard op, dual of the graceful `taglessGuard`). The name is supplied at the
+ *  call site directly — NO central Record. Tagless dispatch is pure (NO JS impl): the real per-op
+ *  types/impls live as `arrival/tagless-final/<name>` members on the terms (primitives/AValue.ts),
+ *  the source of truth — `tagless-final.ts` derives the op-name type from there. The name is free
+ *  here (mirrors `taglessGuard`); the algebra, not this binder, is the completeness gate. */
+function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSymbolDef {
+  const { name, doc } = parseNameDoc(tpl, sub);
+  return bakeTagless({ kind: "tagless", name, doc });
+}
 
 /** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. */
