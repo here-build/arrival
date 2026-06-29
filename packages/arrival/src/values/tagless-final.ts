@@ -28,13 +28,10 @@ type StripTaglessPrefix<K> = K extends `${TaglessPrefix}${infer Op}` ? Op : neve
  *  optional method on AValue (+ `TAGLESS_OP_NAMES` below) and it appears here automatically. */
 export type TaglessOp = StripTaglessPrefix<keyof AValue>;
 
-/** Runtime list of the declared ops (keyof is type-only). The two type-level proofs below pin it
- *  in lock-step with AValue's tagless members — adding an op on one side without the other (or a
- *  typo'd name here) won't compile. */
+/** Runtime list of the declared ops (keyof is type-only). Pinned in lock-step with AValue's
+ *  tagless members by the bidirectional proof in `__tests__/tagless-final.test-d.ts` — adding an
+ *  op on one side without the other (or a typo'd name here) reds the type-test. */
 export const TAGLESS_OP_NAMES = ["equals", "lte", "length", "map", "filter", "reduce", "sort"] as const;
-type _ListCoversAlgebra = TaglessOp extends (typeof TAGLESS_OP_NAMES)[number] ? true : ["MISSING op in TAGLESS_OP_NAMES"];
-type _AlgebraCoversList = (typeof TAGLESS_OP_NAMES)[number] extends TaglessOp ? true : ["STALE op in TAGLESS_OP_NAMES"];
-export type _TaglessSync = [_ListCoversAlgebra, _AlgebraCoversList];
 
 /** Build a prefixed tagless method-name from an op name, type-safe:
  *  `tf("map")` → `"arrival/tagless-final/map"`. The one place callers form the key. */
