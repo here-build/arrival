@@ -275,7 +275,7 @@ export class AHalfBaked extends AValue {
     return this === other;
   }
 
-  withProvenance(p: Provenance): AValue {
+  withProvenance(p: Provenance): AHalfBaked {
     return new AHalfBaked(this.ctx, this.domain, this.slots, this.records, this.source, p);
   }
 }

@@ -32,8 +32,10 @@ export class Keyword extends AValue {
     return `#<keyword:${this.name}>`;
   }
 
-  // A constant syntactic marker carries no provenance lineage — stamping is a no-op.
-  withProvenance(): AValue {
+  // A constant syntactic marker carries no provenance lineage — stamping is a no-op, so it
+  // returns the receiver unchanged. Typed `this` (honest + cast-free: `return this` IS the
+  // canonical `this`-typed expression), never the abstract `AValue` the base no longer declares.
+  withProvenance(): this {
     return this;
   }
 

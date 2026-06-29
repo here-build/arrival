@@ -132,17 +132,20 @@ export class AJSArray extends AValue {
   }
 
   // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
+  // Return types MIRROR AVector's concrete returns (a borrowed array materializes to a
+  // vector, so the algebra IS the vector's): honest + precise, never the abstract `AValue`
+  // (which is not assignable to the `SchemeValue` union the base now declares).
   ["arrival/tagless-final/map"](
     fn: (x: unknown) => unknown | Promise<unknown>,
     runCtx?: RunContext,
-  ): AValue | Promise<AValue> {
+  ): AVector | Promise<AVector> {
     return this.vec()["arrival/tagless-final/map"](fn, runCtx);
   }
 
   ["arrival/tagless-final/filter"](
     pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
-  ): AValue | Promise<AValue> {
+  ): Promise<AVector> {
     return this.vec()["arrival/tagless-final/filter"](pred, runCtx);
   }
 
@@ -154,7 +157,7 @@ export class AJSArray extends AValue {
     return this.vec()["arrival/tagless-final/reduce"](fn, initial, runCtx);
   }
 
-  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AValue {
+  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AVector {
     return this.vec()["arrival/tagless-final/sort"](comparator, runCtx);
   }
 

@@ -21,6 +21,7 @@
 
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
+import type { SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
@@ -70,8 +71,16 @@ export abstract class AValue {
   /** Plain-JS representation for serialization (cache / log / HTTP). */
   abstract toJs(): unknown;
 
-  /** AValues are immutable — provenance updates mint a new instance. */
-  abstract withProvenance(p: ReadonlySet<number>): AValue;
+  /** AValues are immutable — provenance updates mint a new instance. Returns the
+   *  `SchemeValue` union (each concrete subclass overrides with its OWN narrower type, which
+   *  is covariantly assignable to the union — so a statically-concrete receiver still gets the
+   *  precise subtype; only an abstract-`AValue`-typed receiver falls back to the union here).
+   *  NOT the abstract base `AValue`: abstract `AValue` is NOT assignable to `SchemeValue`, so an
+   *  `AValue` return reds every `value.withProvenance(p)` that must flow back into a `SchemeValue`
+   *  slot (e.g. a re-stamp of an `instanceof AValue`-narrowed arm result). NOT `this`: a clone
+   *  mints `new ConcreteClass(...)`, which TS will not accept as `this` without a cast (`this`
+   *  could be a narrower subtype), and a cast would re-mute the very signal this migration surfaces. */
+  abstract withProvenance(p: ReadonlySet<number>): SchemeValue;
 
   /**
    * Fantasy Land Setoid — structural equality, ON THE TERM. Making this abstract
@@ -138,11 +147,11 @@ export interface AValue {
   /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
   /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */
-  ["arrival/tagless-final/map"]?(fn: (x: unknown) => unknown | Promise<unknown>, runCtx?: RunContext): AValue | Promise<AValue>;
+  ["arrival/tagless-final/map"]?(fn: (x: unknown) => unknown | Promise<unknown>, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Filterable — keep elements matching a pred (or RegExp). */
-  ["arrival/tagless-final/filter"]?(pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp, runCtx?: RunContext): AValue | Promise<AValue>;
+  ["arrival/tagless-final/filter"]?(pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. */
   ["arrival/tagless-final/reduce"]?<Acc>(fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>, initial: Acc, runCtx?: RunContext): Acc | Promise<Acc>;
   /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
-  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AValue;
+  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue;
 }
