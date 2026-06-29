@@ -58,6 +58,14 @@ export class Syntax {
   __defmacro__: boolean;
   __env__: unknown;
   /**
+   * The original macro FORM this transformer was built from (the
+   * `(syntax-rules …)` operands), stashed by the syntax-rules constructor in
+   * env/macros.ts for inspection/printing. A Scheme form, not a value the
+   * transformer ever returns — held on the transformer object, outside the
+   * value channel.
+   */
+  __code__?: SchemeValue;
+  /**
    * The def-time Resolver (P3 3a.4) — wraps `__env__`, the hygiene identity root.
    * Captured here (and closed over by the transformer in env/macros.ts) so 3b can
    * swap the hygiene ALGORITHM without re-plumbing this seam. In 3a it is a glass
