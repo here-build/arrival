@@ -41,6 +41,8 @@ import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
 import type { APair } from "./primitives/APair.js";
+import type { Macro } from "../eval/Macro.js";
+import type { Syntax } from "../eval/Syntax.js";
 import type { SchemeValue } from "./types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
 
@@ -87,13 +89,13 @@ export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSki
  *  reaching up into the evaluator): a Macro / syntax Parameter exposes `__name__`
  *  + an `invoke`/`transform`. We probe structurally via the same `is_macro` the
  *  evaluator uses, imported lazily to dodge the value↔eval cycle. */
-function isMacroValue(v: unknown): boolean {
+function isMacroValue(v: unknown): v is Macro | Syntax {
   return _isMacro !== null && _isMacro(v);
 }
-let _isMacro: ((o: unknown) => boolean) | null = null;
+let _isMacro: ((o: unknown) => o is Macro | Syntax) | null = null;
 /** Wired once by generator-exec (which already lives above eval/guards in the
  *  import DAG) so this module needs no static edge into the evaluator. */
-export function installMacroGuard(fn: (o: unknown) => boolean): void {
+export function installMacroGuard(fn: (o: unknown) => o is Macro | Syntax): void {
   _isMacro = fn;
 }
 

@@ -14,14 +14,18 @@
 // `signatureOf` is T (O3) — not modelled here yet; it returns null (graceful per the contract).
 
 import type { Environment } from "../Environment.js";
+import type { Macro } from "../eval/Macro.js";
+import type { Syntax } from "../eval/Syntax.js";
 import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
 /** The structural shape of "this bound value can be a form head". A JS function covers every arrival
  *  primitive and every user lambda; the Macro/Syntax classes cover special-form heads (`if`, `let`,
  *  `quote`, syntax-rules macros). We match those by walking the prototype chain's constructor names
- *  so we needn't import the class (and so a subclass like Syntax-extends-Macro is caught too). */
-function isCallableValue(value: unknown): boolean {
+ *  so we needn't import the class at RUNTIME (and so a subclass like Syntax-extends-Macro is caught
+ *  too) — the Macro/Syntax imports are `import type`, erased at compile, so the oracle keeps no
+ *  runtime edge into the evaluator. */
+function isCallableValue(value: unknown): value is Function | Macro | Syntax {
   if (value === undefined || value === null) return false;
   if (typeof value === "function") return true;
   // Walk the constructor-name chain for Macro / Syntax (special-form heads).

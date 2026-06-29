@@ -124,7 +124,8 @@ interface CtxWithInvocation {
   currentInvocation?: InvocationLike;
 }
 
-const isLipsPair = (x: any): boolean => x && typeof x === "object" && "car" in x && "cdr" in x;
+const isLipsPair = (x: unknown): x is { car: unknown; cdr: unknown } =>
+  x != null && typeof x === "object" && "car" in x && "cdr" in x;
 
 export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   // Handle null/undefined
@@ -377,7 +378,9 @@ export function jsToScheme(
  * `env` probe), so the `resolver` probe suffices; the others are kept as a
  * belt-and-braces OR for any future ctx shape.
  */
-const looksLikeEvalContext = (x: unknown): boolean =>
+const looksLikeEvalContext = (
+  x: unknown,
+): x is Record<string, unknown> & Partial<CtxWithInvocation> =>
   x != null &&
   typeof x === "object" &&
   !(x instanceof AValue) &&

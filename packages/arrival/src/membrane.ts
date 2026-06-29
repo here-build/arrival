@@ -101,6 +101,33 @@ export { InteropAccessError as SandboxViolationError } from "./errors.js";
 export const TO_JS = Symbol.for("scheme.toJS");
 
 /**
+ * The closed union `isSchemeValue` PROVES — every wrapper class, native scheme type, special-form
+ * head (Macro/Syntax/Keyword), env, promise, and a branded scheme lambda (a `Function` carrying the
+ * LAMBDA brand). `SchemeValue` itself is `any`, so this concrete union is what lets the guard narrow
+ * an `unknown` boundary input honestly instead of widening it back to `any`.
+ */
+export type BoxedSchemeValue =
+  | ANil
+  | AJSObject
+  | AJSArray
+  | APair
+  | ASymbol
+  | AString
+  | ABytevector
+  | AVector
+  | ACharacter
+  | AExact
+  | AInexact
+  | ABool
+  | SchemePromise
+  | Macro
+  | Syntax
+  | LambdaContext
+  | SchemeEnvironment
+  | Keyword
+  | Function;
+
+/**
  * Check if a value is already a Scheme value (prevents double-wrapping).
  *
  * `instanceof Nil` not `=== nil`: after the AValue refactor, `nil.withProvenance(p)`
@@ -110,7 +137,7 @@ export const TO_JS = Symbol.for("scheme.toJS");
  * subclass either. This was the bug flagged in the Tier-1 cross-package audit
  * and the canonical example for guards.ts:is_nil (fix in 5f7f9e46a).
  */
-export function isSchemeValue(value: unknown): boolean {
+export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
     case value instanceof ANil:
       return true;
@@ -157,7 +184,7 @@ export function isSchemeValue(value: unknown): boolean {
  * Check if a value is a bytevector-like binary data type.
  * These pass through without wrapping and work with polymorphic bytevector ops.
  */
-export function isBytevectorLike(value: unknown): boolean {
+export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuffer | DataView {
   switch (true) {
     case value instanceof Uint8Array:
     case value instanceof ArrayBuffer:

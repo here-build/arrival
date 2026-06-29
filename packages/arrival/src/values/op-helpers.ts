@@ -98,6 +98,22 @@ export function toIndex(v: unknown): number {
   return typeof v === "number" ? v : Number((v as AExact).valueOf());
 }
 
+/** Structural guard for the vector PROTOCOL — a boxed AVector or a borrowed AJSArray, both
+ *  answering `arrival/tagless-final/vector?` and exposing their element payload via `__vector__`
+ *  (a literal also carries `frozen`). Honest duck-narrowing — no `instanceof AVector` reach-around,
+ *  no operand cast in `asVector`'s body. */
+interface VectorLike {
+  "arrival/tagless-final/vector?"(): boolean;
+  __vector__: SchemeValue[];
+  frozen?: boolean;
+}
+function isVectorLike(obj: unknown): obj is VectorLike {
+  return (
+    obj != null &&
+    typeof (obj as Record<string, unknown>)["arrival/tagless-final/vector?"] === "function"
+  );
+}
+
 /**
  * Resolve a vector argument to its raw element array (read/mutate view).
  *
@@ -110,9 +126,9 @@ export function toIndex(v: unknown): number {
  * regardless). A raw JS array is still tolerated (transition; S10 will remove it). Throws otherwise.
  */
 export function asVector(obj: unknown, fnName: string, forMutation = false): SchemeValue[] {
-  if (typeof (obj as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function") {
-    TypeError.invariant(!forMutation || !(obj as { frozen?: boolean }).frozen, `${fnName}: cannot mutate an immutable vector literal`);
-    return (obj as { __vector__: SchemeValue[] }).__vector__;
+  if (isVectorLike(obj)) {
+    TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable vector literal`);
+    return obj.__vector__;
   }
   if (Array.isArray(obj)) return obj; // transitional raw-array tolerance (S10 will remove this)
   throw new TypeError(`${fnName}: expected vector`);
@@ -289,7 +305,11 @@ export function coerceNumeric(value: unknown): ANumeric {
   }
 }
 
-/** Check if a value can be converted to SchemeNumeric (without throwing) */
+/** Check if a value can be converted to SchemeNumeric (without throwing). NOT a closed type guard:
+ *  the `valueOf` arm admits any object exposing a number/bigint `valueOf()` (the same legacy-boxed
+ *  coercion `coerceNumeric` accepts), so a true verdict does NOT prove `ANumeric | number | bigint`.
+ *  Narrowing it to that union would be a lie; callers that need the boxed value go through
+ *  `coerceNumeric` (which takes `unknown`), so no operand cast hangs off this predicate. */
 export function isSchemeNumber(value: unknown): boolean {
   switch (true) {
     case value instanceof AExact:

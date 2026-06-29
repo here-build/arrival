@@ -209,7 +209,7 @@ export function isSchemeNumeric(value: unknown): value is ANumeric {
 /**
  * Check if a value is a numeric type (SchemeNumeric or JS primitive)
  */
-export function isNumeric(value: unknown): boolean {
+export function isNumeric(value: unknown): value is ANumeric | number | bigint {
   return isSchemeNumeric(value) || typeof value === "number" || typeof value === "bigint";
 }
 
@@ -223,7 +223,7 @@ export function isNativeNumber(n: unknown): n is number | bigint {
 }
 
 /** Check if value is a float (inexact real) */
-export function isFloat(n: unknown): boolean {
+export function isFloat(n: unknown): n is AInexact | number {
   if (n instanceof AInexact) {
     return true;
   }
@@ -243,7 +243,7 @@ export function isComplex(_n: unknown): boolean {
 }
 
 /** Check if value is a rational (exact with denom != 1) */
-export function isRational(n: unknown): boolean {
+export function isRational(n: unknown): n is AExact | { num: unknown; denom: unknown } {
   if (n instanceof AExact) {
     return n.denom !== 1n;
   }
@@ -255,7 +255,7 @@ export function isRational(n: unknown): boolean {
 }
 
 /** Check if value is an integer */
-export function isInteger(n: unknown): boolean {
+export function isInteger(n: unknown): n is AExact | bigint | number {
   if (n instanceof AExact) {
     return n.denom === 1n;
   }
@@ -272,7 +272,7 @@ export function isInteger(n: unknown): boolean {
 }
 
 /** Check if value is a big integer (exact integer) */
-export function isBigInteger(n: unknown): boolean {
+export function isBigInteger(n: unknown): n is AExact | bigint {
   if (n instanceof AExact) {
     return n.denom === 1n;
   }
