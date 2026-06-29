@@ -27,14 +27,6 @@ export function type(name) {
 export function get(name) {
   return __list__[name];
 }
-function append(name, value, type) {
-  __list__[name] = {
-    seq: name,
-    symbol: value,
-    type,
-  };
-}
-export const __list__ = {};
 
 const defined_specials = [
   ["'", new ASymbol(CONSTANT_CTX, "quote"), LITERAL],
@@ -47,6 +39,11 @@ const defined_specials = [
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));
 
-for (const [seq, symbol, type] of defined_specials) {
-  append(seq, symbol, type);
-}
+// The registry is a pure, frozen data literal — built by mapping each [seq, symbol, type]
+// to the same `{ seq, symbol, type }` entry the old `append()` produced. This is pure
+// module-eval (no mutation, no side-effect), evaluated before any reader by construction;
+// it replaces the former `__list__ = {}` + imperative `for (… of defined_specials) append(…)`
+// loop. `names()` / `get()` / `type()` read it unchanged.
+export const __list__ = Object.freeze(
+  Object.fromEntries(defined_specials.map(([seq, symbol, type]) => [seq, { seq, symbol, type }])),
+);
