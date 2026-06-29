@@ -7,27 +7,33 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { printType, signatureOf } from "../schema-to-ts.js";
 
-describe("printType — native identity primitives (z.instanceof → class name)", () => {
-  it("prints z.pair as its class name", () => {
-    expect(printType(z.pair)).toBe("APair");
+describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
+  it("prints z.pair as Cons<unknown> (so z.pair | z.nil = List<unknown>)", () => {
+    expect(printType(z.pair)).toBe("Cons<unknown>");
   });
-  it("prints z.schemeString as its class name", () => {
-    expect(printType(z.schemeString)).toBe("AString");
+  it("prints z.schemeString as string", () => {
+    expect(printType(z.schemeString)).toBe("string");
   });
-  it("prints each numeric-tower identity term", () => {
-    expect(printType(z.schemeExact)).toBe("AExact");
-    expect(printType(z.schemeInexact)).toBe("AInexact");
+  it("prints the numeric tower as exact=bigint / inexact=number", () => {
+    expect(printType(z.schemeExact)).toBe("bigint");
+    expect(printType(z.schemeInexact)).toBe("number");
   });
-  it("prints the rest of the scheme-identity primitives", () => {
-    expect(printType(z.symbol)).toBe("ASymbol");
-    expect(printType(z.svector)).toBe("AVector");
-    expect(printType(z.sbytevector)).toBe("ABytevector");
-    expect(printType(z.nil)).toBe("ANil");
-    expect(printType(z.schemeBool)).toBe("ABool");
-    expect(printType(z.schemeChar)).toBe("ACharacter");
+  it("prints the rest of the scheme-identity primitives as their plain-TS image", () => {
+    expect(printType(z.symbol)).toBe("string");
+    expect(printType(z.svector)).toBe("readonly unknown[]");
+    expect(printType(z.sbytevector)).toBe("Uint8Array");
+    expect(printType(z.nil)).toBe("null");
+    expect(printType(z.schemeBool)).toBe("boolean");
+    expect(printType(z.schemeChar)).toBe("string");
   });
-  it("prints a union of identity primitives as 'A | B' (override fires per-member)", () => {
-    expect(printType(z.schemeNumber)).toBe("AExact | AInexact");
+  it("prints the representation-blind value primitive as unknown", () => {
+    expect(printType(z.value)).toBe("unknown");
+  });
+  it("prints a union of primitives as 'A | B' (override fires per-member)", () => {
+    expect(printType(z.schemeNumber)).toBe("bigint | number");
+  });
+  it("prints the list union z.pair | z.nil as Cons<unknown> | null = List<unknown>", () => {
+    expect(printType(z.union([z.pair, z.nil]))).toBe("Cons<unknown> | null");
   });
 });
 
@@ -54,13 +60,13 @@ describe("printType — compounds", () => {
     expect(printType(z.array(z.number))).toBe("number[]");
   });
   it("prints z.array of an identity primitive as 'T[]'", () => {
-    expect(printType(z.array(z.pair))).toBe("APair[]");
+    expect(printType(z.array(z.pair))).toBe("Cons<unknown>[]");
   });
   it("prints a tuple as '[A, B]'", () => {
     expect(printType(z.tuple([z.string, z.number]))).toBe("[string, number]");
   });
   it("prints a tuple mixing codec + identity members", () => {
-    expect(printType(z.tuple([z.pair, z.schemeString]))).toBe("[APair, AString]");
+    expect(printType(z.tuple([z.pair, z.schemeString]))).toBe("[Cons<unknown>, string]");
   });
   it("prints a union as 'A | B'", () => {
     expect(printType(z.union([z.string, z.number]))).toBe("string | number");
@@ -73,7 +79,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair, z.pair], output: [z.pair] },
       (a) => a,
     );
-    expect(signatureOf(def)).toBe("(a: APair, b: APair) => APair");
+    expect(signatureOf(def)).toBe("(a: Cons<unknown>, b: Cons<unknown>) => Cons<unknown>");
   });
 
   it("composes a rosetta def: decoded JS args, async (Promise) return", () => {
@@ -97,7 +103,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair], output: [z.pair, z.pair] },
       (p) => [p, p] as [typeof p, typeof p],
     );
-    expect(signatureOf(def)).toBe("(a: APair) => [APair, APair]");
+    expect(signatureOf(def)).toBe("(a: Cons<unknown>) => [Cons<unknown>, Cons<unknown>]");
   });
 
   it("composes a variadic (z.array) input as a rest parameter", () => {

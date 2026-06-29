@@ -46,44 +46,62 @@ import * as z from "../common/scheme-zod.js";
 import type { SymbolDef } from "../common/symbol.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The scheme-primitive STATIC fallback (defensive).
+// Scheme primitive → its PLAIN-TS IMAGE  (Scheme is a TS subset; see carriers.ts).
 //
-// bag.Class.name is the primary source (auto-derivable, reachable for every
-// primitive). This map is the belt-and-braces fallback keyed by SCHEMA IDENTITY:
-// if a future zod ever drops _zod.bag.Class, the printer still names the term.
-// Each entry is exactly one z.instanceof export from scheme-zod.
+// The harvest re-presents each scheme primitive as the TS type the lens narrows against:
+// the membrane makes a boundary value its plain JS type, and list/pair/vector project to
+// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair → Cons<unknown>` so the natural
+// list zod `z.union([z.pair, z.nil])` composes to `Cons<unknown> | null` = `List<unknown>`
+// with no special-case. An unmapped custom/instanceof scheme primitive degrades to `unknown`
+// (robust default — never throw; the total-harvest contract, e.g. a future zod primitive).
 // ─────────────────────────────────────────────────────────────────────────────
-const SCHEME_PRIMITIVE_FALLBACK: ReadonlyMap<unknown, string> = new Map<unknown, string>([
-  [z.pair, "APair"],
-  [z.symbol, "ASymbol"],
-  [z.svector, "AVector"],
-  [z.sbytevector, "ABytevector"],
-  [z.nil, "ANil"],
-  [z.schemeString, "AString"],
-  [z.schemeBool, "ABool"],
-  [z.schemeChar, "ACharacter"],
-  [z.schemeExact, "AExact"],
-  [z.schemeInexact, "AInexact"],
+type Ts = typeof import("typescript");
+type NodeBuilder = (ts: Ts) => import("typescript").TypeNode;
+
+const unknownNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.UnknownKeyword);
+const stringNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword);
+const numberNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
+const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword);
+const bigintNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword);
+const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
+const consUnknownNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Cons", [unknownNode(ts)]);
+const readonlyUnknownArrayNode: NodeBuilder = (ts) =>
+  ts.factory.createTypeOperatorNode(ts.SyntaxKind.ReadonlyKeyword, ts.factory.createArrayTypeNode(unknownNode(ts)));
+const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
+
+// Keyed by INSTANCEOF CLASS NAME (`_zod.bag.Class.name`) — robust across the fresh
+// `z.instanceof` member instances a union like `z.schemeNumber` clones.
+const IMAGE_BY_CLASS: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
+  ["APair", consUnknownNode], // `z.pair | z.nil` → `Cons<unknown> | null` = List<unknown>
+  ["AString", stringNode],
+  ["AExact", bigintNode],
+  ["AInexact", numberNode],
+  ["ASymbol", stringNode],
+  ["ABytevector", uint8ArrayNode],
+  ["ANil", nullNode],
+  ["ABool", booleanNode],
+  ["ACharacter", stringNode],
+  ["AVector", readonlyUnknownArrayNode],
+]);
+// Keyed by SCHEMA IDENTITY — the custom-without-Class primitives (`z.custom`, no `bag.Class`).
+const IMAGE_BY_IDENTITY: ReadonlyMap<unknown, NodeBuilder> = new Map<unknown, NodeBuilder>([
+  [z.svector, readonlyUnknownArrayNode],
+  [z.value, unknownNode],
 ]);
 
-/** Read the JS class name a custom/instanceof schema was built from. Primary:
- *  `_zod.bag.Class.name` (zod stashes the class there). Fallback: the static
- *  identity map. Returns undefined for a non-instanceof schema. */
-function instanceofClassName(schema: unknown): string | undefined {
-  const s = schema as { _zod?: { def?: { type?: string }; bag?: { Class?: { name?: unknown } } } };
-  if (s?._zod?.def?.type !== "custom") return undefined;
-  const fromBag = s._zod.bag?.Class?.name;
-  if (typeof fromBag === "string" && fromBag.length > 0) return fromBag;
-  return SCHEME_PRIMITIVE_FALLBACK.get(schema);
-}
-
-/** The zod-to-ts override: any instanceof/custom schema → a bare type reference to
- *  its class name. Fires per-node during the walk, so a union of instanceof members
- *  prints as "A | B". Returns undefined (defer to zod-to-ts) for everything else. */
+/** The zod-to-ts override: a scheme primitive (instanceof/custom) → its plain-TS image, by class
+ *  name then schema identity; an UNMAPPED scheme primitive → `unknown` (robust default — never
+ *  throw; total-harvest). Non-custom schemas (object/array/union/literal/…) defer to zod-to-ts
+ *  (return undefined). Fires per-node, so `z.pair | z.nil` prints as "Cons<unknown> | null". */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
-  const name = instanceofClassName(schema);
-  if (name === undefined) return undefined;
-  return typescript.factory.createTypeReferenceNode(typescript.factory.createIdentifier(name), undefined);
+  const s = schema as { _zod?: { def?: { type?: string }; bag?: { Class?: { name?: unknown } } } };
+  if (s?._zod?.def?.type !== "custom") return undefined; // not a scheme primitive → zod-to-ts handles it
+  const className = s._zod.bag?.Class?.name;
+  const byClass = typeof className === "string" ? IMAGE_BY_CLASS.get(className) : undefined;
+  if (byClass !== undefined) return byClass(typescript);
+  const byIdentity = IMAGE_BY_IDENTITY.get(schema);
+  if (byIdentity !== undefined) return byIdentity(typescript);
+  return unknownNode(typescript); // robust default — never throw
 };
 
 /** Collapse zod-to-ts's pretty-printed (multi-line, indented) output to a single
@@ -207,8 +225,14 @@ export function signatureOf(def: SymbolDef): string {
   // transformer (syntax, not a value-level callable). None carries an in/out codec surface, so all
   // print as `never` until the type-lens grows a dedicated syntax representation.
   if (def.kind === "door" || def.kind === "keyword" || def.kind === "macro") return "never";
-  const params = paramList(def.in);
-  const ret = returnType(def.out);
-  const wrapped = def.kind === "rosetta" ? `Promise<${ret}>` : ret;
-  return `${params} => ${wrapped}`;
+  try {
+    const params = paramList(def.in);
+    const ret = returnType(def.out);
+    const wrapped = def.kind === "rosetta" ? `Promise<${ret}>` : ret;
+    return `${params} => ${wrapped}`;
+  } catch {
+    // TOTAL HARVEST: an unrepresentable schema must NEVER collapse typed mode — degrade this
+    // ONE symbol to a loose arrow (it just isn't narrowed; its slots stay Σ-only), never throw.
+    return "(...args: unknown[]) => unknown";
+  }
 }
