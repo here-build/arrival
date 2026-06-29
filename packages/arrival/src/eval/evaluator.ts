@@ -2627,8 +2627,9 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
     };
 
     // Invoke the macro with unevaluated code.
-    // is_macro narrowed fn to Macro | Syntax, so we can access invoke directly
-    // (both carry it); the is_syntax branch below splits them.
+    // is_macro narrowed fn to Macro | Syntax; the is_syntax branch below splits them
+    // by their HONEST return shapes: Syntax.expand -> { expr, scope } (a form +
+    // hygiene scope), Macro.invoke -> SchemeValue (a form). No flag toggles the shape.
     //
     // THE MATCHER OFF-BY-ONE FIX (`is_syntax(fn) ? code : rest`), landed 2026-06-11.
     // syntax-rules patterns carry a keyword slot as their FIRST element, so the
@@ -2669,7 +2670,7 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       // evaluate it in THIS flat trampoline in TAIL position. No nested run, no onResolve
       // fixup, so a syntax-rules macro in tail position has the SAME O(1) TCO as a special
       // form. (A transformer is Exp->Exp; it must never evaluate inside itself.)
-      const expanded = fn.invoke(code, evalArgs, true) as { expr: SchemeValue; scope: Environment };
+      const expanded = fn.expand(code, evalArgs);
       // The expansion evaluates in its hygiene scope (`expanded.scope`) but resolves
       // builtins through the run's capability base — thread evalArgs.resolver's
       // capabilities, NOT a glass re-derivation from the (post-cut: null-rooted) merge

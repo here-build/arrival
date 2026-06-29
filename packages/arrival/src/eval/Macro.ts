@@ -2,6 +2,7 @@ import { CLASS } from "../well-known-symbols.js";
 import { trim_lines } from "../utils/trim-lines.js";
 import { typecheck } from "../utils/typecheck.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
+import type { SchemeValue } from "../values/types.js";
 import type { Resolver } from "./Resolver.js";
 
 export interface MacroInvokeContext {
@@ -46,10 +47,12 @@ export class Macro {
     this.__fn__ = fn;
   }
 
+  // A define-macro fexpr is Exp→Exp: it returns a replacement FORM (a
+  // `SchemeValue`), never an expansion record — that is `Syntax.expand`'s job.
   // The fexpr body runs with `env` as `this`; `macro_expand` is threaded in so a
   // macro can recursively expand its own output.
-  invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: unknown): unknown {
-    return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__);
+  invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: boolean = false): SchemeValue {
+    return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__) as SchemeValue;
   }
 
   toString(): string {

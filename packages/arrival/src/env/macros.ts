@@ -65,7 +65,7 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(
     }
     const syntax = new Syntax(function (this: Environment, code: SchemeValue, { macro_expand, resolver: useSiteResolver }: SchemeValue) {
       // The use-site Resolver — the EVALUATOR's resolver at expansion time (threaded
-      // through Syntax.invoke), carrying the run's capability base. NOT a fresh glass
+      // through Syntax.expand), carrying the run's capability base. NOT a fresh glass
       // `new Resolver(this)`, which under the 3b.3 cut would re-derive a wrong globalRoot
       // from the null-rooted `this`. Its env IS `this` (the expansion env), so the
       // merge-frame plumbing below is unchanged; under glass byte-identical. (D1)

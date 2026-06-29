@@ -1,9 +1,22 @@
 import { CLASS } from "../well-known-symbols.js";
+import type { Environment } from "../Environment.js";
+import type { SchemeValue } from "../values/types.js";
 import type { MacroInvokeContext } from "./Macro.js";
 import type { Resolver } from "./Resolver.js";
 
 // Type for syntax object (can be Syntax or Function)
 type SyntaxLike = Syntax | Function;
+
+/**
+ * The result of expanding a `Syntax`: the transcribed FORM plus the hygiene
+ * scope it must evaluate in. A transformer is Exp→Exp — it returns a form, never
+ * a value. This shape is determined by the CLASS (always, for `Syntax`), not by
+ * any flag: `env/macros.ts` returns it unconditionally (`void macro_expand`).
+ */
+export interface MacroExpansion {
+  expr: SchemeValue;
+  scope: Environment;
+}
 
 /**
  * A `syntax-rules` transformer. NOT a `Macro`: a `Macro` is a runtime value (a
@@ -61,13 +74,19 @@ export class Syntax {
     this.__defmacro__ = true;
   }
 
-  invoke(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext, macro_expand: unknown): unknown {
+  // A `syntax-rules` transformer is Exp→Exp: it ALWAYS returns the transcribed
+  // form + its hygiene scope (`MacroExpansion`), never a value, and that shape
+  // does not depend on a flag — so this is `expand`, not a boolean-switched
+  // `invoke`. (The old `macro_expand` arg toggled nothing for `Syntax`; the
+  // transformer in env/macros.ts `void`s it. Both call sites passed `true`, so
+  // it is pinned `true` here, keeping the fexpr args byte-identical.)
+  expand(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
     const args = {
       error,
       env,
       use_dynamic,
       dynamic_env: this.__env__,
-      macro_expand,
+      macro_expand: true,
       runCtx,
       // Use-site resolver (from the dispatch) + the def-time one captured on this
       // Syntax. Both staged for 3b; the 3a transformer closes over its own def
@@ -75,7 +94,7 @@ export class Syntax {
       resolver,
       defResolver: this.__resolver__,
     };
-    return this.__fn__.call(env, code, args, this.__name__ || "syntax");
+    return this.__fn__.call(env, code, args, this.__name__ || "syntax") as MacroExpansion;
   }
 
   toString(): string {

@@ -112,9 +112,13 @@ export function macro_expand(): SchemeFunction {
       ];
     }
 
-    function is_macro(name, value) {
+    // A type guard (not just a boolean): narrows `value` to `Macro | Syntax` so the
+    // expander dispatches on the class — Syntax.expand vs Macro.invoke — with no cast.
+    function is_macro(name: string | symbol, value: SchemeValue): value is Macro | Syntax {
       // Syntax no longer extends Macro — list both (a Syntax carries __defmacro__ too).
-      return (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ && !bindings.includes(name);
+      // `=== true` because Macro.__defmacro__ is optional (boolean | undefined); a type
+      // predicate must yield a strict boolean.
+      return (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ === true && !bindings.includes(name);
     }
 
     async function expand_let_binding(node: SchemeValue, n?: number): Promise<SchemeValue> {
@@ -148,10 +152,12 @@ export function macro_expand(): SchemeFunction {
           }
           return new APair(CONSTANT_CTX, node.car, new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)));
         } else if (is_macro(name, value)) {
-          const code = value instanceof Syntax ? node : nodeCdr;
-          let result = await (value as SchemeValue).invoke(code, { ...args, env }, true);
+          // Split by the transformer's HONEST return shape (no flag toggles it):
+          // Syntax.expand -> { expr, scope }, re-expanded in its hygiene scope;
+          // Macro.invoke -> a replacement FORM, re-expanded in the use env.
+          let result: SchemeValue;
           if (value instanceof Syntax) {
-            const { expr, scope } = result;
+            const { expr, scope } = await value.expand(node, { ...args, env });
             if (is_pair(expr)) {
               if ((n !== -1 && n <= 1) || n < recur_guard) {
                 return expr;
@@ -162,6 +168,8 @@ export function macro_expand(): SchemeFunction {
               return traverse(expr, n, scope);
             }
             result = expr;
+          } else {
+            result = await value.invoke(nodeCdr, { ...args, env }, true);
           }
           if (result instanceof ASymbol) {
             return quote(result);
