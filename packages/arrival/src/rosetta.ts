@@ -100,9 +100,11 @@ export interface RosettaFunction {
  * Structural shape of EvalContext.currentInvocation that this module relies
  * on. The full Invocation type lives in arrival-chain/trace.ts (and the
  * evaluator treats it as `unknown`); we duck-type here to avoid pulling in
- * a circular dependency.
+ * a circular dependency. Exported so the symbol API (common/symbol.ts) reuses
+ * the SAME duck-typed invocation shape for its provenance mint instead of
+ * re-spelling the cast.
  */
-interface InvocationLike {
+export interface InvocationLike {
   id: number;
   isProvenancePoint?: boolean;
   /**
@@ -120,7 +122,7 @@ interface InvocationLike {
   setMetadata?(meta: unknown): void;
 }
 
-interface CtxWithInvocation {
+export interface CtxWithInvocation {
   currentInvocation?: InvocationLike;
 }
 
@@ -378,7 +380,7 @@ export function jsToScheme(
  * `env` probe), so the `resolver` probe suffices; the others are kept as a
  * belt-and-braces OR for any future ctx shape.
  */
-const looksLikeEvalContext = (
+export const looksLikeEvalContext = (
   x: unknown,
 ): x is Record<string, unknown> & Partial<CtxWithInvocation> =>
   x != null &&

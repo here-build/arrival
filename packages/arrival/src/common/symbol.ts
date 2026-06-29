@@ -44,7 +44,7 @@
 
 import * as z from "./scheme-zod.js";
 import { AValue, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme, looksLikeEvalContext, type CtxWithInvocation } from "../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { Macro } from "../eval/Macro.js";
 
@@ -235,17 +235,39 @@ function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { nam
   return { name: raw.slice(0, colon).trim(), doc: raw.slice(colon + 1).trim() };
 }
 
-/** Normalize a VectorSpec to ONE zod schema describing the whole args/return vector:
+/** A zod schema describing a whole args/return VECTOR — its codec sides are array-shaped
+ *  (a tuple `[a, b]` IS a `readonly unknown[]`; an array-ish schema's `T[]` is too). Typing
+ *  the normalized schema this way lets `z.decode`/`z.encode` infer `readonly unknown[]` at the
+ *  call site instead of `unknown` (a `ZodTypeAny`'s output) — so the wrapper reads the decoded
+ *  args / encoded values-vector as an array WITHOUT an `as unknown[]` on every result. */
+type VectorSchema = z.ZodType<readonly unknown[], readonly unknown[]>;
+
+/** Normalize a VectorSpec to ONE `VectorSchema` describing the whole args/return vector:
  *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses
  *  the decoded-args array against (and what the harvest will print from). */
-function normalizeVector(spec: VectorSpec): z.ZodTypeAny {
-  if (Array.isArray(spec)) {
-    // z.tuple wants a non-empty tuple type; an empty contract ([]) is the 0-arg case.
-    return spec.length === 0
-      ? (z.tuple([]) as unknown as z.ZodTypeAny)
-      : (z.tuple(spec as [z.ZodTypeAny, ...z.ZodTypeAny[]]) as unknown as z.ZodTypeAny);
+function normalizeVector(spec: VectorSpec): VectorSchema {
+  // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
+  // OUT of the union on the false branch — so probe the tuple member with a guard that carries
+  // the `readonly` element type, leaving the single-schema member on the `else`.
+  if (isSchemaTuple(spec)) {
+    // z.tuple wants a non-empty tuple of items; an empty contract ([]) is the 0-arg case.
+    // The `[head, ...tail]` annotation is the only narrowing needed (a non-empty array can't be
+    // proven from `.length`); a tuple's `out Output` IS array-shaped, so it assigns to
+    // `VectorSchema` with no bridge.
+    return spec.length === 0 ? z.tuple([]) : z.tuple(spec as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
-  return spec as z.ZodTypeAny;
+  // A single array-ish schema (z.array variadic / a tuple / a union of those) — its codec sides
+  // are array-shaped by the VectorSpec contract, but a bare `ZodTypeAny`'s static output is
+  // `unknown`, so assert the vector shape ONCE here (the inner twin of the harvest-surface
+  // contract) rather than on each decode/encode result.
+  return spec as VectorSchema;
+}
+
+/** Is a VectorSpec the bare-tuple member (a positional list of schemas) rather than a single
+ *  array-ish schema? A `readonly`-aware `Array.isArray` so the `else` branch narrows to the
+ *  single-schema member (the stock guard's `arg is any[]` leaves `readonly` arrays in the union). */
+function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
+  return Array.isArray(spec);
 }
 
 /** Did the author give a 1-tuple output? Then the impl returns a SINGLE value (we wrap
@@ -298,13 +320,26 @@ export interface BakeRuntimeOpts {
   validate?: boolean;
 }
 
-/** The structural slice of EvalContext the invocation-`this` reads. Duck-typed (the full
+/** The structural slice of EvalContext the symbol wrappers read. Duck-typed (the full
  *  `EvalContext` lives in eval/evaluator.ts; pulling it here would be a layering cycle —
- *  same reason rosetta.ts duck-types `InvocationLike`). All optional: a direct-JS call
- *  (tests, host) hands NO ctx, so every getter must tolerate `undefined`. */
-interface InvocationCtxSlice {
+ *  same reason rosetta.ts duck-types it). Reuses rosetta's `CtxWithInvocation` for the
+ *  `currentInvocation` shape (so the provenance mint reads the SAME `InvocationLike`, not a
+ *  re-spelled cast) and adds the two extra fields symbol.ts threads: the per-run `runCtx` (for
+ *  heap/strict) and the budget `signal` (the lazy invocation-`this`'s `aborted`/`abortSignal`).
+ *  All optional: a direct-JS call (tests, host) hands NO ctx, so every reader tolerates absence. */
+interface EvalContextSlice extends CtxWithInvocation {
+  runCtx?: RunContext;
   signal?: AbortSignal;
-  currentInvocation?: unknown;
+}
+
+/** Narrow the evaluator-appended trailing arg to the EvalContext slice the symbol wrappers read,
+ *  or `undefined` for a direct-JS call. Composes rosetta's `looksLikeEvalContext` (the shared
+ *  duck-type probe — `resolver`/`currentInvocation`/`tap`/`signal`) and widens its narrow
+ *  `Partial<CtxWithInvocation>` result to the `runCtx`-bearing slice this module threads. One
+ *  typed seam replacing the scattered `ctx as { runCtx?: … }` / `ctx as { currentInvocation?… }`
+ *  casts; the `ctx` it inspects is `unknown` until proven a context. */
+function asEvalContext(ctx: unknown): EvalContextSlice | undefined {
+  return looksLikeEvalContext(ctx) ? ctx : undefined;
 }
 
 /** The per-call **invocation context** — the lazy `this` a rosetta impl is called with.
@@ -336,7 +371,7 @@ export interface InvocationContext {
 /** Build the lazy invocation-`this` over a captured ctx (or `undefined` for a direct-JS call).
  *  The getters close over `ctx` and read it on access — nothing is computed until a verb that
  *  declared a `function` impl actually touches `this.*`. */
-function makeInvocationContext(ctx: InvocationCtxSlice | undefined): InvocationContext {
+function makeInvocationContext(ctx: EvalContextSlice | undefined): InvocationContext {
   return {
     get aborted(): boolean {
       return ctx?.signal?.aborted ?? false;
@@ -396,20 +431,8 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     // plain object carrying resolver/currentInvocation/tap/signal that reaches here (probe
     // keys on `resolver` — the single always-present field since ejection P5 removed `env`).
     // Same probe as createRosettaWrapper's looksLikeEvalContext.
-    let ctx: unknown = undefined;
-    let schemeArgs = args;
-    const last = args[args.length - 1];
-    if (
-      args.length > 0 &&
-      last != null &&
-      typeof last === "object" &&
-      !(last instanceof AValue) &&
-      !Array.isArray(last) &&
-      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
-    ) {
-      ctx = last;
-      schemeArgs = args.slice(0, -1);
-    }
+    const ctx = asEvalContext(args[args.length - 1]);
+    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
 
     // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
     // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
@@ -429,7 +452,7 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
     //    when a contract gains refinements a trusted caller may skip.
     void defaultValidate;
-    const decodedArgs = z.decode(inSchema, schemeArgs) as readonly unknown[];
+    const decodedArgs = z.decode(inSchema, schemeArgs);
 
     // 2. RUN the impl with a per-call **invocation `this`** (the lazy invocation-context). The
     //    impl still receives ONLY the decoded scheme args positionally — ctx is NOT a param. A
@@ -437,7 +460,7 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     //    (`this.aborted` / `this.abortSignal` / `this.invocation`); a pure verb is an arrow that
     //    ignores `this`, so `impl.call(invCtx, …)` is byte-identical to `impl(…)`. The getters
     //    read the captured `ctx` ON ACCESS, so a pure verb materializes nothing. async is implicit.
-    const invCtx = makeInvocationContext(ctx as InvocationCtxSlice | undefined);
+    const invCtx = makeInvocationContext(ctx);
     const result = await input.impl.call(invCtx, ...decodedArgs);
 
     // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A SOURCE rosetta (default)
@@ -446,8 +469,7 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     //    `pure: true`). With no invocation in ctx (direct-JS) a source also falls back to the
     //    input union. ★The forward-vs-mint choice is provenance-load-bearing: a pure rosetta
     //    that minted would fabricate a fresh origin (the seal-laundering class of bug).
-    const inv = (ctx as { currentInvocation?: { id?: number; isProvenancePoint?: boolean; markProvenancePoint?(): void } } | undefined)
-      ?.currentInvocation;
+    const inv = ctx?.currentInvocation;
     let resultProvenance = inputProvenance;
     if (!pure && inv && typeof inv.id === "number") {
       if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
@@ -467,12 +489,14 @@ function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSy
     //    for data) build a Pair-chain, which is the WRONG shape for a values-vector.
     if (singleOut) {
       // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
-      const encoded = (z.encode(outSchema, [result]) as readonly unknown[])[0];
-      return jsToScheme((ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
+      const encoded = z.encode(outSchema, [result])[0];
+      return jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
     }
-    // multiple-values / array-ish output: the impl returned the values-vector already.
-    const encoded = z.encode(outSchema, result) as unknown[];
-    return encoded.map((v) => jsToScheme((ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance));
+    // multiple-values / array-ish output: the impl returned the values-vector already (an array
+    // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
+    // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
+    const encoded = z.encode(outSchema, result as readonly unknown[]);
+    return encoded.map((v) => jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance));
   };
   // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
   // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS
@@ -503,6 +527,21 @@ function describeReceiver(v: unknown): string {
   return Array.isArray(v) ? "array" : typeof v;
 }
 
+/** A receiver's tagless-final term method: scheme args (the leading operands + the run's
+ *  RunContext) in, the op result out. Always called with the receiver as `this`. */
+type TermMethod = (this: unknown, ...args: unknown[]) => unknown;
+
+/** Resolve a named term method off a (possibly non-object) receiver, typed — the dispatch
+ *  primitive both `bakeTagless` (throws when absent) and `bakeTaglessGuard` (#f when absent)
+ *  stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the receiver is a
+ *  real object, returns the callable iff it IS one, else `undefined` — so the call site decides
+ *  the missing-method policy without a raw `receiver as Record` / `fn as callable` cast. */
+function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {
+  if (receiver == null || (typeof receiver !== "object" && typeof receiver !== "function")) return undefined;
+  const fn = (receiver as Record<string, unknown>)[method];
+  return typeof fn === "function" ? (fn as TermMethod) : undefined;
+}
+
 /** Bake a tagless dispatcher. No impl — `run` forwards to the operand's own
  *  `arrival/tagless-final/<name>` term method. Receiver = the LAST scheme arg (scheme places
  *  the collection last: `(map fn xs)`, `(car xs)`); the leading args + the run's RunContext
@@ -511,33 +550,21 @@ function describeReceiver(v: unknown): string {
 function bakeTagless(input: TaglessInput): TaglessSymbolDef {
   const method = `arrival/tagless-final/${input.name}`;
   const run = async (...args: unknown[]): Promise<unknown> => {
-    // Strip the evaluator-appended ctx iff the trailing arg looks like one (same probe as
-    // bakeRosetta). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
-    let ctx: unknown = undefined;
-    let schemeArgs = args;
-    const last = args[args.length - 1];
-    if (
-      args.length > 0 &&
-      last != null &&
-      typeof last === "object" &&
-      !(last instanceof AValue) &&
-      !Array.isArray(last) &&
-      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
-    ) {
-      ctx = last;
-      schemeArgs = args.slice(0, -1);
-    }
-    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    // Strip the evaluator-appended ctx iff the trailing arg looks like one (the shared
+    // `asEvalContext` probe). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
+    const ctx = asEvalContext(args[args.length - 1]);
+    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
+    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
-    const fn = (receiver as Record<string, unknown> | null | undefined)?.[method];
-    if (typeof fn !== "function") {
+    const fn = resolveMethod(receiver, method);
+    if (fn === undefined) {
       throw new TypeError(
         `${input.name}: the ${describeReceiver(receiver)} primitive does not support \`${input.name}\` ` +
           `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
       );
     }
-    return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);
+    return await fn.call(receiver, ...leading, runCtx);
   };
   (run as { __withCtx?: boolean }).__withCtx = true;
   // No contract: the placeholder harvest surface is fixed (like `bakeTaglessGuard`). The real
@@ -553,26 +580,14 @@ function bakeTagless(input: TaglessInput): TaglessSymbolDef {
 function bakeTaglessGuard(input: { name: string; doc?: string }): TaglessGuardSymbolDef {
   const method = `arrival/tagless-final/${input.name}`;
   const run = async (...args: unknown[]): Promise<unknown> => {
-    let ctx: unknown = undefined;
-    let schemeArgs = args;
-    const last = args[args.length - 1];
-    if (
-      args.length > 0 &&
-      last != null &&
-      typeof last === "object" &&
-      !(last instanceof AValue) &&
-      !Array.isArray(last) &&
-      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
-    ) {
-      ctx = last;
-      schemeArgs = args.slice(0, -1);
-    }
-    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    const ctx = asEvalContext(args[args.length - 1]);
+    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
+    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
-    const fn = (receiver as Record<string, unknown> | null | undefined)?.[method];
-    if (typeof fn !== "function") return false; // graceful #f — the receiver simply can't answer
-    return await (fn as (...a: unknown[]) => unknown).call(receiver, ...leading, runCtx);
+    const fn = resolveMethod(receiver, method);
+    if (fn === undefined) return false; // graceful #f — the receiver simply can't answer
+    return await fn.call(receiver, ...leading, runCtx);
   };
   (run as { __withCtx?: boolean }).__withCtx = true;
   return { kind: "tagless-guard", name: input.name, doc: input.doc, in: z.array(z.unknown()), out: z.unknown(), run };
@@ -584,21 +599,9 @@ function bakeTaglessGuard(input: { name: string; doc?: string }): TaglessGuardSy
 function bakeSequence(input: SequenceInput): SequenceSymbolDef {
   const impl = input.impl;
   const run = async (...args: unknown[]): Promise<unknown> => {
-    let ctx: unknown = undefined;
-    let schemeArgs = args;
-    const last = args[args.length - 1];
-    if (
-      args.length > 0 &&
-      last != null &&
-      typeof last === "object" &&
-      !(last instanceof AValue) &&
-      !Array.isArray(last) &&
-      ("resolver" in last || "currentInvocation" in last || "tap" in last || "signal" in last)
-    ) {
-      ctx = last;
-      schemeArgs = args.slice(0, -1);
-    }
-    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+    const ctx = asEvalContext(args[args.length - 1]);
+    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
+    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
     return await impl(schemeArgs, runCtx);
   };
   (run as { __withCtx?: boolean }).__withCtx = true;
@@ -623,7 +626,7 @@ function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   return <const I extends VectorSpec, const O extends VectorSpec>(
     contract: Contract<I, O>,
     impl: Impl<I, O>,
-  ): NativeSymbolDef => bakeNative({ kind: "native", name, doc, contract, impl: impl as AnyFn });
+  ): NativeSymbolDef => bakeNative({ kind: "native", name, doc, contract, impl });
 }
 
 /** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step. */
@@ -633,7 +636,7 @@ function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O>,
     impl: Impl<I, O>,
     opts?: BakeRuntimeOpts,
-  ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl: impl as AnyFn }, opts);
+  ): RosettaSymbolDef => bakeRosetta({ kind: "rosetta", name, doc, contract, impl }, opts);
 }
 
 /** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
