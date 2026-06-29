@@ -59,10 +59,11 @@ export interface UnevalContainer {
  *  selector's step records, and the slice can read the whole lineage). `source` is the original
  *  program text (the v1 program render). */
 export function buildUneval(opts: {
-  // The post-run scope. Typed via the public `EvalContext` ('s `.env`) — the internal
-  // scope-node `parse`/`execExpr` accept — so this never names the package-internal
-  // `Environment` class while still being the concrete env a selector re-evaluates in.
-  env: EvalContext["env"];
+  // The post-run scope a selector re-evaluates in. Typed via the public `EvalContext` — never the
+  // package-internal `Environment` class. P5 dropped `EvalContext.env`; the frame env is reached
+  // through the resolver (`NonNullable<EvalContext["resolver"]>["env"]` names the same internal
+  // scope-node `parse`/`execExpr` accept, purely through the root-exported `EvalContext`).
+  env: NonNullable<EvalContext["resolver"]>["env"];
   result: unknown;
   trace: EvalTrace;
   source: string;
