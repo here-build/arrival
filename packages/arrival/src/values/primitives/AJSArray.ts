@@ -136,7 +136,7 @@ export class AJSArray extends AValue {
   // vector, so the algebra IS the vector's): honest + precise, never the abstract `AValue`
   // (which is not assignable to the `SchemeValue` union the base now declares).
   ["arrival/tagless-final/map"](
-    fn: (x: unknown) => unknown | Promise<unknown>,
+    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
   ): AVector | Promise<AVector> {
     return this.vec()["arrival/tagless-final/map"](fn, runCtx);
