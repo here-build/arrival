@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
-const FL = "arrival/tagless-final/equals";
-const LTE = "arrival/tagless-final/lte";
+const FL = "arrival/tagless-final/equals" as const;
+const LTE = "arrival/tagless-final/lte" as const;
 
 // Small domain + edge cases: "" (empty), astral unicode, ASCII collisions.
 const arb = fc
@@ -29,26 +29,26 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
   it("value equality over distinct heap instances", () => {
     const a = new AString(CONSTANT_CTX, "🦄");
     const b = new AString(CONSTANT_CTX, "🦄");
-    expect((a as never)[FL](b)).toBe(true);
+    expect(a[FL](b)).toBe(true);
   });
 
   it("equals is representation-blind (plain string matches by content); lte stays type-strict", () => {
     const a = new AString(CONSTANT_CTX, "a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
     // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
-    expect((a as never)[FL]("a")).toBe(true); // plain string, equal content → equal (was false)
-    expect((a as never)[FL]("b")).toBe(false); // plain string, different content → not equal
-    expect((a as never)[FL](42)).toBe(false); // non-string → not equal (total)
+    expect(a[FL]("a")).toBe(true); // plain string, equal content → equal (was false)
+    expect(a[FL]("b")).toBe(false); // plain string, different content → not equal
+    expect(a[FL](42)).toBe(false); // non-string → not equal (total)
     // lte (Ord) is unchanged: still type-strict. Cross-representation ORDERING is a separate question
     // from the equality bug; left strict deliberately.
-    expect((a as never)[LTE]("a")).toBe(false);
-    expect((a as never)[LTE](null)).toBe(false);
+    expect(a[LTE]("a")).toBe(false);
+    expect(a[LTE](null)).toBe(false);
   });
 
   it("lexicographic lte agrees with JS string order", () => {
     const a = new AString(CONSTANT_CTX, "ab");
     const b = new AString(CONSTANT_CTX, "b");
-    expect((a as never)[LTE](b)).toBe(true);
-    expect((b as never)[LTE](a)).toBe(false);
+    expect(a[LTE](b)).toBe(true);
+    expect(b[LTE](a)).toBe(false);
   });
 });
