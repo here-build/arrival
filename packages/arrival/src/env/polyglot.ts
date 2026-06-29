@@ -51,23 +51,6 @@ import type { ResolverSpec } from "../common/scheme-env.js";
 // keyword-accessor resolver below only calls `readMember` inside its `resolve` body
 // (never at eval).
 
-// The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol
-// resolves to its `@`-alias pluck (the SAME polyglot read as `@`/`readMember`, but
-// applied to nothing it returns itself, so it composes — `(compose :a :b)`). The pluck
-// carries `KEYWORD_ACCESSOR_FIELD` so `dict` can use a keyword as a literal key. A
-// catchall resolver, sibling to the `c[ad]+r` family; listed in `resolvers` below.
-const keywordAccessorResolver: ResolverSpec = {
-  id: "keyword-accessor",
-  resolve(name: string) {
-    if (!name.startsWith(":")) return undefined;
-    const key = name.slice(1);
-    const pluck = Object.assign((obj: unknown) => (obj == null ? pluck : readMember(obj, key)), {
-      valueOf: () => name,
-      [KEYWORD_ACCESSOR_FIELD]: key,
-    });
-    return pluck;
-  },
-};
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
     ;; -----------------------------------------------------------------------------
@@ -134,7 +117,25 @@ export default new EnvCapability("scheme/polyglot", {
     (define-macro (~> x . forms) \`(-> ,x ,@forms))
     (define-macro (~>> x . forms) \`(->> ,x ,@forms))
 `,
-  resolvers: [keywordAccessorResolver],
+  resolvers: [
+    // The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol
+    // resolves to its `@`-alias pluck (the SAME polyglot read as `@`/`readMember`, but
+    // applied to nothing it returns itself, so it composes — `(compose :a :b)`). The pluck
+    // carries `KEYWORD_ACCESSOR_FIELD` so `dict` can use a keyword as a literal key. A
+    // catchall resolver, sibling to the `c[ad]+r` family; listed in `resolvers` below.
+    {
+      id: "keyword-accessor",
+      resolve(name: string) {
+        if (!name.startsWith(":")) return undefined;
+        const key = name.slice(1);
+        const pluck = Object.assign((obj: unknown) => (obj == null ? pluck : readMember(obj, key)), {
+          valueOf: () => name,
+          [KEYWORD_ACCESSOR_FIELD]: key,
+        });
+        return pluck;
+      },
+    },
+  ],
   symbols: () => ({
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
