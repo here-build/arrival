@@ -7,20 +7,45 @@
 import { Lexer } from "./Lexer.js";
 import { eof } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";
-import type { SchemeValue } from "../values/types.js";
+import invariant from "tiny-invariant";
+
+// The lexer's per-token metadata record — the SHAPE the lexer's meta mode yields, not a
+// Scheme value. (`Lexer.peek(true)` returns these; a token is reader-internal, never an
+// AValue.) This is the canonical home for the type and its overload — `reader/Formatter.ts`
+// re-declares an identical `TokenMeta` only to avoid the cycle (it imports `tokenize` from here).
+export interface TokenMeta {
+  token: string;
+  col: number;
+  offset: number;
+  line: number;
+}
+
+// `Lexer.peek` has no boolean overload, so `peek(true)`'s inferred return is the broad
+// `EOF | TokenMeta | string | null` union even though meta mode always yields a TokenMeta.
+// Narrow back to the real shape through a guard rather than a blind cast (the pattern the
+// Formatter already uses against this exact widening).
+function isTokenMeta(value: unknown): value is TokenMeta {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as TokenMeta).token === "string" &&
+    typeof (value as TokenMeta).col === "number"
+  );
+}
 
 // ----------------------------------------------------------------------
-function tokens(str: SchemeValue): SchemeValue[] {
+function tokens(str: string | AString): TokenMeta[] {
   if (str instanceof AString) {
     str = str.valueOf();
   }
   const lexer = new Lexer(str, { whitespace: true });
-  const result: SchemeValue[] = [];
+  const result: TokenMeta[] = [];
   while (true) {
     const token = lexer.peek(true);
     if (token === eof) {
       break;
     }
+    invariant(isTokenMeta(token), "tokenize: lexer meta mode yielded a non-TokenMeta token");
     result.push(token);
     lexer.skip();
   }
@@ -28,7 +53,12 @@ function tokens(str: SchemeValue): SchemeValue[] {
 }
 
 // ----------------------------------------------------------------------
-export function tokenize(str: string | AString, meta = false) {
+// `meta` is not a runtime flag the type system can branch on, so make it an overload: meta
+// mode returns the lexer's `TokenMeta[]` records; default mode returns the cleaned `string[]`
+// (whitespace-trimmed, comment-stripped). Resolves the Formatter's noted "cleaner fix here".
+export function tokenize(str: string | AString, meta: true): TokenMeta[];
+export function tokenize(str: string | AString, meta?: false): string[];
+export function tokenize(str: string | AString, meta = false): TokenMeta[] | string[] {
   if (str instanceof AString) {
     str = str.toString();
   }

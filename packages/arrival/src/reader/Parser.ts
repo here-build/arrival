@@ -457,7 +457,14 @@ export class Parser {
         // Convert list to a boxed vector (#(...) literal producer). R7RS literals
         // are immutable → freeze, so a later vector-set!/fill! on the literal is
         // an error (else it would corrupt the shared parsed AST node persistently).
-        const litVec = is_nil(list) ? new AVector(CONSTANT_CTX, []) : new AVector(CONSTANT_CTX, list.to_array(false));
+        // Shallow cdr-walk (the `list->vector` builtin's idiom) collects the elements
+        // as the honest `SchemeValue[]` the vector holds — `APair.to_array` returns
+        // the deliberately-`unknown[]` cons payload, which `AVector` can't accept.
+        const items: SchemeValue[] = [];
+        for (let node: unknown = list; node instanceof APair; node = node.cdr) {
+          items.push(node.car);
+        }
+        const litVec = new AVector(CONSTANT_CTX, items);
         litVec.freeze();
         return litVec;
       }

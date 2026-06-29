@@ -20,6 +20,7 @@ import {
   rational_re,
 } from "../values/primitives.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
+import type { SchemeValue } from "../values/types.js";
 
 // Radix-aware bigint parser. Moved here from the deleted reader/serialize.ts (this is its only
 // consumer — the exact/rational/float parsers below). The rest of serialize.ts was a deserializer
@@ -309,7 +310,7 @@ const nan = new AInexact(CONSTANT_CTX, Number.NaN);
 const posInf = new AInexact(CONSTANT_CTX, Number.POSITIVE_INFINITY);
 const negInf = new AInexact(CONSTANT_CTX, Number.NEGATIVE_INFINITY);
 
-const constants: Record<string, unknown> = {
+const constants: Record<string, SchemeValue> = {
   "#t": schemeTrue,
   "#f": schemeFalse,
   "#true": schemeTrue,
@@ -325,7 +326,7 @@ const constants: Record<string, unknown> = {
 // Constants first, then string, then the `#`-prefixed family (char), then the numeric tower;
 // anything that falls through is a symbol. Order matters — the cheap `Object.hasOwn` and prefix tests
 // gate the expensive numeric regexes.
-export function parse_argument(arg: string, strict = false): unknown {
+export function parse_argument(arg: string, strict = false): SchemeValue {
   // Strict (the R7RS portability control) rejects the loose-mode `#void`/`#null`
   // reader literals — a program that writes them is not portable to a stock Scheme.
   // The VALUES (void/nil) still exist; only the non-standard readable LITERAL is gated.

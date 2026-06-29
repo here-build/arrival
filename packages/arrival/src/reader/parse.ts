@@ -7,11 +7,17 @@
 // touches the monolith at all.
 import { Parser } from "./Parser.js";
 import { eof } from "../values/primitives/EOF.js";
+import type { AString } from "../values/primitives/AString.js";
 import type { SchemeValue } from "../values/types.js";
+
+// The reader's input, not a value: either raw source text (`string`/`AString`, the
+// `Parser.parse` input type) or a pre-seeded `Parser`. `arg instanceof Parser` reuses
+// the parser as-is; everything else is fed to a fresh one via `Parser.parse(arg)`.
+type ParseInput = string | AString | Parser;
 
 // `_parse` is the async datum generator; `parse` collects it into an array. stdlib's
 // bootstrap still consumes the generator form for one native-lambda literal.
-export async function* _parse(arg: SchemeValue, source?: string, strict = false) {
+export async function* _parse(arg: ParseInput, source?: string, strict = false) {
   let parser;
   if (arg instanceof Parser) {
     parser = arg;
@@ -34,7 +40,7 @@ export async function* _parse(arg: SchemeValue, source?: string, strict = false)
 }
 
 // unwrap the async datum generator into Promise<Array>
-export const parse = async (arg: SchemeValue, source?: string, strict = false): Promise<SchemeValue[]> => {
+export const parse = async (arg: ParseInput, source?: string, strict = false): Promise<SchemeValue[]> => {
   const result: SchemeValue[] = [];
   for await (const item of _parse(arg, source, strict)) {
     result.push(item);
