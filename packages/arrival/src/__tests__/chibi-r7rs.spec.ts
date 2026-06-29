@@ -190,6 +190,15 @@ const EXPECTED_FAILURES: { pattern: string | RegExp; reason: string }[] = [
     pattern: /string-set!|string-fill!|string-copy!|vector-set!|vector-fill!|vector-copy!|bytevector-u8-set!|bytevector-copy!|set-car!|set-cdr!|append!/,
     reason: "intentional — purity invariant (frozen entities); writing methods are doored. See plan-2026-06-11-purity-pass",
   },
+  {
+    // Lexical `set!` (variable rebinding) is doored under the same purity invariant —
+    // the last binding-mutation vestige (r7rs/binding). These suite tests use it as a
+    // loop counter inside map / vector-map / string-for-each. The trailing SPACE after
+    // `set!` matches only the lexical form, never the hyphenated `-set!` value mutators
+    // (set-car! / vector-set! …), which the pattern above already covers.
+    pattern: /\(set! /,
+    reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored. See r7rs/binding + plan-2026-06-11-purity-pass",
+  },
   // -----------------------------------------------------------------------
   // Macro engine gaps — pre-L1, separate from AValue work.
   // -----------------------------------------------------------------------
