@@ -59,7 +59,7 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   it("character & symbol: boxed ≡ boxed, content-discriminating", () => {
     expect(eq(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
     expect(eq(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
-    expect(eq(ASymbol.is ? new ASymbol(CONSTANT_CTX, "x") : new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "x"))).toBe(true);
+    expect(eq(new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "x"))).toBe(true);
     expect(eq(new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "y"))).toBe(false);
   });
 });

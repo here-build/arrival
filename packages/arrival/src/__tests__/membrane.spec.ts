@@ -237,7 +237,7 @@ describe("Wrapper Layer", () => {
     it("rejects writes — the membrane is read-only (pure-dataflow sandbox)", () => {
       const source: any = { a: 1 };
       const obj = new AJSObject(CONSTANT_CTX, source);
-      expect(() => obj.set("a", 42)).toThrow(/writes are banned/);
+      expect(() => obj.set("a", new AExact(CONSTANT_CTX, 42n))).toThrow(/writes are banned/);
       expect(source.a).toBe(1); // nothing crossed the boundary
       expect(() => obj.delete("a")).toThrow(/mutations are banned/);
       expect(source.a).toBe(1);
