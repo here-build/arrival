@@ -36,10 +36,23 @@ import {
   is_function,
   is_macro,
   is_nil,
-  is_pair,
+  is_pair as is_pair_raw,
   is_promise,
 } from "./guards.js";
+
+// Evaluator-domain refinement of `is_pair`. The shared `is_pair` (value-guards)
+// narrows only to `APair<unknown, unknown>` because `APair` is generic over its
+// slot types for the membrane/reader boundary, where a half-boxed pair can briefly
+// hold raw JS. Inside the evaluator every traversed pair is fully boxed — its car
+// and cdr ARE `SchemeValue`s (the reader emits only scheme values; the membrane
+// boxes borrowed JS to AJSObject/AJSArray, both union members). This shadow makes
+// that domain truth visible at the type level without a per-site cast: it is the
+// SAME runtime predicate and the SAME structural commitment ("this is a Scheme
+// pair") as `is_pair`, refined to the slot truth this layer can rely on. Shadowing
+// the import refines all `is_pair(...)` narrows in this file with zero call churn.
+const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
 import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
+import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "./Resolver.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -584,7 +597,10 @@ function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
  * This represents a lazily evaluated expression.
  */
 export class SchemePromise {
-  private _value: SchemeValue = undefined;
+  // Unforced placeholder. `_value` is only read after `_forced` flips true (force()
+  // sets both together), so theVoid here is a pure pre-force sentinel — never the
+  // observable result of a forced promise. `undefined` is not a SchemeValue.
+  private _value: SchemeValue = theVoid;
   private readonly _thunk: () => SchemeValue;
 
   constructor(thunk: () => SchemeValue) {
@@ -1418,8 +1434,15 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Capture the resolver (lexical scope) at definition time.
   const defResolver = ctxResolver(ctx);
 
-  // Create a macro function - receives unevaluated code
-  const macroFn = function (this: Environment, code: SchemeValue, evalArgs: EvalContext): SchemeValue {
+  // Create a macro function - receives unevaluated code. The body returns
+  // `run(...)` — a `Promise<SchemeValue>` of the expansion FORM; the expansion
+  // consumer (`fn.invoke` site) already `yield`s it via `is_promise`. The prior
+  // `: SchemeValue` annotation under-described that real (async) return.
+  const macroFn = function (
+    this: Environment,
+    code: SchemeValue,
+    evalArgs: EvalContext,
+  ): Promise<SchemeValue> {
     const macroResolver = defResolver.child("macro", "macro");
 
     // Bind macro parameters to unevaluated arguments
@@ -1669,7 +1692,11 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(is_pair(bindingCdr), "letrec: missing value in binding");
     const valExpr = bindingCdr.car;
 
-    letrecResolver.define(varName, undefined);
+    // letrec first pass: the name exists but is unassigned until the second
+    // pass overwrites it. theVoid is the unassigned-slot sentinel (referencing
+    // it before assignment is an R7RS error caught elsewhere); `undefined` is
+    // not a SchemeValue / EnvironmentValue.
+    letrecResolver.define(varName, theVoid);
     bindingList.push({ name: varName, expr: valExpr });
     bindNode = bindNode.cdr;
   }
@@ -1698,11 +1725,11 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* evalAnd(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // (and) with no args returns #t
   if (!is_pair(rest) || is_nil(rest)) {
-    return true;
+    return schemeTrue;
   }
 
   let node: SchemeValue = rest;
-  let result: SchemeValue = true;
+  let result: SchemeValue = schemeTrue;
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   while (is_pair(node)) {
@@ -1738,11 +1765,11 @@ function* evalAnd(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* evalOr(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // (or) with no args returns #f
   if (!is_pair(rest) || is_nil(rest)) {
-    return false;
+    return schemeFalse;
   }
 
   let node: SchemeValue = rest;
-  let result: SchemeValue = false;
+  let result: SchemeValue = schemeFalse;
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   while (is_pair(node)) {
@@ -1991,7 +2018,14 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * procedure is evaluated in non-tail context; the application itself is routed
  * through applyArrowProc by the caller so it stays on the TCO surface.
  */
-function* evalCaseArrowProc(exprs: SchemeValue, nonTailCtx: EvalContext): EvalGenerator {
+function* evalCaseArrowProc(
+  exprs: SchemeValue,
+  nonTailCtx: EvalContext,
+): Generator<unknown, SchemeValue | undefined, SchemeValue> {
+  // `undefined` is the "not a `=> proc` form" control sentinel (the caller tests
+  // `!== undefined`), genuinely outside the value domain — NOT a Scheme value.
+  // So this generator's return type widens to `SchemeValue | undefined`; using
+  // theVoid here would be indistinguishable from a real void-returning proc.
   if (!is_pair(exprs)) return undefined;
   const first = exprs.car;
   if (!(first instanceof ASymbol) || first.literal() !== "=>") return undefined;
@@ -2089,7 +2123,10 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(varName instanceof ASymbol, "do: expected symbol");
 
     const bindingCdr = binding.cdr;
-    let initExpr: SchemeValue = undefined;
+    // No init form → unspecified. theVoid is self-evaluating (an atom — see
+    // `evaluate`'s non-pair return), so a missing init yields void; `undefined`
+    // is not a SchemeValue.
+    let initExpr: SchemeValue = theVoid;
     let stepExpr: SchemeValue | null = null;
 
     if (is_pair(bindingCdr)) {
@@ -2138,7 +2175,10 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const newValues: SchemeValue[] = [];
     for (const { step } of vars) {
       if (step === null) {
-        newValues.push(undefined); // placeholder
+        // Index-alignment filler for a step-less var; never read (the update
+        // pass below only defines names where `step !== null`). theVoid keeps
+        // the array a genuine SchemeValue[]; `undefined` is not a SchemeValue.
+        newValues.push(theVoid);
       } else {
         let newValue = yield { call: evaluate(step, doNonTail) };
         if (is_promise(newValue)) {
@@ -2316,7 +2356,10 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // bounded too; aborts in finally propagate per JS semantics where any
     // exception would (this catch swallows them, matching the old behavior).
     if (finallyClause) {
-      const finallyCdr = (finallyClause as APair).cdr;
+      // `(finally body...)` — narrow to a pair so `.cdr` is a typed SchemeValue
+      // (the evaluator `is_pair` shadow), replacing the prior `as APair` cast.
+      invariant(is_pair(finallyClause), "try: invalid finally clause");
+      const finallyCdr = finallyClause.cdr;
       try {
         await run(evalBegin(finallyCdr, { ...ctx, tail: false }), { signal: ctx.signal });
       } catch {
@@ -2438,7 +2481,11 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvalGenerator {
   return yield* evaluatePair(code, ctx);
 }
 
-function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
+// `code`'s car/cdr are SchemeValues: every caller narrows via the evaluator's
+// `is_pair` (→ `APair<SchemeValue, SchemeValue>`) before dispatching here, so the
+// form head and tail are boxed scheme values, not the generic `unknown` slots
+// `APair`'s default parameters carry for the membrane/reader boundary.
+function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext): EvalGenerator {
   // It's a pair - function application or special form
   const first = code.car;
   const rest = code.cdr;
@@ -2575,9 +2622,14 @@ function* evaluatePair(code: APair, ctx: EvalContext): EvalGenerator {
       // `to_array` is the only such reader. Externally-registered native fns that
       // want the env opt into the `__withCtx` channel (see lips.spec scope_name);
       // the old public `this===env` ABI is intentionally retired.
+      // A `__withCtx` rosetta's true signature is `(...SchemeValue[], EvalContext)` —
+      // it reads the run env from the trailing `ctx`. That trailing non-value arg
+      // isn't expressible through `SchemeValue`'s narrow `(...SchemeValue[]) => SchemeValue`
+      // function arm, so invoke reflectively: `Reflect.apply` accepts the heterogeneous
+      // arg array honestly (no cast), exactly as the native calling convention requires.
       result = (fn as { __withCtx?: boolean }).__withCtx
-        ? fn.apply(undefined, [...wrappedArgs, ctx])
-        : fn.apply(undefined, wrappedArgs);
+        ? Reflect.apply(fn, undefined, [...wrappedArgs, ctx])
+        : Reflect.apply(fn, undefined, wrappedArgs);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;
