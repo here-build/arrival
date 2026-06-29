@@ -25,6 +25,7 @@ import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { fromJs } from "../values/primitives/boxing.js";
+import { jsToScheme } from "../rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 
@@ -41,8 +42,10 @@ let seq = 0;
 
 /**
  * Run `src` in a fresh inherited sandbox env and return the RAW result value. Each
- * call gets a uniquely-named child env; `binds` are written with `env.set`. `setup`
- * (if given) runs against the env first — used to register `defineRosetta` sources.
+ * call gets a uniquely-named child env; `binds` are boxed through `jsToScheme` (the
+ * same membrane `env.set` applies internally; already-boxed AValue inputs short-circuit
+ * to identity) and written with `env.set`. `setup` (if given) runs against the env
+ * first — used to register `defineRosetta` sources.
  */
 export async function runRaw(
   src: string,
@@ -52,7 +55,7 @@ export async function runRaw(
   await initBridge();
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   setup?.(env);
-  for (const [k, v] of Object.entries(binds)) env.set(k, v as AValue);
+  for (const [k, v] of Object.entries(binds)) env.set(k, jsToScheme(CONSTANT_CTX, v));
   const [r] = await exec(src, { env });
   return r;
 }
