@@ -1,13 +1,15 @@
 // -------------------------------------------------------------------------
 // :: errors.ts — the single home for every arrival Error subclass.
 //
-// Kept a runtime LEAF: the only runtime import is the well-known-symbol brands;
+// Kept a runtime LEAF: the only runtime imports are the well-known-symbol brands and the
+// value-kernel guard `is_pair` (value-guards.js is itself a leaf — no evaluator edge).
 // StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
 // these without dragging the evaluator world in. Was scattered across ArrivalError.ts /
 // purity.ts / portability.ts / interop-access.ts / bridge.ts / common/kernel.ts /
 // common/resources.ts / values/lineage-shadow.ts — collected here.
 // -------------------------------------------------------------------------
-import { CLASS, LOCATION } from "./well-known-symbols.js";
+import { CLASS } from "./well-known-symbols.js";
+import { is_pair } from "./values/value-guards.js";
 import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
@@ -90,12 +92,11 @@ export class EvalError extends Error {
 
 /** A SchemeValue's source location off its LOCATION metadata, if any (leaf-local — the
  *  evaluator's richer `formatCode` renderer is not reachable from a leaf, so a stack frame's
- *  code prints via its own `String()` repr). */
+ *  code prints via its own `String()` repr). The parser stamps LOCATION on located Pairs
+ *  (well-known-symbols.ts:48), so only an APair can carry it — read it via the typed
+ *  `getLocation()` accessor after an `is_pair` narrow. */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
-  if (code && typeof code === "object" && LOCATION in code) {
-    return (code as Record<symbol, SourceLocation | undefined>)[LOCATION];
-  }
-  return undefined;
+  return is_pair(code) ? code.getLocation() : undefined;
 }
 
 export class ArrivalError extends Error {
