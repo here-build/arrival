@@ -4,8 +4,9 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import { AExact } from "../values/primitives/AExact.js";
+import type { Environment } from "../Environment.js";
 
-const execSimple = async (string: string, env?: object, dynamic_env?: object) => {
+const execSimple = async (string: string, env?: Environment, dynamic_env?: Environment) => {
   return exec(string, { env, dynamic_env, use_dynamic: !!dynamic_env });
 };
 const global_environment = await freshEnv();
