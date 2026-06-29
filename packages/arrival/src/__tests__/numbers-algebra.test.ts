@@ -29,8 +29,8 @@ describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => 
   it("exact 1 is NOT arrival/tagless-final/equals inexact 1.0 (both directions)", () => {
     const one = new AExact(CONSTANT_CTX, 1n);
     const oneFloat = new AInexact(CONSTANT_CTX, 1);
-    expect((one as never)[FL](oneFloat)).toBe(false);
-    expect((oneFloat as never)[FL](one)).toBe(false);
+    expect(one[FL](oneFloat)).toBe(false);
+    expect(oneFloat[FL](one)).toBe(false);
   });
 
   it("structuralEqual honors the exactness boundary (the bug)", () => {
@@ -43,6 +43,6 @@ describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => 
 
   it("NaN reflexivity holds (Object.is, not ===)", () => {
     const nan = new AInexact(CONSTANT_CTX, NaN);
-    expect((nan as never)[FL](new AInexact(CONSTANT_CTX, NaN))).toBe(true);
+    expect(nan[FL](new AInexact(CONSTANT_CTX, NaN))).toBe(true);
   });
 });
