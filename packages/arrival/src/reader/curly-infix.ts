@@ -55,7 +55,7 @@ function prec(v: SchemeValue): number {
 }
 
 function list(items: SchemeValue[]): SchemeValue {
-  return APair.fromArray(CONSTANT_CTX, items, false) as SchemeValue;
+  return APair.fromArray(CONSTANT_CTX, items, false);
 }
 
 /** SRFI-105 element classifier. `E` is the flat sequence read between `{` and `}`. */

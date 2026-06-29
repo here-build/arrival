@@ -214,6 +214,16 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return false;
   }
 
+  // Return is precise on `quote`: the `unknown[]` arm is reachable ONLY via the pass-through
+  // of an already-`DATA`-marked array, which is gated behind `quote`. So `quote` omitted/false
+  // ⟹ `APair | ANil` (build path, or pass-through of an already-pair input); `quote: true` ⟹
+  // the data-array can also flow back untouched. This lets every build-path caller drop the
+  // historical `as APair | ANil` cast honestly — the narrow type is the real one, not a widen.
+  static fromArray(ctx: RunContext, array: unknown, deep?: boolean, quote?: false): APair | ANil;
+  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: true): APair | ANil | unknown[];
+  // `quote` not known statically (the internal recursion threads the runtime flag): can't promise
+  // the data-array won't flow back, so the return stays wide. No external caller hits this arm.
+  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: boolean): APair | ANil | unknown[];
   static fromArray(ctx: RunContext, array: unknown, deep = true, quote = false): APair | ANil | unknown[] {
     if (
       is_pair(array) ||
@@ -645,10 +655,10 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     }
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<unknown[]>).then(
-        (resolved) => APair.fromArray(this.ctx, resolved, false) as APair | ANil,
+        (resolved) => APair.fromArray(this.ctx, resolved, false),
       );
     }
-    return APair.fromArray(this.ctx, results, false) as APair | ANil;
+    return APair.fromArray(this.ctx, results, false);
   }
 
   // Arrival's async-aware Filterable — `filter` that PRESERVES every kept element's box.
@@ -693,10 +703,10 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     }
     if (verdicts.some(is_promise)) {
       return (promise_all(verdicts) as Promise<unknown[]>).then(
-        (results) => APair.fromArray(this.ctx, elements.filter((_, i) => kept(results[i])), false) as APair | ANil,
+        (results) => APair.fromArray(this.ctx, elements.filter((_, i) => kept(results[i])), false),
       );
     }
-    return APair.fromArray(this.ctx, elements.filter((_, i) => kept(verdicts[i])), false) as APair | ANil;
+    return APair.fromArray(this.ctx, elements.filter((_, i) => kept(verdicts[i])), false);
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
@@ -746,7 +756,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       node = p.cdr;
     }
     out.sort(deriveSortCompare(comparator));
-    return APair.fromArray(this.ctx, out, false) as APair | ANil;
+    return APair.fromArray(this.ctx, out, false);
   }
 
   // Arrival's element-count — `length` carrying the ELEMENTS' (cars') unioned provenance,

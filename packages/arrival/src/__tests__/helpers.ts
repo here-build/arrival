@@ -14,7 +14,7 @@ import { nil } from "../values/primitives/ANil";
  * Create a Scheme list from JS values
  */
 export function list(...items: SchemeValue[]): APair | typeof nil {
-  return APair.fromArray(CONSTANT_CTX, items, false) as APair | typeof nil;
+  return APair.fromArray(CONSTANT_CTX, items, false);
 }
 
 /**
