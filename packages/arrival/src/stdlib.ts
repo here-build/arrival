@@ -110,7 +110,6 @@ const is_node = () => typeof process === "object" && !!process.env;
 // equivalent of the old `new Environment("global", {...})` — the ctor stores
 // `__env__` and runs no logic, so the resulting binding set is byte-identical.
 Object.assign(global_env.__env__, {
-    undefined, // undefined as parser constant breaks most of the unit tests
     // ------------------------------------------------------------------
     // Spec §5.3 car/cdr element-only provenance.
     //
