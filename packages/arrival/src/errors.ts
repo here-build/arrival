@@ -1,15 +1,20 @@
 // -------------------------------------------------------------------------
 // :: errors.ts — the single home for every arrival Error subclass.
 //
-// Kept a runtime LEAF: the only runtime imports are the well-known-symbol brands and the
-// value-kernel guard `is_pair` (value-guards.js is itself a leaf — no evaluator edge).
+// Kept a runtime LEAF: the only runtime import is the well-known-symbol brands.
+// (value-guards.js is NOT a safe leaf for errors.ts to depend on — it imports the whole
+// primitive class barrel as VALUES, so an `errors.ts → value-guards` edge eagerly
+// initializes AString/AExact/AInexact/ACharacter/APair/… at module-load. Because the
+// primitives reach errors.ts on their own init path (AString→op-helpers→errors,
+// APair→errors), that pulls the barrel in mid-init and AValue is `undefined` when a
+// subclass `extends` it. A located Pair is detected via its LOCATION symbol-brand
+// instead — same result, zero class imports.)
 // StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
 // these without dragging the evaluator world in. Was scattered across ArrivalError.ts /
 // purity.ts / portability.ts / interop-access.ts / bridge.ts / common/kernel.ts /
 // common/resources.ts / values/lineage-shadow.ts — collected here.
 // -------------------------------------------------------------------------
-import { CLASS } from "./well-known-symbols.js";
-import { is_pair } from "./values/value-guards.js";
+import { CLASS, LOCATION } from "./well-known-symbols.js";
 import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
@@ -93,10 +98,18 @@ export class EvalError extends Error {
 /** A SchemeValue's source location off its LOCATION metadata, if any (leaf-local — the
  *  evaluator's richer `formatCode` renderer is not reachable from a leaf, so a stack frame's
  *  code prints via its own `String()` repr). The parser stamps LOCATION on located Pairs
- *  (well-known-symbols.ts:48), so only an APair can carry it — read it via the typed
- *  `getLocation()` accessor after an `is_pair` narrow. */
+ *  (well-known-symbols.ts:58), so only an APair can carry it — read the brand directly so
+ *  errors.ts imports no value class (an `is_pair` narrow would drag in the primitive
+ *  barrel via value-guards.js and re-break module init; see the header note). */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
-  return is_pair(code) ? code.getLocation() : undefined;
+  // `LOCATION in code` is a discriminant: APair is the only SchemeValue member
+  // declaring `[LOCATION]?: SourceLocation`, so TS narrows `code` to APair here
+  // and `code[LOCATION]` types as `SourceLocation | undefined` with no cast
+  // (mirrors evaluator.ts's `LOCATION in code` Pair-tap narrow).
+  if (LOCATION in code) {
+    return code[LOCATION];
+  }
+  return undefined;
 }
 
 export class ArrivalError extends Error {
