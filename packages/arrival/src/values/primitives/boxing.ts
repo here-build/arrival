@@ -30,7 +30,14 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
   // Same-instance fast path: already a Scheme value. Re-stamp only when a distinct,
   // non-empty provenance is supplied (then `withProvenance` mints a copy).
   if (v instanceof AValue) {
-    return provenance === EMPTY_PROVENANCE || provenance === v.provenance ? v : v.withProvenance(provenance);
+    if (provenance === EMPTY_PROVENANCE || provenance === v.provenance) return v;
+    // `withProvenance` is typed to the broad `SchemeValue` union (its abstract base
+    // declaration; concrete subclasses override to their own narrower type). A clone
+    // of an `AValue` is always an `AValue` subclass at runtime — narrow honestly with
+    // a guard rather than a cast, so `fromJs` keeps its `AValue` contract.
+    const restamped = v.withProvenance(provenance);
+    invariant(restamped instanceof AValue, "fromJs: withProvenance must mint an AValue");
+    return restamped;
   }
 
   const tag = resolveTypeofTag(v);
