@@ -1,20 +1,16 @@
 /**
  * Nil — the empty list singleton (extracted from values/types.ts).
- * Carries the late-bound Pair constructor that `Nil.append` uses to build a
- * Pair without a circular import. `setPairConstructor` is called by Pair.ts.
+ * `Nil.append` builds a Pair via a plain `import { APair }`. ANil extends AValue
+ * (not APair) and touches APair ONLY inside the `append` method body, so the
+ * resulting ANil↔APair cycle is call-only on both sides — no module-eval edge,
+ * no TDZ — and ESM live-bindings resolve APair at call-time regardless of which
+ * file loads first. (The former `setPairConstructor` late-bound DI is dissolved.)
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
-import type { APairLike } from "../types.js";
-
-// Pair constructor type - will be set by Pair.ts
-let PairConstructor: new (ctx: RunContext, car: unknown, cdr: unknown) => APairLike;
-
-export function setPairConstructor(ctor: new (ctx: RunContext, car: unknown, cdr: unknown) => APairLike) {
-  PairConstructor = ctor;
-}
+import { APair } from "./APair.js";
 
 export class ANil extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -45,8 +41,8 @@ export class ANil extends AValue {
     return {};
   }
 
-  append(x: unknown): APairLike {
-    return new PairConstructor(CONSTANT_CTX, x, nil);
+  append(x: unknown): APair {
+    return new APair(CONSTANT_CTX, x, nil);
   }
 
   to_array(): [] {

@@ -34,7 +34,7 @@ import { AInexact } from "../primitives/AInexact.js";
 import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { type APairLike } from "../types.js";
-import { ANil, nil, setPairConstructor } from "./ANil.js";
+import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
 
@@ -919,9 +919,6 @@ function chainPair(ctx: RunContext, f: (x: unknown) => APair | ANil, pair: unkno
   }
   return result;
 }
-
-// Register Pair constructor with types.ts for Nil.append
-setPairConstructor(APair);
 
 // Interop boundary. A cons cell's rich prototype (`match`/`fromArray`/`toArray`,
 // the cycle/ref-tracking helpers) and metadata symbols (`__data__`, `__location__`)
