@@ -1,4 +1,8 @@
-import { env as userEnv } from "./stdlib.js";
+// The interaction scope, sourced from its true home (env-roots) — not laundered through
+// stdlib.ts. `inherit` is purely structural (no eager builtin read), and the native-root
+// population is owned by `ensureBaseAssembled` (which awaits `import("./stdlib.js")` itself),
+// so this module no longer needs to drag stdlib into the import graph to be correct.
+import { user_env as userEnv } from "./env-roots.js";
 
 // The inference-plane base env: the totalic environment where models author and
 // evaluate Scheme. NOT a security fence — the Graal-thesis sweep deleted every

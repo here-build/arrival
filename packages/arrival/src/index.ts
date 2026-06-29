@@ -1,5 +1,18 @@
-// Re-export all LIPS interpreter functionality
-export * from "./stdlib.js";
+// The historical `export * from "./stdlib.js"` is dissolved — stdlib.ts is no longer a
+// re-export hub, just the native-root population side-effect (`Object.assign(global_env…)`,
+// owned by `ensureBaseAssembled`). The names that rode that star are re-surfaced HERE,
+// each traced in one hop to its real home, so the public surface is byte-identical AND
+// every export is visible at the barrel (no opaque star laundering an unknown name set).
+//   • box / patch_value / quote — value-representation leaves (reader/values-repr.ts)
+//   • unpromise                 — promise util (utils/promises.ts)
+//   • global_env / env          — the native root + interaction scope (env-roots.ts)
+//   • eof                       — the EOF singleton (values/primitives/EOF.ts)
+// (`exec` also rode the star; it is re-exported explicitly below from generator-exec, the
+// canonical stack-safe path — that explicit export already shadowed the stdlib `exec`.)
+export { box, patch_value, quote } from "./reader/values-repr.js";
+export { unpromise } from "./utils/promises.js";
+export { global_env, user_env as env } from "./env-roots.js";
+export { eof } from "./values/primitives/EOF.js";
 // The inference-plane base env — the assembled totalic env every cross-package
 // consumer inherits from (`sandboxedEnv.inherit(name)`) and types against
 // (`ReturnType<typeof sandboxedEnv.inherit>`). `sandboxedEnv` is the public name

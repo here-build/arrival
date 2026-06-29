@@ -8,8 +8,7 @@ import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { withInputProvenance } from "./values/op-helpers.js";
 import { Environment, type EnvironmentValue } from "./Environment.js";
-import { global_env, user_env } from "./env-roots.js";
-import { eof } from "./values/primitives/EOF.js";
+import { global_env } from "./env-roots.js";
 import { Lexer } from "./reader/Lexer.js";
 
 import { is_nil } from "./eval/guards.js";
@@ -52,9 +51,6 @@ specials.on(["remove", "append"], function () {
 
 // reader machinery (tokenize / tokens / _parse) lives in reader/ leaves now.
 
-// Re-export unpromise from utils/promises
-export { unpromise } from "./utils/promises.js";
-
 // `matcher` relocated to env/arrival-extensions.ts (with `find`, its only user).
 
 // `to_array` / `list->array` / `isProperList` / `mapImpl` relocated to env/r7rs/lists.ts
@@ -76,25 +72,15 @@ export { unpromise } from "./utils/promises.js";
 // ----------------------------------------------------------------------
 // :: Function utilities
 // ----------------------------------------------------------------------
-// box() relocated to reader/values-repr.ts (the value-representation leaf,
-// alongside quote/patch_value); imported above. Re-exported below for the barrel.
-
-// ----------------------------------------------------------------------
-// patch_value relocated to reader/values-repr.ts; re-exported to preserve the
-// public barrel surface (mirrors the quote re-export below).
-export { box, patch_value } from "./reader/values-repr.js";
+// box() / patch_value / quote relocated to reader/values-repr.ts (the value-representation
+// leaf). They are surfaced on the package barrel directly from that leaf by src/index.ts —
+// no longer laundered through this module.
 
 // ----------------------------------------------------------------------
 // :: Stub macros for let/let*/letrec - generator evaluator handles these as special forms
 // :: These stubs exist only for LIPS evaluate compatibility during bootstrap
 // ----------------------------------------------------------------------
 // let_macro removed — let/let*/letrec/letrec* now delegate to generator evaluator via genMacroWrapper
-
-// -------------------------------------------------------------------------
-// :: Quote function used to pause evaluation from Macro
-// -------------------------------------------------------------------------
-// quote moved to values-repr.ts; re-exported here to preserve the public barrel.
-export { quote } from "./reader/values-repr.js";
 
 // `get` (the LIPS dot-notation accessor) + `native_lambda` (its `__code__` "[native
 // code]" stub) DELETED — vestigial host-interop infra, NOT R7RS/SRFI. The `.` / `get`
@@ -191,7 +177,10 @@ Object.assign(global_env.__env__, {
     // `find` relocated to env/arrival-extensions.ts (SRFI-1 + arrival regex extension).
     // `for-each` relocated to env/r7rs/lists.ts (R7RS §6.4, alongside map + its mapImpl).
   } satisfies Record<string, EnvironmentValue>);
-export { global_env, user_env as env };
+// global_env / user_env are NOT re-exported here — their true home is env-roots.ts, and
+// the package barrel + inference-env now source them from there directly. This module's
+// only remaining job is the native-root population above (the `Object.assign` side-effect,
+// triggered on demand by `ensureBaseAssembled`), not re-exporting the roots.
 
 
 // NOTE: Numeric operations from bridge.ts should be applied by calling initBridge()
@@ -208,12 +197,6 @@ export { global_env, user_env as env };
 // audit-#42 wrapOperator/TypeError surfacing, all in one place). The old
 // stdlib-local `exec`/`exec_with_stacktrace` wrappers — and the legacy recursive
 // `evaluate` they once drove — are gone; every evaluation now runs on
-// evaluator.ts. Re-exported here so the historical `from "./stdlib"` consumers
-// keep resolving.
-export { exec } from "./eval/generator-exec.js";
-
+// evaluator.ts. The package barrel surfaces `exec` directly from generator-exec;
+// it is no longer re-exported through this module.
 // -------------------------------------------------------------------------
-
-
-// Additional exports needed by Environment.ts
-export { eof } from "./values/primitives/EOF.js";
