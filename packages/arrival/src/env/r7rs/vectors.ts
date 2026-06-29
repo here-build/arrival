@@ -53,10 +53,14 @@ export default new EnvCapability("scheme/vectors", {
         // assertAllocatable. \`Array.from({length})\` on an oversized count is the
         // >10s hang the audit caught.
         assertAllocatable(len, "make-vector");
-        const arr = Array.from({ length: len }) as SchemeValue[];
-        if (fill !== undefined) {
-          arr.fill(fill);
-        }
+        // Materialize the fill into every slot AT construction. \`fill\` is typed
+        // \`unknown\` (the representation-blind contract), but a value reaching a builtin
+        // has already crossed the membrane (JS null→nil, undefined→theVoid) — it IS a
+        // SchemeValue; the slot assertion below is that membrane fact. Folding the fill
+        // into \`Array.from\`'s map (vs a follow-up \`arr.fill\`) keeps it inside that single
+        // boundary, and the no-fill case (\`fill === undefined\`) yields the same
+        // \`[undefined × len]\` an empty \`Array.from({length})\` would.
+        const arr = Array.from({ length: len }, () => fill) as SchemeValue[];
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
         return withInputProvenance([fill], new AVector(CONSTANT_CTX, arr));
