@@ -13,8 +13,18 @@ import fs from "fs";
 import { describe, expect, test } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 import { nil } from "../values/primitives/ANil.js";
+import { stringValue, coerceNumeric } from "../values/op-helpers.js";
+import { is_function } from "../values/value-guards.js";
+import { type SchemeValue } from "../values/types.js";
 import { freshEnv } from "./_fresh-env.js";
 import * as path from "node:path";
+
+// A JS value used as a Scheme procedure IS the SchemeValue function member
+// `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
+// over the union only yield the bare `Function` type (or the un-callable
+// signature-union), so this refines the predicate to the single procedure shape
+// the union already names — mirrors env/r7rs/lists.ts's `is_callable`.
+const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue => is_function(o);
 
 // Initialize bootstrap (includes all Scheme macros)
 const env = await freshEnv();
@@ -131,7 +141,7 @@ describe.each(specs)("spec check: %s", async (filename) => {
   env.set("setTimeout", setTimeout);
   env.set("expected", expect);
   env.set("error", (v) => {
-    throw new Error(v);
+    throw new Error(stringValue(v));
   });
   env.set("string=?", (a, b) => {
     return a === b ? env.get("true") : env.get("false");
@@ -149,19 +159,19 @@ describe.each(specs)("spec check: %s", async (filename) => {
     return a > b ? env.get("true") : env.get("false");
   });
   env.set("string-ci=?", (a, b) => {
-    return a.toLowerCase() === b.toLowerCase() ? env.get("true") : env.get("false");
+    return stringValue(a).toLowerCase() === stringValue(b).toLowerCase() ? env.get("true") : env.get("false");
   });
   env.set("string-ci<=?", (a, b) => {
-    return a.toLowerCase() <= b.toLowerCase() ? env.get("true") : env.get("false");
+    return stringValue(a).toLowerCase() <= stringValue(b).toLowerCase() ? env.get("true") : env.get("false");
   });
   env.set("string-ci>=?", (a, b) => {
-    return a.toLowerCase() >= b.toLowerCase() ? env.get("true") : env.get("false");
+    return stringValue(a).toLowerCase() >= stringValue(b).toLowerCase() ? env.get("true") : env.get("false");
   });
   env.set("string-ci<?", (a, b) => {
-    return a.toLowerCase() < b.toLowerCase() ? env.get("true") : env.get("false");
+    return stringValue(a).toLowerCase() < stringValue(b).toLowerCase() ? env.get("true") : env.get("false");
   });
   env.set("string-ci>?", (a, b) => {
-    return a.toLowerCase() > b.toLowerCase() ? env.get("true") : env.get("false");
+    return stringValue(a).toLowerCase() > stringValue(b).toLowerCase() ? env.get("true") : env.get("false");
   });
   env.set("equal?", (a, b) => {
     return a === b ? env.get("true") : env.get("false");
@@ -173,13 +183,14 @@ describe.each(specs)("spec check: %s", async (filename) => {
     return args.map((arg) => arg.valueOf()).join("");
   });
   env.set("zero?", (val) => {
-    return val === 0 || val === 0n;
+    return coerceNumeric(val).valueOf() === 0;
   });
   env.set("newline", () => {
     return "\n";
   });
   env.set("t.try", (fn, a, b) => {
     try {
+      if (!is_callable(fn)) throw new TypeError("t.try: expected a procedure");
       return fn();
     } catch {
       return nil;
