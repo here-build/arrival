@@ -103,8 +103,11 @@ export const TO_JS = Symbol.for("scheme.toJS");
 /**
  * The closed union `isSchemeValue` PROVES — every wrapper class, native scheme type, special-form
  * head (Macro/Syntax/Keyword), env, promise, and a branded scheme lambda (a `Function` carrying the
- * LAMBDA brand). `SchemeValue` itself is `any`, so this concrete union is what lets the guard narrow
- * an `unknown` boundary input honestly instead of widening it back to `any`.
+ * LAMBDA brand). This is the "already-scheme, don't re-wrap" set: a SUPERSET of the value-intent
+ * `SchemeValue` union, because the JS→Scheme boundary legitimately admits CONTROL forms that are
+ * never values — Macro/Syntax/LambdaContext/SchemeEnvironment (env bindings, not value-intent) and
+ * a bare branded `Function`. Those are why `BoxedSchemeValue` is not assignable to `SchemeValue`,
+ * and why the membrane keeps its own boundary type instead of widening the pure value union.
  */
 export type BoxedSchemeValue =
   | ANil
@@ -126,6 +129,23 @@ export type BoxedSchemeValue =
   | SchemeEnvironment
   | Keyword
   | Function;
+
+/**
+ * The honest return of `fromJS` — the JS→Scheme boundary. A NAMED, bounded superset of
+ * `SchemeValue`: the membrane returns MORE than value-intent at the boundary because some
+ * crossings stay as materialization/plumbing rather than boxing into a value —
+ *   • `BoxedSchemeValue`        — an already-scheme input passes through un-rewrapped (incl.
+ *                                 the control forms / branded Function above);
+ *   • `Uint8Array`/`ArrayBuffer`/`DataView` — raw FFI binary stays raw (identity-preserving;
+ *                                 membrane.spec "preserves Uint8Array identity"), working with
+ *                                 the polymorphic bytevector ops rather than copying into an
+ *                                 owned `ABytevector`;
+ *   • `Promise<unknown>`        — a raw JS promise stays raw for the evaluator trampoline to await.
+ * These carriers are NOT value-intent, so they stay OUT of `SchemeValue` (values/types.ts) — this
+ * boundary type is the seam that holds them, exactly the superset principle: `SchemeValue` pure,
+ * the boundary wider and named.
+ */
+export type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
 
 /**
  * Check if a value is already a Scheme value (prevents double-wrapping).
@@ -196,8 +216,12 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
   }
 }
 
-/** WeakMap cache ensuring same JS object always produces same wrapper. */
-const jsToWrapper = new WeakMap<object, SchemeValue>();
+/**
+ * WeakMap cache ensuring same JS object always produces same wrapper. Holds exactly the two
+ * borrowed-value wrappers the boundary mints (a JS array → AJSArray, a plain object → AJSObject) —
+ * typed to that pair so the cached read returns a `FromJSResult` member honestly, no cast.
+ */
+const jsToWrapper = new WeakMap<object, AJSArray | AJSObject>();
 
 // ============================================================================
 // SANDBOX BOUNDARIES — SchemeJSObject, SchemeJSFunction
@@ -218,7 +242,7 @@ const jsToWrapper = new WeakMap<object, SchemeValue>();
  * Convert a JavaScript value to a Scheme value.
  * Entry point for JS → Scheme boundary crossing.
  */
-export function fromJS(value: unknown): SchemeValue {
+export function fromJS(value: unknown): FromJSResult {
   // Already a Scheme value? Pass through (prevents double-wrapping).
   if (isSchemeValue(value)) return value;
 
@@ -233,7 +257,7 @@ export function fromJS(value: unknown): SchemeValue {
     // (`eq?` stability), matching the AJSObject path below.
     const cached = jsToWrapper.get(value);
     if (cached) return cached;
-    const wrapper: SchemeValue = new AJSArray(CONSTANT_CTX, value);
+    const wrapper: AJSArray = new AJSArray(CONSTANT_CTX, value);
     jsToWrapper.set(value, wrapper);
     return wrapper;
   }
@@ -242,7 +266,7 @@ export function fromJS(value: unknown): SchemeValue {
   if (value !== null && typeof value === "object") {
     const cached = jsToWrapper.get(value as object);
     if (cached) return cached;
-    const wrapper: SchemeValue = new AJSObject(CONSTANT_CTX, value as object);
+    const wrapper: AJSObject = new AJSObject(CONSTANT_CTX, value as object);
     jsToWrapper.set(value as object, wrapper);
     return wrapper;
   }
@@ -333,14 +357,19 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
     }
     const result = accessMember(source, keyStr);
     if (result === NOT_FOUND) return nil;
+    // ctx-threading rough edge (readMember is ctx-free): derive the run ctx from the
+    // container being read; a non-AValue container (a native dict) falls back to CONSTANT_CTX.
+    const ctx = obj instanceof AValue ? obj.ctx : CONSTANT_CTX;
     // re-present a JS array as a polyglot array so car/cdr work on the result.
     if (Array.isArray(result)) {
-      // ctx-threading rough edge (readMember is ctx-free): derive the run ctx from the
-      // container being read; a non-AValue container (a native dict) falls back to CONSTANT_CTX.
-      const ctx = obj instanceof AValue ? obj.ctx : CONSTANT_CTX;
       return new AJSArray(ctx, result);
     }
-    return fromJS(result);
+    // A member read is a VALUE read (contract: SchemeValue, like the delegated AJSObject.get
+    // above) — box through the faithful `jsToScheme` value path, not `fromJS` (whose wider
+    // boundary return carries raw FFI/control plumbing). `jsToScheme` is typed `any` (rosetta
+    // legacy debt); annotate to the honest union so the `SchemeValue` return needs no cast.
+    const boxed: SchemeValue = jsToScheme(ctx, result, {}, EMPTY_PROVENANCE);
+    return boxed;
   } catch (e) {
     if (e instanceof InteropAccessError) return nil;
     throw e;

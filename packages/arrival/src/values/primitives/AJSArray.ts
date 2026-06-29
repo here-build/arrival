@@ -6,10 +6,10 @@
  * (it was lifted out of membrane.ts in Stage B). See the class doc below for the
  * implements-not-extends-AVector cycle rationale.
  *
- * IMPORT CYCLE (benign): `fromJS` (membrane.ts) and `jsToScheme` (rosetta.ts) are hoisted
- * `export function` declarations whose modules statically import this class — so importing them
- * here closes a runtime import cycle, safe because the wrapper methods call them only at runtime
- * and a hoisted function binding is never in TDZ.
+ * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) is a hoisted `export function` declaration
+ * whose module statically imports this class — so importing it here closes a runtime import
+ * cycle, safe because the wrapper methods call it only at runtime and a hoisted function binding
+ * is never in TDZ.
  *
  * SANDBOX BOUNDARY (`static [INTEROP_BOUNDARY] = true`): marked like its membrane siblings so the
  * sandbox symbol-to-field walk stops at this prototype before it can reach `source` (or the
@@ -24,10 +24,9 @@ import { AVector } from "./AVector.js";
 import { printValue } from "../print.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { type SchemeValue } from "../types.js";
-// Runtime import cycle (benign — see header): both are hoisted `export function` declarations,
+// Runtime import cycle (benign — see header): a hoisted `export function` declaration,
 // called only inside wrapper methods at runtime.
 import { jsToScheme } from "../../rosetta.js";
-import { fromJS } from "../../membrane.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // (same rationale as AVector.ts / ABytevector.ts — a module-local const resolving
@@ -201,10 +200,18 @@ export class AJSArray extends AValue {
     return true;
   }
 
-  // Indexed access — boxes JUST element k through the membrane (no full materialize), the
-  // same lazy crossing as the per-element path; `(vector-ref borrowed k)` dispatches here.
+  // Indexed access — boxes JUST element k (no full materialize), the same lazy crossing
+  // as `vec()` above and the AJSObject.get sibling: `jsToScheme` carrying THIS container's
+  // provenance, so `(vector-ref borrowed k)` stamps the element identically to
+  // `(vector->list borrowed)` (the Option-C discipline — a raw element inherits the
+  // container's lineage, an already-AValue element keeps its own). `jsToScheme` is typed
+  // `any` (rosetta legacy debt) but its contract is a boxed Scheme value → annotate to the
+  // honest union so the `SchemeValue` return type-checks without a cast. (`fromJS` would
+  // drop provenance via CONSTANT_CTX/EMPTY_PROVENANCE and could surface the wider boundary
+  // carriers — the value-only `vector-ref` contract wants the faithful value path here.)
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
     this.freezeSource();
-    return fromJS(this.source[k]);
+    const boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
+    return boxed;
   }
 }
