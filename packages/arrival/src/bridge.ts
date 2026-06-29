@@ -23,9 +23,7 @@ import type { Environment } from "./Environment.js";
 // global_env by `initBridge` as live capability packs (NATIVE_PACKS). `wrappedOps`
 // now keeps only the R7RS exception machinery.
 import { NATIVE_PACKS } from "./env/native-packs.js";
-import { lipsCompat } from "./env/lips-compat.js";
 import { env as userEnv, exec, global_env } from "./stdlib.js";
-import { inferenceEnv } from "./inference-env.js";
 import { AString } from "./values/primitives/AString.js";
 import { APair } from "./values/primitives/APair.js";
 import { nil } from "./values/primitives/ANil.js";
@@ -254,30 +252,20 @@ export function initBridge(): Promise<void> {
   bootstrapPromise = assembleEnv(
     global_env as unknown as SchemeEnv,
     GLOBAL_NATIVE_PACKS.map((pack) => pack.lower()),
-  )
-    .then(() =>
-      assembleEnv(
-        userEnv as unknown as SchemeEnv,
-        BASE_PACKS.map((pack) => pack.lower({ evalScheme })),
-      ),
-    )
-    .then(async () => {
-      // The inference plane's one non-R7RS binding — `nil` (the LIPS-dialect alias for '()) —
-      // is the `lips-compat` capability, ASSEMBLED onto inferenceEnv HERE (replacing the old
-      // inline `{ nil }` island in inference-env.ts). Inside whenBootstrapComplete's chain so a
-      // public exec never sees a half-assembled inference env; `evalScheme` runs its
-      // `(define nil '())` prelude.
-      //
-      // EVERYTHING ELSE the inference plane reaches — the threading macros (->/->>/~>/~>>),
-      // SRFI-26 cut/cute + gensym, SRFI-1 (iota/remove/some/every/…), polyglot compose/pipe/flow,
-      // and every native cluster — resolves by INHERITANCE (inferenceEnv → user_env → global_env;
-      // resolvers + macro expansion both walk child→parent). The old loop that COPIED ~22 such
-      // bindings onto inferenceEnv (`inferenceEnv.set(name, user_env.get(name))`) was a vestige of
-      // the null-parent-island era — when the env had no parent it HAD to snapshot its builtins.
-      // With inheritance the copy is pure redundancy, so it is dissolved: one capability assembly,
-      // zero imperative binding copies.
-      await assembleEnv(inferenceEnv as unknown as SchemeEnv, [lipsCompat.lower({ evalScheme })]);
-    });
+  ).then(() =>
+    assembleEnv(
+      userEnv as unknown as SchemeEnv,
+      BASE_PACKS.map((pack) => pack.lower({ evalScheme })),
+    ).then(() => {
+      // No third inference-plane assembly. The one non-R7RS binding the inference plane
+      // adds — `nil` (the LIPS-dialect alias for '()) — now lives in the polyglot base
+      // pack's prelude (env/polyglot.ts), assembled onto user_env in the BASE_PACKS step
+      // above. The inference plane is a user_env child (inference-env.ts), so it inherits
+      // `nil` for free — no `lips-compat` capability, no inference-only assembly. Everything
+      // else the plane reaches (threading macros, SRFI families, native clusters) already
+      // resolved by that same inheritance.
+    }),
+  );
   // Publish the COMPLETION promise so a public `exec` racing a fire-and-forget
   // `void initBridge()` (index.ts) awaits the full async assembly, not just the flag.
   setBootstrapComplete(bootstrapPromise);

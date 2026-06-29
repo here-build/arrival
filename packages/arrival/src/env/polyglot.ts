@@ -71,6 +71,19 @@ const keywordAccessorResolver: ResolverSpec = {
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
     ;; -----------------------------------------------------------------------------
+    ;; nil — the LIPS-dialect alias for the empty list (polyglot)
+    ;; -----------------------------------------------------------------------------
+    ;; Same principle as the threading idioms and :key accessors below: LLMs and
+    ;; humans reach for whichever Lisp idiom they already know. R7RS spells the empty
+    ;; list '() ; LIPS (and the Scheme the models were trained on) also binds the
+    ;; symbol \`nil\` to it. It is one more dialect alias, so it lives in the polyglot
+    ;; base rather than in a one-binding compat pack — and because polyglot is a base
+    ;; pack assembled onto user_env, \`nil\` inherits everywhere (the inference plane is
+    ;; a user_env child, so it gets it for free). \`'()\` reads to the ANil singleton,
+    ;; so this binds exactly that.
+    (define nil '())
+
+    ;; -----------------------------------------------------------------------------
     ;; Threading & composition (polyglot)
     ;; -----------------------------------------------------------------------------
     ;; LLMs and humans reach for whichever Lisp/FP idiom they already know — the

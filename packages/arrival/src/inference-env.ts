@@ -14,10 +14,10 @@ import { env as userEnv } from "./stdlib.js";
 // post-sweep the full env leaks nothing host-reaching, so the projection bought no safety,
 // and inheritance has none of the load-order races a `SAFE_BUILTINS` snapshot did.
 //
-// The one binding the inference plane adds over the R7RS base — `nil` (the LIPS-dialect
-// alias for `'()`) — is NO LONGER an inline `{ nil }` literal here. It is the `lips-compat`
-// EnvCapability (env/lips-compat.ts), ASSEMBLED onto this env in the bootstrap chain
-// (bridge.ts initBridge), the same `EnvCapability`/`assembleEnv` path the base stdlib uses.
-// So the inference base = the assembled user_env base + the nil-compat capability — a
-// declarative pack, not an imperative island.
+// `nil` (the LIPS-dialect alias for `'()`) — the one non-R7RS idiom the models reach for —
+// is NOT added here. It lives in the polyglot base pack's prelude (env/polyglot.ts), assembled
+// onto user_env with the rest of the base. This env is a user_env child, so it INHERITS `nil`
+// (and every threading idiom, SRFI family, and native cluster) with no inference-only wiring at
+// all. There is no `lips-compat` capability and no inference-plane assembly step — the inference
+// base is simply `user_env.inherit`, the full assembled base reached by inheritance.
 export const inferenceEnv = userEnv.inherit("inference");
