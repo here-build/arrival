@@ -357,7 +357,8 @@ export function decodeAccessor(head: string): PairStep[] | null {
   const steps: PairStep[] = [];
   let d = 0;
   for (let i = letters.length - 1; i >= 0; i--) {
-    if (letters[i] === "d") d++; // skip another element
+    if (letters[i] === "d")
+      d++; // skip another element
     else (steps.push({ pull: d }), (d = 0)); // an `a` closes the pull it caps
   }
   if (d > 0) steps.push({ drop: d }); // innermost bare cdr-run (no `a` after)
@@ -468,12 +469,57 @@ function escSym(s: string): string {
 // infix ops (rendered curly when arity ≥3, never a postfix method) and the access
 // heads `@`/`:k` (peeled by their own step branches, not as plain methods).
 const NEVER_METHOD = new Set<string>([
-  "quote", "quasiquote", "unquote", "unquote-splicing",
-  "lambda", "named-lambda", "define", "define-values", "define-syntax", "define-record-type",
-  "if", "cond", "case", "when", "unless", "and", "or", "begin", "do", "set!",
-  "let", "let*", "letrec", "letrec*", "let-values", "let*-values", "let-syntax", "letrec-syntax",
-  "else", "=>", "delay", "delay-force", "parameterize", "guard", "syntax-rules", "@",
-  "+", "-", "*", "/", "<", ">", "<=", ">=", "=", "equal?", "eq?", "eqv?", "modulo", "quotient", "remainder",
+  "quote",
+  "quasiquote",
+  "unquote",
+  "unquote-splicing",
+  "lambda",
+  "named-lambda",
+  "define",
+  "define-values",
+  "define-syntax",
+  "define-record-type",
+  "if",
+  "cond",
+  "case",
+  "when",
+  "unless",
+  "and",
+  "or",
+  "begin",
+  "do",
+  "set!",
+  "let",
+  "let*",
+  "letrec",
+  "letrec*",
+  "let-values",
+  "let*-values",
+  "let-syntax",
+  "letrec-syntax",
+  "else",
+  "=>",
+  "delay",
+  "delay-force",
+  "parameterize",
+  "guard",
+  "syntax-rules",
+  "@",
+  "+",
+  "-",
+  "*",
+  "/",
+  "<",
+  ">",
+  "<=",
+  ">=",
+  "=",
+  "equal?",
+  "eq?",
+  "eqv?",
+  "modulo",
+  "quotient",
+  "remainder",
 ]);
 
 /** A head usable as a bare/braced postfix method op: a plain symbol that is neither
