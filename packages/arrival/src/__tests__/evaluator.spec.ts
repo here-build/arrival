@@ -313,23 +313,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       });
     });
 
-    describe("set!", () => {
-      it("should update an existing variable", async () => {
-        env.set("x", num(10));
-        // (set! x 20)
-        const code = list(sym("set!"), sym("x"), num(20));
-        await exec(code, { env });
-        expect(env._lookupWithResolvers("x")).toEqual(num(20));
-      });
-
-      it("should evaluate the value expression", async () => {
-        env.set("x", num(10));
-        // (set! x (+ x 5))
-        const code = list(sym("set!"), sym("x"), list(sym("+"), sym("x"), num(5)));
-        await exec(code, { env });
-        expect(env._lookupWithResolvers("x")).toEqual(num(15));
-      });
-    });
+    // set! removed — lexical variable rebinding is doored under the purity invariant
+    // (r7rs/binding); arrival is pure dataflow, so there is no rebind form to test.
 
     describe("lambda", () => {
       it("should create a callable function", async () => {

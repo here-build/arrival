@@ -1294,41 +1294,14 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return theVoid;
 }
 
-/** `(set! name value)` — assign an EXISTING binding; unbound is an error (R7RS §5.3.1), not a fresh define. */
-function* evalSet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(is_pair(rest), "set!: missing name");
-
-  const name = rest.car;
-  invariant(name instanceof ASymbol, "set!: expected symbol");
-
-  const valueRest = rest.cdr;
-  invariant(is_pair(valueRest), "set!: missing value");
-
-  // NOT tail position — value returns here so we can store it. Strip tail.
-  let value = yield { call: evaluate(valueRest.car, ctx.tail ? { ...ctx, tail: false } : ctx) };
-  if (is_promise(value)) {
-    value = yield value;
-  }
-
-  // Find the lexical frame where the variable is defined and rebind it there.
-  // `set!` is a frame REBIND of an existing lexical binding (not value mutation —
-  // that family is doored), so it walks the lexical scope chain (`resolver.env` =
-  // the LexicalScope frame). Under glass this is byte-identical to the old
-  // `ctx.env.ref`; under the cut a `set!` on an unshadowed builtin misses the
-  // lexical chain and throws Unbound below (builtins are not program rebind targets).
-  const ref = ctxResolver(ctx).env.ref(symbol_name(name));
-  if (ref) {
-    ref.set(name, value);
-  } else {
-    // R7RS §5.3.1: assigning to an unbound variable is an error. `set!` must
-    // NOT create a fresh binding (that is `define`'s job) — mirror the
-    // unbound-variable error shape used on lookup (Environment::get).
-    throw Object.assign(new Error(`Unbound variable \`${symbol_name(name).toString()}'`), {
-      publicMessage: `symbol ${symbol_name(name).toString()} does not exist - look at list of available functions at tool description`,
-    });
-  }
-  return value;
-}
+// `set!` — OMITTED by the purity invariant; doored in r7rs/binding (removed from
+// the special-form table so env lookup reaches the door, exactly like delay /
+// parameterize). Lexical variable rebinding is the last binding-mutation vestige:
+// arrival is pure dataflow (every value carries the lineage of WHERE it was bound),
+// so re-binding a name severs that lineage. It was a LIPS-fork carry-over, not an
+// earned form. With it gone, the `Environment.ref`/`Resolver.env.ref` mutation-
+// targeting walk has no evaluator caller (it survives only for hygiene's
+// `Capabilities.refFrame` IDENTITY probe, which is not a mutation path).
 
 /** `(lambda args body)` — closes over the definition-time env; body starts in tail position (R7RS §3.5). */
 function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
@@ -2369,7 +2342,8 @@ const SPECIAL_FORMS: Record<string, (rest: SchemeValue, ctx: EvalContext) => Eva
   quasiquote: evalQuasiquote,
   define: evalDefine,
   "define-macro": evalDefineMacro,
-  "set!": evalSet,
+  // set! — OMITTED by the purity invariant; doored in r7rs/binding (removed from
+  // the special-form table so env lookup reaches the door, like delay / parameterize).
   lambda: evalLambda,
   // Core macros (implemented as special forms for performance)
   let: evalLet,

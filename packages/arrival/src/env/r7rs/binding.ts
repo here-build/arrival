@@ -61,6 +61,13 @@ export const BINDING_SCM = `    ;; ---------------------------------------------
 // BASE_PACKS→user_env home resolves for every consumer by inheritance.
 export default new EnvCapability("scheme/r7rs/binding", {
   symbols: {
+    // §4.1.6 Assignment — the last binding-MUTATION vestige, doored. arrival is pure
+    // dataflow: every value carries the lineage of WHERE it was bound, so re-binding a
+    // name (the value family `set-car!`/`vector-set!` is doored too) severs that lineage —
+    // there is no single binding site left to root it at. For an updated value, bind a
+    // fresh name (`let`/`letrec`/`define` in a new scope) or thread it through your dataflow.
+    "set!": symbol.notImplemented`set!: set! mutates — violates value provenance (R7RS §4.1.6 omitted) — arrival is pure dataflow; rebinding a variable severs the lineage a value carries from its binding site. Bind a fresh name (let / letrec / define in a new scope) or thread the value through your dataflow instead`,
+
     "values": symbol.native`values: package zero or more values for a continuation`(
       { input: z.array(z.unknown()), output: [z.unknown()] },
       (...args: unknown[]): unknown => Values.from(args),
