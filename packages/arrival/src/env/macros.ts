@@ -13,11 +13,22 @@ import { symbol } from "../common/symbol.js";
 import { Syntax } from "../eval/Syntax.js";
 import { Environment } from "../Environment.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eval/syntax-rules.js";
-import { is_nil, is_pair } from "../values/value-guards.js";
+import { is_nil, is_pair as is_pair_raw } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { APair } from "../values/primitives/APair.js";
 import { Resolver } from "../eval/Resolver.js";
 import type { MacroInvokeContext } from "../eval/Macro.js";
 import type { SchemeValue } from "../values/types.js";
+
+// Macros-domain refinement of `is_pair` — the same shadow the evaluator uses.
+// The shared `is_pair` (value-guards) narrows only to `APair<unknown, unknown>`
+// because `APair` is generic over its slot types for the membrane/reader boundary.
+// Every cons cell this pack walks (a macro form / its rules, emitted by the reader)
+// is fully boxed — its car and cdr ARE `SchemeValue`s. This shadow makes that domain
+// truth visible at the type level so each `.car`/`.cdr`/`.valueOf()` descent over a
+// narrowed pair types as a scheme value WITHOUT a per-site cast. Same runtime
+// predicate, same structural commitment, refined to this layer's slot truth.
+const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
 
 // The syntax-rules transformer-constructor, relocated VERBATIM from the stdlib husk (was the
 // `global_env.__env__` blob). Invoked as `(syntax-rules (literals) (pattern template)…)` → returns
@@ -41,14 +52,17 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
   // `globalRoot` (global_env), so this is byte-identical.
   const defResolver = new Resolver(env, defSiteResolver?.capabilities);
 
-  function get_identifiers(node: SchemeValue) {
-    // Collects the unwrapped identifier NAMES (string | symbol from each
-    // ASymbol's valueOf), consumed downstream as a name-list via `.includes`.
+  function get_identifiers(node: unknown) {
+    // `node` is typed `unknown` — the honest contract for an arbitrary datum (and for
+    // `APair.car`'s default). The walk narrows internally with the slot-typed `is_pair`
+    // shadow, so `node.car` / `node.cdr` descend as scheme values with no per-site cast.
+    // Collects the unwrapped identifier NAMES (string | symbol from each ASymbol's
+    // valueOf), consumed downstream as a name-list via `.includes`.
     const symbols: unknown[] = [];
     while (is_pair(node)) {
       const x = node.car;
-      symbols.push((x as SchemeValue).valueOf());
-      node = node.cdr as SchemeValue;
+      symbols.push(x.valueOf());
+      node = node.cdr;
     }
     return symbols;
   }
@@ -96,17 +110,17 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
       if (macro.car instanceof ASymbol) {
         ellipsis = macro.car;
         TypeError.invariant(is_pair(macro.cdr), "syntax-rules: malformed macro form");
-        symbols = get_identifiers(macro.cdr.car as SchemeValue);
-        rules = macro.cdr.cdr as SchemeValue;
+        symbols = get_identifiers(macro.cdr.car);
+        rules = macro.cdr.cdr;
       } else {
         ellipsis = "...";
-        symbols = get_identifiers(macro.car as SchemeValue);
-        rules = macro.cdr as SchemeValue;
+        symbols = get_identifiers(macro.car);
+        rules = macro.cdr;
       }
       try {
         while (is_pair(rules)) {
           TypeError.invariant(is_pair(rules.car), "syntax-rules: malformed rule");
-          const rule = rules.car.car as SchemeValue;
+          const rule = rules.car.car;
           TypeError.invariant(is_pair(rules.car.cdr), "syntax-rules: malformed rule");
           // `expr` is a TEMPLATE HANDLE, not a proven SchemeValue: it is the template
           // form read from the rule, fed straight into `transform_syntax` (whose
@@ -148,7 +162,7 @@ const syntaxRulesDef = symbol.macro`syntax-rules`(function (
             void macro_expand;
             return { expr: restore_data_gensyms(expr, names), scope: new_env };
           }
-          rules = rules.cdr as SchemeValue;
+          rules = rules.cdr;
         }
       } catch (error_) {
         (error_ as Error).message += `\nin macro:\n  ${macro.toString()}`;

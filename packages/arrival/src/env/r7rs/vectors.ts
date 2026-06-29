@@ -24,6 +24,7 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
@@ -46,21 +47,24 @@ import { EnvCapability } from "../../common/capability.js";
 export default new EnvCapability("scheme/vectors", {
   symbols: {
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
-      { input: [z.schemeNumber, z.unknown().optional()], output: [z.svector] },
-      (k: unknown, fill?: unknown): AVector => {
+      { input: [z.schemeNumber, z.value.optional()], output: [z.svector] },
+      (k: unknown, fill?: SchemeValue): AVector => {
         const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
         // assertAllocatable. \`Array.from({length})\` on an oversized count is the
         // >10s hang the audit caught.
         assertAllocatable(len, "make-vector");
-        // Materialize the fill into every slot AT construction. \`fill\` is typed
-        // \`unknown\` (the representation-blind contract), but a value reaching a builtin
-        // has already crossed the membrane (JS null→nil, undefined→theVoid) — it IS a
-        // SchemeValue; the slot assertion below is that membrane fact. Folding the fill
-        // into \`Array.from\`'s map (vs a follow-up \`arr.fill\`) keeps it inside that single
-        // boundary, and the no-fill case (\`fill === undefined\`) yields the same
-        // \`[undefined × len]\` an empty \`Array.from({length})\` would.
-        const arr = Array.from({ length: len }, () => fill) as SchemeValue[];
+        // Materialize the fill into every slot AT construction. The fill slot takes any
+        // scheme value by design, so its contract is \`z.value\` (output \`SchemeValue\`, the
+        // typed replacement for \`z.unknown()\`) and \`fill\` is \`SchemeValue\` — a provided
+        // fill has crossed the membrane (JS null→nil), and the no-fill case maps each
+        // slot to \`theVoid\` (the membrane's own undefined→theVoid image) rather than a
+        // raw \`undefined\` — that unboxed slot is exactly the leak this layer dissolves,
+        // and \`theVoid\` keeps \`slot\` a genuine \`SchemeValue\` so \`Array.from\` infers
+        // \`SchemeValue[]\` with no cast. Folding the slot into \`Array.from\`'s map (vs a
+        // follow-up \`arr.fill\`) keeps it inside that single boundary.
+        const slot: SchemeValue = fill === undefined ? theVoid : fill;
+        const arr = Array.from({ length: len }, () => slot);
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
         return withInputProvenance([fill], new AVector(CONSTANT_CTX, arr));
