@@ -45,6 +45,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
+import { AExact } from "./AExact.js";
 import { nil } from "./ANil.js";
 import type { SchemeValue } from "../types.js";
 
@@ -239,7 +240,11 @@ export class AHalfBaked extends AValue {
   force(): Promise<SchemeValue> {
     if (this.forced) return this.forced;
     if (this.domain === "number") {
-      this.forced = this.source.force().then((pair) => pairLength(pair));
+      // The collapsed cardinality is an exact non-negative integer — box it as the
+      // faithful SchemeValue (AExact). Downstream numeric coercion (coerceNumeric)
+      // takes this AExact verbatim, identical to the raw-count → safe-integer box it
+      // produced before, so this is the contract-honest form of the same value.
+      this.forced = this.source.force().then((pair) => new AExact(this.ctx, BigInt(pairLength(pair))));
       return this.forced;
     }
     this.forced = Promise.all(this.slots).then((slotItems) => {
