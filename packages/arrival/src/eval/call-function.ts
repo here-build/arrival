@@ -29,7 +29,7 @@ type SchemeFunction = (...args: any[]) => any;
 export function call_function(
   fn: SchemeFunction,
   args: SchemeValue[],
-  { use_dynamic }: SchemeValue = {},
+  { use_dynamic }: { use_dynamic?: boolean } = {},
 ) {
   // F1/F2 dissolved (P3 3b.3 step 6): the callers (the HOF dispatch in env/r7rs/lists.ts)
   // always pass `{}`, so `env`/`dynamic_env` were always undefined and `env?.new_frame(...)`
