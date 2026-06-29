@@ -16,10 +16,7 @@ import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eva
 import { is_nil } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "../eval/Resolver.js";
-
-// Scheme is inherently dynamic — these use `any` intentionally for interpreter interop.
-
-type SchemeValue = any;
+import type { SchemeValue } from "../values/types.js";
 
 // The syntax-rules transformer-constructor, relocated VERBATIM from the stdlib husk (was the
 // `global_env.__env__` blob). Invoked as `(syntax-rules (literals) (pattern template)…)` → returns

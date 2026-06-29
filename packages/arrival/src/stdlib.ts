@@ -31,12 +31,7 @@ import { Values } from "./values/primitives/Values.js";
 
 import { ABool } from "./values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "./provenance-collapse.js";
-
-
-// Type definitions for dynamic Scheme values
-// Scheme is inherently dynamic - these use `any` intentionally for interpreter interop
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SchemeValue = any;
+import type { SchemeValue } from "./values/types.js";
 
 // -------------------------------------------------------------------------
 

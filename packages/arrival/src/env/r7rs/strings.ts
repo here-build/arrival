@@ -57,13 +57,7 @@ import {
   rational_re,
 } from "../../values/primitives.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
-
-// Scheme is inherently dynamic at these interop boundaries — the relocated
-// LIPS-era string builtins (`concat`/`join`/`split`/`substring`/`string->number`)
-// typecheck their args at runtime; the param types use `any` intentionally (as in
-// the stdlib originals).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SchemeValue = any;
+import type { SchemeValue } from "../../values/types.js";
 
 // Pack-local copies of the list<->array bridge helpers `join`/`split` need. The
 // stdlib originals (`listToArray`/`arrayToList`/`to_array`) stay in stdlib.ts for

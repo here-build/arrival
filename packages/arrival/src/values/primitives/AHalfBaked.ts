@@ -46,9 +46,8 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
 import { nil } from "./ANil.js";
+import type { SchemeValue } from "../types.js";
 
-// Loose, like the rest of the interpreter — SchemeValue is `any` in types.ts.
-type SchemeValue = any;
 type Provenance = ReadonlySet<number>;
 
 /** Closed integer interval `[lo, hi]`. `hi === Infinity` means unbounded above. */

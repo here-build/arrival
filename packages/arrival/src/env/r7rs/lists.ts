@@ -48,12 +48,7 @@ import { SPECULATE } from "../../well-known-symbols.js";
 import { call_function } from "../../eval/call-function.js";
 import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
-
-// Scheme is inherently dynamic at these interop boundaries — the relocated
-// LIPS-era list builtins below typecheck their args at runtime; the param
-// types use `any` intentionally (as in the stdlib originals).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SchemeValue = any;
+import type { SchemeValue } from "../../values/types.js";
 
 // Pack-local copies of the list<->array bridge helpers. The stdlib originals
 // (`listToArray`/`arrayToList`/`to_array`/`isProperList`) stay in stdlib.ts for
