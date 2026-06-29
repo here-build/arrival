@@ -35,14 +35,26 @@ const net = new EnvCapability("net", {
   },
 });
 
-/** A minimal SchemeEnv that records defineRosetta wiring. */
+/** A minimal SchemeEnv that records defineRosetta wiring. The scope-shaping verbs
+ *  (registerResolver / list / allBoundNames) are not exercised by these tests, so they
+ *  throw LOUD rather than silently mis-record — mirroring `captureSymbols`'s recorder. */
 function recordingEnv(): { env: SchemeEnv; verbs: Record<string, (...a: unknown[]) => unknown> } {
   const verbs: Record<string, (...a: unknown[]) => unknown> = {};
+  const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
   const env: SchemeEnv = {
     defineRosetta: (name, cfg) => void (verbs[name] = cfg.fn),
     set: () => undefined,
     get: () => undefined,
     inherit: () => env,
+    registerResolver: () => {
+      throw unrecordable("registerResolver");
+    },
+    list: () => {
+      throw unrecordable("list");
+    },
+    allBoundNames: () => {
+      throw unrecordable("allBoundNames");
+    },
   };
   return { env, verbs };
 }
