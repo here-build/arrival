@@ -4,7 +4,8 @@
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
-export const SRFI189_SCM = `
+export default new EnvCapability("scheme/srfi-189", {
+  prelude: `
 ;; ============ SRFI-189 (Maybe & Either) ============
 ;; ---- SRFI-189 Maybe & Either (tagged-list values) ----
 
@@ -76,6 +77,5 @@ export const SRFI189_SCM = `
   (cond ((left? e) (right (car (cdr e))))
         ((right? e) (left (car (cdr e))))
         (else (error "either-swap: not an Either"))))
-`;
-
-export default new EnvCapability("scheme/srfi-189", { prelude: SRFI189_SCM });
+`,
+});

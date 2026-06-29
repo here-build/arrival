@@ -4,7 +4,8 @@
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
-export const SRFI128_SCM = `
+export default new EnvCapability("scheme/srfi-128", {
+  prelude: `
 ;; ============ SRFI-128 (comparators) ============
 ;; ---- SRFI-128 comparators (tagged-list; NO hash — arrival has no value-hash,
 ;; so comparator-hashable? is always #f and the hash arg is ignored) ----
@@ -50,6 +51,5 @@ export const SRFI128_SCM = `
               (else #f)))))
 (define (make-default-comparator) (make-comparator (lambda (x) #t) equal? %default-less))
 (define (default-comparator) (make-default-comparator))
-`;
-
-export default new EnvCapability("scheme/srfi-128", { prelude: SRFI128_SCM });
+`,
+});

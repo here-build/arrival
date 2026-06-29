@@ -4,7 +4,8 @@
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
-export const SRFI43_SCM = `
+export default new EnvCapability("scheme/srfi-43", {
+  prelude: `
 ;; ============ SRFI-43 (vector library — pure ops only; arrival vectors are immutable) ============
 ;; vector-fold — left fold over a vector; (kons acc elt) folded across indices 0..n-1.
 (define (vector-fold kons knil vec)
@@ -64,6 +65,5 @@ export const SRFI43_SCM = `
             (cond ((not r) #f)
                   ((= i (- n 1)) r)
                   (else (loop (+ i 1)))))))))
-`;
-
-export default new EnvCapability("scheme/srfi-43", { prelude: SRFI43_SCM });
+`,
+});

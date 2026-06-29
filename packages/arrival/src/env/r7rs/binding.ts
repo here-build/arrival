@@ -24,34 +24,8 @@ import { typecheck } from "../../utils/typecheck.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SchemeFunction = (...args: any[]) => any;
 
-export const BINDING_SCM = `    ;; -----------------------------------------------------------------------------
-    ;; R7RS let-values and let*-values
-    ;; -----------------------------------------------------------------------------
-    (define-macro (let-values bindings . body)
-      (if (null? bindings)
-          \`(begin ,@body)
-          (let* ((first-binding (car bindings))
-                 (vars (car first-binding))
-                 (expr (cadr first-binding))
-                 (rest-bindings (cdr bindings)))
-            \`(call-with-values
-               (lambda () ,expr)
-               (lambda ,vars
-                 (let-values ,rest-bindings ,@body))))))
-    
-    (define-macro (let*-values bindings . body)
-      (if (null? bindings)
-          \`(begin ,@body)
-          (let* ((first-binding (car bindings))
-                 (vars (car first-binding))
-                 (expr (cadr first-binding))
-                 (rest-bindings (cdr bindings)))
-            \`(call-with-values
-               (lambda () ,expr)
-               (lambda ,vars
-                 (let*-values ,rest-bindings ,@body))))))
-    
-`;
+
+
 
 // R7RS § 6.10 multiple-value primitives, relocated VERBATIM from stdlib.ts global_env
 // (husk dissolution). They live HERE, co-located with their only define-time shape —
@@ -90,5 +64,33 @@ export default new EnvCapability("scheme/r7rs/binding", {
       },
     ),
   },
-  prelude: BINDING_SCM,
+  prelude: `
+    ;; -----------------------------------------------------------------------------
+    ;; R7RS let-values and let*-values
+    ;; -----------------------------------------------------------------------------
+    (define-macro (let-values bindings . body)
+      (if (null? bindings)
+          \`(begin ,@body)
+          (let* ((first-binding (car bindings))
+                 (vars (car first-binding))
+                 (expr (cadr first-binding))
+                 (rest-bindings (cdr bindings)))
+            \`(call-with-values
+               (lambda () ,expr)
+               (lambda ,vars
+                 (let-values ,rest-bindings ,@body))))))
+    
+    (define-macro (let*-values bindings . body)
+      (if (null? bindings)
+          \`(begin ,@body)
+          (let* ((first-binding (car bindings))
+                 (vars (car first-binding))
+                 (expr (cadr first-binding))
+                 (rest-bindings (cdr bindings)))
+            \`(call-with-values
+               (lambda () ,expr)
+               (lambda ,vars
+                 (let*-values ,rest-bindings ,@body))))))
+    
+`,
 });

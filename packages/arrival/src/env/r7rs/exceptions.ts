@@ -14,7 +14,9 @@
 // it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
-export const EXCEPTIONS_SCM = `    ;; -----------------------------------------------------------------------------
+export default new EnvCapability("scheme/r7rs/exceptions", {
+  prelude: `
+    ;; -----------------------------------------------------------------------------
     ;; R7RS Exception Handling
     ;; -----------------------------------------------------------------------------
     
@@ -77,6 +79,5 @@ export const EXCEPTIONS_SCM = `    ;; ------------------------------------------
              (cond
                ,@clauses
                (else (raise ,var)))))))
-`;
-
-export default new EnvCapability("scheme/r7rs/exceptions", { prelude: EXCEPTIONS_SCM });
+`,
+});

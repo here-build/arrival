@@ -4,7 +4,8 @@
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
-export const SRFI26_SCM = `
+export default new EnvCapability("scheme/srfi-26", {
+  prelude: `
 ;; -----------------------------------------------------------------------------
 ;; SRFI-26 — cut / cute: specialize parameters without currying
 ;; -----------------------------------------------------------------------------
@@ -42,6 +43,5 @@ export const SRFI26_SCM = `
       ((and (symbol? (car items)) (equal? (symbol->string (car items)) "<...>"))
        (loop (cdr items) params call binds (gensym)))
       (else (let ((t (gensym))) (loop (cdr items) params (cons t call) (cons (list t (car items)) binds) restp))))))
-`;
-
-export default new EnvCapability("scheme/srfi-26", { prelude: SRFI26_SCM });
+`,
+});

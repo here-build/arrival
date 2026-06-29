@@ -10,7 +10,8 @@
 // single-sources from here — one definition for both envs.
 import { EnvCapability } from "../../common/capability.js";
 
-export const SRFI2_SCM = `
+export default new EnvCapability("scheme/srfi-2", {
+  prelude: `
 ;; ============ SRFI-2 and-let* ============
 ;; and-let* (SRFI-2) — sequential AND with binding. Claw (var expr) binds+tests var;
 ;; claw (expr) is a bare guard; a bare symbol tests itself. Any #f short-circuits the
@@ -27,6 +28,5 @@ export const SRFI2_SCM = `
            \`(if ,(car claw) (and-let* ,rest ,@body) #f))
           (else
            \`(if ,claw (and-let* ,rest ,@body) #f))))))
-`;
-
-export default new EnvCapability("scheme/srfi-2", { prelude: SRFI2_SCM });
+`,
+});
