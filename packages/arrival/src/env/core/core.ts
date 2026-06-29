@@ -14,7 +14,8 @@
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { gensym } from "../../reader/values-repr.js";
+import { gensym, type SymbolName } from "../../reader/values-repr.js";
+import type { ASymbol } from "../../values/primitives/ASymbol.js";
 import { typecheck } from "../../utils/typecheck.js";
 
 /** The irreducible scheme core pack: constants, syntax-binding macros.
@@ -92,8 +93,12 @@ export default new EnvCapability("scheme/core", {
     case: symbol.keyword`case: dispatch on a key via eqv? datum lists`,
     when: symbol.keyword`when: evaluate the body when the test passes`,
     unless: symbol.keyword`unless: evaluate the body when the test fails`,
+    // Contract mirrors gensym's real signature so the raw function binds cast-free:
+    // the optional name hint is a raw symbol NAME (string/symbol/number), an ASymbol
+    // wrapper, or null — NOT a boxed SchemeValue (gensym predates the union and threads
+    // raw names). Output is the freshly-minted ASymbol.
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
-      { input: z.array(z.value), output: [z.value] },
+      { input: z.tuple([z.custom<SymbolName | ASymbol | null>().optional()]), output: [z.symbol] },
       gensym,
     ),
 

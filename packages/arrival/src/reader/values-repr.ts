@@ -28,7 +28,7 @@ import { is_nil, is_pair } from "../values/value-guards.js";
 // (`SchemeSymbolName`) — NOT a boxed SchemeValue. `gensym`/`is_gensym` predate the
 // SchemeValue union and thread raw names through; the union migration surfaces that
 // their inputs are names (string/symbol/number), an ASymbol wrapper, or null.
-type SymbolName = string | symbol | number;
+export type SymbolName = string | symbol | number;
 
 /** Non-enumerable, non-writable Symbol-keyed slot — used for metadata that must
  *  not surface in enumeration or be clobbered (e.g. a gensym's `__literal__` name,
