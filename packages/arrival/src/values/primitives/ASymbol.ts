@@ -45,12 +45,17 @@ export class ASymbol extends AValue {
   static [CLASS] = "symbol";
   readonly kind = "symbol" as const;
   // Interning is per run context — see `internTables` / `internTableFor` above.
-  // Note: gensyms store their literal name at this[SchemeSymbol.literal]
-  // We can't declare the index signature with esbuild
-  // Special symbol markers
-  static readonly literal = Symbol.for("__literal__");
+  // Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for`
+  // registry value is unchanged) so the gensym literal slot can be a DECLARED
+  // computed field below — a single typed key, not the broad symbol index
+  // signature that esbuild rejects. The slot is written by `gensym`'s
+  // `hidden_prop(symbol, "__literal__", name)` (reader/values-repr.ts); `name`
+  // is a string (named gensym) or number (anonymous `#:gN`), and a gensym minted
+  // via the no-double-gensym path carries no slot — hence `?` + `string | number`.
+  static readonly literal: unique symbol = Symbol.for("__literal__");
   static readonly object = Symbol.for("__object__");
   declare __name__: SchemeSymbolName;
+  declare [ASymbol.literal]?: string | number;
 
   constructor(
     ctx: RunContext,
@@ -109,7 +114,12 @@ export class ASymbol extends AValue {
 
   literal(): string {
     if (this.is_gensym()) {
-      return (this as unknown as Record<symbol, string>)[ASymbol.literal];
+      // The declared `[ASymbol.literal]` slot is `string | number | undefined`:
+      // a named gensym stored its source name, an anonymous `#:gN` stored its
+      // counter (number), and a no-double-gensym mint carries no slot at all.
+      // Coerce to the `string` contract; fall back to the symbol's printed form.
+      const lit = this[ASymbol.literal];
+      return lit === undefined ? this.toString() : String(lit);
     }
     // Non-gensyms always have string names
     return this.__name__ as string;

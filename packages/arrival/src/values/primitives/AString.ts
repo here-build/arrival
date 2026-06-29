@@ -192,10 +192,21 @@ export class AString extends AValue {
     function (this: AString, ...args: unknown[]) {
       return fn.apply(this.__string__, args);
     };
+  // The two casts here are IRREDUCIBLE reflection bridges, not laziness: this loop
+  // indexes `String.prototype` by a runtime-discovered string `key` and writes the
+  // wrapped method onto `AString.prototype` by that same dynamic key. TS models
+  // `String.prototype` as a fixed set of named methods (no string index signature)
+  // and a class prototype as non-writable-by-arbitrary-key — neither dynamic access
+  // is expressible without the `as unknown as Record<...>` widening. The exfiltration
+  // hazard this creates (own grafted methods bypass the accessMember boundary) is
+  // documented + mitigated below. The `typeof` guard keeps the graft to callables, so
+  // a future non-method own prop on `String.prototype` (e.g. an accessor) is skipped
+  // rather than copied as a broken "method".
+  const proto = AString.prototype as unknown as Record<string, unknown>;
+  const strProto = String.prototype as unknown as Record<string, unknown>;
   for (const key of _keys) {
-    const proto = AString.prototype as unknown as Record<string, unknown>;
-    const strProto = String.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
-    proto[key] = wrap(strProto[key]);
+    const fn = strProto[key];
+    if (typeof fn === "function") proto[key] = wrap(fn as (...args: unknown[]) => unknown);
   }
 }
 

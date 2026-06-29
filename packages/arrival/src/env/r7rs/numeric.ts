@@ -828,11 +828,12 @@ const floorSlashFn = (n1: unknown, n2: unknown): unknown => {
   const b = coerceNumeric(n2);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
+  // Both operands are AExact, so floorQuotient/floorRemainder take the bothExact
+  // branch and return AExact — no reconstruction (the old `as unknown as bigint`
+  // would have fed a non-bigint to the ctor's denom!=0n invariant in a dead else).
   const q = floorQuotientFn(aExact, bExact);
   const r = floorRemainderFn(aExact, bExact);
-  const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
-  const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
-  return Values.from([qNum, rNum]);
+  return Values.from([q, r]);
 };
 
 const truncateSlashFn = (n1: unknown, n2: unknown): unknown => {
@@ -840,11 +841,12 @@ const truncateSlashFn = (n1: unknown, n2: unknown): unknown => {
   const b = coerceNumeric(n2);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
+  // Both operands are AExact, so truncateQuotient/truncateRemainder take the
+  // bothExact branch and return AExact — no reconstruction (the old
+  // `as unknown as bigint` would have fed a non-bigint to the ctor in a dead else).
   const q = truncateQuotientFn(aExact, bExact);
   const r = truncateRemainderFn(aExact, bExact);
-  const qNum = q instanceof AExact ? q : new AExact(a.ctx, q as unknown as bigint);
-  const rNum = r instanceof AExact ? r : new AExact(a.ctx, r as unknown as bigint);
-  return Values.from([qNum, rNum]);
+  return Values.from([q, r]);
 };
 
 const lcmFn = (...args: unknown[]): ANumeric => {

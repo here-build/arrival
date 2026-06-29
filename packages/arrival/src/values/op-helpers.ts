@@ -350,6 +350,23 @@ export function isSchemeNumber(value: unknown): boolean {
  * along with its twin: the HOFs route truthiness through `is_false`, which is blind
  * to a boxed `SchemeBool`. Non-scalars (Pair / vector / object) stay raw — they
  * carry provenance structurally and `AValue.fromJs` would double-wrap them.
+ *
+ * RETURN-TYPE CAST — `<T>(…): T` with two `as T`, and the second (`fromJs(…) as T`)
+ * is INHERENT, not laziness. This is the seam between two layers that model values
+ * differently:
+ *   • the provenance layer BOXES a raw scalar (`fromJs`) to carry lineage, so a
+ *     `boolean`/`number` input can come back as a `SchemeBool`/`AExact` AValue;
+ *   • the symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`)
+ *     and the tagless ops type their result by its DECODED JS shape, BLIND to the box
+ *     (a `SchemeBool` decodes back to `boolean` downstream).
+ * The impl-side contract DELIBERATELY wants the unboxed type (`string=?` is `: boolean`).
+ * Surfacing the box (return `T | AValue`) doesn't fix the cast — it pushes the same
+ * widening into ~11 predicate/projection contracts that are intentionally boxing-blind
+ * (`string=?`, `string-ci=?`, the order chains, `car`/`cdr`), each a value-model
+ * decision about whether a provenanced boolean is "still a boolean." That belongs to
+ * the provenance/contract design, not this leaf. So the cast stays AS the asserted
+ * fact "the box is transparent to the contract"; the AValue-branch `as T` is sound
+ * (`withProvenance` preserves the subtype) and rides the same signature.
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   const inputs = args.filter((a): a is AValue => a instanceof AValue);
