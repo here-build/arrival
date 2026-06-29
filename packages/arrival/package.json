@@ -88,6 +88,7 @@
   },
   "dependencies": {
     "@here.build/arrival-env": "workspace:^",
+    "@here.build/arrival-sweet": "workspace:^",
     "@here.build/error-invariant": "workspace:^",
     "fantasy-land": "5.0.1",
     "fold-case": "1.0.0",
