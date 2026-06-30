@@ -110,6 +110,14 @@ export interface PlainInv {
   metadata: unknown;
   /** running | resolved | rejected — the render's pending/result/error state. */
   state: InvocationState;
+  /** Rejection detail — `Invocation.error` stringified at snapshot time (clone-safe).
+   *  Points only, `rejected` only; `undefined` otherwise. The render labels the failed
+   *  card with it instead of a bare `⚠ failed`. */
+  error?: string;
+  /** infer cache HIT (replayed free) vs fresh (paid) call. Points only; `undefined` for
+   *  non-infer. The free-vs-paid cost signal — "nothing costs anything until ▶, and a
+   *  pre-cached trace replays for free". */
+  cached?: boolean;
 }
 
 export interface PlainTrace {
@@ -127,6 +135,11 @@ const headName = (node: APair | undefined): string | undefined => {
   const n = (car as { __name__?: unknown } | undefined)?.__name__;
   return typeof n === "string" ? n : undefined;
 };
+
+/** Stringify a rejection for the snapshot. An `Error` is its message; anything else its
+ *  `String(…)`; nullish → undefined. A string is structured-clone-safe (the live `error:
+ *  unknown` / `Error` would lose its prototype across `postMessage`). */
+const errText = (e: unknown): string | undefined => (e instanceof Error ? e.message : e == null ? undefined : String(e));
 
 /** Shared empty set for invocations whose provenance the build never reads. */
 const NO_PROVENANCE: ReadonlySet<number> = new Set();
@@ -172,6 +185,10 @@ export function snapshotTrace(trace: EvalTrace): PlainTrace {
         value: isPoint || isRoot || isBranchChild ? schemeToJs(inv.value) : undefined,
         metadata: isPoint ? inv.metadata : undefined,
         state: inv.state,
+        // Rejection detail + cache flag — points only (the leaves the render draws), gated
+        // exactly like `value`/`metadata`. Both are clone-safe primitives (string/boolean).
+        error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,
+        cached: isPoint ? inv.cached : undefined,
       };
       byId.set(inv.id, plain);
       invocations.push(plain);

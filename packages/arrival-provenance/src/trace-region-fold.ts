@@ -32,6 +32,7 @@
  */
 import { schemeToJs, type APair } from "@here.build/arrival";
 
+import { carrierFieldEdges } from "./carrier-fields.js";
 import type { PlainInv } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import {
@@ -39,6 +40,7 @@ import {
   appendDecisionEdges,
   appendOutput,
   attributeFieldEdges,
+  attributeFromFields,
   decisionInputProducers,
   derivePorts,
   regionsAt,
@@ -63,6 +65,9 @@ import type { EvalTrace, Invocation } from "./trace.js";
 const EMPTY_NUM: ReadonlySet<number> = new Set();
 
 const headOf = (inv: PlainInv): string => scopeId(inv.node).split("@")[0] ?? "?";
+/** Stringify a rejection — the snapshot's `errText`, inlined (kept identical so the fold's
+ *  mirror stays deep-equal to a fresh `snapshotTrace`). */
+const errText = (e: unknown): string | undefined => (e instanceof Error ? e.message : e == null ? undefined : String(e));
 const hasSelfAncestor = (inv: PlainInv): boolean => {
   for (let p = inv.parent; p; p = p.parent) if (p.node === inv.node) return true;
   return false;
@@ -425,7 +430,9 @@ export class TraceRegionFold {
       pointIds: this.#pointIds,
       reach: this.#reach,
     };
-    const edges = attributeFieldEdges(this.#baseEdges, finalizeCtx);
+    // Consumer-slot then producer-output-row attribution — identical to the from-scratch
+    // build so `current()` stays deep-equal to `traceToRegions` (the parity gate).
+    const edges = attributeFromFields(attributeFieldEdges(this.#baseEdges, finalizeCtx), carrierFieldEdges(this.#trace));
 
     // Decision wires, then the statement-output terminal (final = last top-level form).
     appendDecisionEdges(edges, knotArm, knotInputs);
@@ -467,6 +474,10 @@ export class TraceRegionFold {
       plain.state = live.state;
       plain.value = isPoint || isRoot || isBranchChild ? schemeToJs(live.value) : undefined;
       plain.metadata = isPoint ? live.metadata : undefined;
+      // A leaf parked while `running` may have REJECTED since — re-copy the error/cache too so
+      // the settled mirror matches a fresh snapshot.
+      plain.error = isPoint && live.state === "rejected" ? errText(live.error) : undefined;
+      plain.cached = isPoint ? live.cached : undefined;
       // Provenance is materialized for children-of-points + roots (snapshot predicate);
       // it is computed at the live invocation's exit, so re-copy it now it has settled.
       if (plain.parent?.isProvenancePoint || isRoot) plain.provenance = new Set(live.provenance);
@@ -492,6 +503,8 @@ export class TraceRegionFold {
       value: isPoint || isRoot || isBranchChild ? schemeToJs(inv.value) : undefined,
       metadata: isPoint ? inv.metadata : undefined,
       state: inv.state,
+      error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,
+      cached: isPoint ? inv.cached : undefined,
     };
   }
 

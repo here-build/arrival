@@ -46,6 +46,7 @@
 import { schemeToJs } from "@here.build/arrival";
 import { schemeToSweet } from "@here.build/arrival-sweet";
 
+import { carrierFieldEdges } from "./carrier-fields.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import type { EvalTrace } from "./trace.js";
@@ -83,6 +84,12 @@ export type Region =
       value?: unknown;
       /** running | resolved | rejected — pending vs result vs error in the card. */
       state: "running" | "resolved" | "rejected";
+      /** Rejection detail for a `rejected` leaf — the message off `Invocation.error`, so the
+       *  card shows WHY it failed, not a bare `⚠ failed`. */
+      error?: string;
+      /** Cache HIT (replayed free) vs fresh (paid) call — the free-vs-paid cost signal.
+       *  `undefined` for non-infer leaves. */
+      cached?: boolean;
     }
   | {
       /** A `<>` DECISION MARKER — the point a live branch (`if`/`cond`/…) decided
@@ -496,6 +503,8 @@ export function leafFor(inv: PlainInv): Extract<Region, { kind: "leaf" }> {
     meta: inv.metadata,
     value: inv.value,
     state: inv.state,
+    error: inv.error,
+    cached: inv.cached,
   };
 }
 
@@ -825,6 +834,38 @@ export interface FinalizeCtx {
 }
 
 /**
+ * The PRODUCER-side twin of `attributeFieldEdges`: stamp each data edge with `fromField` —
+ * which OUTPUT field of the producer the consumer plucked (`(:verdict (car reactions))` →
+ * `fromField:"verdict"`). The pin data is reused verbatim from `carrierFieldEdges` (the
+ * spec-faithful, byte-identical replacement for the retired field-point mint), keyed by
+ * `${producer}>${consumer}` — the exact point-id endpoints region edges carry, so the join
+ * is a direct `Map.get` with no cell-lift (regions never collapse points). Pure: identical
+ * for from-scratch + incremental (the fold calls it with the same carrier map).
+ *
+ * Only DATA edges qualify (control/decision/output carry no producer-field pluck). An edge
+ * with no carrier entry — whole-value flow, positional plucks (`car`/index), or the
+ * auto-bindings flag OFF — passes through unchanged (`fromField` stays undefined), so this is
+ * fully additive. Limitation: the carrier aggregates to `Set<field>` per `(producer,consumer)`
+ * and loses which producer field fed which consumer slot, so a producer plucked into two
+ * different slots of one consumer over-generates (the same fidelity ceiling `statechart.ts`
+ * accepts); a true (slot,fromField)-paired carrier is a follow-up.
+ */
+export function attributeFromFields(edges: RegionEdge[], fromFieldEdges: Map<string, Set<string>>): RegionEdge[] {
+  const out: RegionEdge[] = [];
+  for (const e of edges) {
+    const set = e.kind === "data" ? fromFieldEdges.get(`${e.from}>${e.to}`) : undefined;
+    if (!set || set.size === 0) {
+      out.push(e);
+      continue;
+    }
+    // `{ ...e }` preserves any consumer-slot `field` already attached — the edge honestly
+    // carries BOTH the consumer slot and the producer output row.
+    for (const fromField of set) out.push({ ...e, fromField });
+  }
+  return out;
+}
+
+/**
  * Rewrite the base point→point data edges into FIELD-QUALIFIED edges (consumer-field
  * attribution). For a `.prompt` consumer, find which named input the producer flowed
  * into — the sound `inputsProvenance` path (immediate-writer Hasse-reduced per slot +
@@ -1143,9 +1184,11 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const tops = snap.invocations.filter((i) => !i.parent);
   const roots = tops.flatMap((t) => regionsAt(t, ctx));
 
-  // Field attribution rewrites the base edges in place.
+  // Field attribution rewrites the base edges in place: first the consumer slot (`field`),
+  // then the producer output row (`fromField`) reused from the carrier (empty + no-op when the
+  // auto-bindings flag is OFF, so this is byte-identical for non-armed traces).
   const finalizeCtx: FinalizeCtx = { points, pointIds, reach };
-  const attributed = attributeFieldEdges(edges, finalizeCtx);
+  const attributed = attributeFromFields(attributeFieldEdges(edges, finalizeCtx), carrierFieldEdges(trace));
   edges.length = 0;
   edges.push(...attributed);
 
