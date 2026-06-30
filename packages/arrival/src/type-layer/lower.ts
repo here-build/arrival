@@ -10,9 +10,10 @@
 //
 // The cut between "plain TS" and "carrier vocabulary":
 //   • application `(head a b)`     → `head(a, b)` (scheme arg order; head is a global /
-//                                    declared const) — or `_["op"](a, b)` for a
-//                                    non-identifier head (`+`, `string-append`, …),
-//                                    which lives in the prelude's `_` namespace.
+//                                    declared const) — or `_.op$escaped(a, b)` for a
+//                                    non-identifier head (`+`, `string-append`, …), which
+//                                    lives in the prelude's `_` namespace under its escaped,
+//                                    dotted name (name-escape.ts — so `typeof _.op` is legal).
 //   • lists/pairs (the ONLY non-TS-subset values) → the carrier globals
 //                                    `list`/`cons`/`car`/`cdr` (functional, never `.car`).
 //   • vector `#(…)`                → a native TS array `[…]`.
@@ -24,8 +25,9 @@
 
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 
-/** An identifier-safe name lowers as a bare reference / call head; everything else
- *  (`+`, `string-append`, `null?`, …) routes through the prelude's `_` namespace. */
+import { escapeName, isTsIdentifier } from "./name-escape.js";
+
+/** A dict / object-property key prints bare when identifier-safe, else quoted. */
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 /** A plain decimal/integer numeric literal (also covers a leading sign + exponent). */
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -95,8 +97,8 @@ function emitAtom(node: AtomNode): string {
   if (NUMBER.test(t)) return t;
   const rat = RATIONAL.exec(t);
   if (rat !== null) return `${rat[1]} / ${rat[2]}`; // rational → number-typed division
-  if (IDENT.test(t)) return t; // value-position symbol → the declared const / carrier global
-  return `_[${JSON.stringify(t)}]`; // operator/symbol value → prelude `_` namespace member
+  if (isTsIdentifier(t)) return t; // value-position symbol → the declared const / carrier global
+  return `_.${escapeName(t)}`; // operator/symbol value → prelude `_` namespace member (escaped, dotted)
 }
 
 function emitList(node: ListNode): string {
@@ -131,7 +133,7 @@ function emitList(node: ListNode): string {
   // Application — scheme arg order preserved.
   const args = emitSeq(items.slice(1)).join(", ");
   if (isWord(head)) {
-    return IDENT.test(head.atom) ? `${head.atom}(${args})` : `_[${JSON.stringify(head.atom)}](${args})`;
+    return isTsIdentifier(head.atom) ? `${head.atom}(${args})` : `_.${escapeName(head.atom)}(${args})`;
   }
   // Computed head (a nested application / lambda): `(expr a b)` → `expr(a, b)`.
   return `${emitNode(head)}(${args})`;

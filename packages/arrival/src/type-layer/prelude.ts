@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { escapeName, isTsIdentifier } from "./name-escape.js";
 import type { SymbolDef } from "../common/symbol.js";
 import { signatureOf } from "./schema-to-ts.js";
 
@@ -34,8 +35,6 @@ function carrierVocabulary(): string {
   return cachedVocabulary;
 }
 
-const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-
 export interface HarvestedPrelude {
   /** The ambient TS the lens prepends to the lowered program. */
   readonly prelude: string;
@@ -45,9 +44,10 @@ export interface HarvestedPrelude {
 
 /**
  * Assemble the ambient prelude for a set of `[name, SymbolDef]` grant tools. Identifier-safe
- * names become `declare const <name>: <sig>`; operator / non-identifier names become members of
- * a `declare const _: { … }` namespace (the lowering emits `_["+"](…)` for them). `sig` is the
- * harvested arrow string; a door/macro/keyword harvests as `never` (not callable).
+ * names become `declare const <name>: <sig>`; operator / non-identifier names become ESCAPED,
+ * dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the lowering emits the
+ * matching escaped access). `sig` is the harvested arrow string; a door/macro/keyword harvests as
+ * `never` (not callable).
  */
 export function assembleHarvestedPrelude(
   entries: Iterable<readonly [name: string, def: SymbolDef]>,
@@ -58,8 +58,11 @@ export function assembleHarvestedPrelude(
   for (const [name, def] of entries) {
     const sig = signatureOf(def);
     members.push(name);
-    if (IDENTIFIER.test(name)) identDecls.push(`declare const ${name}: ${sig};`);
-    else operatorDecls.push(`  ${JSON.stringify(name)}: ${sig};`);
+    // identifier-safe → a top-level `declare const`; everything else → an ESCAPED, dotted member of
+    // the `_` namespace (`get-route` → `_.get$dash$route`), so `typeof _.<name>` is a legal type
+    // query and `_.` autocompletes (name-escape.ts — the scheme-name ⇄ TS-identifier lens).
+    if (isTsIdentifier(name)) identDecls.push(`declare const ${name}: ${sig};`);
+    else operatorDecls.push(`  ${escapeName(name)}: ${sig};`);
   }
   const operatorNamespace =
     operatorDecls.length > 0 ? `declare const _: {\n${operatorDecls.join("\n")}\n};\n` : "";

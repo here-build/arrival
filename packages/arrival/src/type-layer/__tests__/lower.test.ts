@@ -42,9 +42,9 @@ describe("lower — scheme → TS emitter", () => {
     expect(ts1("(foo a b)")).toBe("foo(a, b)");
   });
 
-  it("a non-identifier head routes through the `_` operator namespace", () => {
-    expect(ts1("(+ a b)")).toBe('_["+"](a, b)');
-    expect(ts1("(string-append a b)")).toBe('_["string-append"](a, b)');
+  it("a non-identifier head routes through the `_` namespace under its escaped, dotted name", () => {
+    expect(ts1("(+ a b)")).toBe("_.$plus$(a, b)");
+    expect(ts1("(string-append a b)")).toBe("_.string$dash$append(a, b)");
   });
 
   it("car / cdr are functional carrier globals, not field reads", () => {
@@ -70,7 +70,7 @@ describe("lower — scheme → TS emitter", () => {
   });
 
   it("lambda → an arrow", () => {
-    expect(ts1("(lambda (x y) (+ x y))")).toBe('((x, y) => _["+"](x, y))');
+    expect(ts1("(lambda (x y) (+ x y))")).toBe("((x, y) => _.$plus$(x, y))");
   });
 
   it("atoms: strings, numbers, booleans", () => {

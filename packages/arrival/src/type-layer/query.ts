@@ -43,14 +43,12 @@
 import * as ts from "typescript";
 
 import { lower } from "./lower.js";
+import { escapeName, isTsIdentifier } from "./name-escape.js";
 import type { HarvestedPrelude } from "./prelude.js";
 
 /** A clean-name-proof cursor atom: an identifier no scheme program or builtin uses, so its
  *  lowered TS identifier is unambiguous to locate. */
 const SENTINEL = "qzcursorzq";
-/** An identifier-safe head/candidate lowers as a bare `typeof <name>`; everything else routes
- *  through the prelude's `_` operator namespace (matching lower.ts's own dispatch). */
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 /** The cursor's slot role. `argument` is the only T-narrowable position; an operator slot, a
  *  top-level position, or an unparseable prefix all collapse to `none` (→ keep everything). */
@@ -298,10 +296,11 @@ function isUncertain(t: ts.Type): boolean {
 
 /** A candidate's TS type expression for the probe: an identifier-safe name resolves as
  *  `typeof <name>` (a prelude `declare const`, a carrier global, or — if undeclared — an
- *  error-`any` that is kept); a non-identifier name routes through the `_` operator namespace,
- *  mirroring lower.ts's own head dispatch. */
+ *  error-`any` that is kept); a non-identifier name routes through the `_` namespace under its
+ *  ESCAPED, dotted name (`typeof _.get$dash$route`), mirroring lower.ts's own head dispatch. The
+ *  dotted form (not `_["…"]`) is what lets `typeof` walk it — see name-escape.ts. */
 function candidateTypeExpr(name: string): string {
-  return IDENT.test(name) ? `typeof ${name}` : `typeof _[${JSON.stringify(name)}]`;
+  return isTsIdentifier(name) ? `typeof ${name}` : `typeof _.${escapeName(name)}`;
 }
 
 /** Fold the carrier `SlotKind` literal into the 3-way array verdict ("string" → "scalar"); any

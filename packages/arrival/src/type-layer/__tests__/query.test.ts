@@ -80,6 +80,35 @@ const stringTyped = (marked: string): boolean | null => {
   return lens.getSlotIsStringTyped(scheme, offset);
 };
 
+// ── kebab / operator-named callees narrow too (the `_` namespace) ──────────────
+// A scheme tool named with a hyphen (`get-route`) lowers its head to the ESCAPED, dotted member
+// `_.get$dash$route` (name-escape.ts) — NOT a string index — so `typeof _.get$dash$route` is a
+// legal type query and the slot type resolves: the narrow ENGAGES instead of falling to keep-all.
+// Identifier (underscore/bfcl) callees stay bare (`typeof get_route`) — the same code path.
+describe("getTypeValidCandidates — kebab/operator-named callees narrow", () => {
+  const kebabLens = createQueryLens(
+    assembleHarvestedPrelude([
+      ["get-route", getRoute],
+      ["make-route", makeRoute],
+      ["set-timer", setTimer],
+    ]),
+  );
+  const kvalid = (marked: string, cands: readonly string[]): string[] => {
+    const [scheme, offset] = at(marked);
+    return kebabLens.getTypeValidCandidates(scheme, offset, cands);
+  };
+
+  it("a kebab callee's LIST slot narrows: drops the void-returner, keeps the list-returner + local", () => {
+    // (get-route …) → _.get$dash$route(…); arg 0 is List<unknown>. make-route returns a list (kept),
+    // set-timer returns void (PROVABLY ill-typed — dropped), my_local is uncertain (kept).
+    expect(kvalid("(get-route |)", ["make-route", "set-timer", "my_local"])).toEqual(["make-route", "my_local"]);
+  });
+
+  it("a kebab callee's STRING slot still narrows: drops the list-returner, keeps the local", () => {
+    expect(kvalid("(get-route 1 |)", ["make-route", "my_local"])).toEqual(["my_local"]);
+  });
+});
+
 describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
   it("LIST slot: drops the provably-non-list, KEEPS the list-returner AND the unresolved local", () => {
     // get_route arg 0 is `List<unknown>`. make_route returns a list (kept), sum_readings returns
