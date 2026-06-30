@@ -51,8 +51,10 @@ import type { HarvestedPrelude } from "./prelude.js";
 const SENTINEL = "qzcursorzq";
 
 /** The cursor's slot role. `argument` is the only T-narrowable position; an operator slot, a
- *  top-level position, or an unparseable prefix all collapse to `none` (→ keep everything). */
-type Role = { kind: "argument"; calleeText: string; argIndex: number } | { kind: "none" };
+ *  top-level position, or an unparseable prefix all collapse to `none` (→ keep everything).
+ *  `propertyKey` is set when the cursor is a kwargs/object value (`(f :name |)` → `f({ name: … })`),
+ *  so the slot narrows to that property's type, not the whole object. */
+type Role = { kind: "argument"; calleeText: string; argIndex: number; propertyKey?: string } | { kind: "none" };
 
 /** The 3-way value-slot verdict (the carrier `SlotKind`'s "string" folds into "scalar" — a
  *  string is a scalar value, not an array). `null` = unresolved (superset-safe). */
@@ -141,7 +143,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
     if (role.kind !== "argument") return null; // operator / top / unparseable → no T narrowing
     const probe = [
       preludeText,
-      `type __E = Parameters<typeof ${role.calleeText}>[${role.argIndex}];`,
+      `type __E = ${slotTypeExpr(role)};`,
       `declare const __slot: __E;`,
       ...extra,
     ].join("\n");
@@ -161,7 +163,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
 
       const probe = [
         preludeText,
-        `type __E = Parameters<typeof ${role.calleeText}>[${role.argIndex}];`,
+        `type __E = ${slotTypeExpr(role)};`,
         `declare const __slot: __E;`,
         ...cands.map((c, i) => `declare const __c${i}: ${candidateTypeExpr(c)};`),
       ].join("\n");
@@ -187,7 +189,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
 
       const probe = [
         preludeText,
-        `type __E = Parameters<typeof ${role.calleeText}>[${role.argIndex}];`,
+        `type __E = ${slotTypeExpr(role)};`,
         `declare const __slot: __E;`,
         `declare const __kind: SlotKind<__E>;`,
       ].join("\n");
@@ -331,7 +333,8 @@ function findRole(loweredTs: string): Role {
         if (!ts.isCallExpression(p)) continue;
         const argIndex = p.arguments.findIndex((a) => a.getStart(sourceFile) <= start && end <= a.end);
         if (argIndex !== -1) {
-          role = { kind: "argument", calleeText: p.expression.getText(sourceFile), argIndex };
+          const propertyKey = objectPropertyAt(p.arguments[argIndex], start, end, sourceFile);
+          role = { kind: "argument", calleeText: p.expression.getText(sourceFile), argIndex, propertyKey };
           return;
         }
         if (p.expression.getStart(sourceFile) <= start && end <= p.expression.end) return; // operator slot → none
@@ -342,6 +345,30 @@ function findRole(loweredTs: string): Role {
   };
   visit(sourceFile);
   return role;
+}
+
+/** If the argument is an object literal `{ k: … }` and the sentinel sits in property `k`'s VALUE,
+ *  return `k` — so the slot narrows to the property type (`…[arg]["k"]`), not the whole object.
+ *  This is the kwargs/dict value probe (`(f :name |)` → `f({ name: … })`). A sentinel in a property
+ *  NAME (a key being typed) returns undefined → the whole-object slot → keep-all, since key
+ *  narrowing is the profile gate's job, not the lens's. */
+function objectPropertyAt(arg: ts.Expression, start: number, end: number, sf: ts.SourceFile): string | undefined {
+  if (!ts.isObjectLiteralExpression(arg)) return undefined;
+  for (const prop of arg.properties) {
+    if (!ts.isPropertyAssignment(prop)) continue;
+    const init = prop.initializer;
+    if (init.getStart(sf) <= start && end <= init.end) {
+      return ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : undefined;
+    }
+  }
+  return undefined;
+}
+
+/** The TS type expression for the cursor's slot: the callee's parameter at `argIndex`, indexed into
+ *  the kwargs property when the cursor is an object-literal value (`…[argIndex]["key"]`). */
+function slotTypeExpr(role: { calleeText: string; argIndex: number; propertyKey?: string }): string {
+  const base = `Parameters<typeof ${role.calleeText}>[${role.argIndex}]`;
+  return role.propertyKey === undefined ? base : `${base}[${JSON.stringify(role.propertyKey)}]`;
 }
 
 // ── the virtual program ──────────────────────────────────────────────────────

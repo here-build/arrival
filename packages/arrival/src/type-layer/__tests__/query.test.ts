@@ -109,6 +109,34 @@ describe("getTypeValidCandidates — kebab/operator-named callees narrow", () =>
   });
 });
 
+// ── kwargs / object-value slots narrow to the PROPERTY type ────────────────────
+// `(create_user :name |)` lowers to `create_user({ name: ‹cursor› })`; the cursor is the `name`
+// property's VALUE, so the slot narrows to that property's type (`…[0]["name"]`), not the whole
+// object. Every existing axis (candidates / arrayKind / elementType) then narrows the value for free.
+describe("kwargs / object-value slots narrow to the property type", () => {
+  const userTool = symbol.rosetta`create_user: make a user`(
+    { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+    () => "",
+  );
+  const kw = createQueryLens(assembleHarvestedPrelude([["create_user", userTool], ["sum_readings", sumReadings]]));
+
+  it("a string-valued kwarg: element-domain is free-form string; the value slot is scalar", () => {
+    const [scheme, offset] = at("(create_user :name |)");
+    expect(kw.getSlotElementType(scheme, offset)).toEqual({ isStringy: true, enum: null });
+    expect(kw.getSlotArrayKind(scheme, offset)).toBe("scalar");
+  });
+
+  it("an enum-valued kwarg narrows to its members", () => {
+    const [scheme, offset] = at("(create_user :mode |)");
+    expect(kw.getSlotElementType(scheme, offset)).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
+  });
+
+  it("drops-only: a number-returner is dropped at a string-valued kwarg; the unresolved local kept", () => {
+    const [scheme, offset] = at("(create_user :name |)");
+    expect(kw.getTypeValidCandidates(scheme, offset, ["sum_readings", "my_local"])).toEqual(["my_local"]);
+  });
+});
+
 describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
   it("LIST slot: drops the provably-non-list, KEEPS the list-returner AND the unresolved local", () => {
     // get_route arg 0 is `List<unknown>`. make_route returns a list (kept), sum_readings returns
