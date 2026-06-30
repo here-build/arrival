@@ -23,6 +23,8 @@ import { signatureOf } from "./schema-to-ts.js";
 // references `list`/`car`/`map` + the carriers unqualified). Resolved against the shipped src
 // tree (from dist/.../prelude.js that is `../../src/type-layer`; from src it is `.`).
 function carrierVocabularyPath(): string {
+  const o = process.env.ARRIVAL_CARRIERS_PATH;
+  if (o !== undefined) return o;
   const here = fileURLToPath(new URL(".", import.meta.url));
   const inDist = here.includes(`${"/dist/"}`) || here.endsWith("/dist/type-layer/");
   const base = inDist ? new URL("../../src/type-layer/carriers.ts", import.meta.url) : new URL("./carriers.ts", import.meta.url);
