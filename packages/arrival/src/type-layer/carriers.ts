@@ -93,3 +93,42 @@ export type CouldBeList<R> =
   [unknown] extends [R] ? true
   : [Extract<R, Cons<unknown> | null>] extends [never] ? false
   : true;
+
+// ── kwargs encoding — an object input → a forceable `:key value` pair sequence ──
+// A "kwargs tool" is one whose input is an object; the model calls it `(tool :k v :k2 v2)`,
+// which lowers to `tool([":k", v], [":k2", v2])`. `ObjectToKwargs<T>` is the args-tuple TYPE:
+//   • REQUIRED pairs → a FIXED canonical tuple (every required pair is a mandatory position the
+//     model cannot omit; the order is the type's, hence "canonical").
+//   • OPTIONAL pairs → a FLEXIBLE variadic tail (`…Pairs<…>[]` — any subset, any order).
+// Each pair is a 2-tuple `[":key", value]`, so a `:key` with no value is a length-1 tuple that
+// does NOT match — the value is structurally mandatory ("no keyword without its value"). The
+// keyword slot is a one-member literal (the lens FORCES it); the value slot is its type (the lens
+// narrows it) — both fall out of the existing per-element slot probe (`Parameters<…>[arg][elem]`).
+
+/** One `:key value` pair. The keyword literal carries the colon so it matches the lowered `:key`
+ *  atom; `value` at index 1 is mandatory, which is what bans a bare keyword. */
+export type Kwarg<K extends string, V> = [key: `:${K}`, value: V];
+
+/** An object type → the UNION of its `[":key", value]` pairs (`-?` strips optional's `| undefined`). */
+export type Pairs<T> = { [K in keyof T]-?: Kwarg<K & string, T[K]> }[keyof T];
+
+/** Keep only the REQUIRED properties of `T` (a key is optional iff `{}` is assignable to its pick). */
+export type OnlyRequired<T> = { [K in keyof T as {} extends Pick<T, K> ? never : K]: T[K] };
+/** Keep only the OPTIONAL properties of `T`. */
+export type OnlyOptional<T> = { [K in keyof T as {} extends Pick<T, K> ? K : never]: T[K] };
+
+// union → tuple: turns the required-pair UNION into a FIXED-arity tuple, so each required pair is a
+// mandatory position. The order is the compiler's internal union order — stable within a TS
+// version, which is all a forced canonical order needs (the sampler forces whatever order it is).
+type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void ? I : never;
+type LastOfUnion<U> = UnionToIntersection<U extends unknown ? () => U : never> extends () => infer R ? R : never;
+export type UnionToArray<U, Acc extends unknown[] = []> =
+  [U] extends [never] ? Acc : UnionToArray<Exclude<U, LastOfUnion<U>>, [LastOfUnion<U>, ...Acc]>;
+
+/** An object input → the forceable kwargs args-tuple: required pairs fixed + canonical, optional
+ *  pairs a flexible all-or-nothing variadic tail. The harvest emits `(...args: ObjectToKwargs<T>)`
+ *  for a `z.kwargs` input; the lowering emits `tool([":k", v], …)` to match it. */
+export type ObjectToKwargs<T> = [
+  ...UnionToArray<Pairs<OnlyRequired<T>>>,
+  ...Pairs<OnlyOptional<T>>[],
+];
