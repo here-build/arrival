@@ -47,17 +47,17 @@ describe("lower — scheme → TS emitter", () => {
     expect(ts1("(string-append a b)")).toBe("_.string$dash$append(a, b)");
   });
 
-  it("kwargs: a `:keyword value` run groups into [\":keyword\", value] pairs (the ObjectToKwargs shape)", () => {
-    expect(ts1('(create_user :name "Ada")')).toBe('create_user([":name", "Ada"])');
-    expect(ts1('(create_user :name "Ada" :mode "fast")')).toBe('create_user([":name", "Ada"], [":mode", "fast"])');
+  it("kwargs: a `:keyword value` run flips into a real object literal `{ key: value }`", () => {
+    expect(ts1('(create_user :name "Ada")')).toBe('create_user({ name: "Ada" })');
+    expect(ts1('(create_user :name "Ada" :mode "fast")')).toBe('create_user({ name: "Ada", mode: "fast" })');
   });
 
-  it("kwargs: a positional arg before keywords stays positional", () => {
-    expect(ts1("(f x :a 1)")).toBe('f(x, [":a", 1])');
+  it("kwargs: leading positional args stay positional; keywords fold into a trailing object", () => {
+    expect(ts1("(f x :a 1)")).toBe("f(x, { a: 1 })");
   });
 
-  it("kwargs: a bare keyword with no value lowers to a length-1 tuple (the all-or-nothing ban)", () => {
-    expect(ts1("(create_user :name)")).toBe('create_user([":name"])');
+  it("kwargs: a bare keyword with no value lowers to `{ key: undefined }` (the property type bites)", () => {
+    expect(ts1("(create_user :name)")).toBe("create_user({ name: undefined })");
   });
 
   it("car / cdr are functional carrier globals, not field reads", () => {

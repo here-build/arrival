@@ -85,30 +85,37 @@ function emitVector(node: ListNode): string {
   return `[${emitSeq(node.list).join(", ")}]`;
 }
 
-/** Emit a CALL's args, scheme order preserved. A `:keyword value` runs groups into a `[":keyword",
- *  value]` pair — the kwargs shape that matches the harvested `ObjectToKwargs<…>` tuple. A keyword
- *  with no following value lowers to a length-1 `[":keyword"]`, which the pair type rejects (the
- *  "no bare keyword" ban). Non-keyword args stay positional; `#(…)` fuses to a vector as in emitSeq. */
+/** Emit a CALL's args, scheme order preserved. A `:keyword value` run FLIPS into a real object
+ *  literal `{ key: value, … }` (the kwargs shape — `:name "Ada"` → `{ name: "Ada" }`), so the
+ *  type-checker narrows each value as a plain object property and a kwargs tool's object input
+ *  matches with no inverse decode. Leading non-keyword args stay positional (a mixed call
+ *  `(f x :a 1)` → `f(x, { a: 1 })`); a bare keyword lowers to `{ key: undefined }`, which the
+ *  property type rejects unless it admits undefined. `#(…)` values fuse to a vector as in emitSeq. */
 function emitCallArgs(items: Node[]): string {
-  const out: string[] = [];
+  const positional: string[] = [];
+  const props: string[] = [];
+  let kwargs = false;
   for (let i = 0; i < items.length; i++) {
     const node = items[i];
     if (isKeyword(node)) {
-      const key = JSON.stringify(node.atom); // the `:name` literal (colon included → matches Kwarg's `:${K}`)
+      kwargs = true;
+      const key = propKey(keywordName(node)); // `:name` → the object key `name` (quoted if non-ident)
       if (items[i + 1] === undefined) {
-        out.push(`[${key}]`); // a bare keyword (mid-edit / malformed) → length-1, the type bites
+        props.push(`${key}: undefined`); // a bare keyword (mid-edit) → undefined; the property type bites
         continue;
       }
       const value = emitValueAt(items, i + 1);
-      out.push(`[${key}, ${value.ts}]`);
+      props.push(`${key}: ${value.ts}`);
       i += value.consumed; // consume the value node(s) (the keyword itself is consumed by the loop)
       continue;
     }
     const value = emitValueAt(items, i);
-    out.push(value.ts);
+    positional.push(value.ts);
     i += value.consumed - 1;
   }
-  return out.join(", ");
+  const parts = [...positional];
+  if (kwargs) parts.push(props.length === 0 ? "{}" : `{ ${props.join(", ")} }`);
+  return parts.join(", ");
 }
 
 /** One value node at `items[i]`, fusing a `#(…)` vector (which the parser splits into `#` + list). */

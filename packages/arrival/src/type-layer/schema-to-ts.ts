@@ -176,11 +176,6 @@ function paramName(i: number): string {
  *  (its items, named positionally; empty → "()"); an array-ish schema → a variadic
  *  rest param "(...args: T[])". */
 function paramList(input: z.ZodTypeAny): string {
-  // A kwargs (object) input → the forceable `:key value` pair-tuple. `ObjectToKwargs<T>` (a global
-  // carrier type) maps the object's required props to a fixed canonical tuple + its optional props
-  // to a flexible all-or-nothing variadic tail. The model fills `(tool :k v …)`; each value slot
-  // narrows, each `:key` literal is forced — all via the existing per-element slot probe.
-  if (z.isKwargs(input)) return `(...args: ObjectToKwargs<${printType(input)}>)`;
   const def = zodDef(input);
   if (def.type === "tuple") {
     const items = def.items ?? [];
