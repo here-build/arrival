@@ -36,3 +36,5 @@ create_user([":name", 42]);
 create_user([":name", "Ada"], [":mode", "teleport"]);
 // @ts-expect-error — an unknown keyword
 create_user([":name", "Ada"], [":nope", 1]);
+// @ts-expect-error — an optional pair's value is never `undefined` (absence expresses "unset")
+create_user([":name", "Ada"], [":mode", undefined]);

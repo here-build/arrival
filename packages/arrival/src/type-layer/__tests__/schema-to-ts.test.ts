@@ -126,4 +126,16 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     const def = symbol.notImplemented`eval: arbitrary evaluation is a door`;
     expect(signatureOf(def)).toBe("never");
   });
+
+  it("composes a kwargs (object) input as an ObjectToKwargs pair-tuple rest param", () => {
+    const def = symbol.rosetta`create_user: make a user`(
+      { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+      () => "",
+    );
+    // zod-to-ts renders `.optional()` as `?: T | undefined`; `ObjectToKwargs`/`Pairs` strips the
+    // `| undefined` from the pair value internally (the optionality is the pair's absence).
+    expect(signatureOf(def)).toBe(
+      '(...args: ObjectToKwargs<{ name: string; mode?: ("fast" | "scenic") | undefined }>) => Promise<string>',
+    );
+  });
 });

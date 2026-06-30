@@ -109,8 +109,10 @@ export type CouldBeList<R> =
  *  atom; `value` at index 1 is mandatory, which is what bans a bare keyword. */
 export type Kwarg<K extends string, V> = [key: `:${K}`, value: V];
 
-/** An object type → the UNION of its `[":key", value]` pairs (`-?` strips optional's `| undefined`). */
-export type Pairs<T> = { [K in keyof T]-?: Kwarg<K & string, T[K]> }[keyof T];
+/** An object type → the UNION of its `[":key", value]` pairs. `-?` strips the optional MODIFIER and
+ *  `Exclude<…, undefined>` strips the optional VALUE: an absent pair expresses "not provided", so a
+ *  PRESENT pair always carries a defined value (zod-to-ts renders `.optional()` as `T | undefined`). */
+export type Pairs<T> = { [K in keyof T]-?: Kwarg<K & string, Exclude<T[K], undefined>> }[keyof T];
 
 /** Keep only the REQUIRED properties of `T` (a key is optional iff `{}` is assignable to its pick). */
 export type OnlyRequired<T> = { [K in keyof T as {} extends Pick<T, K> ? never : K]: T[K] };

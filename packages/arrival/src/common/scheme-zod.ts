@@ -82,6 +82,23 @@ export const schemeInexact = z.instanceof(AInexact);
 /** Either numeric tower class — the identity term for a native numeric op. */
 export const schemeNumber = z.union([z.instanceof(AExact), z.instanceof(AInexact)]);
 
+// ── kwargs — an object input the model fills as `:key value` pairs ─────────────
+// A kwargs tool takes ONE object input; the model calls it `(tool :k v :k2 v2)`, which lowers to
+// the `[":k", v]` pair sequence the harvest types via `ObjectToKwargs<T>` (type-layer/carriers).
+// `kwargs(shape)` is a z.object BRANDED so the harvest recognizes it (`isKwargs`) and emits the
+// pair-tuple signature `(...args: ObjectToKwargs<{…}>)` instead of a single object arg.
+const KWARGS = new WeakSet<object>();
+/** Declare a kwargs (object) input: `kwargs({ name: z.string, age: number.optional() })`. */
+export function kwargs<S extends z.ZodRawShape>(shape: S) {
+  const schema = z.object(shape);
+  KWARGS.add(schema);
+  return schema;
+}
+/** Is `schema` a `kwargs(...)` object-input marker? (→ the harvest emits an ObjectToKwargs tuple.) */
+export function isKwargs(schema: unknown): boolean {
+  return typeof schema === "object" && schema !== null && KWARGS.has(schema);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CODECS — for `arrival.rosetta` (JS-land). Each codec IS the per-arg membrane:
 // `z.output<codec>` is the DECODED JS value the impl sees; `encode` rebuilds the
