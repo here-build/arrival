@@ -85,6 +85,40 @@ function emitVector(node: ListNode): string {
   return `[${emitSeq(node.list).join(", ")}]`;
 }
 
+/** Emit a CALL's args, scheme order preserved. A `:keyword value` runs groups into a `[":keyword",
+ *  value]` pair — the kwargs shape that matches the harvested `ObjectToKwargs<…>` tuple. A keyword
+ *  with no following value lowers to a length-1 `[":keyword"]`, which the pair type rejects (the
+ *  "no bare keyword" ban). Non-keyword args stay positional; `#(…)` fuses to a vector as in emitSeq. */
+function emitCallArgs(items: Node[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const node = items[i];
+    if (isKeyword(node)) {
+      const key = JSON.stringify(node.atom); // the `:name` literal (colon included → matches Kwarg's `:${K}`)
+      if (items[i + 1] === undefined) {
+        out.push(`[${key}]`); // a bare keyword (mid-edit / malformed) → length-1, the type bites
+        continue;
+      }
+      const value = emitValueAt(items, i + 1);
+      out.push(`[${key}, ${value.ts}]`);
+      i += value.consumed; // consume the value node(s) (the keyword itself is consumed by the loop)
+      continue;
+    }
+    const value = emitValueAt(items, i);
+    out.push(value.ts);
+    i += value.consumed - 1;
+  }
+  return out.join(", ");
+}
+
+/** One value node at `items[i]`, fusing a `#(…)` vector (which the parser splits into `#` + list). */
+function emitValueAt(items: Node[], i: number): { ts: string; consumed: number } {
+  const item = items[i];
+  const next = items[i + 1];
+  if (isVectorMark(item) && isList(next)) return { ts: emitVector(next), consumed: 2 };
+  return { ts: emitNode(item), consumed: 1 };
+}
+
 function emitNode(node: Node): string {
   return isAtom(node) ? emitAtom(node) : emitList(node);
 }
@@ -130,8 +164,8 @@ function emitList(node: ListNode): string {
     }
   }
 
-  // Application — scheme arg order preserved.
-  const args = emitSeq(items.slice(1)).join(", ");
+  // Application — scheme arg order preserved; `:keyword value` args group into kwargs pairs.
+  const args = emitCallArgs(items.slice(1));
   if (isWord(head)) {
     return isTsIdentifier(head.atom) ? `${head.atom}(${args})` : `_.${escapeName(head.atom)}(${args})`;
   }

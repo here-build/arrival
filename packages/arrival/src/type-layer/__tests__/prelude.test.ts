@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
+import { lower } from "../lower.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 
 /** Type-check `source` as one in-memory file; return the diagnostic messages (empty = clean). */
@@ -62,5 +63,22 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
     const { prelude } = assembleHarvestedPrelude(entries);
     expect(compileErrors(`${prelude}\nget_route([1, 2, 3], "fast");\n`).length).toBeGreaterThan(0);
     expect(compileErrors(`${prelude}\nset_timer("ten");\n`).length).toBeGreaterThan(0);
+  });
+
+  it("a kwargs tool: a valid `:key value` call type-checks; a bad value / missing required pair bites", () => {
+    // create_user takes a kwargs object: required name:string + optional mode:"fast"|"scenic".
+    const createUser = symbol.rosetta`create_user: make a user`(
+      { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+      () => "",
+    );
+    const { prelude } = assembleHarvestedPrelude([["create_user", createUser]]);
+    const check = (scheme: string): number => compileErrors(`${prelude}\n${lower(scheme).ts};\n`).length;
+    // valid: required :name (+ an optional :mode) — lowers to create_user([":name","Ada"], [":mode","fast"])
+    expect(check('(create_user :name "Ada" :mode "fast")')).toBe(0);
+    expect(check('(create_user :name "Ada")')).toBe(0); // optional omitted — still valid
+    // a wrong value type for :name, a value outside the :mode enum, and a missing required pair all bite
+    expect(check("(create_user :name 42)")).toBeGreaterThan(0);
+    expect(check('(create_user :name "Ada" :mode "teleport")')).toBeGreaterThan(0);
+    expect(check('(create_user :mode "fast")')).toBeGreaterThan(0);
   });
 });

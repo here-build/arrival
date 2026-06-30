@@ -47,6 +47,19 @@ describe("lower — scheme → TS emitter", () => {
     expect(ts1("(string-append a b)")).toBe("_.string$dash$append(a, b)");
   });
 
+  it("kwargs: a `:keyword value` run groups into [\":keyword\", value] pairs (the ObjectToKwargs shape)", () => {
+    expect(ts1('(create_user :name "Ada")')).toBe('create_user([":name", "Ada"])');
+    expect(ts1('(create_user :name "Ada" :mode "fast")')).toBe('create_user([":name", "Ada"], [":mode", "fast"])');
+  });
+
+  it("kwargs: a positional arg before keywords stays positional", () => {
+    expect(ts1("(f x :a 1)")).toBe('f(x, [":a", 1])');
+  });
+
+  it("kwargs: a bare keyword with no value lowers to a length-1 tuple (the all-or-nothing ban)", () => {
+    expect(ts1("(create_user :name)")).toBe('create_user([":name"])');
+  });
+
   it("car / cdr are functional carrier globals, not field reads", () => {
     expect(ts1("(car x)")).toBe("car(x)");
     expect(ts1("(cdr x)")).toBe("cdr(x)");
