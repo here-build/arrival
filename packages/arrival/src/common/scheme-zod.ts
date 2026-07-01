@@ -94,8 +94,11 @@ export function kwargs<S extends z.ZodRawShape>(shape: S) {
   KWARGS.add(schema);
   return schema;
 }
-/** Is `schema` a `kwargs(...)` object-input marker? (→ the harvest emits an ObjectToKwargs tuple.) */
-export function isKwargs(schema: unknown): boolean {
+/** Is `schema` a `kwargs(...)` object-input marker? (→ the harvest emits an ObjectToKwargs tuple.)
+ *  A real type predicate (not just `boolean`) so a caller narrows `VectorSpec`'s `z.ZodTypeAny`
+ *  member down to the branded object schema — e.g. `bakeRosetta`'s runtime kwargs decode reads
+ *  the narrowed schema with no `as`/cast at the call site. */
+export function isKwargs(schema: unknown): schema is z.ZodObject<z.ZodRawShape> {
   return typeof schema === "object" && schema !== null && KWARGS.has(schema);
 }
 

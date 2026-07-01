@@ -54,6 +54,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { jsToScheme, looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import { Macro } from "../../eval/Macro.js";
+import { KEYWORD_ACCESSOR_FIELD } from "../../Environment.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -249,9 +250,53 @@ export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[])
  *  args / encoded values-vector as an array WITHOUT an `as unknown[]` on every result. */
 type VectorSchema = z.ZodType<readonly unknown[], readonly unknown[]>;
 
+/** Read a kwargs KEY off a raw scheme call arg — the pluck closure's `KEYWORD_ACCESSOR_FIELD`
+ *  (the SAME read `dict`'s native impl uses, env/polyglot.ts), falling back to stripping a
+ *  leading `:` off the arg's string form. One protocol, shared here because a kwargs rosetta's
+ *  input lowering folds the identical `:key value` pair sequence `dict` already folds. */
+function kwargsKeyOf(arg: unknown): string {
+  const tagged = arg as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
+  if (
+    tagged != null &&
+    (typeof tagged === "function" || typeof tagged === "object") &&
+    tagged[KEYWORD_ACCESSOR_FIELD]
+  ) {
+    return tagged[KEYWORD_ACCESSOR_FIELD];
+  }
+  return String(arg).replace(/^:/, "");
+}
+
+/** Fold a `(tool :k v :k2 v2 …)` call's interleaved scheme args into the RAW kwargs object —
+ *  a plain JS record keyed by the kwargs shape's field names, valued by the RAW (still-encoded)
+ *  scheme values. The kwargs schema's OWN `z.decode` (run by the caller, directly against the
+ *  object schema — see bakeRosetta) then validates + decodes each field through its own
+ *  per-property codec; this fold only performs the array→object RESHAPE, not the per-field
+ *  decode. A dangling keyword (odd arg count) doors with a teaching error rather than silently
+ *  dropping it. */
+function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
+  if (args.length % 2 !== 0) {
+    throw new Error(
+      `kwargs call has a dangling keyword with no value — expected interleaved \`:key value\` pairs, got ${args.length} arg(s)`,
+    );
+  }
+  const obj: Record<string, unknown> = {};
+  for (let i = 0; i + 1 < args.length; i += 2) {
+    obj[kwargsKeyOf(args[i])] = args[i + 1];
+  }
+  return obj;
+}
+
 /** Normalize a VectorSpec to ONE `VectorSchema` describing the whole args/return vector:
  *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses
- *  the decoded-args array against (and what the harvest will print from). */
+ *  the decoded-args array against (and what the harvest will print from).
+ *
+ *  ★A `z.kwargs(...)` object input is DELIBERATELY left as-is here (the "any other single
+ *  schema" arm below) — it is NOT array-shaped, and normalizing it into a `VectorSchema`
+ *  would change what `def.in`/`def.out` (the HARVEST surface the type-layer printer reads,
+ *  schema-to-ts.ts's `paramList`) structurally see, regressing the type-layer's kwargs
+ *  signature printing. The kwargs array↔object RESHAPE instead happens ONLY at the runtime
+ *  decode call site (bakeRosetta's `run`, gated by `z.isKwargs`) — `def.in` stays the bare,
+ *  unwrapped kwargs object schema, byte-identical to before this reshape existed. */
 function normalizeVector(spec: VectorSpec): VectorSchema {
   // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
   // OUT of the union on the false branch — so probe the tuple member with a guard that carries
@@ -266,7 +311,8 @@ function normalizeVector(spec: VectorSpec): VectorSchema {
   // A single array-ish schema (z.array variadic / a tuple / a union of those) — its codec sides
   // are array-shaped by the VectorSpec contract, but a bare `ZodTypeAny`'s static output is
   // `unknown`, so assert the vector shape ONCE here (the inner twin of the harvest-surface
-  // contract) rather than on each decode/encode result.
+  // contract) rather than on each decode/encode result. (A kwargs object rides this arm too —
+  // see the note above; its "vector shape" assertion is never exercised at decode time.)
   return spec as VectorSchema;
 }
 
@@ -459,7 +505,18 @@ export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): Ro
     //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
     //    when a contract gains refinements a trusted caller may skip.
     void defaultValidate;
-    const decodedArgs = z.decode(inSchema, schemeArgs);
+    // A `z.kwargs(...)` input is a single OBJECT schema, not array-shaped — `inSchema` (the
+    // generic `VectorSchema`-typed handle `normalizeVector` hands back unchanged for it, see
+    // that fn's note) can't decode the RAW interleaved `:key value` pairs array directly
+    // against an object schema. Fold the pairs into the plain object `dict` would build
+    // (`collectKwargsObject` — the same KEYWORD_ACCESSOR_FIELD read), THEN decode that object
+    // against the (narrowed, honest) kwargs schema, and wrap the one decoded value as the
+    // 1-element args array `DecodedArgs` already gives a non-tuple, non-array-output contract
+    // member. `isKwargs` narrows `input.contract.input` from `VectorSpec` to the branded
+    // object schema — no cast needed.
+    const decodedArgs: readonly unknown[] = z.isKwargs(input.contract.input)
+      ? [z.decode(input.contract.input, collectKwargsObject(schemeArgs))]
+      : z.decode(inSchema, schemeArgs);
 
     // 2. RUN the impl with a per-call **invocation `this`** (the lazy invocation-context). The
     //    impl still receives ONLY the decoded scheme args positionally — ctx is NOT a param. A
