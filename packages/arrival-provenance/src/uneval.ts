@@ -92,7 +92,9 @@ export function buildUneval(opts: {
       // becomes a trace node, exactly like any value the program itself computed.
       env.set("result", result as never);
       const sel = await parse(selector, env);
-      let v: unknown = await execExpr(sel.at(-1), { env, tap: trace });
+      const lastForm = sel.at(-1);
+      if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);
+      let v: unknown = await execExpr(lastForm, { env, tap: trace });
       if (v != null && typeof (v as { then?: unknown }).then === "function") v = await (v as Promise<unknown>);
       const provenance = v instanceof AValue ? [...v.provenance] : [];
       // The SLICE: the reachable derivation of the run's output (static backward reference-closure

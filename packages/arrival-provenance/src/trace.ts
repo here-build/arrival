@@ -433,10 +433,9 @@ export class EvalTrace implements EvalTap {
   });
 
   exit = (
-    invocation: unknown,
-    result: { value: unknown } | { error: unknown },
-  ): { value: unknown } | { error: unknown } | void => {
-    const inv = invocation as Invocation;
+    inv: Invocation,
+    result: Parameters<EvalTap["exit"]>[1],
+  ): ReturnType<EvalTap["exit"]> => {
     if (!("value" in result)) {
       inv.state = "rejected";
       inv.error = result.error;
@@ -475,10 +474,11 @@ export class EvalTrace implements EvalTap {
     // THAT to whatever `define`/`let`/arg slot this invocation feeds.
     // See arrival-scheme `Call.onResolve` for the trampoline-side contract.
     if (inv.provenance.size > 0 && inv.value instanceof AValue) {
-      inv.value = inv.value.withProvenance(inv.provenance);
+      const stamped = inv.value.withProvenance(inv.provenance);
+      inv.value = stamped;
       const rec = this.records.get(inv.node);
       if (rec) rec.exited += 1;
-      return { value: inv.value };
+      return { value: stamped };
     }
 
     const rec = this.records.get(inv.node);

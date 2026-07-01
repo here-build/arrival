@@ -37,13 +37,17 @@ import type { Classifier, LineageNode } from "@here.build/arrival";
 
 import type { EvalTrace, Invocation } from "./trace.js";
 
+// The AST type `classify` actually accepts — derived from its own signature (via indexed
+// access) rather than named, so this file never needs to import the value union directly.
+type Ast = Parameters<typeof classify>[0];
+
 /** Structural pair test — local, so the reader needs no `is_pair` import (mirrors statechart.ts). */
-const isPair = (v: unknown): v is { readonly car: unknown; readonly cdr: unknown } =>
+const isPair = (v: unknown): v is { readonly car: Ast; readonly cdr: Ast } =>
   v !== null && typeof v === "object" && "car" in v && "cdr" in v;
 
 /** The operand expressions of a call AST `(head a b c)` → `[a, b, c]`. */
-function operandsOf(node: unknown): unknown[] {
-  const out: unknown[] = [];
+function operandsOf(node: unknown): Ast[] {
+  const out: Ast[] = [];
   let n: unknown = isPair(node) ? node.cdr : null;
   while (isPair(n)) {
     out.push(n.car);
