@@ -127,18 +127,15 @@ describe("Escaped Symbol Resolution", () => {
 
   describe("Edge cases and resolution", () => {
     it("should handle empty escaped symbol", async () => {
-      // LIPS might not support this, but let's test
-      try {
-        const result = await execOne(`
-          (begin
-            (define || "empty")
-            ||)
-        `);
-        expect(schemeToJs(result, {})).toBe("empty");
-      } catch (error) {
-        // If LIPS doesn't support it, that's fine - document the limitation
-        expect(error).toBeDefined();
-      }
+      // R7RS §7.1.1: `||` is the symbol whose name is the empty string — a real
+      // reader gap this used to crash on (`Reduce of empty array with no initial
+      // value`), now fixed in `parse_symbol`.
+      const result = await execOne(`
+        (begin
+          (define || "empty")
+          ||)
+      `);
+      expect(schemeToJs(result, {})).toBe("empty");
     });
 
     it("should handle unicode in escaped symbols", async () => {
@@ -152,19 +149,15 @@ describe("Escaped Symbol Resolution", () => {
     });
 
     it("should handle pipes inside escaped symbols", async () => {
-      // This might require escaping - test what LIPS does
-      try {
-        // Try escaping with backslash
-        const result = await execOne(`
-          (begin
-            (define |foo\\|bar| "pipe inside")
-            |foo\\|bar|)
-        `);
-        expect(schemeToJs(result, {})).toBe("pipe inside");
-      } catch (error) {
-        // Document if this doesn't work
-        expect(error).toBeDefined();
-      }
+      // R7RS §7.1.1: `\|` inside `|...|` is a literal `|` in the symbol's name
+      // (a real reader gap — the old `parse_symbol` split on every bar and lost
+      // the escape, producing a mangled name — now fixed).
+      const result = await execOne(`
+        (begin
+          (define |foo\\|bar| "pipe inside")
+          |foo\\|bar|)
+      `);
+      expect(schemeToJs(result, {})).toBe("pipe inside");
     });
 
     it("should preserve case sensitivity in escaped symbols", async () => {

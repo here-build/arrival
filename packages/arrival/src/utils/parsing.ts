@@ -264,42 +264,85 @@ export function parse_string(string: string): AString {
   }
 }
 
-// ----------------------------------------------------------------------
-export const parse_symbol = (arg: string): ASymbol =>
-  new ASymbol(CONSTANT_CTX,
-    /(?:^|.)\|/.test(arg)
-      ? arg
-          .split("|")
-          .filter(Boolean)
-          .reduce((acc, str) => {
-            let result = "";
-            if (/^\\+$/.test(str)) {
-              if (str.length > 1) {
-                const count = Math.floor(str.length / 2);
-                result = "\\".repeat(count);
-              }
-              if (str.length % 2 !== 0) {
-                result += "|";
-              }
-            } else {
-              result = str;
-            }
-            return acc + result;
-          })
-          .replaceAll(/\\(x[^;]+);/g, (_, chr) => String.fromCharCode(Number.parseInt(`0${chr}`, 16)))
-          .replaceAll(
-            /\\([trn])/g,
-            (_, chr) =>
-              (
-                ({
-                  t: "\t",
-                  r: "\r",
-                  n: "\n",
-                }) as Record<string, string>
-              )[chr],
-          )
-      : arg,
+// R7RS §7.1.1 escape grammar for `|...|` bar-quoted symbols: the five mnemonic escapes,
+// a literal bar/backslash, an inline hex escape (`\x<hex>;`, any Unicode scalar — astral
+// codepoints round-trip through `String.fromCodePoint`), and the line-continuation escape
+// (`\`, intraline whitespace, a line ending, intraline whitespace — folds to nothing).
+// Shared with nothing else: `parse_string` decodes JSON-shaped escapes via `JSON.parse`
+// (a different delimiter, no `\a`/`\|`), so bar-symbols get their own small decoder rather
+// than a forced, awkward reuse.
+const BAR_SYMBOL_MNEMONICS: Record<string, string> = {
+  a: "",
+  b: "\b",
+  t: "\t",
+  n: "\n",
+  r: "\r",
+};
+
+const BAR_SYMBOL_ESCAPE_RE = /\\(?:x([0-9a-fA-F]+);|([|\\abtnr])|[ \t]*\r?\n[ \t]*)/g;
+
+// Decodes the content between one `|...|` pair's bars. Escapes are only meaningful inside
+// the bars — the plain-text runs a token may adjoin (see `splitBarSegments`) are copied verbatim.
+function decodeBarSymbolEscapes(content: string): string {
+  // A backslash that doesn't open one of the four recognized escape forms is invalid R7RS
+  // syntax — reject it rather than silently passing the stray backslash through.
+  const stray = content.match(/\\(?!x[0-9a-fA-F]+;|[|\\abtnr]|[ \t]*\r?\n)/);
+  invariant(
+    stray === null,
+    () =>
+      `Parse: invalid escape '\\${content.slice((stray!.index ?? 0) + 1, (stray!.index ?? 0) + 9)}' in |...| symbol literal`,
   );
+  return content.replaceAll(BAR_SYMBOL_ESCAPE_RE, (_match, hex?: string, mnemonic?: string) => {
+    if (hex !== undefined) {
+      return String.fromCodePoint(Number.parseInt(hex, 16));
+    }
+    if (mnemonic !== undefined) {
+      return mnemonic === "|" || mnemonic === "\\" ? mnemonic : BAR_SYMBOL_MNEMONICS[mnemonic];
+    }
+    // line continuation: intraline whitespace* line-ending intraline whitespace* → nothing
+    return "";
+  });
+}
+
+// Splits a reader token on UNESCAPED `|` boundaries into alternating plain/quoted runs.
+// `|foo bar|` is a single quoted run; `abc|d e|fgh` (plain text directly adjoining a bar
+// run with no separating whitespace — an existing reader tolerance, see the Lexer's
+// `b_symbol_ex` state) is plain+quoted+plain. Inside a quoted run, `\` always escapes
+// exactly the following character, so an escaped `\|` can never be mistaken for the close.
+function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
+  const segments: { text: string; quoted: boolean }[] = [];
+  let buf = "";
+  let quoted = false;
+  for (let i = 0; i < token.length; ++i) {
+    const char = token[i];
+    if (quoted && char === "\\") {
+      buf += char + (token[i + 1] ?? "");
+      ++i;
+      continue;
+    }
+    if (char === "|") {
+      segments.push({ text: buf, quoted });
+      buf = "";
+      quoted = !quoted;
+      continue;
+    }
+    buf += char;
+  }
+  invariant(!quoted, `Parse: unterminated |...| symbol literal in ${token}`);
+  segments.push({ text: buf, quoted: false });
+  return segments;
+}
+
+// ----------------------------------------------------------------------
+export function parse_symbol(arg: string): ASymbol {
+  if (!arg.includes("|")) {
+    return new ASymbol(CONSTANT_CTX, arg);
+  }
+  const name = splitBarSegments(arg)
+    .map((segment) => (segment.quoted ? decodeBarSymbolEscapes(segment.text) : segment.text))
+    .join("");
+  return new ASymbol(CONSTANT_CTX, name);
+}
 
 // ── Self-evaluating literal constants ──
 // Hoisted to module scope so every `+inf.0` / `-inf.0` / `+nan.0` in source shares ONE instance.

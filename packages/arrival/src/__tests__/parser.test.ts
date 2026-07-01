@@ -15,6 +15,8 @@
 import { describe, expect, it } from "vitest";
 import { EOF } from "../values/primitives/EOF.js";
 import { AVector } from "../values/primitives/AVector.js";
+import { APair } from "../values/primitives/APair.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Parser } from "../reader/Parser.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -93,6 +95,81 @@ describe("Parser — vectors & strings", () => {
   it("reads a string literal (content, unquoted)", async () => {
     // bare toString() yields the raw content; toString(true) re-quotes it.
     expect(await readOne('"hello"')).toBe("hello");
+  });
+});
+
+// R7RS §7.1.1 `|...|` bar-quoted symbols. A live sampler run had a model correctly emit
+// `(list |Picnic Tables| |Public Restrooms|)` (valid R7RS) and the reader mis-scored it —
+// this locks the actual reader behavior down at the Parser level (parse_symbol/ASymbol are
+// exercised through the same entry every real caller uses).
+describe("Parser — bar-quoted symbols (R7RS §7.1.1 |...|)", () => {
+  it("reads a bar-quoted symbol with spaces", async () => {
+    const [sym] = await readAll("|foo bar|");
+    expect((sym as ASymbol).valueOf()).toBe("foo bar");
+  });
+
+  it("reads |Picnic Tables| and |Public Restrooms| as two symbols inside a list", async () => {
+    const [list] = await readAll("(list |Picnic Tables| |Public Restrooms|)");
+    const items = (list as APair).to_array(false) as ASymbol[];
+    expect(items.map((s) => s.valueOf())).toEqual(["list", "Picnic Tables", "Public Restrooms"]);
+  });
+
+  it("reads the empty bar-quoted symbol || as the empty-name symbol", async () => {
+    const [sym] = await readAll("||");
+    expect((sym as ASymbol).valueOf()).toBe("");
+  });
+
+  it("decodes an escaped bar \\| to a literal |", async () => {
+    const [sym] = await readAll("|with\\|bar|");
+    expect((sym as ASymbol).valueOf()).toBe("with|bar");
+  });
+
+  it("decodes an inline hex escape \\x41; to its codepoint", async () => {
+    const [sym] = await readAll("|x\\x41;y|");
+    expect((sym as ASymbol).valueOf()).toBe("xAy");
+  });
+
+  it("decodes the mnemonic escapes \\t \\n \\r inside bars", async () => {
+    const [sym] = await readAll("|a\\tb\\nc\\rd|");
+    expect((sym as ASymbol).valueOf()).toBe("a\tb\nc\rd");
+  });
+
+  it("decodes the mnemonic escapes \\a (alarm) and \\b (backspace)", async () => {
+    const [sym] = await readAll("|x\\ay\\bz|");
+    expect((sym as ASymbol).valueOf()).toBe("x\x07y\bz");
+  });
+
+  it("rejects an unrecognized backslash escape", async () => {
+    await expect(readAll("|bad\\qescape|")).rejects.toThrow();
+  });
+
+  it("round-trips a symbol that needs bars through toString(true) and back through the reader", async () => {
+    const [sym] = await readAll("|foo bar|");
+    const printed = (sym as ASymbol).toString(true);
+    expect(printed).toBe("|foo bar|");
+    const [reparsed] = await readAll(printed);
+    expect((reparsed as ASymbol).valueOf()).toBe((sym as ASymbol).valueOf());
+  });
+
+  it("round-trips a symbol whose name itself contains a bar and a backslash", async () => {
+    const [sym] = await readAll("|with\\|bar|");
+    const printed = (sym as ASymbol).toString(true);
+    const [reparsed] = await readAll(printed);
+    expect((reparsed as ASymbol).valueOf()).toBe((sym as ASymbol).valueOf());
+    expect((reparsed as ASymbol).valueOf()).toBe("with|bar");
+  });
+
+  it("round-trips the empty symbol through toString(true) as ||", async () => {
+    const [sym] = await readAll("||");
+    const printed = (sym as ASymbol).toString(true);
+    expect(printed).toBe("||");
+    const [reparsed] = await readAll(printed);
+    expect((reparsed as ASymbol).valueOf()).toBe("");
+  });
+
+  it("a plain symbol prints without bars even when asked to quote", async () => {
+    const [sym] = await readAll("foo-bar");
+    expect((sym as ASymbol).toString(true)).toBe("foo-bar");
   });
 });
 

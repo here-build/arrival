@@ -100,9 +100,15 @@ export class ASymbol extends AValue {
       return symbol_to_string(this.__name__);
     }
     const str = this.valueOf();
-    // those special characters can be normal symbol when printed
-    if (quote && typeof str === "string" && /(^;|[\s()[\]'])/.test(str)) {
-      return `|${str}|`;
+    // Bar-quoted `|...|` round-trip (R7RS §7.1.1 write syntax): quote when asked AND the
+    // name needs it — empty (`""` has no unquoted spelling at all), contains a bar/backslash
+    // (both of which the reader would otherwise treat as a delimiter/escape starter), or
+    // contains a character that breaks unquoted symbol syntax (whitespace, a bracket/quote
+    // delimiter, or a leading `;` comment starter). Only `|` and `\` need escaping inside the
+    // bars — every other character (including literal whitespace) is legal there verbatim.
+    if (quote && typeof str === "string" && (str === "" || /[|\\\s()[\]']|^;/.test(str))) {
+      const escaped = str.replaceAll(/[|\\]/g, (char) => `\\${char}`);
+      return `|${escaped}|`;
     }
     return String(str);
   }
