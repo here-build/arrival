@@ -33,7 +33,7 @@
  * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
  */
 import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
-import type { Classifier, LineageNode } from "@here.build/arrival";
+import type { AutoBindings, Bindings, Classifier, LineageNode } from "@here.build/arrival";
 
 import type { EvalTrace, Invocation } from "./trace.js";
 
@@ -46,7 +46,7 @@ const isPair = (v: unknown): v is { readonly car: Ast; readonly cdr: Ast } =>
   v !== null && typeof v === "object" && "car" in v && "cdr" in v;
 
 /** The operand expressions of a call AST `(head a b c)` → `[a, b, c]`. */
-function operandsOf(node: unknown): Ast[] {
+export function operandsOf(node: unknown): Ast[] {
   const out: Ast[] = [];
   let n: unknown = isPair(node) ? node.cdr : null;
   while (isPair(n)) {
@@ -114,7 +114,7 @@ function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode
  *  pluck's symbol resolution is recorded under the child invocation that read it (e.g. the `car`
  *  invocation), which is a descendant of the consumer point — so this is the scope to resolve the
  *  pluck's slots against, isolating each consumer from another that reads the same slot name. */
-function subtreeIds(root: Invocation): Set<number> {
+export function subtreeIds(root: Invocation): Set<number> {
   const ids = new Set<number>();
   const stack: Invocation[] = [root];
   while (stack.length > 0) {
@@ -123,6 +123,27 @@ function subtreeIds(root: Invocation): Set<number> {
     for (const c of n.children) stack.push(c);
   }
   return ids;
+}
+
+/**
+ * Assemble a `Bindings` for a skeleton's free LEAF/SOURCE `slots`, resolved ONLY against
+ * auto-bindings recorded WITHIN a consumer point's invocation `scope` (its `subtreeIds`) — the
+ * per-value, per-consumer grounding both the carrier's `fieldResolve` and the lineage producer
+ * need. Distinct from `AutoBindings.bindingsFor` (global first-match): scoping to the consumer's
+ * subtree keeps two consumers reading the same slot name bound to their OWN producer, and each
+ * iteration of a looped consumer bound to its own (unioned per cell downstream).
+ */
+export function scopedBindings(auto: AutoBindings, scope: Set<number>, slots: Iterable<string>): Bindings {
+  const b: Record<string, readonly number[]> = {};
+  for (const slot of slots) {
+    const ids = auto.producersFor(slot, (cands) => {
+      const u = new Set<number>();
+      for (const c of cands) if (scope.has(c.invocationId)) for (const x of c.ids) u.add(x);
+      return [...u];
+    });
+    if (ids.length > 0) b[slot] = ids;
+  }
+  return b;
 }
 
 /** Leading op-symbol of a call AST `(head . args)` → its `__name__`, else null. */
@@ -183,24 +204,9 @@ export function carrierFieldEdges(
     if (!inv.isProvenancePoint) continue; // consumers are the source-points (infer/effect calls)
     const consumer = inv.id;
     const scope = subtreeIds(inv); // resolve this consumer's slots only against ITS subtree's bindings
-    // Resolve a field node's slots against bindings recorded WITHIN this consumer's subtree — not
-    // the global first-match — so two consumers reading the same slot name bind to their own
-    // producer, and a looped consumer's iterations each bind their own (unioned per cell downstream).
-    const scopedBindings = (slots: Iterable<string>): Record<string, readonly number[]> => {
-      const b: Record<string, readonly number[]> = {};
-      for (const slot of slots) {
-        const ids = auto.producersFor(slot, (cands) => {
-          const u = new Set<number>();
-          for (const c of cands) if (scope.has(c.invocationId)) for (const x of c.ids) u.add(x);
-          return [...u];
-        });
-        if (ids.length > 0) b[slot] = ids;
-      }
-      return b;
-    };
     for (const argExpr of operandsOf(inv.node)) {
       for (const fieldNode of collectFieldNodes(classify(argExpr, classifier))) {
-        const { base, key } = fieldResolve(fieldNode, scopedBindings(slotsOf(fieldNode)));
+        const { base, key } = fieldResolve(fieldNode, scopedBindings(auto, scope, slotsOf(fieldNode)));
         if (key === null) continue; // positional-forward (car / index) — no pin (D-v02-4)
         for (const producer of base) {
           if (producer === consumer) continue; // self-edge — a mid-flight artifact (matches statechart.ts:176)
