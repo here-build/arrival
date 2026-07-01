@@ -36,7 +36,6 @@
  *   - Accessor macros (`field`/`@`) expand to a `cond` the classifier currently
  *     sees as a dnf box (minor noise; refine by skipping macro-internal forms).
  */
-import type { BoxType, CandidateBox } from "./mdl-collapse.js";
 import { headOf, scopeId } from "./scope-id.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
 import type { EvalTrace } from "./trace.js";
@@ -44,6 +43,44 @@ import type { EvalTrace } from "./trace.js";
 // scopeId moved to a cycle-neutral leaf (trace-snapshot needs it too; trace-to-forest
 // imports trace-snapshot, so the reverse import would close a loop). Re-exported here
 // so the 8 downstream `from "./trace-to-forest.js"` importers stay unchanged.
+
+// CandidateBox/BoxType describe the forest's own vocabulary (the candidate boxes
+// this module produces for the MDL collapse optimizer to decide over) — they live
+// here, not in mdl-collapse.ts, so the primitive layer (this file) doesn't type-import
+// from the analysis layer (mdl-collapse.ts). mdl-collapse.ts imports them back.
+export type BoxType = "unfold" | "loop" | "dnf" | "fold" | "leaf";
+
+/** A collapse/expand verdict for a candidate box — the shape `CandidateBox.force`
+ *  references and the MDL optimizer (`mdl-collapse.ts`) emits. Lives here (the
+ *  structural/primitive layer) so the forest types own it without importing the
+ *  analysis layer. */
+export type Decision = "collapsed" | "expanded";
+
+export interface CandidateBox {
+  id: string;
+  type: BoxType;
+  /** Trace multiplicity: iterations (loop), fan-out width (unfold), arms (dnf). */
+  n: number;
+  /** Description bits of this scope's OWN body structure, excluding children. */
+  localBits: number;
+  /** External bindings the box connects to — encoded once in the definition AND
+   *  per reference (the residual identification cost AST-licensing does NOT make
+   *  free; adversarial-review finding 2). Default 0. */
+  boundaryPorts?: number;
+  /** Number of DISTINCT structural sub-DAG shapes across the n instances. 1 ⇒
+   *  uniform (collapse is residual-free). k>1 ⇒ a collapsed box must encode a
+   *  per-instance shape selector (log2 k bits each) — the grammar-derivation
+   *  residual, kept STRUCTURAL (topology) so the layout stays value-stable.
+   *  Default 1. */
+  distinctShapes?: number;
+  /** Override the MDL decision (design §4.6 / §5.4 marks-as-override). Unset ⇒
+   *  the optimizer decides ("suggested"). `"collapsed"` ⇒ always a box
+   *  ("forced", e.g. a promoted user-define). `"expanded"` ⇒ always flattened
+   *  (force-suppress a box the MDL wanted). The human's deliberate disagreement
+   *  with the optimizer, honored. */
+  force?: Decision;
+  children: CandidateBox[];
+}
 
 const CONTROL_TYPE: Record<string, BoxType> = {
   map: "unfold",

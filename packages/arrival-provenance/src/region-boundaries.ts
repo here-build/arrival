@@ -17,10 +17,9 @@
  * elk-layout's "lift each edge to the nearest visible ancestor" heuristic with the
  * real boundary, computed once.
  */
-import type { CandidateBox } from "./mdl-collapse.js";
 import { traceToStatechart } from "./statechart.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
-import { scopeId, traceToForest } from "./trace-to-forest.js";
+import { scopeId, traceToForest, type CandidateBox } from "./trace-to-forest.js";
 import type { EvalTrace } from "./trace.js";
 
 export interface RegionBoundary {

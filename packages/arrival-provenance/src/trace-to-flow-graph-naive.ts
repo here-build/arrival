@@ -24,10 +24,9 @@
  * `FlowGraph` types so the renderer needs no changes.
  */
 import type { FlowGraph, FlowGraphEdge, FlowGraphNode } from "./flow-graph.js";
-import type { BoxType, CandidateBox } from "./mdl-collapse.js";
 import { regionBoundariesFromEdges } from "./region-boundaries.js";
 import { traceToStatechart } from "./statechart.js";
-import { scopeId, traceToForest, type ForestOptions } from "./trace-to-forest.js";
+import { scopeId, traceToForest, type BoxType, type CandidateBox, type ForestOptions } from "./trace-to-forest.js";
 import type { EvalTrace, Invocation } from "./trace.js";
 
 /** Box types that are containers (can hold nested work), vs a terminal `leaf`. */

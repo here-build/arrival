@@ -8,8 +8,8 @@
  * `@here.build/arrival-provenance` surfaces — so a UI can render and select over the
  * graph without pulling the interpreter.
  */
-import type { BoxType } from "./mdl-collapse.js";
 import type { EdgeKind } from "./statechart.js";
+import type { BoxType } from "./trace-to-forest.js";
 
 export type FlowNodeKind = "region" | "leaf";
 

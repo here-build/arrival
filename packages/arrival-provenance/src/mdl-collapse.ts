@@ -44,33 +44,7 @@
  * steps (doc §9). The cost ALGEBRA here is the formally-correct one.
  */
 
-export type BoxType = "unfold" | "loop" | "dnf" | "fold" | "leaf";
-
-export interface CandidateBox {
-  id: string;
-  type: BoxType;
-  /** Trace multiplicity: iterations (loop), fan-out width (unfold), arms (dnf). */
-  n: number;
-  /** Description bits of this scope's OWN body structure, excluding children. */
-  localBits: number;
-  /** External bindings the box connects to — encoded once in the definition AND
-   *  per reference (the residual identification cost AST-licensing does NOT make
-   *  free; adversarial-review finding 2). Default 0. */
-  boundaryPorts?: number;
-  /** Number of DISTINCT structural sub-DAG shapes across the n instances. 1 ⇒
-   *  uniform (collapse is residual-free). k>1 ⇒ a collapsed box must encode a
-   *  per-instance shape selector (log2 k bits each) — the grammar-derivation
-   *  residual, kept STRUCTURAL (topology) so the layout stays value-stable.
-   *  Default 1. */
-  distinctShapes?: number;
-  /** Override the MDL decision (design §4.6 / §5.4 marks-as-override). Unset ⇒
-   *  the optimizer decides ("suggested"). `"collapsed"` ⇒ always a box
-   *  ("forced", e.g. a promoted user-define). `"expanded"` ⇒ always flattened
-   *  (force-suppress a box the MDL wanted). The human's deliberate disagreement
-   *  with the optimizer, honored. */
-  force?: Decision;
-  children: CandidateBox[];
-}
+import type { BoxType, CandidateBox, Decision } from "./trace-to-forest.js";
 
 export interface CollapseParams {
   /** λ — zoom knob, scales the per-occurrence reference overhead. LOW λ ⇒ cheap
@@ -79,8 +53,6 @@ export interface CollapseParams {
    *  non-increasing in λ. Lagrangian dual of a hard box-limit K. Default 1. */
   lambda?: number;
 }
-
-export type Decision = "collapsed" | "expanded";
 
 export interface CollapseResult {
   decisions: Map<string, Decision>;
