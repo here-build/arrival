@@ -74,3 +74,57 @@ export function traceToLineage(
   }
   return { wires, warnings: [] };
 }
+
+/** One op step's surface label, producer→consumer reading (innermost transform first). */
+function stepLabel(n: Extract<LineageNode, { kind: "field" }>): string {
+  const s = n.step;
+  return "field" in s ? `:${s.field}` : "car" in s ? "car" : `[${s.index}]`;
+}
+
+/**
+ * The pure-transform op chain each grounded producer travels to reach this wire's consumer —
+ * `producer point-id → ["car", ":verdict"]` (producer→consumer order). It's the transform
+ * sequence the RegionGraph DROPS: `field` lens steps, `pipe`/`merge` combinators, plus `mux`/`fan`
+ * heads as chain markers (those already render as their own nodes — the marker keeps the chain
+ * COMPLETE without materializing them again). A projection of the wire's `skeleton` + `bindings`,
+ * the render analogue of `fieldResolve` — the studio joins it onto each drawn producer→consumer
+ * wire to label the ops it carries. A producer feeding two positions gets the chain of each
+ * (unioned by the caller); a wire with no grounded producer yields an empty map.
+ */
+export function wireOpChains(wire: LineageWire): Map<number, readonly string[]> {
+  const out = new Map<number, readonly string[]>();
+  const emit = (name: string, ops: readonly string[]): void => {
+    for (const producer of wire.bindings[name] ?? []) if (!out.has(producer)) out.set(producer, ops);
+  };
+  // Descend accumulating ops OUTER-first; at a grounded leaf/source reverse to producer→consumer.
+  const walk = (n: LineageNode, acc: readonly string[]): void => {
+    switch (n.kind) {
+      case "leaf":
+        emit(n.slot, [...acc].reverse());
+        break;
+      case "source":
+        emit(n.op, [...acc].reverse());
+        break;
+      case "field":
+        walk(n.child, [...acc, stepLabel(n)]);
+        break;
+      case "pipe":
+        walk(n.child, [...acc, n.op]);
+        break;
+      case "merge":
+        n.children.forEach((ch) => walk(ch, [...acc, n.op]));
+        break;
+      case "fan":
+        walk(n.source, [...acc, n.op]);
+        if (n.template) walk(n.template, [...acc, n.op]);
+        break;
+      case "mux":
+        walk(n.selector, [...acc, n.op]);
+        n.arms.forEach((a) => walk(a, [...acc, n.op]));
+        break;
+      // literal / opaque carry no renderable transform chain.
+    }
+  };
+  walk(wire.skeleton, []);
+  return out;
+}

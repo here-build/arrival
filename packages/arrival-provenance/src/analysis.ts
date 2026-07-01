@@ -17,7 +17,7 @@ export {
   type EdgeKind,
 } from "./statechart.js";
 export { carrierFieldEdges } from "./carrier-fields.js";
-export { traceToLineage, type LineageGraph, type LineageWire } from "./trace-to-lineage.js";
+export { traceToLineage, wireOpChains, type LineageGraph, type LineageWire } from "./trace-to-lineage.js";
 export {
   collapseMDL,
   type CollapseParams,
