@@ -769,6 +769,14 @@ function listElements(v: unknown): unknown[] {
   return out;
 }
 
+/** The ARGUMENT sub-ASTs of a call node `(head arg…)` — the cdr chain's cars. Used to
+ *  tell an evaluated argument's invocation (its node IS an argument position) from an
+ *  element application's (its node is the lambda/body). */
+function astArgs(node: unknown): unknown[] {
+  if (!(node instanceof APair)) return [];
+  return listElements(node.cdr);
+}
+
 /** The pred lambda's FIRST parameter name off a `(filter (lambda (x) …) coll)` AST — the
  *  name whose per-application binding pairs each verdict to its element. A named or
  *  otherwise opaque pred yields undefined (verdicts then rely on the positional read). */
@@ -860,9 +868,15 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
   }
 
   if (FANOUT.has(headOf(inv))) {
-    // Iterations = the application children (those carrying a body). The
-    // eval'd-once args (lambda, collection) have no children → excluded.
-    const applChildren = inv.children.filter((c) => c.children.length > 0);
+    // Iterations = the application children (those carrying a body). The eval'd-once args
+    // (lambda, collection) are excluded TWO ways: most have no children, but an INLINE
+    // collection expression (`(filter pred (map list …))`) does — its subtree made gepa's
+    // failing-filter read `kept 6 of 11` over a 10-element collection (the 11th "element"
+    // was the collection itself, its truthy list value counted kept). An evaluated
+    // ARGUMENT is recognized by its node being one of the form's own argument ASTs;
+    // element applications' nodes are the lambda/body, never an argument position.
+    const argNodes = new Set(astArgs(inv.node));
+    const applChildren = inv.children.filter((c) => c.children.length > 0 && !argNodes.has(c.node));
     // An iteration that flattens to nothing meaningful is dropped; `incoming`
     // keeps the RAW count so the banner can say "10 incoming, 5 mattered". A map
     // application is FROZEN once it has resolved (its subtree no longer grows —
@@ -888,9 +902,15 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // render frames "kept k of n → [the kept work]". The marker's id is the first element
     // application's (the fanout keeps `inv.id`; a pred application is never itself a region).
     const decision = headOf(inv) === "filter" ? filterDecision(inv, applChildren, ctx) : undefined;
+    // An INLINE argument expression carries real work — `(map car (filter …))` computes
+    // its collection in an argument position, and that subtree holds the filter's own
+    // decision (or even inference). It walks as PRECEDING SIBLINGS (the collection was
+    // computed before the fan), never as an element: counting it as one is exactly the
+    // phantom-11th bug this split fixes.
+    const argRegions = inv.children.filter((c) => c.children.length > 0 && argNodes.has(c.node)).flatMap((c) => regionsAt(c, ctx));
     // Degenerate container (mapped/filtered over non-inference data) → drop it; a live
     // gated selection still shows its decision (pure-pred filters have empty bodies).
-    if (iterations.length === 0) return decision ? [decision] : [];
+    if (iterations.length === 0) return decision ? [...argRegions, decision] : argRegions;
     if (decision) ctx.knotArm.push({ knot: decision.id, arm: inv.id });
     const fanout: Region = {
       kind: "fanout",
@@ -902,7 +922,7 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
       inputs: [],
       outputs: [],
     };
-    return decision ? [decision, fanout] : [fanout];
+    return decision ? [...argRegions, decision, fanout] : [...argRegions, fanout];
   }
 
   // A LIVE branch (decided ≥2 ways trace-wide) does NOT box — boxing every `if`
