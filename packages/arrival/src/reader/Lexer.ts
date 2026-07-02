@@ -58,7 +58,11 @@ export class Lexer {
   static readonly i_comment = Symbol.for("i_comment");
   static readonly l_datum = Symbol.for("l_datum");
   static readonly dot = Symbol.for("dot");
-  static readonly boundary = /^$|[\s()[\]{}']/;
+  // `,` is a token boundary: R7RS §7.1.1 classes it a delimiter (it is unquote syntax),
+  // and the collection literals need `1,` to lex as `1` + `,` (JSON-gravity separators,
+  // see reader/Parser.ts read_literal_elements). Symbols containing a comma still exist
+  // via `|pipe syntax|`, exactly like every other delimiter char.
+  static readonly boundary = /^$|[\s()[\]{}',]/;
   static _brackets: LexerRule[] = [[/[()[\]{}]/, null, null, null, null]];
   // Symbol rules MUST concatenate last — a delimiter is claimed as a bracket/special before these
   // greedy `\S` catch-alls can swallow it (the disambiguation strategy, see the file header).
@@ -139,7 +143,10 @@ export class Lexer {
     // characters
     [/#/, null, /\\/, null, Lexer.character],
     [/\\/, /#/, /\s/, Lexer.character, Lexer.character],
-    [/\\/, /#/, /[()[\]{}]/, Lexer.character, Lexer.character],
+    // `,` joined the boundary class (see `boundary` above), so `#\,` needs the same
+    // escaped-delimiter continuation the bracket chars get, else the `\` would
+    // complete the token early and split the literal.
+    [/\\/, /#/, /[()[\]{},]/, Lexer.character, Lexer.character],
     [/\s/, /\\/, null, Lexer.character, null],
     [/\S/, null, Lexer.boundary, Lexer.character, null],
 

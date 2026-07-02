@@ -1,0 +1,41 @@
+{"name":"y_vector_basic","mode":"read","input":"[a b]","expect":{"ast":"[a b]"}}
+{"name":"y_vector_empty","mode":"read","input":"[]","expect":{"ast":"[]"}}
+{"name":"y_vector_elements_are_forms","mode":"read","input":"[1 (+ 1 1) 3]","expect":{"ast":"[1 (+ 1 1) 3]"}}
+{"name":"y_vector_nested_dict","mode":"read","input":"[{:a 1}]","expect":{"ast":"[{:a 1}]"}}
+{"name":"y_vector_comma_separators","mode":"read","input":"[1, 2, 3]","expect":{"ast":"[1 2 3]"}}
+{"name":"y_vector_trailing_comma","mode":"read","input":"[1, 2,]","expect":{"ast":"[1 2]"}}
+{"name":"y_vector_separator_absorbs_one_comma","mode":"read","input":"[a ,b]","expect":{"ast":"[a b]"}}
+{"name":"y_vector_second_comma_is_unquote","mode":"read","input":"[a ,,b]","expect":{"ast":"[a (unquote b)]"}}
+{"name":"y_vector_leading_comma_is_unquote","mode":"read","input":"[,a]","expect":{"ast":"[(unquote a)]"}}
+{"name":"y_vector_unquote_splicing_never_separator","mode":"read","input":"[1 ,@xs]","expect":{"ast":"[1 (unquote-splicing xs)]"}}
+{"name":"y_dict_keyword_keys","mode":"read","input":"{:a 1 :b 2}","expect":{"ast":"{:a 1 :b 2}"}}
+{"name":"y_dict_empty","mode":"read","input":"{}","expect":{"ast":"{}"}}
+{"name":"y_dict_comma_separated","mode":"read","input":"{:a 1, :b 2}","expect":{"ast":"{:a 1 :b 2}"}}
+{"name":"y_dict_trailing_comma","mode":"read","input":"{:a 1,}","expect":{"ast":"{:a 1}"}}
+{"name":"y_dict_string_key","mode":"read","input":"{\"a\" 1}","expect":{"ast":"{\"a\" 1}"}}
+{"name":"y_dict_mixed_keys","mode":"read","input":"{:a 1 \"b\" 2}","expect":{"ast":"{:a 1 \"b\" 2}"}}
+{"name":"y_dict_odd_boundary_comma_is_unquote","mode":"read","input":"{:a ,x}","expect":{"ast":"{:a (unquote x)}"}}
+{"name":"y_dict_unquote_key_after_separator","mode":"read","input":"{:a 1, ,k v}","expect":{"ast":"{:a 1 (unquote k) v}"}}
+{"name":"y_dict_canonical_mixed_comma_roles","mode":"read","input":"{:a ,quoted,,anotherQuoted ,quotedValue}","expect":{"ast":"{:a (unquote quoted) (unquote anotherQuoted) (unquote quotedValue)}"}}
+{"name":"y_quote_vector_stays_data","mode":"read","input":"'[a b]","expect":{"ast":"(quote [a b])"}}
+{"name":"y_quote_dict_stays_data","mode":"read","input":"'{:a (f x)}","expect":{"ast":"(quote {:a (f x)})"}}
+{"name":"y_unquote_outside_literal_untouched","mode":"read","input":"`(a ,b)","expect":{"ast":"(quasiquote (a (unquote b)))"}}
+{"name":"y_r7rs_vector_constant_distinct","mode":"read","input":"#(a b)","expect":{"ast":"#(a b)"}}
+{"name":"y_dict_value_vector_nested","mode":"read","input":"{:a [1 2]}","expect":{"ast":"{:a [1 2]}"}}
+{"name":"y_dotted_pair_outside_literals_unaffected","mode":"read","input":"(a . b)","expect":{"ast":"(a . b)"}}
+{"name":"i_comma_is_delimiter_outside_literals","mode":"read","input":"(f 1, 2)","expect":{"ast":"(f 1 (unquote 2))"}}
+{"name":"n_dict_odd_arity","mode":"read","input":"{:a}","expect":{"error":"E-DICT-ODD-ARITY"}}
+{"name":"n_dict_odd_arity_missing_value","mode":"read","input":"{:a 1 :b}","expect":{"error":"E-DICT-ODD-ARITY"}}
+{"name":"n_dict_bad_key_number","mode":"read","input":"{1 2}","expect":{"error":"E-DICT-BAD-KEY"}}
+{"name":"n_dict_bad_key_bare_symbol","mode":"read","input":"{a 1}","expect":{"error":"E-DICT-BAD-KEY"}}
+{"name":"n_dict_dup_key","mode":"read","input":"{:a 1 :a 2}","expect":{"error":"E-DICT-DUP-KEY"}}
+{"name":"n_dict_dup_key_mixed_styles","mode":"read","input":"{:a 1 \"a\" 2}","expect":{"error":"E-DICT-DUP-KEY"}}
+{"name":"n_dict_trailing_unquote_missing_datum","mode":"read","input":"{:a ,}","expect":{"error":"E-EXPECTING-DATUM"}}
+{"name":"n_vector_dot","mode":"read","input":"[a . b]","expect":{"error":"E-LITERAL-DOT"}}
+{"name":"n_dict_dot","mode":"read","input":"{:a . 1}","expect":{"error":"E-LITERAL-DOT"}}
+{"name":"n_vector_unterminated","mode":"read","input":"[1 2","expect":{"error":"E-UNTERMINATED"}}
+{"name":"n_dict_unterminated","mode":"read","input":"{:a 1","expect":{"error":"E-UNTERMINATED"}}
+{"name":"n_bracket_mismatch_paren_closed_square","mode":"read","input":"(a]","expect":{"error":"E-BRACKET-MISMATCH"}}
+{"name":"n_bracket_mismatch_square_closed_paren","mode":"read","input":"[a)","expect":{"error":"E-BRACKET-MISMATCH"}}
+{"name":"n_stray_square_close","mode":"read","input":"]","expect":{"error":"E-BRACKET-UNEXPECTED"}}
+{"name":"n_stray_curly_close","mode":"read","input":"}","expect":{"error":"E-BRACKET-UNEXPECTED"}}

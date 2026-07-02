@@ -72,6 +72,14 @@ export class AJSObject extends AValue {
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
+  /** `{…}` reader dict-literal payload: the flat `key value` element sequence as read
+   *  (keys = `:keyword` symbols / strings / unquote forms, values = UNEVALUATED forms).
+   *  Present ⇒ this node is a reader-minted dict literal — the evaluator lowers it to
+   *  the equivalent `(dict …)` application in code position; under `quote` the node
+   *  itself is the datum (static entries read back as the raw forms). Absent on every
+   *  membrane-boxed wrapper. See values/dict-literal.ts. */
+  dictForms?: readonly SchemeValue[];
+
   constructor(
     ctx: RunContext,
     readonly source: object,
@@ -102,7 +110,10 @@ export class AJSObject extends AValue {
     // New wrapper = new identity = empty cache. Provenance-variant entries
     // would otherwise leak between wrappers; cleaner to let each lineage
     // build its own cache the first time it's queried.
-    return new AJSObject(this.ctx, this.source, p);
+    const w = new AJSObject(this.ctx, this.source, p);
+    // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node.
+    if (this.dictForms !== undefined) w.dictForms = this.dictForms;
+    return w;
   }
 
   /**

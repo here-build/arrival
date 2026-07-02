@@ -17,12 +17,14 @@ type ParseInput = string | AString | Parser;
 
 // `_parse` is the async datum generator; `parse` collects it into an array. stdlib's
 // bootstrap still consumes the generator form for one native-lambda literal.
-export async function* _parse(arg: ParseInput, source?: string, strict = false) {
+// `curlyInfix` mirrors the `strict` plumbing: opt-in SRFI-105 `{}` (default false ⇒
+// `{}`/`[]` read as dict/vector literals — see ParserOptions.curlyInfix).
+export async function* _parse(arg: ParseInput, source?: string, strict = false, curlyInfix = false) {
   let parser;
   if (arg instanceof Parser) {
     parser = arg;
   } else {
-    parser = new Parser({ source, strict });
+    parser = new Parser({ source, strict, curlyInfix });
     parser.parse(arg);
   }
   let prev;
@@ -40,9 +42,14 @@ export async function* _parse(arg: ParseInput, source?: string, strict = false) 
 }
 
 // unwrap the async datum generator into Promise<Array>
-export const parse = async (arg: ParseInput, source?: string, strict = false): Promise<SchemeValue[]> => {
+export const parse = async (
+  arg: ParseInput,
+  source?: string,
+  strict = false,
+  curlyInfix = false,
+): Promise<SchemeValue[]> => {
   const result: SchemeValue[] = [];
-  for await (const item of _parse(arg, source, strict)) {
+  for await (const item of _parse(arg, source, strict, curlyInfix)) {
     result.push(item);
   }
   return result;

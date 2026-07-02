@@ -26,7 +26,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
-import { Environment, type EnvironmentValue } from "../Environment.js";
+import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "../Environment.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
 import { ArrivalError } from "../errors.js";
 export { ArrivalError };
@@ -63,6 +63,11 @@ import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
 import { type SchemeValue, type SchemeBounceMarker } from "../values/types.js";
 import { nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
+import { AString } from "../values/primitives/AString.js";
+// AJSObject here is the `{…}` dict-literal NODE face (values/dict-literal.ts) — the
+// import is cycle-safe (AJSObject leans only on value leaves + the hoisted jsToScheme).
+import { AJSObject } from "../values/primitives/AJSObject.js";
+import { isDictLiteralNode, makeDictLiteralNode, type DictLiteralNode } from "../values/dict-literal.js";
 
 // ============================================================================
 // Error Handling with Stack Traces
@@ -1190,6 +1195,39 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // unquote evaluated and unquote-splicing flattened (R7RS §4.2.8). A vector
   // can't be improper or carry a dotted-unquote tail, so this mirrors the
   // list-element loop below without the tail-threading.
+  // `{…}` dict-literal template (reader-minted node): process the key/value forms
+  // element-wise, exactly like the vector template below — unquote fires at level 1
+  // (this is what makes `` `{:a ,x} `` work; the reader's position-scoped comma rule
+  // deliberately leaves odd-boundary commas as unquote). At level 1 the processed
+  // template is FINAL data — fold it to a plain dict (post-substitution key
+  // validation + Clojure-faithful loud duplicates); deeper levels rebuild a literal
+  // node carrying the processed forms so nested quasiquotes keep their shape.
+  if (isDictLiteralNode(expr)) {
+    const processed: SchemeValue[] = [];
+    for (const form of expr.dictForms) {
+      let p = yield { call: processQuasiquote(form, ctx, level) };
+      if (is_promise(p)) {
+        p = yield p;
+      }
+      processed.push(p);
+    }
+    if (level > 1) {
+      return makeDictLiteralNode(processed);
+    }
+    const record: Record<string, SchemeValue> = Object.create(null);
+    for (let i = 0; i + 1 < processed.length; i += 2) {
+      const key = foldSubstitutedDictKey(processed[i]);
+      if (key in record) {
+        throw Object.assign(
+          new Error(`duplicate dict literal key :${key} after quasiquote substitution — each key may appear once`),
+          { code: "E-DICT-DUP-KEY" },
+        );
+      }
+      record[key] = processed[i + 1];
+    }
+    return new AJSObject(CONSTANT_CTX, record);
+  }
+
   // Vector template: a boxed SchemeVector (a `#(...) literal) or, defensively, a
   // raw array. Build a fresh boxed vector so the result is a proper vector value.
   if (expr instanceof AVector || Array.isArray(expr)) {
@@ -2461,6 +2499,61 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 }
 
 // ============================================================================
+// `[…]` / `{…}` collection literals — code-position lowering
+// ============================================================================
+// The reader mints literal NODES (a frozen `evalElements` AVector / a `dictForms`
+// AJSObject) so `quote` yields them unchanged as data. In CODE position their
+// elements EVALUATE (Clojure semantics): the node lowers ONCE (cached) to the
+// equivalent `(vector …)` / `(dict …)` application, which is then evaluated — so
+// the semantics are BY CONSTRUCTION the documented equivalences
+// (`{:k v}` ≡ `(dict :k v)`), including membrane marshaling, heap charging and
+// provenance. `#(…)` literals carry no flag and keep their R7RS
+// self-evaluating-constant semantics.
+
+const LOWERED_LITERALS = new WeakMap<AVector | AJSObject, APair<SchemeValue, SchemeValue>>();
+
+function loweredCollectionLiteral(node: AVector | DictLiteralNode): APair<SchemeValue, SchemeValue> {
+  let lowered = LOWERED_LITERALS.get(node);
+  if (lowered === undefined) {
+    const [head, forms] =
+      node instanceof AVector ? (["vector", node.__vector__] as const) : (["dict", node.dictForms] as const);
+    lowered = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, head), ...forms], false) as APair<
+      SchemeValue,
+      SchemeValue
+    >;
+    LOWERED_LITERALS.set(node, lowered);
+  }
+  return lowered;
+}
+
+/**
+ * Post-substitution key fold for a quasiquote-instantiated `{…}` template
+ * (`` `{,k v} `` — the reader admits unquote forms in key position, validated HERE
+ * once the substituted value exists). Admits what `dict`'s own key fold admits:
+ * `:keyword` symbols / keyword-accessor plucks (the value `,:a` evaluates to),
+ * strings, and bare symbols — everything folds to the same string key. Anything
+ * else (numbers, composites) is doored: these literals feed JSON-shaped tool args,
+ * keys ARE strings.
+ */
+function foldSubstitutedDictKey(v: SchemeValue): string {
+  if (v instanceof AString) return v.toString();
+  if (typeof v === "string") return v;
+  if (v instanceof ASymbol) {
+    const name = typeof v.__name__ === "string" ? v.__name__ : String(v.valueOf());
+    return name.replace(/^:/, "");
+  }
+  if ((typeof v === "function" || (typeof v === "object" && v !== null)) && KEYWORD_ACCESSOR_FIELD in v) {
+    return String((v as { [KEYWORD_ACCESSOR_FIELD]: unknown })[KEYWORD_ACCESSOR_FIELD]);
+  }
+  throw Object.assign(
+    new Error(
+      `dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`,
+    ),
+    { code: "E-DICT-BAD-KEY" },
+  );
+}
+
+// ============================================================================
 // Core Evaluator
 // ============================================================================
 
@@ -2528,6 +2621,16 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerato
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value);
     }
     return value;
+  }
+
+  // `[…]` / `{…}` collection literals evaluate their elements in code position
+  // (Clojure semantics) via the cached `(vector …)` / `(dict …)` lowering above.
+  // Under `quote` these nodes never reach here — evalQuote returns them as data.
+  if (code instanceof AVector && code.evalElements) {
+    return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
+  }
+  if (isDictLiteralNode(code)) {
+    return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
   }
 
   // Non-pair (atoms) evaluate to themselves

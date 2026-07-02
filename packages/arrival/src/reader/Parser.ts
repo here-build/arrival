@@ -34,6 +34,7 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
+import { isUnquoteForm, makeDictLiteralNode, staticDictKey } from "../values/dict-literal.js";
 import type { SchemeValue } from "../values/types.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -82,6 +83,11 @@ interface ParserOptions {
   /** Strict (R7RS-faithful) parse — rejects loose-mode reader tolerances like
    *  `#void`/`#null`. Defaults false (loose), the studio default. */
   strict?: boolean;
+  /** SRFI-105 curly-infix `{a + b}` → `(+ a b)` (the pre-2026-07 default). Defaults
+   *  false: `{…}` reads as a DICT literal (≡ `(dict :k v …)`) and `[…]` as a vector
+   *  literal — the Clojure/JSON shapes models emit. Mutually exclusive on the `{}`
+   *  delimiter; `[…]` reads as a vector literal in BOTH modes. */
+  curlyInfix?: boolean;
 }
 
 function defaultFormatter(token: { token: string; col: number; offset: number; line: number }) {
@@ -97,13 +103,20 @@ export class Parser {
   private readonly _meta!: boolean;
   private readonly _source?: string;
   private readonly _strict!: boolean;
+  private readonly _curlyInfix!: boolean;
   private _refs!: (SchemeValue | Promise<SchemeValue>)[];
   // `parentheses` is the live descent depth (the nesting-cap counter); `brackets`
   // is the typed open-delimiter stack holding each open's EXPECTED close char, so
   // a close must match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
   private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
-  constructor({ meta = false, formatter = defaultFormatter, source, strict = false }: ParserOptions = {}) {
+  constructor({
+    meta = false,
+    formatter = defaultFormatter,
+    source,
+    strict = false,
+    curlyInfix = false,
+  }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
       value: formatter,
       configurable: true,
@@ -121,6 +134,11 @@ export class Parser {
     });
     Object.defineProperty(this, "_strict", {
       value: strict,
+      configurable: true,
+      enumerable: false,
+    });
+    Object.defineProperty(this, "_curlyInfix", {
+      value: curlyInfix,
       configurable: true,
       enumerable: false,
     });
@@ -255,17 +273,21 @@ export class Parser {
   private _exitNesting(closeToken: string, loc?: SourceLocation) {
     const expected = this._state.brackets.pop();
     if (expected === undefined) {
-      throw new ParseError(`unexpected '${closeToken}'`, loc ?? undefined);
+      throw new ParseError(`unexpected '${closeToken}'`, loc ?? undefined, "E-BRACKET-UNEXPECTED");
     }
     if (closeToken !== expected) {
-      throw new ParseError(`mismatched bracket: expected '${expected}' but found '${closeToken}'`, loc ?? undefined);
+      throw new ParseError(
+        `mismatched bracket: expected '${expected}' but found '${closeToken}'`,
+        loc ?? undefined,
+        "E-BRACKET-MISMATCH",
+      );
     }
     --this._state.parentheses;
   }
 
-  // `[` / `]` were dropped from the grammar: s-expressions use `(` … `)` only,
-  // `{` … `}` is reserved for SRFI-105 curly-infix. Square brackets are no longer
-  // an interchangeable delimiter.
+  // `[` / `]` are NOT interchangeable list delimiters: s-expressions use `(` … `)`
+  // only. `[` … `]` is a VECTOR literal and `{` … `}` a DICT literal (or SRFI-105
+  // curly-infix under the opt-in `curlyInfix` flag) — see _read_object.
   is_open(token: string) {
     return token === "(";
   }
@@ -320,9 +342,102 @@ export class Parser {
     return head;
   }
 
+  /**
+   * Collection-literal element reader: gather the flat datum sequence between `[`…`]` /
+   * `{`…`}` with POSITION-SCOPED comma separators (the JSON-gravity tolerance; see
+   * docs/working-proposals/arrival-curly-vector-literals.md "Commas and keys").
+   *
+   * A `,` is consumed as a SEPARATOR only where a JSON-writer would emit one —
+   * immediately after a complete element (`[1, 2]`), and for maps only after a complete
+   * key-value PAIR (an even boundary; JSON puts `:` between key and value, never `,`).
+   * At most one separator per boundary; every other comma reads as R7RS unquote
+   * (`{:a ,x}` under quasiquote keeps working). `,@` is never a separator. One trailing
+   * separator before the close is tolerated (`[1, 2,]`, JS gravity).
+   */
+  private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
+    const elements: SchemeValue[] = [];
+    // Whether the CURRENT boundary already consumed its one separator comma.
+    let separatorConsumed = false;
+    while (true) {
+      const token = await this.peek();
+      if (token === eof) {
+        throw new Unterminated(`unterminated ${what} '${isMap ? "{" : "["}'`);
+      }
+      if (typeof token === "string" && token === closeToken) {
+        this._exitNesting(closeToken, this._getLocation());
+        this.skip();
+        break;
+      }
+      if (token === ",") {
+        // Separator position: something precedes, this boundary hasn't consumed one,
+        // and (maps) the preceding elements form complete pairs. Otherwise the comma
+        // is unquote — fall through to _read_object, which reads the `,`-prefixed form.
+        const separatorPosition =
+          elements.length > 0 && !separatorConsumed && (!isMap || elements.length % 2 === 0);
+        if (separatorPosition) {
+          separatorConsumed = true;
+          this.skip();
+          continue;
+        }
+      }
+      if (token === ".") {
+        throw new ParseError(`'.' not allowed in a ${what}`, this._getLocation(), "E-LITERAL-DOT");
+      }
+      const node = await this._read_object();
+      if (node === eof) {
+        throw new Unterminated(`unterminated ${what} '${isMap ? "{" : "["}'`);
+      }
+      elements.push(node as SchemeValue);
+      separatorConsumed = false;
+    }
+    return elements;
+  }
+
+  /**
+   * Validate + mint the `{…}` dict-literal node (default `{}` mode). Doors, phrased for
+   * model recovery: even arity; keys are `:keyword` / `"string"` (both fold to the same
+   * string key) or an unquote form (quasiquote-substituted, validated post-substitution);
+   * duplicate static keys are loud (Clojure-faithful — a model's duplicate is a mistake).
+   */
+  private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
+    if (elements.length % 2 !== 0) {
+      throw new ParseError(
+        `dict literal {…} has ${elements.length} element(s) — expected alternating key value pairs, ` +
+          `e.g. {:name "Ada" :age 36} (a key is missing its value)`,
+        loc,
+        "E-DICT-ODD-ARITY",
+      );
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < elements.length; i += 2) {
+      const keyDatum = elements[i];
+      const key = staticDictKey(keyDatum);
+      if (key === null) {
+        if (isUnquoteForm(keyDatum)) continue; // quasiquote-substituted key — validated post-substitution
+        throw new ParseError(
+          `dict literal key must be a :keyword or a "string", got ${String(keyDatum)} — ` +
+            `write {:name "Ada"} or {"name" "Ada"}; for computed keys use (dict …)`,
+          loc,
+          "E-DICT-BAD-KEY",
+        );
+      }
+      if (seen.has(key)) {
+        throw new ParseError(
+          `duplicate dict literal key :${key} — each key may appear once (:${key} and "${key}" are the same key)`,
+          loc,
+          "E-DICT-DUP-KEY",
+        );
+      }
+      seen.add(key);
+    }
+    return makeDictLiteralNode(elements);
+  }
+
   // SRFI-105 curly-infix: gather the flat datum sequence between `{` and `}` (the transform to a
   // canonical s-expr happens in canonicalizeCurly). Mirrors read_list's loop but collects a JS array
   // and stops on `}`; `_read_object` recursion handles nested `{…}`/`(…)`/quotes for free.
+  // Reached ONLY under the opt-in `curlyInfix` flag (kept verbatim: no comma-separator logic here —
+  // in infix mode a `,` reads as unquote, exactly the pre-flag behavior).
   async read_curly_elements(): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
     while (true) {
@@ -439,15 +554,6 @@ export class Parser {
     }
     // Capture location early for all constructs
     const loc = this._getLocation();
-    // `[` / `]` were removed from the grammar (s-expressions are `(` … `)` only).
-    // Reject them explicitly with their own location rather than letting them fall
-    // through to `read_value` and silently parse as an atom.
-    if (token === "[" || token === "]") {
-      throw new ParseError(
-        `'${token}' is not part of the grammar — s-expressions use '(' … ')' (square brackets removed)`,
-        loc ?? undefined,
-      );
-    }
     if (is_special(token)) {
       // Handle vector literals #(...) specially
       if (is_vector_literal(token)) {
@@ -493,7 +599,15 @@ export class Parser {
       this.skip();
       let expr: any;
       const is_symbol = is_symbol_extension(token);
-      const was_close_paren = this.is_close(await this.peek());
+      // A quote-family prefix dangling against a close delimiter (e.g. the trailing-
+      // unquote `{:a ,}`, or `')`) is a MISSING DATUM — door it here, BEFORE the datum
+      // read, or the stray-close machinery throws its less-teaching error first. Any
+      // close counts, not just `)` (the literals brought `]`/`}` into datum position).
+      const peeked = await this.peek();
+      const was_close = typeof peeked === "string" && [")", "]", "}"].includes(peeked);
+      if (was_close && is_literal(token)) {
+        throw new ParseError(`Parse Error: expecting datum after '${token}'`, loc ?? undefined, "E-EXPECTING-DATUM");
+      }
       const object = is_symbol ? undefined : await this._read_object();
       if (object === eof) {
         throw new Unterminated("Expecting expression, eof found");
@@ -505,7 +619,6 @@ export class Parser {
       // forced exec to dynamically import("stdlib") under the vestigial `lips` handle to break it.
       invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
       if (is_literal(token)) {
-        invariant(!was_close_paren, "Parse Error: expecting datum");
         expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object, nil));
         if (loc) expr.setLocation(loc);
       } else {
@@ -525,15 +638,40 @@ export class Parser {
       this.skip();
       this._refs[+ref_label] = this._read_object() as SchemeValue | Promise<SchemeValue>;
       return this._refs[+ref_label] as SchemeValue | Promise<SchemeValue>;
+    } else if (token === "[") {
+      // `[…]` VECTOR literal (Clojure/JSON array shape). The node is a frozen AVector
+      // (a parsed literal is shared AST — quote hands it out as immutable data, like
+      // `#(…)`) carrying `evalElements`: in code position the evaluator evaluates the
+      // elements (lowering to `(vector …)` — see evaluator.ts), unlike the R7RS
+      // constant `#(…)`. NOT an interchangeable list delimiter: `(a b]` stays an error.
+      this._enterNesting("]");
+      this.skip();
+      const elements = await this.read_literal_elements("]", false, "vector literal");
+      const vec = new AVector(CONSTANT_CTX, elements);
+      vec.evalElements = true;
+      vec.freeze();
+      return vec;
+    } else if (token === "]") {
+      // A stray/mismatched `]` (read_literal_elements consumes its own close). Always
+      // throws — same contract as the `}` / `)` stray-close branches below.
+      this._exitNesting(token, loc ?? undefined);
     } else if (this.is_curly_open(token)) {
       this._enterNesting("}");
       this.skip();
-      const elements = await this.read_curly_elements();
-      const datum = canonicalizeCurly(elements, loc);
-      if (loc && is_pair(datum)) {
-        datum.setLocation(loc);
+      if (this._curlyInfix) {
+        // Opt-in SRFI-105 curly-infix — the pre-2026-07 default, verbatim.
+        const elements = await this.read_curly_elements();
+        const datum = canonicalizeCurly(elements, loc);
+        if (loc && is_pair(datum)) {
+          datum.setLocation(loc);
+        }
+        return datum;
       }
-      return datum;
+      // `{…}` DICT literal (default): `{:k v …}` ≡ `(dict :k v …)` in code position;
+      // data under quote. See read_literal_elements (comma rule) / make_dict_literal
+      // (key doors) and docs/working-proposals/arrival-curly-vector-literals.md.
+      const elements = await this.read_literal_elements("}", true, "dict literal");
+      return this.make_dict_literal(elements, loc ?? undefined);
     } else if (this.is_curly_close(token)) {
       // a stray/mismatched `}` (read_curly_elements consumes its OWN close);
       // _exitNesting reports the mismatch — e.g. a `}` inside a `(` list — or the

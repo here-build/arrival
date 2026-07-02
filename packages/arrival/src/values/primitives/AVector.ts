@@ -60,6 +60,14 @@ export class AVector extends AValue {
    *  vector mutators reject a frozen target. Constructed vectors stay mutable. */
   frozen = false;
 
+  /** `[…]` reader-literal marker: the evaluator, meeting this node in CODE position,
+   *  evaluates the elements (Clojure semantics) by lowering to the equivalent
+   *  `(vector …)` application — see evaluator.ts. Under `quote` the node is data (a
+   *  vector of the raw forms, frozen like every parsed literal). False for `#(…)`
+   *  R7RS constants (self-evaluating, elements stay data) and constructed vectors.
+   *  Reader-minted only. */
+  evalElements = false;
+
   constructor(ctx: RunContext, items: SchemeValue[], provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
     this.__vector__ = items;
@@ -105,6 +113,8 @@ export class AVector extends AValue {
     // The copy shares the payload by reference, so a frozen literal stays frozen
     // (else re-stamping a literal's provenance would yield a mutable alias of it).
     if (this.frozen) v.freeze();
+    // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
+    v.evalElements = this.evalElements;
     return v;
   }
 

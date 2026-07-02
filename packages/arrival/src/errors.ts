@@ -51,6 +51,9 @@ export function formatLocation(loc: SourceLocation): string {
  */
 export class Unterminated extends Error {
   location?: SourceLocation;
+  /** Stable spec-taxonomy identifier — the grammar conformance corpus
+   *  (spec/corpus/, see its README) matches error CLASSES on this, not on prose. */
+  readonly code = "E-UNTERMINATED";
 
   constructor(message: string, location?: SourceLocation) {
     super(location ? `${message} at ${formatLocation(location)}` : message);
@@ -64,11 +67,16 @@ export class Unterminated extends Error {
  */
 export class ParseError extends Error {
   location?: SourceLocation;
+  /** Stable spec-taxonomy identifier (e.g. E-DICT-DUP-KEY) — the grammar conformance
+   *  corpus (spec/corpus/, see its README) matches error CLASSES on this, not on
+   *  prose, so messages stay free to teach while the contract stays machine-checkable. */
+  code?: string;
 
-  constructor(message: string, location?: SourceLocation) {
+  constructor(message: string, location?: SourceLocation, code?: string) {
     super(location ? `${message} at ${formatLocation(location)}` : message);
     this.name = "ParseError";
     this.location = location;
+    this.code = code;
   }
 }
 

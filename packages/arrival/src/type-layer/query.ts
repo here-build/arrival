@@ -429,12 +429,14 @@ function typeAt(checker: ts.TypeChecker, sourceFile: ts.SourceFile, name: string
 
 /** Close an INCOMPLETE scheme prefix so it lowers — the sampler queries on a mid-generation,
  *  usually-unbalanced prefix (`lower` → `parseSexprs` throws on an unclosed paren). String /
- *  char-literal / line- and block-comment aware (arrival's lexer); brackets `()[]` are
- *  interchangeable on close, so one `)` per open level suffices. The suffix is appended at the
- *  END, so every cursor offset within the original prefix maps unchanged. (A standalone twin of
- *  the old lens's balance.ts — kept local to avoid a cross-package import.) */
+ *  char-literal / line- and block-comment aware (arrival's lexer). The reader enforces STRICT
+ *  bracket pairing (`(`→`)`, `[`→`]`, `{`→`}` — `[]`/`{}` are the vector/dict literals), so the
+ *  suffix closes each open level with ITS OWN close char, innermost first. The suffix is
+ *  appended at the END, so every cursor offset within the original prefix maps unchanged.
+ *  (A standalone twin of the old lens's balance.ts — kept local to avoid a cross-package
+ *  import.) */
 function balance(scheme: string): string {
-  let depth = 0;
+  const opens: string[] = [];
   let inStr = false;
   let esc = false;
   let inLine = false;
@@ -470,8 +472,10 @@ function balance(scheme: string): string {
     else if (c === "#" && scheme[i + 1] === "|") {
       block = 1;
       i++;
-    } else if (c === "(" || c === "[") depth++;
-    else if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
+    } else if (c === "(") opens.push(")");
+    else if (c === "[") opens.push("]");
+    else if (c === "{") opens.push("}");
+    else if (c === ")" || c === "]" || c === "}") opens.pop();
   }
-  return scheme + (inStr ? '"' : "") + ")".repeat(depth);
+  return scheme + (inStr ? '"' : "") + opens.reverse().join("");
 }

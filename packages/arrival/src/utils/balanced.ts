@@ -29,6 +29,9 @@ class Stack<T = string> {
 const maching_pairs: Record<string, string> = {
   "[": "]",
   "(": ")",
+  // `{}` is grammar now (the dict literal / opt-in curly-infix), so the REPL's
+  // balance detector must hold the prompt open across an unclosed `{`.
+  "{": "}",
 };
 const open_tokens = Object.keys(maching_pairs);
 const brackets = new Set([...Object.values(maching_pairs), ...open_tokens]);
