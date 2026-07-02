@@ -103,6 +103,13 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec> {
    *  `SPECULATE` shape, minus the Symbol). Declared here on the contract, not in a name-list —
    *  so fan-ness follows the binding (alias-correct), not a string match. */
   readonly fanout?: boolean;
+  /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol as living ONLY in the shared
+   *  prelude-evaluation scope (the extended scope a capability's `prelude` evaluates against —
+   *  runtime env R plus every `preludeOnly` symbol layered on as a transient parent), never bound
+   *  into the runtime env R itself. A running program naming the symbol gets the ordinary
+   *  unbound-variable error — there is nothing to seal, the name genuinely isn't in scope. See
+   *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
+  readonly preludeOnly?: boolean;
 }
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
@@ -127,6 +134,8 @@ export interface NativeSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly impl: AnyFn;
+  /** See `Contract.preludeOnly`. */
+  readonly preludeOnly?: boolean;
 }
 
 /** A rosetta symbol: impl in JS-land. `in`/`out` are the (codec) schemas; `run` is the
@@ -147,6 +156,8 @@ export interface RosettaSymbolDef {
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
   /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
   readonly pure?: boolean;
+  /** See `Contract.preludeOnly`. */
+  readonly preludeOnly?: boolean;
 }
 
 /** A tagless symbol: NO impl — the bypass to the operand's own `arrival/tagless-final/<name>`
@@ -457,6 +468,7 @@ export function bakeNative(input: NativeInput): NativeSymbolDef {
     // NO runtime validation, NO codec — the impl works on scheme values directly.
     // "zod for types purely": the schemas live on the def for inference + the harvest.
     impl,
+    preludeOnly: input.contract.preludeOnly,
   };
 }
 
@@ -589,6 +601,7 @@ export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): Ro
     impl: input.impl,
     run,
     pure,
+    preludeOnly: input.contract.preludeOnly,
   };
 }
 

@@ -20,8 +20,8 @@
  * the structure, not the scaled production path (that's the statechart's job, once
  * its O(n²) build is addressed).
  */
+import { userCallSite } from "./scope-id.js";
 import { snapshotTrace } from "./trace-snapshot.js";
-import { scopeId } from "./trace-to-forest.js";
 import type { EvalTrace } from "./trace.js";
 
 export interface ChainNode {
@@ -83,7 +83,10 @@ export function traceToChain(trace: EvalTrace): ProvenanceChain {
     return L;
   };
 
-  const nodes: ChainNode[] = points.map((p) => ({ id: p.id, label: scopeId(p.node), layer: layer(p.id) }));
+  // A `.prompt` point mints on the resolver-generated `(infer/run …)` form (its own
+  // `scope` carries `@dotprompt:<path>`, not the user's call site) — project through
+  // `userCallSite` so the label reads as the real `(run-x …)` invocation's scope.
+  const nodes: ChainNode[] = points.map((p) => ({ id: p.id, label: userCallSite(p).scope, layer: layer(p.id) }));
   const edges: ChainEdge[] = [];
   for (const [to, ups] of upstreamOf) for (const from of ups) edges.push({ from, to });
   const layerCount = nodes.reduce((m, n) => Math.max(m, n.layer + 1), 0);

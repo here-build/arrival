@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 
-import type { EnvPack } from "./kernel.js";
+import type { EnvPack, PackContext } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
@@ -202,7 +202,16 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         spawned = spinUpAll(cellList, signal);
         await spawned;
       },
-      apply: async (env: SchemeEnv) => {
+      apply: async (env: SchemeEnv, ctx?: PackContext<SchemeEnv>) => {
+        // preludeOnly routing (design doc §1.3/§4 step 3): a baked native/rosetta def marked
+        // `preludeOnly: true` binds onto `ctx.preludeScope` — the shared, accumulating scope a
+        // capability's OWN prelude (and every later-applied capability's prelude, via C3 dep
+        // order) is evaluated against — instead of the runtime env `env`. Same bind form either
+        // way (native → raw impl; rosetta → the gated run wrapper); only the TARGET scope
+        // differs. Absent `ctx.preludeScope` (e.g. a bare direct apply outside an assembly that
+        // wires an overlay), fall back to `env` so the symbol is never silently dropped.
+        const bindTarget = (def: BakedSymbolDef): SchemeEnv =>
+          "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
         const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
         const prefix = spec.symbolPrefix ?? "";
         for (const [name, def] of Object.entries(symbolsRec)) {
@@ -215,7 +224,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // The impl works on SCHEME VALUES, no codec, no validation — bind it raw,
                 // exactly like the legacy `{ value: fn }` path (and provenance-transparent:
                 // a native value-op is a pure transform, never a source).
-                env.set(verb, def.impl);
+                bindTarget(def).set(verb, def.impl);
                 break;
               case "sequence":
               case "tagless":
@@ -238,7 +247,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                         },
                         { __withCtx: runFn.__withCtx },
                       );
-                env.set(verb, gatedRun);
+                bindTarget(def).set(verb, gatedRun);
                 break;
               }
               case "door":
@@ -292,7 +301,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             opts.evalScheme !== undefined,
             `capability "${name}" has a prelude but no evalScheme was provided to lower()`,
           );
-          await opts.evalScheme(env, spec.prelude);
+          // Bootstrap (§1.3): evaluate against `env` (= R, already re-parented onto the prelude
+          // overlay by the caller) so prelude `define`s land in R — `ctx.preludeEvalScope` is
+          // undefined here. Mid-run (§1.4): evaluate against the caller's discarded CHILD scope
+          // instead, so a prelude `define` is dropped with it rather than leaking to the live env.
+          await opts.evalScheme(ctx?.preludeEvalScope ?? env, spec.prelude);
         }
       },
     };

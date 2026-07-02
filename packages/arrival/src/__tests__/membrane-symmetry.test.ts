@@ -32,6 +32,7 @@ import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { LAMBDA } from "../well-known-symbols.js";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -126,6 +127,24 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   it("function → #void (the boxer registry never mints a callable wrapper)", () => {
     expect(fromJs(CONSTANT_CTX, () => 42)).toBe(theVoid);
+  });
+
+  // ── THE LAMBDA-BRAND DISTINCTION (the require return-marshal leak) ────────────
+  // A Scheme LAMBDA is represented internally as a JS function carrying the well-known
+  // LAMBDA brand (`Symbol.for("arrival/lambda")`, set by the evaluator on every closure —
+  // evaluator.ts `lambda[LAMBDA] = true`). It is ALREADY a scheme value, not host data
+  // crossing the boundary, so `jsToScheme` must pass it through BY IDENTITY. Without this,
+  // a `require`d file resolving as `{ kind: "eval", forms }` to a scheme lambda (the
+  // `.hbs`/`.prompt` CALLABLE RULE shape) gets VOIDED on its way back out through
+  // `require`'s own rosetta return-marshal — the "require-returns-lambda voids" bug.
+  // The membrane's law is unchanged: an UNBRANDED (borrowed host) function still voids.
+  it("a LAMBDA-branded function passes through jsToScheme by identity (it IS a scheme value)", () => {
+    const lam = Object.assign(() => 42, { [LAMBDA]: true });
+    expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
+  });
+
+  it("an UNBRANDED function still voids through jsToScheme (borrowed host callback, by design)", () => {
+    expect(jsToScheme(CONSTANT_CTX, () => 42)).toBe(theVoid);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.

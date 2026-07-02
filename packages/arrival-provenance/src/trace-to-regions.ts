@@ -47,6 +47,7 @@ import { APair, deepProvenance, schemeToJs } from "@here.build/arrival";
 import { schemeToSweet } from "@here.build/arrival-sweet";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
+import { userCallSite } from "./scope-id.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import type { EvalTrace, Invocation } from "./trace.js";
@@ -501,15 +502,20 @@ const DIRECT_INFER_HEADS: ReadonlySet<string> = new Set(["infer", "infer/chat"])
 
 /** Classify an infer provenance point by its head: a direct `(infer/chat …)` →
  *  `direct`, labelled by the rosetta head; a `.prompt` call `(run-x …)` →
- *  `prompt`, labelled by the binding `run-x` at its real source location. */
+ *  `prompt`, labelled by the binding `run-x` at its real source location. A
+ *  `.prompt` point mints on the resolver-generated `(infer/run …)` form (its
+ *  head/scope carry `@dotprompt:<path>`, not the user's call site) — project
+ *  through `userCallSite` first so the label/scope read as the real `(run-x …)`
+ *  invocation while `id`/`meta`/`value`/`state` stay the point's own. */
 export function leafFor(inv: PlainInv): Extract<Region, { kind: "leaf" }> {
-  const head = headOf(inv);
+  const site = userCallSite(inv);
+  const head = headOf(site);
   return {
     kind: "leaf",
     id: inv.id,
     label: head,
-    scope: scopeId(inv.node),
-    nodeKind: DIRECT_INFER_HEADS.has(head) ? "direct" : "prompt",
+    scope: site.scope,
+    nodeKind: DIRECT_INFER_HEADS.has(headOf(inv)) ? "direct" : "prompt",
     meta: inv.metadata,
     value: inv.value,
     state: inv.state,
@@ -1008,9 +1014,17 @@ export function attributeFromFields(edges: RegionEdge[], fromFieldEdges: Map<str
  * Rewrite the base point→point data edges into FIELD-QUALIFIED edges (consumer-field
  * attribution). For a `.prompt` consumer, find which named input the producer flowed
  * into — the sound `inputsProvenance` path (immediate-writer Hasse-reduced per slot +
- * value-presence gate) with a structural-value-match fallback. Returns the rewritten
- * edge list (the same edges, some now carrying `field`, some split into per-slot
- * copies). Pure given `ctx`; identical for from-scratch + incremental.
+ * value-presence gate) when available, else a structural VALUE-PRESENCE match over
+ * every input slot (same `valuePresent` test, no immediate-writer narrowing — the only
+ * path available for a `.prompt` consumer, since the composable `dotprompt/render` →
+ * `infer/run` split runs the render under `apply`, which does not thread `EvalContext`
+ * and so cannot populate `inputsProvenance`; see `prompt.ts`'s "KNOWN NARROWINGS"). The
+ * fallback checks EVERY slot (not just-the-first) so one producer feeding two slots
+ * (`:score (list s) :also (list s)`) still emits two field-qualified edges, and a value
+ * PACKED INTO A LIST or a field PLUCK both match via the same bidirectional
+ * `valuePresent` the sound path uses. Returns the rewritten edge list (the same edges,
+ * some now carrying `field`, some split into per-slot copies). Pure given `ctx`;
+ * identical for from-scratch + incremental.
  */
 export function attributeFieldEdges(edges: RegionEdge[], ctx: FinalizeCtx): RegionEdge[] {
   const { points, pointIds, reach } = ctx;
@@ -1106,20 +1120,18 @@ export function attributeFieldEdges(edges: RegionEdge[], ctx: FinalizeCtx): Regi
       out.push(e);
       continue;
     }
-    const pv = asJson(producer.value);
-    if (pv === undefined) {
-      out.push(e);
+    // No `inputsProvenance` (the composable render can't attribute per-field origins
+    // through `apply`) — fall back to the same VALUE-PRESENCE test the sound path uses,
+    // over EVERY slot, so a producer feeding several slots (or embedded/plucked rather
+    // than exactly-equal) still emits one field-qualified edge per matching slot.
+    const fields = Object.entries(meta.inputs)
+      .filter(([, v]) => valuePresent(producer.value, v) || valuePresent(v, producer.value))
+      .map(([k]) => k);
+    if (fields.length > 0) {
+      for (const field of fields) out.push({ ...e, field });
       continue;
     }
-    let labeled = false;
-    for (const [k, v] of Object.entries(meta.inputs)) {
-      if (asJson(v) === pv) {
-        out.push({ ...e, field: k });
-        labeled = true;
-        break;
-      }
-    }
-    if (!labeled) out.push(e);
+    out.push(e);
   }
   return out;
 }
