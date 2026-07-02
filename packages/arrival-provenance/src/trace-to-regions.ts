@@ -43,13 +43,13 @@
  * `addPointToHasse`, `regionsAt`, `attributeFieldEdges`, `derivePorts`, …) rather than
  * re-deriving them, so the two paths cannot drift.
  */
-import { deepProvenance, schemeToJs } from "@here.build/arrival";
+import { APair, deepProvenance, schemeToJs } from "@here.build/arrival";
 import { schemeToSweet } from "@here.build/arrival-sweet";
 
-import { carrierFieldEdges } from "./carrier-fields.js";
+import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
-import type { EvalTrace } from "./trace.js";
+import type { EvalTrace, Invocation } from "./trace.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT
  *  (docs/package-specific/arrival-provenance/provenance-region-model-plan-2026-06-02.md, Stage 2).
@@ -112,6 +112,16 @@ export type Region =
        *  doesn't carry for non-points — that's the next layer. `cond`/`case` are
        *  multi-clause and stay unlabelled here (also next layer). */
       condition?: string;
+      /** PER-ELEMENT verdicts for a NARROWING decision (`filter` today; the survivorship
+       *  family — `car`/`slice`/`take-while` — later), in collection order over the settled
+       *  prefix. `kept` = the element survived; `origins` = the inference points the
+       *  ELEMENT'S VALUE deep-traces to (NOT the predicate outcome's provenance, which
+       *  folds in compared-against values) — the pairing key that lets a render absorb
+       *  the verdict onto the producing fan-out's iterations as an element-axis stack
+       *  (`⊘ filtered` on the dropped candidate's tab). Empty `origins` = an element that
+       *  entered the collection without traced inference (a carried-over literal) — an
+       *  unpaired row, still counted by `condition`. Absent on plain branch decisions. */
+      verdicts?: { kept: boolean; origins: number[] }[];
     }
   | {
       kind: "fanout";
@@ -617,6 +627,13 @@ export interface RegionWalkCtx {
    *  survives STRUCTURALLY — the infer point lives in the pluck invocation's subtree, and
    *  points are never pruned — so the decision gate recovers it by walking here. */
   livePointsUnder: (id: number) => readonly number[];
+  /** The producer POINTS a NAME was bound to within an invocation's live subtree — the
+   *  auto-bindings sidecar (`withAutoBindings`) scoped to that subtree. This is the
+   *  per-element pairing key for narrowing verdicts: a filter pred's PARAMETER binding
+   *  inside pred-application j carries exactly element j's origins (the predicate
+   *  OUTCOME's provenance would smear in compared-against elements — a Pareto test folds
+   *  the whole pool). Absent when the trace runs without the sidecar. */
+  boundPointsOf?: (id: number, name: string) => readonly number[];
   /** Collectors filled during the walk (knot→arm control wires, knot→operand data
    *  wires) — read after the walk to append the decision edges. */
   knotArm: { knot: number; arm: number }[];
@@ -686,12 +703,13 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
   }
   if (kept === 0 || dropped === 0) return undefined; // one-way selection — invisible plumbing
   const origins = new Set<number>();
-  const addOrigins = (ps: Iterable<number>): void => {
+  const resolveInto = (ps: Iterable<number>, into: Set<number>): void => {
     for (const p of ps) {
       const o = resolveOriginVia(p);
-      if (ctx.pointIds.has(o)) origins.add(o);
+      if (ctx.pointIds.has(o)) into.add(o);
     }
   };
+  const addOrigins = (ps: Iterable<number>): void => resolveInto(ps, origins);
   // Per-element: each pred application's invocation provenance (prune-exempt for filter
   // children) unions the origins that element's test folded in — the sharpest read.
   for (const c of applChildren) addOrigins(ctx.liveProvenanceById(c.id));
@@ -702,6 +720,30 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
     addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
   }
   if (origins.size === 0) return undefined; // static selection — degenerate, dissolve
+  // PER-ELEMENT VERDICTS — the half the aggregate `kept k of n` used to discard. The
+  // pairing key is the ELEMENT's OWN origins (the predicate OUTCOME's provenance is wrong
+  // for this — a Pareto test folds in the candidates it compared AGAINST). Two reads:
+  //  1. BINDING (primary): the pred parameter's auto-binding within application j's
+  //     subtree names exactly what element j carried — works however the collection
+  //     arrived (a bare symbol deref leaves no invocation to read positionally).
+  //  2. POSITIONAL (fallback): an eval'd-once collection arg whose live list aligns with
+  //     the applications in order — covers sidecar-less traces with inline collections.
+  // Neither available ⇒ no verdicts; the aggregate `condition` stays honest.
+  const param = ctx.boundPointsOf ? predParamOf(inv.node) : undefined;
+  const collection = inv.children
+    .filter((arg) => arg.children.length === 0)
+    .map((arg) => listElements(ctx.liveValueById(arg.id)))
+    .find((els) => els.length >= applChildren.length);
+  const verdicts =
+    param !== undefined || collection
+      ? applChildren.flatMap((c, j) => {
+          if (c.state === "running") return [];
+          const elementOrigins = new Set<number>();
+          if (param !== undefined) resolveInto(ctx.boundPointsOf!(c.id, param), elementOrigins);
+          if (elementOrigins.size === 0 && collection) resolveInto(deepProvenance(collection[j]), elementOrigins);
+          return [{ kept: schemeToJs(ctx.liveValueById(c.id)) !== false, origins: [...elementOrigins] }];
+        })
+      : undefined;
   const id = applChildren[0]!.id; // a pred application never becomes a region itself — free id
   for (const from of origins) ctx.knotInputs.push({ knot: id, from });
   return {
@@ -710,7 +752,29 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
     label: "filter",
     scope: scopeId(inv.node),
     condition: `kept ${kept} of ${kept + dropped}`,
+    ...(verdicts ? { verdicts } : {}),
   };
+}
+
+/** The elements of a proper Scheme list, in order — `[]` for a non-list value. */
+function listElements(v: unknown): unknown[] {
+  const out: unknown[] = [];
+  for (let cur = v; cur instanceof APair; cur = cur.cdr) out.push(cur.car);
+  return out;
+}
+
+/** The pred lambda's FIRST parameter name off a `(filter (lambda (x) …) coll)` AST — the
+ *  name whose per-application binding pairs each verdict to its element. A named or
+ *  otherwise opaque pred yields undefined (verdicts then rely on the positional read). */
+function predParamOf(node: unknown): string | undefined {
+  if (!(node instanceof APair) || !(node.cdr instanceof APair)) return undefined;
+  const pred = node.cdr.car;
+  if (!(pred instanceof APair)) return undefined;
+  const head = pred.car as { __name__?: unknown } | null;
+  if (head === null || typeof head !== "object" || head.__name__ !== "lambda") return undefined;
+  const params = pred.cdr instanceof APair ? pred.cdr.car : undefined;
+  const first = params instanceof APair ? (params.car as { __name__?: unknown } | null) : undefined;
+  return first !== null && first !== undefined && typeof first === "object" && typeof first.__name__ === "string" ? first.__name__ : undefined;
 }
 
 /**
@@ -1247,6 +1311,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   // The region walk.
   const knotArm: { knot: number; arm: number }[] = [];
   const knotInputs: { knot: number; from: number }[] = [];
+  const auto = trace.autoBindings;
   const ctx: RegionWalkCtx = {
     loopBodies,
     liveBranchScopes,
@@ -1255,6 +1320,15 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     liveValueById,
     liveProvenanceById,
     livePointsUnder,
+    // The narrowing-verdict pairing key (see RegionWalkCtx.boundPointsOf) — the sidecar
+    // scoped to the live invocation's subtree. Sidecar-less traces leave it unset.
+    boundPointsOf: auto
+      ? (id, name) => {
+          // `liveById` is typed for the value accessor but holds the live invocations.
+          const live = liveById.get(id) as Invocation | undefined;
+          return live ? (scopedBindings(auto, subtreeIds(live), [name])[name] ?? []) : [];
+        }
+      : undefined,
     knotArm,
     knotInputs,
   };

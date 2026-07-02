@@ -32,7 +32,7 @@
  */
 import { schemeToJs, type APair } from "@here.build/arrival";
 
-import { carrierFieldEdges } from "./carrier-fields.js";
+import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import type { PlainInv } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import {
@@ -96,7 +96,8 @@ function cloneRegion(r: Region): Region {
     case "leaf":
       return { ...r };
     case "decision":
-      return { ...r };
+      // verdicts is nested — copy it so the pristine template can't alias a mutated graph.
+      return { ...r, ...(r.verdicts ? { verdicts: r.verdicts.map((v) => ({ ...v, origins: [...v.origins] })) } : {}) };
     case "output":
       return { ...r };
     case "fanout":
@@ -368,6 +369,16 @@ export class TraceRegionFold {
       return out;
     };
 
+    // Mirror of from-scratch `boundPointsOf` — the sidecar scoped to the live invocation's
+    // subtree, the narrowing-verdict pairing key. MUST match the one-shot exactly (parity).
+    const auto = this.#trace.autoBindings;
+    const boundPointsOf = auto
+      ? (id: number, name: string): readonly number[] => {
+          const live = this.#liveById.get(id);
+          return live ? (scopedBindings(auto, subtreeIds(live), [name])[name] ?? []) : [];
+        }
+      : undefined;
+
     const knotArm: { knot: number; arm: number }[] = [];
     const knotInputs: { knot: number; from: number }[] = [];
 
@@ -415,6 +426,7 @@ export class TraceRegionFold {
       liveValueById,
       liveProvenanceById,
       livePointsUnder,
+      boundPointsOf,
       knotArm,
       knotInputs,
       iterationCache,
