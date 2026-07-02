@@ -29,6 +29,7 @@ import {
   NOT_FOUND,
 } from "../../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
+import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
@@ -172,7 +173,13 @@ export class AJSObject extends AValue {
     // produce a boxed Scheme value — annotate to the honest union so the cache store
     // below type-checks without a cast. The `instanceof AValue` gate then narrows to
     // the cacheable (class-backed) members, dropping the never-here function/orphan arms.
-    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
+    let boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
+    // Attestation inheritance (stamp site 2, values/attestation.ts): an entry is
+    // attested iff its container is — the pluck twin of the provenance threading
+    // just above. `freshIfSingleton` first: a raw boolean field boxes to the shared
+    // #t/#f flyweight on the empty-provenance path, and the program-wide singletons
+    // never attest — the clone does, and the per-(wrapper, key) cache keeps it stable.
+    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
     if (cacheKey !== undefined && boxed instanceof AValue) {
       if (cache === undefined) {
         cache = new Map();

@@ -18,6 +18,7 @@
 
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
+import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { fromJs } from "./boxing.js";
 import { AVector } from "./AVector.js";
@@ -94,11 +95,23 @@ export class AJSArray extends AValue {
     // Box each element through jsToScheme carrying THIS borrowed container's provenance — so
     // elements inherit the crossing's lineage (parallel to AJSObject.get, which threads
     // this.provenance to its fields), and nested arrays/objects re-borrow faithfully.
-    return (this.boxedVec ??= new AVector(
-      this.ctx,
-      this.source.map((v) => jsToScheme(this.ctx, v, {}, this.provenance)),
-      this.provenance,
-    ));
+    if (this.boxedVec === undefined) {
+      // Attestation inheritance (stamp site 2, values/attestation.ts): the materialized
+      // elements are attested iff the borrowed container is — parallel to AJSObject.get.
+      // `freshIfSingleton` per element: a raw boolean boxes to the shared #t/#f flyweight
+      // on the empty-provenance path, and the singletons never attest — the clone does.
+      const inherit = isAttested(this);
+      this.boxedVec = new AVector(
+        this.ctx,
+        this.source.map((v) => {
+          const boxed: SchemeValue = jsToScheme(this.ctx, v, {}, this.provenance);
+          return inherit ? attestDeep(freshIfSingleton(boxed)) : boxed;
+        }),
+        this.provenance,
+      );
+      if (inherit) attestDeep(this.boxedVec);
+    }
+    return this.boxedVec;
   }
 
   // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
@@ -214,7 +227,12 @@ export class AJSArray extends AValue {
   // carriers — the value-only `vector-ref` contract wants the faithful value path here.)
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
     this.freezeSource();
-    const boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
+    let boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
+    // Attestation inheritance (stamp site 2): the plucked element box is attested iff
+    // this borrowed container is — same discipline as the provenance threading above
+    // (`freshIfSingleton`: a raw boolean element surfaces as an attested clone, never
+    // the shared flyweight).
+    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
     return boxed;
   }
 }

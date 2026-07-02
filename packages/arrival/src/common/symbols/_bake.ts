@@ -50,6 +50,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "../scheme-zod.js";
+import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme, looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
@@ -551,16 +552,28 @@ export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): Ro
     //    multiple-values case is a RAW JS ARRAY (the scheme values-vector) — stamp each
     //    ELEMENT and keep the JS array, because jsToScheme over a JS array would (correctly,
     //    for data) build a Pair-chain, which is the WRONG shape for a values-vector.
+    //    ATTESTATION (values/attestation.ts) rides the SAME walk position: a SOURCE
+    //    rosetta's return is machine-made (a tool result), so its spine + leaves are
+    //    deep-attested — `car`/`vector-ref`/plucks on it hand back already-attested
+    //    boxes at the manifold boundary. A PURE rosetta is a transform: its return
+    //    keeps only what the impl itself chose to attest (the manifold's `s/*`
+    //    validators attest their identity-returns this way).
+    //    (`freshIfSingleton` first: `fromJs` reuses the shared #t/#f flyweights on the
+    //    empty-provenance fast path, and the program-wide singletons must never attest.)
     if (singleOut) {
       // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
       const encoded = z.encode(outSchema, [result])[0];
-      return jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
+      const boxed: unknown = jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
+      return pure ? boxed : attestDeep(freshIfSingleton(boxed));
     }
     // multiple-values / array-ish output: the impl returned the values-vector already (an array
     // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
     // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
     const encoded = z.encode(outSchema, result as readonly unknown[]);
-    return encoded.map((v) => jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance));
+    return encoded.map((v) => {
+      const boxed: unknown = jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance);
+      return pure ? boxed : attestDeep(freshIfSingleton(boxed));
+    });
   };
   // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
   // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS
