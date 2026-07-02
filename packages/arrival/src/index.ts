@@ -124,6 +124,7 @@ export {
   ArrivalError,
   SchemePromise,
   is_scheme_promise,
+  currentRunEnv,
   type EvalContext,
   type EvalGenerator,
   type EvalTap,

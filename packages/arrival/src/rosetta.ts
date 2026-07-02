@@ -25,6 +25,7 @@ import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
+import { LAMBDA } from "./well-known-symbols.js";
 
 // Membrane warnings (warnMembrane / setMembraneWarnings) now live in the leaf `membrane-warn.ts`,
 // shared with boxing.ts's `function` boxer — extracted so the value layer needn't import this
@@ -345,6 +346,18 @@ export function jsToScheme(
     if (key !== undefined) return new ASymbol(ctx, ":" + key, provenance);
     warnMembrane("a unique JS symbol");
     return theVoid;
+  }
+
+  // A Scheme LAMBDA is represented internally as a plain JS function carrying the well-known
+  // LAMBDA brand (set by the evaluator on every closure it creates — see well-known-symbols.ts).
+  // It is ALREADY a scheme value, not host data crossing the boundary, so it passes through
+  // untouched — the same pass-through `membrane.ts`'s `isSchemeValue`/`fromJS` give it. Without
+  // this check, a `require`d file resolving to `{ kind: "eval", forms }` (the `.hbs`/`.prompt`
+  // CALLABLE RULE shape: a scheme lambda over a directly-bound native verb) gets VOIDED the moment
+  // it flows back out through `require`'s own rosetta wrapper — which re-runs every return value
+  // through `jsToScheme` — even though it was never a "borrowed JS callback" to begin with.
+  if (tag === "function" && LAMBDA in value) {
+    return value;
   }
 
   // A borrowed JS function is NOT a Scheme value (and exposing it as callable would let Scheme
