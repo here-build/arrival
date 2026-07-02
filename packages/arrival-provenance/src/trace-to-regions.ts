@@ -695,7 +695,6 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     const spine = ctx.loopSpine ? ctx.loopSpine(inv) : walkSpine(inv);
     for (let i = 0; i < spine.length; i++) {
       const here = spine[i]!;
-      incoming += 1;
       // A loop iteration is FROZEN once its successor body-entry exists: the `if` has
       // definitively routed to the recursive call and this iteration's content (work +
       // the recursive call's arg-eval that surfaces here) can no longer change. The
@@ -704,7 +703,13 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
       const regions = ctx.iterationCache
         ? ctx.iterationCache(here.id, frozen, () => here.children.flatMap((c) => regionsAt(c, ctx)))
         : here.children.flatMap((c) => regionsAt(c, ctx));
+      // The TERMINAL spine entry with an EMPTY body is the loop's EXIT — the base case
+      // returning the value (`(if (zero? n) pool …)`'s bare-arm pass). It is not an
+      // "incoming iteration that got pruned": counting it made a 4-round loop read
+      // `4 ← ×5`, implying a fifth round existed. A MID-spine empty pass IS a real
+      // skip/discard round and stays counted.
       if (regions.length > 0) iterations.push(regions);
+      if (regions.length > 0 || frozen) incoming += 1;
     }
     // Degenerate container (no inference anywhere in the loop) → drop it. The
     // cleanup is INLINE: an empty fanout never materializes, so an outer frame
