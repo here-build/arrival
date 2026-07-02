@@ -124,6 +124,7 @@ export {
   ArrivalError,
   SchemePromise,
   is_scheme_promise,
+  currentRunEnv,
   type EvalContext,
   type EvalGenerator,
   type EvalTap,
@@ -213,3 +214,7 @@ export { classifierFromEnv } from "./values/lineage-classifier-from-env.js";
 // manual `{ infer: ids }` global map the v02-G1 shadow uses) without collapsing distinct
 // invocations of one source name. Populated by EvalTrace.exit when attached.
 export { AutoBindings, slotsOf } from "./values/lineage-auto-bindings.js";
+// Deep provenance of a value — the union of `.provenance` over every reachable AValue
+// (pair spine, vector, JS array elements). Containers are provenance-transparent, so this
+// is THE read for "which points fed this packed value" (a pool of candidates, a list arg).
+export { deepProvenance } from "./values/deep-provenance.js";
