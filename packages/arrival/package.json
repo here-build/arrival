@@ -67,6 +67,10 @@
     "./srfi": {
       "types": "./dist/env/srfi/index.d.ts",
       "default": "./dist/env/srfi/index.js"
+    },
+    "./pipeline-input": {
+      "types": "./dist/env/pipeline-input.d.ts",
+      "default": "./dist/env/pipeline-input.js"
     }
   },
   "main": "./dist/index.js",
