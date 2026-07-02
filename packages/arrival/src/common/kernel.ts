@@ -21,14 +21,37 @@ export interface EnvPack<E = unknown> {
   readonly config?: unknown;
   /** Runs once, after all deps, in C3 order. May await import / defineRosetta / ctx.onDispose.
    *  MUST contribute symbols via the env's membrane-wrapping API, never a bare host closure (§8). */
-  apply(env: E, ctx: PackContext): void | Promise<void>;
+  apply(env: E, ctx: PackContext<E>): void | Promise<void>;
 }
 
-export interface PackContext {
+export interface PackContext<E = unknown> {
   /** Register a teardown thunk; run LIFO by AssembledEnv.dispose(). */
   onDispose(fn: () => void | Promise<void>): void;
   /** The C3 linearization this pack sits in (highest precedence first) — debug/audit. */
   readonly order: readonly string[];
+  /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env, for
+   *  the duration of THIS assembly — an opaque, CALLER-constructed `E`. The kernel never builds
+   *  or interprets it (env-agnostic core); it only threads whatever the caller passed as
+   *  `assembleEnv(base, roots, { preludeScope })` onto every pack's ctx. Undefined when the
+   *  caller passed none (the default — no-op for every consumer that doesn't opt in). Read by
+   *  the scheme-aware `EnvCapability.lower().apply()` (capability.ts), which is also where the
+   *  actual re-parenting trick (sandboxBase ← preludeOverlay ← R) is built and torn down — see
+   *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.3. */
+  readonly preludeScope?: E;
+  /** The scope a capability's `prelude` TEXT is evaluated AGAINST — distinct from
+   *  `preludeScope` (the bind target), because the two coincide in ONE topology and diverge in
+   *  the other:
+   *    - BOOTSTRAP (§1.3): `preludeScope` = the overlay, a PARENT of the runtime env R.
+   *      `preludeEvalScope` is left undefined (capability.ts falls back to evaluating against
+   *      `env` = R) because R already resolves through to the overlay on a lookup miss, AND a
+   *      prelude `define` must land in R (fact 1) — evaluating against the overlay directly
+   *      would trap defines there instead.
+   *    - MID-RUN (§1.4): `preludeScope` = `preludeEvalScope` = a discarded CHILD `C'` of the
+   *      live env. Re-parenting a LIVE env is unsafe (concurrent lookups), so the prelude is
+   *      evaluated IN `C'` instead: lookups miss `C'` → hit `liveEnv` → base, and `C'` (with any
+   *      prelude `define`s) is simply dropped when `require()` returns — the deliberate mid-run
+   *      asymmetry (a mid-run pack's prelude cannot contribute runtime bindings). */
+  readonly preludeEvalScope?: E;
 }
 
 export interface AssembledEnv<E = unknown> {
@@ -183,9 +206,17 @@ function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: 
   return { order, byName };
 }
 
-function makeCtx(order: string[]): { ctx: PackContext; runDisposers: () => Promise<void> } {
+function makeCtx<E>(
+  order: string[],
+  preludeOpts: { preludeScope?: E; preludeEvalScope?: E } = {},
+): { ctx: PackContext<E>; runDisposers: () => Promise<void> } {
   const disposers: Array<() => void | Promise<void>> = [];
-  const ctx: PackContext = { onDispose: (fn) => disposers.push(fn), order };
+  const ctx: PackContext<E> = {
+    onDispose: (fn) => disposers.push(fn),
+    order,
+    preludeScope: preludeOpts.preludeScope,
+    preludeEvalScope: preludeOpts.preludeEvalScope,
+  };
   const runDisposers = async () => {
     for (let i = disposers.length - 1; i >= 0; i--) {
       try {
@@ -202,10 +233,19 @@ function makeCtx(order: string[]): { ctx: PackContext; runDisposers: () => Promi
  * Assemble `base` into a capability-scoped env by resolving the pack DAG. Async by construction.
  * Applies each pack once in C3 order (least-precedence first ⇒ last-write-wins matches C3). On any
  * apply failure, runs disposers collected so far (LIFO) and rejects — no half-built env escapes.
+ *
+ * `opts.preludeScope`, when passed, is threaded onto every pack's `ctx.preludeScope` for the
+ * duration of THIS assembly — an opaque `E`-typed scope the kernel never builds or interprets
+ * (env-agnostic core; see `PackContext.preludeScope`). The scheme-aware caller (`buildArrivalEnv`)
+ * constructs the actual overlay + does the re-parenting trick; `assembleEnv` only carries it.
  */
-export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Promise<AssembledEnv<E>> {
+export async function assembleEnv<E>(
+  base: E,
+  roots: readonly EnvPack<E>[],
+  opts: { preludeScope?: E; preludeEvalScope?: E } = {},
+): Promise<AssembledEnv<E>> {
   const { order, byName } = linearize(roots);
-  const { ctx, runDisposers } = makeCtx(order);
+  const { ctx, runDisposers } = makeCtx(order, opts);
   for (const name of order.toReversed()) {
     const pack = byName.get(name)!;
     try {
@@ -234,8 +274,14 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
  *  pack's deps are applied first in C3 order, and a pack reached two ways applies once. Disposers are
  *  collected for a single LIFO `dispose()` tied to the env's teardown. */
 export interface RuntimeAssembler<E = unknown> {
-  /** Apply `pack` (and any not-yet-applied deps) to the live env, in C3 order. Idempotent. */
-  require(pack: EnvPack<E>): Promise<void>;
+  /** Apply `pack` (and any not-yet-applied deps) to the live env, in C3 order. Idempotent.
+   *  `opts.preludeScope`/`opts.preludeEvalScope`, when passed, are threaded onto every applied
+   *  pack's `ctx` for THIS require() call only — see `PackContext.preludeScope` /
+   *  `.preludeEvalScope` + the mid-run design note in
+   *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.4
+   *  (a scheme-aware caller seeds a discarded CHILD scope here, since the live env can't safely be
+   *  re-parented mid-run the way bootstrap assembly re-parents its not-yet-live base). */
+  require(pack: EnvPack<E>, opts?: { preludeScope?: E; preludeEvalScope?: E }): Promise<void>;
   /** Tear down every runtime-applied pack, LIFO (reverse of apply order). */
   dispose(): Promise<void>;
 }
@@ -247,10 +293,20 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   const disposers: Array<() => void | Promise<void>> = [];
 
   // todo replace with DefaultedMap
-  const applyOne = (name: string, pack: EnvPack<E>, order: readonly string[]): Promise<void> => {
+  const applyOne = (
+    name: string,
+    pack: EnvPack<E>,
+    order: readonly string[],
+    preludeOpts: { preludeScope?: E; preludeEvalScope?: E },
+  ): Promise<void> => {
     const existing = applied.get(name);
     if (existing) return existing; // idempotent + single-flight (no await between get and set below)
-    const ctx: PackContext = { onDispose: (fn) => disposers.push(fn), order };
+    const ctx: PackContext<E> = {
+      onDispose: (fn) => disposers.push(fn),
+      order,
+      preludeScope: preludeOpts.preludeScope,
+      preludeEvalScope: preludeOpts.preludeEvalScope,
+    };
     // The async IIFE turns a SYNCHRONOUS throw in apply() into a rejection so the catch handles it
     // uniformly (a bare `pack.apply(...)` would throw before withTimeout was even called).
     const p = (async () => withTimeout(pack.apply(env, ctx), packTimeoutMs(), name))().catch((error) => {
@@ -263,11 +319,11 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   };
 
   return {
-    require: async (pack: EnvPack<E>): Promise<void> => {
+    require: async (pack: EnvPack<E>, opts: { preludeScope?: E; preludeEvalScope?: E } = {}): Promise<void> => {
       const { order, byName } = linearize([pack]);
       // Apply least-precedence (deps) first, matching construction's last-write-wins order.
       for (const name of order.toReversed()) {
-        await applyOne(name, byName.get(name)!, order);
+        await applyOne(name, byName.get(name)!, order, opts);
       }
     },
     dispose: async (): Promise<void> => {
