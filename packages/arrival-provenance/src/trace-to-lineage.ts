@@ -23,7 +23,7 @@
  * ADDITIVE + flag-gated exactly like the carrier: no `AutoBindings` sidecar
  * (`trace.withAutoBindings()`) → an empty graph with a warning, never a throw.
  */
-import { classify, slotsOf } from "@here.build/arrival";
+import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
 import type { Bindings, Classifier, LineageNode } from "@here.build/arrival";
 
 import { classifierFromTrace, operandsOf, scopedBindings, subtreeIds } from "./carrier-fields.js";
@@ -73,6 +73,62 @@ export function traceToLineage(
     }
   }
   return { wires, warnings: [] };
+}
+
+/**
+ * The keyword field(s) each producer's value was PLUCKED BY, anywhere downstream — the pins the
+ * point-only carrier cannot see. A pluck often sits in PURE code between points (GEPA's `ask`
+ * does `(:label (car (infer …)))` inside a function; the score compare consumes the result and
+ * only the OUTPUT statement is pointful downstream), so neither `carrierFieldEdges` (classifies
+ * point-consumer args) nor a root-form classify (no descent into user functions) finds it. But
+ * every pluck IS an invocation on the trace: scan the log for forms that classify to a top-level
+ * keyword `field` node and pin its step on the producers it plucked from —
+ *  - INLINE-SOURCE pluck `(:k (car (infer …)))`: the producers are the provenance POINTS inside
+ *    the pluck invocation's OWN subtree (the carrier's documented gap 1 — the operator slot
+ *    carries no provenance, but the point invocation is right there in the tree);
+ *  - SYMBOL-BOUND pluck `(:k x)`: ground the skeleton's slots through the AutoBindings sidecar,
+ *    scoped to the pluck's subtree (same grounding as the carrier).
+ * Consumers attribute e.g. producer→OUTPUT edges: `fromField = the pin that names a field of the
+ * producer's value`. Empty without the sidecar.
+ */
+export function producerPluckFields(
+  trace: EvalTrace,
+  classifier: Classifier = classifierFromTrace(trace),
+): Map<number, Set<string>> {
+  const out = new Map<number, Set<string>>();
+  const auto = trace.autoBindings;
+  if (!auto) return out;
+  const pin = (producer: number, key: string): void => {
+    (out.get(producer) ?? out.set(producer, new Set()).get(producer)!).add(key);
+  };
+  for (const inv of trace.invocationLog) {
+    const node = inv.node as { car?: unknown } | null;
+    // Cheap pre-filter: a pluck form's head is an ATOM (a keyword), never a pair.
+    if (!node || typeof node !== "object" || !("car" in node)) continue;
+    const head = node.car;
+    if (head === null || typeof head !== "object" || "car" in (head as object)) continue;
+    const skeleton = classify(inv.node, classifier);
+    if (skeleton.kind !== "field" || !("field" in skeleton.step)) continue; // keyword plucks only
+    const key = skeleton.step.field;
+    // Inline-source: the plucked producer is a point INSIDE this pluck's subtree.
+    let pinned = false;
+    const stack = [...inv.children];
+    while (stack.length > 0) {
+      const c = stack.pop()!;
+      if (c.isProvenancePoint) {
+        pin(c.id, key);
+        pinned = true;
+      } else {
+        stack.push(...c.children);
+      }
+    }
+    if (pinned) continue;
+    // Symbol-bound: ground the skeleton's slots through the sidecar, scoped to this pluck.
+    const { base, key: resolved } = fieldResolve(skeleton, scopedBindings(auto, subtreeIds(inv), slotsOf(skeleton)));
+    if (resolved === null) continue;
+    for (const producer of base) pin(producer, resolved);
+  }
+  return out;
 }
 
 /** One op step's surface label, producer→consumer reading (innermost transform first). */
