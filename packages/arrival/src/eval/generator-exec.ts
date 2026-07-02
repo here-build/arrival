@@ -108,12 +108,16 @@ const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
  * (`user_env → global_env`) rather than replace it. A fresh child per call keeps the user's
  * capabilities out of the shared `user_env` (no cross-call bleed); a caller wanting a
  * persistent capability env builds it once with `assembleEnv` and passes it as `{ env }`.
+ *
+ * `config` is the ONE shared bag (see `ExecOptions.config`) handed to every capability's
+ * `lower()` — each validates its own slice; `assembleEnv` supplies the phase-gated prelude
+ * scope, so `preludeOnly` symbols work here with no extra wiring.
  */
-async function assembleCapabilityBase(capabilities: readonly EnvCapability[]): Promise<Environment> {
+async function assembleCapabilityBase(capabilities: readonly EnvCapability[], config?: object): Promise<Environment> {
   const base = user_env.inherit("exec-capabilities");
   await assembleEnv(
     base,
-    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme })),
+    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme, config })),
   );
   return base;
 }
@@ -132,6 +136,17 @@ export interface ExecOptions {
    * `user_env` child (no cross-call bleed). Ignored when `env` (glass) is set.
    */
   capabilities?: readonly EnvCapability[];
+  /**
+   * THE SHARED CONFIG BAG for `capabilities` (inert without them). ONE object handed to every
+   * capability's `lower({ config })`: each capability validates its OWN slice against its
+   * `configuration` zod schemas (`z.object` strips the keys it doesn't declare), so unrelated
+   * capabilities ride one bag without knowing about each other. Deliberately reference-shared,
+   * never cloned or split per capability: `EnvCapability.lower` threads the SAME raw object to
+   * its deps, so the kernel's closure dedup matches a capability's root + dep appearances by
+   * IDENTITY instead of tripping `AssembleConfigConflictError` (the idiom `buildArrivalEnv`
+   * pioneered — "each capability validates its own slice of the SHARED opts config").
+   */
+  config?: object;
   /**
    * THE CUT, scope-refined. The lexical root the run's top-level `define`s land in. Pass a
    * persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls for REPL-style
@@ -269,6 +284,7 @@ export async function exec(
   {
     env,
     capabilities,
+    config,
     scope,
     dynamic_env,
     use_dynamic,
@@ -351,7 +367,7 @@ export async function exec(
   } else {
     const capabilityBase =
       capabilities !== undefined
-        ? Capabilities.assembled(await assembleCapabilityBase(capabilities))
+        ? Capabilities.assembled(await assembleCapabilityBase(capabilities, config))
         : Capabilities.assembled(actualEnv);
     const lexicalRoot = scope !== undefined ? scope.env : defaultLexicalRoot();
     runResolver = new Resolver(lexicalRoot, capabilityBase);

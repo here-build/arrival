@@ -24,28 +24,37 @@ export interface EnvPack<E = unknown> {
   apply(env: E, ctx: PackContext<E>): void | Promise<void>;
 }
 
+/** The narrow surface a `preludeOnly` symbol's BINDING lands on. Deliberately just `.set`:
+ *  capability.ts's bindTarget only ever writes. In BOOTSTRAP assembly this is the kernel's own
+ *  Map-backed shim (see `assembleEnv`); in MID-RUN application (§1.4) it is a real, discarded
+ *  child scope the caller constructs — a `SchemeEnv` satisfies this structurally. */
+export interface PreludeBindTarget {
+  set(name: string, value: unknown): unknown;
+}
+
 export interface PackContext<E = unknown> {
   /** Register a teardown thunk; run LIFO by AssembledEnv.dispose(). */
   onDispose(fn: () => void | Promise<void>): void;
   /** The C3 linearization this pack sits in (highest precedence first) — debug/audit. */
   readonly order: readonly string[];
-  /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env, for
-   *  the duration of THIS assembly — an opaque, CALLER-constructed `E`. The kernel never builds
-   *  or interprets it (env-agnostic core); it only threads whatever the caller passed as
-   *  `assembleEnv(base, roots, { preludeScope })` onto every pack's ctx. Undefined when the
-   *  caller passed none (the default — no-op for every consumer that doesn't opt in). Read by
-   *  the scheme-aware `EnvCapability.lower().apply()` (capability.ts), which is also where the
-   *  actual re-parenting trick (sandboxBase ← preludeOverlay ← R) is built and torn down — see
-   *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.3. */
-  readonly preludeScope?: E;
+  /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env.
+   *
+   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own Map-backed shim. A binding
+   *  written here is answered by a phase-gated resolver the kernel registers on the base env
+   *  (structurally, iff the base has `registerResolver`), so it is resolvable from any scope
+   *  chaining through the base WHILE the assembly's prelude phase is open, and genuinely gone
+   *  once `assembleEnv`'s C3 loop ends — including for closures a prelude defined (a closure
+   *  walks the live chain at call time; the resolver answers nothing post-assembly). That IS
+   *  the `preludeOnly` contract: assembly-time-only, not run-within-prelude-scope.
+   *
+   *  MID-RUN (`RuntimeAssembler.require`, §1.4): caller-supplied — a discarded child `C'` of
+   *  the live env (require-extension.ts). Undefined when that caller passes none. */
+  readonly preludeScope?: PreludeBindTarget;
   /** The scope a capability's `prelude` TEXT is evaluated AGAINST — distinct from
-   *  `preludeScope` (the bind target), because the two coincide in ONE topology and diverge in
-   *  the other:
-   *    - BOOTSTRAP (§1.3): `preludeScope` = the overlay, a PARENT of the runtime env R.
-   *      `preludeEvalScope` is left undefined (capability.ts falls back to evaluating against
-   *      `env` = R) because R already resolves through to the overlay on a lookup miss, AND a
-   *      prelude `define` must land in R (fact 1) — evaluating against the overlay directly
-   *      would trap defines there instead.
+   *  `preludeScope` (the bind target):
+   *    - BOOTSTRAP: left undefined; capability.ts falls back to evaluating against `env` = R,
+   *      so prelude `define`s land in R (fact 1 of the design doc §1.3) while `preludeOnly`
+   *      lookups are answered by the kernel's phase-gated resolver on the base.
    *    - MID-RUN (§1.4): `preludeScope` = `preludeEvalScope` = a discarded CHILD `C'` of the
    *      live env. Re-parenting a LIVE env is unsafe (concurrent lookups), so the prelude is
    *      evaluated IN `C'` instead: lookups miss `C'` → hit `liveEnv` → base, and `C'` (with any
@@ -208,7 +217,7 @@ function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: 
 
 function makeCtx<E>(
   order: string[],
-  preludeOpts: { preludeScope?: E; preludeEvalScope?: E } = {},
+  preludeOpts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E } = {},
 ): { ctx: PackContext<E>; runDisposers: () => Promise<void> } {
   const disposers: Array<() => void | Promise<void>> = [];
   const ctx: PackContext<E> = {
@@ -229,32 +238,89 @@ function makeCtx<E>(
   return { ctx, runDisposers };
 }
 
+// ── The kernel-internal, phase-gated prelude scope (bootstrap assembly) ─────────────────────
+//
+// `preludeOnly` symbols used to ride a CALLER-built overlay env (sandboxBase ← overlay ← R,
+// re-parented for the duration of assembly). That model made every assembling consumer wire the
+// same trick by hand. The kernel now owns the mechanism, per-assembly, with no re-parenting:
+//
+//   • bindings land in a per-assembly `Map` behind `ctx.preludeScope` (a `.set`-only shim —
+//     capability.ts's bindTarget only writes);
+//   • a resolver registered ON THE BASE ENV answers lookups from that Map, gated on the
+//     assembly's `phase.prelude` flag. Resolvers are consulted at every layer of a chain walk
+//     (`Environment._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
+//     evaluated against R — or any child scope chaining through the base — resolves the symbol
+//     exactly like the old overlay-parent did;
+//   • the flag flips false after the C3 loop (success OR failure), so post-assembly the name is
+//     a plain unbound-variable everywhere — INCLUDING from prelude-defined closures, which walk
+//     the live chain at call time. `preludeOnly` therefore means ASSEMBLY-TIME-ONLY. This is the
+//     contract, not a gap: a prelude that must bridge a preludeOnly value to runtime captures the
+//     VALUE at assembly time (`(define x (the-prelude-verb …))`), never the verb.
+//
+// Everything is a per-assembly closure (concurrent assemblies never share state); only the id
+// uniquifier below is module-level, so two assemblies over the SAME base register distinct
+// resolver ids (Environment.registerResolver dedups by id). A spent resolver stays registered
+// but answers `undefined` forever — dead weight bounded by assemblies-per-env (one for
+// long-lived bases; fresh per-run children are GC'd whole).
+
+/** The structural face of a resolver-capable base (mirrors scheme-env.ts's `SchemeEnv.
+ *  registerResolver`/`ResolverSpec` WITHOUT importing them — the kernel stays env-agnostic;
+ *  a non-scheme `E` simply never gets the resolver and Map-bound symbols stay unreachable). */
+interface ResolverHostLike {
+  registerResolver(resolver: { readonly id: string; resolve(name: string): unknown }): unknown;
+}
+const isResolverHost = (base: unknown): base is ResolverHostLike =>
+  typeof (base as { registerResolver?: unknown } | null | undefined)?.registerResolver === "function";
+
+let preludeResolverSeq = 0;
+
 /**
  * Assemble `base` into a capability-scoped env by resolving the pack DAG. Async by construction.
  * Applies each pack once in C3 order (least-precedence first ⇒ last-write-wins matches C3). On any
  * apply failure, runs disposers collected so far (LIFO) and rejects — no half-built env escapes.
  *
- * `opts.preludeScope`, when passed, is threaded onto every pack's `ctx.preludeScope` for the
- * duration of THIS assembly — an opaque `E`-typed scope the kernel never builds or interprets
- * (env-agnostic core; see `PackContext.preludeScope`). The scheme-aware caller (`buildArrivalEnv`)
- * constructs the actual overlay + does the re-parenting trick; `assembleEnv` only carries it.
+ * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, phase-gated prelude scope (see the
+ * block comment above). Mid-run application (`RuntimeAssembler.require`) keeps its caller-supplied
+ * `preludeScope`/`preludeEvalScope` override (§1.4) — that path applies onto a LIVE env, where the
+ * discarded-child topology is the safe one.
  */
-export async function assembleEnv<E>(
-  base: E,
-  roots: readonly EnvPack<E>[],
-  opts: { preludeScope?: E; preludeEvalScope?: E } = {},
-): Promise<AssembledEnv<E>> {
+export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Promise<AssembledEnv<E>> {
   const { order, byName } = linearize(roots);
-  const { ctx, runDisposers } = makeCtx(order, opts);
-  for (const name of order.toReversed()) {
-    const pack = byName.get(name)!;
-    try {
-      await withTimeout(pack.apply(base, ctx), packTimeoutMs(), name);
-    } catch (error) {
-      await runDisposers();
-      if (error instanceof AssemblePackTimeoutError) throw error;
-      throw new AssemblePackError(name, error);
+  // Per-assembly closure: the Map + phase flag live and die with THIS call.
+  const phase = { prelude: true };
+  const preludeMap = new Map<string, unknown>();
+  let resolverRegistered = false;
+  const preludeScope: PreludeBindTarget = {
+    set: (name, value) => {
+      // Register the resolver lazily, on the FIRST preludeOnly binding — an assembly with none
+      // (the overwhelmingly common case) leaves the base env untouched.
+      if (!resolverRegistered && isResolverHost(base)) {
+        resolverRegistered = true;
+        base.registerResolver({
+          id: `kernel/prelude-scope#${preludeResolverSeq++}`,
+          resolve: (name) => (phase.prelude ? preludeMap.get(name) : undefined),
+        });
+      }
+      preludeMap.set(name, value);
+      return value;
+    },
+  };
+  const { ctx, runDisposers } = makeCtx<E>(order, { preludeScope });
+  try {
+    for (const name of order.toReversed()) {
+      const pack = byName.get(name)!;
+      try {
+        await withTimeout(pack.apply(base, ctx), packTimeoutMs(), name);
+      } catch (error) {
+        await runDisposers();
+        if (error instanceof AssemblePackTimeoutError) throw error;
+        throw new AssemblePackError(name, error);
+      }
     }
+  } finally {
+    // The seal: after the C3 loop (success or failure), preludeOnly symbols are unreachable —
+    // the resolver answers nothing, and there is no overlay frame to leak.
+    phase.prelude = false;
   }
   return { env: base, order, dispose: runDisposers };
 }
@@ -279,9 +345,9 @@ export interface RuntimeAssembler<E = unknown> {
    *  pack's `ctx` for THIS require() call only — see `PackContext.preludeScope` /
    *  `.preludeEvalScope` + the mid-run design note in
    *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.4
-   *  (a scheme-aware caller seeds a discarded CHILD scope here, since the live env can't safely be
-   *  re-parented mid-run the way bootstrap assembly re-parents its not-yet-live base). */
-  require(pack: EnvPack<E>, opts?: { preludeScope?: E; preludeEvalScope?: E }): Promise<void>;
+   *  (a scheme-aware caller seeds a discarded CHILD scope here — the live env can't be handed to
+   *  bootstrap's phase-gated machinery mid-run, and it must not accumulate prelude defines). */
+  require(pack: EnvPack<E>, opts?: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E }): Promise<void>;
   /** Tear down every runtime-applied pack, LIFO (reverse of apply order). */
   dispose(): Promise<void>;
 }
@@ -297,7 +363,7 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
     name: string,
     pack: EnvPack<E>,
     order: readonly string[],
-    preludeOpts: { preludeScope?: E; preludeEvalScope?: E },
+    preludeOpts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E },
   ): Promise<void> => {
     const existing = applied.get(name);
     if (existing) return existing; // idempotent + single-flight (no await between get and set below)
@@ -319,7 +385,7 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   };
 
   return {
-    require: async (pack: EnvPack<E>, opts: { preludeScope?: E; preludeEvalScope?: E } = {}): Promise<void> => {
+    require: async (pack: EnvPack<E>, opts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E } = {}): Promise<void> => {
       const { order, byName } = linearize([pack]);
       // Apply least-precedence (deps) first, matching construction's last-write-wins order.
       for (const name of order.toReversed()) {

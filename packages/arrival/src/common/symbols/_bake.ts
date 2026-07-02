@@ -103,11 +103,13 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec> {
    *  `SPECULATE` shape, minus the Symbol). Declared here on the contract, not in a name-list —
    *  so fan-ness follows the binding (alias-correct), not a string match. */
   readonly fanout?: boolean;
-  /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol as living ONLY in the shared
-   *  prelude-evaluation scope (the extended scope a capability's `prelude` evaluates against —
-   *  runtime env R plus every `preludeOnly` symbol layered on as a transient parent), never bound
-   *  into the runtime env R itself. A running program naming the symbol gets the ordinary
-   *  unbound-variable error — there is nothing to seal, the name genuinely isn't in scope. See
+  /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol ASSEMBLY-TIME-ONLY: it binds into
+   *  the assembly's phase-gated prelude scope (kernel.ts `assembleEnv` — a per-assembly Map
+   *  answered by a resolver on the base env while the C3 loop runs), never into the runtime env.
+   *  Callable from any later-applied capability's prelude during assembly; a plain
+   *  unbound-variable error everywhere at runtime — INCLUDING from lambdas a prelude defined
+   *  (closures walk the live chain at call time). A prelude bridges a preludeOnly value to
+   *  runtime by capturing the call's RESULT in an ordinary define, never the verb itself. See
    *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
   readonly preludeOnly?: boolean;
 }

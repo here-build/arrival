@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 
-import type { EnvPack, PackContext } from "./kernel.js";
+import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
@@ -203,14 +203,20 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       apply: async (env: SchemeEnv, ctx?: PackContext<SchemeEnv>) => {
-        // preludeOnly routing (design doc §1.3/§4 step 3): a baked native/rosetta def marked
-        // `preludeOnly: true` binds onto `ctx.preludeScope` — the shared, accumulating scope a
-        // capability's OWN prelude (and every later-applied capability's prelude, via C3 dep
-        // order) is evaluated against — instead of the runtime env `env`. Same bind form either
-        // way (native → raw impl; rosetta → the gated run wrapper); only the TARGET scope
-        // differs. Absent `ctx.preludeScope` (e.g. a bare direct apply outside an assembly that
-        // wires an overlay), fall back to `env` so the symbol is never silently dropped.
-        const bindTarget = (def: BakedSymbolDef): SchemeEnv =>
+        // preludeOnly routing (design doc §1.3, phase-gated model): a baked native/rosetta def
+        // marked `preludeOnly: true` binds onto `ctx.preludeScope` instead of the runtime env.
+        // Under `assembleEnv` that target is the kernel's Map-backed shim, answered by a
+        // phase-gated resolver on the base env — so the symbol is resolvable by every
+        // later-applied capability's prelude (C3 dep order) and by nothing else: once the C3
+        // loop ends the resolver goes silent, and the name is a plain unbound-variable
+        // EVERYWHERE at runtime, including from lambdas a prelude defined (closures walk the
+        // live chain at call time — `preludeOnly` means ASSEMBLY-TIME-ONLY; a prelude bridges a
+        // value to runtime by capturing the CALL'S RESULT in an ordinary define, never the
+        // verb). Same bind form either way (native → raw impl; rosetta → the gated run
+        // wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
+        // apply outside any assembly), fall back to `env` so the symbol is never silently
+        // dropped.
+        const bindTarget = (def: BakedSymbolDef): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
         const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
         const prefix = spec.symbolPrefix ?? "";
