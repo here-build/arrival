@@ -49,6 +49,16 @@ const capString = (full: string): string =>
     ? `${full.slice(0, activeCaps.maxStringChars)}…(+${full.length - activeCaps.maxStringChars} chars)`
     : full;
 
+/** R7RS §6.7 string escapes, verified against arrival's own reader (every one of
+ *  `\\`, `\"`, `\n`, `\t`, `\r` round-trips through `exec('"a\\Xb"')`). Backslash MUST
+ *  be escaped FIRST — otherwise the backslash this function inserts for `\n`/`\t`/`\r`
+ *  would itself get re-escaped by a later `\\` pass. This is the ONE place a rendered
+ *  string's content is turned into R7RS `"..."` source — both the AString branch and
+ *  formatSExpr's primitive-string leaf route through it, so every string in the
+ *  observation surface re-parses. */
+const escapeSchemeString = (s: string): string =>
+  s.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n").replaceAll("\t", "\\t").replaceAll("\r", "\\r");
+
 /** Options for the public serializer. When any cap is set, truncation is ON for this
  *  call; with none set (or a bare indent number) behaviour is unchanged (no caps). */
 export type SerializeOpts = {
@@ -187,15 +197,13 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
       return obj.__name__; // Return symbol name as-is (includes : for keywords)
     }
 
-    // SchemeString
+    // SchemeString — R7RS double-quoted, fully escaped, so it re-parses through
+    // arrival's own reader (see `escapeSchemeString` above for the verified escape set).
+    // The elision suffix `capString` may append lands inside the quotes as ordinary
+    // content, escaped like anything else.
     if (obj.constructor?.name === "AString" && "__string__" in obj) {
       const str = capString(obj.__string__);
-      // Use template strings for complex strings (multi-line, quotes, etc.)
-      if (str.includes(String.raw`\n`) || str.includes(String.raw`\t`) || str.includes('"') || str.includes("'")) {
-        return `\`${str}\``;
-      }
-      // Use single quotes for simple strings
-      return `'${str}'`;
+      return `"${escapeSchemeString(str)}"`;
     }
 
     // SchemeCharacter
@@ -286,7 +294,8 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
       entries.push(`:${String(key)}`, toSExpr(value, visited));
     }
-    if (all.length > activeCaps.maxItems) entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
+    if (all.length > activeCaps.maxItems)
+      entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
     return ["map", ...entries];
   }
 
@@ -316,7 +325,8 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
       entries.push(`:${key}`, toSExpr(value, visited));
     }
-    if (all.length > activeCaps.maxItems) entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
+    if (all.length > activeCaps.maxItems)
+      entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
     return ["dict", ...entries];
   }
 
@@ -517,16 +527,26 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     if (sexpr === "<function>") return sexpr;
     // BigInt notation (ends with n) - don't quote
     if (sexpr.endsWith("n") && /^\d+n$/.test(sexpr)) return sexpr;
-    // Template strings (wrapped in backticks) - don't quote
+    // Template strings (wrapped in backticks) - don't quote. LEGACY passthrough: the
+    // AString branch above no longer emits this shape, but old already-rendered data
+    // may still flow through formatSExpr, so this stays dead-but-harmless.
     if (sexpr.startsWith("`") && sexpr.endsWith("`")) return sexpr;
-    // Single-quoted strings - don't quote (already quoted)
+    // Single-quoted strings - don't quote (already quoted). LEGACY passthrough, same
+    // reason as above — the AString branch no longer produces this shape either.
     if (sexpr.startsWith("'") && sexpr.endsWith("'")) return sexpr;
+    // Double-quoted strings - don't re-quote (already quoted). This IS the live shape:
+    // the AString branch above now emits `"..."` directly (R7RS double quotes, already
+    // escaped via `escapeSchemeString`) as the SExpr node itself; formatSExpr must pass
+    // it through unchanged or it would escape-and-wrap an already-escaped string,
+    // corrupting the round-trip (e.g. `"hello"` → `"\"hello\""`).
+    if (sexpr.startsWith('"') && sexpr.endsWith('"') && sexpr.length >= 2) return sexpr;
     // Character literals (start with #\) - don't quote
     if (sexpr.startsWith("#\\")) return sexpr;
     // Bare symbols (no quotes, no special chars) - don't quote
     if (/^[a-z][\w-]*$/i.test(sexpr)) return sexpr;
-    // All other strings are quoted
-    return `"${sexpr.replaceAll('"', String.raw`\"`)}"`;
+    // All other strings are quoted — full R7RS escaping (not just `"`), so the
+    // rendered string re-parses (see `escapeSchemeString`).
+    return `"${escapeSchemeString(sexpr)}"`;
   }
 
   if (typeof sexpr === "number" || typeof sexpr === "bigint") {
@@ -679,7 +699,11 @@ export const sexpr = (tag: string, ...args: any[]): SExprDefinition => [SEXPR_TA
 /**
  * Helper to create a map from object
  */
-export const smap = (obj: Record<string, any>): SExprDefinition => [SEXPR_TAG, "dict", ...Object.entries(obj).flatMap(([k, v]) => [`:${k}`, v])];
+export const smap = (obj: Record<string, any>): SExprDefinition => [
+  SEXPR_TAG,
+  "dict",
+  ...Object.entries(obj).flatMap(([k, v]) => [`:${k}`, v]),
+];
 
 /**
  * Helper to create a list

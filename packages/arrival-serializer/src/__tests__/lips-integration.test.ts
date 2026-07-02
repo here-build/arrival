@@ -74,7 +74,7 @@ describe("LIPS Integration", () => {
       { expr: "3.14", expected: "3.14" }, // LNumber float
       { expr: "#t", expected: "true" },
       { expr: "#f", expected: "false" },
-      { expr: '"hello world"', expected: `'hello world'` }, // Single quotes for simple strings
+      { expr: '"hello world"', expected: `"hello world"` }, // R7RS double quotes — re-parses
       { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
       { expr: "()", expected: "(list nil)" } // edge case - keeping like that for now
     ];
