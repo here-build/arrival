@@ -347,6 +347,9 @@ export class TraceRegionFold {
       return v;
     };
     const liveValueById = (id: number): unknown => this.#liveById.get(id)?.value;
+    // Mirror of from-scratch `liveProvenanceById` — the prune-exempt filter-child sets the
+    // filter-predicate decision reads. MUST match the one-shot exactly (parity).
+    const liveProvenanceById = (id: number): Iterable<number> => (this.#liveById.get(id) as { provenance?: Iterable<number> } | undefined)?.provenance ?? [];
     // Mirror of from-scratch `livePointsUnder` (trace-to-regions): the topmost provenance
     // points in an invocation's live subtree, for pluck-off-infer decision operands whose
     // stamped value was GC-pruned. MUST match the one-shot exactly or the parity test trips.
@@ -410,6 +413,7 @@ export class TraceRegionFold {
       pointIds: this.#pointIds,
       valueById,
       liveValueById,
+      liveProvenanceById,
       livePointsUnder,
       knotArm,
       knotInputs,

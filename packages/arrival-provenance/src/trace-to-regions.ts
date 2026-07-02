@@ -43,7 +43,7 @@
  * `addPointToHasse`, `regionsAt`, `attributeFieldEdges`, `derivePorts`, …) rather than
  * re-deriving them, so the two paths cannot drift.
  */
-import { schemeToJs } from "@here.build/arrival";
+import { deepProvenance, schemeToJs } from "@here.build/arrival";
 import { schemeToSweet } from "@here.build/arrival-sweet";
 
 import { carrierFieldEdges } from "./carrier-fields.js";
@@ -605,6 +605,11 @@ export interface RegionWalkCtx {
   /** Live value of an invocation id (for decision-operand provenance) — the snapshot
    *  drops plumbing values, so the decision path reads the live trace. */
   liveValueById: (id: number) => unknown;
+  /** Live INVOCATION provenance of an id — the snapshot zeroes plumbing provenance, and the
+   *  pruner frees most of it mid-run, but a `filter`'s direct children are prune-exempt (see
+   *  `EvalTrace#pruneChildProvenance`): each per-element pred application's set names the
+   *  inference origins that element's selection tested. The filter-predicate decision reads it. */
+  liveProvenanceById: (id: number) => Iterable<number>;
   /** The provenance POINTS in an invocation's live subtree (topmost ones — not descending
    *  past a point). A field-pluck off an infer (`(:big (car (infer …)))`) carries its
    *  provenance on the stamped pluck VALUE, but that value is GC-pruned as non-point
@@ -656,6 +661,57 @@ export const walkSpine = (entry: PlainInv): PlainInv[] => {
 };
 
 const lastRegionId = (rs: Region[]): number | undefined => (rs.length > 0 ? rs.at(-1)!.id : undefined);
+
+/**
+ * The decision marker for a provenance-gated `filter` (see the fanout arm). Returns
+ * `undefined` unless BOTH gates pass:
+ *  - LIVE: this invocation's settled per-element predicate outcomes are MIXED (some kept,
+ *    some dropped). One-way filtering is plumbing, exactly like a one-way branch.
+ *  - DYNAMIC: the filtered collection's elements trace to inference points. Read DEEP off
+ *    the non-application args' live values (`deepProvenance` — a packed list's origins live
+ *    on its elements; the container itself is provenance-transparent), so a pool of
+ *    candidate records wires from the evaluations that scored them.
+ * Side effect on success: pushes the origin points into `ctx.knotInputs` (the data-ins of
+ * the selection). Reads LIVE values throughout — the snapshot drops plumbing values — so
+ * neither `snapshotTrace` nor the fold's mirrors need new fields (fold parity for free:
+ * this runs inside the shared `regionsAt`).
+ */
+function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalkCtx): Region | undefined {
+  let kept = 0;
+  let dropped = 0;
+  for (const c of applChildren) {
+    if (c.state === "running") continue;
+    if (schemeToJs(ctx.liveValueById(c.id)) === false) dropped++;
+    else kept++;
+  }
+  if (kept === 0 || dropped === 0) return undefined; // one-way selection — invisible plumbing
+  const origins = new Set<number>();
+  const addOrigins = (ps: Iterable<number>): void => {
+    for (const p of ps) {
+      const o = resolveOriginVia(p);
+      if (ctx.pointIds.has(o)) origins.add(o);
+    }
+  };
+  // Per-element: each pred application's invocation provenance (prune-exempt for filter
+  // children) unions the origins that element's test folded in — the sharpest read.
+  for (const c of applChildren) addOrigins(ctx.liveProvenanceById(c.id));
+  // Fallback: the eval'd-once args' values, DEEP (a packed list's origins live on its
+  // elements) — covers a pred whose comparisons happened outside this subtree.
+  if (origins.size === 0) for (const arg of inv.children) {
+    if (arg.children.length > 0) continue;
+    addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
+  }
+  if (origins.size === 0) return undefined; // static selection — degenerate, dissolve
+  const id = applChildren[0]!.id; // a pred application never becomes a region itself — free id
+  for (const from of origins) ctx.knotInputs.push({ knot: id, from });
+  return {
+    kind: "decision",
+    id,
+    label: "filter",
+    scope: scopeId(inv.node),
+    condition: `kept ${kept} of ${kept + dropped}`,
+  };
+}
 
 /**
  * Walk one invocation into its meaningful regions — the SINGLE source of region-tree
@@ -749,20 +805,34 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
           : regionsAt(c, ctx),
       )
       .filter((r) => r.length > 0);
-    // Degenerate container (mapped/filtered over non-inference data) → drop it.
-    if (iterations.length === 0) return [];
-    return [
-      {
-        kind: "fanout",
-        id: inv.id,
-        scope: scopeId(inv.node),
-        stages: [{ label: headOf(inv), id: inv.id }],
-        iterations,
-        incoming: applChildren.length,
-        inputs: [],
-        outputs: [],
-      },
-    ];
+    // FILTER-PREDICATE DECISION. A `filter` whose per-element predicate outcomes are
+    // provenance-gated is a SELECTION the reader can act on — GEPA's `frontier` keeps or
+    // drops candidates by their inferred scores — yet its predicate is pure code: no `if`
+    // form, so the branch arm never fires, and (when the pred bodies carry no points) the
+    // whole fanout flattens away. Emit ONE decision marker per such filter, gated exactly
+    // like a branch: LIVE = both kept and dropped occurred in THIS invocation (a one-way
+    // filter is invisible plumbing, as ever), DYNAMIC = the filtered collection's elements
+    // trace to inference points (deep read — the container is provenance-transparent). Its
+    // data-ins wire from those origin points (the seed evaluation finally CONNECTS to the
+    // loop that selects on it) and its control arm gates the surviving fanout, so the
+    // render frames "kept k of n → [the kept work]". The marker's id is the first element
+    // application's (the fanout keeps `inv.id`; a pred application is never itself a region).
+    const decision = headOf(inv) === "filter" ? filterDecision(inv, applChildren, ctx) : undefined;
+    // Degenerate container (mapped/filtered over non-inference data) → drop it; a live
+    // gated selection still shows its decision (pure-pred filters have empty bodies).
+    if (iterations.length === 0) return decision ? [decision] : [];
+    if (decision) ctx.knotArm.push({ knot: decision.id, arm: inv.id });
+    const fanout: Region = {
+      kind: "fanout",
+      id: inv.id,
+      scope: scopeId(inv.node),
+      stages: [{ label: headOf(inv), id: inv.id }],
+      iterations,
+      incoming: applChildren.length,
+      inputs: [],
+      outputs: [],
+    };
+    return decision ? [decision, fanout] : [fanout];
   }
 
   // A LIVE branch (decided ≥2 ways trace-wide) does NOT box — boxing every `if`
@@ -1141,6 +1211,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     return v;
   };
   const liveValueById = (id: number): unknown => liveById.get(id)?.value;
+  const liveProvenanceById = (id: number): Iterable<number> => (liveById.get(id) as { provenance?: Iterable<number> } | undefined)?.provenance ?? [];
   // The topmost provenance points in an invocation's live subtree (do NOT descend past a
   // point — we want the immediate inference origins feeding the operand). Recovers a
   // pluck-off-infer's provenance structurally after `pruneChildProvenance` nulled the
@@ -1182,6 +1253,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     pointIds,
     valueById,
     liveValueById,
+    liveProvenanceById,
     livePointsUnder,
     knotArm,
     knotInputs,

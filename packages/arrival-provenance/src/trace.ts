@@ -48,6 +48,14 @@ import invariant from "tiny-invariant";
 
 export type InvocationState = "running" | "resolved" | "rejected";
 
+/** A form's head symbol name (`filter`, `map`, `:verdict`, …), else null. */
+function headNameOf(node: APair): string | null {
+  const head = (node as { car: unknown }).car;
+  if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
+  const name = (head as { __name__: unknown }).__name__;
+  return typeof name === "string" ? name : null;
+}
+
 /** If a form is a keyword-accessor application `(:field x)`, the bare field name
  *  (`"verdict"`), else null. The head is the keyword SchemeSymbol whose
  *  `__name__` is `":verdict"`; a head of exactly `":"` (no field) is not one. */
@@ -504,6 +512,13 @@ export class EvalTrace implements EvalTap {
   #pruneChildProvenance(inv: Invocation): void {
     // A point's children ARE snapshot-materialized (parent.isProvenancePoint) — keep them.
     if (inv.isProvenancePoint) return;
+    // A FILTER's direct children are read by the region build's filter-predicate decision:
+    // the per-element pred applications' BOOLEANS (kept/dropped outcomes) and the eval'd-once
+    // collection arg (whose deep provenance names the inference origins the selection tested).
+    // Retention cost is tiny — booleans plus a reference to a list that is alive elsewhere —
+    // and without it the selection is unreconstructable post-run (the one divergence from the
+    // snapshot's keep-predicate, deliberate and bounded to `filter` heads).
+    if (headNameOf(inv.node) === "filter") return;
     for (const child of inv.children) {
       // A point's own set is {self} (tiny + read as a point); never prune it.
       if (child.isProvenancePoint) continue;
