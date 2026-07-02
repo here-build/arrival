@@ -34,7 +34,7 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
-import { isUnquoteForm, makeDictLiteralNode, staticDictKey } from "../values/dict-literal.js";
+import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
 import type { SchemeValue } from "../values/types.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -353,11 +353,18 @@ export class Parser {
    * At most one separator per boundary; every other comma reads as R7RS unquote
    * (`{:a ,x}` under quasiquote keeps working). `,@` is never a separator. One trailing
    * separator before the close is tolerated (`[1, 2,]`, JS gravity).
+   *
+   * Maps additionally absorb at most ONE lone `:` token at an ODD boundary (immediately
+   * after a complete key) — the verbatim-JSON string-key colon `{"a": 1}` (the lexer
+   * emits a clean separate `:` token there; a GLUED `:1` is one keyword token and is NOT
+   * absorbed — see the spec's flip section).
    */
   private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
     // Whether the CURRENT boundary already consumed its one separator comma.
     let separatorConsumed = false;
+    // Maps: whether the CURRENT odd boundary already absorbed its one JSON `:` token.
+    let colonConsumed = false;
     while (true) {
       const token = await this.peek();
       if (token === eof) {
@@ -380,6 +387,13 @@ export class Parser {
           continue;
         }
       }
+      if (token === ":" && isMap && elements.length % 2 === 1 && !colonConsumed) {
+        // The verbatim-JSON key colon (`{"a": 1}`): one lone `:` token at the odd
+        // boundary is absorbed. Anywhere else `:` reads as a plain datum.
+        colonConsumed = true;
+        this.skip();
+        continue;
+      }
       if (token === ".") {
         throw new ParseError(`'.' not allowed in a ${what}`, this._getLocation(), "E-LITERAL-DOT");
       }
@@ -389,34 +403,51 @@ export class Parser {
       }
       elements.push(node as SchemeValue);
       separatorConsumed = false;
+      colonConsumed = false;
     }
     return elements;
   }
 
   /**
    * Validate + mint the `{…}` dict-literal node (default `{}` mode). Doors, phrased for
-   * model recovery: even arity; keys are `:keyword` / `"string"` (both fold to the same
-   * string key) or an unquote form (quasiquote-substituted, validated post-substitution);
-   * duplicate static keys are loud (Clojure-faithful — a model's duplicate is a mistake).
+   * model recovery: even arity; keys are `:keyword` / `"string"` / `key:` (all fold to
+   * the same string key) or an unquote form (quasiquote-substituted, validated
+   * post-substitution); duplicate static keys are loud (Clojure-faithful — a model's
+   * duplicate is a mistake).
+   *
+   * THE SUFFIX-KEYWORD FLIP (spec: "The suffix-keyword flip"): a symbol key with a
+   * single trailing colon is an EXPLICIT declaration and flips to the keyword —
+   * `{flight_number: "X"}` ≡ `{:flight_number "X"}`. The flipped key is REPLACED in the
+   * element sequence by its `:keyword` twin so every downstream face (code-position
+   * `(dict …)` lowering, quasiquote processing, the quoted-data AJSObject face) sees the
+   * one canonical spelling. Bare symbols (`{x 1}`) stay E-DICT-BAD-KEY — no commitment
+   * marker, could be an intended reference. Position-scoped: this is a dict-literal KEY
+   * rule, not a lexer change (`foo:` outside `{}` stays a plain symbol).
    */
   private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
-    if (elements.length % 2 !== 0) {
-      throw new ParseError(
-        `dict literal {…} has ${elements.length} element(s) — expected alternating key value pairs, ` +
-          `e.g. {:name "Ada" :age 36} (a key is missing its value)`,
-        loc,
-        "E-DICT-ODD-ARITY",
-      );
-    }
+    // Key validation runs BEFORE the arity check (and covers a trailing unpaired key):
+    // this matches the char-incremental order the sampler's Σ mirror necessarily judges
+    // in — a key token is judged the moment it completes, the close's arity check comes
+    // after — so `{a:1}` doors as the BAD KEY it is, not as odd arity.
     const seen = new Set<string>();
     for (let i = 0; i < elements.length; i += 2) {
+      const suffixKey = suffixKeyName(elements[i]);
+      if (suffixKey !== null) {
+        elements[i] = new ASymbol(CONSTANT_CTX, `:${suffixKey}`); // the flip — canonicalize to the keyword twin
+      }
       const keyDatum = elements[i];
       const key = staticDictKey(keyDatum);
       if (key === null) {
         if (isUnquoteForm(keyDatum)) continue; // quasiquote-substituted key — validated post-substitution
+        // Teaching door. The glued JSON form `{a:1}` lexes as ONE symbol token `a:1`
+        // (only a space after the colon splits it) — call that shape out explicitly.
+        const shown = String(keyDatum);
+        const glued = keyDatum instanceof ASymbol && /^[^:\s]+:[^:]/.test(shown);
         throw new ParseError(
-          `dict literal key must be a :keyword or a "string", got ${String(keyDatum)} — ` +
-            `write {:name "Ada"} or {"name" "Ada"}; for computed keys use (dict …)`,
+          `dict literal key must be a :keyword, a "string", or a name with a trailing colon (name:), ` +
+            `got ${shown} — write {:name "Ada"}, {name: "Ada"} or {"name" "Ada"}; ` +
+            `for computed keys use (dict …)` +
+            (glued ? ` (${shown} is glued — add a space after the colon: {${shown.replace(":", ": ")}})` : ""),
           loc,
           "E-DICT-BAD-KEY",
         );
@@ -429,6 +460,14 @@ export class Parser {
         );
       }
       seen.add(key);
+    }
+    if (elements.length % 2 !== 0) {
+      throw new ParseError(
+        `dict literal {…} has ${elements.length} element(s) — expected alternating key value pairs, ` +
+          `e.g. {:name "Ada" :age 36} (a key is missing its value)`,
+        loc,
+        "E-DICT-ODD-ARITY",
+      );
     }
     return makeDictLiteralNode(elements);
   }

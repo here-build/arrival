@@ -226,8 +226,10 @@ describe("the flag gate — default (flag OFF) is the dict/vector literal gramma
     const [datum] = await readAll("{:a 1}", false);
     expect(isDictLiteralNode(datum)).toBe(true);
   });
-  it("default `{a + b}` doors as a malformed dict literal (odd arity), not infix", async () => {
-    await expect(readAll("{a + b}", false)).rejects.toThrow(/alternating key value pairs/);
+  it("default `{a + b}` doors as a malformed dict literal (bad bare-symbol key), not infix", async () => {
+    // Key validation runs BEFORE the arity check (the suffix-keyword flip's Σ-mirror ordering):
+    // the bare `a` at key position is the FIRST problem the incremental judge sees.
+    await expect(readAll("{a + b}", false)).rejects.toThrow(/key must be a :keyword/);
   });
   it("flag ON keeps `{:a 1}` as INFIX input — `:a` in operator position", async () => {
     // {x op y} with op = `1`? No: 3 elements, operator slot holds `1` — same-operator

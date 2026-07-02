@@ -52,7 +52,7 @@ teach; the corpus matches ONLY the class. These become the spec's error contract
 | Code | Meaning |
 |---|---|
 | `E-DICT-ODD-ARITY` | `{…}` has an odd element count (a key without its value) |
-| `E-DICT-BAD-KEY` | `{…}` key is not a `:keyword` / `"string"` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
+| `E-DICT-BAD-KEY` | `{…}` key is not a `:keyword` / `"string"` / trailing-colon `key:` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
 | `E-DICT-DUP-KEY` | duplicate `{…}` key (read-time static; or post-quasiquote-substitution) |
 | `E-LITERAL-DOT` | `.` inside a `[…]`/`{…}` literal |
 | `E-EXPECTING-DATUM` | quote-family prefix (`'`, `` ` ``, `,`, `,@`) dangling against a close delimiter |
@@ -69,3 +69,14 @@ boundaries (after a complete key-value pair; JSON puts `:` between key and value
 outside the literals — is R7RS unquote. `,@` is never a separator. One trailing separator
 before the close is tolerated. Canonical pin:
 `{:a ,quoted,,anotherQuoted ,quotedValue}` ≡ `{:a (unquote quoted) (unquote anotherQuoted) (unquote quotedValue)}`.
+
+## The suffix-keyword flip (what the `*_suffix_*` cases pin)
+
+At KEY position inside `{…}`, a symbol token with a SINGLE trailing colon flips to the
+keyword key: `{flight_number: "X"}` ≡ `{:flight_number "X"}` (explicit declaration only —
+a bare `{x 1}` stays `E-DICT-BAD-KEY`; position-scoped — `foo:` outside `{}` is a plain
+symbol; flipped keys share the dup-detection keyspace with `:key`/`"key"`). Maps also
+absorb at most ONE lone `:` token at an ODD boundary — the verbatim-JSON string-key colon
+`{"a": 1}`. The GLUED forms are lexer-scoped (`i_`): `{a:1}` is ONE symbol token (the
+teaching door), and `{"a":1}` lexes the value as the keyword token `:1` — only a space
+after the colon yields the JSON meaning.

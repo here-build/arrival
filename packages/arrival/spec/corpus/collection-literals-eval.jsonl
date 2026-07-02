@@ -17,3 +17,7 @@
 {"name":"n_quasiquote_dup_key_post_substitution","mode":"eval","input":"`{:a 1, ,\"a\" 2}","expect":{"error":"E-DICT-DUP-KEY"}}
 {"name":"n_quasiquote_bad_key_post_substitution","mode":"eval","input":"`{,(list 1 2) 3}","expect":{"error":"E-DICT-BAD-KEY"}}
 {"name":"i_unquote_key_outside_quasiquote_errors","mode":"eval","input":"{:a 1, ,k 2}","expect":{"error":"*"}}
+{"name":"y_dict_suffix_key_evals","mode":"eval","input":"(:flight_number {flight_number: \"HAT136\"})","expect":{"value":"HAT136"}}
+{"name":"y_dict_suffix_mixed_evals","mode":"eval","input":"(:b {:a 1 b: (+ 1 1)})","expect":{"value":2}}
+{"name":"y_dict_suffix_airline_shape_evals","mode":"eval","input":"(:date (vector-ref [{flight_number: \"HAT136\", date: \"2024-05-20\"}] 0))","expect":{"value":"2024-05-20"}}
+{"name":"y_dict_string_key_json_colon_evals","mode":"eval","input":"(:a {\"a\": 1})","expect":{"value":1}}

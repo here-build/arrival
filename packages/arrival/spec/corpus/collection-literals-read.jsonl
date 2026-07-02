@@ -39,3 +39,12 @@
 {"name":"n_bracket_mismatch_square_closed_paren","mode":"read","input":"[a)","expect":{"error":"E-BRACKET-MISMATCH"}}
 {"name":"n_stray_square_close","mode":"read","input":"]","expect":{"error":"E-BRACKET-UNEXPECTED"}}
 {"name":"n_stray_curly_close","mode":"read","input":"}","expect":{"error":"E-BRACKET-UNEXPECTED"}}
+{"name":"y_dict_suffix_key_flip","mode":"read","input":"{flight_number: \"X\"}","expect":{"ast":"{:flight_number \"X\"}"}}
+{"name":"y_dict_suffix_mixed_with_prefix","mode":"read","input":"{:a 1 b: 2}","expect":{"ast":"{:a 1 :b 2}"}}
+{"name":"y_dict_suffix_nested_in_vector_airline","mode":"read","input":"[{flight_number: \"HAT136\", date: \"2024-05-20\"}]","expect":{"ast":"[{:flight_number \"HAT136\" :date \"2024-05-20\"}]"}}
+{"name":"y_quote_dict_suffix_key_flips_too","mode":"read","input":"'{a: 1}","expect":{"ast":"(quote {:a 1})"}}
+{"name":"y_dict_string_key_json_colon","mode":"read","input":"{\"a\": 1}","expect":{"ast":"{\"a\" 1}"}}
+{"name":"n_dict_dup_key_prefix_and_suffix","mode":"read","input":"{:a 1 a: 2}","expect":{"error":"E-DICT-DUP-KEY"}}
+{"name":"n_dict_suffix_double_colon_bad_key","mode":"read","input":"{a:: 1}","expect":{"error":"E-DICT-BAD-KEY"}}
+{"name":"i_dict_glued_colon_key_teaching_door","mode":"read","input":"{a:1}","expect":{"error":"E-DICT-BAD-KEY"}}
+{"name":"i_dict_glued_string_colon_reads_keyword_value","mode":"read","input":"{\"a\":1}","expect":{"ast":"{\"a\" :1}"}}
