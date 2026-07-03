@@ -76,7 +76,17 @@ import { schemaCapability } from "./schema.js";
  *  silent passthrough. */
 function lowerTag(jsTag: unknown, bindingName: string): z.ZodType {
   try {
-    return z.fromJSONSchema(tagToJsonSchema(jsTag) as Parameters<typeof z.fromJSONSchema>[0]);
+    const json = tagToJsonSchema(jsTag);
+    // `tagToJsonSchema` is deliberately LENIENT — an unrecognized shape (an unknown list
+    // `kind`, an empty list, a non-string/non-array atom like a bare number) falls through
+    // to `{}` rather than throwing (see `schema-tag.ts`'s header). That's correct for the
+    // WIRE-SCHEMA/HTTP projections, but `{}` lowers to a PERMISSIVE zod validator
+    // (`z.fromJSONSchema({})` accepts anything), which would make `overridable/resolve`
+    // silently accept ANY override for such a tag — the exact "silent passthrough" this
+    // capability's contract promises it never does. So an empty lowering DOORS here, at the
+    // validation boundary, with the same binding-named message a bad bare-string type gets.
+    if (Object.keys(json).length === 0) throw new Error("tag lowered to an empty (unconstrained) schema");
+    return z.fromJSONSchema(json as Parameters<typeof z.fromJSONSchema>[0]);
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
     throw new Error(

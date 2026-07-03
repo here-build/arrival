@@ -84,6 +84,22 @@ describe("arrival/overridable — plain define plus validation, through the cons
     ).rejects.toThrow(/define\/overridable age: unrecognized type tag/);
   });
 
+  it("a tag that lowers to an EMPTY schema DOORS (no silent permissive passthrough)", async () => {
+    // An unknown list `kind` and an empty list both fall through `tagToJsonSchema` to `{}`,
+    // which `z.fromJSONSchema` would turn into a PERMISSIVE validator (accept anything) —
+    // the exact silent passthrough this capability promises never to do. Both must door,
+    // naming the binding, rather than silently accepting an unvalidated override.
+    await expect(
+      exec(`(define/overridable x '("frobnicate" 1) 5) x`, {
+        capabilities,
+        config: { params: { x: "literally anything" } },
+      }),
+    ).rejects.toThrow(/define\/overridable x: unrecognized type tag/);
+    await expect(
+      exec(`(define/overridable x '() 5) x`, { capabilities, config: { params: { x: "anything" } } }),
+    ).rejects.toThrow(/define\/overridable x: unrecognized type tag/);
+  });
+
   it("an `/optional`-suffixed tag is tolerated (the suffix is inert here) — validation still applies", async () => {
     const result = await exec(`(define/overridable size "number/optional" 10) size`, {
       capabilities,
