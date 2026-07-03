@@ -46,6 +46,9 @@ describe("srfi-stubs — one representative door per family", () => {
     ["random → ambient non-determinism", '(random-integer 10)', /ambient/],
     ["char-sets → char / one-arg predicate", '(char-set-contains? 1 2)', /predicate/],
     ["time/date → ambient clock", '(current-date)', /ambient/],
+    ["string-filter → filter + string<->list composition", '(string-filter char-numeric? "a1b2")', /list->string \(filter pred \(string->list s\)\)/],
+    ["SRFI-113 sets → no set type, no redirect claimed", '(list->set (list 1 2))', /no set type/],
+    ["string ports → operate on the string directly", '(call-with-input-string "x" (lambda (p) p))', /string ports are omitted/],
   ] as const;
 
   for (const [label, src, redirect] of cases) {
@@ -69,6 +72,10 @@ describe("srfi-stubs — the pack upgrades a WALL into a DOOR", () => {
     ["random-integer", '(random-integer 10)'],
     ["char-set-contains?", '(char-set-contains? 1 2)'],
     ["current-date", '(current-date)'],
+    ["string-filter", '(string-filter char-numeric? "a1b2")'],
+    ["list->set", '(list->set (list 1 2))'],
+    ["set-contains?", '(set-contains? (list 1 2) 1)'],
+    ["call-with-input-string", '(call-with-input-string "x" (lambda (p) p))'],
   ] as const;
 
   // (No "wall" counter-case: the pack ships inside allSrfi → BASE_PACKS, so every env

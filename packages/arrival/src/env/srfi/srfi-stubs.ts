@@ -7,17 +7,21 @@
 // the REASON, and the EXACT alternative bound in this environment — turning the
 // wall into a route back to the real dataflow.
 //
-// Five families, grouped internally:
+// Eight families, grouped internally:
 //   1. SRFI-69/125 hash tables → dicts are native & immutable ({…} / (dict …)).
 //   2. file ports (+ the CL-ism with-open-file) → files arrive through TOOLS.
 //   3. SRFI-27 random → ambient non-determinism has no place in a pure sandbox.
 //   4. SRFI-14 char-sets → the string library takes a char or one-arg predicate.
 //   5. SRFI-19 time/date → the clock is ambient; timestamps arrive in tool results.
+//   6. SRFI-13 string-filter → not shipped; build it from filter + string<->list.
+//   7. SRFI-113 sets (list->set, set-contains?) → no set type exists to redirect to.
+//   8. string ports (call-with-input-string) → also omitted, same as host.ts's ports.
 //
 // SCOPE / COMPROMISES (honest deltas):
-//   • Purely additive — this pack is NOT registered by `srfi/index.ts` or
-//     `base-packs.ts`; a consumer assembles it EXPLICITLY (`cap.lower({})` →
-//     `assembleEnv`). Registration is a later single-writer step.
+//   • Registered — this pack IS assembled by default: `srfi/index.ts` folds it into
+//     `allSrfi`, which `base-packs.ts` assembles into `BASE_PACKS`. Every env that
+//     inherits `sandboxedEnv` doors these symbols; there is no pack-less production
+//     configuration left to pin as a counter-case (see `srfi-stubs.test.ts`).
 //   • `char-set:whitespace` / `:alphabetic` / `:numeric` are SRFI VARIABLES, not
 //     procedures. `symbol.notImplemented` only bakes a callable door, so they are
 //     bound as throwing procedures: a model that CALLS one gets the teaching door;
@@ -60,6 +64,30 @@ const CHAR_SET_REASON =
 // Ambient-clock door (host.ts tone) + the format/parse redirect for the pure verbs.
 const TIME_DATE_REASON =
   "the date/time library is omitted from arrival by design — the clock is ambient and non-deterministic, with no construction-site to root a value's lineage at; timestamps arrive in tool results, so compare and format them as plain strings or numbers";
+
+// ── 6. SRFI-13 string-filter ─────────────────────────────────────────────────
+// Unlike families 1-5 (design omissions), this is a genuine gap in the bound SRFI-13
+// subset (string-index/string-count/string-trim stop at "a char or one-arg predicate,
+// no char-sets" — see CHAR_SET_REASON) — but it has an honest compositional redirect
+// using symbols verified bound elsewhere: `filter` (SRFI-1, srfi-1.ts) and
+// `string->list` / `list->string` (R7RS, r7rs/strings.ts).
+const STRING_FILTER_REASON =
+  "string-filter is not implemented (SRFI-13) — build the same result compositionally from what IS bound: (list->string (filter pred (string->list s))), using filter (SRFI-1), string->list and list->string (R7RS)";
+
+// ── 7. SRFI-113 sets ──────────────────────────────────────────────────────────
+// Verified: no set type is bound anywhere in this env (grepped values/ + env/{srfi,r7rs,
+// core}) — dicts and lists are the only collection types. There is genuinely no set
+// equivalent to redirect to, so — unlike family 6 — this door does NOT claim one.
+const SET_REASON =
+  "sets are not implemented (SRFI-113) — this sandbox has no set type, only lists and dicts, so there is no direct equivalent to redirect to; if de-duplication or membership alone covers what you needed a set for, (delete-duplicates xs) and (member x xs) are bound (SRFI-1 / R7RS), but they operate on lists, not sets";
+
+// ── 8. String ports (call-with-input-string) ─────────────────────────────────
+// Not a design-omission family of its own — it's the same §6.13 port omission
+// r7rs/host.ts already doors (open-input-string / open-output-string throw IO_REASON
+// there); call-with-input-string would just wrap a port constructor that doesn't
+// exist, so it gets the identical redirect: operate on the string directly.
+const STRING_PORT_REASON =
+  "call-with-input-string is not implemented — string ports are omitted from arrival by design (R7RS §6.13.2 / SRFI-6), the same omission r7rs/host.ts's open-input-string door names; the string you would read through the port IS the value you already have, so operate on it directly with string-ref / string->list / string-split / string-index instead of reading it back through a port";
 
 export default new EnvCapability("scheme/srfi-stubs", {
   symbols: {
@@ -111,5 +139,15 @@ export default new EnvCapability("scheme/srfi-stubs", {
     "string->date": symbol.notImplemented`string->date: ${TIME_DATE_REASON}`,
     "time-utc->date": symbol.notImplemented`time-utc->date: ${TIME_DATE_REASON}`,
     "current-julian-day": symbol.notImplemented`current-julian-day: ${TIME_DATE_REASON}`,
+
+    // 6. SRFI-13 string-filter (compositional gap, not a design omission)
+    "string-filter": symbol.notImplemented`string-filter: ${STRING_FILTER_REASON}`,
+
+    // 7. SRFI-113 sets (no set type — no redirect claimed)
+    "list->set": symbol.notImplemented`list->set: ${SET_REASON}`,
+    "set-contains?": symbol.notImplemented`set-contains?: ${SET_REASON}`,
+
+    // 8. String ports (mirrors host.ts's port omission)
+    "call-with-input-string": symbol.notImplemented`call-with-input-string: ${STRING_PORT_REASON}`,
   },
 });
