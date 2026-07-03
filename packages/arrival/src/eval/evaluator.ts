@@ -986,7 +986,10 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
               frameStack.filter((f): f is StackFrame => f !== undefined),
             );
           }
-          await Promise.resolve(); // Minimal yield - just microtask
+          // we need specifically macrotask here to let the interceptors
+          await new Promise((resolve) => {
+            setTimeout(resolve, 0);
+          });
           lastYield = now;
           iterations = 0;
         }
