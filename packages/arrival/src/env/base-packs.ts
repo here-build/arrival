@@ -13,9 +13,13 @@
 
 import type { EnvCapability } from "../common/capability.js";
 import core from "./core/core.js";
+import wellKnownStubs from "./libraries/well-known-stubs.js";
 import macros from "./macros.js";
 import polyglot from "./polyglot.js";
 import { allR7rs } from "./r7rs/index.js";
 import { allSrfi } from "./srfi/index.js";
 
-export const BASE_PACKS: readonly EnvCapability[] = [core, macros, polyglot, ...allR7rs, ...allSrfi];
+// `wellKnownStubs` is its OWN entry — NOT folded into `allSrfi` — because it is not
+// a SRFI: it doors cross-dialect (Common Lisp / Racket / Clojure) symbols with no
+// SRFI/R7RS lineage at all. See env/libraries/well-known-stubs.ts's header.
+export const BASE_PACKS: readonly EnvCapability[] = [core, macros, polyglot, ...allR7rs, ...allSrfi, wellKnownStubs];

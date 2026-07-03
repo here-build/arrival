@@ -32,6 +32,7 @@
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { ABool } from "../../values/primitives/ABool.js";
+import { AJSObject } from "../../values/primitives/AJSObject.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -201,6 +202,27 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     "symbol?": symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
+
+    // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
+    // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
+    // it — a genuine gap, not a design omission (see `env/libraries/well-known-stubs.ts`'s
+    // header for that distinction). Mirrors the EXACT record-vs-class-instance
+    // disambiguation `readMember` (membrane.ts) already uses: a dict value is either the
+    // raw plain-object record `dict` constructs, or the `{…}` reader literal's
+    // `AJSObject` wrapper around one (`Object.create(null)`, see values/dict-literal.ts) —
+    // proto is `Object.prototype` or `null` either way. An array, a scalar, or a foreign
+    // class instance (any other prototype — including every other AValue subclass, whose
+    // own class prototype never equals `Object.prototype`) is not a dict.
+    "dict?": symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
+      { input: [z.unknown()], output: [z.boolean] },
+      (obj: unknown): boolean => {
+        if (obj == null) return false;
+        const source = obj instanceof AJSObject ? obj.source : obj;
+        if (typeof source !== "object" || source === null || Array.isArray(source)) return false;
+        const proto = Object.getPrototypeOf(source);
+        return proto === Object.prototype || proto === null;
+      },
+    ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
       { input: [z.unknown()], output: [z.boolean] },

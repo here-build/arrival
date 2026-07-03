@@ -116,6 +116,149 @@ export default new EnvCapability("scheme/polyglot", {
     
     (define-macro (~> x . forms) \`(-> ,x ,@forms))
     (define-macro (~>> x . forms) \`(->> ,x ,@forms))
+
+    ;; -----------------------------------------------------------------------------
+    ;; Cross-dialect stdlib completion (polyglot) — famous Clojure/CL symbols that
+    ;; are PURE functions over primitives already bound here. Same principle as the
+    ;; threading family above: an LLM (or human) reaching for a well-known symbol
+    ;; from another dialect should get a REAL binding, not a teaching-stub door —
+    ;; when the semantics are implementable without IO/mutation/macro machinery.
+    ;; (The genuinely-impure/macro-only cousins — println, setf, defun, loop,
+    ;; nreverse, for/list, for/fold, gethash, getf, hash-ref — are doored instead,
+    ;; in env/libraries/well-known-stubs.ts.) Every primitive these compose (map,
+    ;; filter, reduce, append, dict, @, @keys, …) is verified bound elsewhere in
+    ;; this pack or a sibling R7RS/SRFI pack.
+    ;;
+    ;; NOTE: \`first\` (SRFI-1), \`comp\` (alias above), \`flatten\` (r7rs/lists.ts,
+    ;; LIPS extension) and \`curry\` (SRFI-235-adjacent, srfi-235.ts) are ALREADY
+    ;; bound elsewhere — deliberately not redefined here.
+
+    ;; %interleave — zip two equal-length lists into a flat (k v k v …) sequence,
+    ;; the shape \`dict\`/\`apply\` expect. Private helper (% convention, see %chain-rel).
+    (define (%interleave ks vs)
+      (if (or (null? ks) (null? vs))
+          '()
+          (cons (car ks) (cons (car vs) (%interleave (cdr ks) (cdr vs))))))
+
+    ;; %dict-set — a dict with key k rebuilt to value v, everything else preserved
+    ;; (dicts are immutable — see HASH_TABLE_REASON in srfi-stubs.ts). Applied to nil
+    ;; it builds a fresh single-key dict (@keys nil = '()), which is exactly what
+    ;; assoc-in needs to create missing intermediate maps on demand. \`@keys\` returns
+    ;; a raw JS array (not a scheme list — filter/map need the term protocol), so
+    ;; \`array->list\` (r7rs/lists.ts, LIPS extension) lifts it first.
+    (define (%dict-set d k v)
+      (let* ((ks (filter (lambda (key) (not (equal? key k))) (array->list (@keys d))))
+             (vs (map (lambda (key) (@ d key)) ks)))
+        (apply dict (cons k (cons v (%interleave ks vs))))))
+
+    ;; str — Clojure: concatenate the display form of every arg. Strings pass
+    ;; through as-is; everything else prints via \`repr\` (the external-representation
+    ;; protocol, r7rs/equality.ts) before concatenating with string-append.
+    (define (str . args)
+      (apply string-append (map (lambda (x) (if (string? x) x (repr x))) args)))
+
+    ;; get-in — Clojure: read a value nested ks-deep through dicts (or anything
+    ;; \`@\` reads), nil if any step misses.
+    (define (get-in obj ks)
+      (if (null? ks)
+          obj
+          (get-in (@ obj (car ks)) (cdr ks))))
+
+    ;; assoc-in — Clojure: a NEW obj with the value at nested path ks set to v,
+    ;; building missing intermediate dicts as needed (see %dict-set).
+    (define (assoc-in obj ks v)
+      (if (null? ks)
+          v
+          (if (null? (cdr ks))
+              (%dict-set obj (car ks) v)
+              (%dict-set obj (car ks) (assoc-in (@ obj (car ks)) (cdr ks) v)))))
+
+    ;; update-in — Clojure: assoc-in the result of applying f to the current value.
+    (define (update-in obj ks f)
+      (assoc-in obj ks (f (get-in obj ks))))
+
+    ;; zipmap — Clojure: a dict pairing each key with the value at the same
+    ;; position in vs.
+    (define (zipmap ks vs) (apply dict (%interleave ks vs)))
+
+    ;; frequencies — Clojure: a dict of each distinct element to its occurrence
+    ;; count. Non-string elements key by their \`repr\` (dict keys are strings).
+    (define (frequencies coll)
+      (reduce
+        (lambda (x acc)
+          (let* ((k (if (string? x) x (repr x)))
+                 (cur (@ acc k)))
+            (%dict-set acc k (if (null? cur) 1 (+ cur 1)))))
+        (dict)
+        coll))
+
+    ;; group-by — Clojure: a dict of (f element) to the list of elements that
+    ;; produced it, in original order.
+    (define (group-by f coll)
+      (reduce
+        (lambda (x acc)
+          (let* ((k0 (f x))
+                 (k (if (string? k0) k0 (repr k0)))
+                 (cur (@ acc k)))
+            (%dict-set acc k (append (if (null? cur) '() cur) (list x)))))
+        (dict)
+        coll))
+
+    ;; partial — Clojure: fix the leading args of f, returning a function of the
+    ;; rest.
+    (define (partial f . args)
+      (lambda more (apply f (append args more))))
+
+    ;; juxt — Clojure: a function that applies every fn to the same args,
+    ;; collecting the results into a list (in fn order).
+    (define (juxt . fns)
+      (lambda args
+        (map (lambda (f) (apply f args)) fns)))
+
+    ;; mapv / filterv — Clojure: map/filter with a vector result instead of a list.
+    (define (mapv f . lists) (list->vector (apply map (cons f lists))))
+    (define (filterv pred lst) (list->vector (filter pred lst)))
+
+    ;; conj — Clojure: add items to a collection in its natural growth position —
+    ;; the front for a list (each successive item conj'd onto the accumulating
+    ;; result, so the LAST item passed ends up FIRST), the end for a vector.
+    (define (%conj-list coll items)
+      (if (null? items)
+          coll
+          (%conj-list (cons (car items) coll) (cdr items))))
+    (define (conj coll . items)
+      (if (vector? coll)
+          (list->vector (append (vector->list coll) items))
+          (%conj-list coll items)))
+
+    ;; into — Clojure: pour every element of from into to via conj, in from's
+    ;; order.
+    (define (into to from)
+      (reduce (lambda (x acc) (conj acc x)) to from))
+
+    ;; rest — Clojure: cdr that tolerates a non-pair (nil) instead of erroring.
+    (define (rest xs) (if (pair? xs) (cdr xs) '()))
+
+    ;; empty? — Clojure: #t iff the list / string / vector / dict has no elements.
+    ;; (\`@keys\` returns a raw JS array, not a scheme list — \`length\` accepts it
+    ;; directly as a ".length carrier", r7rs/lists.ts, so no array->list needed here.)
+    (define (empty? xs)
+      (cond
+        ((null? xs) #t)
+        ((pair? xs) #f)
+        ((string? xs) (= (string-length xs) 0))
+        ((vector? xs) (= (vector-length xs) 0))
+        ((dict? xs) (= (length (@keys xs)) 0))
+        (else #f)))
+
+    ;; mapcar — Common Lisp: identical argument order to R7RS map (proc, then one
+    ;; or more lists), so it is a direct alias.
+    (define (mapcar f . lists) (apply map (cons f lists)))
+
+    ;; remove-if / remove-if-not — Common Lisp: filter, with the sense of the
+    ;; predicate flipped / kept.
+    (define (remove-if pred lst) (filter (lambda (x) (not (pred x))) lst))
+    (define (remove-if-not pred lst) (filter pred lst))
 `,
   resolvers: [
     // The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol

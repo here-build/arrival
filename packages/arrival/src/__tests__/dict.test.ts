@@ -32,3 +32,37 @@ describe("dict constructor", () => {
     expect(n == null || (n as { valueOf?: () => unknown })?.valueOf?.() == null).toBe(true);
   });
 });
+
+// `dict?` — the missing predicate for the native dict type (r7rs/equality.ts). A
+// real gap (we shipped the type with no predicate for it), not a design omission —
+// see equality.ts's comment at the binding site. Mirrors readMember's own
+// record-vs-class-instance disambiguation (membrane.ts).
+describe("dict? predicate", () => {
+  let env: Environment;
+  beforeAll(async () => {
+    env = await freshEnv();
+  });
+
+  const truthy = async (src: string): Promise<string> => {
+    const [r] = await exec(`(if ${src} "yes" "no")`, { env });
+    return String(r);
+  };
+
+  it("#t for a (dict ...) constructed value", async () => {
+    expect(await truthy('(dict? (dict "a" 1))')).toBe("yes");
+    expect(await truthy("(dict? (dict))")).toBe("yes");
+  });
+
+  it("#t for a {...} reader dict-literal (quoted, the AJSObject dictForms node)", async () => {
+    expect(await truthy("(dict? '{:a 1})")).toBe("yes");
+  });
+
+  it("#f for a list, string, vector, number, boolean, or nil", async () => {
+    expect(await truthy("(dict? (list 1 2))")).toBe("no");
+    expect(await truthy('(dict? "str")')).toBe("no");
+    expect(await truthy("(dict? (vector 1 2))")).toBe("no");
+    expect(await truthy("(dict? 5)")).toBe("no");
+    expect(await truthy("(dict? #t)")).toBe("no");
+    expect(await truthy("(dict? '())")).toBe("no");
+  });
+});
