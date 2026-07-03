@@ -11,15 +11,14 @@ pnpm add @here.build/arrival-provenance
 ## Usage
 
 ```ts
-import { computeProvenance, traceToForest } from "@here.build/arrival-provenance";
+import { traceToForest } from "@here.build/arrival-provenance";
 
-const provenance = computeProvenance(trace);   // a finished EvalTrace
-const forest = traceToForest(trace);
+const forest = traceToForest(trace);   // `trace`: a finished EvalTrace
 ```
 
 The surface, in two halves:
 
-- **Capture** — `EvalTrace`, `Invocation`, `computeProvenance` (dataflow minted at boundaries).
+- **Capture** — `EvalTrace`, `Invocation` (each carries its own computed `.provenance`; dataflow minted at boundaries).
 - **Analysis** — turn a finished trace into render-models: a forest, a statechart, a region tree (the studio blueprint) with an incremental `TraceRegionFold`, a flow graph, and the reverse-chain slicer (`buildSlice` / `buildUneval`). Plus `trace-snapshot` / `trace-artifact` serialization.
 
 ## License

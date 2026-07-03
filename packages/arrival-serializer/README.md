@@ -379,12 +379,12 @@ The context object provides:
 
 The serializer has built-in support for `@here.build/arrival-scheme` runtime types:
 
-- `SchemeExact` (exact integers / rationals) → Numbers or `num/denom`
-- `SchemeInexact` (floats / complex) → Numbers or `real+imagi`
-- `SchemeSymbol` → Symbols/keywords
-- `SchemeString` → Single-quoted or template strings
-- `SchemeCharacter` → Character literals (`#\char`)
-- `Pair` / `Nil` → Lists
+- `AExact` (exact integers / rationals) → Numbers or `num/denom`
+- `AInexact` (floats / complex) → Numbers or `real+imagi`
+- `ASymbol` → Symbols/keywords
+- `AString` → Single-quoted or template strings
+- `ACharacter` → Character literals (`#\char`)
+- `APair` / `ANil` → Lists
 - `Values` → Multiple return values
 - `EOF`, `Macro`, `Syntax`, `InputPort`/`OutputPort` → reader-friendly placeholders
 

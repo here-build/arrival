@@ -31,13 +31,13 @@ Give a value a source, derive from it, and the derived value still knows where i
 real, in-package, and it's all you need to feel the grain:
 
 ```typescript
-import { exec, sandboxedEnv, schemeToJs, jsToScheme, pointProvenance } from '@here.build/arrival';
+import { exec, sandboxedEnv, schemeToJs, jsToScheme, pointProvenance, CONSTANT_CTX } from '@here.build/arrival';
 
 const env = sandboxedEnv.inherit('demo');
 
 // A value crosses into the language carrying its origin (here: provenance point #7,
 // as a real source — an HTTP read, a DB row — would mint at the membrane).
-env.set('forecast', jsToScheme('cloudy in berlin', {}, pointProvenance(7)));
+env.set('forecast', jsToScheme(CONSTANT_CTX, 'cloudy in berlin', {}, pointProvenance(7)));
 
 // Derive from it through ordinary Scheme. Nobody threads the origin by hand.
 const [result] = await exec(`(string-append "today: " forecast)`, { env });
@@ -148,7 +148,7 @@ console.log(schemeToJs(results[0], {})); // [2, 4, 6, 8, 10]
 ### Complex Data
 
 ```typescript
-import { exec, sandboxedEnv, schemeToJs, jsToScheme } from '@here.build/arrival';
+import { exec, sandboxedEnv, schemeToJs, jsToScheme, CONSTANT_CTX } from '@here.build/arrival';
 
 // Register function filtering objects
 sandboxedEnv.defineRosetta('high-priority-users', {
@@ -163,7 +163,7 @@ const users = [
   { id: "charlie", priority: 20 }
 ];
 
-sandboxedEnv.set('users', jsToScheme(users, {}));
+sandboxedEnv.set('users', jsToScheme(CONSTANT_CTX, users, {}));
 
 const results = await exec(`
   (high-priority-users users)
@@ -227,8 +227,8 @@ A few constructs from beyond R7RS are admitted as deliberate, bounded supersets 
 
 ```typescript
 // Environment is isolated per execution
-const env1 = sandboxedEnv.clone();
-const env2 = sandboxedEnv.clone();
+const env1 = sandboxedEnv.inherit();
+const env2 = sandboxedEnv.inherit();
 
 env1.set('x', 10);
 env2.set('x', 20);
@@ -306,7 +306,7 @@ env.defineRosetta('shout', {
 
 // Direct Scheme value
 env.set('pi', 3.14159);
-env.set('config', jsToScheme({ timeout: 5000 }, {}));
+env.set('config', jsToScheme(CONSTANT_CTX, { timeout: 5000 }, {}));
 ```
 
 ## Extending the term algebra
@@ -363,9 +363,10 @@ const results = await exec(`(+ 1 2 3)`, { env: sandboxedEnv });
 console.log(results[0]); // 6
 ```
 
-**`jsToScheme(value: any, options?: RosettaOptions): SchemeValue`**
+**`jsToScheme(ctx: RunContext, value: any, options?: RosettaOptions): SchemeValue`**
 
-Convert JavaScript value to Scheme representation.
+Convert JavaScript value to Scheme representation. `ctx` is the per-run context (use the exported
+`CONSTANT_CTX` for run-neutral values registered before `exec`).
 
 **`schemeToJs(value: any, options?: RosettaOptions): any`**
 
@@ -388,9 +389,10 @@ Set binding in environment (use `jsToScheme` for JS values).
 
 Get binding from environment.
 
-**`env.clone(): Environment`**
+**`env.inherit(name?: string): Environment`**
 
-Create isolated copy of environment.
+Create an isolated child scope: own `set` calls land locally (shadowing the parent), while lookups
+still fall through to it.
 
 TypeScript types coverage will be added eventually.
 
