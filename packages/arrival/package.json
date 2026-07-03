@@ -23,7 +23,6 @@
   "author": "here.build",
   "type": "module",
   "sideEffects": false,
-  "// overridable-rename-alias": "TEMP: `./pipeline-input` mirrors `./overridable`'s dist file — kept only so downstream (arrival-chain/api/studio, still on `define/pipeline-input`) keeps building until the rename-sweep unit removes this entry and the old macro name.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -70,10 +69,6 @@
       "default": "./dist/env/srfi/index.js"
     },
     "./overridable": {
-      "types": "./dist/env/overridable.d.ts",
-      "default": "./dist/env/overridable.js"
-    },
-    "./pipeline-input": {
       "types": "./dist/env/overridable.d.ts",
       "default": "./dist/env/overridable.js"
     }

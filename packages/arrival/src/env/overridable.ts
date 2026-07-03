@@ -154,11 +154,5 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   prelude: `
     (define-macro (define/overridable name type default)
       \`(define ,name (overridable/resolve ',name ,type ,default)))
-    ;; TEMP alias — removed by the rename sweep (downstream still authors the old name).
-    (define-macro (define/pipeline-input name type default)
-      \`(define ,name (overridable/resolve ',name ,type ,default)))
   `,
 });
-
-/** TEMP alias for the rename sweep — downstream rosters still import this name. Removed with it. */
-export const pipelineInputCapability = overridableCapability;
