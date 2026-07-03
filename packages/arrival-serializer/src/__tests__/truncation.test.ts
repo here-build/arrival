@@ -41,7 +41,31 @@ describe("streaming truncation (opt-in)", () => {
     const heavy = Array.from({ length: 80 }, (_, i) => ({ id: i, payload: "y".repeat(400) }));
     const out = toSExprString(heavy, { maxTotalChars: 4000 });
     expect(out).toContain("⚠ output reduced to fit");
-    expect(out.length).toBeLessThanOrEqual(4000 + 300); // content bounded + the note
+    expect(out.length).toBeLessThanOrEqual(4000 + 400); // content bounded + the note + remedy
+  });
+
+  it("the reduced-output banner teaches the RELEVANT remedy (collection vs string vs both)", () => {
+    // A capped COLLECTION (many small items, no long strings) → filter/map/reduce advice,
+    // and NOT the substring advice.
+    const manyItems = Array.from({ length: 800 }, (_, i) => ({ id: i }));
+    const coll = toSExprString(manyItems, { maxTotalChars: 500 });
+    expect(coll).toContain("⚠ output reduced to fit");
+    expect(coll).toContain("filter/map/reduce the collection");
+    expect(coll).not.toContain("substring");
+
+    // A capped STRING (one huge string forced under a small total) → substring advice, and
+    // NOT the collection advice.
+    const str = toSExprString("q".repeat(50000), { maxTotalChars: 400, maxStringChars: 30000 });
+    expect(str).toContain("⚠ output reduced to fit");
+    expect(str).toContain("substring");
+    expect(str).not.toContain("filter/map/reduce the collection");
+
+    // BOTH capped → the combined remedy mentions both levers.
+    const mixed = Array.from({ length: 800 }, (_, i) => ({ id: i, blob: "z".repeat(500) }));
+    const both = toSExprString(mixed, { maxTotalChars: 3000 });
+    expect(both).toContain("⚠ output reduced to fit");
+    expect(both).toContain("filter/map/reduce the collection");
+    expect(both).toContain("substring");
   });
 
   it("shrink-to-fit is FAIR across siblings — both PSLIST and PSSCAN survive the diff", () => {
@@ -68,5 +92,46 @@ describe("streaming truncation (opt-in)", () => {
       { maxItems: 5 },
     );
     expect(out).toMatch(/#\| \+95 more of 100 \|#/);
+  });
+});
+
+describe("SerializeOpts.format — a custom formatter rides the caps + shrink machinery", () => {
+  // A toy bracket formatter standing in for arrival-manifold's brace/bracket
+  // observation renderer — the seam's real consumer. Non-list nodes delegate to the
+  // default rendering via String() (enough for numbers and the marker-bearing leaves
+  // this suite feeds it).
+  const bracketed = (sexpr: unknown): string => {
+    if (Array.isArray(sexpr)) {
+      const [head, ...tail] = sexpr as unknown[];
+      if (head === "list") return `[${tail.map(bracketed).join(" ")}]`;
+      return `(${(sexpr as unknown[]).map(bracketed).join(" ")})`;
+    }
+    if (sexpr !== null && typeof sexpr === "object") {
+      // the truncation marker object — render its note like formatSExpr does
+      const note = (sexpr as Record<symbol, string>)[Symbol.for("arrival:truncated")];
+      if (note !== undefined) return `#| ${note} |#`;
+    }
+    return String(sexpr);
+  };
+
+  it("is used for the no-caps path", () => {
+    expect(toSExprString([1, 2, 3], { format: bracketed })).toBe("[1 2 3]");
+  });
+
+  it("sees the streaming caps' truncation markers", () => {
+    const out = toSExprString(
+      Array.from({ length: 100 }, (_, i) => i),
+      { maxItems: 5, format: bracketed },
+    );
+    expect(out.startsWith("[0 1 2 3 4 ")).toBe(true);
+    expect(out).toContain("#| +95 more of 100 |#");
+  });
+
+  it("is re-invoked by the shrink-to-fit loop — the ⚠ note wraps the CUSTOM rendering", () => {
+    const heavy = Array.from({ length: 500 }, (_, i) => i * 1000);
+    const out = toSExprString(heavy, { maxTotalChars: 300, format: bracketed });
+    expect(out).toContain("⚠ output reduced to fit");
+    expect(out).toContain("[");
+    expect(out.length).toBeLessThanOrEqual(300 + 300);
   });
 });

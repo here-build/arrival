@@ -33,10 +33,17 @@ let activeCaps: Caps = NO_CAPS;
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
 const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
 
+// What actually got capped during the current render pass — so the reduced-output banner
+// can teach the RELEVANT remedy (process the collection in-REPL / slice the string) rather
+// than a generic line. Reset per render() pass (below); read after the shrink loop settles.
+let cappedCollection = false;
+let cappedString = false;
+
 /** Render the first `maxItems` of an array, appending a `+N more of TOTAL` marker when
  *  truncated. STREAMING — `slice` then map, so the dropped tail is never rendered. */
 const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => {
   if (arr.length <= activeCaps.maxItems) return arr.map(render);
+  cappedCollection = true;
   const shown: SExpr[] = arr.slice(0, activeCaps.maxItems).map(render);
   shown.push(truncatedMarker(`+${arr.length - activeCaps.maxItems} more of ${arr.length}`));
   return shown;
@@ -44,10 +51,11 @@ const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => 
 
 /** Cap a string to `maxStringChars`, annotating the elision inline. O(maxStringChars) —
  *  `slice` never walks the dropped tail. */
-const capString = (full: string): string =>
-  full.length > activeCaps.maxStringChars
-    ? `${full.slice(0, activeCaps.maxStringChars)}…(+${full.length - activeCaps.maxStringChars} chars)`
-    : full;
+const capString = (full: string): string => {
+  if (full.length <= activeCaps.maxStringChars) return full;
+  cappedString = true;
+  return `${full.slice(0, activeCaps.maxStringChars)}…(+${full.length - activeCaps.maxStringChars} chars)`;
+};
 
 /** R7RS §6.7 string escapes, verified against arrival's own reader (every one of
  *  `\\`, `\"`, `\n`, `\t`, `\r` round-trips through `exec('"a\\Xb"')`). Backslash MUST
@@ -70,6 +78,12 @@ export type SerializeOpts = {
    *  SHRINK and re-render (fair across siblings) — not a tail-cut. */
   maxTotalChars?: number;
   indent?: number;
+  /** Custom formatter over the `toSExpr` intermediate tree — the seam that lets an
+   *  alternative rendering (e.g. arrival-manifold's brace/bracket observation formatter)
+   *  ride the SAME caps + shrink-to-fit machinery instead of duplicating it. Receives the
+   *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
+   *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
+  format?: (sexpr: SExpr) => string;
 };
 
 export type SExprSerializable =
@@ -294,8 +308,10 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
       entries.push(`:${String(key)}`, toSExpr(value, visited));
     }
-    if (all.length > activeCaps.maxItems)
+    if (all.length > activeCaps.maxItems) {
+      cappedCollection = true;
       entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
+    }
     return ["map", ...entries];
   }
 
@@ -325,8 +341,10 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
       entries.push(`:${key}`, toSExpr(value, visited));
     }
-    if (all.length > activeCaps.maxItems)
+    if (all.length > activeCaps.maxItems) {
+      cappedCollection = true;
       entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
+    }
     return ["dict", ...entries];
   }
 
@@ -649,10 +667,11 @@ const FLOOR_STRING = 80;
 export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0): string => {
   const opts: SerializeOpts = typeof optsOrIndent === "number" ? { indent: optsOrIndent } : optsOrIndent;
   const indent = opts.indent ?? 0;
+  const format = opts.format ?? ((sexpr: SExpr) => formatSExpr(sexpr, indent));
 
   // No caps requested → unchanged behaviour.
   if (opts.maxItems == null && opts.maxStringChars == null && opts.maxTotalChars == null) {
-    return formatSExpr(toSExpr(obj), indent);
+    return format(toSExpr(obj));
   }
 
   const maxTotalChars = opts.maxTotalChars ?? DEFAULT_TOTAL;
@@ -661,8 +680,10 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
 
   const render = (): string => {
     activeCaps = { maxItems, maxStringChars };
+    cappedCollection = false;
+    cappedString = false;
     try {
-      return formatSExpr(toSExpr(obj), indent);
+      return format(toSExpr(obj));
     } finally {
       activeCaps = NO_CAPS;
     }
@@ -686,7 +707,18 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
   }
   if (squeezed) {
-    out = `#| ⚠ output reduced to fit response budget (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string |#\n${out}`;
+    // Teach the RELEVANT remedy at the moment of over-fetch — a truncated result is the one
+    // instant the "process it in-REPL, don't page it into context" lesson lands, because the
+    // cost and the fix coincide. Tailored by what actually capped (collection / string / both).
+    const remedy =
+      cappedCollection && cappedString
+        ? " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need"
+        : cappedCollection
+          ? " — filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back"
+          : cappedString
+            ? " — slice the long string with substring, or scan it with string-contains, to pull just the part you need"
+            : "";
+    out = `#| ⚠ output reduced to fit response budget (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
   }
   return out;
 };
