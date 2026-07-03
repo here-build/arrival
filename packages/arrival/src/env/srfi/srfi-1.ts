@@ -137,6 +137,27 @@ export default new EnvCapability("scheme/srfi-1", {
 ;; last — the last element of a non-empty list.
 (define (last xs) (car (last-pair xs)))
 
+;; first … tenth — SRFI-1 positional accessors: the nth element of a proper list.
+;; A list too short for the requested position is an error (mirroring srfi-189's
+;; \`(error …)\` style in this pack). The element is returned AS-IS — accessors don't
+;; stamp provenance (cf. \`find\`, which returns its match unchanged). \`%list-nth\` walks
+;; k cdrs and reports the accessor's name on underflow. (\`last\`/\`last-pair\` already
+;; live above; only the ordinal head accessors are added.)
+(define (%list-nth xs k msg)
+  (cond ((not (pair? xs)) (error msg))
+        ((= k 0) (car xs))
+        (else (%list-nth (cdr xs) (- k 1) msg))))
+(define (first   xs) (%list-nth xs 0 "first: list has no elements"))
+(define (second  xs) (%list-nth xs 1 "second: list has fewer than 2 elements"))
+(define (third   xs) (%list-nth xs 2 "third: list has fewer than 3 elements"))
+(define (fourth  xs) (%list-nth xs 3 "fourth: list has fewer than 4 elements"))
+(define (fifth   xs) (%list-nth xs 4 "fifth: list has fewer than 5 elements"))
+(define (sixth   xs) (%list-nth xs 5 "sixth: list has fewer than 6 elements"))
+(define (seventh xs) (%list-nth xs 6 "seventh: list has fewer than 7 elements"))
+(define (eighth  xs) (%list-nth xs 7 "eighth: list has fewer than 8 elements"))
+(define (ninth   xs) (%list-nth xs 8 "ninth: list has fewer than 9 elements"))
+(define (tenth   xs) (%list-nth xs 9 "tenth: list has fewer than 10 elements"))
+
 ;; list-tabulate — (list (f 0) (f 1) ... (f (- n 1))).
 (define (list-tabulate n f)
   (let loop ((i (- n 1)) (acc '()))
