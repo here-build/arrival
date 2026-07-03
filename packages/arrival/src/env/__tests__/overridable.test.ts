@@ -100,3 +100,92 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect((result.at(-1) as AString).toJs()).toBe("Paris");
   });
 });
+
+// s/* is the only place types appear explicitly — `arrival/overridable` no longer carries its
+// own hand-rolled scalar subset; every type tag lowers through the SAME `tagToJsonSchema` +
+// `z.fromJSONSchema` bridge `schemaToZod` (arrival-chain) uses. `deps: [schemaCapability]`
+// (declared on `overridableCapability` itself) means `(s/enum …)`/`(s/object …)` resolve here
+// with no extra wiring at the test's own capability list.
+describe("arrival/overridable — the FULL s/* language, not just the old scalar subset", () => {
+  it("(s/enum ...) as a type tag validates an override against the enum's values", async () => {
+    const result = await exec(
+      `(define/overridable tier (s/enum "free" "pro") "free") tier`,
+      { capabilities, config: { params: { tier: "pro" } } },
+    );
+    expect((result.at(-1) as AString).toJs()).toBe("pro");
+  });
+
+  it("(s/enum ...) rejects a value outside the declared set — legible, names the binding", async () => {
+    await expect(
+      exec(`(define/overridable tier (s/enum "free" "pro") "free") tier`, {
+        capabilities,
+        config: { params: { tier: "enterprise" } },
+      }),
+    ).rejects.toThrow(/define\/overridable tier: expected one of \["free","pro"\], got "enterprise"/);
+  });
+
+  it("(s/object ...) as a type tag validates a structured override field-by-field", async () => {
+    const result = await exec(
+      `(define/overridable profile
+         (s/object (s/field/string "name") (s/field/integer "age"))
+         "unused")
+       (@ profile "name")`,
+      {
+        capabilities,
+        config: { params: { profile: { name: "Maya", age: 30 } } },
+      },
+    );
+    expect((result.at(-1) as AString).toJs()).toBe("Maya");
+  });
+
+  it("(s/object ...) rejects an override missing a required field", async () => {
+    await expect(
+      exec(
+        `(define/overridable profile
+           (s/object (s/field/string "name") (s/field/integer "age"))
+           "unused")
+         profile`,
+        { capabilities, config: { params: { profile: { name: "Maya" } } } },
+      ),
+    ).rejects.toThrow(/define\/overridable profile: expected/);
+  });
+
+  it("a nested (s/optional ...) field inside (s/object ...) is genuinely optional", async () => {
+    const withBio = await exec(
+      `(define/overridable profile
+         (s/object (s/field/string "name") (s/field "bio" (s/optional "string")))
+         "unused")
+       (@ profile "bio")`,
+      { capabilities, config: { params: { profile: { name: "Maya", bio: "hi" } } } },
+    );
+    expect((withBio.at(-1) as AString).toJs()).toBe("hi");
+
+    // Omitting the /optional field still validates — the object schema doesn't require it.
+    const withoutBio = await exec(
+      `(define/overridable profile
+         (s/object (s/field/string "name") (s/field "bio" (s/optional "string")))
+         "unused")
+       (@ profile "name")`,
+      { capabilities, config: { params: { profile: { name: "Maya" } } } },
+    );
+    expect((withoutBio.at(-1) as AString).toJs()).toBe("Maya");
+  });
+
+  it("the old subset's error cases stay legible: unrecognized tag, bad override, bad default", async () => {
+    // Unrecognized bare tag — still DOORS with the binding name (now via tagToJsonSchema/
+    // z.fromJSONSchema failing to build a validator, not a hand-rolled switch default).
+    await expect(
+      exec(`(define/overridable age "not-a-real-type" 30) age`, { capabilities, config: { params: {} } }),
+    ).rejects.toThrow(/define\/overridable age: unrecognized type tag/);
+
+    // Bad override — same "expected X, got Y (from an environment override)" shape.
+    await expect(
+      exec(`(define/overridable age "number" 30) age`, { capabilities, config: { params: { age: "nope" } } }),
+    ).rejects.toThrow(/define\/overridable age: expected number, got "nope" \(from an environment override\)/);
+
+    // Bad default — validated exactly as loud as a bad override.
+    await expect(
+      exec(`(define/overridable age "number" "thirty") age`, { capabilities, config: { params: {} } }),
+    ).rejects.toThrow(/define\/overridable age: expected number, got "thirty" \(from the in-form default\)/);
+  });
+});

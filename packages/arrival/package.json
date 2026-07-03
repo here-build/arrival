@@ -56,6 +56,10 @@
       "types": "./dist/common/scheme-zod.d.ts",
       "default": "./dist/common/scheme-zod.js"
     },
+    "./schema-tag": {
+      "types": "./dist/common/schema-tag.d.ts",
+      "default": "./dist/common/schema-tag.js"
+    },
     "./attestation": {
       "types": "./dist/values/attestation.d.ts",
       "default": "./dist/values/attestation.js"
@@ -71,6 +75,10 @@
     "./overridable": {
       "types": "./dist/env/overridable.d.ts",
       "default": "./dist/env/overridable.js"
+    },
+    "./schema": {
+      "types": "./dist/env/schema.d.ts",
+      "default": "./dist/env/schema.js"
     }
   },
   "main": "./dist/index.js",
