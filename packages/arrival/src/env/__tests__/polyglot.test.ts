@@ -131,3 +131,77 @@ describe("@here.build/arrival/polyglot — cross-dialect stdlib completion (Buck
     expect(await str("((curry (lambda (a b) (+ a b)) 1) 2)")).toBe("3"); // srfi-235.ts
   });
 });
+
+// dict accessor family (Racket's dict library) — grain-completion: MCP-Atlas
+// trajectory autopsy found models reaching for `dict-ref` on a dict-shaped tool
+// result and getting stranded (Unbound variable). These are dict-SPECIFIC (guard
+// the dict shape, unlike @'s origin-agnostic read) real bindings, not stubs.
+describe("@here.build/arrival/polyglot — dict accessor family (Bucket A)", () => {
+  const str = async (src: string) => String((await exec(src))[0]);
+  const raw = (src: string) => exec(src);
+
+  it("dict-ref — reads by keyword, symbol, or string key, identically", async () => {
+    expect(await str('(dict-ref (dict :a 1) :a)')).toBe("1");
+    expect(await str("(dict-ref (dict \"a\" 1) 'a)")).toBe("1");
+    expect(await str('(dict-ref (dict "a" 1) "a")')).toBe("1");
+  });
+
+  it("dict-ref — optional default, nil when missing and no default (same convention as get-in)", async () => {
+    expect(await str('(dict-ref (dict :a 1) :b 99)')).toBe("99");
+    const missing = await raw('(dict-ref (dict :a 1) :b)');
+    expect(missing[0]).toEqual((await raw("'()"))[0]);
+  });
+
+  it("dict-ref — nested dicts", async () => {
+    expect(await str('(dict-ref (dict-ref (dict :a (dict :b 2)) :a) :b)')).toBe("2");
+  });
+
+  it("dict-ref — errors with a door (fact + why + action) on a non-dict", async () => {
+    await expect(raw('(dict-ref (list 1 2) :a)')).rejects.toThrow(
+      /dict-ref: expected a dict .* got a pair\/list.*use @ for an origin-agnostic read/,
+    );
+    await expect(raw('(dict-ref "x" :a)')).rejects.toThrow(/dict-ref: expected a dict .* got a string/);
+  });
+
+  it("dict-has-key? — #t iff key resolves, #f when missing", async () => {
+    const truthy = async (src: string) => str(`(if ${src} "yes" "no")`);
+    expect(await truthy("(dict-has-key? (dict :a 1) :a)")).toBe("yes");
+    expect(await truthy("(dict-has-key? (dict :a 1) :b)")).toBe("no");
+  });
+
+  it("dict-keys / dict-values — proper scheme lists, composable with map/filter", async () => {
+    expect(await str('(length (dict-keys (dict :a 1 :b 2)))')).toBe("2");
+    // dict-keys elements are raw JS strings lifted via array->list (same representation
+    // as @keys elsewhere in this pack) — they print unquoted inside a list, same quirk
+    // as any other raw-string-in-pair-spine value in this runtime.
+    expect(await str('(map (lambda (k) k) (dict-keys (dict :a 1)))')).toBe("(a)");
+    expect(await str("(dict-values (dict :a 1))")).toBe("(1)");
+  });
+
+  it("dict-count — the number of keys", async () => {
+    expect(await str("(dict-count (dict :a 1 :b 2 :c 3))")).toBe("3");
+    expect(await str("(dict-count (dict))")).toBe("0");
+  });
+
+  it("dict->alist / alist->dict — round trip through an alist of (key . value) pairs", async () => {
+    expect(await str('(cdr (assoc "a" (dict->alist (dict :a 1))))')).toBe("1");
+    expect(await str('(dict-ref (alist->dict (list (cons "a" 1) (cons "b" 2))) :b)')).toBe("2");
+  });
+
+  it("dict-set — a NEW dict, original untouched (immutable, not mutation)", async () => {
+    expect(await str('(let ((d (dict :a 1))) (dict-ref (dict-set d :a 2) :a))')).toBe("2");
+    expect(await str('(let ((d (dict :a 1))) (dict-set d :a 2) (dict-ref d :a))')).toBe("1");
+    // dict-set on a MISSING key adds it
+    expect(await str('(dict-ref (dict-set (dict :a 1) :b 2) :b)')).toBe("2");
+  });
+
+  it("dict-update — dict-set the result of applying updater to the current value, optional failure-result", async () => {
+    expect(await str('(dict-ref (dict-update (dict :a 1) :a (lambda (x) (+ x 1))) :a)')).toBe("2");
+    expect(await str('(dict-ref (dict-update (dict) :a (lambda (x) (+ x 1)) 0) :a)')).toBe("1");
+  });
+
+  it("assoc-ref (Guile) — an alias of dict-ref, same key handling and default convention", async () => {
+    expect(await str('(assoc-ref (dict :a 1) :a)')).toBe("1");
+    expect(await str('(assoc-ref (dict :a 1) :b 42)')).toBe("42");
+  });
+});

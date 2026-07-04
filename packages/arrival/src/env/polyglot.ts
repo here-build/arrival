@@ -146,10 +146,16 @@ export default new EnvCapability("scheme/polyglot", {
     ;; assoc-in needs to create missing intermediate maps on demand. \`@keys\` returns
     ;; a raw JS array (not a scheme list — filter/map need the term protocol), so
     ;; \`array->list\` (r7rs/lists.ts, LIPS extension) lifts it first.
+    ;; k v are placed LAST (not first): \`dict\`'s own key resolution (KEYWORD_ACCESSOR_FIELD
+    ;; else strip a leading \`:\`) normalizes a keyword pluck / symbol / string key to the
+    ;; SAME underlying JS-object key as an already-stored string key — a plain \`equal?\`
+    ;; comparison can't see that (a pluck closure is never \`equal?\` to a string), but
+    ;; sequential \`obj[key] = value\` assignment naturally dedupes on the LAST write. So
+    ;; no explicit exclusion is needed: k v simply overwrite whatever ks/vs already wrote.
     (define (%dict-set d k v)
-      (let* ((ks (filter (lambda (key) (not (equal? key k))) (array->list (@keys d))))
+      (let* ((ks (array->list (@keys d)))
              (vs (map (lambda (key) (@ d key)) ks)))
-        (apply dict (cons k (cons v (%interleave ks vs))))))
+        (apply dict (append (%interleave ks vs) (list k v)))))
 
     ;; str — Clojure: concatenate the display form of every arg. Strings pass
     ;; through as-is; everything else prints via \`repr\` (the external-representation
@@ -259,6 +265,102 @@ export default new EnvCapability("scheme/polyglot", {
     ;; predicate flipped / kept.
     (define (remove-if pred lst) (filter (lambda (x) (not (pred x))) lst))
     (define (remove-if-not pred lst) (filter pred lst))
+
+    ;; -----------------------------------------------------------------------------
+    ;; dict accessor family (Racket's dict library) — grain-completion
+    ;; -----------------------------------------------------------------------------
+    ;; MCP-Atlas trajectory autopsy found models reaching for \`dict-ref\` to read a
+    ;; field off a dict-shaped tool result and getting stranded (Unbound variable):
+    ;; \`@\`/\`:key\` already read ANYTHING member-shaped (dict / membrane-foreign /
+    ;; array — origin-agnostic, see the module header), but a model trained on
+    ;; Racket's dict library reaches for its actual name. This family is that name,
+    ;; PLUS the value \`@\` doesn't have: dict-ref/dict-keys/… are dict-SPECIFIC —
+    ;; they guard the dict shape (see %dict-guard) so a wrong-shaped argument fails
+    ;; loudly (door: fact + why + action) instead of silently reading nil through
+    ;; \`@\`'s origin-agnostic fallback.
+
+    ;; %dict-guard — internal: the dict? guard shared by the whole family below.
+    (define (%dict-guard who d)
+      (if (dict? d)
+          d
+          (error (str who ": expected a dict (native {…} / (dict …) record), got "
+                      (cond ((pair? d) "a pair/list")
+                            ((vector? d) "a vector")
+                            ((string? d) "a string")
+                            ((number? d) "a number")
+                            ((null? d) "'() (empty list)")
+                            ((procedure? d) "a procedure")
+                            (else "a foreign/membrane value"))
+                      " — " who " guards the dict shape so a wrong-shaped argument "
+                      "fails loudly instead of silently reading nil; use @ for an "
+                      "origin-agnostic read across dict/array/foreign values instead"))))
+
+    ;; dict-ref — Racket: read the value at key, with an optional failure-result
+    ;; when key is missing. Same missing-key convention as get-in/@ (nil when no
+    ;; default is given — NOT a second convention); key may be a keyword (:key), a
+    ;; quoted symbol, or a string, normalized identically to @/:key (readMember,
+    ;; membrane.ts). \`@?\` (not a bare \`@\` nil-check) distinguishes "key truly
+    ;; missing" from "key present with a nil/'() value" before falling back.
+    (define (dict-ref d key . default)
+      (%dict-guard "dict-ref" d)
+      (if (@? d key)
+          (@ d key)
+          (if (null? default) nil (car default))))
+
+    ;; dict-has-key? — Racket: #t iff key resolves in d. A dict-guarded alias of @?.
+    (define (dict-has-key? d key)
+      (%dict-guard "dict-has-key?" d)
+      (@? d key))
+
+    ;; dict-keys — Racket: d's own keys as a proper scheme list. \`@keys\` alone
+    ;; returns a raw JS array — composes with length, but not map/filter (see
+    ;; %dict-set's comment above) — so this lifts it via array->list once, the same
+    ;; move %dict-set already makes.
+    (define (dict-keys d)
+      (%dict-guard "dict-keys" d)
+      (array->list (@keys d)))
+
+    ;; dict-values — Racket: the value at each of d's keys, in dict-keys order.
+    (define (dict-values d)
+      (%dict-guard "dict-values" d)
+      (map (lambda (k) (@ d k)) (dict-keys d)))
+
+    ;; dict-count — Racket: the number of keys in d.
+    (define (dict-count d)
+      (%dict-guard "dict-count" d)
+      (length (dict-keys d)))
+
+    ;; dict->alist — d's entries as an alist of (key . value) pairs, in dict-keys
+    ;; order. The inverse of alist->dict.
+    (define (dict->alist d)
+      (%dict-guard "dict->alist" d)
+      (map (lambda (k) (cons k (@ d k))) (dict-keys d)))
+
+    ;; alist->dict — the inverse of dict->alist: build a dict from an alist of
+    ;; (key . value) pairs. Each key may be a keyword/symbol/string — the same
+    ;; normalization \`dict\` itself already applies to its own :key args.
+    (define (alist->dict alist)
+      (apply dict (%interleave (map car alist) (map cdr alist))))
+
+    ;; dict-set — Racket: a NEW dict with key rebuilt to value, everything else
+    ;; preserved (dicts are immutable — wraps %dict-set above, the same rebuild
+    ;; assoc-in uses).
+    (define (dict-set d key value)
+      (%dict-guard "dict-set" d)
+      (%dict-set d key value))
+
+    ;; dict-update — Racket: dict-set the result of applying updater to the
+    ;; CURRENT value at key (an optional failure-result when key is missing, same
+    ;; convention as dict-ref — passed straight through to it).
+    (define (dict-update d key updater . failure-result)
+      (%dict-guard "dict-update" d)
+      (dict-set d key (updater (apply dict-ref (cons d (cons key failure-result))))))
+
+    ;; assoc-ref — Guile/Emacs Lisp: read by key, same polyglot-idiom principle as
+    ;; the threading family above (a model reaches for whichever accessor name it
+    ;; already knows) — an alias of dict-ref, not a second read convention.
+    (define (assoc-ref d key . default)
+      (apply dict-ref (cons d (cons key default))))
 `,
   resolvers: [
     // The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol
