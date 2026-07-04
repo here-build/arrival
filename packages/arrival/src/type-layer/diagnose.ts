@@ -37,7 +37,7 @@ export interface RawMappedDiagnostic {
   readonly tsMessage: string;
   readonly expected?: string; // TS type string of the expected type, when applicable
   readonly actual?: string; //  TS type string of the actual type, when applicable
-  readonly propertyName?: string; // for 2353/2339
+  readonly propertyName?: string; // for 2353/2561/2551/2339
   readonly candidateProperties?: readonly string[]; // closed key set, for did-you-mean
   readonly signatureText?: string; // for arity (2554/2555), pre-rendered to scheme by the adapter
 }
@@ -147,9 +147,14 @@ function extractPayload(
       }
       case 2353: // object literal excess property
       case 2561: // … with a did-you-mean suggestion
+      case 2551: // property doesn't exist on a typo'd READ (TS's actual code for this, not 2339)
       case 2339: {
-        // property does not exist
-        const propertyName = node.getText(sourceFile);
+        // property does not exist. lower.ts's ONLY property-read shape is bracket access
+        // (`(:key obj)` → `obj["key"]`) — the diagnostic node is then the STRING LITERAL
+        // itself, whose `.getText()` includes the quotes; `.text` gives the unescaped bare
+        // name (matching the identifier-node case's plain text, e.g. an object-literal
+        // kwargs key).
+        const propertyName = ts.isStringLiteralLike(node) ? node.text : node.getText(sourceFile);
         const candidateProperties = candidatePropertiesFor(checker, node);
         return candidateProperties === undefined ? { propertyName } : { propertyName, candidateProperties };
       }

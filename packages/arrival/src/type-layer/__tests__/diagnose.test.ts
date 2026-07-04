@@ -20,8 +20,9 @@ const TYPED: HarvestedPrelude = {
     "declare function list<T>(...xs: T[]): List<T>;",
     "declare const add2: (a: number, b: number) => number;",
     "declare const fx_search: (a: { query: string; max_results?: number }) => void;",
+    "declare const config: { count: number };",
   ].join("\n"),
-  members: ["add2", "fx_search", "list"],
+  members: ["add2", "fx_search", "list", "config"],
 };
 
 const lens = createDiagnoseLens(TYPED);
@@ -50,6 +51,15 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(d).toBeDefined();
     expect(d!.propertyName).toBe("max_result");
     expect(d!.candidateProperties).toContain("max_results");
+  });
+
+  it("2551 (typo'd property READ, bracket access — lower.ts's ONLY read shape): extracts a bare (unquoted) propertyName + candidates", () => {
+    const { diagnostics } = lens.diagnose('(:coun config)', [], { codes: [2551] });
+    const d = diagnostics.find((x) => x.code === 2551);
+    expect(d).toBeDefined();
+    expect(d!.propertyName).toBe("coun"); // bare — no surrounding quotes from the string-literal node
+    expect(d!.candidateProperties).toContain("count");
+    expect(d!.tsMessage).toContain("Did you mean");
   });
 
   it("whitelist gate: a non-whitelisted code is kept BARE (code + span + message, no payload)", () => {
