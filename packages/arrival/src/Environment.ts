@@ -18,6 +18,7 @@ import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
+import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -224,9 +225,7 @@ export class Environment implements SchemeEnv {
     }
 
     if (throwError) {
-      throw Object.assign(new Error(`Unbound variable \`${name.toString()}'`), {
-        publicMessage: `symbol ${name.toString()} does not exist - look at list of available functions at tool description`,
-      });
+      throw unboundVariableError(name.toString());
     }
     return undefined;
   }

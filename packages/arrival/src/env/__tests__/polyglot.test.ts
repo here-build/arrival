@@ -33,7 +33,7 @@ describe("@here.build/arrival/polyglot", () => {
 // pure bindings over primitives already bound elsewhere (map/filter/reduce/dict/@/
 // @keys/…). These run against the DEFAULT assembled env (`exec` with no explicit
 // env), since polyglot ships in BASE_PACKS in production — the same surface a model
-// actually reaches. Sibling to env/libraries/well-known-stubs.ts, which doors the
+// actually reaches. Sibling to env/polyglot-rich-errors/stubs.ts, which doors the
 // symbols that genuinely can't be pure (IO/mutation/macro-only).
 describe("@here.build/arrival/polyglot — cross-dialect stdlib completion (Bucket A)", () => {
   const str = async (src: string) => String((await exec(src))[0]);

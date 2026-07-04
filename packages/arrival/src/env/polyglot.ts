@@ -125,7 +125,7 @@ export default new EnvCapability("scheme/polyglot", {
     ;; when the semantics are implementable without IO/mutation/macro machinery.
     ;; (The genuinely-impure/macro-only cousins — println, setf, defun, loop,
     ;; nreverse, for/list, for/fold, gethash, getf, hash-ref — are doored instead,
-    ;; in env/libraries/well-known-stubs.ts.) Every primitive these compose (map,
+    ;; in env/polyglot-rich-errors/stubs.ts.) Every primitive these compose (map,
     ;; filter, reduce, append, dict, @, @keys, …) is verified bound elsewhere in
     ;; this pack or a sibling R7RS/SRFI pack.
     ;;

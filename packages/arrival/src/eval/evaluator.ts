@@ -27,6 +27,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "../Environment.js";
+import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { formatLocation, type SourceLocation } from "../errors.js";
 import { ArrivalError } from "../errors.js";
 export { ArrivalError };
@@ -643,7 +644,11 @@ function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
  */
 function resolvedBindingOrThrow(binding: EnvironmentValue | undefined, sym: ASymbol): SchemeValue | Macro | Syntax {
   if (binding === undefined) {
-    throw new Error(`Unbound variable \`${symbol_name(sym)}'`);
+    // Structurally unreachable via the ordinary `Resolver.resolve` call path (it
+    // throws `unboundVariableError` itself before ever returning `undefined` —
+    // see `eval/Resolver.ts#resolveSynth`), but kept as a defensive throw for any
+    // other caller of this narrowing fn; same rich-error hook for consistency.
+    throw unboundVariableError(symbol_name(sym));
   }
   if (binding instanceof Environment) {
     throw new Error(`\`${symbol_name(sym)}' is an environment — neither a value nor applicable`);

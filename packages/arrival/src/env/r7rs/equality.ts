@@ -205,7 +205,7 @@ export default new EnvCapability("scheme/equality", {
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
-    // it — a genuine gap, not a design omission (see `env/libraries/well-known-stubs.ts`'s
+    // it — a genuine gap, not a design omission (see `env/polyglot-rich-errors/stubs.ts`'s
     // header for that distinction). Mirrors the EXACT record-vs-class-instance
     // disambiguation `readMember` (membrane.ts) already uses: a dict value is either the
     // raw plain-object record `dict` constructs, or the `{…}` reader literal's

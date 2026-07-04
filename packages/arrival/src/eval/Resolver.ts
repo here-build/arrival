@@ -30,6 +30,7 @@ import { resolveMemberPath } from "../member-walk.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
+import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 
 // ============================================================================
 // Environment lookup without lips runtime dependency
@@ -94,9 +95,7 @@ function resolveSynth(
     const base = lookup(first);
     if (base !== undefined) return resolveMemberPath(base, rest);
   }
-  throw Object.assign(new Error(`Unbound variable \`${String(name)}'`), {
-    publicMessage: `symbol ${String(name)} does not exist - look at list of available functions at tool description`,
-  });
+  throw unboundVariableError(String(name));
 }
 
 /**
