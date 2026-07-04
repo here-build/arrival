@@ -2,16 +2,18 @@
 
 Language-portable conformance suite for the arrival reader/evaluator grammar extensions —
 the `{…}` dict / `[…]` vector collection literals and their position-scoped comma rule
-(spec: `docs/working-proposals/arrival-curly-vector-literals.md`), and the let-family
+(spec: `docs/working-proposals/arrival-curly-vector-literals.md`), the let-family
 **bracket bindings** superset (spec: `docs/reference/bracket-bindings.md`; requirements:
-`docs/working-proposals/arrival-bracket-bindings-requirements.md`). A future Python/Rust
-port of the reader runs this same corpus; only the thin runner
-(`src/__tests__/spec-corpus.test.ts` here) is implementation-specific.
+`docs/working-proposals/arrival-bracket-bindings-requirements.md`, R1–R8), and its R9
+addendum, **bracket clause positions** for `cond`/`case`/`do`'s test clause (same
+requirements doc, R9). A future Python/Rust port of the reader runs this same corpus; only
+the thin runner (`src/__tests__/spec-corpus.test.ts` here) is implementation-specific.
 
-Files: `collection-literals-{read,eval}.jsonl` (collection literals) and
-`bracket-bindings-{read,eval}.jsonl` (let-family bracket-binding consumption + doors). The
-runner globs every `*.jsonl` and keys behavior off each record's `mode` field, so a new
-corpus file is picked up automatically.
+Files: `collection-literals-{read,eval}.jsonl` (collection literals),
+`bracket-bindings-{read,eval}.jsonl` (let-family bracket-binding consumption + doors), and
+`bracket-clauses-{read,eval}.jsonl` (R9: `cond`/`case`/`do`-test-clause bracket-clause
+consumption + doors). The runner globs every `*.jsonl` and keys behavior off each record's
+`mode` field, so a new corpus file is picked up automatically.
 
 ## Record format
 
@@ -68,6 +70,8 @@ teach; the corpus matches ONLY the class. These become the spec's error contract
 | `E-BRACKET-UNEXPECTED` | close delimiter with nothing open (`]`) |
 | `E-LET-BRACKET-BINDINGS-LIST` | a let-family whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (spec: `docs/reference/bracket-bindings.md` R4) |
 | `E-LET-BRACKET-BINDING` | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the binding-name slot |
+| `E-COND-BRACKET-CLAUSE` | a `cond`/`case`/`do`-test bracket clause is empty (`[]` — R9, `docs/working-proposals/arrival-bracket-bindings-requirements.md`) |
+| `E-CASE-BRACKET-DATUM-LIST` | a `case` clause's datum-list head is itself a bracket vector — the datum list is data and is never bracket-converted, even inside a bracketed clause (R9) |
 
 ## The comma rule (what the cases pin)
 

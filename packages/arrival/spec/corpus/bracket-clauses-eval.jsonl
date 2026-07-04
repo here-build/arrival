@@ -1,0 +1,14 @@
+{"name":"y_cond_bracket_test_matches","mode":"eval","input":"(cond [(> 2 1) \"a\"] [else \"b\"])","expect":{"value":"a"}}
+{"name":"y_cond_bracket_else_matches","mode":"eval","input":"(cond [#f \"a\"] [else \"b\"])","expect":{"value":"b"}}
+{"name":"y_cond_bracket_arrow_clause","mode":"eval","input":"(cond [(+ 1 2) => (lambda (x) (* x 10))])","expect":{"value":30}}
+{"name":"y_case_bracket_datum_list_matches","mode":"eval","input":"(case 1 [(1 2) \"low\"] [else \"hi\"])","expect":{"value":"low"}}
+{"name":"y_case_bracket_else_matches","mode":"eval","input":"(case 99 [(1 2) \"low\"] [else \"hi\"])","expect":{"value":"hi"}}
+{"name":"y_case_bracket_arrow_clause","mode":"eval","input":"(case 2 [(1 2) => (lambda (x) (* x 100))] [else 0])","expect":{"value":200}}
+{"name":"y_do_bracket_test_clause","mode":"eval","input":"(do ((i 0 (+ i 1))) [(= i 3) i])","expect":{"value":3}}
+{"name":"y_do_bracket_binding_and_test_clause_compose","mode":"eval","input":"(do ([i 0 (+ i 1)]) [(= i 3) i])","expect":{"value":3}}
+{"name":"y_nested_cond_bracket_clause_with_bracket_let_binding","mode":"eval","input":"(cond [#t (let [a 1] a)])","expect":{"value":1}}
+{"name":"y_cond_bracket_equals_paren_image","mode":"eval","input":"(equal? (cond [(> 2 1) \"a\"]) (cond ((> 2 1) \"a\")))","expect":{"value":true}}
+{"name":"n_cond_empty_bracket_clause","mode":"eval","input":"(cond [])","expect":{"error":"E-COND-BRACKET-CLAUSE"}}
+{"name":"n_case_empty_bracket_clause","mode":"eval","input":"(case 1 [])","expect":{"error":"E-COND-BRACKET-CLAUSE"}}
+{"name":"n_do_empty_bracket_test_clause","mode":"eval","input":"(do ((i 0)) [])","expect":{"error":"E-COND-BRACKET-CLAUSE"}}
+{"name":"n_case_bracket_datum_list_vector_head","mode":"eval","input":"(case 1 [[1 2] \"low\"])","expect":{"error":"E-CASE-BRACKET-DATUM-LIST"}}

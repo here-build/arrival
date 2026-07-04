@@ -2206,6 +2206,69 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   return result;
 }
 
+// R9 (addendum to the bracket-bindings requirements — `docs/working-proposals/
+// arrival-bracket-bindings-requirements.md`): the CLAUSE positions of `cond`,
+// `case`, and `do`'s test-result clause additionally accept an `evalElements`
+// vector, elementwise ≡ the parenthesized clause. `cond`/`case` are evaluator
+// SPECIAL FORMS (this file), not syntax-rules prelude macros — so consumption
+// lands right here, the same file and shape as the R2/R3 let-family
+// consumption above (`normalizeBindings`), applied to CLAUSE positions instead
+// of BINDING positions.
+//
+// `normalizeClause` runs once per clause, before the existing clause walk,
+// and produces the SAME plain-list shape a hand-written paren clause already
+// is — so downstream (the test/datum/body handling below) is completely
+// unmodified code evaluating a plain list, same structural-equivalence
+// argument as R3.
+//
+// Critically, `normalizeClause` converts ONLY the clause's own wrapper — it
+// never looks inside element 0. This is what keeps a `case` clause's
+// datum-list head a LIST, never bracket-converted (R9): `[(1 2) "low"]`'s
+// vector elements are `[(1 2), "low"]`; rewrapping them as a list gives
+// `((1 2) "low")` with the inner `(1 2)` untouched, exactly the paren image.
+//
+// `#(…)` (`evalElements === false`) and non-vector clauses pass straight
+// through (R5 — never consumed); the existing `is_pair(clause)` invariants
+// below are the right door for anything else malformed.
+function normalizeClause(clause: SchemeValue, form: string): SchemeValue {
+  if (!(clause instanceof AVector) || !clause.evalElements) return clause;
+  const els = clause.__vector__;
+  if (els.length === 0) throw emptyClauseError(form);
+  return APair.fromArray(CONSTANT_CTX, els, false);
+}
+
+/** R9/R4-family: an empty bracket clause `[]` — cond/case/do's clause vector
+ *  must contain at least the test/datum slot. Code `E-COND-BRACKET-CLAUSE`
+ *  (shared across cond/case/do — this is "the whole bracketed CLAUSE is
+ *  malformed for this form", the clause-position sibling of
+ *  `E-LET-BRACKET-BINDINGS-LIST`). */
+function emptyClauseError(form: string): Error {
+  return new EvalError(
+    `${form} clause [] is empty — a bracketed clause needs at least a test/datum slot ` +
+      `(\`[test expr…]\` for cond/do, \`[(datum…) expr…]\` or \`[else expr…]\` for case). ` +
+      `Add the missing slot, or remove the empty clause.`,
+    { code: "E-COND-BRACKET-CLAUSE" },
+  );
+}
+
+/** R9: a `case` clause's datum-list HEAD is itself a bracket vector — the
+ *  datum list is DATA and is never bracket-converted (R9), even inside a
+ *  bracketed clause. `[[1 2] "low"]` therefore does NOT lower to
+ *  `((1 2) "low")`; it stays `([1 2] "low")` and would otherwise fall through
+ *  to the generic "case: expected list of datums" invariant with no hint
+ *  about why. This door names the vector-ness itself as the confusion (per
+ *  R9: "the bracket door only where the vector-ness itself is the
+ *  confusion") and points at the fix. */
+function caseDatumListVectorError(datums: AVector): Error {
+  const els = datums.__vector__;
+  const rendered = els.map((el) => String(el)).join(" ");
+  return new EvalError(
+    `case clause datum list [${rendered}] is a vector — the datum-list head is data and is never ` +
+      `bracket-converted, even inside a bracketed clause. Write it as a parenthesized list: (${rendered}).`,
+    { code: "E-CASE-BRACKET-DATUM-LIST" },
+  );
+}
+
 /**
  * Handle 'cond' special form: (cond (test expr...) ... (else expr...)?)
  */
@@ -2214,7 +2277,9 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   while (is_pair(node)) {
-    const clause = node.car;
+    // R9: consume a bracket clause (see normalizeClause above) before the
+    // existing invariant/walk.
+    const clause = normalizeClause(node.car, "cond");
     invariant(is_pair(clause), "cond: invalid clause");
 
     const test = clause.car;
@@ -2294,7 +2359,9 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let node: SchemeValue = rest.cdr;
 
   while (is_pair(node)) {
-    const clause = node.car;
+    // R9: consume a bracket clause (see normalizeClause above) before the
+    // existing invariant/walk.
+    const clause = normalizeClause(node.car, "case");
     invariant(is_pair(clause), "case: invalid clause");
 
     const datums = clause.car;
@@ -2316,6 +2383,12 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     // Check if key matches any datum (using eqv? semantics)
+    // R9: the datum-list head is data and is NEVER bracket-converted — a
+    // vector here (evalElements) is the confusion itself, not a generic
+    // malformation, so it gets its own door (see caseDatumListVectorError).
+    if (datums instanceof AVector && datums.evalElements) {
+      throw caseDatumListVectorError(datums);
+    }
     invariant(is_pair(datums), "case: expected list of datums");
     let datumNode: SchemeValue = datums;
     let matched = false;
@@ -2439,7 +2512,9 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const restCdr = rest.cdr;
   invariant(is_pair(restCdr), "do: missing test clause");
 
-  const testClause = restCdr.car;
+  // R9: do's test clause may be a bracket vector, elementwise ≡ the
+  // parenthesized clause (see normalizeClause above).
+  const testClause = normalizeClause(restCdr.car, "do");
   const body = restCdr.cdr;
 
   invariant(is_pair(testClause), "do: invalid test clause");

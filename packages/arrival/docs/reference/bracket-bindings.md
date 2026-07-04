@@ -127,12 +127,16 @@ destructuring name slot, `do` whole-list exclusion).
 
 ## R5 — Scope bound (named future explicitly excluded)
 
-The widening covers **only the six enumerated forms' bindings slots**. Explicitly **not**:
+The widening covers **only the six enumerated forms' bindings slots**, plus the R9 addendum
+below. Explicitly **not**:
 
-- `cond` / `case` / `when` clause positions — a **future, separate decision**.
+- `when` / `unless` clause positions — no clause structure exists to consume.
 - lambda formals, head position, or **any data position**.
 - `#(…)` constant vectors (`evalElements === false`) — **never** consumed; they keep today's
   behavior.
+
+(`cond` / `case` / `do`-test clause positions **were** on this exclusion list — R9, below,
+lifts that part of R5.)
 
 Positive corollaries the corpus pins (these hold on the current tree already, and must keep
 holding — they are reader/data invariants, not consumption behavior):
@@ -158,6 +162,40 @@ Each row's only ✅ column is the meaning Arrival adopts. Where R7RS would call 
 Arrival gives it the single well-defined dialect meaning instead of a door — and that meaning is,
 by R3, byte-identical to a form R7RS *does* accept. The union of the three readings is therefore
 a **function**: one input shape → one meaning, everywhere, with no branch on surrounding context.
+
+## R9 — Clause positions (addendum, lifts part of R5)
+
+The CLAUSE positions of `cond`, `case`, and `do`'s test-result clause additionally accept an
+`evalElements` vector, elementwise ≡ the parenthesized clause:
+
+- `(cond [test e…] [else d])` — clause vector ≡ clause list; `else`/`=>` forms included.
+- `(case k [(d₁ d₂) e] [else d])` — the datum-list **head stays a LIST** (it is data, never
+  bracket-converted); only the CLAUSE wrapper may be a vector.
+- `(do (…) [test result…] body…)` — the test clause may be a vector.
+
+`cond`/`case`/`do` are evaluator **special forms** (`src/eval/evaluator.ts`'s
+`evalCond`/`evalCase`/`evalDo`), not syntax-rules prelude macros, so consumption lands in the
+same file as R2/R3 via `normalizeClause` — the clause-position sibling of
+`normalizeBindings`. It runs once per clause, before the existing clause walk, converting
+only the clause's own wrapper (never looking inside element 0) — which is exactly what
+keeps a `case` datum-list head untouched, and what makes a nested bracket form (e.g.
+`(cond [#t (let [a 1] a)])`) compose for free.
+
+**Non-intersection:** bracket clauses are a purely Racket surface — Clojure's `cond` is flat
+(no clause grouping), so no dialect conflict exists; Racket's reading already equals the
+rewrite.
+
+**Validation doors:**
+
+| Code | Fires when |
+|---|---|
+| `E-COND-BRACKET-CLAUSE` | an empty bracket clause `[]` on `cond`/`case`/`do`'s test clause |
+| `E-CASE-BRACKET-DATUM-LIST` | a `case` clause's datum-list head is itself a bracket vector (the vector-ness itself is the confusion — the datum list is data and is never bracket-converted, so `[[1 2] "low"]` does not lower like a binding vector would) |
+
+Still excluded (R5 continues): lambda formals, `when`/`unless` (no clause structure),
+binding/clause positions of any form not enumerated in R2/R9.
+
+Corpus: `bracket-clauses-{read,eval}.jsonl`.
 
 ## R7/R8 — Executable spec & gates
 

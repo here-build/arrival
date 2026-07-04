@@ -1,0 +1,4 @@
+{"name":"y_cond_bracket_clause_reads_as_vector","mode":"read","input":"(cond [(> x 1) \"a\"] [else \"b\"])","expect":{"ast":"(cond [(> x 1) \"a\"] [else \"b\"])"}}
+{"name":"y_case_bracket_clause_reads_as_vector_datum_list_stays_list","mode":"read","input":"(case k [(1 2) \"low\"] [else \"hi\"])","expect":{"ast":"(case k [(1 2) \"low\"] [else \"hi\"])"}}
+{"name":"y_do_bracket_test_clause_reads_as_vector","mode":"read","input":"(do ((i 0 (+ i 1))) [(= i n) acc])","expect":{"ast":"(do ((i 0 (+ i 1))) [(= i n) acc])"}}
+{"name":"y_quote_cond_bracket_clause_is_plain_vector","mode":"read","input":"(quote (cond [#t 1]))","expect":{"ast":"(quote (cond [#t 1]))"}}
