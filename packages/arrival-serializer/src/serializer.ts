@@ -84,18 +84,31 @@ export type SerializeOpts = {
    *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
    *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
   format?: (sexpr: SExpr) => string;
-  /** COMPETENCE-GATED banner pedagogy (V's design, 2026-07-05): suppress the reduced-output
-   *  banner's collection-processing remedy clause ("filter/map/reduce the collection…") when
-   *  the caller has already demonstrated the model can do this — the banner's FACTUAL part
-   *  (that reduction happened + the applied limits) is unaffected, only this one teaching
-   *  clause is dropped. Independent of `suppressStringRemedy`; a caller may suppress one,
-   *  both, or neither. Default (unset/false) ⇒ unchanged behaviour (the clause always shows
-   *  when a collection was capped). */
-  suppressCollectionRemedy?: boolean;
-  /** Same as `suppressCollectionRemedy`, for the string-slicing remedy clause ("slice the
-   *  long string with substring…"), gated by demonstrated string-processing competence. */
-  suppressStringRemedy?: boolean;
+  /** COMPETENCE v2 (V's design, 2026-07-05): the collection-processing remedy clause
+   *  ("filter/map/reduce the collection…") rendering mode. The banner's FACTUAL half (that
+   *  reduction happened + the applied limits) is NEVER gated by this — only this one
+   *  teaching clause is:
+   *    - "verbose" (default when unset) — the full teaching sentence.
+   *    - "compact" — the short reminder form of the SAME pattern, for a caller (arrival-
+   *      manifold's competence.ts) that has already rendered this teaching once this session.
+   *    - "suppressed" — the clause is dropped entirely; the factual half still renders.
+   *  Independent of `stringRemedyMode`; a caller may set either, both, or neither. */
+  collectionRemedyMode?: RemedyMode;
+  /** Same as `collectionRemedyMode`, for the string-slicing remedy clause ("slice the long
+   *  string with substring…"). */
+  stringRemedyMode?: RemedyMode;
+  /** Fires synchronously, at most once per class per `toSExprString` call, exactly when that
+   *  class's remedy clause was ACTUALLY included in the rendered banner (its collection/
+   *  string capped THIS render AND its mode wasn't "suppressed") — regardless of whether the
+   *  included text was verbose or compact. Never fires for a class that didn't cap, or whose
+   *  mode was "suppressed" (nothing rendered, nothing to learn from). The caller (arrival-
+   *  manifold's competence.ts) uses this as the feedback half of the verbose→compact
+   *  gradient: flip to compact for every LATER rendering this session. */
+  onRemedyRendered?: (cls: "collection" | "string") => void;
 };
+
+/** Remedy-clause rendering mode — see `collectionRemedyMode`/`stringRemedyMode` above. */
+export type RemedyMode = "verbose" | "compact" | "suppressed";
 
 export type SExprSerializable =
   | string
@@ -725,20 +738,32 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     // caller's per-call override (possibly clamped to a bound), the number here is always the
     // budget actually honored, so a clamped request is never a silent reinterpretation.
     //
-    // COMPETENCE GATING: each remedy clause is shown only when its collection actually capped
-    // AND the caller hasn't already flagged that competence as demonstrated. The FACTUAL part
-    // of the banner (the reduction happened, the applied limits) is never gated — only the
-    // pedagogy clause is.
-    const showCollectionRemedy = cappedCollection && !opts.suppressCollectionRemedy;
-    const showStringRemedy = cappedString && !opts.suppressStringRemedy;
-    const remedy =
-      showCollectionRemedy && showStringRemedy
-        ? " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need"
-        : showCollectionRemedy
-          ? " — filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back"
-          : showStringRemedy
-            ? " — slice the long string with substring, or scan it with string-contains, to pull just the part you need"
-            : "";
+    // COMPETENCE v2 GATING (arrival-manifold's competence.ts): each class's clause renders
+    // independently, driven by its OWN mode — never gated by the other class's mode/state.
+    // The FACTUAL part of the banner (the reduction happened, the applied limits) is never
+    // gated — only these per-class pedagogy clauses are. `onRemedyRendered` fires exactly
+    // when a clause was actually included, so the caller can advance its own verbose→compact
+    // gradient for next time.
+    const collectionMode: RemedyMode = opts.collectionRemedyMode ?? "verbose";
+    const stringMode: RemedyMode = opts.stringRemedyMode ?? "verbose";
+    const clauses: string[] = [];
+    if (cappedCollection && collectionMode !== "suppressed") {
+      clauses.push(
+        collectionMode === "compact"
+          ? "filter/map/reduce helps"
+          : "filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back",
+      );
+      opts.onRemedyRendered?.("collection");
+    }
+    if (cappedString && stringMode !== "suppressed") {
+      clauses.push(
+        stringMode === "compact"
+          ? "substring helps"
+          : "slice the long string with substring, or scan it with string-contains, to pull just the part you need",
+      );
+      opts.onRemedyRendered?.("string");
+    }
+    const remedy = clauses.length > 0 ? ` — ${clauses.join("; ")}` : "";
     out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
   }
   return out;

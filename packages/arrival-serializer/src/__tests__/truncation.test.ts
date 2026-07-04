@@ -68,57 +68,97 @@ describe("streaming truncation (opt-in)", () => {
     expect(both).toContain("substring");
   });
 
-  describe("competence-gated remedy suppression (suppressCollectionRemedy / suppressStringRemedy)", () => {
+  describe("COMPETENCE v2 remedy modes (collectionRemedyMode / stringRemedyMode)", () => {
     const manyItems = Array.from({ length: 800 }, (_, i) => ({ id: i }));
     const hugeString = "q".repeat(50000);
     const mixed = Array.from({ length: 800 }, (_, i) => ({ id: i, blob: "z".repeat(500) }));
 
-    it("suppressCollectionRemedy drops the collection clause but keeps the factual banner part", () => {
-      const out = toSExprString(manyItems, { maxTotalChars: 500, suppressCollectionRemedy: true });
+    it("collectionRemedyMode: 'suppressed' drops the collection clause but keeps the factual banner part", () => {
+      const out = toSExprString(manyItems, { maxTotalChars: 500, collectionRemedyMode: "suppressed" });
       expect(out).toContain("⚠ output reduced to fit response budget of 500 chars");
       expect(out).toContain("showing ≤");
-      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("filter/map/reduce");
       expect(out).not.toContain("substring");
     });
 
-    it("suppressStringRemedy drops the string clause but keeps the factual banner part", () => {
-      const out = toSExprString(hugeString, { maxTotalChars: 400, maxStringChars: 30000, suppressStringRemedy: true });
+    it("stringRemedyMode: 'suppressed' drops the string clause but keeps the factual banner part", () => {
+      const out = toSExprString(hugeString, { maxTotalChars: 400, maxStringChars: 30000, stringRemedyMode: "suppressed" });
       expect(out).toContain("⚠ output reduced to fit response budget of 400 chars");
       expect(out).toContain("showing ≤");
       expect(out).not.toContain("substring");
-      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("filter/map/reduce");
     });
 
-    it("suppresses independently — collection flag alone still teaches the string remedy on a both-capped result", () => {
-      const out = toSExprString(mixed, { maxTotalChars: 3000, suppressCollectionRemedy: true });
+    it("suppresses independently — collection suppressed alone still teaches the (verbose) string remedy on a both-capped result", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000, collectionRemedyMode: "suppressed" });
       expect(out).toContain("⚠ output reduced to fit");
-      expect(out).not.toContain("filter/map/reduce the collection");
-      expect(out).toContain("substring");
+      expect(out).not.toContain("filter/map/reduce");
+      expect(out).toContain("slice the long string with substring");
     });
 
-    it("suppresses independently — string flag alone still teaches the collection remedy on a both-capped result", () => {
-      const out = toSExprString(mixed, { maxTotalChars: 3000, suppressStringRemedy: true });
+    it("suppresses independently — string suppressed alone still teaches the (verbose) collection remedy on a both-capped result", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000, stringRemedyMode: "suppressed" });
       expect(out).toContain("⚠ output reduced to fit");
       expect(out).toContain("filter/map/reduce the collection");
       expect(out).not.toContain("substring");
     });
 
-    it("both flags set → banner has neither remedy clause, only the factual part", () => {
+    it("both suppressed → banner has neither remedy clause, only the factual part", () => {
       const out = toSExprString(mixed, {
         maxTotalChars: 3000,
-        suppressCollectionRemedy: true,
-        suppressStringRemedy: true,
+        collectionRemedyMode: "suppressed",
+        stringRemedyMode: "suppressed",
       });
       expect(out).toContain("⚠ output reduced to fit");
-      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("filter/map/reduce");
       expect(out).not.toContain("substring");
     });
 
-    it("no flags set (regression pin) → unchanged current text, both clauses present when both cap", () => {
+    it("no modes set (regression pin) → default verbose, both clauses present when both cap", () => {
       const out = toSExprString(mixed, { maxTotalChars: 3000 });
       expect(out).toContain(
-        " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need",
+        "filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back",
       );
+      expect(out).toContain("slice the long string with substring, or scan it with string-contains, to pull just the part you need");
+    });
+
+    it("'compact' mode renders the short reminder form of the SAME pattern, per class", () => {
+      const collOnly = toSExprString(manyItems, { maxTotalChars: 500, collectionRemedyMode: "compact" });
+      expect(collOnly).toContain("filter/map/reduce helps");
+      expect(collOnly).not.toContain("filter/map/reduce the collection in your program");
+
+      const strOnly = toSExprString(hugeString, { maxTotalChars: 400, maxStringChars: 30000, stringRemedyMode: "compact" });
+      expect(strOnly).toContain("substring helps");
+      expect(strOnly).not.toContain("slice the long string with substring");
+
+      const both = toSExprString(mixed, { maxTotalChars: 3000, collectionRemedyMode: "compact", stringRemedyMode: "compact" });
+      expect(both).toContain("filter/map/reduce helps");
+      expect(both).toContain("substring helps");
+    });
+
+    it("modes are independent per class — one verbose, one compact, on the same both-capped result", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000, collectionRemedyMode: "verbose", stringRemedyMode: "compact" });
+      expect(out).toContain("filter/map/reduce the collection in your program");
+      expect(out).toContain("substring helps");
+      expect(out).not.toContain("slice the long string with substring");
+    });
+
+    it("onRemedyRendered fires exactly for the classes whose clause actually rendered, never for a suppressed or non-capped class", () => {
+      const rendered: string[] = [];
+      toSExprString(mixed, {
+        maxTotalChars: 3000,
+        stringRemedyMode: "suppressed",
+        onRemedyRendered: (cls) => rendered.push(cls),
+      });
+      expect(rendered).toEqual(["collection"]);
+
+      const renderedNeither: string[] = [];
+      toSExprString("z".repeat(10000), {
+        maxTotalChars: 5000,
+        maxStringChars: 3000,
+        onRemedyRendered: (cls) => renderedNeither.push(cls),
+      }); // fits under budget uncapped-by-total (no ⚠ at all) — no clause, no callback
+      expect(renderedNeither).toEqual([]);
     });
   });
 
