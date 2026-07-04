@@ -251,13 +251,49 @@ function emitList(node: ListNode): string {
   return `${emitNode(head)}(${args})`;
 }
 
-/** `(quote X)` from `'X`. A quoted list → `list(…)` of its lowered elements; a quoted
- *  atom → its value image (symbol → identifier, number/string → itself), matching the
- *  rule that `'(a b c)` ≡ `(list a b c)`. */
+/** `(quote X)` from `'X`. A quoted atom → its value image (symbol → identifier — benign
+ *  2304 noise, unchanged this round; number/string → itself). A quoted LIST recurses as
+ *  QUOTED DATA (never as an application) — `'(("a" 1))` → `list(list("a", 1))`, never the
+ *  false-positive `list("a"(1))` that treating the nested list as a call would produce (a
+ *  string-literal head would get CALLED). A dotted datum `'(a . b)` → `cons(a, b)`, folding
+ *  right through any preceding proper elements: `'(a b . c)` → `cons(a, cons(b, c))`. */
 function emitQuote(datum: Node | undefined): string {
-  if (datum === undefined) return "list()";
-  if (isList(datum)) return `list(${emitSeq(datum.list).join(", ")})`;
-  return emitNode(datum);
+  return datum === undefined ? "list()" : emitQuotedDatum(datum);
+}
+
+/** One datum in QUOTED context: a nested list recurses (never applies), an atom keeps its
+ *  plain value image (symbol → identifier, unchanged this round). */
+function emitQuotedDatum(datum: Node): string {
+  return isList(datum) ? emitQuoteLikeList(datum.list, emitQuotedDatum) : emitNode(datum);
+}
+
+/** Shared list-body emitter for QUOTE and QUASIQUOTE: fuses `#` + list into a vector (as
+ *  `emitSeq`), detects a dotted tail via the bare `.` WORD marker (never a string atom —
+ *  R7RS improper-list tail) and folds it into nested `cons(...)`, and recurses every other
+ *  element through `emitElem` (quote vs. quasiquote differ only in that recursive step —
+ *  quasiquote's `emitElem` additionally un-quotes an `(unquote …)`/`(unquote-splicing …)`
+ *  node it encounters). */
+function emitQuoteLikeList(items: Node[], emitElem: (n: Node) => string): string {
+  const parts: string[] = [];
+  let dotSeen = false;
+  for (let i = 0; i < items.length; i++) {
+    const node = items[i]!;
+    if (isWord(node) && node.atom === "." && !dotSeen) {
+      dotSeen = true; // the dot itself emits nothing; the following element is the tail
+      continue;
+    }
+    const next = items[i + 1];
+    if (isVectorMark(node) && isList(next)) {
+      parts.push(emitVector(next)); // vector elements stay plain values (unchanged behavior)
+      i++;
+      continue;
+    }
+    parts.push(emitElem(node));
+  }
+  if (!dotSeen) return `list(${parts.join(", ")})`;
+  let acc = parts[parts.length - 1]!; // the tail
+  for (let i = parts.length - 2; i >= 0; i--) acc = `cons(${parts[i]}, ${acc})`;
+  return acc;
 }
 
 /** `(lambda (x y) body…)` → `((x, y) => body)`. A multi-form body folds to a comma

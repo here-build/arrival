@@ -35,9 +35,9 @@ function compileErrors(source: string): string[] {
   return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 }
 
-describe("lower — scheme → TS emitter", () => {
-  const ts1 = (src: string) => lower(src).ts;
+const ts1 = (src: string) => lower(src).ts;
 
+describe("lower — scheme → TS emitter", () => {
   it("application keeps the head + scheme arg order", () => {
     expect(ts1("(foo a b)")).toBe("foo(a, b)");
   });
@@ -96,6 +96,28 @@ describe("lower — scheme → TS emitter", () => {
 
   it("multiple top-level forms become `;\\n`-separated statements", () => {
     expect(ts1("(foo 1) (bar 2)")).toBe("foo(1);\nbar(2)");
+  });
+});
+
+describe("lower — quoted data recurses (the false-positive killer)", () => {
+  it("a quoted NESTED list recurses as quoted data, never an application", () => {
+    expect(ts1('\'(("a" 1))')).toBe('list(list("a", 1))');
+  });
+
+  it("a flat quoted list is unchanged", () => {
+    expect(ts1("'(1 2 3)")).toBe("list(1, 2, 3)");
+  });
+
+  it("a dotted quoted pair lowers to cons", () => {
+    expect(ts1("'((k . v))")).toBe("list(cons(k, v))");
+  });
+
+  it("deep nesting recurses at every level", () => {
+    expect(ts1("'((1 (2 3)) 4)")).toBe("list(list(1, list(2, 3)), 4)");
+  });
+
+  it("a multi-element dotted list folds right through the proper elements", () => {
+    expect(ts1("'(a b . c)")).toBe("cons(a, cons(b, c))");
   });
 });
 
