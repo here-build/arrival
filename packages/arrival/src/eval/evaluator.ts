@@ -28,7 +28,7 @@ import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { Environment, KEYWORD_ACCESSOR_FIELD, type EnvironmentValue } from "../Environment.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
-import { formatLocation, type SourceLocation } from "../errors.js";
+import { formatLocation, type SourceLocation, EvalError } from "../errors.js";
 import { ArrivalError } from "../errors.js";
 export { ArrivalError };
 import {
@@ -1611,6 +1611,58 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // Core Macros (implemented as special forms for performance)
 // ============================================================================
 
+// ── let-family bracket-binding doors ────────────────────────────────────────
+// Models trained on Racket/Clojure write `[a 1]` for let-family bindings.
+// Arrival's reader never erases bracket kind — it survives as the produced
+// node's CLASS: `[…]` mints an `AVector` with `evalElements === true` (the
+// reader-literal marker — Parser.ts, on `[`); `(…)` mints an `APair`; `#(…)`
+// mints an `AVector` with `evalElements === false`. So `evalElements ===
+// true` at a binding-position node IS the detection — no reader/lexer
+// change, and the check lives in the failure branch each let-family site
+// already has (`invariant(is_pair(binding), …)`).
+//
+// Two habits, two shapes, both gated the same way:
+//   - Racket per-pair:    (let* ([a 1] [b 2]) …)   — each PAIR is bracketed.
+//     Fires exactly where the existing per-pair invariant fires today.
+//   - Clojure whole-list: (let [a 1 b 2] …)        — the whole LIST is
+//     bracketed. `bindings` itself is the AVector, so the per-pair
+//     `while (is_pair(bindNode))` walk never enters — TODAY this silently
+//     binds zero variables and fails later as a confusing unbound-variable.
+//     Must be checked BEFORE that walk, once, right after `bindings` is read
+//     off the form (there is no enclosing cons cell to blame here, so no
+//     location is attached — the whole list itself is a bracket literal).
+// `evalElements === false` (a `#(…)` constant sitting in binding position) is
+// deliberately NOT absorbed — it falls through to the generic invariant so
+// the `[…]` vs `#(…)` distinction stays crisp.
+
+/** Racket habit: a single binding PAIR bracketed — `[a 1]` where `(a 1)` was expected.
+ *  `location` is the enclosing binding-list cons cell (`bindNode[LOCATION]`) — the
+ *  `[…]` literal itself carries no location (Parser.ts never stamps one on it). */
+function bracketBindingError(binding: AVector, form: string, location?: SourceLocation): Error {
+  const els = binding.__vector__;
+  const rendered = els.map((el) => String(el)).join(" ");
+  return new EvalError(
+    `${form} bindings are pairs, not vectors — [${rendered}] here is a […] vector literal, and […] is reserved ` +
+      `for data (vectors/JSON arrays), never binding syntax. Write the binding with parens: (${rendered}).`,
+    { location, code: "E-LET-BRACKET-BINDING" },
+  );
+}
+
+/** Clojure habit: the whole bindings LIST bracketed — `[a 1 b 2]` where `((a 1) (b 2))` was expected. */
+function bracketBindingsListError(bindings: AVector, form: string): Error {
+  const els = bindings.__vector__;
+  const rendered = els.map((el) => String(el)).join(" ");
+  const pairs: string[] = [];
+  for (let i = 0; i < els.length; i += 2) {
+    pairs.push(i + 1 < els.length ? `(${String(els[i])} ${String(els[i + 1])})` : String(els[i]));
+  }
+  return new EvalError(
+    `${form} bindings must be a parenthesized list of pairs — [${rendered}] here is a […] vector literal, not ` +
+      `binding syntax. Wrap each binding in parens and the list in parens: (${pairs.join(" ")}).`,
+    { code: "E-LET-BRACKET-BINDINGS-LIST" },
+  );
+}
+
 /**
  * Handle 'let' special form: (let ((var val) ...) body...)
  * Also handles named let: (let name ((var val) ...) body...)
@@ -1634,6 +1686,14 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     body = rest.cdr;
   }
 
+  // named let gets its own form name in the bracket-binding doors below —
+  // "named let" reads clearer than "let" when the model bracketed `(let loop
+  // […]) …)`'s bindings.
+  const letForm = name ? "named let" : "let";
+  if (bindings instanceof AVector && bindings.evalElements) {
+    throw bracketBindingsListError(bindings, letForm);
+  }
+
   // Create new environment
   const letResolver = ctxResolver(ctx).child("let", "let");
 
@@ -1644,6 +1704,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     let bindNode: SchemeValue = bindings;
     while (is_pair(bindNode)) {
       const binding = bindNode.car;
+      if (binding instanceof AVector && binding.evalElements) {
+        throw bracketBindingError(binding, letForm, bindNode[LOCATION]);
+      }
       if (is_pair(binding) && binding.car instanceof ASymbol) {
         params.push(binding.car);
       }
@@ -1719,6 +1782,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
+    if (binding instanceof AVector && binding.evalElements) {
+      throw bracketBindingError(binding, letForm, bindNode[LOCATION]);
+    }
     invariant(is_pair(binding), "let: invalid binding");
 
     const varName = binding.car;
@@ -1760,6 +1826,10 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
+  if (bindings instanceof AVector && bindings.evalElements) {
+    throw bracketBindingsListError(bindings, "let*");
+  }
+
   // Create new environment
   const letStarResolver = ctxResolver(ctx).child("let*", "let*");
 
@@ -1767,6 +1837,9 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
+    if (binding instanceof AVector && binding.evalElements) {
+      throw bracketBindingError(binding, "let*", bindNode[LOCATION]);
+    }
     invariant(is_pair(binding), "let*: invalid binding");
 
     const varName = binding.car;
@@ -1800,6 +1873,10 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
+  if (bindings instanceof AVector && bindings.evalElements) {
+    throw bracketBindingsListError(bindings, "letrec");
+  }
+
   // Create new environment
   const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
 
@@ -1808,6 +1885,9 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
+    if (binding instanceof AVector && binding.evalElements) {
+      throw bracketBindingError(binding, "letrec", bindNode[LOCATION]);
+    }
     invariant(is_pair(binding), "letrec: invalid binding");
 
     const varName = binding.car;
@@ -2224,6 +2304,9 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   invariant(is_pair(rest), "do: missing bindings");
 
   const bindings = rest.car;
+  if (bindings instanceof AVector && bindings.evalElements) {
+    throw bracketBindingsListError(bindings, "do");
+  }
   const restCdr = rest.cdr;
   invariant(is_pair(restCdr), "do: missing test clause");
 
@@ -2251,6 +2334,9 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = bindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
+    if (binding instanceof AVector && binding.evalElements) {
+      throw bracketBindingError(binding, "do", bindNode[LOCATION]);
+    }
     invariant(is_pair(binding), "do: invalid binding");
 
     const varName = binding.car;
