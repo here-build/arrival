@@ -84,6 +84,17 @@ export type SerializeOpts = {
    *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
    *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
   format?: (sexpr: SExpr) => string;
+  /** COMPETENCE-GATED banner pedagogy (V's design, 2026-07-05): suppress the reduced-output
+   *  banner's collection-processing remedy clause ("filter/map/reduce the collection…") when
+   *  the caller has already demonstrated the model can do this — the banner's FACTUAL part
+   *  (that reduction happened + the applied limits) is unaffected, only this one teaching
+   *  clause is dropped. Independent of `suppressStringRemedy`; a caller may suppress one,
+   *  both, or neither. Default (unset/false) ⇒ unchanged behaviour (the clause always shows
+   *  when a collection was capped). */
+  suppressCollectionRemedy?: boolean;
+  /** Same as `suppressCollectionRemedy`, for the string-slicing remedy clause ("slice the
+   *  long string with substring…"), gated by demonstrated string-processing competence. */
+  suppressStringRemedy?: boolean;
 };
 
 export type SExprSerializable =
@@ -713,12 +724,19 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     // The banner states the APPLIED `maxTotalChars` — whether that's the world default or a
     // caller's per-call override (possibly clamped to a bound), the number here is always the
     // budget actually honored, so a clamped request is never a silent reinterpretation.
+    //
+    // COMPETENCE GATING: each remedy clause is shown only when its collection actually capped
+    // AND the caller hasn't already flagged that competence as demonstrated. The FACTUAL part
+    // of the banner (the reduction happened, the applied limits) is never gated — only the
+    // pedagogy clause is.
+    const showCollectionRemedy = cappedCollection && !opts.suppressCollectionRemedy;
+    const showStringRemedy = cappedString && !opts.suppressStringRemedy;
     const remedy =
-      cappedCollection && cappedString
+      showCollectionRemedy && showStringRemedy
         ? " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need"
-        : cappedCollection
+        : showCollectionRemedy
           ? " — filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back"
-          : cappedString
+          : showStringRemedy
             ? " — slice the long string with substring, or scan it with string-contains, to pull just the part you need"
             : "";
     out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;

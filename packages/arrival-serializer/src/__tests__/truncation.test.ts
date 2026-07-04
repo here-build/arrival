@@ -68,6 +68,60 @@ describe("streaming truncation (opt-in)", () => {
     expect(both).toContain("substring");
   });
 
+  describe("competence-gated remedy suppression (suppressCollectionRemedy / suppressStringRemedy)", () => {
+    const manyItems = Array.from({ length: 800 }, (_, i) => ({ id: i }));
+    const hugeString = "q".repeat(50000);
+    const mixed = Array.from({ length: 800 }, (_, i) => ({ id: i, blob: "z".repeat(500) }));
+
+    it("suppressCollectionRemedy drops the collection clause but keeps the factual banner part", () => {
+      const out = toSExprString(manyItems, { maxTotalChars: 500, suppressCollectionRemedy: true });
+      expect(out).toContain("⚠ output reduced to fit response budget of 500 chars");
+      expect(out).toContain("showing ≤");
+      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("substring");
+    });
+
+    it("suppressStringRemedy drops the string clause but keeps the factual banner part", () => {
+      const out = toSExprString(hugeString, { maxTotalChars: 400, maxStringChars: 30000, suppressStringRemedy: true });
+      expect(out).toContain("⚠ output reduced to fit response budget of 400 chars");
+      expect(out).toContain("showing ≤");
+      expect(out).not.toContain("substring");
+      expect(out).not.toContain("filter/map/reduce the collection");
+    });
+
+    it("suppresses independently — collection flag alone still teaches the string remedy on a both-capped result", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000, suppressCollectionRemedy: true });
+      expect(out).toContain("⚠ output reduced to fit");
+      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).toContain("substring");
+    });
+
+    it("suppresses independently — string flag alone still teaches the collection remedy on a both-capped result", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000, suppressStringRemedy: true });
+      expect(out).toContain("⚠ output reduced to fit");
+      expect(out).toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("substring");
+    });
+
+    it("both flags set → banner has neither remedy clause, only the factual part", () => {
+      const out = toSExprString(mixed, {
+        maxTotalChars: 3000,
+        suppressCollectionRemedy: true,
+        suppressStringRemedy: true,
+      });
+      expect(out).toContain("⚠ output reduced to fit");
+      expect(out).not.toContain("filter/map/reduce the collection");
+      expect(out).not.toContain("substring");
+    });
+
+    it("no flags set (regression pin) → unchanged current text, both clauses present when both cap", () => {
+      const out = toSExprString(mixed, { maxTotalChars: 3000 });
+      expect(out).toContain(
+        " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need",
+      );
+    });
+  });
+
   it("shrink-to-fit is FAIR across siblings — both PSLIST and PSSCAN survive the diff", () => {
     const pslist = Array.from({ length: 500 }, (_, i) => ({ pid: i, name: `proc${i}` }));
     const psscan = Array.from({ length: 600 }, (_, i) => ({ pid: i, name: `scan${i}` }));
