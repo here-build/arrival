@@ -292,6 +292,26 @@ function emitList(node: ListNode): string {
         // A stray unquote/unquote-splicing OUTSIDE a quasiquote (malformed, but kept
         // inert): degrade to the live inner expression, same as before.
         return items[1] === undefined ? "undefined" : emitNode(items[1]);
+      // ── s.* combinators: TS RESERVED-WORD forms lowered to calls on the `s` property
+      // bag (carriers.ts) instead of a bare head — `if(...)`/`let(...)`/`do(...)` as a
+      // CALL parse-catastrophes (the token starts a statement, not an expression).
+      case "if":
+        return emitIf(items);
+      case "let":
+        return emitLet(items);
+      case "let*":
+        return emitLetStar(items[1], items.slice(2));
+      case "letrec":
+      case "letrec*":
+        // Advisory fidelity only — mutual-recursion scoping is not modeled; same flat
+        // emission as plain `let` (s.let), per the design decision.
+        return emitLetBindings(items[1], items.slice(2));
+      case "cond":
+        return emitCond(items.slice(1));
+      case "do":
+        return `s.do(${emitCallArgs(items.slice(1))})`;
+      case "case":
+        return `s.case(${emitCallArgs(items.slice(1))})`;
     }
   }
 
@@ -400,4 +420,92 @@ function emitDict(items: Node[]): string {
     pairs.push(`${propKey(key)}: ${value}`);
   }
   return pairs.length === 0 ? "{}" : `{ ${pairs.join(", ")} }`;
+}
+
+// ── s.* combinators — the reserved-word forms (carriers.ts's `s` namespace) ────────────
+
+/** `(if c a b)` → `s.if(c, a, b)`; `(if c a)` (no else) → `s.if(c, a)`. */
+function emitIf(items: Node[]): string {
+  const c = items[1] === undefined ? "undefined" : emitNode(items[1]);
+  const a = items[2] === undefined ? "undefined" : emitNode(items[2]);
+  if (items[3] === undefined) return `s.if(${c}, ${a})`;
+  return `s.if(${c}, ${a}, ${emitNode(items[3])})`;
+}
+
+/** One `((name value) …)` binding-list read as parallel `{ names, values }` arrays — the
+ *  shared shape `let`/named-let/letrec pull their binding pairs from. A malformed binding
+ *  (no name) is skipped rather than crashing the emitter. */
+function readBindings(bindingsNode: Node | undefined): { names: string[]; values: string[] } {
+  const bindings = isList(bindingsNode) ? bindingsNode.list : [];
+  const names: string[] = [];
+  const values: string[] = [];
+  for (const b of bindings) {
+    if (!isList(b)) continue;
+    const nameNode = b.list[0];
+    if (!isWord(nameNode)) continue;
+    names.push(nameNode.atom);
+    values.push(b.list[1] === undefined ? "undefined" : emitNode(b.list[1]));
+  }
+  return { names, values };
+}
+
+function letBodyTs(body: Node[]): string {
+  return body.length === 0 ? "undefined" : body.length === 1 ? emitNode(body[0]) : `(${emitSeq(body).join(", ")})`;
+}
+
+/** `(let ((a v1) (b v2)) body…)` → `s.let(v1, v2, (a, b) => body)` — a single flat call.
+ *  Also the emission target for `letrec`/`letrec*` (advisory fidelity — mutual-recursion
+ *  scoping is not modeled). */
+function emitLetBindings(bindingsNode: Node | undefined, body: Node[]): string {
+  const { names, values } = readBindings(bindingsNode);
+  const lambda = `(${names.join(", ")}) => ${letBodyTs(body)}`;
+  return `s.let(${[...values, lambda].join(", ")})`;
+}
+
+/** `(let …)` dispatch: a WORD immediately after `let` is a named let (`(let loop ((i 0))
+ *  body…)`), never a bindings list — plain `let`'s bindings position is always a list
+ *  (possibly empty, `()`), never a bare symbol. */
+function emitLet(items: Node[]): string {
+  const second = items[1];
+  if (isWord(second)) return emitNamedLet(second.atom, items[2], items.slice(3));
+  return emitLetBindings(second, items.slice(2));
+}
+
+/** Named let: `(let loop ((i 0)) body…)` → `s.namedLet(0, (loop, i) => body)`. */
+function emitNamedLet(loopName: string, bindingsNode: Node | undefined, body: Node[]): string {
+  const { names, values } = readBindings(bindingsNode);
+  const lambda = `(${[loopName, ...names].join(", ")}) => ${letBodyTs(body)}`;
+  return `s.namedLet(${[...values, lambda].join(", ")})`;
+}
+
+/** `let*` → NESTED `s.let` calls — sequential scoping (each binding's value can see the
+ *  previous ones) is structural and can't be expressed as one flat call. */
+function emitLetStar(bindingsNode: Node | undefined, body: Node[]): string {
+  const bindings = isList(bindingsNode) ? bindingsNode.list : [];
+  return emitLetStarFrom(bindings, 0, body);
+}
+
+function emitLetStarFrom(bindings: Node[], i: number, body: Node[]): string {
+  if (i >= bindings.length) return letBodyTs(body);
+  const b = bindings[i];
+  if (!isList(b)) return emitLetStarFrom(bindings, i + 1, body); // skip a malformed binding
+  const nameNode = b.list[0];
+  const name = isWord(nameNode) ? nameNode.atom : "_";
+  const value = b.list[1] === undefined ? "undefined" : emitNode(b.list[1]);
+  const inner = emitLetStarFrom(bindings, i + 1, body);
+  return `s.let(${value}, (${name}) => ${inner})`;
+}
+
+/** `(cond (test e…) … (else d…))` → `s.cond([test, e], …, [true, d])` — `else` → `true`
+ *  (the `else(` head is what breaks `cond` today); a multi-expression clause body folds to
+ *  a comma sequence, same as everywhere else. */
+function emitCond(clauses: Node[]): string {
+  const parts = clauses.map((clause) => {
+    if (!isList(clause)) return "[true, undefined]";
+    const [test, ...bodyItems] = clause.list;
+    const isElse = isWord(test) && test.atom === "else";
+    const testTs = isElse || test === undefined ? "true" : emitNode(test);
+    return `[${testTs}, ${letBodyTs(bodyItems)}]`;
+  });
+  return `s.cond(${parts.join(", ")})`;
 }

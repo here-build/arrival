@@ -37,6 +37,10 @@ function compileErrors(source: string): string[] {
 
 const ts1 = (src: string) => lower(src).ts;
 
+/** The bare carrier vocabulary (carriers.ts, including the `s` namespace) as ambient TS —
+ *  no harvested tool entries, just the `assembleHarvestedPrelude([]).prelude`'s carrier text. */
+const carrierVocabularyText = assembleHarvestedPrelude([]).prelude;
+
 describe("lower — scheme → TS emitter", () => {
   it("application keeps the head + scheme arg order", () => {
     expect(ts1("(foo a b)")).toBe("foo(a, b)");
@@ -175,6 +179,63 @@ describe("lower — top-level define lowers to a const statement", () => {
   it("integration: a defined helper's arity mismatch actually type-checks against real params", () => {
     const errors = compileErrors(`${lower("(define (add2 a b) a) (add2 1)").ts}\n`);
     expect(errors.length).toBeGreaterThan(0); // TS2554 — too few arguments
+  });
+});
+
+describe("lower — s.* combinators (TS reserved-word forms)", () => {
+  it("if → s.if(c, a, b) / s.if(c, a)", () => {
+    expect(ts1("(if #t 1 2)")).toBe("s.if(true, 1, 2)");
+    expect(ts1("(if #t 1)")).toBe("s.if(true, 1)");
+  });
+
+  it("let → s.let(v1, v2, (a, b) => body)", () => {
+    expect(ts1("(let ((a 1) (b 2)) (+ a b))")).toBe("s.let(1, 2, (a, b) => _.$plus$(a, b))");
+  });
+
+  it("named let → s.namedLet(v, (loop, i) => body)", () => {
+    expect(ts1("(let loop ((i 0)) (loop i))")).toBe("s.namedLet(0, (loop, i) => loop(i))");
+  });
+
+  it("let* → nested s.let calls (sequential scoping)", () => {
+    expect(ts1("(let* ((a 1) (b a)) b)")).toBe("s.let(1, (a) => s.let(a, (b) => b))");
+  });
+
+  it("letrec / letrec* → the same flat emission as let (advisory fidelity)", () => {
+    expect(ts1("(letrec ((a 1)) a)")).toBe("s.let(1, (a) => a)");
+    expect(ts1("(letrec* ((a 1)) a)")).toBe("s.let(1, (a) => a)");
+  });
+
+  it("cond → s.cond([test, e], …, [true, d]) — else becomes true", () => {
+    expect(ts1("(cond (#t 1) (else 2))")).toBe("s.cond([true, 1], [true, 2])");
+  });
+
+  it("do / case → parse-safety only", () => {
+    expect(ts1("(do 1 2)")).toBe("s.do(1, 2)");
+    expect(ts1("(case x (1 2))")).toBe("s.case(x, _.$1$(2))"); // parse-safety only — shape is incidental
+  });
+
+  it("a reserved word in ARGUMENT/value position routes through `_`, never prints bare", () => {
+    expect(ts1("(f for)")).toBe("f(_.for)");
+    expect(ts1("(f class new return)")).toBe("f(_.class, _.new, _.return)");
+  });
+
+  it("integration: (if ...) type-checks and narrows through the carrier `s` namespace", () => {
+    const errors = compileErrors(`${carrierVocabularyText}\n${lower("(if #t 1 2)").ts}\n`);
+    expect(errors).toEqual([]);
+    const narrowed: string = "const _x: number = s.if(true, 1, 2);";
+    expect(compileErrors(`${carrierVocabularyText}\n${narrowed}\n`)).toEqual([]);
+  });
+
+  it("integration: (let ((a 1)) a) type-checks and infers the bound type", () => {
+    const errors = compileErrors(`${carrierVocabularyText}\nconst _x: number = ${lower("(let ((a 1)) a)").ts};\n`);
+    expect(errors).toEqual([]);
+  });
+
+  it("integration: (cond (#t 1) (else 2)) type-checks", () => {
+    const errors = compileErrors(
+      `${carrierVocabularyText}\nconst _x: number = ${lower("(cond (#t 1) (else 2))").ts};\n`,
+    );
+    expect(errors).toEqual([]);
   });
 });
 
