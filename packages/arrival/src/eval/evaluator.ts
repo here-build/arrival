@@ -38,8 +38,14 @@ import {
   is_macro,
   is_nil,
   is_pair as is_pair_raw,
+  is_plain_object,
   is_promise,
 } from "./guards.js";
+// The shared scheme-visible type-namer — the same helper syntax-rules.ts already
+// uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
+// the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
+// instead of a raw `typeof`, which collapses every boxed value to "object".
+import { type } from "../utils/typecheck.js";
 
 // Evaluator-domain refinement of `is_pair`. The shared `is_pair` (value-guards)
 // narrows only to `APair<unknown, unknown>` because `APair` is generic over its
@@ -2678,6 +2684,57 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerato
   return yield* evaluatePair(code, ctx);
 }
 
+// ── Not-callable doors ───────────────────────────────────────────────────────
+// Both application-position invariants below are MODEL-REACHABLE (a model can
+// trivially write a program that quotes a call head, or over-parenthesizes),
+// so per Rule 0 (assert internally, validate at the boundary) they throw plain
+// doors instead of `invariant()` — an `invariant()` failure here would prefix
+// every message with "Invariant failed: ", which reads like an engine bug
+// rather than a program mistake, and (per the MCP-Atlas error-corpus autopsy)
+// the OLD `Cannot apply object: <toString>` wording actively misled: for a
+// string head it echoed the string's own content, so the door read exactly
+// like a failed TOOL CALL rather than a syntax mistake.
+
+/**
+ * Shared "operator position holds a non-callable value" door — used both by
+ * `nonCallableHeadError` below (a literal head that isn't a string, e.g. a
+ * bare number/vector/boolean) and by the post-dispatch site at the bottom of
+ * `evaluatePair` (a COMPUTED head — `((f x) y)` — or any resolved value that
+ * fell through every callable check). Names the actual scheme-visible type via
+ * `type()` (dict/vector/pair/number/…) rather than `typeof`, which collapses
+ * every boxed value to "object". The over-parenthesization hint targets the
+ * corpus's #4 class (`((call))` / Python-habit `print(x)`), the most common
+ * route to a non-function value reaching call-head position.
+ */
+function notCallableError(value: unknown): Error {
+  const typeName = value instanceof AJSObject || is_plain_object(value) ? "dict" : type(value);
+  return new Error(
+    `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
+      ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
+  );
+}
+
+/**
+ * Door for a non-callable LITERAL sitting directly in operator position —
+ * `[("open-library/get_book_by_title" :title "…")]` or `(42 :x 1)`. A quoted
+ * string is the #1 MCP-Atlas corpus class: models write a tool/symbol name as
+ * a STRING in call-head position (data, not a reference), and the old message
+ * echoed the string's own content back, which reads like the tool itself
+ * failed. Every other literal type (number, vector, boolean, …) falls through
+ * to the shared `notCallableError` door above so the wording never drifts
+ * between the two application-position sites.
+ */
+function nonCallableHeadError(first: SchemeValue): Error {
+  if (first instanceof AString) {
+    const content = first.valueOf();
+    return new Error(
+      `"${content}" is a string, not a function — a quoted name is data, it is never called. ` +
+        `Drop the quotes and call the symbol directly: (${content} …).`,
+    );
+  }
+  return notCallableError(first);
+}
+
 // `code`'s car/cdr are SchemeValues: every caller narrows via the evaluator's
 // `is_pair` (→ `APair<SchemeValue, SchemeValue>`) before dispatching here, so the
 // form head and tail are boxed scheme values, not the generic `unknown` slots
@@ -2750,7 +2807,9 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn);
     }
   } else {
-    invariant(is_function(first), `Cannot apply ${typeof first}: ${first}`);
+    if (!is_function(first)) {
+      throw nonCallableHeadError(first);
+    }
     fn = first;
   }
 
@@ -2973,7 +3032,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // Nothing above matched — fn is not a callable value kind. (A borrowed JS
   // function is no longer callable: it crosses the membrane as #void, so it
   // never reaches here as a call head.)
-  invariant(false, `Not callable: ${typeof fn}`);
+  throw notCallableError(fn);
 }
 
 /**
