@@ -17,10 +17,13 @@
 //     arrival ships no IO surface (see r7rs/host.ts) — it is a teaching door, not a
 //     silent no-op.
 //   • Directives: `~a` (display), `~s` (write), `~d` (decimal number), `~%` (newline),
-//     `~~` (literal tilde). SRFI-48's numeric-column / `~w` / `~f` / `~r` variants and
-//     `~t`/`~_` whitespace directives are NOT bound — they are presentation-layout, not
-//     value-rendering, and belong to a port-backed pretty-printer we don't ship.
-//   • Directive letters are case-insensitive (SRFI-48 admits `~A`/`~S`/`~D`).
+//     `~~` (literal tilde), plus one bounded SRFI-48 subset — `~F` / `~w,dF` fixed-point
+//     (optional width, optional `,decimals`; covers the CL-style `~,2f` models reach for
+//     right after `~d`). SRFI-48's numeric-COLUMN directives (`~w` alone), `~r` (radix/
+//     roman-numeral), and `~t`/`~_` whitespace directives are NOT bound — they are
+//     presentation-layout, not value-rendering, and belong to a port-backed pretty-
+//     printer we don't ship.
+//   • Directive letters are case-insensitive (SRFI-48 admits `~A`/`~S`/`~D`/`~F`).
 //
 // PROVENANCE: `format` is a COLLAPSING op (it folds the fmt string + every arg into one
 // fresh string), so — exactly like `string-append` / `string-join` — the result is
@@ -55,7 +58,8 @@ const isHashF = (v: unknown): boolean => v === false || (v instanceof ABool && v
 const DEST_REASON =
   "format here is string-only: it returns the formatted string. A #t or port destination would stream to a port, but arrival ships no IO surface (it is a pure inference plane). Use (format #f ...) or (format \"...\" ...) to GET the string, then return it from your dataflow";
 
-const SUPPORTED = "~a (display) ~s (write) ~d (decimal) ~% (newline) ~~ (literal tilde)";
+const SUPPORTED =
+  "~a (display) ~s (write) ~d (decimal) ~F / ~w,dF (fixed-point, e.g. ~,2f) ~% (newline) ~~ (literal tilde)";
 
 /** Display-style render (strings bare) — the printer's sole renderer. */
 const displayOf = (arg: unknown): string => printValue(arg);
@@ -72,7 +76,7 @@ const writeOf = (arg: unknown): string => {
 export default new EnvCapability("scheme/srfi-28", {
   symbols: {
     format:
-      symbol.native`format: (format fmt arg ...) or (format #f fmt arg ...) → the fmt string with ~a (display) ~s (write) ~d (decimal) ~% (newline) ~~ (tilde) directives filled from the args; string-only (a #t/port destination is a teaching door — no IO here) (SRFI-28/48)`(
+      symbol.native`format: (format fmt arg ...) or (format #f fmt arg ...) → the fmt string with ~a (display) ~s (write) ~d (decimal) ~F/~w,dF (fixed-point, e.g. ~,2f) ~% (newline) ~~ (tilde) directives filled from the args; string-only (a #t/port destination is a teaching door — no IO here) (SRFI-28/48)`(
         { input: z.array(z.unknown()), output: [z.union([z.string, z.schemeString])] },
         (...args: unknown[]): string | AString => {
           // ── Resolve destination vs format string ───────────────────────────────
@@ -132,6 +136,36 @@ export default new EnvCapability("scheme/srfi-28", {
                 [],
               );
             }
+            // ── ~F / ~w,dF — SRFI-48's fixed-point directive family, a BOUNDED subset:
+            // an optional width, an optional `,decimals`, then a case-insensitive `f`/`F`
+            // — enough to cover `~,2f`, the CL-style habit models reach for right after
+            // ~a/~s/~d (MCP-Atlas error-corpus `format-unknown-directive:~,` class). Tried
+            // BEFORE the single-char switch below because the directive is multi-char
+            // (digits + comma), unlike every other directive here. The rest of SRFI-48
+            // (~r/~t/~c/~p, column directives, port-backed padding chars) is intentionally
+            // NOT implemented — see the module header's scope-narrowing note.
+            const fixedPoint = /^(\d*)(?:,(\d*))?[fF]/.exec(fmt.slice(i + 1));
+            if (fixedPoint) {
+              const [directiveText, widthStr, decimalsStr] = fixedPoint;
+              const width = widthStr ? Number.parseInt(widthStr, 10) : undefined;
+              const decimals = decimalsStr ? Number.parseInt(decimalsStr, 10) : undefined;
+              const n = nextArg(`~${directiveText}`);
+              if (!isSchemeNumber(n)) {
+                throw new ArrivalError(
+                  `format: the ~${directiveText} directive expects a number, got ${displayOf(n)}`,
+                  [],
+                );
+              }
+              const num = typeof n === "number" ? n : Number((n as { valueOf(): number | bigint }).valueOf());
+              let rendered = decimals === undefined ? String(num) : num.toFixed(decimals);
+              if (width !== undefined && rendered.length < width) {
+                rendered = " ".repeat(width - rendered.length) + rendered;
+              }
+              out += rendered;
+              i += directiveText.length; // advance past the consumed digits/comma/letter
+              continue;
+            }
+
             const d = fmt[++i];
             switch (d) {
               case "a":
@@ -159,7 +193,8 @@ export default new EnvCapability("scheme/srfi-28", {
                 break;
               default:
                 throw new ArrivalError(
-                  `format: unknown directive ~${d} in "${fmt}" — supported directives are ${SUPPORTED}`,
+                  `format: unknown directive ~${d} in "${fmt}" — supported directives are ${SUPPORTED}` +
+                    ` — nearest form: numbers use ~d (integer) or ~F / ~w,dF (fixed-point); text uses ~a (display) or ~s (write)`,
                   [],
                 );
             }

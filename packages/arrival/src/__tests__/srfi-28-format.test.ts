@@ -73,6 +73,44 @@ describe("format — SRFI-28 proper (format fmt arg ...)", () => {
   });
 });
 
+describe("format — ~F / ~w,dF fixed-point (SRFI-48 bounded subset)", () => {
+  it("~,2f — no width, 2 decimals (the #1 CL-style habit this door completes)", async () => {
+    expect(js(await run('(format "~,2f" 3.14159)'))).toBe("3.14");
+  });
+
+  it("~F alone — no width, no decimals, free-format render", async () => {
+    expect(js(await run('(format "~f" 3.5)'))).toBe("3.5");
+  });
+
+  it("~w,dF — width AND decimals, left-padded with spaces", async () => {
+    expect(js(await run('(format "[~8,2f]" 3.14159)'))).toBe("[    3.14]");
+  });
+
+  it("width-only (no comma, no decimals) is also accepted — free-format render, left-padded", async () => {
+    expect(js(await run('(format "[~6f]" 3.5)'))).toBe("[   3.5]");
+  });
+
+  it("a genuinely unsupported SRFI-48 directive (~r, radix) still errors, listing ~F in the supported set", async () => {
+    await expect(run('(format "~r" 42)')).rejects.toThrow(/unknown directive ~r/);
+    await expect(run('(format "~r" 42)')).rejects.toThrow(/~F/);
+  });
+
+  it("case-insensitive: ~F and ~f behave identically", async () => {
+    const upper = await run('(format "~,1F" 2.25)');
+    const lower = await run('(format "~,1f" 2.25)');
+    expect(js(upper)).toBe(js(lower));
+  });
+
+  it("~,2f with a non-number argument is an error, naming the directive", async () => {
+    await expect(run('(format "~,2f" "not-a-number")')).rejects.toThrow(/~,2f directive expects a number/);
+  });
+
+  it("rounds via toFixed semantics", async () => {
+    expect(js(await run('(format "~,0f" 2.5)'))).toBe("3");
+    expect(js(await run('(format "~,2f" 1)'))).toBe("1.00");
+  });
+});
+
 describe("format — ~s vs ~a on a string (quoted vs bare)", () => {
   it("~a renders a string bare, ~s renders it quoted", async () => {
     expect(js(await run('(format "~a" "hi")'))).toBe("hi");
