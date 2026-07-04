@@ -121,6 +121,28 @@ describe("lower — quoted data recurses (the false-positive killer)", () => {
   });
 });
 
+describe("lower — quasiquote degrades to quoted data, unquote stays live", () => {
+  it("a quasiquoted list with no unquote lowers exactly like a quote", () => {
+    expect(ts1("`(a b c)")).toBe("list(a, b, c)");
+  });
+
+  it("an (unquote e) node inside emits the LIVE expression, not further-quoted data", () => {
+    expect(ts1("`(a ,b c)")).toBe("list(a, b, c)");
+  });
+
+  it("unquote-splicing also emits the live expression", () => {
+    expect(ts1("`(a ,@b c)")).toBe("list(a, b, c)");
+  });
+
+  it("a nested quasiquoted list still recurses as quoted data", () => {
+    expect(ts1("`((a ,b) c)")).toBe("list(list(a, b), c)");
+  });
+
+  it("a stray unquote outside a quasiquote stays inert (degrades to the live inner expr)", () => {
+    expect(ts1(",b")).toBe("b");
+  });
+});
+
 describe("lower — integration: lowered call ∩ harvested prelude", () => {
   // get-route takes a proper list (z.pair | z.nil → List) + a string; set-timer takes a number.
   const getRoute = symbol.rosetta`get-route: route between stops`(

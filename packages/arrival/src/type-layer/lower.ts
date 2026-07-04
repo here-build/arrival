@@ -234,10 +234,11 @@ function emitList(node: ListNode): string {
       case "dict":
         return emitDict(items);
       case "quasiquote":
+        return emitQuasiquote(items[1]);
       case "unquote":
       case "unquote-splicing":
-        // TODO: quasiquotation is not lowered yet — degrade to the inner datum so a
-        // type stays inferable rather than emitting broken syntax.
+        // A stray unquote/unquote-splicing OUTSIDE a quasiquote (malformed, but kept
+        // inert): degrade to the live inner expression, same as before.
         return items[1] === undefined ? "undefined" : emitNode(items[1]);
     }
   }
@@ -265,6 +266,26 @@ function emitQuote(datum: Node | undefined): string {
  *  plain value image (symbol → identifier, unchanged this round). */
 function emitQuotedDatum(datum: Node): string {
   return isList(datum) ? emitQuoteLikeList(datum.list, emitQuotedDatum) : emitNode(datum);
+}
+
+/** `(quasiquote X)` from `` `X ``. Degrades to QUOTED DATA exactly like `emitQuote` — a
+ *  nested list recurses, a dotted tail folds to `cons` — EXCEPT an `(unquote e)` /
+ *  `(unquote-splicing e)` node found ANYWHERE inside emits the LIVE expression `emitNode(e)`,
+ *  not further-quoted data. No interpolation/splicing semantics are modeled (advisory
+ *  typing only, per the type-layer's inference-only contract) — the unquoted piece's
+ *  inferred type is what narrows; splicing behaves identically to plain unquote here. */
+function emitQuasiquote(datum: Node | undefined): string {
+  return datum === undefined ? "list()" : emitQuasiDatum(datum);
+}
+
+function emitQuasiDatum(datum: Node): string {
+  if (!isList(datum)) return emitNode(datum);
+  const head = datum.list[0];
+  if (isWord(head) && (head.atom === "unquote" || head.atom === "unquote-splicing")) {
+    const inner = datum.list[1];
+    return inner === undefined ? "undefined" : emitNode(inner);
+  }
+  return emitQuoteLikeList(datum.list, emitQuasiDatum);
 }
 
 /** Shared list-body emitter for QUOTE and QUASIQUOTE: fuses `#` + list into a vector (as
