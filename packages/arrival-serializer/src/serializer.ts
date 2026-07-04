@@ -710,6 +710,9 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     // Teach the RELEVANT remedy at the moment of over-fetch — a truncated result is the one
     // instant the "process it in-REPL, don't page it into context" lesson lands, because the
     // cost and the fix coincide. Tailored by what actually capped (collection / string / both).
+    // The banner states the APPLIED `maxTotalChars` — whether that's the world default or a
+    // caller's per-call override (possibly clamped to a bound), the number here is always the
+    // budget actually honored, so a clamped request is never a silent reinterpretation.
     const remedy =
       cappedCollection && cappedString
         ? " — filter/map/reduce the collection and slice long strings (substring, string-contains) to keep only what you need"
@@ -718,7 +721,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
           : cappedString
             ? " — slice the long string with substring, or scan it with string-contains, to pull just the part you need"
             : "";
-    out = `#| ⚠ output reduced to fit response budget (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
+    out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
   }
   return out;
 };
