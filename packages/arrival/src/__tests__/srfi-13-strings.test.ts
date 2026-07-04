@@ -202,4 +202,27 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
     expect(js(r)).toBe("Alloy");
   });
+
+  // Gauche/Guile/MIT accept a CHARACTER delimiter, not just a string — the idiom a
+  // model trained on those dialects reaches for by reflex. MCP-Atlas error-corpus
+  // class `invariant-type-mismatch:string-split:expected-string-got-character` (9x
+  // rate, a cascade seed) is this exact mistake. Grain-completion: accept it, coerce
+  // to the single-char string it denotes; string-only behavior is unchanged.
+  it("accepts a character delimiter, behaviorally identical to the string form", async () => {
+    expect(js(await run('(length (string-split "a,b,c" #\\,))'))).toBe(3);
+    expect(js(await run('(cadr (string-split "a,b,c" #\\,))'))).toBe("b");
+    expect(js(await run('(car (string-split "abc" #\\,))'))).toBe("abc");
+    expect(js(await run("(null? (string-split \"\" #\\,))"))).toBe(true);
+  });
+
+  it("a character delimiter still taints pieces with the source string's lineage", async () => {
+    const r = await run('(car (string-split name #\\,))', { name: stamped("Alloy,exe", 7) });
+    expect(r).toBeInstanceOf(AValue);
+    expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
+    expect(js(r)).toBe("Alloy");
+  });
+
+  it("a non-string, non-character delimiter still errors with the type-mismatch door", async () => {
+    await expect(run('(string-split "a,b,c" 42)')).rejects.toThrow(/string-split/);
+  });
 });

@@ -320,18 +320,28 @@ export default new EnvCapability("scheme/srfi-13", {
 
     // SRFI-152 (NOT SRFI-13 — string-split is absent there); bound in this pack anyway
     // because it is the #1 symbol models reach for after seeing string-contains.
-    "string-split": symbol.native`string-split: the list of the string's pieces around a literal delimiter; empty string yields '() (SRFI-152)`(
-      { input: [z.schemeString, z.schemeString], output: [z.value] },
+    //
+    // DIALECT PRECEDENT: Gauche, Guile, and MIT/GNU Scheme all accept a single
+    // CHARACTER delimiter here (`(string-split "a,b,c" #\,)`), not just a string —
+    // it is the idiom a model trained on those dialects reaches for by reflex, and
+    // an MCP-Atlas error-corpus autopsy found it as a 9x-rate, cascade-seeding class
+    // (`invariant-type-mismatch:string-split:expected-string-got-character`). Rather
+    // than teach the string-only form, complete the grain: accept a character
+    // delimiter, coerced to the single-char string it denotes — string-only
+    // behavior (including the empty-subject/empty-list rule below) is unchanged.
+    "string-split": symbol.native`string-split: the list of the string's pieces around a literal delimiter — a string, or a single character (Gauche/Guile/MIT accept a char delimiter too); empty string yields '() (SRFI-152)`(
+      { input: [z.schemeString, z.union([z.schemeString, z.schemeChar])], output: [z.value] },
       (str: unknown, delimiter: unknown): APair | ANil => {
         typecheck("string-split", str, "string", 1);
-        typecheck("string-split", delimiter, "string", 2);
+        typecheck("string-split", delimiter, ["string", "character"], 2);
         const s = stringValue(str);
         // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
         if (s === "") return nil;
+        const delimiterStr = delimiter instanceof ACharacter ? charValue(delimiter) : stringValue(delimiter);
         const prov = collapseProvenance(str, delimiter);
         return APair.fromArray(
           CONSTANT_CTX,
-          s.split(stringValue(delimiter)).map((piece) => taintString(piece, prov)),
+          s.split(delimiterStr).map((piece) => taintString(piece, prov)),
         );
       },
     ),
