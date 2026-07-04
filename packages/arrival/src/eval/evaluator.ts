@@ -1611,44 +1611,51 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // Core Macros (implemented as special forms for performance)
 // ============================================================================
 
-// ── let-family bracket-binding doors ────────────────────────────────────────
-// Models trained on Racket/Clojure write `[a 1]` for let-family bindings.
+// ── let-family bracket-binding consumption ──────────────────────────────────
 // Arrival's reader never erases bracket kind — it survives as the produced
 // node's CLASS: `[…]` mints an `AVector` with `evalElements === true` (the
 // reader-literal marker — Parser.ts, on `[`); `(…)` mints an `APair`; `#(…)`
 // mints an `AVector` with `evalElements === false`. So `evalElements ===
-// true` at a binding-position node IS the detection — no reader/lexer
-// change, and the check lives in the failure branch each let-family site
-// already has (`invariant(is_pair(binding), …)`).
+// true` at a binding-position node IS the R2 detection — no reader/lexer
+// change (R1). Supersedes the bracket-let DOOR (`5259a9398a`) for
+// well-formed shapes; the door survives for malformed ones (R4).
+// Spec: docs/reference/bracket-bindings.md. Requirements:
+// docs/working-proposals/arrival-bracket-bindings-requirements.md (R1-R8).
 //
-// Two habits, two shapes, both gated the same way:
-//   - Racket per-pair:    (let* ([a 1] [b 2]) …)   — each PAIR is bracketed.
-//     Fires exactly where the existing per-pair invariant fires today.
-//   - Clojure whole-list: (let [a 1 b 2] …)        — the whole LIST is
-//     bracketed. `bindings` itself is the AVector, so the per-pair
-//     `while (is_pair(bindNode))` walk never enters — TODAY this silently
-//     binds zero variables and fails later as a confusing unbound-variable.
-//     Must be checked BEFORE that walk, once, right after `bindings` is read
-//     off the form (there is no enclosing cons cell to blame here, so no
-//     location is attached — the whole list itself is a bracket literal).
-// `evalElements === false` (a `#(…)` constant sitting in binding position) is
-// deliberately NOT absorbed — it falls through to the generic invariant so
-// the `[…]` vs `#(…)` distinction stays crisp.
+// Consumption is a PURE SYNTACTIC REWRITE (R3): `normalizeBindings` runs once,
+// before the existing per-binding walk, and produces the SAME cons-list-of-
+// pairs shape a hand-written paren form would produce. Once it returns, every
+// downstream line — the per-pair walk, the tail/provenance handling, the
+// error paths for shapes outside this contract — is completely unmodified
+// code evaluating a plain list. Equivalence to the paren image is therefore
+// structural, not case-by-case.
+//
+// Two surfaces:
+//   - R2a whole-list (Clojure): (let [a 1 b 2] …) — `bindings` itself is the
+//     vector. Rewritten to ((a 1) (b 2)) wholesale. NOT accepted for `do`
+//     (R2a exclusion — its 3-element steps make pairwise grouping
+//     ambiguous); `do` keeps the ORIGINAL door here, unchanged.
+//   - R2b per-element (Racket): each ELEMENT of the (paren or already-
+//     rewritten) bindings list may itself be a vector [a 1] / [i 0 (+ i 1)]
+//     (do only) — rewritten to (a 1) / (i 0 (+ i 1)) in place. R2c mixing is
+//     free: a paren-pair element passes through with its own identity
+//     untouched, so a bindings list may freely mix (a 1) and [b 2] elements.
+//
+// `evalElements === false` (`#(…)`) is NEVER touched (R5) — it isn't an
+// AVector this code recognizes as bindings syntax, so it falls straight
+// through to the generic `invariant(is_pair(binding), …)` below, unchanged.
+//
+// R4 malformed shapes keep the TWO already-committed door codes
+// (`5259a9398a`) — their meanings narrow to genuine malformations now that
+// well-formed shapes consume instead of dooring:
+//   - E-LET-BRACKET-BINDINGS-LIST: odd element count in a whole-list vector,
+//     OR the whole-list form used on `do` (unchanged from the original door).
+//   - E-LET-BRACKET-BINDING: a per-element vector of the wrong length, or a
+//     non-symbol (including a destructuring vector) in the binding-name slot.
 
-/** Racket habit: a single binding PAIR bracketed — `[a 1]` where `(a 1)` was expected.
- *  `location` is the enclosing binding-list cons cell (`bindNode[LOCATION]`) — the
- *  `[…]` literal itself carries no location (Parser.ts never stamps one on it). */
-function bracketBindingError(binding: AVector, form: string, location?: SourceLocation): Error {
-  const els = binding.__vector__;
-  const rendered = els.map((el) => String(el)).join(" ");
-  return new EvalError(
-    `${form} bindings are pairs, not vectors — [${rendered}] here is a […] vector literal, and […] is reserved ` +
-      `for data (vectors/JSON arrays), never binding syntax. Write the binding with parens: (${rendered}).`,
-    { location, code: "E-LET-BRACKET-BINDING" },
-  );
-}
-
-/** Clojure habit: the whole bindings LIST bracketed — `[a 1 b 2]` where `((a 1) (b 2))` was expected. */
+/** `do` doesn't accept the whole-list form (R2a exclusion) — its 3-element
+ *  steps make pairwise grouping ambiguous. UNCHANGED from the original door
+ *  (`5259a9398a`); the other five forms consume this shape instead. */
 function bracketBindingsListError(bindings: AVector, form: string): Error {
   const els = bindings.__vector__;
   const rendered = els.map((el) => String(el)).join(" ");
@@ -1661,6 +1668,139 @@ function bracketBindingsListError(bindings: AVector, form: string): Error {
       `binding syntax. Wrap each binding in parens and the list in parens: (${pairs.join(" ")}).`,
     { code: "E-LET-BRACKET-BINDINGS-LIST" },
   );
+}
+
+/** R2a/R4: a whole-list vector's element count is odd — pairwise grouping leaves
+ *  the last name with no value. Same code as `bracketBindingsListError` above
+ *  (both are "the whole bracketed bindings LIST is malformed for this form"). */
+function wholeListOddCountError(bindings: AVector, form: string): Error {
+  const els = bindings.__vector__;
+  const rendered = els.map((el) => String(el)).join(" ");
+  return new EvalError(
+    `${form} bindings [${rendered}] has an odd number of elements (${els.length}) — a whole-list binding vector ` +
+      `is name/value pairs (\`[s1 v1 s2 v2 …]\`), so the count must be even. Add the missing value, or write the ` +
+      `bindings as a parenthesized list of pairs.`,
+    { code: "E-LET-BRACKET-BINDINGS-LIST" },
+  );
+}
+
+/** R2b/R4: a per-element vector's length is wrong (≠2; ≠2-3 for `do`). Code
+ *  `E-LET-BRACKET-BINDING` — shared with the non-symbol-name door below; both
+ *  are "this bracket binding ELEMENT is malformed" (the per-element sibling
+ *  of the whole-list code above). `location` is the enclosing binding-list
+ *  cons cell — the `[…]` literal itself carries no location (Parser.ts never
+ *  stamps one on it). */
+function bindingArityError(
+  binding: AVector,
+  form: string,
+  minLen: number,
+  maxLen: number,
+  location?: SourceLocation,
+): Error {
+  const els = binding.__vector__;
+  const rendered = els.map((el) => String(el)).join(" ");
+  const arity = minLen === maxLen ? `exactly ${minLen}` : `${minLen}–${maxLen}`;
+  const shape = maxLen > minLen ? "[name init] or [name init step]" : "[name value]";
+  return new EvalError(
+    `${form} binding [${rendered}] has ${els.length} element${els.length === 1 ? "" : "s"} — a bracketed ${form} ` +
+      `binding is ${shape} (${arity}), not ${els.length}. Fix the count, or write the binding with parens: ` +
+      `(${rendered}).`,
+    { location, code: "E-LET-BRACKET-BINDING" },
+  );
+}
+
+/** R2b/R4: a non-symbol in the binding-name slot. SPECIAL-cased text when the
+ *  name is itself a vector (Clojure destructuring: `[[x y] v]`) — that's not
+ *  a malformed pair but an unsupported binding FORM. Same code as the arity
+ *  door above. Reached from BOTH surfaces (R2a whole-list even-position names
+ *  and R2b per-element first-elements) via `buildBindingPair`. */
+function bindingNameError(name: SchemeValue, form: string, location?: SourceLocation): Error {
+  if (name instanceof AVector) {
+    return new EvalError(
+      `${form}: destructuring is not supported — bind the whole value to one name, then read parts with accessors.`,
+      { location, code: "E-LET-BRACKET-BINDING" },
+    );
+  }
+  return new EvalError(
+    `${form} binding name must be a symbol, got ${type(name)} (${String(name)}) — each binding is (name value); ` +
+      `give the value a plain symbol name.`,
+    { location, code: "E-LET-BRACKET-BINDING" },
+  );
+}
+
+/** Builds the cons-pair `(name val…)` a rewritten bracket binding lowers to —
+ *  shared by both R2a (whole-list) and R2b (per-element) rewriting so the
+ *  name-slot validation (and its destructuring special-case) is written once.
+ *  `parts` is `[name, value]` or `[name, value, step]` (do). */
+function buildBindingPair(form: string, parts: SchemeValue[], location: SourceLocation | undefined): APair {
+  const name = parts[0];
+  if (!(name instanceof ASymbol)) {
+    throw bindingNameError(name, form, location);
+  }
+  let cdr: SchemeValue = nil;
+  for (let i = parts.length - 1; i >= 1; i--) {
+    cdr = new APair(CONSTANT_CTX, parts[i], cdr);
+  }
+  return new APair(CONSTANT_CTX, name, cdr);
+}
+
+/**
+ * The R2/R3 syntactic rewrite: lowers a let-family `bindings` slot that uses
+ * either bracket surface into the plain cons-list-of-pairs shape the existing
+ * per-binding walk already understands, throwing door-grade errors (R4) for
+ * malformed shapes right here — BEFORE any walk begins. Once this returns,
+ * every line downstream evaluates a form with no bracket bindings in it at
+ * all, which is what makes R3's equivalence structural rather than
+ * case-by-case.
+ *
+ *  - `#(…)` (`evalElements === false`) and anything that isn't an `AVector`
+ *    pass straight through unchanged — R5 (never consumed) / the generic
+ *    invariant downstream is the right door for anything else malformed.
+ *  - `bindings` itself an `evalElements` vector (R2a whole-list) is rewritten
+ *    wholesale, unless `allowWholeList` is false (`do`'s R2a exclusion — the
+ *    caller passes `allowWholeList: false` and gets the ORIGINAL door).
+ *  - Each ELEMENT of a (paren, or whole-list-just-rewritten) bindings list
+ *    that is itself an `evalElements` vector (R2b per-element) is rewritten
+ *    in place; a paren-pair element (or anything else — the generic
+ *    invariant's job) passes through with its OWN identity, giving R2c
+ *    mixing for free.
+ */
+function normalizeBindings(
+  bindings: SchemeValue,
+  form: string,
+  allowWholeList: boolean,
+  minLen: number,
+  maxLen: number,
+): SchemeValue {
+  if (bindings instanceof AVector) {
+    if (!bindings.evalElements) return bindings;
+    if (!allowWholeList) throw bracketBindingsListError(bindings, form);
+    const els = bindings.__vector__;
+    if (els.length % 2 !== 0) throw wholeListOddCountError(bindings, form);
+    const items: SchemeValue[] = [];
+    for (let i = 0; i < els.length; i += 2) {
+      items.push(buildBindingPair(form, [els[i], els[i + 1]], undefined));
+    }
+    return APair.fromArray(CONSTANT_CTX, items, false);
+  }
+  if (!is_pair(bindings)) return bindings;
+
+  const items: SchemeValue[] = [];
+  let node: SchemeValue = bindings;
+  while (is_pair(node)) {
+    const binding = node.car;
+    if (binding instanceof AVector && binding.evalElements) {
+      const els = binding.__vector__;
+      if (els.length < minLen || els.length > maxLen) {
+        throw bindingArityError(binding, form, minLen, maxLen, node[LOCATION]);
+      }
+      items.push(buildBindingPair(form, els, node[LOCATION]));
+    } else {
+      items.push(binding);
+    }
+    node = node.cdr;
+  }
+  return APair.fromArray(CONSTANT_CTX, items, false);
 }
 
 /**
@@ -1690,9 +1830,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // "named let" reads clearer than "let" when the model bracketed `(let loop
   // […]) …)`'s bindings.
   const letForm = name ? "named let" : "let";
-  if (bindings instanceof AVector && bindings.evalElements) {
-    throw bracketBindingsListError(bindings, letForm);
-  }
+  // R2/R3: consume both bracket surfaces into the plain cons-list-of-pairs
+  // shape everything below already understands (see normalizeBindings).
+  const normalizedBindings = normalizeBindings(bindings, letForm, true, 2, 2);
 
   // Create new environment
   const letResolver = ctxResolver(ctx).child("let", "let");
@@ -1701,12 +1841,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   if (name) {
     // Collect parameter names
     const params: ASymbol[] = [];
-    let bindNode: SchemeValue = bindings;
+    let bindNode: SchemeValue = normalizedBindings;
     while (is_pair(bindNode)) {
       const binding = bindNode.car;
-      if (binding instanceof AVector && binding.evalElements) {
-        throw bracketBindingError(binding, letForm, bindNode[LOCATION]);
-      }
       if (is_pair(binding) && binding.car instanceof ASymbol) {
         params.push(binding.car);
       }
@@ -1779,12 +1916,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const names: ASymbol[] = [];
   const bindingCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
-  let bindNode: SchemeValue = bindings;
+  let bindNode: SchemeValue = normalizedBindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
-    if (binding instanceof AVector && binding.evalElements) {
-      throw bracketBindingError(binding, letForm, bindNode[LOCATION]);
-    }
     invariant(is_pair(binding), "let: invalid binding");
 
     const varName = binding.car;
@@ -1826,20 +1960,16 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
-  if (bindings instanceof AVector && bindings.evalElements) {
-    throw bracketBindingsListError(bindings, "let*");
-  }
+  // R2/R3: consume both bracket surfaces (see normalizeBindings).
+  const normalizedBindings = normalizeBindings(bindings, "let*", true, 2, 2);
 
   // Create new environment
   const letStarResolver = ctxResolver(ctx).child("let*", "let*");
 
   // Evaluate bindings sequentially. Bindings are non-tail; only body is.
-  let bindNode: SchemeValue = bindings;
+  let bindNode: SchemeValue = normalizedBindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
-    if (binding instanceof AVector && binding.evalElements) {
-      throw bracketBindingError(binding, "let*", bindNode[LOCATION]);
-    }
     invariant(is_pair(binding), "let*: invalid binding");
 
     const varName = binding.car;
@@ -1873,21 +2003,19 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
-  if (bindings instanceof AVector && bindings.evalElements) {
-    throw bracketBindingsListError(bindings, "letrec");
-  }
+  // R2/R3: consume both bracket surfaces (see normalizeBindings). Also covers
+  // letrec* — the SPECIAL_FORMS table aliases "letrec*" straight to this
+  // function (R7RS: letrec* evaluates left-to-right, same as our letrec).
+  const normalizedBindings = normalizeBindings(bindings, "letrec", true, 2, 2);
 
   // Create new environment
   const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
 
   // First pass: bind all names to undefined
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
-  let bindNode: SchemeValue = bindings;
+  let bindNode: SchemeValue = normalizedBindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
-    if (binding instanceof AVector && binding.evalElements) {
-      throw bracketBindingError(binding, "letrec", bindNode[LOCATION]);
-    }
     invariant(is_pair(binding), "letrec: invalid binding");
 
     const varName = binding.car;
@@ -2304,9 +2432,10 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   invariant(is_pair(rest), "do: missing bindings");
 
   const bindings = rest.car;
-  if (bindings instanceof AVector && bindings.evalElements) {
-    throw bracketBindingsListError(bindings, "do");
-  }
+  // R2/R3: consume the per-element bracket surface only — do does NOT accept
+  // the whole-list form (R2a exclusion; allowWholeList: false keeps the
+  // ORIGINAL door, unchanged). Arity is 2-3 ([name init] / [name init step]).
+  const normalizedBindings = normalizeBindings(bindings, "do", false, 2, 3);
   const restCdr = rest.cdr;
   invariant(is_pair(restCdr), "do: missing test clause");
 
@@ -2331,12 +2460,9 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const doTail: EvalContext = { ...ctx, resolver: doResolver };
 
   // Initialize variables (non-tail — values feed into the do frame).
-  let bindNode: SchemeValue = bindings;
+  let bindNode: SchemeValue = normalizedBindings;
   while (is_pair(bindNode)) {
     const binding = bindNode.car;
-    if (binding instanceof AVector && binding.evalElements) {
-      throw bracketBindingError(binding, "do", bindNode[LOCATION]);
-    }
     invariant(is_pair(binding), "do: invalid binding");
 
     const varName = binding.car;
