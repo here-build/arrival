@@ -21,7 +21,13 @@
 //   • lambda                       → an arrow.
 //   • scalars                      → their plain-TS image (string/number/boolean).
 //
-// Mappings + a span-map are a LATER phase; this returns the TS string only.
+// SPAN-MAP (per-top-level-statement): alongside the joined `ts`, `lower` returns one
+// `{ tsRange, schemeSpan }` per top-level statement — the TS byte-range each statement
+// occupies in the joined output, and the scheme byte-range it came from (`forms[i].span`,
+// stamped unconditionally by parseSexprs). Per-STATEMENT granularity only: the sole
+// consumer (diagnose.ts) maps a diagnostic's TS offset back to the errored statement's
+// scheme span (statement-coincidence); nothing reads sub-expression offsets. `{ ts }` is
+// preserved verbatim — every current caller destructures `.ts` only.
 
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 
@@ -54,13 +60,78 @@ const keywordName = (n: AtomNode): string => n.atom.slice(1);
 /** An object-property / dict key prints bare when identifier-safe, else quoted. */
 const propKey = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));
 
+/** One top-level statement's coordinate map: the TS byte-range it occupies in the joined
+ *  `ts` output, and the scheme byte-range it lowered from. */
+export interface LoweredStatement {
+  readonly tsRange: readonly [start: number, end: number];
+  readonly schemeSpan: readonly [start: number, end: number];
+}
+
+/** The separator `lower` joins top-level statements with — a byte-length constant the
+ *  span-map's cumulative TS offset accounts for. */
+const STATEMENT_SEP = ";\n";
+
 /**
  * Lower a scheme program to a TypeScript type-inference string. Multiple top-level
- * forms become statements separated by `;\n`.
+ * forms become statements separated by `;\n`. `statements` is the per-statement span-map
+ * (additive; `{ ts }` is unchanged).
  */
-export function lower(scheme: string): { ts: string } {
+export function lower(scheme: string): { ts: string; statements: readonly LoweredStatement[] } {
   const forms = parseSexprs(scheme);
-  return { ts: emitSeq(forms).join(";\n") };
+  const fragments = emitTopLevel(forms);
+  const statements: LoweredStatement[] = [];
+  let offset = 0;
+  for (const fragment of fragments) {
+    const start = offset;
+    const end = start + fragment.ts.length;
+    statements.push({ tsRange: [start, end], schemeSpan: fragment.schemeSpan });
+    offset = end + STATEMENT_SEP.length; // the join inserts the separator after every fragment but the last
+  }
+  return { ts: fragments.map((f) => f.ts).join(STATEMENT_SEP), statements };
+}
+
+/** Lower the top-level forms into per-statement `{ ts, schemeSpan }`, fusing a `#` +
+ *  following-list back into one vector statement (as `emitSeq` does). Each statement's
+ *  scheme span covers from the first fused node's start to the last's end. */
+function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number, number] }[] {
+  const out: { ts: string; schemeSpan: readonly [number, number] }[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
+    const next = nodes[i + 1];
+    if (isVectorMark(node) && isList(next)) {
+      out.push({ ts: emitVector(next), schemeSpan: [nodeStart(node), nodeEnd(next)] });
+      i++; // consume the fused list node
+      continue;
+    }
+    out.push({ ts: emitNode(node), schemeSpan: [nodeStart(node), nodeEnd(node)] });
+  }
+  return out;
+}
+
+/** A node's source start: its own `.span`, or (for a rare span-less synthesized node) the
+ *  first spanned descendant's start. Top-level forms are always spanned by parseSexprs; the
+ *  descent keeps the map total without a cast. */
+function nodeStart(node: Node): number {
+  if (node.span !== undefined) return node.span[0];
+  if ("list" in node) {
+    for (const child of node.list) {
+      const s = nodeStart(child);
+      if (s >= 0) return s;
+    }
+  }
+  return 0;
+}
+
+/** A node's source end (mirror of `nodeStart`, scanning children last-first). */
+function nodeEnd(node: Node): number {
+  if (node.span !== undefined) return node.span[1];
+  if ("list" in node) {
+    for (let i = node.list.length - 1; i >= 0; i--) {
+      const e = nodeEnd(node.list[i]!);
+      if (e >= 0) return e;
+    }
+  }
+  return 0;
 }
 
 /**

@@ -42,6 +42,7 @@
 
 import * as ts from "typescript";
 
+import { compile } from "./compile-host.js";
 import { lower } from "./lower.js";
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 import type { HarvestedPrelude } from "./prelude.js";
@@ -372,37 +373,9 @@ function slotTypeExpr(role: { calleeText: string; argIndex: number; propertyKey?
 }
 
 // ── the virtual program ──────────────────────────────────────────────────────
-
-/** Type-check one in-memory probe file against the real lib, KEEPING the program + checker (the
- *  prelude.test.ts host pattern, extended to extract types rather than only diagnostics). One
- *  call = one compile; diagnostics are intentionally not read — a probe rides on top of an
- *  intentionally-erroring program (an undeclared candidate, an arity-loose call) and reads types
- *  regardless. */
-function compile(source: string): { checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
-  const fileName = "/__query.ts";
-  const options: ts.CompilerOptions = {
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    lib: ["lib.es2022.d.ts"],
-    noEmit: true,
-    skipLibCheck: true,
-  };
-  const host = ts.createCompilerHost(options);
-  const getSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
-    name === fileName
-      ? ts.createSourceFile(name, source, languageVersion, true)
-      : getSourceFile(name, languageVersion, onError, shouldCreate);
-  const fileExists = host.fileExists.bind(host);
-  host.fileExists = (name) => name === fileName || fileExists(name);
-  const readFile = host.readFile.bind(host);
-  host.readFile = (name) => (name === fileName ? source : readFile(name));
-
-  const program = ts.createProgram([fileName], options, host);
-  const sourceFile = program.getSourceFile(fileName);
-  if (sourceFile === undefined) return null;
-  return { checker: program.getTypeChecker(), sourceFile };
-}
+// The single-compile host lives in compile-host.ts (shared with diagnose.ts). The query
+// lens rides on top of intentionally-erroring probes (an undeclared candidate, an
+// arity-loose call) and reads TYPES off the checker regardless of diagnostics.
 
 /** Read the type of `declare const <name>: …` off the checker — locate the declaration's name
  *  identifier, then `getTypeAtLocation`. `null` when the declaration is absent (a corrupt probe). */

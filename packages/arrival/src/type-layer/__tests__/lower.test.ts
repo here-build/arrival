@@ -128,3 +128,33 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
     expect(compileLowered('(set_timer "ten")').length).toBeGreaterThan(0);
   });
 });
+
+describe("lower — per-statement span-map (additive)", () => {
+  it("preserves `{ ts }` verbatim", () => {
+    expect(lower("(set_timer 600)").ts).toBe("set_timer(600)");
+  });
+
+  it("single statement: one entry, tsRange slices the whole output, schemeSpan covers the form", () => {
+    const { ts, statements } = lower("(set_timer 600)");
+    expect(statements).toHaveLength(1);
+    expect(ts.slice(statements[0]!.tsRange[0], statements[0]!.tsRange[1])).toBe(ts);
+    expect(statements[0]!.schemeSpan).toEqual([0, 15]);
+  });
+
+  it("multi statement: each tsRange slices its lowered fragment; each schemeSpan slices its source form", () => {
+    const scheme = "(set_timer 1) (set_timer 2)";
+    const { ts, statements } = lower(scheme);
+    expect(statements).toHaveLength(2);
+    expect(ts.slice(statements[0]!.tsRange[0], statements[0]!.tsRange[1])).toBe("set_timer(1)");
+    expect(ts.slice(statements[1]!.tsRange[0], statements[1]!.tsRange[1])).toBe("set_timer(2)");
+    for (const s of statements) {
+      expect(scheme.slice(s.schemeSpan[0], s.schemeSpan[1]).trim()).toMatch(/^\(set_timer \d\)$/);
+    }
+  });
+
+  it("fuses `#(…)` into one statement covering the `#` mark + the list", () => {
+    const { statements } = lower("#(1 2 3)");
+    expect(statements).toHaveLength(1);
+    expect(statements[0]!.schemeSpan).toEqual([0, 8]);
+  });
+});
