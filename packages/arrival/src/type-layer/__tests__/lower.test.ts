@@ -143,6 +143,41 @@ describe("lower — quasiquote degrades to quoted data, unquote stays live", () 
   });
 });
 
+describe("lower — top-level define lowers to a const statement", () => {
+  it("(define x e) → const x = e", () => {
+    expect(ts1("(define x 5)")).toBe("const x = 5");
+  });
+
+  it("(define (f a b) body) → const f = (a: any, b: any) => body", () => {
+    expect(ts1("(define (add2 a b) (+ a b))")).toBe("const add2 = (a: any, b: any) => _.$plus$(a, b)");
+  });
+
+  it("a multi-form function body folds to a comma sequence, mirroring emitLambda", () => {
+    expect(ts1("(define (f x) (foo x) (bar x))")).toBe("const f = (x: any) => (foo(x), bar(x))");
+  });
+
+  it("a zero-arg function define", () => {
+    expect(ts1("(define (f) 1)")).toBe("const f = () => 1");
+  });
+
+  it("(define x) with no value lowers to undefined", () => {
+    expect(ts1("(define x)")).toBe("const x = undefined");
+  });
+
+  it("multiple top-level defines are separate const statements", () => {
+    expect(ts1("(define x 1) (define y 2)")).toBe("const x = 1;\nconst y = 2");
+  });
+
+  it("a NESTED define (inside a lambda body) keeps the prior application-call lowering", () => {
+    expect(ts1("(lambda () (define x 1) x)")).toBe("(() => (define(x, 1), x))");
+  });
+
+  it("integration: a defined helper's arity mismatch actually type-checks against real params", () => {
+    const errors = compileErrors(`${lower("(define (add2 a b) a) (add2 1)").ts}\n`);
+    expect(errors.length).toBeGreaterThan(0); // TS2554 — too few arguments
+  });
+});
+
 describe("lower — integration: lowered call ∩ harvested prelude", () => {
   // get-route takes a proper list (z.pair | z.nil → List) + a string; set-timer takes a number.
   const getRoute = symbol.rosetta`get-route: route between stops`(

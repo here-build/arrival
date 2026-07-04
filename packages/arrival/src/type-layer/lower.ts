@@ -92,7 +92,10 @@ export function lower(scheme: string): { ts: string; statements: readonly Lowere
 
 /** Lower the top-level forms into per-statement `{ ts, schemeSpan }`, fusing a `#` +
  *  following-list back into one vector statement (as `emitSeq` does). Each statement's
- *  scheme span covers from the first fused node's start to the last's end. */
+ *  scheme span covers from the first fused node's start to the last's end. A top-level
+ *  `(define …)` gets the STATEMENT treatment (`emitTopLevelDefine` → `const …`) — legal
+ *  only here; a `define` anywhere else (nested in a lambda body, an arg, …) falls through
+ *  emitNode's default dispatch and keeps its prior application-call lowering unchanged. */
 function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number, number] }[] {
   const out: { ts: string; schemeSpan: readonly [number, number] }[] = [];
   for (let i = 0; i < nodes.length; i++) {
@@ -103,9 +106,58 @@ function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number
       i++; // consume the fused list node
       continue;
     }
-    out.push({ ts: emitNode(node), schemeSpan: [nodeStart(node), nodeEnd(node)] });
+    const span: readonly [number, number] = [nodeStart(node), nodeEnd(node)];
+    if (isList(node) && isWord(node.list[0]) && node.list[0].atom === "define") {
+      const defineTs = emitTopLevelDefine(node.list);
+      if (defineTs !== undefined) {
+        out.push({ ts: defineTs, schemeSpan: span });
+        continue;
+      }
+    }
+    out.push({ ts: emitNode(node), schemeSpan: span });
   }
   return out;
+}
+
+/** `(define x e)` at TOP LEVEL → `const x = e` — a STATEMENT, legal only at top-level
+ *  statement position (a `define` in expression position — a lambda body, an arg, …
+ *  falls through emitNode's default dispatch instead, keeping its prior application-call
+ *  lowering: `const` cannot appear there). `(define (f a b…) body…)` → `const f = (a: any,
+ *  b: any) => body` (a multi-form body folds to a comma sequence, mirroring emitLambda;
+ *  `: any` params are advisory polarity, avoiding TS7006 under noImplicitAny). This kills
+ *  the dominant 2304 mass (`define` lowering as a CALL to an undeclared `define` function
+ *  today) and makes downstream type hints reachable through a define'd helper.
+ *
+ *  KNOWN ACCEPTED RISK: a same-program REDEFINE of the same top-level name now fires
+ *  TS2451 ("Cannot redeclare block-scoped variable") — 0 occurrences observed across the
+ *  2,200-program corpus this rework is calibrated against. Not engineered around (`var`
+ *  would silently shadow scoping semantics elsewhere; `let` would invite a different
+ *  mutation-shaped false positive) — flagged here rather than hidden.
+ *
+ *  Returns undefined for a malformed `(define)`/`(define ())` (no target) — the caller
+ *  falls back to the ordinary application-call lowering. */
+function emitTopLevelDefine(items: Node[]): string | undefined {
+  const target = items[1];
+  if (target === undefined) return undefined;
+  if (isWord(target)) {
+    const value = items[2] === undefined ? "undefined" : emitNode(items[2]);
+    return `const ${escapeName(target.atom)} = ${value}`;
+  }
+  if (!isList(target)) return undefined;
+  const nameNode = target.list[0];
+  if (!isWord(nameNode)) return undefined;
+  // Formals mirror emitLambda's lambdaParams (skip the dotted-tail marker atom), plus an
+  // explicit `: any` per param — the advisory polarity this form needs but a plain lambda
+  // arrow (inferred from its call site) does not.
+  const params = target.list
+    .slice(1)
+    .filter((p): p is AtomNode => isWord(p) && p.atom !== ".")
+    .map((p) => `${p.atom}: any`)
+    .join(", ");
+  const body = items.slice(2);
+  const bodyTs =
+    body.length === 0 ? "undefined" : body.length === 1 ? emitNode(body[0]) : `(${emitSeq(body).join(", ")})`;
+  return `const ${escapeName(nameNode.atom)} = (${params}) => ${bodyTs}`;
 }
 
 /** A node's source start: its own `.span`, or (for a rare span-less synthesized node) the
