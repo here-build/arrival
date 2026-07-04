@@ -188,16 +188,16 @@ describe("@here.build/arrival/polyglot — dict accessor family (Bucket A)", () 
     expect(await str('(dict-ref (alist->dict (list (cons "a" 1) (cons "b" 2))) :b)')).toBe("2");
   });
 
-  it("dict-set — a NEW dict, original untouched (immutable, not mutation)", async () => {
-    expect(await str('(let ((d (dict :a 1))) (dict-ref (dict-set d :a 2) :a))')).toBe("2");
-    expect(await str('(let ((d (dict :a 1))) (dict-set d :a 2) (dict-ref d :a))')).toBe("1");
-    // dict-set on a MISSING key adds it
-    expect(await str('(dict-ref (dict-set (dict :a 1) :b 2) :b)')).toBe("2");
+  it("dict-set — an immutability DOOR, not a function (a 'set' verb in an immutable env is a silent-mutation trap)", async () => {
+    await expect(raw('(dict-set (dict :a 1) :a 2)')).rejects.toThrow(
+      /dict-set is not provided — dicts are immutable here.*assoc-in.*original d is unchanged/s,
+    );
   });
 
-  it("dict-update — dict-set the result of applying updater to the current value, optional failure-result", async () => {
-    expect(await str('(dict-ref (dict-update (dict :a 1) :a (lambda (x) (+ x 1))) :a)')).toBe("2");
-    expect(await str('(dict-ref (dict-update (dict) :a (lambda (x) (+ x 1)) 0) :a)')).toBe("1");
+  it("dict-update — an immutability DOOR pointing at update-in", async () => {
+    await expect(raw('(dict-update (dict :a 1) :a (lambda (x) (+ x 1)))')).rejects.toThrow(
+      /dict-update is not provided — dicts are immutable here.*update-in.*original d is unchanged/s,
+    );
   });
 
   it("assoc-ref (Guile) — an alias of dict-ref, same key handling and default convention", async () => {

@@ -342,19 +342,25 @@ export default new EnvCapability("scheme/polyglot", {
     (define (alist->dict alist)
       (apply dict (%interleave (map car alist) (map cdr alist))))
 
-    ;; dict-set — Racket: a NEW dict with key rebuilt to value, everything else
-    ;; preserved (dicts are immutable — wraps %dict-set above, the same rebuild
-    ;; assoc-in uses).
-    (define (dict-set d key value)
-      (%dict-guard "dict-set" d)
-      (%dict-set d key value))
+    ;; dict-set / dict-update — DOORS, not functions (V, 2026-07-04). This env is
+    ;; immutable, and a "set"/"update" VERB reads as in-place mutation: a pure
+    ;; implementation returning a new dict is a trap — the model believes it mutated
+    ;; d, nothing changed, and the failure is silent (exactly the class the doors
+    ;; program exists to delete). So the verbs exist only to teach the sanctioned
+    ;; pure path: assoc-in/update-in + (define …). Same family as the SRFI-69
+    ;; hash-table immutable-redirect stubs.
+    (define (dict-set . _args)
+      (error (str "dict-set is not provided — dicts are immutable here, and a 'set' "
+                  "verb implies in-place mutation, which never happens. Build a NEW "
+                  "dict and bind it: (define d2 (assoc-in d (list :key) value)) — "
+                  "the original d is unchanged.")))
 
-    ;; dict-update — Racket: dict-set the result of applying updater to the
-    ;; CURRENT value at key (an optional failure-result when key is missing, same
-    ;; convention as dict-ref — passed straight through to it).
-    (define (dict-update d key updater . failure-result)
-      (%dict-guard "dict-update" d)
-      (dict-set d key (updater (apply dict-ref (cons d (cons key failure-result))))))
+    (define (dict-update . _args)
+      (error (str "dict-update is not provided — dicts are immutable here, and an "
+                  "'update' verb implies in-place mutation, which never happens. "
+                  "Build a NEW dict and bind it: "
+                  "(define d2 (update-in d (list :key) updater)) — "
+                  "the original d is unchanged.")))
 
     ;; assoc-ref — Guile/Emacs Lisp: read by key, same polyglot-idiom principle as
     ;; the threading family above (a model reaches for whichever accessor name it
