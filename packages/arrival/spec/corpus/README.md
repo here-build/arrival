@@ -1,10 +1,17 @@
 # Arrival grammar conformance corpus
 
 Language-portable conformance suite for the arrival reader/evaluator grammar extensions —
-currently the `{…}` dict / `[…]` vector collection literals and their position-scoped
-comma rule (spec: `docs/working-proposals/arrival-curly-vector-literals.md`). A future
-Python/Rust port of the reader runs this same corpus; only the thin runner
+the `{…}` dict / `[…]` vector collection literals and their position-scoped comma rule
+(spec: `docs/working-proposals/arrival-curly-vector-literals.md`), and the let-family
+**bracket bindings** superset (spec: `docs/reference/bracket-bindings.md`; requirements:
+`docs/working-proposals/arrival-bracket-bindings-requirements.md`). A future Python/Rust
+port of the reader runs this same corpus; only the thin runner
 (`src/__tests__/spec-corpus.test.ts` here) is implementation-specific.
+
+Files: `collection-literals-{read,eval}.jsonl` (collection literals) and
+`bracket-bindings-{read,eval}.jsonl` (let-family bracket-binding consumption + doors). The
+runner globs every `*.jsonl` and keys behavior off each record's `mode` field, so a new
+corpus file is picked up automatically.
 
 ## Record format
 
@@ -59,6 +66,8 @@ teach; the corpus matches ONLY the class. These become the spec's error contract
 | `E-UNTERMINATED` | EOF inside an open string/list/literal |
 | `E-BRACKET-MISMATCH` | close delimiter does not pair its opener (`(a]`) |
 | `E-BRACKET-UNEXPECTED` | close delimiter with nothing open (`]`) |
+| `E-LET-BRACKET-BINDINGS-LIST` | a let-family whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (spec: `docs/reference/bracket-bindings.md` R4) |
+| `E-LET-BRACKET-BINDING` | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the binding-name slot |
 
 ## The comma rule (what the cases pin)
 

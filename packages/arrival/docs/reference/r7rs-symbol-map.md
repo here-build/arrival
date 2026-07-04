@@ -111,6 +111,12 @@ Each table = one section; rows = symbols **introduced** there. Columns: **symbol
 | `letrec` | syntax | 5.3.2, 7.3 | base, r5rs |
 | `letrec*` | syntax | 5.3.2, 7.3 | base |
 
+> **Arrival extension — bracket bindings.** The bindings slot of `let`, `let*`, `letrec`,
+> `letrec*`, named `let`, and `do` (4.2.4) additionally accepts a vector datum
+> (`(let [a 1 b 2] …)`, `(let* ([a 1] [b 2]) …)`), a form-contract-level superset that lowers
+> byte-identically to the parenthesized image. The reader is unchanged (`[…]` is a vector
+> everywhere). See `docs/reference/bracket-bindings.md`.
+
 ### 4.2.3 Sequencing
 
 | Symbol | Kind | Also mentioned at | Library |
