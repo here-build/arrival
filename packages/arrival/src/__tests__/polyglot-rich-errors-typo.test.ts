@@ -70,3 +70,20 @@ describe("polyglot-rich-errors — LIVE enrichment at the arrival throw site (de
     await expect(exec("csv-content")).rejects.toThrow(/^Unbound variable `csv-content'$/);
   });
 });
+
+describe("length floor — short names never get edit-distance suggestions", () => {
+  // Every 1-char name is one substitution from every 1-char entry (`a` → `@`), so an
+  // unbound single-letter variable used to get a WRONG "did you mean `@`" that shadowed
+  // the doors that own that case (scope-confusion). Distance-1 requires length ≥ 3.
+  it("single-char unbound names get no suggestion", () => {
+    for (const name of ["a", "b", "z", "w", "q"]) {
+      expect(richErrorFor(name)).toBeUndefined();
+    }
+  });
+  it("two-char unbound names get no edit-distance suggestion", () => {
+    expect(richErrorFor("ab")).toBeUndefined();
+  });
+  it("real typos of structured names still fire", () => {
+    expect(richErrorFor("reduse")).toContain("reduce");
+  });
+});

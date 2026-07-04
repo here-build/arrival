@@ -283,8 +283,15 @@ export function richErrorFor(unboundName: string): string | undefined {
 }
 
 function nearestByEditDistance(unboundName: string): WellKnownSymbolEntry | undefined {
+  // Length floor: distance-1 between short names is noise, not a typo signal — EVERY
+  // 1-char name is one substitution from every 1-char entry (`a` → `@`), so an unbound
+  // single-letter variable would get a wrong "did you mean `@`" and SHADOW the doors
+  // that actually own that case (scope-confusion, quoting). A wrong hint is poison;
+  // require enough structure on both sides before suggesting.
+  if (unboundName.length < 3) return undefined;
   let best: { entry: WellKnownSymbolEntry; distance: number } | undefined;
   for (const entry of WELL_KNOWN_SYMBOLS) {
+    if (entry.name.length < 3) continue;
     const distance = editDistanceAtMost(unboundName, entry.name, 1);
     if (distance <= 1 && (!best || distance < best.distance)) {
       best = { entry, distance };
