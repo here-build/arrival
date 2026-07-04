@@ -92,7 +92,10 @@ export function lower(scheme: string): { ts: string; statements: readonly Lowere
 
 /** Lower the top-level forms into per-statement `{ ts, schemeSpan }`, fusing a `#` +
  *  following-list back into one vector statement (as `emitSeq` does). Each statement's
- *  scheme span covers from the first fused node's start to the last's end. */
+ *  scheme span covers from the first fused node's start to the last's end. A top-level
+ *  `(define …)` gets the STATEMENT treatment (`emitTopLevelDefine` → `const …`) — legal
+ *  only here; a `define` anywhere else (nested in a lambda body, an arg, …) falls through
+ *  emitNode's default dispatch and keeps its prior application-call lowering unchanged. */
 function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number, number] }[] {
   const out: { ts: string; schemeSpan: readonly [number, number] }[] = [];
   for (let i = 0; i < nodes.length; i++) {
@@ -103,9 +106,58 @@ function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number
       i++; // consume the fused list node
       continue;
     }
-    out.push({ ts: emitNode(node), schemeSpan: [nodeStart(node), nodeEnd(node)] });
+    const span: readonly [number, number] = [nodeStart(node), nodeEnd(node)];
+    if (isList(node) && isWord(node.list[0]) && node.list[0].atom === "define") {
+      const defineTs = emitTopLevelDefine(node.list);
+      if (defineTs !== undefined) {
+        out.push({ ts: defineTs, schemeSpan: span });
+        continue;
+      }
+    }
+    out.push({ ts: emitNode(node), schemeSpan: span });
   }
   return out;
+}
+
+/** `(define x e)` at TOP LEVEL → `const x = e` — a STATEMENT, legal only at top-level
+ *  statement position (a `define` in expression position — a lambda body, an arg, …
+ *  falls through emitNode's default dispatch instead, keeping its prior application-call
+ *  lowering: `const` cannot appear there). `(define (f a b…) body…)` → `const f = (a: any,
+ *  b: any) => body` (a multi-form body folds to a comma sequence, mirroring emitLambda;
+ *  `: any` params are advisory polarity, avoiding TS7006 under noImplicitAny). This kills
+ *  the dominant 2304 mass (`define` lowering as a CALL to an undeclared `define` function
+ *  today) and makes downstream type hints reachable through a define'd helper.
+ *
+ *  KNOWN ACCEPTED RISK: a same-program REDEFINE of the same top-level name now fires
+ *  TS2451 ("Cannot redeclare block-scoped variable") — 0 occurrences observed across the
+ *  2,200-program corpus this rework is calibrated against. Not engineered around (`var`
+ *  would silently shadow scoping semantics elsewhere; `let` would invite a different
+ *  mutation-shaped false positive) — flagged here rather than hidden.
+ *
+ *  Returns undefined for a malformed `(define)`/`(define ())` (no target) — the caller
+ *  falls back to the ordinary application-call lowering. */
+function emitTopLevelDefine(items: Node[]): string | undefined {
+  const target = items[1];
+  if (target === undefined) return undefined;
+  if (isWord(target)) {
+    const value = items[2] === undefined ? "undefined" : emitNode(items[2]);
+    return `const ${escapeName(target.atom)} = ${value}`;
+  }
+  if (!isList(target)) return undefined;
+  const nameNode = target.list[0];
+  if (!isWord(nameNode)) return undefined;
+  // Formals mirror emitLambda's lambdaParams (skip the dotted-tail marker atom), plus an
+  // explicit `: any` per param — the advisory polarity this form needs but a plain lambda
+  // arrow (inferred from its call site) does not.
+  const params = target.list
+    .slice(1)
+    .filter((p): p is AtomNode => isWord(p) && p.atom !== ".")
+    .map((p) => `${p.atom}: any`)
+    .join(", ");
+  const body = items.slice(2);
+  const bodyTs =
+    body.length === 0 ? "undefined" : body.length === 1 ? emitNode(body[0]) : `(${emitSeq(body).join(", ")})`;
+  return `const ${escapeName(nameNode.atom)} = (${params}) => ${bodyTs}`;
 }
 
 /** A node's source start: its own `.span`, or (for a rare span-less synthesized node) the
@@ -234,11 +286,32 @@ function emitList(node: ListNode): string {
       case "dict":
         return emitDict(items);
       case "quasiquote":
+        return emitQuasiquote(items[1]);
       case "unquote":
       case "unquote-splicing":
-        // TODO: quasiquotation is not lowered yet — degrade to the inner datum so a
-        // type stays inferable rather than emitting broken syntax.
+        // A stray unquote/unquote-splicing OUTSIDE a quasiquote (malformed, but kept
+        // inert): degrade to the live inner expression, same as before.
         return items[1] === undefined ? "undefined" : emitNode(items[1]);
+      // ── s.* combinators: TS RESERVED-WORD forms lowered to calls on the `s` property
+      // bag (carriers.ts) instead of a bare head — `if(...)`/`let(...)`/`do(...)` as a
+      // CALL parse-catastrophes (the token starts a statement, not an expression).
+      case "if":
+        return emitIf(items);
+      case "let":
+        return emitLet(items);
+      case "let*":
+        return emitLetStar(items[1], items.slice(2));
+      case "letrec":
+      case "letrec*":
+        // Advisory fidelity only — mutual-recursion scoping is not modeled; same flat
+        // emission as plain `let` (s.let), per the design decision.
+        return emitLetBindings(items[1], items.slice(2));
+      case "cond":
+        return emitCond(items.slice(1));
+      case "do":
+        return `s.do(${emitCallArgs(items.slice(1))})`;
+      case "case":
+        return `s.case(${emitCallArgs(items.slice(1))})`;
     }
   }
 
@@ -251,13 +324,69 @@ function emitList(node: ListNode): string {
   return `${emitNode(head)}(${args})`;
 }
 
-/** `(quote X)` from `'X`. A quoted list → `list(…)` of its lowered elements; a quoted
- *  atom → its value image (symbol → identifier, number/string → itself), matching the
- *  rule that `'(a b c)` ≡ `(list a b c)`. */
+/** `(quote X)` from `'X`. A quoted atom → its value image (symbol → identifier — benign
+ *  2304 noise, unchanged this round; number/string → itself). A quoted LIST recurses as
+ *  QUOTED DATA (never as an application) — `'(("a" 1))` → `list(list("a", 1))`, never the
+ *  false-positive `list("a"(1))` that treating the nested list as a call would produce (a
+ *  string-literal head would get CALLED). A dotted datum `'(a . b)` → `cons(a, b)`, folding
+ *  right through any preceding proper elements: `'(a b . c)` → `cons(a, cons(b, c))`. */
 function emitQuote(datum: Node | undefined): string {
-  if (datum === undefined) return "list()";
-  if (isList(datum)) return `list(${emitSeq(datum.list).join(", ")})`;
-  return emitNode(datum);
+  return datum === undefined ? "list()" : emitQuotedDatum(datum);
+}
+
+/** One datum in QUOTED context: a nested list recurses (never applies), an atom keeps its
+ *  plain value image (symbol → identifier, unchanged this round). */
+function emitQuotedDatum(datum: Node): string {
+  return isList(datum) ? emitQuoteLikeList(datum.list, emitQuotedDatum) : emitNode(datum);
+}
+
+/** `(quasiquote X)` from `` `X ``. Degrades to QUOTED DATA exactly like `emitQuote` — a
+ *  nested list recurses, a dotted tail folds to `cons` — EXCEPT an `(unquote e)` /
+ *  `(unquote-splicing e)` node found ANYWHERE inside emits the LIVE expression `emitNode(e)`,
+ *  not further-quoted data. No interpolation/splicing semantics are modeled (advisory
+ *  typing only, per the type-layer's inference-only contract) — the unquoted piece's
+ *  inferred type is what narrows; splicing behaves identically to plain unquote here. */
+function emitQuasiquote(datum: Node | undefined): string {
+  return datum === undefined ? "list()" : emitQuasiDatum(datum);
+}
+
+function emitQuasiDatum(datum: Node): string {
+  if (!isList(datum)) return emitNode(datum);
+  const head = datum.list[0];
+  if (isWord(head) && (head.atom === "unquote" || head.atom === "unquote-splicing")) {
+    const inner = datum.list[1];
+    return inner === undefined ? "undefined" : emitNode(inner);
+  }
+  return emitQuoteLikeList(datum.list, emitQuasiDatum);
+}
+
+/** Shared list-body emitter for QUOTE and QUASIQUOTE: fuses `#` + list into a vector (as
+ *  `emitSeq`), detects a dotted tail via the bare `.` WORD marker (never a string atom —
+ *  R7RS improper-list tail) and folds it into nested `cons(...)`, and recurses every other
+ *  element through `emitElem` (quote vs. quasiquote differ only in that recursive step —
+ *  quasiquote's `emitElem` additionally un-quotes an `(unquote …)`/`(unquote-splicing …)`
+ *  node it encounters). */
+function emitQuoteLikeList(items: Node[], emitElem: (n: Node) => string): string {
+  const parts: string[] = [];
+  let dotSeen = false;
+  for (let i = 0; i < items.length; i++) {
+    const node = items[i]!;
+    if (isWord(node) && node.atom === "." && !dotSeen) {
+      dotSeen = true; // the dot itself emits nothing; the following element is the tail
+      continue;
+    }
+    const next = items[i + 1];
+    if (isVectorMark(node) && isList(next)) {
+      parts.push(emitVector(next)); // vector elements stay plain values (unchanged behavior)
+      i++;
+      continue;
+    }
+    parts.push(emitElem(node));
+  }
+  if (!dotSeen) return `list(${parts.join(", ")})`;
+  let acc = parts[parts.length - 1]!; // the tail
+  for (let i = parts.length - 2; i >= 0; i--) acc = `cons(${parts[i]}, ${acc})`;
+  return acc;
 }
 
 /** `(lambda (x y) body…)` → `((x, y) => body)`. A multi-form body folds to a comma
@@ -291,4 +420,92 @@ function emitDict(items: Node[]): string {
     pairs.push(`${propKey(key)}: ${value}`);
   }
   return pairs.length === 0 ? "{}" : `{ ${pairs.join(", ")} }`;
+}
+
+// ── s.* combinators — the reserved-word forms (carriers.ts's `s` namespace) ────────────
+
+/** `(if c a b)` → `s.if(c, a, b)`; `(if c a)` (no else) → `s.if(c, a)`. */
+function emitIf(items: Node[]): string {
+  const c = items[1] === undefined ? "undefined" : emitNode(items[1]);
+  const a = items[2] === undefined ? "undefined" : emitNode(items[2]);
+  if (items[3] === undefined) return `s.if(${c}, ${a})`;
+  return `s.if(${c}, ${a}, ${emitNode(items[3])})`;
+}
+
+/** One `((name value) …)` binding-list read as parallel `{ names, values }` arrays — the
+ *  shared shape `let`/named-let/letrec pull their binding pairs from. A malformed binding
+ *  (no name) is skipped rather than crashing the emitter. */
+function readBindings(bindingsNode: Node | undefined): { names: string[]; values: string[] } {
+  const bindings = isList(bindingsNode) ? bindingsNode.list : [];
+  const names: string[] = [];
+  const values: string[] = [];
+  for (const b of bindings) {
+    if (!isList(b)) continue;
+    const nameNode = b.list[0];
+    if (!isWord(nameNode)) continue;
+    names.push(nameNode.atom);
+    values.push(b.list[1] === undefined ? "undefined" : emitNode(b.list[1]));
+  }
+  return { names, values };
+}
+
+function letBodyTs(body: Node[]): string {
+  return body.length === 0 ? "undefined" : body.length === 1 ? emitNode(body[0]) : `(${emitSeq(body).join(", ")})`;
+}
+
+/** `(let ((a v1) (b v2)) body…)` → `s.let(v1, v2, (a, b) => body)` — a single flat call.
+ *  Also the emission target for `letrec`/`letrec*` (advisory fidelity — mutual-recursion
+ *  scoping is not modeled). */
+function emitLetBindings(bindingsNode: Node | undefined, body: Node[]): string {
+  const { names, values } = readBindings(bindingsNode);
+  const lambda = `(${names.join(", ")}) => ${letBodyTs(body)}`;
+  return `s.let(${[...values, lambda].join(", ")})`;
+}
+
+/** `(let …)` dispatch: a WORD immediately after `let` is a named let (`(let loop ((i 0))
+ *  body…)`), never a bindings list — plain `let`'s bindings position is always a list
+ *  (possibly empty, `()`), never a bare symbol. */
+function emitLet(items: Node[]): string {
+  const second = items[1];
+  if (isWord(second)) return emitNamedLet(second.atom, items[2], items.slice(3));
+  return emitLetBindings(second, items.slice(2));
+}
+
+/** Named let: `(let loop ((i 0)) body…)` → `s.namedLet(0, (loop, i) => body)`. */
+function emitNamedLet(loopName: string, bindingsNode: Node | undefined, body: Node[]): string {
+  const { names, values } = readBindings(bindingsNode);
+  const lambda = `(${[loopName, ...names].join(", ")}) => ${letBodyTs(body)}`;
+  return `s.namedLet(${[...values, lambda].join(", ")})`;
+}
+
+/** `let*` → NESTED `s.let` calls — sequential scoping (each binding's value can see the
+ *  previous ones) is structural and can't be expressed as one flat call. */
+function emitLetStar(bindingsNode: Node | undefined, body: Node[]): string {
+  const bindings = isList(bindingsNode) ? bindingsNode.list : [];
+  return emitLetStarFrom(bindings, 0, body);
+}
+
+function emitLetStarFrom(bindings: Node[], i: number, body: Node[]): string {
+  if (i >= bindings.length) return letBodyTs(body);
+  const b = bindings[i];
+  if (!isList(b)) return emitLetStarFrom(bindings, i + 1, body); // skip a malformed binding
+  const nameNode = b.list[0];
+  const name = isWord(nameNode) ? nameNode.atom : "_";
+  const value = b.list[1] === undefined ? "undefined" : emitNode(b.list[1]);
+  const inner = emitLetStarFrom(bindings, i + 1, body);
+  return `s.let(${value}, (${name}) => ${inner})`;
+}
+
+/** `(cond (test e…) … (else d…))` → `s.cond([test, e], …, [true, d])` — `else` → `true`
+ *  (the `else(` head is what breaks `cond` today); a multi-expression clause body folds to
+ *  a comma sequence, same as everywhere else. */
+function emitCond(clauses: Node[]): string {
+  const parts = clauses.map((clause) => {
+    if (!isList(clause)) return "[true, undefined]";
+    const [test, ...bodyItems] = clause.list;
+    const isElse = isWord(test) && test.atom === "else";
+    const testTs = isElse || test === undefined ? "true" : emitNode(test);
+    return `[${testTs}, ${letBodyTs(bodyItems)}]`;
+  });
+  return `s.cond(${parts.join(", ")})`;
 }

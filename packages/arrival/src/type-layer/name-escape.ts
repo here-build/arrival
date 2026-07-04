@@ -34,9 +34,29 @@ const FROM_NAMED: ReadonlyMap<string, string> = new Map([...NAMED].map(([c, w]) 
  *  lens (escape = id). The regex excludes `$`, so any `$`-bearing name is (re-)escaped. */
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** Is `name` a fixed point of the lens (passes through escape unchanged)? */
+/** ECMAScript RESERVED WORDS — never printable as a bare identifier/head, even though they match
+ *  the `IDENTIFIER` char regex: `for`/`class`/`new`/`return`/… as a plain identifier or CALL head
+ *  (`for(...)`) is a PARSE ERROR (the token starts a statement, not an expression). A scheme
+ *  symbol equal to one of these is perfectly legal; the lexical IDENTIFIER position is not — so
+ *  these are excluded from `isTsIdentifier`, routing them through the escaped, dotted `_` member
+ *  path instead (`_.for`, a legal property access). Deliberately NARROW: TS's *contextual* /
+ *  soft type-level keywords (`any`, `string`, `number`, `unknown`, `type`, `declare`, `of`, `as`,
+ *  `is`, `infer`, `keyof`, `readonly`, `namespace`, `module`, `get`, `set`, `undefined`, …) are
+ *  NOT reserved — `const string = 1` is valid TS — so they stay OUT of this set and keep printing
+ *  bare (over-escaping them would be harmless but pointless, and this set's job is exactness). */
+const RESERVED_WORDS: ReadonlySet<string> = new Set([
+  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
+  "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import",
+  "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw", "true", "try",
+  "typeof", "var", "void", "while", "with", "yield",
+  // strict-mode reserved (every emitted TS file is a module, hence strict):
+  "let", "static", "implements", "interface", "package", "private", "protected", "public", "await",
+]);
+
+/** Is `name` a fixed point of the lens (passes through escape unchanged) — a valid TS
+ *  identifier char-shape that is ALSO not an ECMAScript reserved word? */
 export function isTsIdentifier(name: string): boolean {
-  return IDENTIFIER.test(name);
+  return IDENTIFIER.test(name) && !RESERVED_WORDS.has(name);
 }
 
 /** The `$token$` for one non-identifier char (or a leading digit): a named word, a bare digit, or

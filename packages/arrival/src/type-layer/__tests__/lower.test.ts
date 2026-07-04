@@ -35,9 +35,13 @@ function compileErrors(source: string): string[] {
   return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 }
 
-describe("lower — scheme → TS emitter", () => {
-  const ts1 = (src: string) => lower(src).ts;
+const ts1 = (src: string) => lower(src).ts;
 
+/** The bare carrier vocabulary (carriers.ts, including the `s` namespace) as ambient TS —
+ *  no harvested tool entries, just the `assembleHarvestedPrelude([]).prelude`'s carrier text. */
+const carrierVocabularyText = assembleHarvestedPrelude([]).prelude;
+
+describe("lower — scheme → TS emitter", () => {
   it("application keeps the head + scheme arg order", () => {
     expect(ts1("(foo a b)")).toBe("foo(a, b)");
   });
@@ -96,6 +100,142 @@ describe("lower — scheme → TS emitter", () => {
 
   it("multiple top-level forms become `;\\n`-separated statements", () => {
     expect(ts1("(foo 1) (bar 2)")).toBe("foo(1);\nbar(2)");
+  });
+});
+
+describe("lower — quoted data recurses (the false-positive killer)", () => {
+  it("a quoted NESTED list recurses as quoted data, never an application", () => {
+    expect(ts1('\'(("a" 1))')).toBe('list(list("a", 1))');
+  });
+
+  it("a flat quoted list is unchanged", () => {
+    expect(ts1("'(1 2 3)")).toBe("list(1, 2, 3)");
+  });
+
+  it("a dotted quoted pair lowers to cons", () => {
+    expect(ts1("'((k . v))")).toBe("list(cons(k, v))");
+  });
+
+  it("deep nesting recurses at every level", () => {
+    expect(ts1("'((1 (2 3)) 4)")).toBe("list(list(1, list(2, 3)), 4)");
+  });
+
+  it("a multi-element dotted list folds right through the proper elements", () => {
+    expect(ts1("'(a b . c)")).toBe("cons(a, cons(b, c))");
+  });
+});
+
+describe("lower — quasiquote degrades to quoted data, unquote stays live", () => {
+  it("a quasiquoted list with no unquote lowers exactly like a quote", () => {
+    expect(ts1("`(a b c)")).toBe("list(a, b, c)");
+  });
+
+  it("an (unquote e) node inside emits the LIVE expression, not further-quoted data", () => {
+    expect(ts1("`(a ,b c)")).toBe("list(a, b, c)");
+  });
+
+  it("unquote-splicing also emits the live expression", () => {
+    expect(ts1("`(a ,@b c)")).toBe("list(a, b, c)");
+  });
+
+  it("a nested quasiquoted list still recurses as quoted data", () => {
+    expect(ts1("`((a ,b) c)")).toBe("list(list(a, b), c)");
+  });
+
+  it("a stray unquote outside a quasiquote stays inert (degrades to the live inner expr)", () => {
+    expect(ts1(",b")).toBe("b");
+  });
+});
+
+describe("lower — top-level define lowers to a const statement", () => {
+  it("(define x e) → const x = e", () => {
+    expect(ts1("(define x 5)")).toBe("const x = 5");
+  });
+
+  it("(define (f a b) body) → const f = (a: any, b: any) => body", () => {
+    expect(ts1("(define (add2 a b) (+ a b))")).toBe("const add2 = (a: any, b: any) => _.$plus$(a, b)");
+  });
+
+  it("a multi-form function body folds to a comma sequence, mirroring emitLambda", () => {
+    expect(ts1("(define (f x) (foo x) (bar x))")).toBe("const f = (x: any) => (foo(x), bar(x))");
+  });
+
+  it("a zero-arg function define", () => {
+    expect(ts1("(define (f) 1)")).toBe("const f = () => 1");
+  });
+
+  it("(define x) with no value lowers to undefined", () => {
+    expect(ts1("(define x)")).toBe("const x = undefined");
+  });
+
+  it("multiple top-level defines are separate const statements", () => {
+    expect(ts1("(define x 1) (define y 2)")).toBe("const x = 1;\nconst y = 2");
+  });
+
+  it("a NESTED define (inside a lambda body) keeps the prior application-call lowering", () => {
+    expect(ts1("(lambda () (define x 1) x)")).toBe("(() => (define(x, 1), x))");
+  });
+
+  it("integration: a defined helper's arity mismatch actually type-checks against real params", () => {
+    const errors = compileErrors(`${lower("(define (add2 a b) a) (add2 1)").ts}\n`);
+    expect(errors.length).toBeGreaterThan(0); // TS2554 — too few arguments
+  });
+});
+
+describe("lower — s.* combinators (TS reserved-word forms)", () => {
+  it("if → s.if(c, a, b) / s.if(c, a)", () => {
+    expect(ts1("(if #t 1 2)")).toBe("s.if(true, 1, 2)");
+    expect(ts1("(if #t 1)")).toBe("s.if(true, 1)");
+  });
+
+  it("let → s.let(v1, v2, (a, b) => body)", () => {
+    expect(ts1("(let ((a 1) (b 2)) (+ a b))")).toBe("s.let(1, 2, (a, b) => _.$plus$(a, b))");
+  });
+
+  it("named let → s.namedLet(v, (loop, i) => body)", () => {
+    expect(ts1("(let loop ((i 0)) (loop i))")).toBe("s.namedLet(0, (loop, i) => loop(i))");
+  });
+
+  it("let* → nested s.let calls (sequential scoping)", () => {
+    expect(ts1("(let* ((a 1) (b a)) b)")).toBe("s.let(1, (a) => s.let(a, (b) => b))");
+  });
+
+  it("letrec / letrec* → the same flat emission as let (advisory fidelity)", () => {
+    expect(ts1("(letrec ((a 1)) a)")).toBe("s.let(1, (a) => a)");
+    expect(ts1("(letrec* ((a 1)) a)")).toBe("s.let(1, (a) => a)");
+  });
+
+  it("cond → s.cond([test, e], …, [true, d]) — else becomes true", () => {
+    expect(ts1("(cond (#t 1) (else 2))")).toBe("s.cond([true, 1], [true, 2])");
+  });
+
+  it("do / case → parse-safety only", () => {
+    expect(ts1("(do 1 2)")).toBe("s.do(1, 2)");
+    expect(ts1("(case x (1 2))")).toBe("s.case(x, _.$1$(2))"); // parse-safety only — shape is incidental
+  });
+
+  it("a reserved word in ARGUMENT/value position routes through `_`, never prints bare", () => {
+    expect(ts1("(f for)")).toBe("f(_.for)");
+    expect(ts1("(f class new return)")).toBe("f(_.class, _.new, _.return)");
+  });
+
+  it("integration: (if ...) type-checks and narrows through the carrier `s` namespace", () => {
+    const errors = compileErrors(`${carrierVocabularyText}\n${lower("(if #t 1 2)").ts}\n`);
+    expect(errors).toEqual([]);
+    const narrowed: string = "const _x: number = s.if(true, 1, 2);";
+    expect(compileErrors(`${carrierVocabularyText}\n${narrowed}\n`)).toEqual([]);
+  });
+
+  it("integration: (let ((a 1)) a) type-checks and infers the bound type", () => {
+    const errors = compileErrors(`${carrierVocabularyText}\nconst _x: number = ${lower("(let ((a 1)) a)").ts};\n`);
+    expect(errors).toEqual([]);
+  });
+
+  it("integration: (cond (#t 1) (else 2)) type-checks", () => {
+    const errors = compileErrors(
+      `${carrierVocabularyText}\nconst _x: number = ${lower("(cond (#t 1) (else 2))").ts};\n`,
+    );
+    expect(errors).toEqual([]);
   });
 });
 

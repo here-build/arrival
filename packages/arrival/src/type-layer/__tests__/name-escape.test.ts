@@ -74,4 +74,20 @@ describe("name-escape — the bifunctor lens", () => {
     expect(escapeName("a$b")).toBe("a$dollar$b");
     expect(unescapeName("a$dollar$b")).toBe("a$b");
   });
+
+  it("an ECMAScript RESERVED WORD is never a fixed point — it must route through `_`, not print bare", () => {
+    for (const word of ["for", "class", "new", "return", "if", "let", "do", "case", "var", "delete"]) {
+      expect(isTsIdentifier(word)).toBe(false);
+      // escapeName still round-trips it (no char needs escaping — the word is unescaped by
+      // charFor, matching the round-trip law); the CALLER is what routes it through `_.`.
+      expect(unescapeName(escapeName(word))).toBe(word);
+    }
+  });
+
+  it("a TS CONTEXTUAL (non-reserved) type-level keyword stays a fixed point — `const string = 1` is valid TS", () => {
+    for (const word of ["any", "string", "number", "unknown", "type", "declare", "of", "as", "get", "set"]) {
+      expect(isTsIdentifier(word)).toBe(true);
+      expect(escapeName(word)).toBe(word);
+    }
+  });
 });

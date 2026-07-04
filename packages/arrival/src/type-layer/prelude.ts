@@ -45,20 +45,20 @@ export interface HarvestedPrelude {
 }
 
 /**
- * Assemble the ambient prelude for a set of `[name, SymbolDef]` grant tools. Identifier-safe
- * names become `declare const <name>: <sig>`; operator / non-identifier names become ESCAPED,
- * dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the lowering emits the
- * matching escaped access). `sig` is the harvested arrow string; a door/macro/keyword harvests as
- * `never` (not callable).
+ * Assemble the ambient prelude for a set of `[name, arrow-signature]` grant entries.
+ * Identifier-safe names become `declare const <name>: <sig>`; operator / non-identifier names
+ * become ESCAPED, dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the
+ * lowering emits the matching escaped access). `sig` is used verbatim — callers that harvest
+ * from a `SymbolDef` (`assembleHarvestedPrelude`) or from a tool's JSON Schema
+ * (arrival-manifold's `assembleManifoldPrelude`) both funnel through this one assembly.
  */
-export function assembleHarvestedPrelude(
-  entries: Iterable<readonly [name: string, def: SymbolDef]>,
+export function assemblePreludeFromSignatures(
+  entries: Iterable<readonly [name: string, sig: string]>,
 ): HarvestedPrelude {
   const members: string[] = [];
   const identDecls: string[] = [];
   const operatorDecls: string[] = [];
-  for (const [name, def] of entries) {
-    const sig = signatureOf(def);
+  for (const [name, sig] of entries) {
     members.push(name);
     // identifier-safe → a top-level `declare const`; everything else → an ESCAPED, dotted member of
     // the `_` namespace (`get-route` → `_.get$dash$route`), so `typeof _.<name>` is a legal type
@@ -72,4 +72,17 @@ export function assembleHarvestedPrelude(
     prelude: [carrierVocabulary(), "", ...identDecls, "", operatorNamespace].join("\n"),
     members,
   };
+}
+
+/**
+ * Assemble the ambient prelude for a set of `[name, SymbolDef]` grant tools. Thin wrapper over
+ * `assemblePreludeFromSignatures`: harvests each def's arrow signature via `signatureOf`, then
+ * delegates assembly. A door/macro/keyword harvests as `never` (not callable) — `signatureOf`'s
+ * own contract.
+ */
+export function assembleHarvestedPrelude(
+  entries: Iterable<readonly [name: string, def: SymbolDef]>,
+): HarvestedPrelude {
+  const sigEntries = Array.from(entries, ([name, def]): readonly [string, string] => [name, signatureOf(def)]);
+  return assemblePreludeFromSignatures(sigEntries);
 }

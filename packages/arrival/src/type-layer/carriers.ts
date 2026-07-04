@@ -81,6 +81,34 @@ export type IsStringTyped<S> =
   : [NonNullable<S>] extends [string] ? true
   : false;
 
+// ── the `s` namespace — RESERVED-WORD special forms as calls on a property bag ────
+//
+// TS reserved words (`if`, `let`, `do`, `case`) parse-catastrophe as a bare head
+// (`if(c, a, b)` starts an if-STATEMENT, not a call) but are legal PROPERTY names, so
+// lower.ts routes these forms through `s.<name>(...)` instead. Declared here (the
+// ambient-vocabulary file) so the same `s` is in scope everywhere the carriers are.
+export declare const s: {
+  /** `(if c a b)` / `(if c a)` → `s.if(c, a, b)` / `s.if(c, a)`. */
+  if<T, F = undefined>(c: unknown, t: T, f?: F): T | F;
+  /** `(let ((a v1) (b v2)) body…)` → `s.let(v1, v2, (a, b) => body)`. Also the emission
+   *  target for `letrec`/`letrec*` (advisory fidelity — mutual-recursion scoping is not
+   *  modeled; a single flat call is enough for typing purposes). */
+  let<A extends readonly unknown[], R>(...args: [...A, (...bindings: A) => R]): R;
+  /** Named let: `(let loop ((i 0)) body…)` → `s.namedLet(0, (loop, i) => body)`. `loop`'s
+   *  type is the same `(...args: A) => R` shape as the call itself — a self-referential
+   *  recursive-loop signature. */
+  namedLet<A extends readonly unknown[], R>(...args: [...A, (loop: (...args: A) => R, ...bindings: A) => R]): R;
+  /** `(cond (test e) … (else d))` → `s.cond([test, e], …, [true, d])` — `else` → `true`.
+   *  Each clause is a `[test, result]` tuple; `R` is the union of every clause's result. */
+  cond<R>(...clauses: readonly (readonly [unknown, R])[]): R;
+  /** Parse-safety only (0 corpus occurrences) — `do`'s named-step/init binding structure
+   *  is not type-faithfully expressible as a flat argument list without losing its
+   *  per-binding (init, step) pairing; not attempted. */
+  do(...args: unknown[]): unknown;
+  /** Parse-safety only (0 corpus occurrences) — same rationale as `do`. */
+  case(...args: unknown[]): unknown;
+};
+
 // ── the reachability query (the list-slot gate; see §7) ───────────────────────
 // At a List slot after `(`, admit a head iff its return COULD be a list — mask only
 // PROVABLY non-list. The `[unknown] extends [R]` arm is the nuke-guard: a generic / `if`
