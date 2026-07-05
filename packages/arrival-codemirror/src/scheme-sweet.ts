@@ -1,4 +1,4 @@
-import { LanguageSupport, StreamLanguage, type StreamParser } from "@codemirror/language";
+import { LanguageSupport, StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
 /**
@@ -24,6 +24,7 @@ const set = (str: string): Set<string> => new Set(str.split(/\s+/).filter(Boolea
 
 export const DEFINITION_KEYWORDS = set(`
   define define-values define-syntax define-macro defmacro define-class define-record-type
+  define/overridable
   lambda λ case-lambda opt-lambda
   let let* letrec letrec-syntax let-syntax let-values let*-values let/ec let/cc
   syntax-rules syntax-case
@@ -53,10 +54,66 @@ const decimalMatcher =
 const SYMBOL_BODY = /[\w\-!$%&*+./<=>?@^~]/;
 
 interface SchemeSweetState {
-  mode: false | "string" | "comment";
+  mode: false | "string" | "comment" | "attext";
   // Are we the head (first datum) of a freshly-opened list? Used so that the
   // defined name in `(define foo ...)` can read as t.definition(variableName).
   afterDefineHead: boolean;
+  // Balanced LITERAL brace depth inside an `@…{…}` text body (mode === "attext").
+  // The body closes on a `}` at depth 0; inner balanced `{}` are literal prose.
+  atDepth: number;
+}
+
+// at-expression opener `@head{` / `@{` — head is any non-delimiter run (mirrors the
+// arrival-sweet reader's AT_HEAD), immediately followed by `{`.
+const AT_OPENER = /^[^\s{}()[\]"@]*\{/;
+// interpolation id chars inside a text body (bare `@id`), mirrors the reader.
+const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
+
+/** Tokenize one step INSIDE an `@…{…}` text body (mode === "attext"). Prose runs
+ *  highlight as `string`; `@`-escapes (`@id` / `@|id|` / `@(graft)`) pop as an
+ *  interpolation; `{`/`}` track balanced literal braces; the depth-0 `}` closes the
+ *  body. Returns null at EOL so the body carries across lines (multi-line @dedent). */
+function tokenizeAtText(stream: StringStream, state: SchemeSweetState): string | null {
+  const c = stream.peek();
+  if (c == null) return null; // end of line — stay in attext (multi-line body)
+  if (c === "}") {
+    stream.next();
+    if (state.atDepth === 0) {
+      state.mode = false;
+      return CURLY; // body close
+    }
+    state.atDepth--;
+    return "string"; // literal closing brace
+  }
+  if (c === "{") {
+    stream.next();
+    state.atDepth++;
+    return "string"; // literal opening brace
+  }
+  if (c === "@") {
+    stream.next(); // consume `@`
+    const n = stream.peek();
+    if (n === "(") {
+      // graft — consume the balanced `(…)` on this line
+      let depth = 0;
+      let ch: string | void;
+      while ((ch = stream.next()) != null) {
+        if (ch === "(") depth++;
+        else if (ch === ")" && --depth === 0) break;
+      }
+      return INTERP;
+    }
+    if (n === "|") {
+      stream.next(); // opening `|`
+      stream.eatWhile((x: string) => x !== "|");
+      stream.eat("|"); // closing `|`
+      return INTERP;
+    }
+    stream.eatWhile(AT_INTERP); // bare `@id` (or a nested `@head` — its `{` bumps atDepth)
+    return INTERP;
+  }
+  stream.eatWhile((x: string) => x !== "@" && x !== "{" && x !== "}"); // prose run
+  return "string";
 }
 
 // Custom token names → resolved through tokenTable below.
@@ -66,10 +123,12 @@ const COMPARE = "sweetCompare"; // == → compareOperator
 const LOGIC = "sweetLogic"; // && || → logicOperator
 const CURLY = "sweetCurly"; // { } infix braces → brace
 const DEFNAME = "sweetDefName"; // defined name → definition(variableName)
+const ATOPEN = "sweetAtOpen"; // @head{ opener → keyword (the tagged-template head)
+const INTERP = "sweetInterp"; // @id / @(…) / @|…| inside a text body → variableName pop
 
-const parser: StreamParser<SchemeSweetState> = {
+export const parser: StreamParser<SchemeSweetState> = {
   name: "scheme-sweet",
-  startState: () => ({ mode: false, afterDefineHead: false }),
+  startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0 }),
 
   token(stream, state): string | null {
     // continue multi-line string
@@ -98,6 +157,8 @@ const parser: StreamParser<SchemeSweetState> = {
       }
       return "blockComment";
     }
+    // continue an `@…{…}` text body (possibly multi-line)
+    if (state.mode === "attext") return tokenizeAtText(stream, state);
 
     if (stream.eatSpace()) return null;
 
@@ -195,6 +256,16 @@ const parser: StreamParser<SchemeSweetState> = {
       return LOGIC; // ||
     }
 
+    // ── at-expression opener `@head{` / `@{` ── enter the text-body sub-mode. A bare
+    // `@` / `@foo` (no following `{`) is NOT one — it falls through to symbol handling
+    // (the accessor `@` / an `@`-symbol stay variableName).
+    if (ch === "@" && AT_OPENER.test(stream.string.slice(stream.pos))) {
+      stream.match(AT_OPENER); // consume head + `{`
+      state.mode = "attext";
+      state.atDepth = 0;
+      return ATOPEN;
+    }
+
     // ── numbers (non-prefixed decimal) ──
     if (/[-+0-9.]/.test(ch)) {
       stream.backUp(1);
@@ -238,6 +309,8 @@ const parser: StreamParser<SchemeSweetState> = {
     [LOGIC]: t.logicOperator,
     [CURLY]: t.brace,
     [DEFNAME]: t.definition(t.variableName),
+    [ATOPEN]: t.keyword, // @head{ — the tagged-template head reads as a keyword
+    [INTERP]: t.variableName, // @id / @(…) / @|…| — interpolation pops against the prose
   },
 };
 
