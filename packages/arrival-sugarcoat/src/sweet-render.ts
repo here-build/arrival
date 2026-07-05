@@ -119,6 +119,31 @@ export function parseSexprs(src: string): Node[] {
     const c = src[i];
     invariant(c !== undefined, "unexpected EOF");
     let node: Node;
+    if (c === "#" && src[i + 1] === "\\") {
+      // `#\<char>` character literal (R7RS 7.1.1): self-delimiting — a single
+      // non-alphabetic payload (`#\"`, `#\\`, `#\(`, `#\;`, `#\ `, ...) always
+      // consumes EXACTLY one more character regardless of what follows; an
+      // alphabetic payload can extend into a named literal (`#\space`,
+      // `#\newline`, `#\x41`, ...), so consume the whole run. Without this,
+      // the payload char falls through to the generic atom scan below, which
+      // stops at `"`/`(`/`)`/`[`/`]`/`;` — e.g. `#\"` reads as the 2-char atom
+      // `#\` and then hands the bare `"` to `readString`, which then swallows
+      // everything up to the NEXT quote in the source (or to EOF, throwing
+      // "unterminated string") instead of the one intended character literal.
+      const charStart = i;
+      i += 2;
+      if (i < n && /[a-z]/i.test(src[i])) {
+        while (i < n && /[a-z0-9]/i.test(src[i])) i++;
+      } else if (i < n) {
+        i++;
+      }
+      node = { atom: src.slice(charStart, i) };
+      if (lead.length > 0) node.lead = lead;
+      node.span = [start, i];
+      lastNode = node;
+      sawNewlineSinceNode = false;
+      return node;
+    }
     switch (c) {
       case "(":
       case "[": {
