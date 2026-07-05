@@ -1,12 +1,19 @@
 /**
- * Bridge — the R7RS exception machinery + the native foundation pack roster.
+ * Bridge — the R7RS error-object predicate surface + the native foundation pack roster.
  *
  * Historically this module bridged the Operator/Profunctor numeric system to the
  * Scheme runtime (the `wrapOperator` / `Operator` / `Codec` stack). That numeric core
  * has been carved into the `scheme/numeric` pack (env/r7rs/numeric.ts) and is bound
  * via `symbol.native`. What remains here:
- *   1. `wrappedOps` / `exceptionsCapability` — the R7RS §6.11 exception verbs + the
- *      exception-handler stack, as a pack;
+ *   1. `wrappedOps` / `exceptionsCapability` — the genuine R7RS §6.11 PREDICATES
+ *      (error-object?/error-object-message/error-object-irritants/read-error?/
+ *      file-error?), as a pack. The exception FORMS (raise/raise-continuable/
+ *      with-exception-handler/error/guard) and the machinery they need
+ *      (%raise/%current-handlers/%set-handlers!/make-error-object) moved to
+ *      `scheme/r7rs/exceptions` (env/r7rs/exceptions.ts) — that pack's OWN prelude
+ *      was the only caller of that machinery, so it now owns it directly instead of
+ *      depending on this pack via roster-order accident (no explicit `deps` ever
+ *      declared the link).
  *   2. `GLOBAL_NATIVE_PACKS` — the native foundation roster (NATIVE_PACKS + the
  *      exceptions pack) that the runtime bootstrap assembles onto global_env;
  *   3. the `coerceNumeric` re-export (its home is op-helpers.ts).
@@ -19,16 +26,15 @@
  * cycle) — which is exactly why generator-exec.ts can import `GLOBAL_NATIVE_PACKS` here.
  */
 
-import { R7RSError, R7RSReadError, R7RSFileError, RaisedException } from "./errors.js";
+import { R7RSError, R7RSReadError, R7RSFileError } from "./errors.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { EnvCapability } from "./common/capability.js";
 import { symbol } from "./common/symbol.js";
 import * as z from "./common/scheme-zod.js";
 // The value-domain primitive clusters AND the numeric core are assembled onto
 // global_env from `GLOBAL_NATIVE_PACKS` below (NATIVE_PACKS + the exceptions pack).
-// `wrappedOps` keeps only the R7RS exception machinery.
+// `wrappedOps` keeps only the R7RS error-object predicates.
 import { NATIVE_PACKS } from "./env/native-packs.js";
-import { AString } from "./values/primitives/AString.js";
 import { APair } from "./values/primitives/APair.js";
 import { nil } from "./values/primitives/ANil.js";
 import "./errors.js";
@@ -38,24 +44,18 @@ import "./errors.js";
 // that still reach for it via `bridge.js`.
 export { coerceNumeric } from "./values/op-helpers.js";
 
-// R7RSError / R7RSReadError / R7RSFileError / RaisedException relocated to errors.ts (the single error home).
-
-// The R7RS exception handler stack — a module-level holder (the dynamic-holder family,
-// alongside the evaluator's _dynamicCallSite/_currentRunEnv). Replaces the old set!'d
-// `*current-exception-handlers*` scheme cell: the R7RS exception forms push/pop it via the
-// `%current-handlers`/`%set-handlers!` primitives below, so NO scheme `set!` remains.
-// Process-global like the cell was (same dynamic visibility, so a deep `raise` sees it);
-// per-run isolation lands later when the dynamic holders thread per-run through the trampoline.
-let currentHandlers: unknown = nil;
+// R7RSError / R7RSReadError / R7RSFileError relocated to errors.ts (the single error home).
 
 export const wrappedOps = {
   // The entire numeric core (arithmetic / comparison / tower predicates / exactness
   // conversions / the inline misc ops) has been carved into the `scheme/numeric`
-  // pack (env/r7rs/numeric.ts), bound via `symbol.native`. What remains here is the
-  // R7RS § 6.11 exception machinery — sourced into `exceptionsCapability` below.
+  // pack (env/r7rs/numeric.ts), bound via `symbol.native`. The exception FORMS +
+  // machinery live in `scheme/r7rs/exceptions` (env/r7rs/exceptions.ts) now. What
+  // remains here is JUST the R7RS § 6.11 error-object predicate surface — sourced
+  // into `exceptionsCapability` below.
 
   // ============================================================================
-  // R7RS Exception Handling (Section 6.11)
+  // R7RS Exception Handling (Section 6.11) — the predicate surface
   // ============================================================================
 
   "error-object?"(obj: unknown): boolean {
@@ -92,66 +92,19 @@ export const wrappedOps = {
   "file-error?"(obj: unknown): boolean {
     return obj instanceof R7RSFileError;
   },
-
-  "make-error-object"(message: unknown, ...irritants: unknown[]): R7RSError {
-    const msg = message instanceof AString ? message.valueOf() : String(message);
-    return new R7RSError(msg, ...irritants);
-  },
-
-  "raise-exception"(obj: unknown): never {
-    throw new RaisedException(obj, false);
-  },
-
-  "raise-continuable-exception"(obj: unknown): never {
-    throw new RaisedException(obj, true);
-  },
-
-  "raised-exception?"(obj: unknown): boolean {
-    return obj instanceof RaisedException;
-  },
-
-  "raised-exception-value"(exc: unknown): unknown {
-    if (exc instanceof RaisedException) {
-      return exc.value;
-    }
-    return exc;
-  },
-
-  "raised-exception-continuable?"(exc: unknown): boolean {
-    if (exc instanceof RaisedException) {
-      return exc.continuable;
-    }
-    return false;
-  },
-
-  // Throw the object directly (not wrapped in Error with toString)
-  // This preserves the original object type for R7RS exception handling
-  "%raise"(obj: unknown): never {
-    throw obj;
-  },
-
-  // Read / replace the handler stack (machinery; the R7RS forms push/pop through these
-  // instead of mutating a scheme binding with `set!`).
-  "%current-handlers"(): unknown {
-    return currentHandlers;
-  },
-
-  "%set-handlers!"(handlers: unknown): unknown {
-    currentHandlers = handlers;
-    return nil;
-  },
 };
 
 // ============================================================================
 // Environment Integration
 // ============================================================================
 
-// The R7RS § 6.11 exception verbs — now the SOLE content of `wrappedOps` (the numeric
-// core was carved into the `scheme/numeric` pack). Sourced into `exceptionsCapability`
-// below so they assemble like every other domain — no imperative `applyToEnvironment`
-// monolith.
+// The R7RS § 6.11 error-object PREDICATES — now the SOLE content of `wrappedOps`
+// (the numeric core was carved into `scheme/numeric`; the exception FORMS + their
+// machinery moved to `scheme/r7rs/exceptions`, env/r7rs/exceptions.ts). Sourced into
+// `exceptionsCapability` below so they assemble like every other domain — no
+// imperative `applyToEnvironment` monolith.
 
-/** The R7RS § 6.11 exception verbs as a pack. DELIBERATELY dumb: one literal
+/** The R7RS § 6.11 error-object predicates as a pack. DELIBERATELY dumb: one literal
  *  `symbol.native` declaration per verb, no filter/roster/Set indirection building
  *  the `symbols` object programmatically — this object IS the complete roster, read
  *  top-to-bottom, nothing to cross-reference. Each impl is `wrappedOps.<verb>` (the
@@ -159,7 +112,10 @@ export const wrappedOps = {
  *  public re-export other consumers import directly, see index.ts). Every input is
  *  representation-blind (`z.unknown()`, matching each verb's own `unknown`-typed
  *  param) except the genuinely-boolean/string returns, which get the concrete codec
- *  so the contract documents them honestly. */
+ *  so the contract documents them honestly. NOTHING else lives here — the exception
+ *  FORMS (raise/guard/with-exception-handler/error) and the machinery they need
+ *  (%raise/%current-handlers/%set-handlers!/make-error-object) are self-contained in
+ *  `scheme/r7rs/exceptions` now, not split across two packs joined by roster order. */
 export const exceptionsCapability = new EnvCapability("scheme/exceptions", {
   symbols: {
     "error-object?": symbol.native`error-object?: #t iff obj is an R7RS error object`(
@@ -181,42 +137,6 @@ export const exceptionsCapability = new EnvCapability("scheme/exceptions", {
     "file-error?": symbol.native`file-error?: #t iff obj is a file error`(
       { input: [z.unknown()], output: [z.boolean] },
       wrappedOps["file-error?"],
-    ),
-    "make-error-object": symbol.native`make-error-object: build an R7RS error object from a message and irritants`(
-      { input: [z.unknown()], inputRest: z.unknown(), output: [z.unknown()] },
-      wrappedOps["make-error-object"],
-    ),
-    "raise-exception": symbol.native`raise-exception: throw obj as a non-continuable exception`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      wrappedOps["raise-exception"],
-    ),
-    "raise-continuable-exception": symbol.native`raise-continuable-exception: throw obj as a continuable exception`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      wrappedOps["raise-continuable-exception"],
-    ),
-    "raised-exception?": symbol.native`raised-exception?: #t iff exc is a RaisedException`(
-      { input: [z.unknown()], output: [z.boolean] },
-      wrappedOps["raised-exception?"],
-    ),
-    "raised-exception-value": symbol.native`raised-exception-value: the value carried by a RaisedException`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      wrappedOps["raised-exception-value"],
-    ),
-    "raised-exception-continuable?": symbol.native`raised-exception-continuable?: #t iff exc was raised continuable`(
-      { input: [z.unknown()], output: [z.boolean] },
-      wrappedOps["raised-exception-continuable?"],
-    ),
-    "%raise": symbol.native`%raise: throw obj directly (machinery — the R7RS forms build on this)`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      wrappedOps["%raise"],
-    ),
-    "%current-handlers": symbol.native`%current-handlers: read the exception-handler stack (machinery)`(
-      { input: [], output: [z.unknown()] },
-      wrappedOps["%current-handlers"],
-    ),
-    "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
-      { input: [z.unknown()], output: [z.unknown()] },
-      wrappedOps["%set-handlers!"],
     ),
   },
 });
