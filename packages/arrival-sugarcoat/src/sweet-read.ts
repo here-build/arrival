@@ -105,7 +105,8 @@ type Tok =
   | { t: "(" | ")" | "{" | "}" | "[" | "]"; start?: number; end?: number; tight?: boolean }
   | { t: "."; start?: number; end?: number } // method-dot (postfix apply) — see splitMethodDots
   | { t: "quote"; v: "'" | "`" | "," | ",@"; start?: number; end?: number }
-  | { t: "word"; v: string; str?: boolean; start?: number; end?: number };
+  | { t: "word"; v: string; str?: boolean; start?: number; end?: number }
+  | { t: "at"; node: Node; start?: number; end?: number }; // @head{…} at-expression (already parsed)
 
 // ident-start glyphs (R7RS initial set, minus digits): a `.` only splits when the
 // next char is one of these — so `0.5`/`x.5` (decimals) and `(a . b)` stay whole.
@@ -196,6 +197,177 @@ const QUOTE_WRAP: Record<string, string> = {
   ",@": "unquote-splicing",
 };
 
+// ── at-expressions (prose / tagged-template sub-reader) ─────────────────────────
+// `@head{ text }` → (head <part>…); headless `@{…}` defaults to `str`; `@dedent{…}`
+// dissolves to (str <dedented>). Inside a body the only escape is `@`: `@id`
+// interpolates, `@(datum)` grafts code, `@head{…}` nests. Everything else — quotes,
+// newlines, balanced `{}` — is literal text. Spec:
+// docs/package-specific/arrival-sweet/arrival-sweet-at-expressions-2026-07-05.md.
+
+// head of `@head{`: any non-delimiter run (str, string-append, dedent, config/x).
+const AT_HEAD = /[^\s{}()[\]"@]/;
+// bare `@id` interpolation: ident-ish; STOPS at `.` (not in the class) so prose
+// periods stay literal — richer holes use the `@(expr)` graft.
+const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
+const strAtom = (s: string): Node => ({ atom: s, str: true });
+
+// String atoms store the SOURCE-escaped form (the normal string tokenizer preserves
+// backslash sequences; printScheme wraps verbatim). The at-body reader accumulates
+// RAW characters (so dedent can see real newlines), then escapes at the end.
+const SCHEME_ESC: Record<string, string> = { "\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+const escapeSchemeString = (s: string): string => s.replace(/[\\"\n\r\t]/g, (ch) => SCHEME_ESC[ch]);
+const escapeStrParts = (parts: Node[]): Node[] =>
+  parts.map((p) => ("atom" in p && p.str ? strAtom(escapeSchemeString(p.atom)) : p));
+
+/** Strip the common leading indentation from `@dedent{…}` literal parts — the
+ *  cognitive-rung `dedent` head applied at read, so it dissolves to plain `str`.
+ *  Indentation only ever follows a `\n` inside a literal part (interpolations break
+ *  parts), so the strip is intra-part. The first line (inline after `{`) is excluded;
+ *  blank lines don't lower the minimum. */
+function dedentParts(parts: Node[]): Node[] {
+  const skel = parts.map((p) => ("atom" in p && p.str ? p.atom : "\x00")).join("");
+  const lines = skel.split("\n");
+  let min = Infinity;
+  for (let k = 1; k < lines.length; k++) {
+    if (lines[k].trim() === "") continue; // blank line — ignore
+    min = Math.min(min, /^[ \t]*/.exec(lines[k])![0].length);
+  }
+  if (min === Infinity || min === 0) return parts;
+  return parts.map((p) =>
+    "atom" in p && p.str ? strAtom(p.atom.replace(/\n([ \t]*)/g, (_m, ws: string) => `\n${ws.slice(min)}`)) : p,
+  );
+}
+
+/** Bare `@id` interpolation, restricted class (§3b). `i` points past the `@`. */
+function readInterpId(src: string, i: number): { id: string; end: number } {
+  let id = "";
+  while (i < src.length && AT_INTERP.test(src[i])) {
+    id += src[i];
+    i++;
+  }
+  return { id, end: i };
+}
+
+/** `@(datum)` graft — read the balanced `(…)` raw (string/escape aware) and parse it
+ *  as one sweet expression. `i` points at the `(`. */
+function readGraftParen(src: string, i: number): { node: Node; end: number } {
+  let depth = 0;
+  let inStr = false;
+  let j = i;
+  for (; j < src.length; j++) {
+    const c = src[j];
+    if (inStr) {
+      if (c === "\\") j++;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) {
+      j++;
+      break;
+    }
+  }
+  return { node: readSweetExpr(src.slice(i, j)), end: j };
+}
+
+/** An at-expression iff `@`, optional head, then `{`. Returns null for a bare
+ *  `@`/`@foo` (stays an ordinary symbol — backwards-compat, §2). `i` points at `@`. */
+function tryReadAtExpr(src: string, i: number): { node: Node; end: number } | null {
+  let j = i + 1;
+  while (j < src.length && AT_HEAD.test(src[j])) j++;
+  if (src[j] !== "{") return null;
+  const head = src.slice(i + 1, j) || "str"; // headless `@{…}` → str
+  const { parts, end } = parseAtBody(src, j + 1); // past `{` — RAW literal parts
+  // dedent runs on raw text (real newlines), THEN literal parts get source-escaped.
+  const finalParts = escapeStrParts(head === "dedent" ? dedentParts(parts) : parts);
+  const node: Node =
+    head === "dedent"
+      ? { list: [atom("str"), ...finalParts] } // dedent dissolves to str (§4)
+      : { list: [atom(head), ...finalParts] };
+  return { node, end };
+}
+
+/** Read a text body from just-past-`{` to its matching `}`. Coalesces literal runs
+ *  into single string parts; `@` escapes to a graft / nested at-expr / interpolation;
+ *  balanced literal `{}` stay verbatim. */
+function parseAtBody(src: string, i: number): { parts: Node[]; end: number } {
+  const parts: Node[] = [];
+  let buf = "";
+  const flush = (): void => {
+    if (buf.length > 0) {
+      parts.push(strAtom(buf));
+      buf = "";
+    }
+  };
+  let depth = 0; // balanced LITERAL braces inside the body
+  while (i < src.length) {
+    const c = src[i];
+    if (c === "}") {
+      if (depth === 0) {
+        i++;
+        break; // body close
+      }
+      depth--;
+      buf += c;
+      i++;
+      continue;
+    }
+    if (c === "{") {
+      depth++;
+      buf += c;
+      i++;
+      continue; // literal brace (balanced)
+    }
+    if (c === "@") {
+      if (src[i + 1] === "(") {
+        flush();
+        const g = readGraftParen(src, i + 1);
+        parts.push(g.node);
+        i = g.end;
+        continue;
+      }
+      if (src[i + 1] === "|") {
+        // `@|sym|` — explicit-boundary interpolation, for when the next literal char
+        // would otherwise glue onto a bare `@id` (`@|name|!` vs the greedy `@name!`).
+        let k = i + 2;
+        let sym = "";
+        while (k < src.length && src[k] !== "|") {
+          sym += src[k];
+          k++;
+        }
+        if (src[k] === "|") {
+          flush();
+          parts.push(atom(sym));
+          i = k + 1;
+          continue;
+        }
+      }
+      const nested = tryReadAtExpr(src, i);
+      if (nested) {
+        flush();
+        parts.push(nested.node);
+        i = nested.end;
+        continue;
+      }
+      const { id, end } = readInterpId(src, i + 1);
+      if (id.length > 0) {
+        flush();
+        parts.push(atom(id));
+        i = end;
+        continue;
+      }
+      buf += c; // lone `@` → literal
+      i++;
+      continue;
+    }
+    buf += c;
+    i++;
+  }
+  flush();
+  return { parts, end: i };
+}
+
 function tokenize(src: string, base?: number): Tok[] {
   const toks: Tok[] = [];
   let i = 0;
@@ -240,6 +412,16 @@ function tokenize(src: string, base?: number): Tok[] {
       i++;
       toks.push({ t: "word", v: str, str: true, ...at(s, i) });
       continue;
+    }
+    if (c === "@") {
+      // `@head{…}` at-expression — read the raw body (newlines intact). A bare
+      // `@`/`@foo` (no `{`) is NOT one → fall through to the word run, stays a symbol.
+      const r = tryReadAtExpr(src, i);
+      if (r) {
+        toks.push({ t: "at", node: r.node, ...at(s, r.end) });
+        i = r.end;
+        continue;
+      }
     }
     let j = i;
     while (j < src.length && !/\s/.test(src[j]) && !'(){}[]"'.includes(src[j])) j++;
@@ -375,6 +557,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     const t = next();
     if (t.t === "(") return classicList();
     if (t.t === "{") return curly();
+    if (t.t === "at") return t.node;
     if (t.t === "word") return atom(t.v, t.str);
     invariant(false, () => `unexpected '${t.t}'`);
   }
@@ -389,6 +572,10 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     if (t.t === "{") {
       next();
       return curly();
+    }
+    if (t.t === "at") {
+      next();
+      return t.node;
     }
     if (t.t === "word" && !isOp(t.v)) {
       next();
@@ -532,7 +719,11 @@ function coalesce(physical: { text: string; base: number }[]): LogLine[] {
     let joined = false;
     while (i + 1 < physical.length && bracketDepth(content) > 0) {
       i++;
-      content += ` ${physical[i].text.trim()}`;
+      // Preserve the raw continuation (newline + original indentation): inside an
+      // `@…{…}` text body newlines and indentation are literal content (dedent needs
+      // to see the indent). For code/curly the reader skips all whitespace, so `\n`
+      // vs ` ` is equivalent — joined lines carry no `base`, hence no spans either way.
+      content += `\n${physical[i].text}`;
       joined = true;
     }
     out.push(joined ? { indent, content } : { indent, content, base });

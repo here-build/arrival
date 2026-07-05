@@ -358,6 +358,107 @@ const isInfix = (items: Node[], o: SweetOpts): boolean =>
 
 const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
 
+// ── at-expressions render (inverse of sweet-read's @-reader) ─────────────────────
+// `(str …)`→`@{…}`, `(string-append …)`→`@string-append{…}`. dedent never appears in
+// canonical scheme (the reader dissolved it), so a multi-line `(str …)` renders as
+// `@dedent{…}` (handled in the broken renderer); the single-line forms live here.
+const AT_TEXT_HEADS = new Set(["str", "string-append"]);
+// a bare `@id` interpolation must FULLY match the reader's restricted class (no `.`).
+const INTERP_ID = /^[A-Za-z0-9!$%&*/:<=>?^_~+-]+$/;
+const unescapeScheme = (s: string): string =>
+  s.replace(/\\(["\\ntr])/g, (_m, c: string) => (c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c));
+const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!(n as { str?: boolean }).str;
+
+/** Emit one interpolation part. A simple symbol → `@id`, guarded to `@|id|` when the
+ *  NEXT literal starts with an interp-class char (else the reader reads them glued).
+ *  A classic list (`(f x)`) → `@(f x)` graft. Anything else → null (caller bails to
+ *  classic — no sound at-exp spelling). */
+function interpPiece(p: Node, next: Node | undefined, o: SweetOpts): string | null {
+  if (isAtom(p) && !p.str && INTERP_ID.test(p.atom)) {
+    const glue = next != null && isStrNode(next) && INTERP_ID.test(unescapeScheme(next.atom)[0] ?? "");
+    return glue ? `@|${p.atom}|` : `@${p.atom}`;
+  }
+  const inner = inlineSweet(p, o);
+  return inner.startsWith("(") ? `@${inner}` : null;
+}
+
+/** Render `(str …)`/`(string-append …)` as a SINGLE-LINE at-expression, or null when
+ *  not safely round-trippable (caller falls back to classic). Soundness gates: no
+ *  adjacent string literals (the reader coalesces), no `@`/brace/newline in literal
+ *  text (no in-body escape for those; newline ⇒ the deferred multi-line path), and
+ *  at least one prose literal (preference — don't at-exp `(str x y)`). */
+function renderAtExpr(items: Node[], o: SweetOpts): string | null {
+  if (!o.curly || !isAtom(items[0]) || items[0].str || !AT_TEXT_HEADS.has(items[0].atom)) return null;
+  const head = items[0].atom;
+  const parts = items.slice(1);
+  if (parts.length === 0) return null;
+  let prevWasStr = false;
+  let sawProse = false;
+  let body = "";
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k];
+    if (isStrNode(p)) {
+      if (prevWasStr) return null; // adjacent literals coalesce on read → not representable
+      prevWasStr = true;
+      const raw = unescapeScheme(p.atom);
+      if (/[\n\r@{}]/.test(raw)) return null; // newline ⇒ multi-line path; @/brace ⇒ no text-mode escape
+      if (/[ "]/.test(raw)) sawProse = true; // space or quote ⇒ genuine prose
+      body += raw;
+    } else {
+      prevWasStr = false;
+      const piece = interpPiece(p, parts[k + 1], o);
+      if (piece == null) return null;
+      body += piece;
+    }
+  }
+  if (!sawProse) return null;
+  return head === "str" ? `@{${body}}` : `@${head}{${body}}`;
+}
+
+/** Multi-line render for a `(str …)` whose prose carries a newline: `@dedent{…}` with
+ *  cosmetic indent the reader strips back (round-trips) when the value has no intrinsic
+ *  common indent, else `@{…}` verbatim. Only `str` (string-append multi-line stays
+ *  classic — one escaped line reads cleaner than a flush-left block). Returns null when
+ *  not a newline-bearing representable str (single-line/classic handled elsewhere). */
+function renderAtDedentBlock(nd: Node, col: number, o: SweetOpts): string | null {
+  if (!o.curly || isAtom(nd)) return null;
+  const items = nd.list;
+  if (!isAtom(items[0]) || items[0].str || items[0].atom !== "str") return null;
+  const parts = items.slice(1);
+  if (parts.length === 0) return null;
+  let prevWasStr = false;
+  let hasNewline = false;
+  const pieces: string[] = [];
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k];
+    if (isStrNode(p)) {
+      if (prevWasStr) return null;
+      prevWasStr = true;
+      const raw = unescapeScheme(p.atom);
+      if (/[@{}]/.test(raw)) return null;
+      if (raw.includes("\n")) hasNewline = true;
+      pieces.push(raw);
+    } else {
+      prevWasStr = false;
+      const piece = interpPiece(p, parts[k + 1], o);
+      if (piece == null) return null;
+      pieces.push(piece);
+    }
+  }
+  if (!hasNewline) return null; // single-line → renderAtExpr / classic
+  const lines = pieces.join("").split("\n");
+  let vmin = Infinity; // value's intrinsic common indent (non-first, non-blank lines)
+  for (let k = 1; k < lines.length; k++) {
+    if (lines[k].trim() === "") continue;
+    vmin = Math.min(vmin, /^[ \t]*/.exec(lines[k])![0].length);
+  }
+  if (vmin === Infinity) return null; // all continuation lines blank → let classic handle
+  if (vmin > 0) return `@{${lines.join("\n")}}`; // intrinsic indent → verbatim, no dedent
+  const pad = " ".repeat(col + 2); // dedent strips exactly this back on read (fixed point)
+  const body = lines.map((ln, k) => (k === 0 || ln.trim() === "" ? ln : pad + ln)).join("\n");
+  return `@dedent{${body}}`;
+}
+
 // ── pair-accessor lens: the whole c[ad]+r family as a list-indexing surface ───
 //
 // A pair path `c[ad]+r` is a chain of just two ops applied inner→outer (read the
@@ -623,6 +724,8 @@ export function inlineSweet(nd: Node, o: SweetOpts): string {
   const items = nd.list;
   if (items.length === 0) return "()";
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSweet(items[1], o);
+  const at = renderAtExpr(items, o);
+  if (at != null) return at;
   if (isInfix(items, o)) {
     return `{${infixContent(items, o)}}`;
   }
@@ -736,6 +839,8 @@ export function formatSweet(nd: Node, col: number, o: SweetOpts): string {
   return withComments(nd, formatSweetCore(nd, col, o), col);
 }
 function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
+  const atBlock = renderAtDedentBlock(nd, col, o);
+  if (atBlock != null) return atBlock; // multi-line @dedent{…}/@{…} for newline-bearing str
   const flat = inlineSweet(nd, o);
   // Function defines, cond, and elidable let-family always break (uniform shape,
   // even if they'd fit); everything else stays inline when it fits. string-append
