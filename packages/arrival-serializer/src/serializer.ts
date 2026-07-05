@@ -750,7 +750,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     if (cappedCollection && collectionMode !== "suppressed") {
       clauses.push(
         collectionMode === "compact"
-          ? "filter/map/reduce helps"
+          ? "filter/map/reduce first, e.g. (map (lambda (x) (:field x)) coll)"
           : "filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back",
       );
       opts.onRemedyRendered?.("collection");
@@ -758,7 +758,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     if (cappedString && stringMode !== "suppressed") {
       clauses.push(
         stringMode === "compact"
-          ? "substring helps"
+          ? "(substring s 0 2000) or (string-contains s \"needle\") to pull just the part you need"
           : "slice the long string with substring, or scan it with string-contains, to pull just the part you need",
       );
       opts.onRemedyRendered?.("string");

@@ -249,13 +249,28 @@ export function renderObservation(
   // unquoted, while the same value provenance-boxed (AString) renders quoted — breaking
   // the preamble's round-trip claim inconsistently. Normalize here: quote + escape,
   // capped like any other string. (Nested raw strings inside raw containers share the
-  // token fate at the serializer level — no interpreter path produces those today.) This
-  // shortcut carries NO remedy clause at all (pre-existing, out of COMPETENCE v2's scope —
-  // it never threaded suppress*/mode options either, in v1).
+  // token fate at the serializer level — no interpreter path produces those today.)
+  //
+  // This shortcut now carries the SAME string-remedy clause the serializer's own
+  // truncation banner does (errors-as-doors: a truncation banner with no remedy is an
+  // anti-door), routed through the identical COMPETENCE v2 gating the collection/string
+  // paths use elsewhere in this file — `opts.stringRemedyMode` (verbose the first time
+  // this world, compact after, suppressed once stably demonstrated) and
+  // `opts.onRemedyRendered("string")` so the caller's gradient advances exactly as it
+  // would for a capped-inside-a-collection string.
   if (typeof value === "string") {
     const cap = opts.maxTotalChars ?? DEFAULT_OBSERVATION_MAX_TOTAL_CHARS;
     if (value.length <= cap) return JSON.stringify(value);
-    return `${JSON.stringify(value.slice(0, cap))} #| ⚠ output reduced: +${value.length - cap} more chars |#`;
+    const stringMode = opts.stringRemedyMode ?? "verbose";
+    let remedy = "";
+    if (stringMode !== "suppressed") {
+      remedy =
+        stringMode === "compact"
+          ? ` — (substring s 0 2000) or (string-contains s "needle") to pull just the part you need`
+          : " — slice the long string with substring, or scan it with string-contains, to pull just the part you need";
+      opts.onRemedyRendered?.("string");
+    }
+    return `${JSON.stringify(value.slice(0, cap))} #| ⚠ output reduced: +${value.length - cap} more chars${remedy} |#`;
   }
   // The `SerializeOptsPending` intersection covers the window where the serializer's
   // PUBLISHED dist .d.ts predates a SerializeOpts seam its src already has (`format`, and

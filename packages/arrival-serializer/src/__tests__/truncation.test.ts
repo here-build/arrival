@@ -122,24 +122,24 @@ describe("streaming truncation (opt-in)", () => {
       expect(out).toContain("slice the long string with substring, or scan it with string-contains, to pull just the part you need");
     });
 
-    it("'compact' mode renders the short reminder form of the SAME pattern, per class", () => {
+    it("'compact' mode renders the short reminder form of the SAME pattern, per class, and STILL carries an exact-syntax action kernel (errors-as-doors: 'X helps' alone is an anti-door)", () => {
       const collOnly = toSExprString(manyItems, { maxTotalChars: 500, collectionRemedyMode: "compact" });
-      expect(collOnly).toContain("filter/map/reduce helps");
+      expect(collOnly).toContain("(map (lambda (x) (:field x)) coll)");
       expect(collOnly).not.toContain("filter/map/reduce the collection in your program");
 
       const strOnly = toSExprString(hugeString, { maxTotalChars: 400, maxStringChars: 30000, stringRemedyMode: "compact" });
-      expect(strOnly).toContain("substring helps");
+      expect(strOnly).toContain("(substring s 0 2000)");
       expect(strOnly).not.toContain("slice the long string with substring");
 
       const both = toSExprString(mixed, { maxTotalChars: 3000, collectionRemedyMode: "compact", stringRemedyMode: "compact" });
-      expect(both).toContain("filter/map/reduce helps");
-      expect(both).toContain("substring helps");
+      expect(both).toContain("(map (lambda (x) (:field x)) coll)");
+      expect(both).toContain("(substring s 0 2000)");
     });
 
     it("modes are independent per class — one verbose, one compact, on the same both-capped result", () => {
       const out = toSExprString(mixed, { maxTotalChars: 3000, collectionRemedyMode: "verbose", stringRemedyMode: "compact" });
       expect(out).toContain("filter/map/reduce the collection in your program");
-      expect(out).toContain("substring helps");
+      expect(out).toContain("(substring s 0 2000)");
       expect(out).not.toContain("slice the long string with substring");
     });
 

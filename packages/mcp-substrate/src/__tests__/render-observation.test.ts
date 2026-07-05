@@ -176,3 +176,43 @@ describe("renderObservation — caps + shrink ride the brace notation natively",
     expect(renderObservation({ a: [1, 2, 3], b: "two words" })).toBe('{:a [1 2 3] :b "two words"}');
   });
 });
+
+describe("renderObservation — raw top-level string truncation now carries a remedy (regression: the pre-existing no-remedy gap)", () => {
+  // A provenance-less native string (e.g. a bare JS string returned top-level, not boxed
+  // in an AString) hits the shortcut branch in renderObservation directly — the ONE path
+  // that, before this fix, emitted the factual `+N more chars` note with zero teaching
+  // clause. It's now routed through the same collectionRemedyMode/stringRemedyMode gating
+  // every other truncation path uses.
+  const raw = "x".repeat(1000);
+
+  it("verbose (default, unset mode) carries the full teaching sentence", () => {
+    const rendered = renderObservation(raw, { maxTotalChars: 100 });
+    expect(rendered).toContain("#| ⚠ output reduced: +900 more chars");
+    expect(rendered).toContain(
+      "slice the long string with substring, or scan it with string-contains, to pull just the part you need",
+    );
+  });
+
+  it("compact mode keeps an exact-syntax action kernel, not a bare technique name (errors-as-doors: 'substring helps' is an anti-door)", () => {
+    const rendered = renderObservation(raw, { maxTotalChars: 100, stringRemedyMode: "compact" });
+    expect(rendered).toContain("(substring s 0 2000)");
+    expect(rendered).toContain('(string-contains s "needle")');
+    expect(rendered).not.toContain("slice the long string with substring");
+  });
+
+  it("suppressed mode drops the remedy clause but keeps the factual +N more chars note", () => {
+    const rendered = renderObservation(raw, { maxTotalChars: 100, stringRemedyMode: "suppressed" });
+    expect(rendered).toContain("output reduced: +900 more chars");
+    expect(rendered).not.toContain("substring");
+  });
+
+  it("fires onRemedyRendered('string') exactly when the remedy actually rendered on this path", () => {
+    const rendered: string[] = [];
+    renderObservation(raw, { maxTotalChars: 100, onRemedyRendered: (cls) => rendered.push(cls) });
+    expect(rendered).toEqual(["string"]);
+
+    const renderedNone: string[] = [];
+    renderObservation("short", { maxTotalChars: 100, onRemedyRendered: (cls) => renderedNone.push(cls) });
+    expect(renderedNone).toEqual([]);
+  });
+});
