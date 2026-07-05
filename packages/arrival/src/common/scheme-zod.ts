@@ -74,16 +74,6 @@ export const svector = z.custom<AVector>(
 );
 export const sbytevector = z.instanceof(ABytevector);
 export const nil = z.instanceof(ANil);
-export const schemeExact = z.instanceof(AExact);
-export const schemeInexact = z.instanceof(AInexact);
-/** Either numeric tower class — the ONE identity term for a native numeric op, reused
- *  (not re-spelled) as the shared `.in` side of every number codec below (number/integer/
- *  bigint/numberOrBigint all lower the exact same scheme value; they differ only in which
- *  JS shape they decode it TO, never in what they accept FROM scheme). Built from the
- *  ALREADY-DECLARED `schemeExact`/`schemeInexact` (not fresh `z.instanceof(...)` calls) —
- *  identity-based lookups (`lookupName`, below) need the union's OWN members to be the
- *  exact same objects those names are registered against, not mere same-class clones. */
-export const schemeNumber = z.union([schemeExact, schemeInexact]);
 
 /** A callable scheme value — a JS function, whether a user `(lambda …)` (carries the
  *  well-known LAMBDA brand) or a bare native/rosetta reference (see eval/guards.ts's
@@ -157,6 +147,45 @@ export const schemeChar = char.in;
 
 // ── the NUMBER CODEC FAMILY ───────────────────────────────────────────────────
 // The boundary number-representation is declared by WHICH of these the author picks.
+
+/** SchemeExact ↔ JS `bigint`. decode DOORS on a non-integer rational (e.g. 1/3 has no
+ *  faithful bigint form) — same door `bigint`'s own decode already has for its exact
+ *  branch, narrowed here to a single class instead of a union member check. encode is
+ *  total (any bigint IS an exact integer). */
+export const exact = z.codec(z.instanceof(AExact), z.bigint(), {
+  decode: (n) => {
+    if (n.denom !== 1n) {
+      throw new Error(`exact codec: exact rational ${n.toString()} has no integer bigint form`);
+    }
+    return n.num;
+  },
+  encode: (n) => new AExact(CONSTANT_CTX, n),
+});
+/** See `schemeString`'s comment — derived from `exact.in`, not re-declared. The identity
+ *  side accepts ANY AExact (the full domain the old standalone `z.instanceof(AExact)`
+ *  accepted, including non-integer rationals) — only the codec's own `decode` doors on a
+ *  value that can't be a faithful bigint; the bare identity schema never narrows. */
+export const schemeExact = exact.in;
+
+/** SchemeInexact ↔ JS `number`. Total — `.real` is always a valid JS number, so unlike
+ *  `exact` this codec never doors. encode is total too (any JS number IS a valid inexact). */
+export const inexact = z.codec(z.instanceof(AInexact), z.number(), {
+  decode: (n) => n.real,
+  encode: (n) => new AInexact(CONSTANT_CTX, n),
+});
+/** See `schemeString`'s comment — derived from `inexact.in`, not re-declared. */
+export const schemeInexact = inexact.in;
+
+/** Either numeric tower class — the ONE identity term for a native numeric op, reused
+ *  (not re-spelled) as the shared `.in` side of every number codec below (number/integer/
+ *  bigint/numberOrBigint all lower the exact same scheme value; they differ only in which
+ *  JS shape they decode it TO, never in what they accept FROM scheme). Built from
+ *  `schemeExact`/`schemeInexact` — themselves now codec-derived (`exact.in`/`inexact.in`)
+ *  rather than fresh `z.instanceof(...)` calls, so this union is codec-driven BY
+ *  COMPOSITION with no fifth standalone codec needed. identity-based lookups (`lookupName`,
+ *  below) need the union's OWN members to be the exact same objects those names are
+ *  registered against, not mere same-class clones. */
+export const schemeNumber = z.union([schemeExact, schemeInexact]);
 
 const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
@@ -284,10 +313,10 @@ const NAMES = new Map<unknown, string>([
 
 /** The canonical NAME of a scheme-zod vocabulary schema, by identity — `undefined` if
  *  `schema` isn't one of ours (a bare zod primitive/compound the printer should defer to
- *  zod-to-ts for). Codecs (`string`/`boolean`/`char`/`number`/`integer`/`bigint`/
- *  `numberOrBigint`) are deliberately NOT registered here — they already print correctly
- *  through zod-to-ts's native codec handling (`io:"output"`), so this seam only needs to
- *  cover the IDENTITY-flavored primitives zod-to-ts can't represent on its own. */
+ *  zod-to-ts for). Codecs (`string`/`boolean`/`char`/`exact`/`inexact`/`number`/`integer`/
+ *  `bigint`/`numberOrBigint`) are deliberately NOT registered here — they already print
+ *  correctly through zod-to-ts's native codec handling (`io:"output"`), so this seam only
+ *  needs to cover the IDENTITY-flavored primitives zod-to-ts can't represent on its own. */
 export function lookupName(schema: unknown): string | undefined {
   return NAMES.get(schema);
 }
