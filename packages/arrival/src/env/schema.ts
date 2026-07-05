@@ -68,6 +68,16 @@ export const schemaCapability = new EnvCapability("arrival/schema", {
 (define (s/field name type . desc)
   (if (null? desc) (list name type) (list name type (car desc))))
 
+;; Top-level scalar constructors — the leaf primitives, spelled as s/* calls so a bare
+;; "string"/"number"/"integer"/"boolean" literal never has to appear in authored code (a
+;; \`define/overridable\` type tag, an array element, anywhere a tag stands alone rather than
+;; inside an \`s/field\`). Each still lowers to the SAME bare string \`tagToJsonSchema\` has
+;; always understood — this is authoring surface, not a new representation.
+(define (s/string)  "string")
+(define (s/number)  "number")
+(define (s/integer) "integer")
+(define (s/boolean) "boolean")
+
 (define (s/field/string  name . rest) (apply s/field (cons name (cons "string"  rest))))
 (define (s/field/number  name . rest) (apply s/field (cons name (cons "number"  rest))))
 (define (s/field/integer name . rest) (apply s/field (cons name (cons "integer" rest))))

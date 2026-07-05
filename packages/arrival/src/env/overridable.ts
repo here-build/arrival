@@ -33,8 +33,8 @@
 // preludeOnly fetch + `%pipeline-params` + pure-scheme `%params-ref` — is gone; there is nothing
 // assembly-time-only left to bridge). The macro is pure ergonomics over it:
 //
-//     (define/overridable city "string" "Berlin")
-//       ⇒ (define city (overridable/resolve 'city "string" "Berlin"))
+//     (define/overridable city (s/string) "Berlin")
+//       ⇒ (define city (overridable/resolve 'city (s/string) "Berlin"))
 //
 // `overridable/resolve` reads `configuration.params[name]` if the host supplied one (an
 // OVERRIDE); otherwise it falls back to the in-form default. EITHER WAY it lowers `type` to a
@@ -87,13 +87,13 @@ function lowerTag(jsTag: unknown, bindingName: string): z.ZodType {
     // validation boundary, with the same binding-named message a bad bare-string type gets.
     if (Object.keys(json).length === 0) throw new Error("tag lowered to an empty (unconstrained) schema");
     return z.fromJSONSchema(json as Parameters<typeof z.fromJSONSchema>[0]);
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
       `define/overridable ${bindingName}: unrecognized type tag ${JSON.stringify(jsTag)} (${reason}) — expected ` +
-        `a bare "string"/"number"/"integer"/"boolean", an ("enum" value...) list, an ("object" (name ` +
-        `type)...) or ("array" tag) form (as built by the s/* constructors — see ` +
-        `@here.build/arrival/schema), with an optional "/optional" suffix on the head`,
+        `an s/* expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
+        `(s/object (s/field ...)...) or (s/array tag) (see @here.build/arrival/schema), ` +
+        `optionally wrapped in (s/optional ...)`,
     );
   }
 }
@@ -133,30 +133,31 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   // applied, root-set membership or not — same posture the capability DAG uses everywhere else.
   deps: [schemaCapability],
   symbols: ({ configuration }) => ({
-    "overridable/resolve": symbol.rosetta`overridable/resolve: (name: symbol, type: string|list, default: any): any — a host override wins over the in-form default; both are validated against \`type\``(
-      { input: [sz.symbol, sz.value, sz.value], output: [sz.value] },
-      (nameSym, typeTag, defaultVal) => {
-        const bindingName = nameSym.toString();
-        const jsTag = schemeToJs(typeTag);
-        const zodType = lowerTag(jsTag, bindingName);
+    "overridable/resolve":
+      symbol.rosetta`overridable/resolve: (name: symbol, type: string|list, default: any): any — a host override wins over the in-form default; both are validated against \`type\``(
+        { input: [sz.symbol, sz.value, sz.value], output: [sz.value] },
+        (nameSym, typeTag, defaultVal) => {
+          const bindingName = nameSym.toString();
+          const jsTag = schemeToJs(typeTag);
+          const zodType = lowerTag(jsTag, bindingName);
 
-        const hasOverride = Object.prototype.hasOwnProperty.call(configuration.params, bindingName);
-        const raw = hasOverride ? configuration.params[bindingName] : schemeToJs(defaultVal);
-        const source = hasOverride ? "an environment override" : "the in-form default";
+          const hasOverride = Object.prototype.hasOwnProperty.call(configuration.params, bindingName);
+          const raw = hasOverride ? configuration.params[bindingName] : schemeToJs(defaultVal);
+          const source = hasOverride ? "an environment override" : "the in-form default";
 
-        const outcome = zodType.safeParse(raw);
-        if (!outcome.success) {
-          const followup = hasOverride
-            ? "the environment that supplied this value should validate at its own boundary too"
-            : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor";
-          throw new Error(
-            `define/overridable ${bindingName}: expected ${describeTag(jsTag)}, got ${describeValue(raw)} ` +
-              `(from ${source}) — ${followup}`,
-          );
-        }
-        return jsToScheme(CONSTANT_CTX, outcome.data);
-      },
-    ),
+          const outcome = zodType.safeParse(raw);
+          if (!outcome.success) {
+            const followup = hasOverride
+              ? "the environment that supplied this value should validate at its own boundary too"
+              : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor";
+            throw new Error(
+              `define/overridable ${bindingName}: expected ${describeTag(jsTag)}, got ${describeValue(raw)} ` +
+                `(from ${source}) — ${followup}`,
+            );
+          }
+          return jsToScheme(CONSTANT_CTX, outcome.data);
+        },
+      ),
   }),
   prelude: `
     (define-macro (define/overridable name type default)

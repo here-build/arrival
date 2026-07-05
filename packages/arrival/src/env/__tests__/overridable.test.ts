@@ -21,7 +21,7 @@ const capabilities = [overridableCapability];
 
 describe("arrival/overridable — plain define plus validation, through the consumer door", () => {
   it("a host-supplied override wins over the in-form default, and validates", async () => {
-    const result = await exec(`(define/overridable city "string" "Berlin") city`, {
+    const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
       config: { params: { city: "Paris" } },
     });
@@ -29,7 +29,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
   });
 
   it("default fallback: absent params ⇒ the in-form default fires (and validates)", async () => {
-    const result = await exec(`(define/overridable city "string" "Berlin") city`, {
+    const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
       config: { params: {} },
     });
@@ -37,7 +37,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
   });
 
   it("config-less lower succeeds (`params` defaults to {}) — every in-form default fires", async () => {
-    const result = await exec(`(define/overridable city "string" "Berlin") city`, {
+    const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
       // no config at all — the shared-bag posture: lower({ config: undefined }) parses to {}.
     });
@@ -46,8 +46,8 @@ describe("arrival/overridable — plain define plus validation, through the cons
 
   it("multiple inputs in one program resolve independently (override + default mixed)", async () => {
     const result = await exec(
-      `(define/overridable city "string" "Berlin")
-       (define/overridable country "string" "France")
+      `(define/overridable city (s/string) "Berlin")
+       (define/overridable country (s/string) "France")
        (list city country)`,
       { capabilities, config: { params: { city: "Paris" } } },
     );
@@ -57,7 +57,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
 
   it("a bad OVERRIDE throws legibly, naming the binding, the declared type, and the source", async () => {
     await expect(
-      exec(`(define/overridable age "number" 30) age`, {
+      exec(`(define/overridable age (s/number) 30) age`, {
         capabilities,
         config: { params: { age: "not-a-number" } },
       }),
@@ -68,7 +68,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
 
   it("a bad DEFAULT throws exactly as loud as a bad override — validated the same", async () => {
     await expect(
-      exec(`(define/overridable age "number" "thirty") age`, {
+      exec(`(define/overridable age (s/number) "thirty") age`, {
         capabilities,
         config: { params: {} },
       }),
@@ -82,6 +82,17 @@ describe("arrival/overridable — plain define plus validation, through the cons
         config: { params: {} },
       }),
     ).rejects.toThrow(/define\/overridable age: unrecognized type tag/);
+  });
+
+  it("a bare NAME in tag position is not a type reference — it's an unbound variable, same as anywhere else", async () => {
+    // `type` splices UNQUOTED into the macro's expansion: `(overridable/resolve 'age ,type ,default)`.
+    // A bare symbol there evaluates as an ordinary variable reference, same as any other position —
+    // there is no notion of a "named type" to resolve against. s/* calls — (s/string), (s/enum ...),
+    // … — are the only legal type expressions; an undefined identifier just bites unbound, before
+    // `overridable/resolve` ever runs. Same rule the static type-lens enforces at compile time.
+    await expect(
+      exec(`(define/overridable age NotARealType 30) age`, { capabilities, config: { params: {} } }),
+    ).rejects.toThrow(/^Unbound variable `NotARealType'$/);
   });
 
   it("a tag that lowers to an EMPTY schema DOORS (no silent permissive passthrough)", async () => {
@@ -101,7 +112,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
   });
 
   it("an `/optional`-suffixed tag is tolerated (the suffix is inert here) — validation still applies", async () => {
-    const result = await exec(`(define/overridable size "number/optional" 10) size`, {
+    const result = await exec(`(define/overridable size (s/optional (s/number)) 10) size`, {
       capabilities,
       config: { params: {} },
     });
@@ -109,7 +120,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
   });
 
   it("`overridable/resolve` is a real RUNTIME verb — callable directly by user code, no sealing", async () => {
-    const result = await exec(`(overridable/resolve 'city "string" "Berlin")`, {
+    const result = await exec(`(overridable/resolve 'city (s/string) "Berlin")`, {
       capabilities,
       config: { params: { city: "Paris" } },
     });
@@ -118,11 +129,12 @@ describe("arrival/overridable — plain define plus validation, through the cons
 });
 
 // s/* is the only place types appear explicitly — `arrival/overridable` no longer carries its
-// own hand-rolled scalar subset; every type tag lowers through the SAME `tagToJsonSchema` +
+// own hand-rolled scalar subset; every type tag, scalar leaf (`s/string`/`s/number`/`s/integer`/
+// `s/boolean`) or structured composite, lowers through the SAME `tagToJsonSchema` +
 // `z.fromJSONSchema` bridge `schemaToZod` (arrival-chain) uses. `deps: [schemaCapability]`
 // (declared on `overridableCapability` itself) means `(s/enum …)`/`(s/object …)` resolve here
 // with no extra wiring at the test's own capability list.
-describe("arrival/overridable — the FULL s/* language, not just the old scalar subset", () => {
+describe("arrival/overridable — structured s/* forms: enum, object, optional", () => {
   it("(s/enum ...) as a type tag validates an override against the enum's values", async () => {
     const result = await exec(
       `(define/overridable tier (s/enum "free" "pro") "free") tier`,
@@ -169,7 +181,7 @@ describe("arrival/overridable — the FULL s/* language, not just the old scalar
   it("a nested (s/optional ...) field inside (s/object ...) is genuinely optional", async () => {
     const withBio = await exec(
       `(define/overridable profile
-         (s/object (s/field/string "name") (s/field "bio" (s/optional "string")))
+         (s/object (s/field/string "name") (s/field "bio" (s/optional (s/string))))
          "unused")
        (@ profile "bio")`,
       { capabilities, config: { params: { profile: { name: "Maya", bio: "hi" } } } },
@@ -179,7 +191,7 @@ describe("arrival/overridable — the FULL s/* language, not just the old scalar
     // Omitting the /optional field still validates — the object schema doesn't require it.
     const withoutBio = await exec(
       `(define/overridable profile
-         (s/object (s/field/string "name") (s/field "bio" (s/optional "string")))
+         (s/object (s/field/string "name") (s/field "bio" (s/optional (s/string))))
          "unused")
        (@ profile "name")`,
       { capabilities, config: { params: { profile: { name: "Maya" } } } },
@@ -187,7 +199,7 @@ describe("arrival/overridable — the FULL s/* language, not just the old scalar
     expect((withoutBio.at(-1) as AString).toJs()).toBe("Maya");
   });
 
-  it("the old subset's error cases stay legible: unrecognized tag, bad override, bad default", async () => {
+  it("scalar error cases stay legible: unrecognized tag, bad override, bad default", async () => {
     // Unrecognized bare tag — still DOORS with the binding name (now via tagToJsonSchema/
     // z.fromJSONSchema failing to build a validator, not a hand-rolled switch default).
     await expect(
@@ -196,12 +208,12 @@ describe("arrival/overridable — the FULL s/* language, not just the old scalar
 
     // Bad override — same "expected X, got Y (from an environment override)" shape.
     await expect(
-      exec(`(define/overridable age "number" 30) age`, { capabilities, config: { params: { age: "nope" } } }),
+      exec(`(define/overridable age (s/number) 30) age`, { capabilities, config: { params: { age: "nope" } } }),
     ).rejects.toThrow(/define\/overridable age: expected number, got "nope" \(from an environment override\)/);
 
     // Bad default — validated exactly as loud as a bad override.
     await expect(
-      exec(`(define/overridable age "number" "thirty") age`, { capabilities, config: { params: {} } }),
+      exec(`(define/overridable age (s/number) "thirty") age`, { capabilities, config: { params: {} } }),
     ).rejects.toThrow(/define\/overridable age: expected number, got "thirty" \(from the in-form default\)/);
   });
 });
