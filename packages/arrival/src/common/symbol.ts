@@ -31,6 +31,8 @@ export * as symbol from "./symbols/index.js";
 export type {
   VectorSpec,
   DecodedArgs,
+  RestSpec,
+  DecodedArgsWithRest,
   DecodedReturn,
   MaybePromise,
   Contract,

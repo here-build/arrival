@@ -15,8 +15,9 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../common/scheme-zod.js";
-import { symbol, type DecodedArgs, type DecodedReturn } from "../common/symbol.js";
+import { symbol, type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
+import type { SchemeValue } from "../values/types.js";
 
 describe("symbol contract — decoded arg/return inference", () => {
   test("native: an identity-schema tuple infers the impl arg as the SCHEME TERM", () => {
@@ -79,6 +80,43 @@ describe("symbol contract — wrong-typed impls must NOT compile", () => {
         { input: [z.string], output: [z.number] },
         // @ts-expect-error — return must be number, not string
         (s) => s,
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+});
+
+describe("symbol contract — inputRest: a fixed head + a separately-typed variadic tail", () => {
+  test("mechanism: head and rest genuinely differ in type — proves the split is real, not coincidental", () => {
+    expectTypeOf<DecodedArgsWithRest<[typeof z.string], typeof z.number>>().toEqualTypeOf<[string, ...number[]]>();
+  });
+
+  test("native-identity flavored: a Pair head + a SchemeValue (z.value) rest", () => {
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.value>>().toEqualTypeOf<[APair, ...SchemeValue[]]>();
+  });
+
+  test("no rest (Rest defaults to undefined) is BYTE-IDENTICAL to today's DecodedArgs<I> — the additive guarantee", () => {
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair]>>().toEqualTypeOf<DecodedArgs<[typeof z.pair]>>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair]>>().toEqualTypeOf<[APair]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<DecodedArgs<[typeof z.string]>>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<[string]>();
+  });
+
+  test("apply's own declared shape: a SchemeValue head + a SchemeValue... tail", () => {
+    // Mirrors apply's real migrated contract exactly: { input: [z.value], inputRest: z.value, output: [z.value] }.
+    // (Native SymbolDef erases the concrete Contract type on its return, so the real bound `apply`
+    // export can't be re-inspected at the type level — this synthetic contract IS apply's declared
+    // shape, proving the mechanism computes the right decoded-args type for it.)
+    expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
+  });
+
+  test("wrong-typed rest param must NOT compile", () => {
+    const RUN = false as boolean;
+    if (RUN) {
+      symbol.rosetta`headtail: proof`(
+        { input: [z.string], inputRest: z.number, output: [z.string] },
+        // @ts-expect-error — rest args decode via z.number (JS number), annotating them string is wrong
+        (head: string, ...rest: string[]) => head,
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

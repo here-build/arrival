@@ -332,7 +332,10 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     apply: symbol.native`apply: call fn with args, the last of which is a list spliced in`(
-      { input: z.array(z.value), output: [z.value] },
+      // The callable is the fixed HEAD (`input`); the spread call-args are the variadic TAIL
+      // (`inputRest`) — apply's own shape for the `Contract.inputRest` mechanism (both happen to
+      // be `z.value` here, but the two are independently-typed generic slots).
+      { input: [z.value], inputRest: z.value, output: [z.value] },
       // Relocated VERBATIM from stdlib.ts global_env (husk dissolution). The legacy
       // body took `this: Environment` but never read it — apply's env-as-this was
       // already erased, so the native bind (this === undefined) is behavior-identical.
