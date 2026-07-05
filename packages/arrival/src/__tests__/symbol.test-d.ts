@@ -15,7 +15,14 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../common/scheme-zod.js";
-import { symbol, type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../common/symbol.js";
+import {
+  symbol,
+  type AEntity,
+  type DecodedArgs,
+  type DecodedArgsWithRest,
+  type DecodedReturn,
+  type NativeSymbolDef,
+} from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import type { AString } from "../values/primitives/AString.js";
@@ -341,5 +348,15 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+});
+
+describe("AEntity — the baked, discriminated union (formerly the colliding `SymbolDef` name shared with capability.ts's SymbolDeclaration)", () => {
+  test("a baked native def is a member of AEntity", () => {
+    expectTypeOf<NativeSymbolDef>().toExtend<AEntity>();
+  });
+
+  test("AEntity is exactly the 8-way discriminated union — a bare `{ value: unknown }` binding is NOT a member (that lives only in capability.ts's wider SymbolDeclaration)", () => {
+    expectTypeOf<{ value: unknown }>().not.toExtend<AEntity>();
   });
 });

@@ -15,10 +15,10 @@
 // writing this).
 import { describe, expect, it } from "vitest";
 import srfi95Pack from "../srfi-95.js";
-import type { SymbolDef } from "../../common/symbol.js";
+import { AEntity } from "../../../common/symbols/_bake.js";
 
-function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, SymbolDef> {
-  return pack.spec.symbols as Record<string, SymbolDef>;
+function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, AEntity> {
+  return pack.spec.symbols as Record<string, AEntity>;
 }
 
 function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {

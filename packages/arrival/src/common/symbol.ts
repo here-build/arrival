@@ -11,9 +11,9 @@
 //     bundler can drop the tags a consumer doesn't touch — the old literal referenced every member
 //     in one module, so `sideEffects:false` tree-shaking couldn't prune any.
 //
-//   • the contract/`SymbolDef` TYPES — re-exported from `./symbols/_bake.js` (the shared machinery
-//     the factory files stand on). Kept on THIS path so `capability.ts` (`SymbolDef`), the type-
-//     layer printer (`SymbolDef`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`)
+//   • the contract/`AEntity` TYPES — re-exported from `./symbols/_bake.js` (the shared machinery
+//     the factory files stand on). Kept on THIS path so `capability.ts` (`SymbolDeclaration`), the
+//     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`)
 //     import them from the same stable specifier they always have.
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
@@ -26,7 +26,7 @@
 // the package root) → `symbol.native` + a `name: doc` template + `(contract, impl)`.
 export * as symbol from "./symbols/index.js";
 
-// The contract machinery + the baked `SymbolDef` union and its members. Surfaced here (not from
+// The contract machinery + the baked `AEntity` union and its members. Surfaced here (not from
 // `./symbols/_bake.js` directly) so the public type path is the stable `common/symbol.js`.
 export type {
   VectorSpec,
@@ -45,7 +45,7 @@ export type {
   DoorSymbolDef,
   KeywordSymbolDef,
   MacroSymbolDef,
-  SymbolDef,
+  AEntity,
   BakeRuntimeOpts,
   InvocationContext,
 } from "./symbols/_bake.js";

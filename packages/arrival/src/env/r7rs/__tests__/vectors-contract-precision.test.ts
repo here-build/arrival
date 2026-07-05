@@ -18,12 +18,12 @@
 // elements ARE runtime-discriminating — those three are what this file exercises.
 import { describe, expect, it } from "vitest";
 import vectorsPack from "../vectors.js";
-import type { SymbolDef } from "../../../common/symbol.js";
+import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
-const symbols = vectorsPack.spec.symbols as Record<string, SymbolDef>;
+const symbols = vectorsPack.spec.symbols as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

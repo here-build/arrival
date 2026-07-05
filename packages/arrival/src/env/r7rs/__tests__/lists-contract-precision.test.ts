@@ -26,14 +26,14 @@
 // z.array(...) too), and flatten's output (now a z.pair|z.nil|z.array(z.unknown()) union).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
-import type { SymbolDef } from "../../../common/symbol.js";
+import type { AEntity } from "../../../common/symbol.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { ANil, nil } from "../../../values/primitives/ANil.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
-const symbols = listsPack.spec.symbols as Record<string, SymbolDef>;
+const symbols = listsPack.spec.symbols as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

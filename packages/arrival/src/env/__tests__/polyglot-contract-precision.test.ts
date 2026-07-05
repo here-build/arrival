@@ -26,15 +26,15 @@
 
 import { describe, expect, it } from "vitest";
 import polyglot from "../polyglot.js";
-import type { SymbolDef } from "../../common/symbol.js";
+import type { AEntity } from "../../common/symbol.js";
 
-// `symbols` is a builder (activation) => Record<string, SymbolDef> for this capability —
+// `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
 // `this.configuration`/`this.resources` (no config/resources declared on this capability).
 const symbolsSpec = polyglot.spec.symbols;
 const symbols = (
   typeof symbolsSpec === "function" ? symbolsSpec({ configuration: {}, resources: {} } as never) : (symbolsSpec ?? {})
-) as Record<string, SymbolDef>;
+) as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

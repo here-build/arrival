@@ -23,7 +23,7 @@
 // assembles it into the base env.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol, type SymbolDef } from "../../common/symbol.js";
+import { symbol } from "../../common/symbol.js";
 
 // §6.13 — no IO surface in the inference plane (an ambient effect, no construction-site).
 const IO_REASON =

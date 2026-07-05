@@ -29,12 +29,12 @@
 
 import { describe, expect, it } from "vitest";
 import numericPack from "../numeric.js";
-import type { SymbolDef } from "../../../common/symbol.js";
+import type { AEntity } from "../../../common/symbol.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AInexact } from "../../../values/primitives/AInexact.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
-const symbols = numericPack.spec.symbols as Record<string, SymbolDef>;
+const symbols = numericPack.spec.symbols as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

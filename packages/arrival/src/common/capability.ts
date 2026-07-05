@@ -17,7 +17,7 @@ import { z } from "zod";
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
-import type { SymbolDef as BakedSymbolDef } from "./symbol.js";
+import type { AEntity } from "./symbol.js";
 import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
 import invariant from "tiny-invariant";
@@ -46,7 +46,7 @@ type Fn = (...args: any[]) => unknown;
 
 /** A symbol is, during the symbol.* migration window, one of TWO families:
  *
- *  • the BAKED `SymbolDef` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" }`)
+ *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" }`)
  *    — the target form, dispatched by `kind` in apply();
  *  • a LEGACY form — a bare fn, a rosetta config (`withContext`/`type`/`options`), or a raw
  *    value binding (`{ value }`) — the shape unmigrated packs still use. Fn forms read `this`.
@@ -56,12 +56,17 @@ type Fn = (...args: any[]) => unknown;
  *  (`isValueDef` / `isSymbolSpec` / the bare-Fn fallback below) is DELETED in Phase 2, once
  *  every pack is migrated to `symbol.native` / `symbol.rosetta` / `symbol.notImplemented`.
  *  `equality.ts` is the Phase-1 pilot; the rest of NATIVE_PACKS + the rosetta packs follow.
- *  Until then this union is open on both sides and apply() routes by shape. */
-export type SymbolDef = BakedSymbolDef | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
+ *  Until then this union is open on both sides and apply() routes by shape.
+ *
+ *  Named `SymbolDeclaration` (not `SymbolDef`) to keep it distinct from `symbol.js`'s
+ *  `AEntity` — the two used to share the identical name `SymbolDef`, a real naming
+ *  collision (this is the wider pre-bake authoring shape; `AEntity` is the narrower
+ *  baked/discriminated result — `AEntity` is one arm of this union, not a synonym for it). */
+export type SymbolDeclaration = AEntity | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
 
 /** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
  *  target form from every legacy shape. */
-const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
+const isBakedDef = (m: SymbolDeclaration): m is AEntity =>
   typeof m === "object" &&
   m !== null &&
   "kind" in m &&
@@ -75,23 +80,24 @@ const isBakedDef = (m: SymbolDef): m is BakedSymbolDef =>
     (m as { kind: unknown }).kind === "macro");
 
 // ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
-const isValueDef = (m: SymbolDef): m is { value: unknown } => typeof m === "object" && m !== null && "value" in m;
-const isSymbolSpec = (m: SymbolDef): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
+const isValueDef = (m: SymbolDeclaration): m is { value: unknown } =>
+  typeof m === "object" && m !== null && "value" in m;
+const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
 /** A `symbols` record, or a BUILDER computing it from the activation (per-env config).
  *  The builder form is how helper-delegating packs (`defineXRosettas`) express symbols
  *  without re-homing their logic — see `captureSymbols`. */
 export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> =
-  | (Record<string, SymbolDef> & ThisType<Activation<C, R>>)
-  | ((activation: Activation<C, R>) => Record<string, SymbolDef>);
+  | (Record<string, SymbolDeclaration> & ThisType<Activation<C, R>>)
+  | ((activation: Activation<C, R>) => Record<string, SymbolDeclaration>);
 
 /** Run an imperative `defineXRosettas(env, …)` helper against a recording host and
  *  return its wiring as a symbol record — so a helper-delegating pack becomes a
  *  declarative `symbols` builder, keeping the helper, no re-homing. `defineRosetta`
  *  → a rosetta symbol; `set` → a `{ value }` binding. */
-export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, SymbolDef> {
-  const out: Record<string, SymbolDef> = {};
+export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, SymbolDeclaration> {
+  const out: Record<string, SymbolDeclaration> = {};
   // A recording host: the SUBSET of SchemeEnv a `defineXRosettas` helper actually
   // exercises (defineRosetta → a rosetta symbol; set → a `{ value }` binding) is wired
   // to capture into `out`. The scope-shaping verbs (registerResolver / list /
@@ -102,7 +108,7 @@ export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, 
   // capture-only implementation, not a laundered partial.
   const recorderError = (verb: string) => new Error(`captureSymbols: ${verb} is not recordable`);
   const host: SchemeEnv = {
-    defineRosetta: (name: string, cfg: RosettaSpec) => void (out[name] = cfg as SymbolDef),
+    defineRosetta: (name: string, cfg: RosettaSpec) => void (out[name] = cfg as SymbolDeclaration),
     set: (name: string, value: unknown) => void (out[name] = { value }),
     get: () => undefined,
     inherit: () => host,
@@ -216,7 +222,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
         // apply outside any assembly), fall back to `env` so the symbol is never silently
         // dropped.
-        const bindTarget = (def: BakedSymbolDef): PreludeBindTarget =>
+        const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
         const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
         const prefix = spec.symbolPrefix ?? "";

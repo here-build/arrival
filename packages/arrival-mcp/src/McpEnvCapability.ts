@@ -12,7 +12,12 @@
  * key-set (the third constructor arg) to carry extra catalog fields.
  */
 
-import { type Activation, type CapabilitySpec, EnvCapability, type SymbolDef } from "@here.build/arrival/capability";
+import {
+  type Activation,
+  type CapabilitySpec,
+  EnvCapability,
+  type SymbolDeclaration,
+} from "@here.build/arrival/capability";
 import type { Resource } from "@here.build/arrival/resources";
 import * as z from "zod";
 
@@ -55,13 +60,13 @@ export interface McpAnnotation {
  *  this (via the constructor's third arg) to lift extra, domain-specific catalog fields. */
 export const MCP_ANNOTATION_KEYS: readonly string[] = ["description", "dynamicDescription", "inputSchema", "aliases"];
 
-/** The object form of a `SymbolDef` (the rosetta-config member with an `fn`). */
-type ObjectSymbolDef = Extract<SymbolDef, { fn: unknown }>;
+/** The object form of a `SymbolDeclaration` (the rosetta-config member with an `fn`). */
+type ObjectSymbolDef = Extract<SymbolDeclaration, { fn: unknown }>;
 
 /** A symbol def that MAY carry inline MCP annotation fields. The constructor lifts the
- *  annotation keys off into the `annotations` record, leaving a clean rosetta `SymbolDef`.
+ *  annotation keys off into the `annotations` record, leaving a clean rosetta `SymbolDeclaration`.
  *  Bare-fn and `{ value }` defs carry no inline fields. */
-export type AnnotatedSymbolDef = SymbolDef | (ObjectSymbolDef & Partial<McpAnnotation>);
+export type AnnotatedSymbolDef = SymbolDeclaration | (ObjectSymbolDef & Partial<McpAnnotation>);
 
 /** A `symbols` record (which may carry inline annotation fields), or a builder computing it. */
 export type McpSymbolsSpec<C extends Record<string, z.ZodType>, R extends Record<string, Resource<unknown>>> =

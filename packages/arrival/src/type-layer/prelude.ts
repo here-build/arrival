@@ -6,7 +6,7 @@
 // `get_route(list("a"), "fast")` type-checks against the harvested signature, and the
 // Σ∩T narrow drops the provably ill-typed candidates.
 //
-// We HARVEST from the SymbolDefs directly (schema-to-ts.signatureOf) rather than route
+// We HARVEST from the AEntity defs directly (schema-to-ts.signatureOf) rather than route
 // through `OracleEnv.signatureOf`: that method is a contract SHARED with sift (type-identical,
 // O0-conformance-proven), so re-typing it to a TS string would invert the cross-package arrow.
 // The harvest is one-directional (defs → prelude text) and lives entirely in this package.
@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
-import type { SymbolDef } from "../common/symbol.js";
+import type { AEntity } from "../common/symbol.js";
 import { signatureOf } from "./schema-to-ts.js";
 
 // carriers.ts as AMBIENT text: strip the leading `export ` so `interface Cons`, `type List`,
@@ -49,7 +49,7 @@ export interface HarvestedPrelude {
  * Identifier-safe names become `declare const <name>: <sig>`; operator / non-identifier names
  * become ESCAPED, dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the
  * lowering emits the matching escaped access). `sig` is used verbatim — callers that harvest
- * from a `SymbolDef` (`assembleHarvestedPrelude`) or from a tool's JSON Schema
+ * from an `AEntity` (`assembleHarvestedPrelude`) or from a tool's JSON Schema
  * (arrival-manifold's `assembleManifoldPrelude`) both funnel through this one assembly.
  */
 export function assemblePreludeFromSignatures(
@@ -75,13 +75,13 @@ export function assemblePreludeFromSignatures(
 }
 
 /**
- * Assemble the ambient prelude for a set of `[name, SymbolDef]` grant tools. Thin wrapper over
+ * Assemble the ambient prelude for a set of `[name, AEntity]` grant tools. Thin wrapper over
  * `assemblePreludeFromSignatures`: harvests each def's arrow signature via `signatureOf`, then
  * delegates assembly. A door/macro/keyword harvests as `never` (not callable) — `signatureOf`'s
  * own contract.
  */
 export function assembleHarvestedPrelude(
-  entries: Iterable<readonly [name: string, def: SymbolDef]>,
+  entries: Iterable<readonly [name: string, def: AEntity]>,
 ): HarvestedPrelude {
   const sigEntries = Array.from(entries, ([name, def]): readonly [string, string] => [name, signatureOf(def)]);
   return assemblePreludeFromSignatures(sigEntries);

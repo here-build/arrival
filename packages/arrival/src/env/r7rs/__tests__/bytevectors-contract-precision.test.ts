@@ -13,13 +13,13 @@
 // (`.success` is `true`, not `false`) until the fix narrows the element schema.
 import { describe, expect, it } from "vitest";
 import bytevectorsPack from "../bytevectors.js";
-import type { SymbolDef } from "../../../common/symbol.js";
+import type { AEntity } from "../../../common/symbol.js";
 import { ABytevector } from "../../../values/primitives/ABytevector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
-const symbols = bytevectorsPack.spec.symbols as Record<string, SymbolDef>;
+const symbols = bytevectorsPack.spec.symbols as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

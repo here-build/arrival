@@ -34,14 +34,14 @@
 
 import { describe, expect, it } from "vitest";
 import stringsPack from "../strings.js";
-import type { SymbolDef } from "../../../common/symbol.js";
+import type { AEntity } from "../../../common/symbol.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { nil } from "../../../values/primitives/ANil.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
-const symbols = stringsPack.spec.symbols as Record<string, SymbolDef>;
+const symbols = stringsPack.spec.symbols as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];

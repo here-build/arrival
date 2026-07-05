@@ -1,4 +1,4 @@
-// schema-to-ts — the HARVEST: a scheme-zod schema (and a SymbolDef's normalized
+// schema-to-ts — the HARVEST: a scheme-zod schema (and an AEntity's normalized
 // input/output) → a TypeScript type-STRING. This is what will (post-migration)
 // replace the hand-written `type:` field on every symbol; for now it is a
 // STANDALONE printer — nothing wires it into the type-lens yet.
@@ -46,7 +46,7 @@
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod.js";
-import type { SymbolDef } from "../common/symbol.js";
+import type { AEntity } from "../common/symbol.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheme primitive → its PLAIN-TS IMAGE  (Scheme is a TS subset; see carriers.ts).
@@ -171,7 +171,7 @@ export function printType(schema: z.ZodTypeAny): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // signatureOf — the vector → function-signature composer.
 //
-// Reads the SymbolDef's NORMALIZED in/out (already one schema per side, per
+// Reads the AEntity's NORMALIZED in/out (already one schema per side, per
 // symbol.ts normalizeVector): a z.tuple for a positional list, an array-ish schema
 // for a variadic / multiple-values vector. We branch on the schema's _zod.def.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ function returnType(output: z.ZodTypeAny): string {
 }
 
 /**
- * Compose the full ".d.ts member" arrow signature for a baked SymbolDef.
+ * Compose the full ".d.ts member" arrow signature for a baked AEntity.
  *
  *   native  → "(a: A, b: B) => R"            (sync; impl works on scheme values)
  *   rosetta → "(a: A, b: B) => Promise<R>"   (bake awaits → implicitly async)
@@ -245,7 +245,7 @@ function returnType(output: z.ZodTypeAny): string {
  * A 1-tuple output collapses to a bare return; an n-tuple becomes a
  * multiple-values "[A, B]"; a variadic input becomes "(...args: T[])".
  */
-export function signatureOf(def: SymbolDef): string {
+export function signatureOf(def: AEntity): string {
   // door = omitted verb (not callable); keyword = special-form syntax; macro = a non-evaluating
   // transformer (syntax, not a value-level callable). None carries an in/out codec surface, so all
   // print as `never` until the type-lens grows a dedicated syntax representation.

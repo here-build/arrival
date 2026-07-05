@@ -22,7 +22,7 @@ import stringsPack from "../env/r7rs/strings.js";
 import srfi1Pack from "../env/srfi/srfi-1.js";
 import corePack from "../env/core/core.js";
 import equalityPack from "../env/r7rs/equality.js";
-import type { SymbolDef } from "../common/symbol.js";
+import type { AEntity } from "../common/symbol.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { AString } from "../values/primitives/AString.js";
@@ -31,9 +31,9 @@ import { ABool } from "../values/primitives/ABool.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** A pack's `.spec.symbols` map, generically — mirrors numeric-contract-precision.test.ts's
- *  `numericPack.spec.symbols as Record<string, SymbolDef>` access pattern. */
-function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, SymbolDef> {
-  return pack.spec.symbols as Record<string, SymbolDef>;
+ *  `numericPack.spec.symbols as Record<string, AEntity>` access pattern. */
+function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, AEntity> {
+  return pack.spec.symbols as Record<string, AEntity>;
 }
 
 /** Resolve a named symbol and narrow it to a contract-bearing def (native or sequence —

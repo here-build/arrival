@@ -22,7 +22,7 @@
 import { describe, expect, it } from "vitest";
 import srfi235 from "../srfi-235.js";
 import * as z from "../../../common/scheme-zod.js";
-import type { NativeSymbolDef, SymbolDef } from "../../../common/symbol.js";
+import type { AEntity, NativeSymbolDef } from "../../../common/symbol.js";
 
 /** Read a normalized zod schema's internal `def` — same cast `type-layer/schema-to-ts.ts` already
  *  uses to introspect `_zod.def` (zod4's public `.def` mirrors this, but the shipped .d.ts doesn't
@@ -36,7 +36,7 @@ describe("srfi-235 — curry's contract: inputRest precision (input/inputRest, n
   // srfi-235.ts declares `symbols` as a plain object literal (not the activation-builder form),
   // so the function branch is unreachable here — narrowed defensively rather than cast, so a
   // future switch to the builder form fails this test loudly instead of silently miscompiling.
-  const symbolsRec: Record<string, SymbolDef> =
+  const symbolsRec: Record<string, AEntity> =
     typeof srfi235.spec.symbols === "function"
       ? srfi235.spec.symbols({ configuration: {}, resources: {} } as never)
       : (srfi235.spec.symbols ?? {});

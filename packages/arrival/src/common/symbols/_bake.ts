@@ -1,5 +1,5 @@
 // symbols/_bake — the SHARED machinery behind the `arrival.symbol*` EnvCapability
-// symbol-definition API: the contract/decoded-type machinery, the baked `SymbolDef`
+// symbol-definition API: the contract/decoded-type machinery, the baked `AEntity`
 // union + its members, and the `bake*` constructors the per-tag factory files
 // (`./native.ts`, `./rosetta.ts`, …) stand on. The factories live one-per-file under
 // this directory and are re-assembled into the `symbol` namespace by `./index.ts`;
@@ -42,7 +42,7 @@
 //                       `symbol.contextual`.) PROVENANCE MINTING is RESOLVED: the run-wrapper is
 //                       `__withCtx` at the binding level (lower() binds it raw; the evaluator
 //                       appends ctx), so it reads ctx.currentInvocation and mints/deep-stamps
-//                       EXACTLY as createRosettaWrapper does (a non-pure rosetta SymbolDef = a
+//                       EXACTLY as createRosettaWrapper does (a non-pure rosetta AEntity = a
 //                       source). withContext / argProvenance contract knobs are DROPPED here.
 //
 //   symbol.notImplemented — no contract/impl, just `name: reason`. bake → a door:
@@ -159,7 +159,10 @@ export type Impl<I extends VectorSpec, O extends VectorSpec, Rest extends RestSp
 ) => MaybePromise<DecodedReturn<O>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. SymbolDef — the baked, discriminated union
+// 2. AEntity — the baked, discriminated union (an interpreter primitive — TYPE-ONLY,
+//    no class/runtime footprint; the bound runtime value stays whatever shape it's always
+//    been — a plain object for door/keyword/macro, a real callable fn for native/rosetta/
+//    tagless/tagless-guard/sequence).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type AnyFn = (...args: any[]) => unknown;
@@ -266,7 +269,7 @@ export interface MacroSymbolDef {
   readonly macro: Macro;
 }
 
-export type SymbolDef =
+export type AEntity =
   | NativeSymbolDef
   | RosettaSymbolDef
   | TaglessSymbolDef
