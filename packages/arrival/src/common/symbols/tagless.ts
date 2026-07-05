@@ -1,8 +1,10 @@
 // symbol.tagless — a dispatcher to the receiver's own tagless-final term method. One
 // of the per-tag factory files re-assembled into the `symbol` namespace by `./index.ts`;
-// the shared bake fn + types live in `./_bake.js`.
+// the shared types + helpers live in `./_bake.js`.
 
-import { bakeTagless, parseNameDoc, type TaglessSymbolDef } from "./_bake.js";
+import * as z from "../scheme-zod.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { asEvalContext, describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
 
 /** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
  *  own `arrival/tagless-final/name` term method (the LAST scheme arg is the receiver; a missing
@@ -13,5 +15,27 @@ import { bakeTagless, parseNameDoc, type TaglessSymbolDef } from "./_bake.js";
  *  here (mirrors `taglessGuard`); the algebra, not this binder, is the completeness gate. */
 export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
-  return bakeTagless({ kind: "tagless", name, doc });
+  const method = `arrival/tagless-final/${name}`;
+  const run = async (...args: unknown[]): Promise<unknown> => {
+    // Strip the evaluator-appended ctx iff the trailing arg looks like one (the shared
+    // `asEvalContext` probe). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
+    const ctx = asEvalContext(args[args.length - 1]);
+    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
+    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
+    const receiver = schemeArgs[schemeArgs.length - 1];
+    const leading = schemeArgs.slice(0, -1);
+    const fn = resolveMethod(receiver, method);
+    if (fn === undefined) {
+      throw new TypeError(
+        `${name}: the ${describeReceiver(receiver)} primitive does not support \`${name}\` ` +
+          `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
+      );
+    }
+    return await fn.call(receiver, ...leading, runCtx);
+  };
+  (run as { __withCtx?: boolean }).__withCtx = true;
+  // No contract: the placeholder harvest surface is fixed (like `taglessGuard`). The real
+  // per-op types live on the receiver's `arrival/tagless-final/<name>` member (AValue), the
+  // source of truth — `tagless-final.ts` derives the op-name type from there.
+  return { kind: "tagless", name, doc, in: z.array(z.unknown()), out: z.unknown(), run };
 }

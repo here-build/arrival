@@ -50,10 +50,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "../scheme-zod.js";
-import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
-import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
-import { jsToScheme, looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { AValue } from "../../values/primitives/AValue.js";
+import { looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
 import { Macro } from "../../eval/Macro.js";
 import { KEYWORD_ACCESSOR_FIELD } from "../../Environment.js";
 
@@ -345,7 +344,7 @@ function kwargsKeyOf(arg: unknown): string {
  *  per-property codec; this fold only performs the array→object RESHAPE, not the per-field
  *  decode. A dangling keyword (odd arg count) doors with a teaching error rather than silently
  *  dropping it. */
-function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
+export function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
   if (args.length % 2 !== 0) {
     throw new Error(
       `kwargs call has a dangling keyword with no value — expected interleaved \`:key value\` pairs, got ${args.length} arg(s)`,
@@ -369,7 +368,7 @@ function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> 
  *  signature printing. The kwargs array↔object RESHAPE instead happens ONLY at the runtime
  *  decode call site (bakeRosetta's `run`, gated by `z.isKwargs`) — `def.in` stays the bare,
  *  unwrapped kwargs object schema, byte-identical to before this reshape existed. */
-function normalizeVector(spec: VectorSpec): VectorSchema {
+export function normalizeVector(spec: VectorSpec): VectorSchema {
   // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
   // OUT of the union on the false branch — so probe the tuple member with a guard that carries
   // the `readonly` element type, leaving the single-schema member on the `else`.
@@ -403,7 +402,7 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
  *  (`DecodedArgsWithRest`'s two generic params). Absent `inputRest` ⇒ byte-identical to
  *  `normalizeVector(input)` — this is what `bakeNative`/`bakeRosetta` call for `.in`/`inSchema`
  *  (the OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
-function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
+export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
   // `inputRest` needs a FIXED prefix length to split the call's raw args at — only a tuple
   // `input` has one; a single schema (bare variadic, or a `z.kwargs` object) covers the WHOLE
@@ -426,48 +425,24 @@ function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSch
 
 /** Did the author give a 1-tuple output? Then the impl returns a SINGLE value (we wrap
  *  it as a 1-element values-list); otherwise it returns the values-vector already. */
-function isSingleOutput(output: VectorSpec): boolean {
+export function isSingleOutput(output: VectorSpec): boolean {
   return Array.isArray(output) && output.length === 1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. bake — the three constructors' shared runtime
+// 4. Shared contract-impl types the per-tag factories build their return value from.
+//    There is NO separate "bake" constructor anymore (see the note below, where
+//    `bakeNative`/`bakeRosetta`/`bakeDoor` used to live) — each factory
+//    (`native.ts`/`rosetta.ts`/`sequence.ts`/…) wires its own `AEntity` member
+//    directly, inline, using these types + the helpers above.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface NativeInput {
-  kind: "native";
-  name: string;
-  doc?: string;
-  // Widened over the full `RestSpec` union (not the default-`undefined` 2-arg shape) so a
-  // contract declaring `inputRest` is a valid `NativeInput.contract` too — the tagged-template
-  // factories (`native.ts`) hand this a `Contract<I, O, Rest>` for whatever concrete `Rest` the
-  // author declared.
-  contract: Contract<VectorSpec, VectorSpec, RestSpec>;
-  impl: AnyFn;
-}
-export interface RosettaInput {
-  kind: "rosetta";
-  name: string;
-  doc?: string;
-  contract: Contract<VectorSpec, VectorSpec, RestSpec>;
-  impl: AnyFn;
-}
-export interface DoorInput {
-  kind: "door";
-  name: string;
-  reason: string;
-}
-export interface TaglessInput {
-  kind: "tagless";
-  name: string;
-  doc?: string;
-}
 /** The impl a `symbol.sequence` contract demands: ONE args array (not spread — the dual of
  *  native/rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`,
  *  the run's RunContext, decoded return (or a promise) out via `DecodedReturn<O>`. `DecodedArgs`/
  *  `DecodedReturn` are both `SpecInfer`-built — same decode semantics as native/rosetta, just
  *  gathered into one array instead of spread params (sequence's `run` slices the raw scheme args
- *  into exactly this array before calling impl — see `bakeSequence`). No `Rest`: a sequence
+ *  into exactly this array before calling impl — see `sequence.ts`). No `Rest`: a sequence
  *  contract's `Contract<I,O>` never carries `inputRest` (map/filter/sort's variadic tail, where
  *  any, is expressed as the tagless receiver's own term algebra, not a contract rest slot). */
 export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
@@ -475,16 +450,8 @@ export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
   runCtx: RunContext,
 ) => MaybePromise<DecodedReturn<O>>;
 
-export interface SequenceInput {
-  kind: "sequence";
-  name: string;
-  doc?: string;
-  contract: Contract<VectorSpec, VectorSpec>;
-  impl: AnyFn;
-}
-
 /** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
- *  `exec(src, { typecheck })` — see the decode note in bakeRosetta for the current
+ *  `exec(src, { typecheck })` — see the decode note in `rosetta.ts` for the current
  *  fused-transform caveat. */
 export interface BakeRuntimeOpts {
   /** Run zod validation on decoded args + encoded output. Default true. */
@@ -509,7 +476,7 @@ interface EvalContextSlice extends CtxWithInvocation {
  *  `Partial<CtxWithInvocation>` result to the `runCtx`-bearing slice this module threads. One
  *  typed seam replacing the scattered `ctx as { runCtx?: … }` / `ctx as { currentInvocation?… }`
  *  casts; the `ctx` it inspects is `unknown` until proven a context. */
-function asEvalContext(ctx: unknown): EvalContextSlice | undefined {
+export function asEvalContext(ctx: unknown): EvalContextSlice | undefined {
   return looksLikeEvalContext(ctx) ? ctx : undefined;
 }
 
@@ -542,7 +509,7 @@ export interface InvocationContext {
 /** Build the lazy invocation-`this` over a captured ctx (or `undefined` for a direct-JS call).
  *  The getters close over `ctx` and read it on access — nothing is computed until a verb that
  *  declared a `function` impl actually touches `this.*`. */
-function makeInvocationContext(ctx: EvalContextSlice | undefined): InvocationContext {
+export function makeInvocationContext(ctx: EvalContextSlice | undefined): InvocationContext {
   return {
     get aborted(): boolean {
       return ctx?.signal?.aborted ?? false;
@@ -560,166 +527,17 @@ function makeInvocationContext(ctx: EvalContextSlice | undefined): InvocationCon
   };
 }
 
-export function bakeNative(input: NativeInput): NativeSymbolDef {
-  const impl = input.impl;
-  // `fanout: true` → stamp the bound fn (capability binds def.impl raw; the lineage classifier
-  // reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
-  if (input.contract.fanout) (impl as { fanout?: boolean }).fanout = true;
-  return {
-    kind: "native",
-    name: input.name,
-    doc: input.doc,
-    in: normalizeInputVector(input.contract.input, input.contract.inputRest),
-    out: normalizeVector(input.contract.output),
-    // NO runtime validation, NO codec — the impl works on scheme values directly.
-    // "zod for types purely": the schemas live on the def for inference + the harvest.
-    impl,
-    type: input.contract.type,
-    preludeOnly: input.contract.preludeOnly,
-  };
-}
-
-export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSymbolDef {
-  const inSchema = normalizeInputVector(input.contract.input, input.contract.inputRest);
-  const outSchema = normalizeVector(input.contract.output);
-  const singleOut = isSingleOutput(input.contract.output);
-  // `pure: true` → TRANSFORM (forward input provenance); default → SOURCE (mint). Strict
-  // `=== true` so only an explicit opt-out forwards (undefined/false stay sources).
-  const pure = input.contract.pure === true;
-  // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
-  // for the trust model + future use; see the decode note below for why it currently
-  // can't be a no-op for the codec family. Default from bake opts.
-  const defaultValidate = opts.validate !== false;
-
-  // The interpretive wrapper. Mirrors createRosettaWrapper's spine
-  // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
-  // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
-  // provenance mint at the end. Tagged `__withCtx` (below) so the evaluator appends
-  // EvalContext as the trailing arg; a direct-JS caller (tests) passes a scheme value
-  // there instead — duck-typed so it is NOT mis-stripped (mirrors createRosettaWrapper).
-  const run = async (...args: unknown[]): Promise<unknown> => {
-    // Strip the evaluator-appended ctx iff the trailing arg LOOKS like one. By the time
-    // the wrapper runs under the evaluator the scheme DATA args are already scheme values
-    // (AValue subclasses / raw arrays-primitives); the genuine EvalContext is the only raw
-    // plain object carrying resolver/currentInvocation/tap/signal that reaches here (probe
-    // keys on `resolver` — the single always-present field since ejection P5 removed `env`).
-    // Same probe as createRosettaWrapper's looksLikeEvalContext.
-    const ctx = asEvalContext(args[args.length - 1]);
-    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-
-    // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
-    // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
-    // when no invocation is in ctx (direct-JS calls) is this input union — exactly
-    // createRosettaWrapper's behavior.
-    const inputAValues = schemeArgs.filter((a): a is AValue => a instanceof AValue);
-    const inputProvenance = unionProvenance(inputAValues);
-
-    // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
-    //    crossing) and its input-side VALIDATION are FUSED inside `decode` — you can't
-    //    run the transform without the instanceof/refinement guard. The membrane is
-    //    structural (not optional), so decode always runs. For the primitive codec
-    //    family the only validation BEYOND the transform is `z.integer`'s safe-int check
-    //    (itself part of the boundary contract, not skippable noise) — so `validate`
-    //    is effectively always-on here. The flag stays on the API to track trust and to
-    //    host a real split once a schema carries skippable refinements; the no-op path
-    //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
-    //    when a contract gains refinements a trusted caller may skip.
-    void defaultValidate;
-    // A `z.kwargs(...)` input is a single OBJECT schema, not array-shaped — `inSchema` (the
-    // generic `VectorSchema`-typed handle `normalizeVector` hands back unchanged for it, see
-    // that fn's note) can't decode the RAW interleaved `:key value` pairs array directly
-    // against an object schema. Fold the pairs into the plain object `dict` would build
-    // (`collectKwargsObject` — the same KEYWORD_ACCESSOR_FIELD read), THEN decode that object
-    // against the (narrowed, honest) kwargs schema, and wrap the one decoded value as the
-    // 1-element args array `DecodedArgs` already gives a non-tuple, non-array-output contract
-    // member. `isKwargs` narrows `input.contract.input` from `VectorSpec` to the branded
-    // object schema — no cast needed.
-    const decodedArgs: readonly unknown[] = z.isKwargs(input.contract.input)
-      ? [z.decode(input.contract.input, collectKwargsObject(schemeArgs))]
-      : z.decode(inSchema, schemeArgs);
-
-    // 2. RUN the impl with a per-call **invocation `this`** (the lazy invocation-context). The
-    //    impl still receives ONLY the decoded scheme args positionally — ctx is NOT a param. A
-    //    ctx-coupled verb declares a `function` impl and reads run-state lazily off `this`
-    //    (`this.aborted` / `this.abortSignal` / `this.invocation`); a pure verb is an arrow that
-    //    ignores `this`, so `impl.call(invCtx, …)` is byte-identical to `impl(…)`. The getters
-    //    read the captured `ctx` ON ACCESS, so a pure verb materializes nothing. async is implicit.
-    const invCtx = makeInvocationContext(ctx);
-    const result = await input.impl.call(invCtx, ...decodedArgs);
-
-    // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A SOURCE rosetta (default)
-    //    MINTS a fresh point off ctx.currentInvocation; a PURE rosetta (`pure: true`) is a
-    //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta
-    //    `pure: true`). With no invocation in ctx (direct-JS) a source also falls back to the
-    //    input union. ★The forward-vs-mint choice is provenance-load-bearing: a pure rosetta
-    //    that minted would fabricate a fresh origin (the seal-laundering class of bug).
-    const inv = ctx?.currentInvocation;
-    let resultProvenance = inputProvenance;
-    if (!pure && inv && typeof inv.id === "number") {
-      if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
-      else inv.isProvenancePoint = true;
-      resultProvenance = pointProvenance(inv.id);
-    }
-
-    // 4. ENCODE the output via the output codecs (codec encode = z.encode), then DEEP-STAMP
-    //    with the minted provenance. The codec builds the scheme value(s) with EMPTY
-    //    provenance, so the stamp is a separate re-walk (vs. createRosettaWrapper, which
-    //    stamps DURING jsToScheme construction). `jsToScheme(v, {}, prov)` is the canonical
-    //    re-stamp: given an already-AValue with a fresh provenance it deep-clones the
-    //    Pair/vector spine + leaves with that provenance (rosetta.ts jsToScheme AValue
-    //    branch), reaching every constructed value in one pass. CONTAINER-AWARE: the
-    //    multiple-values case is a RAW JS ARRAY (the scheme values-vector) — stamp each
-    //    ELEMENT and keep the JS array, because jsToScheme over a JS array would (correctly,
-    //    for data) build a Pair-chain, which is the WRONG shape for a values-vector.
-    //    ATTESTATION (values/attestation.ts) rides the SAME walk position: a SOURCE
-    //    rosetta's return is machine-made (a tool result), so its spine + leaves are
-    //    deep-attested — `car`/`vector-ref`/plucks on it hand back already-attested
-    //    boxes at the manifold boundary. A PURE rosetta is a transform: its return
-    //    keeps only what the impl itself chose to attest (the manifold's `s/*`
-    //    validators attest their identity-returns this way).
-    //    (`freshIfSingleton` first: `fromJs` reuses the shared #t/#f flyweights on the
-    //    empty-provenance fast path, and the program-wide singletons must never attest.)
-    if (singleOut) {
-      // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
-      const encoded = z.encode(outSchema, [result])[0];
-      const boxed: unknown = jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
-      return pure ? boxed : attestDeep(freshIfSingleton(boxed));
-    }
-    // multiple-values / array-ish output: the impl returned the values-vector already (an array
-    // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
-    // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
-    const encoded = z.encode(outSchema, result as readonly unknown[]);
-    return encoded.map((v) => {
-      const boxed: unknown = jsToScheme(ctx?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance);
-      return pure ? boxed : attestDeep(freshIfSingleton(boxed));
-    });
-  };
-  // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
-  // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS
-  // calls (no ctx) safe.
-  (run as { __withCtx?: boolean }).__withCtx = true;
-
-  return {
-    kind: "rosetta",
-    name: input.name,
-    doc: input.doc,
-    in: inSchema,
-    out: outSchema,
-    impl: input.impl,
-    run,
-    pure,
-    type: input.contract.type,
-    preludeOnly: input.contract.preludeOnly,
-  };
-}
-
-export function bakeDoor(input: DoorInput): DoorSymbolDef {
-  return { kind: "door", name: input.name, reason: input.reason };
-}
+// `bakeNative`/`bakeRosetta`/`bakeDoor` used to live here as separately-importable
+// constructors, each taking a `{kind, name, doc, contract, impl}` bag. DISSOLVED
+// (2026-07): the exact same logic is now inlined directly into the returned closure
+// of `native()`/`rosetta()`/`notImplemented()` (one file each, in this directory) —
+// so producing a `NativeSymbolDef`/`RosettaSymbolDef`/`DoorSymbolDef` is only possible
+// by calling `symbol.native`/`symbol.rosetta`/`symbol.notImplemented`. There is no
+// longer a raw constructor here to reach around them with.
 
 /** Human description of a receiver for the type-mismatch error: an AValue reports its
  *  scheme `kind` ("number"/"pair"/"nil"/…), else the JS shape. */
-function describeReceiver(v: unknown): string {
+export function describeReceiver(v: unknown): string {
   if (v === null || v === undefined) return String(v);
   if (v instanceof AValue) return v.kind;
   return Array.isArray(v) ? "array" : typeof v;
@@ -740,83 +558,11 @@ export function resolveMethod(receiver: unknown, method: string): TermMethod | u
   return typeof fn === "function" ? (fn as TermMethod) : undefined;
 }
 
-/** Bake a tagless dispatcher. No impl — `run` forwards to the operand's own
- *  `arrival/tagless-final/<name>` term method. Receiver = the LAST scheme arg (scheme places
- *  the collection last: `(map fn xs)`, `(car xs)`); the leading args + the run's RunContext
- *  (read ctx-aware off the evaluator-appended EvalContext) are passed through. A receiver that
- *  declares no such method is a TYPE MISMATCH — a clear throw, not a silent bypass. */
-export function bakeTagless(input: TaglessInput): TaglessSymbolDef {
-  const method = `arrival/tagless-final/${input.name}`;
-  const run = async (...args: unknown[]): Promise<unknown> => {
-    // Strip the evaluator-appended ctx iff the trailing arg looks like one (the shared
-    // `asEvalContext` probe). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
-    const ctx = asEvalContext(args[args.length - 1]);
-    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
-    const receiver = schemeArgs[schemeArgs.length - 1];
-    const leading = schemeArgs.slice(0, -1);
-    const fn = resolveMethod(receiver, method);
-    if (fn === undefined) {
-      throw new TypeError(
-        `${input.name}: the ${describeReceiver(receiver)} primitive does not support \`${input.name}\` ` +
-          `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
-      );
-    }
-    return await fn.call(receiver, ...leading, runCtx);
-  };
-  (run as { __withCtx?: boolean }).__withCtx = true;
-  // No contract: the placeholder harvest surface is fixed (like `bakeTaglessGuard`). The real
-  // per-op types live on the receiver's `arrival/tagless-final/<name>` member (AValue), the
-  // source of truth — `tagless-final.ts` derives the op-name type from there.
-  return { kind: "tagless", name: input.name, doc: input.doc, in: z.array(z.unknown()), out: z.unknown(), run };
-}
-
-/** Bake a tagless GUARD dispatcher. Same receiver-resolution as bakeTagless (last scheme arg),
- *  but a missing method returns `false` (#f) instead of throwing — the predicate / optional form.
- *  `(vector? x)` → x's own `arrival/tagless-final/vector?` if present, else #f. The name is FREE
- *  (a per-type predicate), so — unlike the algebra-keyed `tagless` — it is not a declared op. */
-export function bakeTaglessGuard(input: { name: string; doc?: string }): TaglessGuardSymbolDef {
-  const method = `arrival/tagless-final/${input.name}`;
-  const run = async (...args: unknown[]): Promise<unknown> => {
-    const ctx = asEvalContext(args[args.length - 1]);
-    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
-    const receiver = schemeArgs[schemeArgs.length - 1];
-    const leading = schemeArgs.slice(0, -1);
-    const fn = resolveMethod(receiver, method);
-    if (fn === undefined) return false; // graceful #f — the receiver simply can't answer
-    return await fn.call(receiver, ...leading, runCtx);
-  };
-  (run as { __withCtx?: boolean }).__withCtx = true;
-  return { kind: "tagless-guard", name: input.name, doc: input.doc, in: z.array(z.unknown()), out: z.unknown(), run };
-}
-
-/** Bake a ctx-aware op. `run` strips the evaluator-appended ctx (same probe as bakeRosetta/
- *  bakeTagless), extracts the run's RunContext, and hands it to the impl alongside the scheme
- *  args — so the impl can charge `runCtx.heapMeter` and read `runCtx.strict` without a holder. */
-export function bakeSequence(input: SequenceInput): SequenceSymbolDef {
-  const impl = input.impl;
-  const run = async (...args: unknown[]): Promise<unknown> => {
-    const ctx = asEvalContext(args[args.length - 1]);
-    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
-    return await impl(schemeArgs, runCtx);
-  };
-  (run as { __withCtx?: boolean }).__withCtx = true;
-  // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
-  // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
-  if (input.contract.fanout) (run as { fanout?: boolean }).fanout = true;
-  return {
-    kind: "sequence",
-    name: input.name,
-    doc: input.doc,
-    in: normalizeVector(input.contract.input),
-    out: normalizeVector(input.contract.output),
-    run,
-    type: input.contract.type,
-  };
-}
+// `bakeTagless`/`bakeTaglessGuard`/`bakeSequence` used to live here too, for the same
+// reason `bakeNative`/`bakeRosetta`/`bakeDoor` did above — DISSOLVED, inlined into
+// `tagless()`/`taglessGuard()`/`sequence()` respectively.
 
 // The tagged-template factories (`native`/`rosetta`/`tagless`/…) live one-per-file under
-// this directory; each imports the matching `bake*` + types from here and is re-assembled
-// into the `symbol` namespace by `./index.ts`. See `../symbol.js` for the stable entry.
+// this directory; each imports the shared types + helpers from here (NOT a `bake*`
+// constructor — there isn't one anymore) and is re-assembled into the `symbol` namespace
+// by `./index.ts`. See `../symbol.js` for the stable entry.

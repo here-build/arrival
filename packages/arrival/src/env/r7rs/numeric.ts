@@ -24,7 +24,7 @@
 
 import * as z from "../../common/scheme-zod.js";
 import invariant from "tiny-invariant";
-import { bakeNative, parseNameDoc } from "../../common/symbols/_bake.js";
+import { symbol } from "../../common/symbol.js";
 import type { Contract, RestSpec, VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { SPECULATE } from "../../well-known-symbols.js";
@@ -696,9 +696,10 @@ const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n 
 // Reused op specs / cores — the aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME
 // op object as their canonical sibling (byte-identical to the original, which
 // minted a fresh `wrapOperator(ops.X)` carrying the canonical op's name). Specs are
-// named (not just the built op) so an alias's `bindOp` call below can build the SAME
-// Contract shape its canonical sibling declares while still passing the identical
-// shared impl reference. `arithmeticShiftSpec` is also consumed by the `>>`/`<<`
+// named (not just the built op) so an alias's `symbol.native` declaration below can
+// build the SAME Contract shape its canonical sibling declares (`contractFromSpec(spec)`)
+// while still passing the identical shared impl reference. `arithmeticShiftSpec` is
+// also consumed by the `>>`/`<<`
 // inline ops (Phase 4).
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -968,27 +969,19 @@ const numberToStringFn = (z: unknown, radix?: unknown): string => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// The pack. Each op is bound via `symbol.native` under a LOOSE types-only
-// contract — no per-op zod authoring; the impl IS the binding.
-// ════════════════════════════════════════════════════════════════════════════
-
-// ════════════════════════════════════════════════════════════════════════════
-// Codec → zod-schema bridge — the fix this file exists for. `bind` used to discard
-// every op's own precise `NumSpec` (`in`/`inRest`/`out`) and degrade the outer
-// `symbol.native` Contract to `{ input: z.array(z.unknown()), output: [z.unknown()] }`.
-// Each of the six `NCodec` instances above has a zod-schema counterpart whose DECODED
-// (`z.output`) type matches that codec's own `toJS`/`fromJS` JS-side type exactly —
-// mapping through this table turns the discarded NumSpec back into a precise Contract.
-// PURE TYPE-LAYER: `symbol.native` never runs this validation at runtime (see `bind`'s
-// doc below) — `def.in`/`def.out` feed static inference and the future `.d.ts` harvest
-// only; `nativeNumericOp`'s OWN `marshalCall` remains the sole runtime type-check/
-// coerce/dispatch, byte-identical to before this fix. The pairing, verified against
-// each codec's own `match`/`toJS`/`fromJS` (not just its name):
+// Codec → zod-schema bridge. Each of the six `NCodec` instances above has a
+// zod-schema counterpart whose DECODED (`z.output`) type matches that codec's own
+// `toJS`/`fromJS` JS-side type exactly — mapping through this table turns a NumSpec
+// into a real `symbol.native` Contract. PURE TYPE-LAYER: `symbol.native` never runs
+// this validation at runtime — `def.in`/`def.out` feed static inference and the
+// future `.d.ts` harvest only; `nativeNumericOp`'s OWN `marshalCall` remains the sole
+// runtime type-check/coerce/dispatch. The pairing, verified against each codec's own
+// `match`/`toJS`/`fromJS` (not just its name):
 //
 //   SchemeNum → z.schemeNumber   identity (ANumeric↔ANumeric) — exact match.
-//   AnyNum    → z.numberOrBigint added to scheme-zod.ts — no existing schema decoded to
-//               `number | bigint` (z.number/z.integer are number-only, z.bigint is
-//               bigint-only); ported verbatim from AnyNum's own toJS/fromJS.
+//   AnyNum    → z.numberOrBigint no existing schema decoded to `number | bigint`
+//               (z.number/z.integer are number-only, z.bigint is bigint-only);
+//               ported verbatim from AnyNum's own toJS/fromJS.
 //   Int       → z.bigint        decoded type (bigint) matches Int.toJS's return exactly;
 //               z.bigint's INPUT side also accepts AInexact (Int.match doesn't) — inert
 //               for a native contract, which is never decoded/validated at runtime.
@@ -1020,11 +1013,11 @@ const CODEC_SCHEMA = new Map<NCodec<any, any>, z.ZodTypeAny>([
  *  error, not a silent `z.unknown()` regression. */
 function codecSchema(codec: NCodec<any, any>): z.ZodTypeAny {
   const schema = CODEC_SCHEMA.get(codec);
-  invariant(schema, "numeric.ts: bind — no zod schema mapped for this NCodec (add it to CODEC_SCHEMA)");
+  invariant(schema, "numeric.ts: no zod schema mapped for this NCodec (add it to CODEC_SCHEMA)");
   return schema;
 }
 
-/** Map a NumSpec's own precise codec types to the outer `symbol.native` Contract —
+/** Map a NumSpec's own precise codec types to a real `symbol.native` Contract —
  *  1-tuple output (the common case). `floor/`/`truncate/`'s 2-value output and the
  *  bespoke (non-NumSpec) ops below build their Contract by hand instead. */
 function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestSpec> {
@@ -1036,45 +1029,55 @@ function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestS
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// The pack. Each op is bound via the SAME primitive `symbol.native` itself builds on
-// (`bakeNative`), not the `symbol.native` tagged-template factory: that factory
-// statically checks the impl against the decoded contract types, but
-// `nativeNumericOp`'s return is deliberately erased to `(...args: unknown[]) =>
-// unknown` (mirroring `NumSpec`'s own loosely-`any`-typed `in`/`out`/`fn` — the
-// marshalling is entirely runtime-driven, via each NCodec's `.match`/`.toJS`/`.fromJS`),
-// so it can never satisfy a precisely-typed `Impl<I,O,Rest>` parameter without an
-// unsound cast. `bakeNative`'s own `impl: AnyFn` accepts the erased factory output
-// directly, with NO cast — trusting `nativeNumericOp`'s existing runtime dispatch
-// (unchanged, proven byte-identical by the pre-existing behavioral suite) instead of a
-// compile-time proof the erasure makes impossible to ask for honestly.
+// Per-op specs — named so a `symbols` entry below builds its Contract
+// (`contractFromSpec(spec)`) AND its impl (`nativeNumericOp(name, spec)`) from ONE
+// shared object, instead of writing the same in/inRest/out shape twice. Every
+// `symbols` entry below is a LITERAL `symbol.native` call — no bindOp/bind wrapper
+// hiding it (the old bake* constructors these once reached into `_bake.ts` for are
+// dissolved; see that file's note on where they went).
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Build a `NativeSymbolDef` from a "name: doc" string, a precise Contract, and an impl —
- *  the shared primitive both `bindOp` (below) and the bespoke hand-built contracts use.
- *  The impl works on scheme values directly (no codec/validation at the symbol layer —
- *  the marshalling lives inside the impl), exactly as `wrappedOps` bound it. */
-const bind = (
-  nameDoc: string,
-  contract: Contract<VectorSpec, VectorSpec, RestSpec>,
-  impl: (...args: unknown[]) => unknown,
-) => {
-  const { name, doc } = parseNameDoc([nameDoc] as unknown as TemplateStringsArray, []);
-  return bakeNative({ kind: "native", name, doc, contract, impl });
-};
-
-/** The common case: a `NumSpec`-driven op. Builds the Contract from `spec` via the codec
- *  bridge, and (absent an explicit `impl` override) the bound fn via `nativeNumericOp`
- *  itself — exactly as every call site already did inline before this fix, just no
- *  longer discarding `spec`'s types on the way in. An explicit `impl` is passed by the
- *  alias entries (`**`/`%`/`==`/`|`/`&`/`~`, and the `=`/`<`/`>`/`<=`/`>=` `looseCompare`
- *  overlay) that must REUSE — not rebuild — a shared impl reference (see the "Reused op
- *  specs" section above; the file's own aliasing invariant demands the SAME op object). */
-const bindOp = (
-  nameDoc: string,
-  name: string,
-  spec: NumSpec,
-  impl: (...args: unknown[]) => unknown = nativeNumericOp(name, spec),
-) => bind(nameDoc, contractFromSpec(spec), impl);
+const addSpec: NumSpec = { in: [], inRest: SchemeNum, out: SchemeNum, fn: addFn };
+const subSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: subFn };
+const mulSpec: NumSpec = { in: [], inRest: SchemeNum, out: SchemeNum, fn: mulFn };
+const divSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: divFn };
+const quotientSpec: NumSpec = { in: [Int, Int], out: Int, fn: quotientFn };
+const moduloSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: moduloFn };
+const floorQuotientSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorQuotientFn };
+const floorRemainderSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorRemainderFn };
+const truncateQuotientSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateQuotientFn };
+const truncateRemainderSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateRemainderFn };
+const numeratorSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: numeratorFn };
+const denominatorSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: denominatorFn };
+const makeRectangularSpec: NumSpec = { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const makePolarSpec: NumSpec = { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const realPartSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const imagPartSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const magnitudeSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const angleSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
+const absSpec: NumSpec = { in: [AnyNum], out: AnyNum, fn: absFn };
+const gcdSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: gcdFn };
+const maxSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: maxFn };
+const minSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: minFn };
+const zeroSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isZeroFn };
+const positiveSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isPositiveFn };
+const negativeSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isNegativeFn };
+const oddSpec: NumSpec = { in: [Int], out: Bool, fn: isOddFn };
+const evenSpec: NumSpec = { in: [Int], out: Bool, fn: isEvenFn };
+const floorSpec: NumSpec = { in: [Num], out: Num, fn: Math.floor };
+const ceilingSpec: NumSpec = { in: [Num], out: Num, fn: Math.ceil };
+const truncateSpec: NumSpec = { in: [Num], out: Num, fn: Math.trunc };
+const roundSpec: NumSpec = { in: [Num], out: Num, fn: roundFn };
+const sqrtSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: sqrtFn };
+const expSpec: NumSpec = { in: [Num], out: Num, fn: Math.exp };
+const logSpec: NumSpec = { in: [Num], inRest: Num, out: Num, fn: logFn };
+const sinSpec: NumSpec = { in: [Num], out: Num, fn: Math.sin };
+const cosSpec: NumSpec = { in: [Num], out: Num, fn: Math.cos };
+const tanSpec: NumSpec = { in: [Num], out: Num, fn: Math.tan };
+const asinSpec: NumSpec = { in: [Num], out: Num, fn: Math.asin };
+const acosSpec: NumSpec = { in: [Num], out: Num, fn: Math.acos };
+const atanSpec: NumSpec = { in: [Num], inRest: Num, out: Num, fn: atanFn };
+const bitwiseXorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseXorFn };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (its own coercion + a bespoke wrapper around `marshalCall`, or no NumSpec at all), so
@@ -1134,102 +1137,230 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 export default new EnvCapability("scheme/numeric", {
   symbols: {
     // ── Arithmetic ──────────────────────────────────────────────────────────────
-    "+": bindOp("+: variadic sum (0 with no args)", "+", { in: [], inRest: SchemeNum, out: SchemeNum, fn: addFn }),
-    "-": bindOp("-: difference; unary negates", "-", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: subFn }),
-    "*": bindOp("*: variadic product (1 with no args)", "*", { in: [], inRest: SchemeNum, out: SchemeNum, fn: mulFn }),
-    "/": bindOp("/: division; unary is reciprocal", "/", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: divFn }),
-    quotient: bindOp("quotient: integer quotient truncated toward zero", "quotient", { in: [Int, Int], out: Int, fn: quotientFn }),
-    remainder: bindOp("remainder: remainder of truncating division", "remainder", remainderSpec, remainderOp),
-    modulo: bindOp("modulo: modulo (sign of divisor)", "modulo", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: moduloFn }),
-    "floor-quotient": bindOp("floor-quotient: quotient toward negative infinity", "floor-quotient", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorQuotientFn }),
-    "floor-remainder": bindOp("floor-remainder: remainder of floor division", "floor-remainder", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorRemainderFn }),
-    "truncate-quotient": bindOp("truncate-quotient: quotient truncated toward zero", "truncate-quotient", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateQuotientFn }),
-    "truncate-remainder": bindOp("truncate-remainder: remainder of truncating division", "truncate-remainder", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateRemainderFn }),
-    numerator: bindOp("numerator: numerator of a rational", "numerator", { in: [SchemeNum], out: SchemeNum, fn: numeratorFn }),
-    denominator: bindOp("denominator: denominator of a rational", "denominator", { in: [SchemeNum], out: SchemeNum, fn: denominatorFn }),
-    "make-rectangular": bindOp("make-rectangular: DOORED (complex unsupported)", "make-rectangular", { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "make-polar": bindOp("make-polar: DOORED (complex unsupported)", "make-polar", { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "real-part": bindOp("real-part: DOORED (complex unsupported)", "real-part", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "imag-part": bindOp("imag-part: DOORED (complex unsupported)", "imag-part", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    magnitude: bindOp("magnitude: DOORED (complex unsupported)", "magnitude", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    angle: bindOp("angle: DOORED (complex unsupported)", "angle", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    abs: bindOp("abs: absolute value", "abs", { in: [AnyNum], out: AnyNum, fn: absFn }),
-    gcd: bindOp("gcd: greatest common divisor (non-negative)", "gcd", { in: [], inRest: Int, out: Int, fn: gcdFn }),
-    expt: bindOp("expt: exponentiation", "expt", exptSpec, exptOp),
-    max: bindOp("max: maximum (inexactness contagious)", "max", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: maxFn }),
-    min: bindOp("min: minimum (inexactness contagious)", "min", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: minFn }),
+    "+": symbol.native`+: variadic sum (0 with no args)`(contractFromSpec(addSpec), nativeNumericOp("+", addSpec)),
+    "-": symbol.native`-: difference; unary negates`(contractFromSpec(subSpec), nativeNumericOp("-", subSpec)),
+    "*": symbol.native`*: variadic product (1 with no args)`(contractFromSpec(mulSpec), nativeNumericOp("*", mulSpec)),
+    "/": symbol.native`/: division; unary is reciprocal`(contractFromSpec(divSpec), nativeNumericOp("/", divSpec)),
+    quotient: symbol.native`quotient: integer quotient truncated toward zero`(
+      contractFromSpec(quotientSpec),
+      nativeNumericOp("quotient", quotientSpec),
+    ),
+    remainder: symbol.native`remainder: remainder of truncating division`(contractFromSpec(remainderSpec), remainderOp),
+    modulo: symbol.native`modulo: modulo (sign of divisor)`(
+      contractFromSpec(moduloSpec),
+      nativeNumericOp("modulo", moduloSpec),
+    ),
+    "floor-quotient": symbol.native`floor-quotient: quotient toward negative infinity`(
+      contractFromSpec(floorQuotientSpec),
+      nativeNumericOp("floor-quotient", floorQuotientSpec),
+    ),
+    "floor-remainder": symbol.native`floor-remainder: remainder of floor division`(
+      contractFromSpec(floorRemainderSpec),
+      nativeNumericOp("floor-remainder", floorRemainderSpec),
+    ),
+    "truncate-quotient": symbol.native`truncate-quotient: quotient truncated toward zero`(
+      contractFromSpec(truncateQuotientSpec),
+      nativeNumericOp("truncate-quotient", truncateQuotientSpec),
+    ),
+    "truncate-remainder": symbol.native`truncate-remainder: remainder of truncating division`(
+      contractFromSpec(truncateRemainderSpec),
+      nativeNumericOp("truncate-remainder", truncateRemainderSpec),
+    ),
+    numerator: symbol.native`numerator: numerator of a rational`(
+      contractFromSpec(numeratorSpec),
+      nativeNumericOp("numerator", numeratorSpec),
+    ),
+    denominator: symbol.native`denominator: denominator of a rational`(
+      contractFromSpec(denominatorSpec),
+      nativeNumericOp("denominator", denominatorSpec),
+    ),
+    "make-rectangular": symbol.native`make-rectangular: DOORED (complex unsupported)`(
+      contractFromSpec(makeRectangularSpec),
+      nativeNumericOp("make-rectangular", makeRectangularSpec),
+    ),
+    "make-polar": symbol.native`make-polar: DOORED (complex unsupported)`(
+      contractFromSpec(makePolarSpec),
+      nativeNumericOp("make-polar", makePolarSpec),
+    ),
+    "real-part": symbol.native`real-part: DOORED (complex unsupported)`(
+      contractFromSpec(realPartSpec),
+      nativeNumericOp("real-part", realPartSpec),
+    ),
+    "imag-part": symbol.native`imag-part: DOORED (complex unsupported)`(
+      contractFromSpec(imagPartSpec),
+      nativeNumericOp("imag-part", imagPartSpec),
+    ),
+    magnitude: symbol.native`magnitude: DOORED (complex unsupported)`(
+      contractFromSpec(magnitudeSpec),
+      nativeNumericOp("magnitude", magnitudeSpec),
+    ),
+    angle: symbol.native`angle: DOORED (complex unsupported)`(
+      contractFromSpec(angleSpec),
+      nativeNumericOp("angle", angleSpec),
+    ),
+    abs: symbol.native`abs: absolute value`(contractFromSpec(absSpec), nativeNumericOp("abs", absSpec)),
+    gcd: symbol.native`gcd: greatest common divisor (non-negative)`(
+      contractFromSpec(gcdSpec),
+      nativeNumericOp("gcd", gcdSpec),
+    ),
+    expt: symbol.native`expt: exponentiation`(contractFromSpec(exptSpec), exptOp),
+    max: symbol.native`max: maximum (inexactness contagious)`(contractFromSpec(maxSpec), nativeNumericOp("max", maxSpec)),
+    min: symbol.native`min: minimum (inexactness contagious)`(contractFromSpec(minSpec), nativeNumericOp("min", minSpec)),
 
     // ── Comparison (numeric core + FL-Ord fallback + nil-tolerant overlay) ────────
-    "=": bindOp("=: numeric equality (nil-tolerant)", "=", numEqSpec, looseCompare("=", numEqOp)),
-    "<": bindOp("<: strictly increasing (FL-Ord fallback, nil-tolerant)", "<", ltSpec, looseCompare("<", wrapOrd(ltOp, "<"))),
-    ">": bindOp(">: strictly decreasing", ">", gtSpec, looseCompare(">", wrapOrd(gtOp, ">"))),
-    "<=": bindOp("<=: non-decreasing", "<=", lteSpec, looseCompare("<=", wrapOrd(lteOp, "<="))),
-    ">=": bindOp(">=: non-increasing", ">=", gteSpec, looseCompare(">=", wrapOrd(gteOp, ">="))),
+    "=": symbol.native`=: numeric equality (nil-tolerant)`(contractFromSpec(numEqSpec), looseCompare("=", numEqOp)),
+    "<": symbol.native`<: strictly increasing (FL-Ord fallback, nil-tolerant)`(
+      contractFromSpec(ltSpec),
+      looseCompare("<", wrapOrd(ltOp, "<")),
+    ),
+    ">": symbol.native`>: strictly decreasing`(contractFromSpec(gtSpec), looseCompare(">", wrapOrd(gtOp, ">"))),
+    "<=": symbol.native`<=: non-decreasing`(contractFromSpec(lteSpec), looseCompare("<=", wrapOrd(lteOp, "<="))),
+    ">=": symbol.native`>=: non-increasing`(contractFromSpec(gteSpec), looseCompare(">=", wrapOrd(gteOp, ">="))),
 
     // ── Sign / parity predicates (throwing — coerce then test) ───────────────────
-    "zero?": bindOp("zero?: #t iff n is zero", "zero?", { in: [AnyNum], out: Bool, fn: isZeroFn }),
-    "positive?": bindOp("positive?: #t iff n > 0", "positive?", { in: [AnyNum], out: Bool, fn: isPositiveFn }),
-    "negative?": bindOp("negative?: #t iff n < 0", "negative?", { in: [AnyNum], out: Bool, fn: isNegativeFn }),
-    "odd?": bindOp("odd?: #t iff n is odd", "odd?", { in: [Int], out: Bool, fn: isOddFn }),
-    "even?": bindOp("even?: #t iff n is even", "even?", { in: [Int], out: Bool, fn: isEvenFn }),
+    "zero?": symbol.native`zero?: #t iff n is zero`(contractFromSpec(zeroSpec), nativeNumericOp("zero?", zeroSpec)),
+    "positive?": symbol.native`positive?: #t iff n > 0`(
+      contractFromSpec(positiveSpec),
+      nativeNumericOp("positive?", positiveSpec),
+    ),
+    "negative?": symbol.native`negative?: #t iff n < 0`(
+      contractFromSpec(negativeSpec),
+      nativeNumericOp("negative?", negativeSpec),
+    ),
+    "odd?": symbol.native`odd?: #t iff n is odd`(contractFromSpec(oddSpec), nativeNumericOp("odd?", oddSpec)),
+    "even?": symbol.native`even?: #t iff n is even`(contractFromSpec(evenSpec), nativeNumericOp("even?", evenSpec)),
 
     // ── R7RS tower-type predicates (total — a non-number is #f, not an error) ─────
-    "complex?": bind("complex?: #t for any number", PREDICATE_CONTRACT, nativeTypePredicate("complex?", (n) => n.isComplex)),
-    "real?": bind("real?: #t for any number (reals-only tower)", PREDICATE_CONTRACT, nativeTypePredicate("real?", (n) => n.isReal)),
-    "rational?": bind("rational?: #t for finite reals", PREDICATE_CONTRACT, nativeTypePredicate("rational?", (n) => n.isRational)),
-    "integer?": bind("integer?: #t for integer values (exact or inexact)", PREDICATE_CONTRACT, nativeTypePredicate("integer?", (n) => n.isInteger)),
-    "exact?": bind("exact?: #t for exact numbers", PREDICATE_CONTRACT, nativeTypePredicate("exact?", (n) => n.isExact)),
-    "inexact?": bind("inexact?: #t for inexact numbers", PREDICATE_CONTRACT, nativeTypePredicate("inexact?", (n) => !n.isExact)),
-    "exact-integer?": bind("exact-integer?: #t for exact integers", PREDICATE_CONTRACT, nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger)),
-    "finite?": bind("finite?: #t for finite numbers", PREDICATE_CONTRACT, nativeTypePredicate("finite?", (n) => n.isFinite)),
-    "infinite?": bind("infinite?: #t for ±infinity", PREDICATE_CONTRACT, nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN)),
-    "nan?": bind("nan?: #t for NaN", PREDICATE_CONTRACT, nativeTypePredicate("nan?", (n) => n.isNaN)),
+    "complex?": symbol.native`complex?: #t for any number`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("complex?", (n) => n.isComplex),
+    ),
+    "real?": symbol.native`real?: #t for any number (reals-only tower)`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("real?", (n) => n.isReal),
+    ),
+    "rational?": symbol.native`rational?: #t for finite reals`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("rational?", (n) => n.isRational),
+    ),
+    "integer?": symbol.native`integer?: #t for integer values (exact or inexact)`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("integer?", (n) => n.isInteger),
+    ),
+    "exact?": symbol.native`exact?: #t for exact numbers`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("exact?", (n) => n.isExact),
+    ),
+    "inexact?": symbol.native`inexact?: #t for inexact numbers`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("inexact?", (n) => !n.isExact),
+    ),
+    "exact-integer?": symbol.native`exact-integer?: #t for exact integers`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger),
+    ),
+    "finite?": symbol.native`finite?: #t for finite numbers`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("finite?", (n) => n.isFinite),
+    ),
+    "infinite?": symbol.native`infinite?: #t for ±infinity`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN),
+    ),
+    "nan?": symbol.native`nan?: #t for NaN`(PREDICATE_CONTRACT, nativeTypePredicate("nan?", (n) => n.isNaN)),
 
     // ── Rounding ─────────────────────────────────────────────────────────────────
-    floor: bindOp("floor: largest integer ≤ n", "floor", { in: [Num], out: Num, fn: Math.floor }),
-    ceiling: bindOp("ceiling: smallest integer ≥ n", "ceiling", { in: [Num], out: Num, fn: Math.ceil }),
-    truncate: bindOp("truncate: integer toward zero", "truncate", { in: [Num], out: Num, fn: Math.trunc }),
-    round: bindOp("round: nearest integer, ties to even", "round", { in: [Num], out: Num, fn: roundFn }),
+    floor: symbol.native`floor: largest integer ≤ n`(contractFromSpec(floorSpec), nativeNumericOp("floor", floorSpec)),
+    ceiling: symbol.native`ceiling: smallest integer ≥ n`(
+      contractFromSpec(ceilingSpec),
+      nativeNumericOp("ceiling", ceilingSpec),
+    ),
+    truncate: symbol.native`truncate: integer toward zero`(
+      contractFromSpec(truncateSpec),
+      nativeNumericOp("truncate", truncateSpec),
+    ),
+    round: symbol.native`round: nearest integer, ties to even`(
+      contractFromSpec(roundSpec),
+      nativeNumericOp("round", roundSpec),
+    ),
 
     // ── Transcendentals ──────────────────────────────────────────────────────────
-    sqrt: bindOp("sqrt: square root (exact for perfect squares)", "sqrt", { in: [SchemeNum], out: SchemeNum, fn: sqrtFn }),
-    exp: bindOp("exp: e raised to n", "exp", { in: [Num], out: Num, fn: Math.exp }),
-    log: bindOp("log: natural log, or log base", "log", { in: [Num], inRest: Num, out: Num, fn: logFn }),
-    sin: bindOp("sin: sine (radians)", "sin", { in: [Num], out: Num, fn: Math.sin }),
-    cos: bindOp("cos: cosine (radians)", "cos", { in: [Num], out: Num, fn: Math.cos }),
-    tan: bindOp("tan: tangent (radians)", "tan", { in: [Num], out: Num, fn: Math.tan }),
-    asin: bindOp("asin: arc sine", "asin", { in: [Num], out: Num, fn: Math.asin }),
-    acos: bindOp("acos: arc cosine", "acos", { in: [Num], out: Num, fn: Math.acos }),
-    atan: bindOp("atan: arc tangent, or atan2", "atan", { in: [Num], inRest: Num, out: Num, fn: atanFn }),
+    sqrt: symbol.native`sqrt: square root (exact for perfect squares)`(
+      contractFromSpec(sqrtSpec),
+      nativeNumericOp("sqrt", sqrtSpec),
+    ),
+    exp: symbol.native`exp: e raised to n`(contractFromSpec(expSpec), nativeNumericOp("exp", expSpec)),
+    log: symbol.native`log: natural log, or log base`(contractFromSpec(logSpec), nativeNumericOp("log", logSpec)),
+    sin: symbol.native`sin: sine (radians)`(contractFromSpec(sinSpec), nativeNumericOp("sin", sinSpec)),
+    cos: symbol.native`cos: cosine (radians)`(contractFromSpec(cosSpec), nativeNumericOp("cos", cosSpec)),
+    tan: symbol.native`tan: tangent (radians)`(contractFromSpec(tanSpec), nativeNumericOp("tan", tanSpec)),
+    asin: symbol.native`asin: arc sine`(contractFromSpec(asinSpec), nativeNumericOp("asin", asinSpec)),
+    acos: symbol.native`acos: arc cosine`(contractFromSpec(acosSpec), nativeNumericOp("acos", acosSpec)),
+    atan: symbol.native`atan: arc tangent, or atan2`(contractFromSpec(atanSpec), nativeNumericOp("atan", atanSpec)),
 
     // ── Bitwise (integer only) ────────────────────────────────────────────────────
-    "bitwise-and": bindOp("bitwise-and: bitwise AND", "bitwise-and", bitwiseAndSpec, bitwiseAndOp),
-    "bitwise-ior": bindOp("bitwise-ior: bitwise inclusive OR", "bitwise-ior", bitwiseIorSpec, bitwiseIorOp),
-    "bitwise-xor": bindOp("bitwise-xor: bitwise exclusive OR", "bitwise-xor", { in: [], inRest: Int, out: Int, fn: bitwiseXorFn }),
-    "bitwise-not": bindOp("bitwise-not: bitwise NOT", "bitwise-not", bitwiseNotSpec, bitwiseNotOp),
-    "arithmetic-shift": bindOp("arithmetic-shift: shift left (right if count < 0)", "arithmetic-shift", arithmeticShiftSpec),
+    "bitwise-and": symbol.native`bitwise-and: bitwise AND`(contractFromSpec(bitwiseAndSpec), bitwiseAndOp),
+    "bitwise-ior": symbol.native`bitwise-ior: bitwise inclusive OR`(contractFromSpec(bitwiseIorSpec), bitwiseIorOp),
+    "bitwise-xor": symbol.native`bitwise-xor: bitwise exclusive OR`(
+      contractFromSpec(bitwiseXorSpec),
+      nativeNumericOp("bitwise-xor", bitwiseXorSpec),
+    ),
+    "bitwise-not": symbol.native`bitwise-not: bitwise NOT`(contractFromSpec(bitwiseNotSpec), bitwiseNotOp),
+    "arithmetic-shift": symbol.native`arithmetic-shift: shift left (right if count < 0)`(
+      contractFromSpec(arithmeticShiftSpec),
+      nativeNumericOp("arithmetic-shift", arithmeticShiftSpec),
+    ),
 
     // ── LIPS-style aliases (canonical-named cores under the alias key) ────────────
-    "**": bindOp("**: exponentiation (alias of expt)", "expt", exptSpec, exptOp),
-    "%": bindOp("%: remainder (alias)", "remainder", remainderSpec, remainderOp),
-    "==": bindOp("==: numeric equality (alias of =)", "=", numEqSpec, numEqOp),
-    "|": bindOp("|: bitwise inclusive OR (alias)", "bitwise-ior", bitwiseIorSpec, bitwiseIorOp),
-    "&": bindOp("&: bitwise AND (alias)", "bitwise-and", bitwiseAndSpec, bitwiseAndOp),
-    "~": bindOp("~: bitwise NOT (alias)", "bitwise-not", bitwiseNotSpec, bitwiseNotOp),
+    "**": symbol.native`**: exponentiation (alias of expt)`(contractFromSpec(exptSpec), exptOp),
+    "%": symbol.native`%: remainder (alias)`(contractFromSpec(remainderSpec), remainderOp),
+    "==": symbol.native`==: numeric equality (alias of =)`(contractFromSpec(numEqSpec), numEqOp),
+    "|": symbol.native`|: bitwise inclusive OR (alias)`(contractFromSpec(bitwiseIorSpec), bitwiseIorOp),
+    "&": symbol.native`&: bitwise AND (alias)`(contractFromSpec(bitwiseAndSpec), bitwiseAndOp),
+    "~": symbol.native`~: bitwise NOT (alias)`(contractFromSpec(bitwiseNotSpec), bitwiseNotOp),
 
     // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
-    "floor/": bind("floor/: floor quotient and remainder (two values)", TWO_VALUE_OUTPUT_CONTRACT, floorSlashFn),
-    "truncate/": bind("truncate/: truncate quotient and remainder (two values)", TWO_VALUE_OUTPUT_CONTRACT, truncateSlashFn),
-    lcm: bind("lcm: least common multiple (non-negative)", LCM_CONTRACT, lcmFn),
-    "number?": bind("number?: #t for any number", PREDICATE_CONTRACT, (value: unknown) => isSchemeNumber(value)),
-    "1+": bind("1+: increment by one", ONE_ARG_NUM_OUTPUT_CONTRACT, onePlusFn),
-    "1-": bind("1-: decrement by one", ONE_ARG_NUM_OUTPUT_CONTRACT, oneMinusFn),
-    ">>": bind(">>: arithmetic-shift by the count", TWO_ARG_NUM_OUTPUT_CONTRACT, shiftRightFn),
-    "<<": bind("<<: arithmetic-shift by the negated count", TWO_ARG_NUM_OUTPUT_CONTRACT, shiftLeftFn),
-    inexact: bind("inexact: exact→inexact conversion", INEXACT_CONTRACT, inexactFn),
-    exact: bind("exact: inexact→exact conversion", EXACT_CONTRACT, exactFn),
-    "exact->inexact": bind("exact->inexact: R5RS spelling of inexact", INEXACT_CONTRACT, inexactFn),
-    "inexact->exact": bind("inexact->exact: R5RS spelling of exact", EXACT_CONTRACT, exactFn),
-    "number->string": bind("number->string: format a number in a radix", NUMBER_TO_STRING_CONTRACT, numberToStringFn),
+    // Each impl below has a CONCRETE fixed-arity signature (unlike nativeNumericOp/
+    // nativeTypePredicate's erased `(...args: unknown[]) => unknown`), so it doesn't
+    // satisfy the (deliberately loose) `Contract<VectorSpec,VectorSpec,RestSpec>` these
+    // hand-declared contracts carry without erasing the arity first — same boundary
+    // rosetta.ts/sequence.ts's `run` cross, cast once per declaration, right here.
+    "floor/": symbol.native`floor/: floor quotient and remainder (two values)`(
+      TWO_VALUE_OUTPUT_CONTRACT,
+      floorSlashFn as (...args: unknown[]) => unknown,
+    ),
+    "truncate/": symbol.native`truncate/: truncate quotient and remainder (two values)`(
+      TWO_VALUE_OUTPUT_CONTRACT,
+      truncateSlashFn as (...args: unknown[]) => unknown,
+    ),
+    lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),
+    "number?": symbol.native`number?: #t for any number`(
+      PREDICATE_CONTRACT,
+      ((value: unknown) => isSchemeNumber(value)) as (...args: unknown[]) => unknown,
+    ),
+    "1+": symbol.native`1+: increment by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, onePlusFn as (...args: unknown[]) => unknown),
+    "1-": symbol.native`1-: decrement by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, oneMinusFn as (...args: unknown[]) => unknown),
+    ">>": symbol.native`>>: arithmetic-shift by the count`(
+      TWO_ARG_NUM_OUTPUT_CONTRACT,
+      shiftRightFn as (...args: unknown[]) => unknown,
+    ),
+    "<<": symbol.native`<<: arithmetic-shift by the negated count`(
+      TWO_ARG_NUM_OUTPUT_CONTRACT,
+      shiftLeftFn as (...args: unknown[]) => unknown,
+    ),
+    inexact: symbol.native`inexact: exact→inexact conversion`(INEXACT_CONTRACT, inexactFn as (...args: unknown[]) => unknown),
+    exact: symbol.native`exact: inexact→exact conversion`(EXACT_CONTRACT, exactFn as (...args: unknown[]) => unknown),
+    "exact->inexact": symbol.native`exact->inexact: R5RS spelling of inexact`(
+      INEXACT_CONTRACT,
+      inexactFn as (...args: unknown[]) => unknown,
+    ),
+    "inexact->exact": symbol.native`inexact->exact: R5RS spelling of exact`(
+      EXACT_CONTRACT,
+      exactFn as (...args: unknown[]) => unknown,
+    ),
+    "number->string": symbol.native`number->string: format a number in a radix`(
+      NUMBER_TO_STRING_CONTRACT,
+      numberToStringFn as (...args: unknown[]) => unknown,
+    ),
   },
 });

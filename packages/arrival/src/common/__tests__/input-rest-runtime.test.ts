@@ -24,7 +24,7 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { symbol } from "../symbol.js";
-import { bakeNative } from "../symbols/_bake.js";
+import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod.js";
 
 describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + variadic tail", () => {
@@ -89,13 +89,6 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
 
 describe("Contract.inputRest runtime — bake-time GUARD: inputRest requires a fixed tuple `input`", () => {
   it("throws when inputRest is combined with a NON-tuple (bare single-schema) input — contract-authoring error, not a silent ignore", () => {
-    expect(() =>
-      bakeNative({
-        kind: "native",
-        name: "bad",
-        contract: { input: z.array(z.value), inputRest: z.value, output: [z.value] },
-        impl: (...args: unknown[]) => args[0],
-      }),
-    ).toThrow(/fixed positional tuple/);
+    expect(() => normalizeInputVector(z.array(z.value), z.value)).toThrow(/fixed positional tuple/);
   });
 });
