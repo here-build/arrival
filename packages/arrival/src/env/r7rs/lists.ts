@@ -256,7 +256,21 @@ export default new EnvCapability("scheme/lists", {
     // map (Pair preserves boxes + speculates [1,1]; Vector strips boxes, eager) — the term owns the
     // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
     map: symbol.sequence`map: fn over one list (its own term map — box discipline + speculation) or a zip over several`(
-      { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
+      // fn is the fixed HEAD, the further lists/vectors are the variadic TAIL — `symbol.sequence`'s
+      // own factory type is `Contract<I, O>` (no `Rest` generic — see sequence.ts/_bake.ts's
+      // SequenceInput), so a hand-authored `z.tuple(fixed, rest)` is the only available shape
+      // (matches this exact file's own doc precedent, and srfi-1.ts's filter). The head uses the
+      // established callable-schema convention (z.custom<(...args) => SchemeValue>(), matching
+      // vector-map's OWN choice for a data-producing HOF — its mapped result becomes output
+      // elements, unlike a truthiness-only predicate like filter's, which uses `=> unknown`). The
+      // rest is z.value, not z.union([z.pair, z.nil]): a further "list" argument here is actually
+      // ANY sequence answering arrival/tagless-final/map (Pair, Nil, OR Vector — see the impl's own
+      // single-list dispatch), so z.union([pair,nil]) would wrongly exclude the vector case; z.value
+      // is the honest ceiling (matches vector-map's own choice of NOT over-narrowing its rest either).
+      // Output is z.value: both dispatch paths (the tf("map") protocol member, and multiListMap)
+      // declare SchemeValue | Promise<SchemeValue> — never a raw-primitive leak (unlike length's
+      // arrival/tagless-final/length, which honestly admits `AValue | number`).
+      { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.value), output: [z.value], fanout: true },
       (args, runCtx) => {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
@@ -317,7 +331,11 @@ export default new EnvCapability("scheme/lists", {
     ),
     // R7RS 6.4 Pairs and lists
     cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
-      { input: [z.unknown(), z.unknown()], output: [z.pair] },
+      // car/cdr are any scheme value — the whole point of cons is to hold arbitrary scheme
+      // values, so z.value (SchemeValue identity) replaces the old z.unknown(); zero runtime
+      // difference (native ops run no validation; z.value carries no refinement either), a
+      // purely static precision improvement for the .d.ts harvest surface.
+      { input: [z.value, z.value], output: [z.pair] },
       // Byte-identical to the stdlib global_env body it relocates: a constructor,
       // so it unions both inputs' provenance over the produced cell (parallel to
       // make-list / list, which stamp only the produced Pair).
@@ -375,11 +393,20 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "make-list": symbol.native`make-list: build a list of k copies of fill (default #f)`(
-      { input: [z.schemeNumber, z.unknown().optional()], output: [z.unknown()] },
-      (k: unknown, fill?: unknown): unknown => {
+      // fill is any scheme value (z.value, not z.unknown()) — matches cons's car/cdr reasoning.
+      // Output is now z.union([z.pair, z.nil]) rather than a bare z.value/z.unknown(): make-list
+      // is a CONSTRUCTOR that ALWAYS produces a well-formed proper list (nil when k=0, else a
+      // pair chain) — unlike list-tail/list-copy (which can inherit an improper tail from their
+      // INPUT) or list-ref (which extracts a single element), there is no way for make-list to
+      // return anything outside {pair, nil}. This is also the file's own established "this is a
+      // list" vocabulary (list-tail/list-ref/list-set!/list-copy's inputs already use this exact
+      // union) — and, unlike z.value, z.pair/z.nil carry a REAL instanceof refinement, so this is
+      // genuinely runtime-testable (see lists-contract-precision.test.ts).
+      { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
+      (k: unknown, fill?: unknown): APair | ANil => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         const value = fill === undefined ? false : fill;
-        let result: unknown = nil;
+        let result: APair | ANil = nil;
         for (let i = 0; i < count; i++) {
           result = new APair(CONSTANT_CTX, value, result);
         }
@@ -391,12 +418,20 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "list-tail": symbol.native`list-tail: the sublist obtained by dropping the first k elements`(
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.unknown()] },
-      (list: unknown, k: unknown): unknown => {
+      // Output is z.value (SchemeValue), not z.unknown() — but NOT narrowed further to
+      // z.union([z.pair, z.nil]): the walked-to position can be an IMPROPER list's dangling
+      // tail (e.g. (list-tail '(1 2 . 3) 2) => 3, a bare number), so z.value is the honest
+      // ceiling, matching list-ref/list-copy's own reasoning below.
+      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
+      (list: SchemeValue, k: unknown): SchemeValue => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-        let current = list;
+        let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof APair, `list-tail: list too short`);
+          // `is_pair` (the file-local SchemeValue-narrowing shadow, line ~60) replaces the raw
+          // `current instanceof APair` here — byte-identical runtime check (is_pair_raw IS
+          // `instanceof APair`), but narrows `.cdr` to SchemeValue instead of APair<unknown,
+          // unknown>'s default `unknown`, which the tightened `SchemeValue` return type needs.
+          TypeError.invariant(is_pair(current), `list-tail: list too short`);
           current = current.cdr;
         }
         return current;
@@ -404,21 +439,27 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "list-ref": symbol.native`list-ref: the element at index k`(
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.unknown()] },
-      (list: unknown, k: unknown): unknown => {
+      // Output is z.value, not z.unknown() — the element at an index is any scheme value
+      // (e.g. (list-ref '(1 2 3) 0) => 1, a bare number, not a list), so z.value is the
+      // honest ceiling (not a pair|nil union).
+      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
+      (list: SchemeValue, k: unknown): SchemeValue => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-        let current = list;
+        let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof APair, `list-ref: list too short`);
+          // is_pair swap — see list-tail's identical note just above.
+          TypeError.invariant(is_pair(current), `list-ref: list too short`);
           current = current.cdr;
         }
-        TypeError.invariant(current instanceof APair, `list-ref: index out of bounds`);
+        TypeError.invariant(is_pair(current), `list-ref: index out of bounds`);
         return current.car;
       },
     ),
 
     "list-set!": symbol.native`list-set!: store obj at index k (mutates the spine)`(
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber, z.unknown()], output: [z.void()] },
+      // obj (the stored value) is any scheme value — z.value, not z.unknown() (matches cons's
+      // car/cdr). Output stays z.void() (already precise; unaffected by this fix).
+      { input: [z.union([z.pair, z.nil]), z.schemeNumber, z.value], output: [z.void()] },
       (list: unknown, k: unknown, obj: unknown): void => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         let current = list;
@@ -432,34 +473,55 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "list-copy": symbol.native`list-copy: a fresh copy of the list spine (R7RS freshness)`(
-      { input: [z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (list: unknown): unknown => {
-        // \`=== nil\` would miss Nil clones (singletons minted via withProvenance by
+      // Output is z.value, not z.unknown() — like list-tail, list-copy explicitly tolerates an
+      // IMPROPER list (the !(lst instanceof APair) branch below returns the dangling tail
+      // as-is), so the result can be any scheme value, not just a pair|nil.
+      { input: [z.union([z.pair, z.nil])], output: [z.value] },
+      (list: SchemeValue): SchemeValue => {
+        // === nil would miss Nil clones (singletons minted via withProvenance by
         // the evaluator's control-flow provenance pass). A clone bypassed the
-        // guard, fell to the \`!(instanceof Pair)\` improper-list branch on the next
+        // guard, fell to the !(instanceof Pair) improper-list branch on the next
         // line, and aliased the input by reference — violating R7RS list-copy's
-        // fresh-allocation contract. \`instanceof Nil\` keeps the freshness story
+        // fresh-allocation contract. instanceof Nil keeps the freshness story
         // intact for both the singleton and any clones.
         if (list instanceof ANil) return nil;
         if (!(list instanceof APair)) return list;
         TypeError.invariant(!isCircularList(list), "list-copy: circular list");
-        // Deep copy the spine of the list
-        const copy = (lst: unknown): unknown => {
+        // Deep copy the spine of the list. is_nil/is_pair (the file-local SchemeValue-
+        // narrowing shadow) replace the raw instanceof checks here ONLY (byte-identical
+        // runtime check — is_nil/is_pair ARE instanceof ANil/APair) so .car/.cdr narrow to
+        // SchemeValue instead of APair<unknown,unknown>'s default unknown, letting the
+        // recursive call and the tightened SchemeValue return type both typecheck.
+        const copy = (lst: SchemeValue): SchemeValue => {
           // Same clone-aware check at the recursion base: a Nil clone in the cdr
           // would otherwise be preserved as an improper-list tail.
-          if (lst instanceof ANil) return nil;
-          if (!(lst instanceof APair)) return lst; // improper list tail
+          if (is_nil(lst)) return nil;
+          if (!is_pair(lst)) return lst; // improper list tail
           return new APair(CONSTANT_CTX, lst.car, copy(lst.cdr));
         };
-        // Copy is a fresh allocation but semantically the same lineage as \`list\`.
+        // Copy is a fresh allocation but semantically the same lineage as `list`.
         return withInputProvenance([list], copy(list));
       },
     ),
 
     // R7RS 6.4 List searching functions
+    //
+    // memq/memv/assq/assv/member/assoc's output — all six — is z.union([z.value, z.literal(false)]),
+    // not a bare z.unknown(): every one of them returns EITHER a matched sublist/entry (a real
+    // scheme value) OR a raw, unboxed JS `false` sentinel on no-match (relying on the
+    // interpreter's downstream boxing — the SAME established "return false;"/"the membrane
+    // boxes it downstream" pattern used pervasively across this codebase: chars.ts, equality.ts,
+    // numeric.ts, strings.ts, and this file's own isProperList/length). z.value alone would be
+    // DISHONEST here (it would silently exclude the real, intentional false return path);
+    // z.unknown() would be needlessly loose. Neither the z.value arm nor z.literal(false) block
+    // any REAL call (native ops skip validation regardless) — this is a static/.d.ts-harvest
+    // precision fix documenting the actual two-shape domain.
     memq: symbol.native`memq: first sublist whose car is eq? to obj, else #f`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: unknown, list: unknown): unknown => {
+      // obj stays z.unknown() BY DESIGN: eq?'s raw === identity compare is the CANONICAL
+      // genuinely-representation-blind case scheme-zod.ts's own doc comment names ("a predicate
+      // that classifies host JS too — eq?, bytevector?") — not imprecision to fix.
+      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.union([z.value, z.literal(false)])] },
+      (obj: unknown, list: unknown): SchemeValue | false => {
         let current = list;
         TypeError.invariant(!isCircularList(list), "memq: circular list");
         while (current instanceof APair) {
@@ -474,8 +536,8 @@ export default new EnvCapability("scheme/lists", {
     memv: symbol.native`memv: first sublist whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values, so the search key is `z.value` (not the
       // representation-blind `z.unknown` memq uses for its `===` identity test).
-      { input: [z.value, z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: SchemeValue, list: unknown): unknown => {
+      { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.literal(false)])] },
+      (obj: SchemeValue, list: unknown): SchemeValue | false => {
         let current: unknown = list;
         TypeError.invariant(!isCircularList(list), "memv: circular list");
         while (is_pair(current)) {
@@ -487,8 +549,9 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     assq: symbol.native`assq: first alist entry whose car is eq? to obj, else #f`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: unknown, alist: unknown): unknown => {
+      // obj stays z.unknown() BY DESIGN — same eq? reasoning as memq above.
+      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.union([z.value, z.literal(false)])] },
+      (obj: unknown, alist: unknown): SchemeValue | false => {
         let current = alist;
         TypeError.invariant(!isCircularList(alist), "assq: circular list");
         while (current instanceof APair) {
@@ -502,8 +565,8 @@ export default new EnvCapability("scheme/lists", {
 
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
-      { input: [z.value, z.union([z.pair, z.nil])], output: [z.unknown()] },
-      (obj: SchemeValue, alist: unknown): unknown => {
+      { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.literal(false)])] },
+      (obj: SchemeValue, alist: unknown): SchemeValue | false => {
         let current: unknown = alist;
         TypeError.invariant(!isCircularList(alist), "assv: circular list");
         while (is_pair(current)) {
@@ -515,18 +578,25 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    // member uses equal? (deep structural equality)
+    // member uses equal? (deep structural equality). obj is z.value (not z.unknown()) —
+    // structuralEqual is a genuine scheme-value compare (matches memv/assv's own obj, unlike
+    // memq/assq's raw === identity, which stays z.unknown()). compare's return type is now
+    // `unknown`, not `boolean`: the body's own is_false guard right below proves the return
+    // is NOT always a raw JS boolean (a user-supplied Scheme predicate returns a boxed
+    // SchemeBool post-L1, a truthy JS object) — `boolean` was an honest-looking but incorrect
+    // annotation; `unknown` matches srfi-1.ts's filter predicate (the established convention
+    // for a scheme-callable whose result is truthiness-tested via is_false, not used as data).
     member: symbol.native`member: first sublist whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.unknown(), z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => boolean>().optional()],
-        output: [z.unknown()],
+        input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        output: [z.union([z.value, z.literal(false)])],
       },
-      (obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown => {
+      (obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => unknown): SchemeValue | false => {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
         let current = list;
         TypeError.invariant(!isCircularList(list), "member: circular list");
         while (current instanceof APair) {
-          // \`cmp\` may be a user-supplied Scheme predicate whose result is a boxed
+          // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
           // SchemeBool post-L1 (a truthy JS object); route through is_false.
           if (!is_false(cmp(obj, current.car))) return current;
           current = current.cdr;
@@ -535,19 +605,20 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    // assoc uses equal? (deep structural equality)
+    // assoc uses equal? (deep structural equality) — same obj/compare/output precision as
+    // member above.
     assoc: symbol.native`assoc: first alist entry whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.unknown(), z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => boolean>().optional()],
-        output: [z.unknown()],
+        input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        output: [z.union([z.value, z.literal(false)])],
       },
-      (obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => boolean): unknown => {
+      (obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => unknown): SchemeValue | false => {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
         let current = alist;
         TypeError.invariant(!isCircularList(alist), "assoc: circular list");
         while (current instanceof APair) {
           const pair = current.car;
-          // \`cmp\` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
+          // `cmp` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
           if (pair instanceof APair && !is_false(cmp(obj, pair.car))) return pair;
           current = current.cdr;
         }
@@ -625,9 +696,14 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
-      // LIPS-polymorphic over pair | raw JS array (and a number-like index); a borrowed
-      // array isn't a SchemeValue, so the contract is representation-blind.
-      { input: [z.unknown(), z.unknown()], output: [z.unknown()] },
+      // index is z.schemeNumber (not z.unknown()) — it's coerced via Number(index) below,
+      // exactly the same domain list-tail/list-ref/list-set!'s own k argument already uses.
+      // obj (2nd arg) and the output STAY z.unknown(): nth is genuinely LIPS-polymorphic over
+      // pair | raw JS array, and the array branch (`obj[idx]`, `Array.isArray(obj)`) can
+      // return arbitrary host data (a borrowed array isn't a SchemeValue) — matches
+      // `reverse`'s own established representation-blind precedent in this exact file, so
+      // z.value would be dishonest here (it would silently exclude that real return path).
+      { input: [z.schemeNumber, z.unknown()], output: [z.unknown()] },
       (index: unknown, obj: unknown): unknown => {
         typecheck("nth", index, "number");
         typecheck("nth", obj, ["array", "pair"]);
@@ -660,10 +736,15 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     flatten: symbol.native`flatten: the list with nested lists spliced in (LIPS extension)`(
-      // `.flatten()` may yield a nested JS array (LIPS), not just a pair/nil, so the
-      // output is representation-blind.
-      { input: [z.value], output: [z.unknown()] },
-      (list: SchemeValue): unknown => {
+      // `.flatten()`'s own declared TS return type is `APair | ANil | unknown[]` (APair.ts) —
+      // a bare z.unknown() was looser than that. z.union([z.pair, z.nil, z.array(z.unknown())])
+      // mirrors it exactly (the array arm's ELEMENTS genuinely can be arbitrary host data —
+      // `.flatten()` itself types them `unknown[]`, not `SchemeValue[]` — so z.array(z.unknown())
+      // is the honest ceiling there, not z.array(z.value)). Unlike z.value, z.pair/z.nil/z.array
+      // all carry real zod refinements, so this rejects e.g. a bare scalar the old z.unknown()
+      // accepted (see lists-contract-precision.test.ts).
+      { input: [z.value], output: [z.union([z.pair, z.nil, z.array(z.unknown())])] },
+      (list: SchemeValue): APair | ANil | unknown[] => {
         typecheck("flatten", list, "pair");
         // `typecheck` proves pairhood at runtime but is not a TS guard; re-state it so
         // `.flatten()` (an APair method) resolves on the narrowed receiver.
@@ -679,15 +760,20 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "tree->array": symbol.native`tree->array: a nested JS array built from a tree of pairs`(
-      // Output is a nested JS array (not a single SchemeValue) → representation-blind.
-      { input: [z.value], output: [z.unknown()] },
-      (list: unknown): unknown => treeToArray(list),
+      // Output is z.array(...) over the file-local recursive NestedArray element type — matches
+      // treeToArray's own declared TS return type (NestedArray[], from the to_array(name, true)
+      // overload above) exactly, tighter than a bare z.unknown() (z.array's Array.isArray check
+      // is a real refinement — rejects a non-array the old z.unknown() accepted).
+      { input: [z.value], output: [z.array(z.custom<NestedArray>())] },
+      (list: unknown): NestedArray[] => treeToArray(list),
     ),
 
     "list->array": symbol.native`list->array: a JS array built from a proper list`(
-      // Output is a JS array (not a single SchemeValue) → representation-blind.
-      { input: [z.value], output: [z.unknown()] },
-      (list: unknown): unknown => listToArray(list),
+      // Output is z.array(z.value) (SchemeValue[]) — matches listToArray's own declared TS
+      // return type (from the to_array(name) overload above) exactly, tighter than a bare
+      // z.unknown() (a real Array.isArray refinement).
+      { input: [z.value], output: [z.array(z.value)] },
+      (list: unknown): SchemeValue[] => listToArray(list),
     ),
   },
 });
