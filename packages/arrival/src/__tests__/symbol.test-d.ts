@@ -20,6 +20,7 @@ import type { APair } from "../values/primitives/APair.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { SchemeValue } from "../values/types.js";
+import { curry as curryImpl } from "../utils/functional.js";
 
 describe("symbol contract — decoded arg/return inference", () => {
   test("native: an identity-schema tuple infers the impl arg as the SCHEME TERM", () => {
@@ -126,8 +127,8 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2026-07-05 audit: five declaration-precision fixes (for-each / string-map /
-// string-for-each / filter / typecheck). Each proof below mirrors the REAL migrated
+// 2026-07-05 audit: six declaration-precision fixes (for-each / string-map /
+// string-for-each / filter / typecheck / find). Each proof below mirrors the REAL migrated
 // contract shape synthetically (NativeSymbolDef/SequenceSymbolDef erase `I`/`O` on any
 // real export — see the "apply's own declared shape" note above), proving the
 // mechanism computes the right decoded type for the actual declaration each op now uses.
@@ -183,6 +184,50 @@ describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a f
     expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.value]>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, SchemeValue]
     >();
+  });
+});
+
+describe("symbol contract — 2026-07-05 audit: find's predicate + return precision (srfi-1.ts)", () => {
+  // find's list arg was ALREADY precise (z.union([z.pair, z.nil]), matching its own
+  // typecheck("find", list, ["pair","nil"]) domain) — untouched here. The two imprecise
+  // slots are the predicate (arg1) and the return.
+  const listOrNil = z.union([z.pair, z.nil]);
+
+  test("OLD shape: predicate slot z.unknown() decodes to a bare unknown, not a callable", () => {
+    expectTypeOf<DecodedArgs<[ReturnType<typeof z.unknown>, typeof listOrNil]>>().toEqualTypeOf<
+      [unknown, APair | ANil]
+    >();
+  });
+
+  test("NEW shape: predicate slot is a callable schema — the established z.custom<(...args)=>T>() convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
+    const predSchema = z.custom<(...args: unknown[]) => unknown>();
+    expectTypeOf<DecodedArgs<[typeof predSchema, typeof listOrNil]>>().toEqualTypeOf<
+      [(...args: unknown[]) => unknown, APair | ANil]
+    >();
+  });
+
+  test("OLD output z.unknown() collapses to a bare unknown return — the found element/nil loses its SchemeValue identity", () => {
+    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  });
+
+  test("NEW output z.value collapses to SchemeValue — mirrors vectors.ts's vector-ref/vector->list z.unknown()→z.value fix (vectors.test-d.ts)", () => {
+    expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
+  });
+
+  test("wrong-typed impl: a bare string return (not a member of the SchemeValue union) must NOT satisfy the fixed contract", () => {
+    const RUN = false as boolean;
+    if (RUN) {
+      symbol.native`find: proof`(
+        { input: [z.custom<(...args: unknown[]) => unknown>(), listOrNil], output: [z.value] },
+        // @ts-expect-error — output decodes to SchemeValue; a bare string literal is not a member of that union
+        (pred, list) => {
+          void pred;
+          void list;
+          return "not-a-scheme-value";
+        },
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
   });
 });
 
@@ -244,4 +289,57 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
   });
   // typecheck's 5th-argument negative proof lives in the dedicated describe block above
   // (it needs `s1`/`s3`/`s4` in scope), rather than being duplicated here.
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2026-07-05 audit (srfi-235.ts): curry's contract narrows the leading-args tail to
+// SchemeValue, not bare unknown. curry (arrival's arity-aware partial application, kept
+// NATIVE — the arity detection can't be pure scheme) uses the SAME callable-schema head
+// convention named in the audit note above (`z.custom<(...args: unknown[]) => T>()` — one
+// of the 7 call sites: vector-map/vector-for-each's proc, call-with-values's producer/
+// consumer, member/assoc's compare predicate, and curry's fn). Its OLD contract authored
+// the whole input as ONE manually-built `z.tuple([head], z.unknown())` (no `inputRest`
+// field at all); the fix splits it into `input: [head], inputRest: z.value` — mirroring
+// apply's own migrated shape (a fixed callable head + a SchemeValue... tail), matching the
+// leading-args being partially-applied are real scheme terms, not representation-blind
+// `unknown`. A runtime proof lives alongside it (`env/srfi/__tests__/srfi-235.test.ts`) —
+// bakeNative erases the contract's static I/O/Rest on `NativeSymbolDef.in`/`.out`, but the
+// WIRED zod schema is NOT erased, so that test reads the real baked def's rest schema off
+// the actual srfi-235.ts export (reference-equal to `z.value` after the fix) rather than a
+// synthetic mirror — the two proofs cover what each layer can actually observe.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("symbol contract — 2026-07-05 audit: curry's contract narrows the leading-args tail to SchemeValue (srfi-235.ts)", () => {
+  const curryHead = z.custom<(...args: unknown[]) => unknown>();
+
+  test("OLD curry shape: z.tuple(fixed, rest=z.unknown()) — leading args decode as bare unknown, no head/tail distinction in the contract fields", () => {
+    const oldShape = z.tuple([curryHead], z.unknown());
+    expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[(...args: unknown[]) => unknown, ...unknown[]]>();
+  });
+
+  test("NEW curry shape: input=[head], inputRest=z.value — leading args decode as SchemeValue, not unknown", () => {
+    // Mirrors curry's real migrated contract: { input: [z.custom<...>()], inputRest: z.value, output: [z.custom<...>()] }.
+    expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.value>>().toEqualTypeOf<
+      [(...args: unknown[]) => unknown, ...SchemeValue[]]
+    >();
+  });
+
+  test("curry (the real utils/functional impl, unchanged) still satisfies the migrated contract — unknown[] rest params remain a valid substitute for a SchemeValue[]-typed slot (contravariance: unknown is the universal supertype)", () => {
+    const RUN = false as boolean;
+    if (RUN) {
+      symbol.native`curry: proof`({ input: [curryHead], inputRest: z.value, output: [curryHead] }, curryImpl);
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+
+  test("wrong-typed rest param must NOT compile", () => {
+    const RUN = false as boolean;
+    if (RUN) {
+      symbol.native`curry2: proof`(
+        { input: [curryHead], inputRest: z.value, output: [curryHead] },
+        // @ts-expect-error — rest args decode via z.value (SchemeValue), annotating them string is wrong
+        (fn: (...args: unknown[]) => unknown, ...args: string[]) => fn,
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
 });
