@@ -165,6 +165,87 @@ describe("bracket bindings — R3 equivalence (direct pin, not merely per-case)"
   });
 });
 
+// These pin the exact property that separates the REAL evaluator from a value-
+// atomicity heuristic — the shape of the bug that hit arrival-manifold's STATIC
+// statement-facts scanner (1bdafe5a8f, "the allFlat whole-list/pairs
+// discriminator is now shape-based, not atomicity-based"). normalizeBindings
+// discriminates the two surfaces STRUCTURALLY (the bindings slot being a vector
+// vs a list), and groups a whole-list STRICTLY PAIRWISE BY POSITION: even
+// positions are names, odd positions are values taken verbatim whatever their
+// shape. A value being a COMPOUND expression (a call, a lambda) at an odd
+// position must NOT change the grouping. Every whole-list test above binds only
+// ATOMIC values (1, 2, 0); this block closes that gap so a future "optimization"
+// that re-introduced an `every(isAtom)`/allFlat discriminator into
+// normalizeBindings would fail HERE instead of silently mis-binding real
+// mainstream `(let [x 1 y (+ x 1)] …)` programs at runtime.
+describe("bracket bindings — R2a whole-list grouped by POSITION, never by value atomicity", () => {
+  it("let*: a whole-list value computed from a PRIOR binding (compound at an odd position)", async () => {
+    const value = await assertEquivalent("(let* [x 1 y (+ x 1)] y)", "(let* ((x 1) (y (+ x 1))) y)");
+    expect(value).toBe(2);
+  });
+
+  it("let: EVERY whole-list value compound, equal? to the literal result", async () => {
+    const [result] = await exec("(equal? (let [a (+ 1 2) b (* 3 4)] (list a b)) (list 3 12))");
+    expect(result?.valueOf()).toBe(true);
+  });
+
+  it("let*: interleaved atomic/compound values — the exact allFlat-unsound shape", async () => {
+    const [result] = await exec(
+      "(equal? (let* [a 1 b (+ a 1) c 3 d (* c 2)] (list a b c d)) (list 1 2 3 6))",
+    );
+    expect(result?.valueOf()).toBe(true);
+  });
+
+  it("let: a LAMBDA value at an odd whole-list position is a value, not a grouping boundary", async () => {
+    const value = await assertEquivalent(
+      "(let [f (lambda (n) (* n n)) x 5] (f x))",
+      "(let ((f (lambda (n) (* n n))) (x 5)) (f x))",
+    );
+    expect(value).toBe(25);
+  });
+
+  it("let: whole-list keeps PARALLEL semantics — a value sees the OUTER binding, not its sibling", async () => {
+    // If position-grouping ever drifted into let* semantics, `b` would read the
+    // sibling a=1 (=> 1); a parallel let reads the outer a=10.
+    const [result] = await exec("(equal? (let [a 10] (let [a 1 b a] (list a b))) (list 1 10))");
+    expect(result?.valueOf()).toBe(true);
+  });
+});
+
+// A binding NAME may itself be a scope keyword (`let`, `let*`, `lambda`, …).
+// The rewrite treats binding slots as DATA — an even-position (whole-list) or
+// first-element (per-element) symbol is a plain name, never re-dispatched as a
+// form head — so these mainstream-idiom-adjacent shapes bind and read back
+// identically to their paren image. (Uncovered by the spec corpus and the cases
+// above.) NB: this is about a binding's NAME/reference position; CALLING a local
+// var named after a special form in HEAD position is a separate, surface-
+// INDEPENDENT dispatch property — identical for paren and bracket forms — and is
+// deliberately not asserted here.
+describe("bracket bindings — a binding NAME may be a scope keyword (slots are data, not re-parsed)", () => {
+  it("per-element binding named `let` binds and reads back", async () => {
+    const value = await assertEquivalent("(let ([let 5]) let)", "(let ((let 5)) let)");
+    expect(value).toBe(5);
+  });
+
+  it("whole-list binding named `let`", async () => {
+    const value = await assertEquivalent("(let [let 5] let)", "(let ((let 5)) let)");
+    expect(value).toBe(5);
+  });
+
+  it("whole-list with TWO keyword-named bindings, both read as plain names", async () => {
+    const value = await assertEquivalent(
+      "(let [let 5 let* 6] (+ let let*))",
+      "(let ((let 5) (let* 6)) (+ let let*))",
+    );
+    expect(value).toBe(11);
+  });
+
+  it("let*: a keyword-named binding is usable in a later compound value", async () => {
+    const value = await assertEquivalent("(let* [let 5 x (+ let 1)] x)", "(let* ((let 5) (x (+ let 1))) x)");
+    expect(value).toBe(6);
+  });
+});
+
 describe("bracket bindings — R4 doors: whole-list malformations (E-LET-BRACKET-BINDINGS-LIST)", () => {
   it("odd element count in a whole-list vector doors", async () => {
     const message = await doorMessage("(let [a 1 b] a)");
