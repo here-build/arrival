@@ -322,12 +322,25 @@ function describeSuggestion(entry: WellKnownSymbolEntry): string {
  * tool surface reads) when the miss matches the well-known-symbol table; falls
  * back to the original plain wording otherwise (byte-identical to the pre-existing
  * message when there is no hint, so this is a pure addition, never a regression).
+ *
+ * `enriched` is a THIRD, STRUCTURED signal alongside the two wording fields:
+ * unambiguously true iff a rich did-you-mean suffix was appended (`hint !==
+ * undefined`), false for a bare unbound-variable throw. It exists so a consumer
+ * that needs "did arrival already enrich this?" can ask a typed boolean instead of
+ * re-deriving the same decision by sniffing the SHAPE of `.message` (e.g. a
+ * `raw.startsWith(...) && raw.length > bareWall.length` string-length check) — a
+ * wording change to either `.message` or `.publicMessage` can no longer silently
+ * break that decision, because `enriched` doesn't depend on either string's
+ * content. (`second-foundation/arrival-manifold`'s `manifold-tool.ts` currently
+ * does exactly that sniff, keyed off `.message`; wiring it to read `.enriched`
+ * instead is a separate, later change — see
+ * docs/working-proposals/arrival-manifold-decomposition-2026-07-05.md §5.4.)
  */
-export function unboundVariableError(name: string): Error & { publicMessage: string } {
+export function unboundVariableError(name: string): Error & { publicMessage: string; enriched: boolean } {
   const hint = richErrorFor(name);
   const message = hint ? `Unbound variable \`${name}' — ${hint}` : `Unbound variable \`${name}'`;
   const publicMessage = hint
     ? `symbol ${name} does not exist - look at list of available functions at tool description (${hint})`
     : `symbol ${name} does not exist - look at list of available functions at tool description`;
-  return Object.assign(new Error(message), { publicMessage });
+  return Object.assign(new Error(message), { publicMessage, enriched: hint !== undefined });
 }
