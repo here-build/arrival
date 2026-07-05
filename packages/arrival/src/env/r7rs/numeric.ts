@@ -24,8 +24,7 @@
 
 import * as z from "../../common/scheme-zod.js";
 import invariant from "tiny-invariant";
-import { bakeNative, parseNameDoc } from "../../common/symbols/_bake.js";
-import type { Contract, RestSpec, VectorSpec } from "../../common/symbol.js";
+import { bakeNative, parseNameDoc, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { SPECULATE } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -36,7 +35,15 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { Values } from "../../values/primitives/Values.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
-import { coerceNumeric, isSchemeNumber, isOrd, ORD_REL, nilOrderCompare, withInputProvenance, type AOrd } from "../../values/op-helpers.js";
+import {
+  coerceNumeric,
+  isSchemeNumber,
+  isOrd,
+  ORD_REL,
+  nilOrderCompare,
+  withInputProvenance,
+  type AOrd,
+} from "../../values/op-helpers.js";
 import { isStrict } from "../../eval/evaluator.js";
 import { type } from "../../utils/typecheck.js";
 
@@ -184,12 +191,12 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
     let converted: ANumeric[];
     try {
       converted = callArgs.map(coerceNumeric);
-    } catch (cause) {
+    } catch (error) {
       // Name what actually failed — mirror isSchemeNumber's contract.
       const badIndex = callArgs.findIndex((a) => !isSchemeNumber(a));
       const typeNames = callArgs.map(type).join(", ");
-      const detail = badIndex >= 0 ? `argument ${badIndex} is ${type(callArgs[badIndex])}` : "argument type mismatch";
-      throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause });
+      const detail = badIndex === -1 ? "argument type mismatch" : `argument ${badIndex} is ${type(callArgs[badIndex])}`;
+      throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause: error });
     }
     const result: unknown = marshalCall(name, spec, converted);
     if (provenance.size > 0) {
@@ -414,7 +421,7 @@ function toIntegerPair(
 
 function bigintFloorDiv(a: bigint, b: bigint): bigint {
   const q = a / b;
-  if (a % b !== 0n && (a < 0n) !== (b < 0n)) {
+  if (a % b !== 0n && a < 0n !== b < 0n) {
     return q - 1n;
   }
   return q;
@@ -480,8 +487,7 @@ const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   return new AInexact(a.ctx, p.av % p.bv);
 };
 
-const absFn = (x: number | bigint): number | bigint =>
-  typeof x === "bigint" ? (x < 0n ? -x : x) : Math.abs(x);
+const absFn = (x: number | bigint): number | bigint => (typeof x === "bigint" ? (x < 0n ? -x : x) : Math.abs(x));
 
 // ── gcd / lcm ───────────────────────────────────────────────────────────────────
 
@@ -770,7 +776,7 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // Under strict mode (RunContext.strict via the ambient `isStrict()` holder) loose is
 // gated off — an all-constant comparison like `(= '() '())` carries no operand to
 // thread strict, so the run holder is the only honest source.
-const isNilOperand = (v) => v == null || (v)?.constructor?.name === "ANil";
+const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
 const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
 const LOOSE_NUM_PAIR = {
@@ -789,25 +795,32 @@ const ORD_FROM_LE = {
 const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
 function loosePairOrder(sym, a, b) {
   const nilCmp = nilOrderCompare(a, b);
-  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
+  if (nilCmp !== undefined)
+    return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
   if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
-  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
-  const le_ab = Boolean((a)["arrival/tagless-final/lte"](b));
-  const le_ba = Boolean((b)["arrival/tagless-final/lte"](a));
-  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
+  if (!isOrd(a) || !isOrd(b))
+    throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
+  const le_ab = Boolean(a["arrival/tagless-final/lte"](b));
+  const le_ba = Boolean(b["arrival/tagless-final/lte"](a));
+  if (!le_ab && !le_ba)
+    throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
   return ORD_FROM_LE[sym](le_ab, le_ba);
 }
 function looseOrderChain(sym, args) {
   let verdict = true;
   for (let i = 0; i < args.length - 1; i++) {
-    if (!loosePairOrder(sym, args[i], args[i + 1])) { verdict = false; break; }
+    if (!loosePairOrder(sym, args[i], args[i + 1])) {
+      verdict = false;
+      break;
+    }
   }
   return withInputProvenance(args, verdict);
 }
 function looseCompare(sym, core) {
   const fn = function (...args) {
     if (isStrict()) {
-      if (!args.every(isNumberOperand)) throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
+      if (!args.every(isNumberOperand))
+        throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core(...args);
     }
     if (args.some(isNilOperand)) {
@@ -926,7 +939,7 @@ const exactFn = (z: unknown): AExact => {
   // JS Number.toString picks fixed (`0.5`) vs exponential (`1e-10`/`1e+21`) by
   // magnitude. Parse the mantissa+exponent and combine into a power-of-10 denom.
   const str = real.toString();
-  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i);
   if (expMatch) {
     const [, sign, intPart, fracPart = "", expStr] = expMatch;
     const exp = Number(expStr);
@@ -1117,7 +1130,10 @@ const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 
 /** `inexact`/`exact->inexact` — `(z: unknown) => AInexact`: narrower than the generic
  *  scheme-number union, matching `inexactFn`'s own declared return type exactly. */
-const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.unknown()], output: [z.schemeInexact] };
+const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.unknown()],
+  output: [z.schemeInexact],
+};
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact`: narrower than the generic
  *  scheme-number union, matching `exactFn`'s own declared return type exactly. */
@@ -1137,31 +1153,107 @@ export default new EnvCapability("scheme/numeric", {
     "+": bindOp("+: variadic sum (0 with no args)", "+", { in: [], inRest: SchemeNum, out: SchemeNum, fn: addFn }),
     "-": bindOp("-: difference; unary negates", "-", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: subFn }),
     "*": bindOp("*: variadic product (1 with no args)", "*", { in: [], inRest: SchemeNum, out: SchemeNum, fn: mulFn }),
-    "/": bindOp("/: division; unary is reciprocal", "/", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: divFn }),
-    quotient: bindOp("quotient: integer quotient truncated toward zero", "quotient", { in: [Int, Int], out: Int, fn: quotientFn }),
+    "/": bindOp("/: division; unary is reciprocal", "/", {
+      in: [SchemeNum],
+      inRest: SchemeNum,
+      out: SchemeNum,
+      fn: divFn,
+    }),
+    quotient: bindOp("quotient: integer quotient truncated toward zero", "quotient", {
+      in: [Int, Int],
+      out: Int,
+      fn: quotientFn,
+    }),
     remainder: bindOp("remainder: remainder of truncating division", "remainder", remainderSpec, remainderOp),
-    modulo: bindOp("modulo: modulo (sign of divisor)", "modulo", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: moduloFn }),
-    "floor-quotient": bindOp("floor-quotient: quotient toward negative infinity", "floor-quotient", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorQuotientFn }),
-    "floor-remainder": bindOp("floor-remainder: remainder of floor division", "floor-remainder", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorRemainderFn }),
-    "truncate-quotient": bindOp("truncate-quotient: quotient truncated toward zero", "truncate-quotient", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateQuotientFn }),
-    "truncate-remainder": bindOp("truncate-remainder: remainder of truncating division", "truncate-remainder", { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateRemainderFn }),
-    numerator: bindOp("numerator: numerator of a rational", "numerator", { in: [SchemeNum], out: SchemeNum, fn: numeratorFn }),
-    denominator: bindOp("denominator: denominator of a rational", "denominator", { in: [SchemeNum], out: SchemeNum, fn: denominatorFn }),
-    "make-rectangular": bindOp("make-rectangular: DOORED (complex unsupported)", "make-rectangular", { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "make-polar": bindOp("make-polar: DOORED (complex unsupported)", "make-polar", { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "real-part": bindOp("real-part: DOORED (complex unsupported)", "real-part", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    "imag-part": bindOp("imag-part: DOORED (complex unsupported)", "imag-part", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    magnitude: bindOp("magnitude: DOORED (complex unsupported)", "magnitude", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
-    angle: bindOp("angle: DOORED (complex unsupported)", "angle", { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() }),
+    modulo: bindOp("modulo: modulo (sign of divisor)", "modulo", {
+      in: [SchemeNum, SchemeNum],
+      out: SchemeNum,
+      fn: moduloFn,
+    }),
+    "floor-quotient": bindOp("floor-quotient: quotient toward negative infinity", "floor-quotient", {
+      in: [SchemeNum, SchemeNum],
+      out: SchemeNum,
+      fn: floorQuotientFn,
+    }),
+    "floor-remainder": bindOp("floor-remainder: remainder of floor division", "floor-remainder", {
+      in: [SchemeNum, SchemeNum],
+      out: SchemeNum,
+      fn: floorRemainderFn,
+    }),
+    "truncate-quotient": bindOp("truncate-quotient: quotient truncated toward zero", "truncate-quotient", {
+      in: [SchemeNum, SchemeNum],
+      out: SchemeNum,
+      fn: truncateQuotientFn,
+    }),
+    "truncate-remainder": bindOp("truncate-remainder: remainder of truncating division", "truncate-remainder", {
+      in: [SchemeNum, SchemeNum],
+      out: SchemeNum,
+      fn: truncateRemainderFn,
+    }),
+    numerator: bindOp("numerator: numerator of a rational", "numerator", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: numeratorFn,
+    }),
+    denominator: bindOp("denominator: denominator of a rational", "denominator", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: denominatorFn,
+    }),
+    "make-rectangular": bindOp("make-rectangular: DOORED (complex unsupported)", "make-rectangular", {
+      in: [Num, Num],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
+    "make-polar": bindOp("make-polar: DOORED (complex unsupported)", "make-polar", {
+      in: [Num, Num],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
+    "real-part": bindOp("real-part: DOORED (complex unsupported)", "real-part", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
+    "imag-part": bindOp("imag-part: DOORED (complex unsupported)", "imag-part", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
+    magnitude: bindOp("magnitude: DOORED (complex unsupported)", "magnitude", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
+    angle: bindOp("angle: DOORED (complex unsupported)", "angle", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: (): ANumeric => complexDoor(),
+    }),
     abs: bindOp("abs: absolute value", "abs", { in: [AnyNum], out: AnyNum, fn: absFn }),
     gcd: bindOp("gcd: greatest common divisor (non-negative)", "gcd", { in: [], inRest: Int, out: Int, fn: gcdFn }),
     expt: bindOp("expt: exponentiation", "expt", exptSpec, exptOp),
-    max: bindOp("max: maximum (inexactness contagious)", "max", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: maxFn }),
-    min: bindOp("min: minimum (inexactness contagious)", "min", { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: minFn }),
+    max: bindOp("max: maximum (inexactness contagious)", "max", {
+      in: [SchemeNum],
+      inRest: SchemeNum,
+      out: SchemeNum,
+      fn: maxFn,
+    }),
+    min: bindOp("min: minimum (inexactness contagious)", "min", {
+      in: [SchemeNum],
+      inRest: SchemeNum,
+      out: SchemeNum,
+      fn: minFn,
+    }),
 
     // ── Comparison (numeric core + FL-Ord fallback + nil-tolerant overlay) ────────
     "=": bindOp("=: numeric equality (nil-tolerant)", "=", numEqSpec, looseCompare("=", numEqOp)),
-    "<": bindOp("<: strictly increasing (FL-Ord fallback, nil-tolerant)", "<", ltSpec, looseCompare("<", wrapOrd(ltOp, "<"))),
+    "<": bindOp(
+      "<: strictly increasing (FL-Ord fallback, nil-tolerant)",
+      "<",
+      ltSpec,
+      looseCompare("<", wrapOrd(ltOp, "<")),
+    ),
     ">": bindOp(">: strictly decreasing", ">", gtSpec, looseCompare(">", wrapOrd(gtOp, ">"))),
     "<=": bindOp("<=: non-decreasing", "<=", lteSpec, looseCompare("<=", wrapOrd(lteOp, "<="))),
     ">=": bindOp(">=: non-increasing", ">=", gteSpec, looseCompare(">=", wrapOrd(gteOp, ">="))),
@@ -1174,16 +1266,56 @@ export default new EnvCapability("scheme/numeric", {
     "even?": bindOp("even?: #t iff n is even", "even?", { in: [Int], out: Bool, fn: isEvenFn }),
 
     // ── R7RS tower-type predicates (total — a non-number is #f, not an error) ─────
-    "complex?": bind("complex?: #t for any number", PREDICATE_CONTRACT, nativeTypePredicate("complex?", (n) => n.isComplex)),
-    "real?": bind("real?: #t for any number (reals-only tower)", PREDICATE_CONTRACT, nativeTypePredicate("real?", (n) => n.isReal)),
-    "rational?": bind("rational?: #t for finite reals", PREDICATE_CONTRACT, nativeTypePredicate("rational?", (n) => n.isRational)),
-    "integer?": bind("integer?: #t for integer values (exact or inexact)", PREDICATE_CONTRACT, nativeTypePredicate("integer?", (n) => n.isInteger)),
-    "exact?": bind("exact?: #t for exact numbers", PREDICATE_CONTRACT, nativeTypePredicate("exact?", (n) => n.isExact)),
-    "inexact?": bind("inexact?: #t for inexact numbers", PREDICATE_CONTRACT, nativeTypePredicate("inexact?", (n) => !n.isExact)),
-    "exact-integer?": bind("exact-integer?: #t for exact integers", PREDICATE_CONTRACT, nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger)),
-    "finite?": bind("finite?: #t for finite numbers", PREDICATE_CONTRACT, nativeTypePredicate("finite?", (n) => n.isFinite)),
-    "infinite?": bind("infinite?: #t for ±infinity", PREDICATE_CONTRACT, nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN)),
-    "nan?": bind("nan?: #t for NaN", PREDICATE_CONTRACT, nativeTypePredicate("nan?", (n) => n.isNaN)),
+    "complex?": bind(
+      "complex?: #t for any number",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("complex?", (n) => n.isComplex),
+    ),
+    "real?": bind(
+      "real?: #t for any number (reals-only tower)",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("real?", (n) => n.isReal),
+    ),
+    "rational?": bind(
+      "rational?: #t for finite reals",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("rational?", (n) => n.isRational),
+    ),
+    "integer?": bind(
+      "integer?: #t for integer values (exact or inexact)",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("integer?", (n) => n.isInteger),
+    ),
+    "exact?": bind(
+      "exact?: #t for exact numbers",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("exact?", (n) => n.isExact),
+    ),
+    "inexact?": bind(
+      "inexact?: #t for inexact numbers",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("inexact?", (n) => !n.isExact),
+    ),
+    "exact-integer?": bind(
+      "exact-integer?: #t for exact integers",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger),
+    ),
+    "finite?": bind(
+      "finite?: #t for finite numbers",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("finite?", (n) => n.isFinite),
+    ),
+    "infinite?": bind(
+      "infinite?: #t for ±infinity",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN),
+    ),
+    "nan?": bind(
+      "nan?: #t for NaN",
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("nan?", (n) => n.isNaN),
+    ),
 
     // ── Rounding ─────────────────────────────────────────────────────────────────
     floor: bindOp("floor: largest integer ≤ n", "floor", { in: [Num], out: Num, fn: Math.floor }),
@@ -1192,7 +1324,11 @@ export default new EnvCapability("scheme/numeric", {
     round: bindOp("round: nearest integer, ties to even", "round", { in: [Num], out: Num, fn: roundFn }),
 
     // ── Transcendentals ──────────────────────────────────────────────────────────
-    sqrt: bindOp("sqrt: square root (exact for perfect squares)", "sqrt", { in: [SchemeNum], out: SchemeNum, fn: sqrtFn }),
+    sqrt: bindOp("sqrt: square root (exact for perfect squares)", "sqrt", {
+      in: [SchemeNum],
+      out: SchemeNum,
+      fn: sqrtFn,
+    }),
     exp: bindOp("exp: e raised to n", "exp", { in: [Num], out: Num, fn: Math.exp }),
     log: bindOp("log: natural log, or log base", "log", { in: [Num], inRest: Num, out: Num, fn: logFn }),
     sin: bindOp("sin: sine (radians)", "sin", { in: [Num], out: Num, fn: Math.sin }),
@@ -1205,9 +1341,18 @@ export default new EnvCapability("scheme/numeric", {
     // ── Bitwise (integer only) ────────────────────────────────────────────────────
     "bitwise-and": bindOp("bitwise-and: bitwise AND", "bitwise-and", bitwiseAndSpec, bitwiseAndOp),
     "bitwise-ior": bindOp("bitwise-ior: bitwise inclusive OR", "bitwise-ior", bitwiseIorSpec, bitwiseIorOp),
-    "bitwise-xor": bindOp("bitwise-xor: bitwise exclusive OR", "bitwise-xor", { in: [], inRest: Int, out: Int, fn: bitwiseXorFn }),
+    "bitwise-xor": bindOp("bitwise-xor: bitwise exclusive OR", "bitwise-xor", {
+      in: [],
+      inRest: Int,
+      out: Int,
+      fn: bitwiseXorFn,
+    }),
     "bitwise-not": bindOp("bitwise-not: bitwise NOT", "bitwise-not", bitwiseNotSpec, bitwiseNotOp),
-    "arithmetic-shift": bindOp("arithmetic-shift: shift left (right if count < 0)", "arithmetic-shift", arithmeticShiftSpec),
+    "arithmetic-shift": bindOp(
+      "arithmetic-shift: shift left (right if count < 0)",
+      "arithmetic-shift",
+      arithmeticShiftSpec,
+    ),
 
     // ── LIPS-style aliases (canonical-named cores under the alias key) ────────────
     "**": bindOp("**: exponentiation (alias of expt)", "expt", exptSpec, exptOp),
@@ -1219,7 +1364,11 @@ export default new EnvCapability("scheme/numeric", {
 
     // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
     "floor/": bind("floor/: floor quotient and remainder (two values)", TWO_VALUE_OUTPUT_CONTRACT, floorSlashFn),
-    "truncate/": bind("truncate/: truncate quotient and remainder (two values)", TWO_VALUE_OUTPUT_CONTRACT, truncateSlashFn),
+    "truncate/": bind(
+      "truncate/: truncate quotient and remainder (two values)",
+      TWO_VALUE_OUTPUT_CONTRACT,
+      truncateSlashFn,
+    ),
     lcm: bind("lcm: least common multiple (non-negative)", LCM_CONTRACT, lcmFn),
     "number?": bind("number?: #t for any number", PREDICATE_CONTRACT, (value: unknown) => isSchemeNumber(value)),
     "1+": bind("1+: increment by one", ONE_ARG_NUM_OUTPUT_CONTRACT, onePlusFn),

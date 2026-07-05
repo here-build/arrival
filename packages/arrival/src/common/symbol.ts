@@ -1,7 +1,7 @@
 // symbol — the stable entry for the `arrival.symbol*` EnvCapability symbol-definition API.
 //
 // This module is the package's public seam (`@here.build/arrival/symbol` subpath + the root
-// re-export). It surfaces TWO things, unchanged from when they lived in one file:
+// re-export). It surfaces THREE things, unchanged from when they lived in one file:
 //
 //   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, where each tag
 //     (`native`/`rosetta`/`tagless`/…) is its own module. The shape is IDENTICAL to the former
@@ -15,6 +15,13 @@
 //     the factory files stand on). Kept on THIS path so `capability.ts` (`SymbolDeclaration`), the
 //     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`)
 //     import them from the same stable specifier they always have.
+//
+//   • `bakeNative` + `parseNameDoc` — the RAW baking primitives the `symbol.native` tagged
+//     template itself is built from. An escape hatch for the rare pack whose impl type is
+//     deliberately ERASED (marshalling entirely runtime-driven — e.g. `env/r7rs/numeric.ts`'s
+//     NCodec-dispatched ops), so it can't satisfy `symbol.native`'s statically-checked
+//     `Impl<I,O,Rest>` param without an unsound cast; `bakeNative`'s `impl: AnyFn` takes the
+//     erasure directly, no cast. NOT for an ordinary pack — those use `symbol.native` above.
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
 // live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under `vitest --typecheck`
@@ -31,6 +38,9 @@ export * as symbol from "./symbols/index.js";
 // receiver's own term method (map/filter/sort) — surfaced here so those call sites reuse ONE
 // resolver instead of each hand-rolling the identical `receiver as Record<string,unknown>` cast.
 export { resolveMethod } from "./symbols/_bake.js";
+
+// See the THIRD bullet above — reach for this only when the impl type is genuinely erased.
+export { bakeNative, parseNameDoc } from "./symbols/_bake.js";
 
 // The contract machinery + the baked `AEntity` union and its members. Surfaced here (not from
 // `./symbols/_bake.js` directly) so the public type path is the stable `common/symbol.js`.
