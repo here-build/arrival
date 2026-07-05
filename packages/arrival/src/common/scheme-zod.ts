@@ -197,3 +197,29 @@ export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexa
   },
   encode: (n) => new AExact(CONSTANT_CTX, n),
 });
+
+/** SchemeExact|SchemeInexact ↔ JS `number | bigint` — the TOTAL, never-doors sibling of
+ *  `number`/`integer` above, for a call site that would rather preserve exactness as a
+ *  bigint than door on precision loss: an inexact decodes to `number`; an exact integer
+ *  decodes to `number` when it fits a JS safe integer, else `bigint` (arbitrary precision
+ *  kept rather than doored); a non-integer exact rational decodes LOSSILY to `number`
+ *  (float division) rather than throwing. This is the numeric pack's own `AnyNum` NCodec
+ *  (env/r7rs/numeric.ts) promoted here so its shape has a name other codec authors can
+ *  reuse — decode/encode reproduce `AnyNum.toJS`/`.fromJS` exactly. */
+export const numberOrBigint = z.codec(
+  z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
+  z.union([z.number(), z.bigint()]),
+  {
+    decode: (n) => {
+      if (n instanceof AInexact) return n.real;
+      if (n.isInteger && n.num >= SAFE_MIN && n.num <= SAFE_MAX) return Number(n.num);
+      if (n.isInteger) return n.num;
+      return Number(n.num) / Number(n.denom);
+    },
+    encode: (n) => {
+      if (typeof n === "bigint") return new AExact(CONSTANT_CTX, n);
+      if (Number.isSafeInteger(n)) return new AExact(CONSTANT_CTX, BigInt(n));
+      return new AInexact(CONSTANT_CTX, n);
+    },
+  },
+);
