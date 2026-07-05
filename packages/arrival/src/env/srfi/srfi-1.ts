@@ -15,9 +15,11 @@ import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
 import { is_false, is_nil } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
+import type { APair } from "../../values/primitives/APair.js";
 import { unpromise } from "../../utils/promises.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
+import type { SchemeValue } from "../../values/types.js";
 
 // `filter` is re-kinded tagless→sequence so it can carry the `fanout` contract option. The
 // sequence impl dispatches to the receiver's own `arrival/tagless-final/filter` term method —
@@ -36,19 +38,27 @@ import { tf } from "../../values/tagless-final.js";
 // prelude define like `find-tail`) because it recurses over the predicate and unwraps an async
 // generator-lambda result. Relocated from arrival-extensions; the host-RegExp matcher it once also
 // accepted was a LIPS-era host leak (a raw JS RegExp, non-R7RS) and has been dissolved — procedure only.
-function findImpl(arg: unknown, list: any): unknown {
+//
+// Precision-typed to match its own Contract (below): `arg` is the callable-schema convention
+// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each/curry), not the bare
+// `unknown` the old declaration decoded to (and the old `const fn = arg as …` cast papered over).
+// `list`'s car/cdr decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the
+// SAME shared identity primitive lists.ts's list ops use) — every recursive/return site that hands
+// a car/cdr back through this SchemeValue-returning fn casts it, mirroring lists.ts's own established
+// "typecheck is not a TS guard; re-state it" idiom: `typecheck` above already re-validates
+// pair-or-nil on every recursive call, so the cast states a runtime-enforced invariant, not a blind one.
+function findImpl(arg: (...args: unknown[]) => unknown, list: APair<unknown, unknown> | ANil): SchemeValue {
   typecheck("find", arg, "function");
   typecheck("find", list, ["pair", "nil"]);
   if (list instanceof ANil) {
     return nil;
   }
-  const fn = arg as (x: unknown) => unknown;
-  return unpromise(fn(list.car), function (value: unknown) {
+  return unpromise(arg(list.car), function (value: unknown) {
     if (!is_false(value) && !is_nil(value)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr);
-  });
+    return findImpl(arg, list.cdr as APair<unknown, unknown> | ANil);
+  }) as SchemeValue;
 }
 
 export default new EnvCapability("scheme/srfi-1", {
@@ -76,7 +86,10 @@ export default new EnvCapability("scheme/srfi-1", {
       ),
     reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
     find: symbol.native`find: first list element matching the predicate, else nil`(
-      { input: [z.unknown(), z.union([z.pair, z.nil])], output: [z.unknown()] },
+      {
+        input: [z.custom<(...args: unknown[]) => unknown>(), z.union([z.pair, z.nil])],
+        output: [z.value],
+      },
       findImpl,
     ),
   },
