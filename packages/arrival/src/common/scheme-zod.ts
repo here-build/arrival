@@ -79,8 +79,11 @@ export const schemeInexact = z.instanceof(AInexact);
 /** Either numeric tower class — the ONE identity term for a native numeric op, reused
  *  (not re-spelled) as the shared `.in` side of every number codec below (number/integer/
  *  bigint/numberOrBigint all lower the exact same scheme value; they differ only in which
- *  JS shape they decode it TO, never in what they accept FROM scheme). */
-export const schemeNumber = z.union([z.instanceof(AExact), z.instanceof(AInexact)]);
+ *  JS shape they decode it TO, never in what they accept FROM scheme). Built from the
+ *  ALREADY-DECLARED `schemeExact`/`schemeInexact` (not fresh `z.instanceof(...)` calls) —
+ *  identity-based lookups (`lookupName`, below) need the union's OWN members to be the
+ *  exact same objects those names are registered against, not mere same-class clones. */
+export const schemeNumber = z.union([schemeExact, schemeInexact]);
 
 /** A callable scheme value — a JS function, whether a user `(lambda …)` (carries the
  *  well-known LAMBDA brand) or a bare native/rosetta reference (see eval/guards.ts's
@@ -142,8 +145,10 @@ export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
 /** See `schemeString`'s comment — derived from `boolean.in`, not re-declared. */
 export const schemeBool = boolean.in;
 
-/** SchemeCharacter ↔ JS `string` (single grapheme). */
-export const char = z.codec(z.instanceof(ACharacter), z.string(), {
+/** SchemeCharacter ↔ JS `string` (single grapheme). `.length(1)` makes the JS side
+ *  actually ENFORCE "single grapheme" (the doc comment's own claim) instead of merely
+ *  asserting it in prose — an encode of a multi-char or empty string DOORS. */
+export const char = z.codec(z.instanceof(ACharacter), z.string().length(1), {
   decode: (c) => c.valueOf(),
   encode: (c) => new ACharacter(CONSTANT_CTX, c),
 });
@@ -246,3 +251,43 @@ export const numberOrBigint = z.codec(
     },
   },
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// lookupName — the harvest printer's naming seam.
+//
+// scheme-zod.ts is the ONE place that actually knows every vocabulary item's identity
+// (it declared them) — so it owns the canonical schema→name mapping, rather than a
+// CONSUMER (the harvest printer, schema-to-ts.ts) maintaining a second, hand-authored
+// table (keyed by class-name-string OR schema-object-identity, split two ways) that can
+// silently drift out of sync every time a new primitive is added here (exactly what
+// happened to `z.lambda` — it shipped with no printer entry at all until this fix).
+//
+// By IDENTITY, not by class name or duck-typing: every scheme-identity primitive is
+// registered once, at its own declaration site (below, after everything is bound), so
+// the mapping is always exactly as current as this file itself.
+// ─────────────────────────────────────────────────────────────────────────────
+const NAMES = new Map<unknown, string>([
+  [value, "value"],
+  [pair, "pair"],
+  [symbol, "symbol"],
+  [svector, "svector"],
+  [sbytevector, "sbytevector"],
+  [nil, "nil"],
+  [schemeExact, "schemeExact"],
+  [schemeInexact, "schemeInexact"],
+  [schemeNumber, "schemeNumber"],
+  [lambda, "lambda"],
+  [schemeString, "schemeString"],
+  [schemeBool, "schemeBool"],
+  [schemeChar, "schemeChar"],
+]);
+
+/** The canonical NAME of a scheme-zod vocabulary schema, by identity — `undefined` if
+ *  `schema` isn't one of ours (a bare zod primitive/compound the printer should defer to
+ *  zod-to-ts for). Codecs (`string`/`boolean`/`char`/`number`/`integer`/`bigint`/
+ *  `numberOrBigint`) are deliberately NOT registered here — they already print correctly
+ *  through zod-to-ts's native codec handling (`io:"output"`), so this seam only needs to
+ *  cover the IDENTITY-flavored primitives zod-to-ts can't represent on its own. */
+export function lookupName(schema: unknown): string | undefined {
+  return NAMES.get(schema);
+}

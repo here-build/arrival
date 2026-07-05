@@ -94,3 +94,45 @@ describe("the number codec family reuses ONE schemeNumber declaration, not 4 re-
     expect(z.schemeNumber.safeParse(new AExact(CONSTANT_CTX, 3n)).success).toBe(true);
   });
 });
+
+describe("lookupName — scheme-zod.ts's own schema→name seam, by identity", () => {
+  it("resolves every vocabulary item to its own export name", () => {
+    expect(z.lookupName(z.value)).toBe("value");
+    expect(z.lookupName(z.pair)).toBe("pair");
+    expect(z.lookupName(z.symbol)).toBe("symbol");
+    expect(z.lookupName(z.svector)).toBe("svector");
+    expect(z.lookupName(z.sbytevector)).toBe("sbytevector");
+    expect(z.lookupName(z.nil)).toBe("nil");
+    expect(z.lookupName(z.schemeExact)).toBe("schemeExact");
+    expect(z.lookupName(z.schemeInexact)).toBe("schemeInexact");
+    expect(z.lookupName(z.schemeNumber)).toBe("schemeNumber");
+    expect(z.lookupName(z.lambda)).toBe("lambda");
+    expect(z.lookupName(z.schemeString)).toBe("schemeString");
+    expect(z.lookupName(z.schemeBool)).toBe("schemeBool");
+    expect(z.lookupName(z.schemeChar)).toBe("schemeChar");
+  });
+
+  it("returns undefined for a schema that isn't part of the scheme-zod vocabulary", () => {
+    expect(z.lookupName(z.object({}))).toBeUndefined(); // a bare zod compound, not ours
+    expect(z.lookupName(z.array(z.value))).toBeUndefined(); // a compound, not a single vocabulary item
+    expect(z.lookupName(42)).toBeUndefined();
+    expect(z.lookupName(undefined)).toBeUndefined();
+  });
+
+  it("does NOT resolve a codec by name (codecs print via zod-to-ts's native io:output handling, not lookupName)", () => {
+    expect(z.lookupName(z.string)).toBeUndefined();
+    expect(z.lookupName(z.number)).toBeUndefined();
+  });
+});
+
+describe("char codec — .length(1), a scheme character is exactly one grapheme", () => {
+  it("rejects a multi-character JS string on encode (the JS side must be length 1)", () => {
+    expect(() => z.char.encode("ab")).toThrow();
+  });
+  it("rejects an empty string on encode", () => {
+    expect(() => z.char.encode("")).toThrow();
+  });
+  it("still accepts a single character", () => {
+    expect(z.char.encode("a")).toBeInstanceOf(ACharacter);
+  });
+});
