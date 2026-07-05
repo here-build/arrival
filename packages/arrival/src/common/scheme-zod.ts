@@ -74,13 +74,25 @@ export const svector = z.custom<AVector>(
 );
 export const sbytevector = z.instanceof(ABytevector);
 export const nil = z.instanceof(ANil);
-export const schemeString = z.instanceof(AString);
-export const schemeBool = z.instanceof(ABool);
-export const schemeChar = z.instanceof(ACharacter);
 export const schemeExact = z.instanceof(AExact);
 export const schemeInexact = z.instanceof(AInexact);
-/** Either numeric tower class — the identity term for a native numeric op. */
+/** Either numeric tower class — the ONE identity term for a native numeric op, reused
+ *  (not re-spelled) as the shared `.in` side of every number codec below (number/integer/
+ *  bigint/numberOrBigint all lower the exact same scheme value; they differ only in which
+ *  JS shape they decode it TO, never in what they accept FROM scheme). */
 export const schemeNumber = z.union([z.instanceof(AExact), z.instanceof(AInexact)]);
+
+/** A callable scheme value — a JS function, whether a user `(lambda …)` (carries the
+ *  well-known LAMBDA brand) or a bare native/rosetta reference (see eval/guards.ts's
+ *  `is_callable`/`is_function`: "a Scheme lambda carries the LAMBDA brand; native
+ *  builtins/rosettas are bare functions" — either way, callable reduces to `typeof ===
+ *  "function"`). The canonical replacement for the dozen ad-hoc
+ *  `z.custom<(...args: unknown[]) => T>()` one-offs this codebase had accumulated
+ *  (map/filter/find/sort/curry/vector-map/string-map/…) — unlike `z.value`, this carries
+ *  a REAL predicate (existing ad-hoc call sites had none), so it discriminates correctly
+ *  even in a rosetta context that actually validates. Migrating those call sites to this
+ *  export is a deferred follow-up, not part of this change. */
+export const lambda = z.custom<(...args: unknown[]) => unknown>((v) => typeof v === "function");
 
 // ── kwargs — an object input the model fills as `:key value` pairs ─────────────
 // A kwargs tool takes ONE object input; the model calls it `(tool :k v :k2 v2)`, which lowers to
@@ -114,18 +126,29 @@ export const string = z.codec(z.instanceof(AString), z.string(), {
   decode: (s) => s.toJs(),
   encode: (s) => new AString(CONSTANT_CTX, s),
 });
+/** The identity (native-flavored) half of `string` — DERIVED, not re-declared: zod's
+ *  `z.codec(...)` is a `ZodPipe` exposing its constituent schemas as public `.in`/`.out`
+ *  accessors, and `string.in` IS (by reference) the exact `z.instanceof(AString)` passed
+ *  above — one declaration, reused, instead of a second independent one that happened to
+ *  describe the same class. (The harvest printer keys `IMAGE_BY_CLASS` off `_zod.bag.Class.name`,
+ *  not schema identity, so this is invisible to `schema-to-ts.ts` — verified.) */
+export const schemeString = string.in;
 
 /** SchemeBool ↔ JS `boolean`. */
 export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
   decode: (b) => b.value,
   encode: (b) => new ABool(CONSTANT_CTX, b),
 });
+/** See `schemeString`'s comment — derived from `boolean.in`, not re-declared. */
+export const schemeBool = boolean.in;
 
 /** SchemeCharacter ↔ JS `string` (single grapheme). */
 export const char = z.codec(z.instanceof(ACharacter), z.string(), {
   decode: (c) => c.valueOf(),
   encode: (c) => new ACharacter(CONSTANT_CTX, c),
 });
+/** See `schemeString`'s comment — derived from `char.in`, not re-declared. */
+export const schemeChar = char.in;
 
 // ── the NUMBER CODEC FAMILY ───────────────────────────────────────────────────
 // The boundary number-representation is declared by WHICH of these the author picks.
@@ -154,14 +177,14 @@ function exactToJsNumberOrDoor(n: AExact): number {
 
 /** SchemeExact|SchemeInexact ↔ JS `number`. decode lowers (DOORS on precision loss);
  *  encode of a JS number → SchemeInexact (the float type the consumer chose). */
-export const number = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number(), {
+export const number = z.codec(schemeNumber, z.number(), {
   decode: (n) => (n instanceof AInexact ? n.real : exactToJsNumberOrDoor(n)),
   encode: (n) => new AInexact(CONSTANT_CTX, n),
 });
 
 /** SchemeExact|SchemeInexact ↔ JS `number` constrained to SAFE INTEGERS. decode
  *  validates it IS a safe integer (DOORS otherwise); encode → SchemeExact (exact). */
-export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
+export const integer = z.codec(schemeNumber, z.number().int(), {
   decode: (n) => {
     if (n instanceof AInexact) {
       if (!Number.isSafeInteger(n.real)) {
@@ -182,7 +205,7 @@ export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInex
 /** SchemeExact|SchemeInexact ↔ JS `bigint` (exact, arbitrary precision — always faithful
  *  for an integer term). decode → bigint; encode → SchemeExact. A non-integer rational
  *  or a non-integral inexact DOORS (a bigint has no fractional part). */
-export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.bigint(), {
+export const bigint = z.codec(schemeNumber, z.bigint(), {
   decode: (n) => {
     if (n instanceof AInexact) {
       if (!Number.isInteger(n.real)) {
@@ -207,7 +230,7 @@ export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexa
  *  (env/r7rs/numeric.ts) promoted here so its shape has a name other codec authors can
  *  reuse — decode/encode reproduce `AnyNum.toJS`/`.fromJS` exactly. */
 export const numberOrBigint = z.codec(
-  z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
+  schemeNumber,
   z.union([z.number(), z.bigint()]),
   {
     decode: (n) => {
