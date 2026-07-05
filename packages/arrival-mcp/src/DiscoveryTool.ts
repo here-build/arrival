@@ -14,7 +14,15 @@
 //                  the eval membrane — a run can't reach it, so session/other-call state stays out.
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
-import { type SchemeEnv, CONSTANT_CTX, exec, jsToScheme, sandboxedEnv, schemeToJs, tokenize } from "@here.build/arrival";
+import {
+  type SchemeEnv,
+  CONSTANT_CTX,
+  exec,
+  jsToScheme,
+  sandboxedEnv,
+  schemeToJs,
+  tokenize,
+} from "@here.build/arrival";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";

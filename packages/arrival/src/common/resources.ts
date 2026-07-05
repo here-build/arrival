@@ -65,17 +65,16 @@ export function port<H extends object>(value: H, close: () => PromiseLike<void> 
 /** The per-resource factory: a `Ref` backed by single-flight, re-acquirable state.
  *  One cell ←→ one port; the env holds a cell per `ctx.use(resource)`. */
 export class ResourceCell<H> implements Ref<H> {
-  readonly kind: string;
-  readonly #resource: Resource<H>;
   #handle: (H & AsyncDisposable) | undefined;
   #inflight: Promise<H> | undefined;
   /** The abort window for the current spin-up/resume; armed by `spinUp`.
    *  `undefined` = no window (a never-aborting cell). */
   #signal?: AbortSignal;
 
-  constructor(resource: Resource<H>) {
-    this.#resource = resource;
-    this.kind = resource.kind;
+  constructor(private readonly resource: Resource<H>) {}
+
+  get kind() {
+    return this.resource.kind;
   }
 
   get isLive(): boolean {
@@ -110,7 +109,7 @@ export class ResourceCell<H> implements Ref<H> {
     const signal = this.#signal;
     try {
       if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-      const handle = await this.#resource.acquire({ signal, order: [] });
+      const handle = await this.resource.acquire({ signal, order: [] });
       // Aborted WHILE opening → dispose the just-opened handle so nothing leaks.
       if (signal?.aborted) {
         await handle[Symbol.asyncDispose]();

@@ -12,12 +12,7 @@
  * key-set (the third constructor arg) to carry extra catalog fields.
  */
 
-import {
-  type Activation,
-  type CapabilitySpec,
-  EnvCapability,
-  type SymbolDef,
-} from "@here.build/arrival/capability";
+import { type Activation, type CapabilitySpec, EnvCapability, type SymbolDef } from "@here.build/arrival/capability";
 import type { Resource } from "@here.build/arrival/resources";
 import * as z from "zod";
 
