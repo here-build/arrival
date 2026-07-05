@@ -111,7 +111,7 @@ SOFTWARE.
 
 ## Upstream Licenses
 
-**arrival-scheme** is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT
+**arrival** is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT
 licensed by Jakub T. Jankiewicz). LIPS.js source files retain their original
 MIT license and copyright notices.
 
