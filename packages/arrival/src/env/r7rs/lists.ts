@@ -272,24 +272,47 @@ export default new EnvCapability("scheme/lists", {
     ),
     // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
     "for-each": symbol.native`for-each: apply fn to corresponding elements of one or more lists, for side effects`(
-      { input: z.array(z.value), output: [z.value] },
+      // fn is the fixed HEAD (`input`); the spread lists are the variadic TAIL (`inputRest`) —
+      // mirrors apply's own head/rest split. The head uses the callable-schema convention
+      // established by vector-map/vector-for-each/curry/call-with-values/member's compare
+      // (z.custom<(...args) => T>()), not apply's plain z.value — apply's own doc comment
+      // frames that as illustrating the split mechanism, not a "callables are z.value" rule.
+      // Each rest element is genuinely a proper list (typecheck'd below as "pair"|"nil"), so
+      // inputRest is z.union([z.pair, z.nil]) — the same "this is a list" schema this file
+      // already uses elsewhere (list-tail/list-ref/memq/…), not the representation-blind
+      // z.value. Output is UNSPECIFIED (R7RS §6.4), not a returned value — z.void(), matching
+      // the convention string-for-each/vector-for-each already use.
+      {
+        input: [z.custom<(...args: unknown[]) => SchemeValue>()],
+        inputRest: z.union([z.pair, z.nil]),
+        output: [z.void()],
+      },
       // Relocated from stdlib.ts global_env (husk dissolution): runs mapImpl for its
       // side effects and discards the result list. The legacy `.call(this)` was a
       // babel-weakBind workaround — this pack is tsc/ES2022, so a direct call is
       // behavior-identical (mapImpl never reads `this`).
-      (fn: SchemeValue, ...lists: SchemeValue[]): SchemeValue | Promise<SchemeValue> => {
+      //
+      // Return: `void | Promise<void>`, matching the now-precise `z.void()` output (fixed
+      // alongside the head/rest input above). Previously this impl explicitly constructed
+      // `theVoid` (an AVoid instance) because the OLD contract declared `output: [z.value]`
+      // (a SchemeValue return demanded an actual scheme value). `z.void()`'s decoded type is
+      // the bare TS `void` — which only a literal `undefined` satisfies — so the impl now
+      // returns bare `undefined` instead, exactly mirroring vector-for-each/string-for-each's
+      // OWN established idiom (both already fall through to implicit `undefined` on the
+      // sync path and `.then(() => undefined)` on the async path). This is NOT an
+      // observable behavior change: the interpreter's dispatch already boxes a native impl's
+      // raw `undefined` return into the scheme `theVoid` value for the caller (this is the
+      // SAME boxing vector-for-each's sync path already relies on today, unmodified).
+      (fn: SchemeValue, ...lists: SchemeValue[]): void | Promise<void> => {
         typecheck("for-each", fn, "function");
         for (const [i, arg] of lists.entries()) {
           typecheck("for-each", arg, ["pair", "nil"], i + 1);
         }
         const ret = mapImpl(fn, ...lists);
-        // for-each returns unspecified (R7RS §6.4). The relocated body fell off the
-        // end returning bare `undefined`, which the membrane boxed to `theVoid`; emit
-        // that in-language unspecified directly so the contract's value-return holds.
         if (is_promise(ret)) {
-          return ret.then(() => theVoid);
+          return ret.then(() => undefined);
         }
-        return theVoid;
+        return undefined;
       },
     ),
     // R7RS 6.4 Pairs and lists

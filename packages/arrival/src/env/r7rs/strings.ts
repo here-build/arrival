@@ -348,10 +348,16 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
+    // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
+    // apply's head/rest split. The head is the established callable-schema convention
+    // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry), and the rest
+    // is z.schemeString (this file's own string-identity schema) rather than the
+    // representation-blind z.unknown() the old contract used. Once the declared signature
+    // properly types the params, the old manual `const [proc, ...strings] = args as [...]`
+    // destructure-and-cast is redundant — proc/strings arrive as real typed parameters.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(
-      { input: z.array(z.unknown()), output: [z.string] },
-      (...args: unknown[]): string | Promise<string> => {
-        const [proc, ...strings] = args as [(...args: unknown[]) => unknown, ...unknown[]];
+      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.string] },
+      (proc: (...args: unknown[]) => unknown, ...strings: AString[]): string | Promise<string> => {
         invariant(strings.length > 0, "string-map: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
@@ -372,10 +378,11 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
+    // Same head/rest migration as string-map above (callable head, z.schemeString rest);
+    // the manual destructure-and-cast is likewise redundant once the signature is typed.
     "string-for-each": symbol.native`string-for-each: apply a procedure across the strings' characters`(
-      { input: z.array(z.unknown()), output: [z.void()] },
-      (...args: unknown[]): void | Promise<void> => {
-        const [proc, ...strings] = args as [(...args: unknown[]) => unknown, ...unknown[]];
+      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.void()] },
+      (proc: (...args: unknown[]) => unknown, ...strings: AString[]): void | Promise<void> => {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));

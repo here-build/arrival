@@ -53,9 +53,16 @@ function findImpl(arg: unknown, list: any): unknown {
 
 export default new EnvCapability("scheme/srfi-1", {
   symbols: {
+    // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.unknown()], z.unknown())'s
+    // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
+    // exactly 2). pred uses the established callable-schema convention (z.custom<(...args)
+    // => T>(), matching vector-map/vector-for-each/curry); seq stays z.value — it's dispatched
+    // via tf("filter") term-lookup, representation-agnostic. `symbol.sequence`'s impl signature
+    // is always `(args: unknown[], runCtx)` regardless of the contract shape (see
+    // SequenceInput in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
     filter:
       symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
-        { input: z.tuple([z.unknown()], z.unknown()), output: [z.unknown()], fanout: true },
+        { input: [z.custom<(...args: unknown[]) => unknown>(), z.value], output: [z.unknown()], fanout: true },
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = (seq as Record<string, unknown> | null | undefined)?.[tf("filter")];
