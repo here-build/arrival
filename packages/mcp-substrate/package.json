@@ -1,0 +1,49 @@
+{
+  "name": "@here.build/mcp-substrate",
+  "version": "0.1.0",
+  "description": "The doors-steering runner: session-scoped teaching apparatus (doors, competence, futility, session-history replay, scope-confusion, type-hints, statement-facts, example-call synthesis) shared by any MCP scheme-REPL surface — env-lifecycle-agnostic, model/harness-agnostic.",
+  "license": "FSL-1.1-MIT",
+  "author": "here.build",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-serializer": "workspace:^",
+    "@here.build/arrival-sweet": "workspace:^"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.2",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}
