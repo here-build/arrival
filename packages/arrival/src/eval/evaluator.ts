@@ -746,6 +746,62 @@ function ctxResolver(ctx: EvalContext): Resolver {
   return ctx.resolver;
 }
 
+/**
+ * Race a host promise (a JS-interop / rosetta tool-call return the trampoline
+ * awaits at its `is_promise(value)` branch) against an AbortSignal, so a PARKED
+ * await becomes abort-aware.
+ *
+ * WHY this is needed on top of the TICK-boundary abort check (run's TICK branch,
+ * below): that check only fires while the trampoline is actively STEPPING. While
+ * parked on a raw `await value` — a rosetta tool call to a stuck upstream that
+ * never resolves — nothing ticks, so `signal.aborted` is never read and the run
+ * hangs until the host promise settles on its own. The outer wall-clock race a
+ * caller may layer on top (arrival-manifold's manifold-tool.ts) can `abort()`
+ * the signal on time, but that only unsticks THIS await if the await itself
+ * observes the signal. This makes it observe it, at the ONE choke point every
+ * host promise funnels through, regardless of whether the specific host
+ * operation honors the signal.
+ *
+ * This does NOT cancel the underlying host operation — even after the race
+ * rejects, the real upstream request may keep running in the background. Its job
+ * is only to return control to the trampoline, which then throws the abort reason
+ * and unwinds the run. Cancelling the upstream connection/request must be wired at
+ * the operation itself (e.g. `fetch(url, { signal })`, or the MCP SDK's
+ * `client.callTool(params, schema, { signal })`, which arrival-manifold's server
+ * boundary would forward). The abandoned promise's eventual settlement is
+ * SWALLOWED so it never surfaces as an unhandled rejection — the `.then(resolve,
+ * reject)` below keeps a rejection handler attached to it for exactly that reason
+ * (mirroring manifold-tool.ts's own `running.catch(() => {})` on its parked path).
+ */
+export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise<T> {
+  // Already aborted: an `addEventListener("abort", …)` would never fire (the event
+  // already dispatched), so reject now — and still attach a swallow handler so the
+  // abandoned host promise's later settlement is never an unhandled rejection.
+  if (signal.aborted) {
+    void Promise.resolve(value).catch(() => {});
+    return Promise.reject(signal.reason ?? new DOMException("aborted", "AbortError"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason ?? new DOMException("aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    // The two-handler `.then` both settles the race on the happy path AND keeps a
+    // rejection handler attached to `value` for the abort-loser path, so an
+    // abandoned host promise that later rejects is swallowed here (never
+    // unhandled). removeEventListener is idempotent — `once: true` already removed
+    // the listener if abort won; it actively removes it if `value` won.
+    Promise.resolve(value).then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
 // ============================================================================
 // Flat Trampoline Runner
 // ============================================================================
@@ -953,10 +1009,18 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         continue;
       }
 
-      // If yielded value is a promise (from JS interop), await it
+      // If yielded value is a promise (from JS interop), await it. When a signal
+      // is present, race the await against it (raceAbort): a host promise parked
+      // HERE — a rosetta tool call to a stuck upstream — cannot reach the TICK
+      // abort check below, because nothing ticks while parked. Without the race an
+      // abort would not unstick the run until the host promise settled on its own,
+      // however long that took. With no signal the await is byte-identical to
+      // before (no wrapper promise, no listener). A raced abort rejects with the
+      // abort reason and flows through the SAME failAndWrap path as a host-promise
+      // rejection, so the run unwinds identically to the TICK-boundary abort.
       if (is_promise(value)) {
         try {
-          valueToSend = await value;
+          valueToSend = signal === undefined ? await value : await raceAbort(value, signal);
         } catch (error) {
           failAndWrap(error);
           return undefined as never; // unreachable

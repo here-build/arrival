@@ -27,6 +27,7 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execExpr, parse } from "../eval/generator-exec.js";
+import { raceAbort } from "../eval/evaluator.js";
 
 describe("AbortSignal execution budget", () => {
   it("aborts an infinite loop when AbortSignal fires", async () => {
@@ -133,6 +134,91 @@ describe("AbortSignal execution budget", () => {
       const message = (err as Error)?.message ?? String(err);
       const name = (err as Error)?.name ?? "";
       expect(`${name} ${message}`.toLowerCase()).toMatch(/abort/);
+    }
+  });
+
+  // ── PARKED HOST-PROMISE abort (raceAbort, evaluator.ts) ──────────────────────
+  // The trampoline awaits every host promise (a rosetta / tool-call return) at its
+  // one `is_promise(value)` choke point. The TICK-boundary abort check only fires
+  // while the trampoline is actively STEPPING, so a host promise PARKED there — a
+  // tool call to a stuck upstream that never settles — is not abort-aware on its
+  // own: the run would hang until the promise settled, however long that took. The
+  // fix races that await against the signal via `raceAbort`. These unit tests
+  // exercise `raceAbort` DIRECTLY (a deferred promise we control + an
+  // AbortController), which is the deterministic way to pin its contract: the
+  // whole-trampoline behaviour is additionally verified out-of-band by a plain-node
+  // repro (the vitest worker's own abort/unhandled-rejection handling makes the
+  // exec-level parked-hang unobservable from inside a test, so it is not asserted
+  // here — see the fix commit's investigation notes).
+  const deferred = <T = unknown>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  };
+
+  it("rejects the moment the signal aborts, without awaiting a still-pending value", async () => {
+    const d = deferred(); // never settled — models a stuck upstream host promise
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 20);
+    const start = Date.now();
+    await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow(/abort/i);
+    // Rejected promptly on abort — NOT after the (never-settling) value. If the
+    // race waited on the value this would never resolve (suite timeout).
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  it("rejects immediately when the signal is already aborted", async () => {
+    const d = deferred();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow(/abort/i);
+  });
+
+  it("preserves signal.reason through the race", async () => {
+    const d = deferred();
+    const ctrl = new AbortController();
+    const reason = new Error("custom parked-await cancellation");
+    setTimeout(() => ctrl.abort(reason), 10);
+    await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow("custom parked-await cancellation");
+  });
+
+  it("resolves with the value when it settles before any abort, and a later abort is inert", async () => {
+    const d = deferred<number>();
+    const ctrl = new AbortController();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => void unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      d.resolve(42);
+      await expect(raceAbort(d.promise, ctrl.signal)).resolves.toBe(42);
+      // The abort listener was removed on the happy path, so aborting now is a
+      // no-op and produces no stray rejection.
+      ctrl.abort();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("swallows an abandoned value that rejects AFTER the abort (no unhandled rejection)", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => void unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const d = deferred();
+      const ctrl = new AbortController();
+      ctrl.abort();
+      // Abort wins the race immediately; the underlying value is abandoned.
+      await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow(/abort/i);
+      // The abandoned value rejects only NOW. raceAbort keeps a rejection handler
+      // attached to it, so this must never surface as an unhandledRejection.
+      d.reject(new Error("upstream failed late"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
     }
   });
 });
