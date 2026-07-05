@@ -62,7 +62,17 @@ export default new EnvCapability("scheme/r7rs/binding", {
       // making the SHARED `unpromise` utility generic (out of scope: a cross-cutting helper, not
       // this capability) or a bare `as SchemeValue` cast (banned — see the project's
       // honest-types-no-casts convention). `z.unknown()` here is the honest type, not a gap.
-      { input: [z.custom<SchemeFunction>(), z.custom<SchemeFunction>()], output: [z.unknown()] },
+      // The two z.custom<SchemeFunction> params are UNREPRESENTABLE to the harvest printer
+      // (it throws on `custom`), collapsing signatureOf to the catch-all `(...args: unknown[])
+      // => unknown` and losing the two-procedure shape. `type` author-asserts the real
+      // signature (a callable renders as `(...args: unknown[]) => unknown`, the this-session
+      // convention shared with the srfi curry/find/sort overrides). The zod schemas stay the
+      // MEMBRANE description; this is the decoupled TYPE-LEVEL narrowing for the harvest only.
+      {
+        input: [z.custom<SchemeFunction>(), z.custom<SchemeFunction>()],
+        output: [z.unknown()],
+        type: "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
+      },
       (producer: SchemeFunction, consumer: SchemeFunction): unknown => {
         typecheck("call-with-values", producer, "function", 1);
         typecheck("call-with-values", consumer, "function", 2);

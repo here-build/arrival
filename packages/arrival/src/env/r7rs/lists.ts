@@ -31,7 +31,7 @@ import "@here.build/error-invariant";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
@@ -270,16 +270,31 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value: both dispatch paths (the tf("map") protocol member, and multiListMap)
       // declare SchemeValue | Promise<SchemeValue> — never a raw-primitive leak (unlike length's
       // arrival/tagless-final/length, which honestly admits `AValue | number`).
-      { input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.value), output: [z.value], fanout: true },
+      // The z.custom callable head is UNREPRESENTABLE to the harvest printer, collapsing
+      // signatureOf to the catch-all `(...args: unknown[]) => unknown`. `type` author-asserts
+      // the real shape: fn-first, then a REPRESENTATION-AGNOSTIC sequence rest. Like srfi-95
+      // `sort` (and unlike list-only `find`/`for-each`), map dispatches to Pair/Nil/Vector
+      // terms — so the receiver + return stay `unknown`; narrowing to a List would be FALSE
+      // (it would exclude the vector case, exactly the z.value-not-z.union reasoning above).
+      {
+        input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.value),
+        output: [z.value],
+        fanout: true,
+        type: "(fn: (...args: unknown[]) => unknown, ...lists: unknown[]) => unknown",
+      },
       (args, runCtx) => {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
           const seq = lists[0];
-          const m = (seq as Record<string, unknown> | null | undefined)?.[tf("map")];
-          if (typeof m !== "function") {
+          const m = resolveMethod(seq, tf("map"));
+          if (m === undefined) {
             throw new TypeError(`map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${(tf("map"))}).`);
           }
-          return (m as (...a: unknown[]) => unknown).call(seq, fn, runCtx);
+          // The tagless-final map/vector-map term algebra declares SchemeValue | Promise<SchemeValue>
+          // (this file's own header comment) — `resolveMethod`'s TermMethod return is `unknown` (it
+          // resolves ANY term method, not just this one's specific protocol), so the assertion states
+          // that documented, real invariant rather than widening the contract's own DecodedReturn.
+          return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
         }
         return multiListMap(fn, lists, runCtx);
       },
@@ -300,6 +315,12 @@ export default new EnvCapability("scheme/lists", {
         input: [z.custom<(...args: unknown[]) => SchemeValue>()],
         inputRest: z.union([z.pair, z.nil]),
         output: [z.void()],
+        // The z.custom callable head collapses signatureOf to the catch-all `(...args:
+        // unknown[]) => unknown`. `type` author-asserts fn-first over a LIST-ONLY rest (its
+        // schema IS z.union([pair,nil]), unlike map's agnostic z.value → so `Cons<unknown> |
+        // null`, the image this file's own non-degraded list ops harvest as) → `void` (R7RS
+        // unspecified; bare `void` as in env/core/core.ts's own hand-written type).
+        type: "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
       },
       // Relocated from stdlib.ts global_env (husk dissolution): runs mapImpl for its
       // side effects and discards the result list. The legacy `.call(this)` was a
@@ -590,6 +611,10 @@ export default new EnvCapability("scheme/lists", {
       {
         input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
         output: [z.union([z.value, z.literal(false)])],
+        // The optional z.custom compare collapses signatureOf to the catch-all; `type` restores
+        // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
+        // null` list → `unknown | false`), plus the optional binary comparator.
+        type: "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
       },
       (obj: unknown, list: unknown, compare?: (a: unknown, b: unknown) => unknown): SchemeValue | false => {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
@@ -611,6 +636,8 @@ export default new EnvCapability("scheme/lists", {
       {
         input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
         output: [z.union([z.value, z.literal(false)])],
+        // Same degrade + author-assertion as `member` above (the alist search twin).
+        type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
       },
       (obj: unknown, alist: unknown, compare?: (a: unknown, b: unknown) => unknown): SchemeValue | false => {
         const cmp = compare || ((a: unknown, b: unknown) => structuralEqual(a, b));
@@ -764,7 +791,11 @@ export default new EnvCapability("scheme/lists", {
       // treeToArray's own declared TS return type (NestedArray[], from the to_array(name, true)
       // overload above) exactly, tighter than a bare z.unknown() (z.array's Array.isArray check
       // is a real refinement — rejects a non-array the old z.unknown() accepted).
-      { input: [z.value], output: [z.array(z.custom<NestedArray>())] },
+      // The z.custom<NestedArray> ELEMENT of the output array is unrepresentable to the harvest
+      // printer, collapsing signatureOf to the catch-all `(...args: unknown[]) => unknown` (losing
+      // both the single-arg arity and the array output). `type` restores it: one tree arg → a
+      // nested JS array (`unknown[]`, the honest image of the NestedArray element).
+      { input: [z.value], output: [z.array(z.custom<NestedArray>())], type: "(tree: unknown) => unknown[]" },
       (list: unknown): NestedArray[] => treeToArray(list),
     ),
 

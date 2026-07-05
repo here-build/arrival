@@ -22,12 +22,33 @@ import {
   type DecodedArgsWithRest,
   type DecodedReturn,
   type NativeSymbolDef,
+  type SpecInfer,
 } from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { SchemeValue } from "../values/types.js";
 import { curry as curryImpl } from "../utils/functional.js";
+
+describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
+  test("tuple spec: element-wise z.output, as a mutable tuple", () => {
+    expectTypeOf<SpecInfer<[typeof z.pair]>>().toEqualTypeOf<[APair]>();
+    expectTypeOf<SpecInfer<[typeof z.pair, typeof z.string]>>().toEqualTypeOf<[APair, string]>();
+  });
+
+  test("single-schema spec: bare z.output, no tuple wrapping", () => {
+    expectTypeOf<SpecInfer<typeof z.string>>().toEqualTypeOf<string>();
+    expectTypeOf<SpecInfer<typeof z.pair>>().toEqualTypeOf<APair>();
+  });
+
+  test("a 1-tuple spec stays a 1-tuple (unlike DecodedArgs, SpecInfer never wraps/collapses — that's each caller's own job)", () => {
+    expectTypeOf<SpecInfer<[typeof z.number]>>().toEqualTypeOf<[number]>();
+  });
+
+  test("variadic (z.array) single-schema spec: the element-array bare, matching z.output", () => {
+    expectTypeOf<SpecInfer<ReturnType<typeof z.array<typeof z.number>>>>().toEqualTypeOf<number[]>();
+  });
+});
 
 describe("symbol contract — decoded arg/return inference", () => {
   test("native: an identity-schema tuple infers the impl arg as the SCHEME TERM", () => {
@@ -345,6 +366,31 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
         { input: [curryHead], inputRest: z.value, output: [curryHead] },
         // @ts-expect-error — rest args decode via z.value (SchemeValue), annotating them string is wrong
         (fn: (...args: unknown[]) => unknown, ...args: string[]) => fn,
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+});
+
+describe("symbol.sequence — impl args/return typed via SpecInfer-built DecodedArgs/DecodedReturn, not raw unknown[]", () => {
+  test("correctly-typed impl: args destructure to the contract's decoded shape, return matches DecodedReturn", () => {
+    const def = symbol.sequence`seqproof: proof`(
+      { input: [z.pair, z.string], output: [z.string] },
+      (args: [APair, string], runCtx) => {
+        expectTypeOf(args).toEqualTypeOf<[APair, string]>();
+        return args[1];
+      },
+    );
+    expectTypeOf(def.kind).toEqualTypeOf<"sequence">();
+  });
+
+  test("wrong-typed impl must NOT compile — args[0] is a Pair, annotating it string is wrong", () => {
+    const RUN = false as boolean;
+    if (RUN) {
+      symbol.sequence`seqproof2: proof`(
+        { input: [z.pair], output: [z.pair] },
+        // @ts-expect-error — args is [APair], annotating it [string] is wrong
+        (args: [string], runCtx) => args[0] as unknown as APair,
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

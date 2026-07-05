@@ -359,7 +359,16 @@ export default new EnvCapability("scheme/strings", {
     // properly types the params, the old manual `const [proc, ...strings] = args as [...]`
     // destructure-and-cast is redundant — proc/strings arrive as real typed parameters.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(
-      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.string] },
+      // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])
+      // => unknown` (losing the `string[]` rest + the string return). `type` author-asserts the
+      // real shape (callable → `(...args: unknown[]) => unknown`; the rest harvests z.schemeString
+      // as `string`), same convention as the sibling srfi curry/find overrides.
+      {
+        input: [z.custom<(...args: unknown[]) => unknown>()],
+        inputRest: z.schemeString,
+        output: [z.string],
+        type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
+      },
       (proc: (...args: unknown[]) => unknown, ...strings: AString[]): string | Promise<string> => {
         invariant(strings.length > 0, "string-map: expected at least one string");
         const strs = strings.map(stringValue);
@@ -384,7 +393,14 @@ export default new EnvCapability("scheme/strings", {
     // Same head/rest migration as string-map above (callable head, z.schemeString rest);
     // the manual destructure-and-cast is likewise redundant once the signature is typed.
     "string-for-each": symbol.native`string-for-each: apply a procedure across the strings' characters`(
-      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.void()] },
+      // Same degrade + author-assertion as string-map (the for-effect twin) → `void` (R7RS
+      // unspecified; bare `void` as in env/core/core.ts's own hand-written type).
+      {
+        input: [z.custom<(...args: unknown[]) => unknown>()],
+        inputRest: z.schemeString,
+        output: [z.void()],
+        type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
+      },
       (proc: (...args: unknown[]) => unknown, ...strings: AString[]): void | Promise<void> => {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map(stringValue);

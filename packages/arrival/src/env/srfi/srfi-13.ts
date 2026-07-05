@@ -276,7 +276,15 @@ export default new EnvCapability("scheme/srfi-13", {
     ),
 
     "string-join": symbol.native`string-join: the list of strings folded to one with a delimiter (default single space) (SRFI-13)`(
-      { input: [z.value, z.schemeString.optional()], output: [z.union([z.string, z.schemeString])] },
+      {
+        input: [z.value, z.schemeString.optional()],
+        output: [z.union([z.string, z.schemeString])],
+        // scheme-zod has no element-typed list schema, so the list input is `z.value` (→ `unknown`)
+        // and the output union images to the redundant `string | string`. Author-assert what the
+        // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
+        // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
+        type: "(list: List<string>, delimiter?: string) => string",
+      },
       (list: SchemeValue, delimiter?: unknown): string | AString => {
         typecheck("string-join", list, ["pair", "nil"]);
         const parts = to_array("string-join")(list);
@@ -291,7 +299,15 @@ export default new EnvCapability("scheme/srfi-13", {
     // NOTE the inversion vs trim: tokenize's criterion selects TOKEN chars (what to
     // KEEP), trim's selects what to SHED. Default: maximal non-whitespace runs.
     "string-tokenize": symbol.native`string-tokenize: the list of maximal runs of token chars — default non-whitespace, or chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown().optional()], output: [z.value] },
+      {
+        input: [z.schemeString, z.unknown().optional()],
+        output: [z.value],
+        // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
+        // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
+        // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
+        // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
+        type: "(str: string, criterion?: unknown) => List<string>",
+      },
       (str: unknown, criterion?: unknown): APair | ANil | Promise<APair | ANil> => {
         const chars = [...stringValue(str)];
         const flags =
@@ -330,7 +346,15 @@ export default new EnvCapability("scheme/srfi-13", {
     // delimiter, coerced to the single-char string it denotes — string-only
     // behavior (including the empty-subject/empty-list rule below) is unchanged.
     "string-split": symbol.native`string-split: the list of the string's pieces around a literal delimiter — a string, or a single character (Gauche/Guile/MIT accept a char delimiter too); empty string yields '() (SRFI-152)`(
-      { input: [z.schemeString, z.union([z.schemeString, z.schemeChar])], output: [z.value] },
+      {
+        input: [z.schemeString, z.union([z.schemeString, z.schemeChar])],
+        output: [z.value],
+        // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the pieces — a proper
+        // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
+        // `string | string` (schemeString and schemeChar both print `string`); the honest image is a
+        // single `string` delimiter. Both recovered by the author assertion.
+        type: "(str: string, delimiter: string) => List<string>",
+      },
       (str: unknown, delimiter: unknown): APair | ANil => {
         typecheck("string-split", str, "string", 1);
         typecheck("string-split", delimiter, ["string", "character"], 2);

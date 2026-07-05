@@ -34,6 +34,7 @@
 
 import { describe, expect, it } from "vitest";
 import stringsPack from "../strings.js";
+import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
@@ -142,5 +143,24 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     const mapDef = nativeDef("string-map");
     expect(mapDef.in.safeParse([(): void => {}, str("abc")]).success).toBe(true);
     expect(mapDef.in.safeParse([(): void => {}, "raw-js-string"]).success).toBe(false);
+  });
+});
+
+describe("scheme/strings Contract.type overrides — the harvest signature for the two HOFs whose z.custom callable HEAD is UNREPRESENTABLE (printer throws, degrading the whole signature to `(...args: unknown[]) => unknown` and losing the string rest + the string/void return)", () => {
+  // string-map/string-for-each declare `input: [z.custom<callable>()], inputRest: z.schemeString`.
+  // The callable head is unrepresentable to the harvest printer, so the WHOLE signature degrades
+  // to the catch-all — throwing away the fn-first shape, the `string[]` rest (harvested straight
+  // from z.schemeString), and the string / void return. `Contract.type` restores the real shape
+  // (same convention as the sibling srfi curry/find overrides: callable → `(...args: unknown[]) =>
+  // unknown`, a void HOF return → bare `void` as in env/core/core.ts's own hand-written type).
+  it("string-map: proc-first over a string rest → string", () => {
+    expect(signatureOf(nativeDef("string-map"))).toBe(
+      "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
+    );
+  });
+  it("string-for-each: proc-first over a string rest, for effect → void", () => {
+    expect(signatureOf(nativeDef("string-for-each"))).toBe(
+      "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
+    );
   });
 });

@@ -215,6 +215,11 @@ export default new EnvCapability("scheme/vectors", {
         inputRest: z.svector,
         output: [z.svector],
         fanout: true,
+        // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])
+        // => unknown` (losing the vector rest + vector return). `type` restores the real shape:
+        // proc-first, then a `readonly unknown[][]` rest (the same image z.svector harvests as
+        // for vector-append) → a new vector (`readonly unknown[]`).
+        type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
       },
       (proc: (...args: unknown[]) => SchemeValue, ...vectors: AVector[]): AVector | Promise<AVector> => {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
@@ -244,6 +249,8 @@ export default new EnvCapability("scheme/vectors", {
         input: [z.custom<(...args: unknown[]) => unknown>()],
         inputRest: z.svector,
         output: [z.void()],
+        // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
+        type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
       },
       (proc: (...args: unknown[]) => unknown, ...vectors: AVector[]): void | Promise<void> => {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");

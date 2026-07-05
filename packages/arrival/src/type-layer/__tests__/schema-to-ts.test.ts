@@ -77,6 +77,14 @@ describe("printType — compounds", () => {
 });
 
 describe("signatureOf — the args-vector → function-signature composer", () => {
+  it("honors an author-asserted `type` override on the contract — the zod schema stays the MEMBRANE description (runtime decode/validate), `type` is a separate, decoupled TYPE-LEVEL narrowing for the harvest (mirrors legacy RosettaSpec.type/RosettaFunction.type)", () => {
+    const def = symbol.native`typed-override: proof`(
+      { input: [z.value], output: [z.value], type: "(ip: SchemeIP) => SchemeIP" },
+      (a) => a,
+    );
+    expect(signatureOf(def)).toBe("(ip: SchemeIP) => SchemeIP");
+  });
+
   it("composes a native def: scheme-value args, sync return, single-value output", () => {
     const def = symbol.native`cons: build a pair`(
       { input: [z.pair, z.pair], output: [z.pair] },

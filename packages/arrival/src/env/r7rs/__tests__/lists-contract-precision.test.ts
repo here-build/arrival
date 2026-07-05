@@ -26,6 +26,7 @@
 // z.array(...) too), and flatten's output (now a z.pair|z.nil|z.array(z.unknown()) union).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
+import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { ANil, nil } from "../../../values/primitives/ANil.js";
@@ -268,5 +269,39 @@ describe("scheme/lists Contract precision — behavior spot-checks: is_pair-shad
     expect(copy instanceof APair).toBe(true);
     // nil (the canonical singleton) still copies to the shared `nil`, not a clone.
     expect(impl(nil)).toBe(nil);
+  });
+});
+
+describe("scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type \"custom\" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)", () => {
+  // These five ops carry a z.custom<callable>() in their contract (map/for-each's fn head,
+  // member/assoc's optional compare, tree->array's NestedArray output). The printer degrades
+  // each to the bare `(...args: unknown[]) => unknown`, throwing away the fn-first structure,
+  // the list receiver type, the void/`unknown | false` return, and (tree->array) the array
+  // output + arity. `Contract.type` author-asserts the real shape — same trust model + same
+  // this-session convention as the sibling srfi-1 `find` / srfi-95 `sort` overrides (a callable
+  // renders as `(...args: unknown[]) => unknown`; a representation-AGNOSTIC receiver stays
+  // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
+  // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
+  // null`, the same image the file's own non-degraded list ops harvest as).
+  it("map (sequence): fn-first + representation-agnostic sequence rest — receiver/return stay `unknown` (dispatches to Pair/Nil/Vector, like sort), not narrowed to a List", () => {
+    expect(signatureOf(sequenceDef("map"))).toBe("(fn: (...args: unknown[]) => unknown, ...lists: unknown[]) => unknown");
+  });
+  it("for-each: fn-first over list-only rest (its schema is z.union([pair,nil]), unlike map) → void", () => {
+    expect(signatureOf(nativeDef("for-each"))).toBe(
+      "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
+    );
+  });
+  it("member: obj + list + optional binary compare → matched sublist or #f (restores what the degraded `(...args: unknown[]) => unknown` lost)", () => {
+    expect(signatureOf(nativeDef("member"))).toBe(
+      "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+    );
+  });
+  it("assoc: obj + alist + optional binary compare → matched entry or #f", () => {
+    expect(signatureOf(nativeDef("assoc"))).toBe(
+      "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+    );
+  });
+  it("tree->array: single tree arg → a nested JS array (the z.array(z.custom<NestedArray>()) output was unrepresentable, degrading arity + output)", () => {
+    expect(signatureOf(nativeDef("tree->array"))).toBe("(tree: unknown) => unknown[]");
   });
 });

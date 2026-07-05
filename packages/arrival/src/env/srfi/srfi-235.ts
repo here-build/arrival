@@ -51,6 +51,12 @@ export default new EnvCapability("scheme/srfi-235", {
         input: [z.custom<(...args: unknown[]) => unknown>()],
         inputRest: z.value,
         output: [z.custom<(...args: unknown[]) => unknown>()],
+        // Both z.custom callables (head + output) are unrepresentable to the harvest printer, so the
+        // whole signature collapses to the degrade path `(...args: unknown[]) => unknown` — hiding the
+        // two facts a caller most needs. Author-assert the real shape (checkable by eye against
+        // utils/functional.ts curry): the first arg is the function being curried, the rest are the
+        // leading partial args, and the RESULT is itself a function of the remaining args.
+        type: "(fn: (...args: unknown[]) => unknown, ...args: unknown[]) => (...args: unknown[]) => unknown",
       },
       curry,
     ),

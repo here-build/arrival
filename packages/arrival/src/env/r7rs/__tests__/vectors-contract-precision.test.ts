@@ -18,6 +18,7 @@
 // elements ARE runtime-discriminating — those three are what this file exercises.
 import { describe, expect, it } from "vitest";
 import vectorsPack from "../vectors.js";
+import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
@@ -81,5 +82,24 @@ describe("scheme/vectors Contract precision — sanity: the six fixed ops still 
     expect(def.in.safeParse([realVector]).success).toBe(true);
     expect(def.in.safeParse(["not-a-vector"]).success).toBe(false);
     expect(def.out.safeParse([idx]).success).toBe(true);
+  });
+});
+
+describe("scheme/vectors Contract.type overrides — the harvest signature for the two HOFs whose z.custom callable HEAD is UNREPRESENTABLE (printer throws, degrading the whole signature to `(...args: unknown[]) => unknown` and losing the vector rest + the vector/void return)", () => {
+  // vector-map/vector-for-each declare `input: [z.custom<callable>()], inputRest: z.svector`. The
+  // callable head is unrepresentable to the harvest printer, so the WHOLE signature degrades to
+  // the catch-all — throwing away the proc-first shape, the `readonly unknown[][]` rest (the same
+  // image z.svector harvests as everywhere else in this file — cf. vector-append), and the
+  // vector / void return. `Contract.type` restores the real shape (callable → `(...args:
+  // unknown[]) => unknown`; a void HOF return → bare `void`).
+  it("vector-map: proc-first over a vector rest → a new vector", () => {
+    expect(signatureOf(nativeDef("vector-map"))).toBe(
+      "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
+    );
+  });
+  it("vector-for-each: proc-first over a vector rest, for effect → void", () => {
+    expect(signatureOf(nativeDef("vector-for-each"))).toBe(
+      "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
+    );
   });
 });

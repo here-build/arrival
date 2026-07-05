@@ -22,7 +22,8 @@
 import { describe, expect, it } from "vitest";
 import srfi235 from "../srfi-235.js";
 import * as z from "../../../common/scheme-zod.js";
-import type { AEntity, NativeSymbolDef } from "../../../common/symbol.js";
+import type { NativeSymbolDef } from "../../../common/symbol.js";
+import type { SymbolDeclaration } from "../../../common/capability.js";
 
 /** Read a normalized zod schema's internal `def` — same cast `type-layer/schema-to-ts.ts` already
  *  uses to introspect `_zod.def` (zod4's public `.def` mirrors this, but the shipped .d.ts doesn't
@@ -32,31 +33,39 @@ function zodDef(schema: z.ZodTypeAny): { type?: string; items?: readonly z.ZodTy
   return (schema as { _zod?: { def?: unknown } })._zod?.def as never;
 }
 
+/** Is `def` baked as a `symbol.native` def? `EnvCapability.spec.symbols` is typed
+ *  `Record<string, SymbolDeclaration>` — the wider pre-bake authoring union (a baked AEntity, a
+ *  bare fn, an inline rosetta-shaped object, or a `{ value }` binding) — so a real runtime check
+ *  is the honest way to narrow to the one baked kind this suite exercises, not a blind cast. */
+function isNativeSymbolDef(def: SymbolDeclaration | undefined): def is NativeSymbolDef {
+  return def !== undefined && typeof def === "object" && "kind" in def && def.kind === "native";
+}
+
 describe("srfi-235 — curry's contract: inputRest precision (input/inputRest, not a manual z.tuple(fixed, rest))", () => {
   // srfi-235.ts declares `symbols` as a plain object literal (not the activation-builder form),
   // so the function branch is unreachable here — narrowed defensively rather than cast, so a
   // future switch to the builder form fails this test loudly instead of silently miscompiling.
-  const symbolsRec: Record<string, AEntity> =
+  const symbolsRec: Record<string, SymbolDeclaration> =
     typeof srfi235.spec.symbols === "function"
       ? srfi235.spec.symbols({ configuration: {}, resources: {} } as never)
       : (srfi235.spec.symbols ?? {});
   const curryDef = symbolsRec.curry;
 
   it("curry is baked as a symbol.native def", () => {
-    expect(curryDef && typeof curryDef === "object" && "kind" in curryDef && curryDef.kind).toBe("native");
+    expect(isNativeSymbolDef(curryDef)).toBe(true);
   });
 
   it("curry's input schema is a fixed-head tuple with a REST slot", () => {
-    const native = curryDef as NativeSymbolDef;
-    const inDef = zodDef(native.in);
+    if (!isNativeSymbolDef(curryDef)) throw new Error("curry: expected a baked symbol.native def");
+    const inDef = zodDef(curryDef.in);
     expect(inDef.type).toBe("tuple");
     expect(inDef.items?.length).toBe(1); // the fixed `fn` head — exactly one position
     expect(inDef.rest).toBeTruthy(); // a rest slot exists (the variadic partial-application tail)
   });
 
   it("the rest slot is the z.value SchemeValue-identity singleton — NOT a bare z.unknown()", () => {
-    const native = curryDef as NativeSymbolDef;
-    const inDef = zodDef(native.in);
+    if (!isNativeSymbolDef(curryDef)) throw new Error("curry: expected a baked symbol.native def");
+    const inDef = zodDef(curryDef.in);
     // Reference-identity: normalizeInputVector splices a contract's `inputRest` field directly
     // into z.tuple(fixed, inputRest) with no wrapping, so migrating curry's contract to
     // `inputRest: z.value` makes this THE SAME singleton scheme-zod.ts exports. Today (pre-fix)

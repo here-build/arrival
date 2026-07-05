@@ -250,6 +250,12 @@ export function signatureOf(def: AEntity): string {
   // transformer (syntax, not a value-level callable). None carries an in/out codec surface, so all
   // print as `never` until the type-lens grows a dedicated syntax representation.
   if (def.kind === "door" || def.kind === "keyword" || def.kind === "macro") return "never";
+  // `Contract.type` — an author-asserted override, decoupled from the zod-derived computation
+  // below (see its doc comment). Present ⇒ the author's word is final; absent (the common case,
+  // and the ONLY option for tagless/tagless-guard, which carry no Contract) ⇒ fall through to
+  // computing from the contract's own `in`/`out`, unchanged. `"type" in def` (not `def.type`)
+  // because tagless/tagless-guard don't have the field at all, not even as `undefined`.
+  if ("type" in def && def.type !== undefined) return def.type;
   try {
     const params = paramList(def.in);
     const ret = returnType(def.out);

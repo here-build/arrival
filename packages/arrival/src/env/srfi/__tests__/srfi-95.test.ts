@@ -38,23 +38,32 @@ function schemaKind(s: unknown): string {
   return def.type === "optional" ? def.innerType._zod.def.type : def.type;
 }
 
+/** `._zod.def.items` of a normalized tuple schema — same unsafe-but-justified access as
+ *  `schemaKind` above (zod's internal `_zod.def`, no public typed accessor for a tuple's
+ *  item list; a direct cast to `{ _zod: { def: { items: unknown[] } } }` doesn't compile —
+ *  `$ZodTypeDef`, the generic base `.def` type, has no `items` field). */
+function tupleItems(s: unknown): unknown[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- introspecting zod's internal def, not public API
+  return (s as any)._zod.def.items;
+}
+
 describe("2026-07-06 audit — scheme/srfi-95: sort's element precision (real exported op)", () => {
   it("seq (slot 0) is z.value (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
-    const tuple = (def.in as { _zod: { def: { items: unknown[] } } })._zod.def.items;
+    const tuple = tupleItems(def.in);
     expect(schemaKind(tuple[0])).toBe("custom");
   });
 
   it("comparator (slot 1, optional) is a callable custom schema, not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
-    const tuple = (def.in as { _zod: { def: { items: unknown[] } } })._zod.def.items;
+    const tuple = tupleItems(def.in);
     expect(schemaKind(tuple[1])).toBe("custom");
   });
 
   it("output is z.value (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
     // 1-tuple output normalizes the same way as input — z.tuple([z.value]).
-    const outTuple = (def.out as { _zod: { def: { items: unknown[] } } })._zod.def.items;
+    const outTuple = tupleItems(def.out);
     expect(schemaKind(outTuple[0])).toBe("custom");
   });
 });

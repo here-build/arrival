@@ -10,7 +10,7 @@
 // list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
-import { symbol } from "../../common/symbol.js";
+import { resolveMethod, symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
 import { is_false, is_nil } from "../../eval/guards.js";
@@ -75,13 +75,13 @@ export default new EnvCapability("scheme/srfi-1", {
         { input: [z.custom<(...args: unknown[]) => unknown>(), z.value], output: [z.unknown()], fanout: true },
         (args, runCtx) => {
           const [pred, seq] = args;
-          const m = (seq as Record<string, unknown> | null | undefined)?.[tf("filter")];
-          if (typeof m !== "function") {
+          const m = resolveMethod(seq, tf("filter"));
+          if (m === undefined) {
             throw new TypeError(
               `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${(tf("filter"))}).`,
             );
           }
-          return (m as (...a: unknown[]) => unknown).call(seq, pred, runCtx);
+          return m.call(seq, pred, runCtx);
         },
       ),
     reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
@@ -89,6 +89,12 @@ export default new EnvCapability("scheme/srfi-1", {
       {
         input: [z.custom<(...args: unknown[]) => unknown>(), z.union([z.pair, z.nil])],
         output: [z.value],
+        // The z.custom predicate arg is unrepresentable to the harvest printer, collapsing the WHOLE
+        // signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the real
+        // shape (checkable by eye against findImpl): the receiver is `List<unknown>` — findImpl is
+        // list-only (`typecheck(list, ["pair","nil"])`), NOT representation-agnostic like filter/sort —
+        // the predicate is a one-arg callable, and the result is the matched car or nil (any value).
+        type: "(pred: (x: unknown) => unknown, list: List<unknown>) => unknown",
       },
       findImpl,
     ),

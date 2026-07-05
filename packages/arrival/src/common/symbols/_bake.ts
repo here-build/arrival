@@ -65,25 +65,27 @@ import { KEYWORD_ACCESSOR_FIELD } from "../../Environment.js";
  *  schema (`z.array` variadic / `z.tuple` / `z.union` overload). */
 export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
 
-/** Decoded arg TYPES for the impl (the codec OUTPUT side). A bare tuple maps each
- *  element's `z.output`; an array-ish schema yields its element-array (variadic). */
-export type DecodedArgs<S extends VectorSpec> = S extends readonly z.ZodTypeAny[]
+/** The ONE shared traversal: map a VectorSpec through `z.output`. A tuple maps element-wise
+ *  to a mutable tuple; a single schema infers bare (no wrapping — a variadic `z.array`
+ *  schema's output is already an array, and a scalar schema's output stays a scalar).
+ *  `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` are thin callers on top of this —
+ *  they differ only in their OWN boundary handling (wrap a non-array single output in a
+ *  1-tuple; collapse a 1-tuple to its bare value), never in how a spec's shape decodes. */
+export type SpecInfer<S extends VectorSpec> = S extends readonly z.ZodTypeAny[]
   ? { -readonly [K in keyof S]: z.output<S[K] & z.ZodTypeAny> }
   : S extends z.ZodTypeAny
-    ? z.output<S> extends readonly unknown[]
-      ? z.output<S>
-      : [z.output<S>]
+    ? z.output<S>
     : never;
+
+/** Decoded arg TYPES for the impl (the codec OUTPUT side). A bare tuple maps each
+ *  element's `z.output`; an array-ish schema yields its element-array (variadic). */
+export type DecodedArgs<S extends VectorSpec> = SpecInfer<S> extends readonly unknown[]
+  ? SpecInfer<S>
+  : [SpecInfer<S>];
 
 /** Decoded RETURN type: a single value when the output is a 1-tuple, else the
  *  values-vector (multiple-values). */
-export type DecodedReturn<O extends VectorSpec> = O extends readonly [z.ZodTypeAny]
-  ? z.output<O[0] & z.ZodTypeAny>
-  : O extends readonly z.ZodTypeAny[]
-    ? { -readonly [K in keyof O]: z.output<O[K] & z.ZodTypeAny> }
-    : O extends z.ZodTypeAny
-      ? z.output<O>
-      : never;
+export type DecodedReturn<O extends VectorSpec> = O extends readonly [z.ZodTypeAny] ? SpecInfer<O>[0] : SpecInfer<O>;
 
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
@@ -92,25 +94,23 @@ export type MaybePromise<T> = T | Promise<T>;
  *  contract has no rest (the default, unchanged shape). */
 export type RestSpec = z.ZodTypeAny | undefined;
 
-/** The fixed-tuple decoded-types half of `DecodedArgsWithRest` — pulled into its OWN
- *  homomorphic-mapped-type alias (rather than written inline inside the spread below) because
- *  TS's tuple-spread checker (`error TS2574: A rest element type must be an array type`) can't
- *  see a mapped type over a still-abstract `I` as array-shaped when it's written directly inside
- *  a `[...X, ...Y[]]` literal — naming it as its own tuple-constrained alias resolves it. Same
- *  computation `DecodedArgs`'s tuple branch does. */
-type DecodedTupleArgs<T extends readonly z.ZodTypeAny[]> = { -readonly [K in keyof T]: z.output<T[K] & z.ZodTypeAny> };
-
 /** Decoded arg types WITH a rest tail: `input`'s fixed-tuple decoded types, followed by a
  *  spread of `inputRest`'s element type (repeated 0+ times). A rest tail only composes with
  *  a FIXED leading tuple `input` (never a bare single/kwargs schema — there's no well-defined
  *  prefix length to split at), so a non-tuple `I` combined with a real `Rest` types to `never`
  *  rather than silently doing something else. No rest (`Rest` defaults to `undefined`) falls
  *  through to today's `DecodedArgs<I>`, BYTE-IDENTICAL — this is a strictly ADDITIVE change,
- *  zero behavior/type difference for every existing declaration that doesn't set `inputRest`. */
+ *  zero behavior/type difference for every existing declaration that doesn't set `inputRest`.
+ *  `SpecInfer<I>` (not `DecodedArgs<I>`) supplies the fixed-tuple half here — with `I` already
+ *  narrowed to the tuple member, `SpecInfer`'s tuple branch IS the plain element-wise mapping,
+ *  named as its OWN alias reference (rather than inlined) because TS's tuple-spread checker
+ *  (`error TS2574: A rest element type must be an array type`) can't see a mapped type over a
+ *  still-abstract `I` as array-shaped when it's written directly inside a `[...X, ...Y[]]`
+ *  literal — a named alias resolves it. */
 export type DecodedArgsWithRest<I extends VectorSpec, Rest extends RestSpec = undefined> =
   Rest extends z.ZodTypeAny
     ? I extends readonly z.ZodTypeAny[]
-      ? DecodedTupleArgs<I> extends infer Head extends readonly unknown[]
+      ? SpecInfer<I> extends infer Head extends readonly unknown[]
         ? [...Head, ...z.output<Rest>[]]
         : never
       : never
@@ -128,6 +128,18 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  silently ignoring it. Optional; absent ⇒ byte-identical to the pre-`inputRest` behavior. */
   inputRest?: Rest;
   output: O;
+  /** Optional ambient `.d.ts` member-body signature override — e.g. `"(ip: SchemeIP) => SchemeIP"`
+   *  — for the harvest (`schema-to-ts.ts`'s `signatureOf`), DECOUPLED from `input`/`output`'s zod
+   *  schemas. The zod schemas stay the MEMBRANE description (what actually crosses at runtime —
+   *  decode/validate/encode); `type` is a separate, author-asserted TYPE-LEVEL narrowing for
+   *  when the harvest wants to see something the zod schema can't itself express (a host entity
+   *  type like `SchemeIP`, not just the honest `z.output` the membrane decodes to). Mirrors
+   *  legacy `RosettaSpec.type`/`RosettaFunction.type` (rosetta.ts, scheme-env.ts) — same trust
+   *  model: an author assertion, not mechanically derived, checkable by eye. INERT everywhere
+   *  except the harvest: `bakeNative`/`bakeRosetta`/`bakeSequence` carry it through unchanged;
+   *  `signatureOf` prefers it over computing from `in`/`out` when present. Absent ⇒ byte-identical
+   *  to today's zod-derived signature. */
+  readonly type?: string;
   /** ROSETTA-ONLY. `pure: true` makes the rosetta a TRANSFORM, not a source: it FORWARDS the
    *  union of its inputs' provenance instead of minting a fresh point at the call site (mirrors
    *  legacy defineRosetta `pure: true`). Strict `=== true` — undefined/false = source (the
@@ -176,6 +188,8 @@ export interface NativeSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly impl: AnyFn;
+  /** See `Contract.type`. */
+  readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
 }
@@ -198,6 +212,8 @@ export interface RosettaSymbolDef {
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
   /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
   readonly pure?: boolean;
+  /** See `Contract.type`. */
+  readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
 }
@@ -240,6 +256,8 @@ export interface SequenceSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+  /** See `Contract.type`. */
+  readonly type?: string;
 }
 
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
@@ -444,12 +462,25 @@ export interface TaglessInput {
   name: string;
   doc?: string;
 }
+/** The impl a `symbol.sequence` contract demands: ONE args array (not spread — the dual of
+ *  native/rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`,
+ *  the run's RunContext, decoded return (or a promise) out via `DecodedReturn<O>`. `DecodedArgs`/
+ *  `DecodedReturn` are both `SpecInfer`-built — same decode semantics as native/rosetta, just
+ *  gathered into one array instead of spread params (sequence's `run` slices the raw scheme args
+ *  into exactly this array before calling impl — see `bakeSequence`). No `Rest`: a sequence
+ *  contract's `Contract<I,O>` never carries `inputRest` (map/filter/sort's variadic tail, where
+ *  any, is expressed as the tagless receiver's own term algebra, not a contract rest slot). */
+export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
+  args: DecodedArgs<I>,
+  runCtx: RunContext,
+) => MaybePromise<DecodedReturn<O>>;
+
 export interface SequenceInput {
   kind: "sequence";
   name: string;
   doc?: string;
   contract: Contract<VectorSpec, VectorSpec>;
-  impl: (args: unknown[], runCtx: RunContext) => unknown;
+  impl: AnyFn;
 }
 
 /** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
@@ -543,6 +574,7 @@ export function bakeNative(input: NativeInput): NativeSymbolDef {
     // NO runtime validation, NO codec — the impl works on scheme values directly.
     // "zod for types purely": the schemas live on the def for inference + the harvest.
     impl,
+    type: input.contract.type,
     preludeOnly: input.contract.preludeOnly,
   };
 }
@@ -676,6 +708,7 @@ export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): Ro
     impl: input.impl,
     run,
     pure,
+    type: input.contract.type,
     preludeOnly: input.contract.preludeOnly,
   };
 }
@@ -701,7 +734,7 @@ type TermMethod = (this: unknown, ...args: unknown[]) => unknown;
  *  stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the receiver is a
  *  real object, returns the callable iff it IS one, else `undefined` — so the call site decides
  *  the missing-method policy without a raw `receiver as Record` / `fn as callable` cast. */
-function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {
+export function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {
   if (receiver == null || (typeof receiver !== "object" && typeof receiver !== "function")) return undefined;
   const fn = (receiver as Record<string, unknown>)[method];
   return typeof fn === "function" ? (fn as TermMethod) : undefined;
@@ -773,7 +806,15 @@ export function bakeSequence(input: SequenceInput): SequenceSymbolDef {
   // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
   // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
   if (input.contract.fanout) (run as { fanout?: boolean }).fanout = true;
-  return { kind: "sequence", name: input.name, doc: input.doc, in: normalizeVector(input.contract.input), out: normalizeVector(input.contract.output), run };
+  return {
+    kind: "sequence",
+    name: input.name,
+    doc: input.doc,
+    in: normalizeVector(input.contract.input),
+    out: normalizeVector(input.contract.output),
+    run,
+    type: input.contract.type,
+  };
 }
 
 // The tagged-template factories (`native`/`rosetta`/`tagless`/…) live one-per-file under

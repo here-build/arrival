@@ -26,10 +26,17 @@
 // the package root) → `symbol.native` + a `name: doc` template + `(contract, impl)`.
 export * as symbol from "./symbols/index.js";
 
+// `resolveMethod` — the shared tagless-final dispatch primitive `bakeTagless`/`bakeTaglessGuard`
+// stand on. Also the intended shared primitive for a `symbol.sequence` impl that dispatches to a
+// receiver's own term method (map/filter/sort) — surfaced here so those call sites reuse ONE
+// resolver instead of each hand-rolling the identical `receiver as Record<string,unknown>` cast.
+export { resolveMethod } from "./symbols/_bake.js";
+
 // The contract machinery + the baked `AEntity` union and its members. Surfaced here (not from
 // `./symbols/_bake.js` directly) so the public type path is the stable `common/symbol.js`.
 export type {
   VectorSpec,
+  SpecInfer,
   DecodedArgs,
   RestSpec,
   DecodedArgsWithRest,

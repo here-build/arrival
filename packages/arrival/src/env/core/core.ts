@@ -97,8 +97,17 @@ export default new EnvCapability("scheme/core", {
     // the optional name hint is a raw symbol NAME (string/symbol/number), an ASymbol
     // wrapper, or null — NOT a boxed SchemeValue (gensym predates the union and threads
     // raw names). Output is the freshly-minted ASymbol.
+    // `type`: the blind `z.custom<…>()` name-hint slot is UNREPRESENTABLE, so the harvest
+    // (schema-to-ts.ts `signatureOf`) would throw on it and degrade the WHOLE signature to
+    // the catch-all `(...args: unknown[]) => unknown`. Assert the model-facing shape the
+    // schema can't itself express: an optional string name hint in, a fresh symbol (string
+    // image, per z.symbol's own IMAGE_BY_NAME entry) out.
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
-      { input: z.tuple([z.custom<SymbolName | ASymbol | null>().optional()]), output: [z.symbol] },
+      {
+        input: z.tuple([z.custom<SymbolName | ASymbol | null>().optional()]),
+        output: [z.symbol],
+        type: "(name?: string) => string",
+      },
       gensym,
     ),
 
@@ -112,6 +121,11 @@ export default new EnvCapability("scheme/core", {
     // was meant). `arg` (2nd slot) is a generic scheme value (`type(arg)` branches over
     // AExact/AInexact/APair/ASymbol/… in utils/typecheck.ts), so it's z.value — the typed
     // replacement for z.unknown() at a native scheme-value slot — not host-blind data.
+    // `type`: three of the four input slots are blind `z.custom<…>()` (unrepresentable),
+    // which would throw in the harvest and degrade the WHOLE signature to the catch-all
+    // `(...args: unknown[]) => unknown`. Assert the documented shape instead — the real
+    // 4-arity (4th optional) + the `void` return (an assertion returns nothing) that
+    // `z.void()` intends but the blind input slots would otherwise erase.
     typecheck: symbol.native`typecheck: assert arg matches an expected type (or throw a typed error)`(
       {
         input: [
@@ -121,6 +135,7 @@ export default new EnvCapability("scheme/core", {
           z.custom<number | null>().optional(),
         ],
         output: [z.void()],
+        type: "(fn: unknown, arg: unknown, expected: string | Function, position?: number) => void",
       },
       typecheck,
     ),
