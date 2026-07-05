@@ -196,6 +196,34 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
     expect(() => ls.getSemanticDiagnostics("(car ")).not.toThrow();
     expect(() => ls.getQuickInfoAtPosition("(car x", 5)).not.toThrow();
   });
+
+  // BACKPORTING: tsc's own completion list answers in EMITTED terms — `cleanName` (mercury's
+  // types-emit.ts) collapses a non-identifier-safe scheme name to a camelCase TS identifier
+  // (`config/audience` → `configAudience`) so the lowered program compiles. Before this fix,
+  // that EMITTED spelling leaked straight into the completion list — a real, user-visible bug
+  // (screenshot, 2026-07-05): selecting it would insert a name that doesn't exist in scheme,
+  // silently breaking the reference. `computeEntries` now maps each candidate back through
+  // `programDeclaredNames` (populated at the mint site in emitTypes — the transform is
+  // lossy/many-to-one, so there is no general inverse function, only a tracked mapping).
+  it("backports a slash-bearing define/overridable name to its ORIGINAL scheme spelling, not the emitted camelCase", () => {
+    const scheme = `(define/overridable config/audience "string" "people who build web apps")\nconfi`;
+    const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.length).map((e) => e.name));
+    expect(names.has("config/audience")).toBe(true);
+    expect(names.has("configAudience")).toBe(false); // the emitted spelling must NOT leak
+  });
+
+  it("backports a plain slash-bearing define the same way", () => {
+    const scheme = `(define config/model "qwen3.5-9b")\nconfi`;
+    const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.length).map((e) => e.name));
+    expect(names.has("config/model")).toBe(true);
+    expect(names.has("configModel")).toBe(false);
+  });
+
+  it("an already-identifier-safe local is unaffected (fixed point — no spurious rename)", () => {
+    const scheme = `(define plain 1)\npla`;
+    const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.length).map((e) => e.name));
+    expect(names.has("plain")).toBe(true);
+  });
 });
 
 describe("completion subtraction — exact, not name-greedy", () => {
@@ -235,6 +263,21 @@ describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)
     expect(byName.get("names")!.detail).toBe("List<string>");
     expect(byName.get("names")!.callable).toBe(false);
     expect(byName.get("greet")!.detail).toContain("=> string");
+  });
+
+  it("a slash-bearing local's type-preview survives the backport (regression: probeLocalSignatures needs the EMITTED name, not the backported scheme spelling, to probe `typeof <name>`)", () => {
+    const doc = `(define config/audience (list "ada" "grace"))\n(car `;
+    const byName = new Map(ls.getCompletionContext(doc, doc.length).entries.map((e) => [e.name, e]));
+    expect(byName.get("config/audience")).toBeDefined();
+    expect(byName.get("config/audience")!.detail).toBe("List<string>");
+  });
+
+  it("the backport survives on the VERY FIRST completion request of a fresh service (regression: jsGlobalBaseline's one-time loadSource(\"\") probe used to clobber programDeclaredNames before it was ever read)", () => {
+    const fresh = createSchemeLanguageService();
+    const doc = `(define config/audience (list "ada" "grace"))\nconfi`;
+    const names = fresh.getCompletionsAtPosition(doc, doc.length).map((e) => e.name);
+    expect(names).toContain("config/audience");
+    expect(names).not.toContain("configAudience");
   });
 
   it("operator position is recognized (Σ's head discrimination), no slot probing", () => {

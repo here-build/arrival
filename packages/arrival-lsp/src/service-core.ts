@@ -24,7 +24,7 @@
 // that diffs the program file is a later optimization (noted inline).
 
 // The runtime-free reader (spans on every node) — the require scanner's truth.
-import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
+import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 // The deep subpath (not the package index): the index re-exports `formatJs`,
 // whose `eslint` import would drag the whole linter into any browser bundle of
@@ -533,6 +533,14 @@ export function createSchemeLanguageServiceCore(
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
   let programVersion = 0;
+  // Emitted TS identifier → the ORIGINAL scheme source spelling it was minted from (see
+  // `emitTypes`'s `declaredNames`) — the MAIN program's own defines only (a required file's
+  // names are out of scope for THIS buffer's completions). Consumed by `computeEntries` to
+  // backport a completion candidate to what the user actually typed: tsc's own completion
+  // list answers in EMITTED terms (`cleanName` is lossy/many-to-one — `config/audience` and
+  // `config-audience` both emit `configAudience` — so this is populated at the mint site,
+  // not derived by inverting the emitted name).
+  let programDeclaredNames: ReadonlyMap<string, string> = new Map();
 
   const inMemory = (fn: string): string | undefined => preludeFiles.get(fn) ?? supportFiles.get(fn);
 
@@ -616,6 +624,10 @@ export function createSchemeLanguageServiceCore(
       localMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[];
     }
     const rawDeps: RawUnit[] = [];
+    // Merged across every required file too — `config.scm`-style requires (see
+    // run-traced.ts's `(require "config.scm")` note) are the common home for a
+    // `define/overridable` cluster, not just the open buffer.
+    const depDeclaredNames = new Map<string, string>();
     // The scheme stdlib preamble leads the module — an implicit dependency ahead
     // of the require closure. Untracked in rawDeps: it has no Scheme mapper, so
     // its defines are in scope but its own spans never lift to a diagnostic.
@@ -652,6 +664,7 @@ export function createSchemeLanguageServiceCore(
         const text = dep.ts.replace(/export \{\};\n$/, "");
         rawDeps.push({ path, base: prefix.length, length: text.length, source, localMappings: dep.mappings });
         prefix += text;
+        for (const [emittedName, original] of dep.declaredNames) depDeclaredNames.set(emittedName, original);
       };
       for (const r of programRequires) emitDep(r.path);
     }
@@ -666,10 +679,13 @@ export function createSchemeLanguageServiceCore(
     if (requireOverloads.length > 0) {
       prefix += `declare global { interface ArrShape {\n${requireOverloads.map((o) => `  ${o}`).join("\n")}\n} }\n`;
     }
-    const { ts: emitted, mappings } = emitTypes(scheme, { hostMembers: emitterMembers() });
+    const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, { hostMembers: emitterMembers() });
     const programBase = prefix.length;
     programText = prefix + emitted;
     programVersion += 1;
+    // The main program's OWN names win on collision (a local shadowing a required name is
+    // legal scheme — same precedence the completion subtraction/dedup elsewhere gives locals).
+    programDeclaredNames = new Map([...depDeclaredNames, ...declaredNames]);
 
     // 2. Parameter inference: each unannotated arrow param's USE SITES are
     //    asked (checker.getContextualType) what they expect; unanimous →
@@ -858,9 +874,20 @@ export function createSchemeLanguageServiceCore(
       const sentinelScheme = balancePrefix(`${scheme.slice(0, atomStart)} ${SENTINEL} ${scheme.slice(atomEnd)}`);
       const role = findCursorRole(sentinelScheme);
       const builtinSigs = builtinSignatures();
+      // tsc only knows a local by its EMITTED identifier — an entry's `.name` may be
+      // the backported scheme spelling (`config/audience`), which a slash/hyphen
+      // can't stand in for in a bare TS reference. Resolve through
+      // `programDeclaredNames`'s reverse before any TS-side probing (builtins are
+      // never in that map, so this is the identity for them).
+      const emittedNameOf = (name: string): string => {
+        for (const [emitted, original] of programDeclaredNames) if (original === name) return emitted;
+        return name;
+      };
       // Locals' signatures resolve against the program's own emitted consts.
-      const localNames = entries.filter((e) => !builtinSigs.has(e.name)).map((e) => e.name);
-      const localSigs = probeLocalSignatures(scheme, localNames);
+      const localEntries = entries.filter((e) => !builtinSigs.has(e.name));
+      const localEmittedNames = localEntries.map((e) => emittedNameOf(e.name));
+      const localSigsByEmitted = probeLocalSignatures(scheme, localEmittedNames);
+      const localSigs = new Map(localEntries.map((e, i) => [e.name, localSigsByEmitted.get(localEmittedNames[i])]));
       // At an argument slot: one batched probe gives every candidate's verdict
       // (exactly the sampler's per-step mask) + the parameter's rendered type.
       let verdicts: (boolean | null)[] | null = null;
@@ -870,7 +897,7 @@ export function createSchemeLanguageServiceCore(
           scheme,
           role.calleeText,
           role.argIndex,
-          entries.map((e) => e.name),
+          entries.map((e) => emittedNameOf(e.name)),
         );
         verdicts = probed.verdicts;
         paramType = probed.paramType;
@@ -1274,8 +1301,12 @@ export function createSchemeLanguageServiceCore(
       // 2026-06-10: name-only matching ate such locals.
       if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
       seen.add(e.name);
+      // Backport: tsc answers in EMITTED terms (`cleanName` may have renamed a program
+      // local — `config/audience` → `configAudience`); a completion the user selects must
+      // read/insert what they'd actually TYPE in scheme, not the TS-shadow spelling.
+      const name = programDeclaredNames.get(e.name) ?? e.name;
       out.push({
-        name: e.name,
+        name,
         kind: e.kind,
         sortText: e.sortText,
         ...(e.insertText === undefined ? {} : { insertText: e.insertText }),
@@ -1295,11 +1326,23 @@ export function createSchemeLanguageServiceCore(
    *  (what survives subtraction is exactly what the PROGRAM brought into scope). */
   function jsGlobalBaseline(): Set<string> {
     if (baselineNames === null) {
+      // `loadSource` mutates the shared program* state as its whole point — but this
+      // probe's subject is the EMPTY program, not the caller's real document. Restore
+      // afterward (and bump the version once more) so a completion request that
+      // triggers this one-time warm-up mid-flight doesn't lose the real program's
+      // state to it (2026-07-05: the FIRST-EVER completion in a fresh service saw
+      // `programDeclaredNames` clobbered back to empty by this probe, silently
+      // undoing the backport for that one request).
+      const saved = { text: programText, declaredNames: programDeclaredNames, depUnits };
       loadSource("");
       const c = service.getCompletionsAtPosition(PROGRAM_FILE, 0, undefined);
       // Keyed `name kind` so the subtraction is exact: a program VALUE binding
       // may legally share a name with a substrate TYPE (see the caller).
       baselineNames = new Set((c?.entries ?? []).map((e) => `${e.name} ${e.kind}`));
+      programText = saved.text;
+      programDeclaredNames = saved.declaredNames;
+      depUnits = saved.depUnits;
+      programVersion += 1;
     }
     return baselineNames;
   }
@@ -1313,6 +1356,10 @@ export function createSchemeLanguageServiceCore(
    *  (like `probeTypes`); scheme-wise these are in scope everywhere. */
   function builtinCompletions(): SchemeCompletionEntry[] {
     if (builtinEntries === null) {
+      // Same transient-probe hazard as `jsGlobalBaseline` — restore the real
+      // program's state afterward so this one-time warm-up is invisible to
+      // whatever real request triggered it.
+      const saved = { text: programText, declaredNames: programDeclaredNames, depUnits };
       programText = '__arr[""];\nexport {};\n';
       programVersion += 1;
       const c = service.getCompletionsAtPosition(PROGRAM_FILE, '__arr["'.length, undefined);
@@ -1321,6 +1368,10 @@ export function createSchemeLanguageServiceCore(
         // tsc tags string-literal completions kind:"string"; semantically these
         // are the callable builtins — present them as methods.
         .map((e) => ({ name: e.name, kind: "method", sortText: e.sortText }));
+      programText = saved.text;
+      programDeclaredNames = saved.declaredNames;
+      depUnits = saved.depUnits;
+      programVersion += 1;
     }
     return builtinEntries;
   }
