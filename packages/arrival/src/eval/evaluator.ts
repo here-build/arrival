@@ -762,16 +762,20 @@ function ctxResolver(ctx: EvalContext): Resolver {
  * host promise funnels through, regardless of whether the specific host
  * operation honors the signal.
  *
- * This does NOT cancel the underlying host operation — even after the race
- * rejects, the real upstream request may keep running in the background. Its job
- * is only to return control to the trampoline, which then throws the abort reason
- * and unwinds the run. Cancelling the upstream connection/request must be wired at
- * the operation itself (e.g. `fetch(url, { signal })`, or the MCP SDK's
- * `client.callTool(params, schema, { signal })`, which arrival-manifold's server
- * boundary would forward). The abandoned promise's eventual settlement is
- * SWALLOWED so it never surfaces as an unhandled rejection — the `.then(resolve,
- * reject)` below keeps a rejection handler attached to it for exactly that reason
- * (mirroring manifold-tool.ts's own `running.catch(() => {})` on its parked path).
+ * This does NOT cancel the underlying host operation by itself — it only returns control
+ * to the trampoline, which then throws the abort reason and unwinds the run. Cancelling the
+ * upstream connection/request must be wired at the operation itself (e.g. `fetch(url, {
+ * signal })`, or the MCP SDK's `client.callTool(params, schema, { signal })`) — arrival-
+ * manifold's server boundary NOW forwards this exact signal there (bind.ts's `rosettaDef`
+ * reads it off the per-call invocation-`this` and hands it to `RemoteTool.invoke`; server.ts's
+ * `toBoundServer` threads it into `client.callTool`, 2026-07-05), so an aborted eval actually
+ * tells a real upstream MCP server to stop, not merely abandons the local await. A host
+ * operation that does NOT accept a signal (or a direct-JS caller with no ctx at all) still only
+ * gets abandoned — this mechanism can't force an uncooperative operation to stop. The
+ * abandoned promise's eventual settlement is SWALLOWED so it never surfaces as an unhandled
+ * rejection — the `.then(resolve, reject)` below keeps a rejection handler attached to it for
+ * exactly that reason (mirroring manifold-tool.ts's own `running.catch(() => {})` on its
+ * parked path).
  */
 export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise<T> {
   // Already aborted: an `addEventListener("abort", …)` would never fire (the event
