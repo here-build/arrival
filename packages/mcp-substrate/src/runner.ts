@@ -31,7 +31,7 @@
 // All four are additive optional fields; every existing typed consumer of the narrower
 // `DoorsRunnerOptions` shape (the Phase-0 frozen-interface skeleton tests) still type-checks.
 
-import { exec, parse, theVoid, tokenize, type SchemeEnv } from "@here.build/arrival";
+import { APair, exec, parse, theVoid, tokenize, type SchemeEnv, type SchemeValue } from "@here.build/arrival";
 import { toSExprString } from "@here.build/arrival-serializer";
 
 import type { AttachmentSink } from "./attachment-sink.js";
@@ -113,6 +113,61 @@ function splitTopLevel(source: string): string[] {
     }
   }
   return starts.map((s, i) => source.slice(s, starts[i + 1] ?? source.length).trim()).filter(Boolean);
+}
+
+// ─── FORM DISPLAY TEXT (2026-07-06 migration off the retired sweet-expression spike parser) ───
+//
+// `run()`'s statement loop now iterates over `forms: SchemeValue[]` — arrival's real, ALREADY-
+// PARSED reader output (the syntax gate's own `parse(expr)` call, kept instead of discarded) —
+// and BOTH executes (`exec(form, …)`) AND analyzes (`analyzeStatement(form)`) directly from it.
+// `splitTopLevel` (the real lexer's own top-level TEXT split) is kept for exactly one remaining
+// purpose: a human-readable / replayable TEXT string per executed form, for history/context-ring/
+// signature-echo/type-hints display — never for execution or fact derivation, both of which read
+// `forms` exclusively (see the call site).
+//
+// THE ALIGNMENT PROBLEM: `forms.length` can legitimately differ from `splitTopLevel`'s statement
+// count — a `#;` datum comment makes the real `parse()` drop a form that `splitTopLevel` still
+// lists as a text statement (verified: `(a) #;(b) (c)` → 2 forms, 3 text statements). Blindly
+// zipping `forms[i]` with `statements[i]` by index would silently misattribute text once a `#;`
+// appears anywhere in the call. The call site therefore only uses `statements[i]` directly when
+// `statements.length === forms.length` — an explicit, CHECKED precondition (not a blind
+// assumption): both scans walk the identical token stream splitting at the same top-level
+// boundaries, so equal counts mean no form was dropped, and `statements[i]` is `forms[i]`'s exact
+// original text, preserving today's byte-for-byte display behavior in the overwhelmingly common
+// (no-`#;`) case. When the counts diverge, `displayTextFor` below computes an independent,
+// forms-only text array instead — location-anchored slicing into `expr`, falling back to
+// `toSExprString` for a form with no location metadata (only `APair` carries `[LOCATION]`, so a
+// bare top-level atom/vector has none). Either path is PURELY a display/history string; it can
+// never influence what is executed or analyzed.
+
+/** The next form (from `fromIndex` onward) that carries `[LOCATION]` metadata, or `undefined` if
+ *  none of the remaining forms have one. Looking ahead past location-less forms (rather than only
+ *  checking the IMMEDIATE next form) guarantees a form's display-text slice never crosses into a
+ *  LATER form's own located text, however many location-less atoms/vectors sit in between. */
+function nextLocatedOffset(forms: readonly SchemeValue[], fromIndex: number): number | undefined {
+  for (let i = fromIndex; i < forms.length; i++) {
+    const f = forms[i];
+    if (f instanceof APair) {
+      const loc = f.getLocation();
+      if (loc !== undefined) return loc.offset;
+    }
+  }
+  return undefined;
+}
+
+/** Cosmetic display text for one form — NEVER consulted by `exec`/`analyzeStatement` (both read
+ *  `forms` directly at the call site). Prefers a location-anchored slice into the original `expr`
+ *  (preserving the statement's exact original formatting/comments); falls back to `toSExprString`
+ *  for a form with no location metadata. */
+function displayTextFor(form: SchemeValue, index: number, forms: readonly SchemeValue[], expr: string): string {
+  if (form instanceof APair) {
+    const loc = form.getLocation();
+    if (loc !== undefined) {
+      const end = nextLocatedOffset(forms, index + 1) ?? expr.length;
+      return expr.slice(loc.offset, end).trim();
+    }
+  }
+  return toSExprString(form);
 }
 
 /** THE SCOPE-CONFUSION CASCADE DETECTION SITE — ported verbatim from manifold-tool.ts. */
@@ -304,19 +359,24 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       return { content: [{ type: "text", text: `Error: ${timeoutMessage(timeoutMs)}` }], isError: true };
     };
     try {
+      let forms: SchemeValue[];
       try {
-        await parse(expr);
+        forms = await parse(expr);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
       }
 
-      const statements = splitTopLevel(expr);
-      if (statements.length === 0) {
+      if (forms.length === 0) {
         return { content: [] };
       }
 
-      const statementFacts = statements.map(analyzeStatement);
+      // See the FORM DISPLAY TEXT block above `splitTopLevel` for the alignment rationale.
+      const statements = splitTopLevel(expr);
+      const textAligned = statements.length === forms.length;
+      const displayText = forms.map((form, i) => (textAligned ? statements[i]! : displayTextFor(form, i, forms, expr)));
+
+      const statementFacts = forms.map((form) => analyzeStatement(form));
       localBindingTracker.record(
         statementFacts.flatMap((f) => f.localBindings),
         thisCallIndex,
@@ -332,12 +392,12 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       let callUsedString = false;
       const erroredStatementIndexes: number[] = [];
 
-      for (const [index, statement_] of statements.entries()) {
-        const statement = statement_!;
+      for (const [index, form] of forms.entries()) {
+        const statementText = displayText[index]!;
         const remaining = deadline - Date.now();
         if (remaining <= 0) return timeoutResult();
         try {
-          const running = exec(statement, {
+          const running = exec(form, {
             env: input.env as unknown as ExecEnv,
             budgetMs: remaining,
             signal: controller.signal,
@@ -357,8 +417,8 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
               .map((r) => ({ type: "text" as const, text: render(r, callMaxTotalChars) })),
           );
           if (facts.definedName !== undefined) {
-            history.push(facts.definedName, statement);
-            contextRing?.push(facts.definedName, statement);
+            history.push(facts.definedName, statementText);
+            contextRing?.push(facts.definedName, statementText);
           }
         } catch (error) {
           erroredStatementIndexes.push(index);
@@ -394,7 +454,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             // strategy) + the EXAMPLE synthesized through the injected example-synthesis
             // strategy (the two strategies.ts seams a positional consumer overrides), never
             // the kwargs-specific defaults directly.
-            const echo = signatureEchoFor(statement, raw, signatureByName, input.tools, strategies.isMisuseError);
+            const echo = signatureEchoFor(statementText, raw, signatureByName, input.tools, strategies.isMisuseError);
             if (echo) {
               const example = strategies.synthesizeExample(echo.tool, toolSchemas.get(echo.tool));
               text += session.echoSignature(echo.tool, echo.signatureText, example);
@@ -420,7 +480,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           mode: options.typeHints.mode,
           programSource: expr,
           contextDefines: contextRing?.entries() ?? [],
-          statements,
+          statements: displayText,
           erroredStatementIndexes,
           callSeq,
           isLatest: () => callSeq === generation,
@@ -433,7 +493,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       if (note !== undefined) blocks.push({ type: "text", text: note });
       for (const block of attachmentSink.drainBlocks()) blocks.push(block);
 
-      if (failures === statements.length) return { content: blocks, isError: true };
+      if (failures === forms.length) return { content: blocks, isError: true };
       session.observeSuccess(expr);
       return { content: blocks };
     } finally {

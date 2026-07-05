@@ -71,7 +71,17 @@ export { characters } from "./values/primitives/ACharacter.js";
 export { ASymbol } from "./values/primitives/ASymbol.js";
 export { AString } from "./values/primitives/AString.js";
 export { APair } from "./values/primitives/APair.js";
+// `AVector` — legitimate, additive public API: a cross-package consumer that walks a real
+// parsed AST (mcp-substrate's statement-facts.ts, replacing its former reliance on the
+// arrival-sweet spike parser) needs `instanceof AVector` to distinguish a `[...]` literal
+// from an ordinary cons list, the same way `APair`/`ANil`/`AString`/`ASymbol` are already
+// exported for that purpose.
+export { AVector } from "./values/primitives/AVector.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
+// `SchemeValue` — the honest union of every value the interpreter can hold. A cross-package
+// AST-walking consumer (mcp-substrate's statement-facts.ts) needs to name this type for its
+// own function signatures (walking a real parsed form, not a plain-object `Node` shape).
+export type { SchemeValue } from "./values/types.js";
 
 // No eager bootstrap kick. The runtime base assembles lazily on the first `exec`
 // (the realm-cached `ensureBaseAssembled`, exposed as `initBridge` below), so there is

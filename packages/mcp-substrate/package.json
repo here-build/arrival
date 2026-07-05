@@ -35,8 +35,7 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-serializer": "workspace:^",
-    "@here.build/arrival-sweet": "workspace:^"
+    "@here.build/arrival-serializer": "workspace:^"
   },
   "devDependencies": {
     "@here.build/eslint-configs": "workspace:^",
