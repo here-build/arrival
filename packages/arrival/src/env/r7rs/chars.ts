@@ -31,7 +31,7 @@ export default new EnvCapability("scheme/chars", {
     "char?": symbol.taglessGuard`char?: #t iff obj is a character`,
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         if (chars.length < 2) return true;
         const first = charValue(chars[0]);
@@ -42,25 +42,25 @@ export default new EnvCapability("scheme/chars", {
     // char</>/<=/>= derive from SchemeCharacter's arrival/tagless-final/lte (wave-1 Ord) via
     // the shared deriveOrd chain — see ORD_REL above.
     "char<?": symbol.native`char<?: strictly-increasing character order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       deriveOrd("<"),
     ),
     "char>?": symbol.native`char>?: strictly-decreasing character order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       deriveOrd(">"),
     ),
     "char<=?": symbol.native`char<=?: non-decreasing character order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       deriveOrd("<="),
     ),
     "char>=?": symbol.native`char>=?: non-increasing character order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       deriveOrd(">="),
     ),
 
     // Case-insensitive comparisons
     "char-ci=?": symbol.native`char-ci=?: case-insensitive character equivalence`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         if (chars.length < 2) return true;
         const first = charValue(chars[0]).toLowerCase();
@@ -69,7 +69,7 @@ export default new EnvCapability("scheme/chars", {
     ),
 
     "char-ci<?": symbol.native`char-ci<?: case-insensitive strictly-increasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() >= charValue(chars[i + 1]).toLowerCase()) return false;
@@ -79,7 +79,7 @@ export default new EnvCapability("scheme/chars", {
     ),
 
     "char-ci>?": symbol.native`char-ci>?: case-insensitive strictly-decreasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() <= charValue(chars[i + 1]).toLowerCase()) return false;
@@ -89,7 +89,7 @@ export default new EnvCapability("scheme/chars", {
     ),
 
     "char-ci<=?": symbol.native`char-ci<=?: case-insensitive non-decreasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() > charValue(chars[i + 1]).toLowerCase()) return false;
@@ -99,7 +99,7 @@ export default new EnvCapability("scheme/chars", {
     ),
 
     "char-ci>=?": symbol.native`char-ci>=?: case-insensitive non-increasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeChar), output: [z.boolean] },
       (...chars: unknown[]): boolean => {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() < charValue(chars[i + 1]).toLowerCase()) return false;
