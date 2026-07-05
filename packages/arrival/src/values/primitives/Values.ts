@@ -1,22 +1,26 @@
 import { theVoid } from "./AVoid.js";
+import type { SchemeValue } from "../types.js";
 
 // The carrier for `(values …)`: a distinct wrapper, not a plain value, so a
 // multiple-values return is distinguishable from a single value that happens
 // to be a collection.
 export class Values {
-  __values__: unknown[];
+  __values__: SchemeValue[];
 
   // Use Values.from() — it unwraps 0/1-element cases this constructor cannot.
-  private constructor(values: unknown[]) {
+  private constructor(values: SchemeValue[]) {
     this.__values__ = values;
   }
 
   /**
    * Empty → void (the unspecified value); single element → that element
    * unwrapped; ≥2 → a Values. The unwrap is what keeps a 1-value `(values x)`
-   * indistinguishable from `x`.
+   * indistinguishable from `x`. Precise on BOTH sides (not `unknown[]`/`unknown`):
+   * every branch is honestly a SchemeValue — `theVoid` (AVoid), `values[0]` (an
+   * element of the SchemeValue[] argument), or `new Values(values)` itself (`Values`
+   * is a member of the `SchemeValue` union in ../types.ts).
    */
-  static from(values: unknown[]): unknown {
+  static from(values: SchemeValue[]): SchemeValue {
     if (values.length === 0) {
       return theVoid;
     }
@@ -30,7 +34,7 @@ export class Values {
     return this.__values__.map((x) => String(x)).join("\n");
   }
 
-  valueOf(): unknown[] {
+  valueOf(): SchemeValue[] {
     return this.__values__;
   }
 }
