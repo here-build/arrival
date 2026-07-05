@@ -69,18 +69,28 @@ function hasTypePayload(d: MappedDiagnostic): boolean {
 /** The minimal, carrier-clean fallback line for a payload-less whitelisted diagnostic — a
  *  TRUE, non-specific restatement keyed only on the code family (never a mistranslated type,
  *  so never poison). Production spine diagnostics always carry payload; this is the wiring's
- *  floor so a coinciding whitelisted diagnostic always surfaces SOMETHING. */
+ *  floor so a coinciding whitelisted diagnostic always surfaces SOMETHING.
+ *
+ *  Each branch ALSO carries a recovery action — the only fact this floor has to work with is
+ *  the code family and the failing form's head, so the action names what's already known
+ *  (mirrors render.ts's actionFor/unknownPropertyBody/arityBody prose: an action clause, not
+ *  free-composed guidance) rather than leaving a bare restatement with nothing to DO next. */
 function genericHint(head: string, code: number): string {
   const detail =
     code === 2353
-      ? `an unexpected keyword was passed to ${head}`
+      ? `an unexpected keyword was passed to ${head} — remove the unknown :keyword or check the ` +
+        "signature's declared keys"
       : code === 2554 || code === 2555
-        ? `${head} was called with the wrong number of arguments`
+        ? `${head} was called with the wrong number of arguments — check (${head} ...)'s signature ` +
+          "in the tool catalog and match its parameter list"
         : code === 2349
-          ? `${head} is not callable`
+          ? `${head} is not callable — check the tool catalog for the correct symbol name, or a ` +
+            "local binding shadowing it"
           : code === 2339
-            ? `a field accessed on ${head}'s value does not exist`
-            : `the arguments to ${head} do not match its expected types`;
+            ? `a field accessed on ${head}'s value does not exist — check the tool catalog for the ` +
+              "field this value actually returns"
+            : `the arguments to ${head} do not match its expected types — check (${head} ...)'s ` +
+              "signature in the tool catalog";
   return `Type (${head}): ${detail}.`;
 }
 

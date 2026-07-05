@@ -42,6 +42,7 @@ import type { ContentBlock } from "./content-block.js";
 import {
   DoorSession,
   emptyExprDoor,
+  importDoor,
   scopeConfusionDoor,
   signatureEchoFor,
   unboundInExprDoor,
@@ -364,7 +365,17 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
         forms = await parse(expr);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Error: ${message} — check bracket balance near that point (a stray or missing closer ` +
+                "is the usual cause), fix, and resend.",
+            },
+          ],
+          isError: true,
+        };
       }
 
       if (forms.length === 0) {
@@ -440,14 +451,25 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             if (door) {
               text += session.enrichInline(door, attempted);
             } else if (!isLibraryEnriched(raw, attempted)) {
-              const scopeDoor = scopeConfusionDoor({
-                name: attempted,
-                topLevelDefineStatementNumber: topLevelDefineStatementNumber(attempted, statementFacts, index),
-                firstErrorStatementNumber: Math.min(...erroredStatementIndexes) + 1,
-                localBindingCallIndexes: localBindingTracker.occurrences(attempted),
-                currentCallIndex: thisCallIndex,
-              });
-              if (scopeDoor) text += session.enrichInline(scopeDoor, attempted);
+              // THE IMPORT-FORM DOOR (doors.ts's `importDoor`) — consulted after unboundInExprDoor
+              // (a tool literally named `import`/`scheme` is implausible, but a tool-resolution
+              // door still takes precedence by design) and before scopeConfusionDoor (an
+              // import/scheme unbound was never top-level-defined or locally bound by the model,
+              // so that classifier would fall through to undefined anyway — this catches it first
+              // with the actually-relevant lesson instead of leaving the bare wall untaught).
+              const importForm = importDoor(attempted);
+              if (importForm) {
+                text += session.enrichInline(importForm, attempted);
+              } else {
+                const scopeDoor = scopeConfusionDoor({
+                  name: attempted,
+                  topLevelDefineStatementNumber: topLevelDefineStatementNumber(attempted, statementFacts, index),
+                  firstErrorStatementNumber: Math.min(...erroredStatementIndexes) + 1,
+                  localBindingCallIndexes: localBindingTracker.occurrences(attempted),
+                  currentCallIndex: thisCallIndex,
+                });
+                if (scopeDoor) text += session.enrichInline(scopeDoor, attempted);
+              }
             }
           } else {
             // SIGNATURE-ECHO (doors.ts's signatureEchoFor, gated by the injected misuse-shape

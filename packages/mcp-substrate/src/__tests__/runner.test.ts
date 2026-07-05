@@ -135,3 +135,68 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
     expect(rendered).toContain("15"); // c = a + 5 = 15, proving `a` resolved correctly (not shadowed by "bogus")
   });
 });
+
+describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's importDoor)", () => {
+  // Forensic finding (2026-07-06): a benchmark model prepended `(import (scheme base))` (a
+  // malformed R7RS import — this REPL has no module system at all) to every program in an
+  // 11-repeat run, never redirected. `importDoor` fires on the two unbound heads that produces
+  // (`import`, `scheme`); these tests drive it through the REAL runner, not the pure door builder.
+
+  it("`(scheme base)` alone: the door teaches (stdlib already in scope / drop the form), and the rest of the program still computes", async () => {
+    const runner = makeRunner();
+    const env = freshEnv("runner-import-form-scheme-head") as SchemeEnv;
+    const result = await runner.run({
+      expr: "(scheme base) (+ 1 2)",
+      env,
+      tools: noTools,
+    });
+    const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    expect(rendered).toContain("Error: Unbound variable");
+    expect(rendered).toContain("standard library is already fully bound");
+    expect(rendered).toContain("Drop that form and resend the rest of the program unchanged");
+    expect(rendered).toContain("3"); // (+ 1 2) still computed despite the first statement's error
+  });
+
+  it("`(import (scheme base))`: the outer `import` head also gets the door", async () => {
+    const runner = makeRunner();
+    const env = freshEnv("runner-import-form-import-head") as SchemeEnv;
+    const result = await runner.run({
+      expr: "(import (scheme base))",
+      env,
+      tools: noTools,
+    });
+    const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    expect(rendered).toContain("Error: Unbound variable");
+    expect(rendered).toContain("standard library is already fully bound");
+    expect(rendered).toContain("Drop that form and resend the rest of the program unchanged");
+  });
+
+  it("an unrelated unbound variable never gets the import-form door", async () => {
+    const runner = makeRunner();
+    const env = freshEnv("runner-import-form-unrelated") as SchemeEnv;
+    const result = await runner.run({
+      expr: "(frobnicate 1 2)",
+      env,
+      tools: noTools,
+    });
+    const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    expect(rendered).toContain("Error: Unbound variable");
+    expect(rendered).not.toContain("standard library is already fully bound");
+    expect(rendered).not.toContain("module form");
+  });
+
+  it("an 11-repeat run teaches the lesson VERBOSE once, then collapses to terse (no 11 verbose repeats)", async () => {
+    const runner = makeRunner();
+    const env = freshEnv("runner-import-form-repeats") as SchemeEnv;
+    const renders: string[] = [];
+    for (let i = 0; i < 11; i++) {
+      const result = await runner.run({ expr: "(scheme base)", env, tools: noTools });
+      renders.push(result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n"));
+    }
+    expect(renders[0]).toContain("standard library is already fully bound");
+    for (let i = 1; i < renders.length; i++) {
+      expect(renders[i]).not.toContain("standard library is already fully bound");
+      expect(renders[i]).toContain("standard library is already in scope");
+    }
+  });
+});

@@ -49,6 +49,17 @@ export type DoorCode =
   // let/lambda-bound, never at top level), or the ≥2-local "don't force an implementation"
   // case. See doors.ts's `scopeConfusionDoor` section for the full design.
   | "envelope/scope-confusion"
+  // THE IMPORT-FORM DOOR (forensic finding, 2026-07-06): a benchmark model trained on real R7RS
+  // repeatedly prepended a module-system form — `(import (scheme base))`, or a bare
+  // `(scheme base)` when only the outer form got stripped — to every program, assuming this REPL
+  // has a module system. It doesn't: `import` was deliberately deleted from the language (the
+  // standard library is pre-bound; `require` is the loader for SOURCE FILES only — see
+  // reference-import-deleted-require-is-the-loader.md). SIBLING of unbound-in-expr/scope-confusion:
+  // fires on the two unbound heads that malformed form produces (`import`, `scheme`), which are
+  // neither a tool name nor a data literal nor a name the model itself defined/locally bound, so
+  // it runs between unboundInExprDoor (tool-name/literal classes) and scopeConfusionDoor
+  // (self-defined-name classes) — see doors.ts's `importDoor` for the full design.
+  | "envelope/import-form"
   // The SIGNATURE-ECHO hint (manifold-tool.ts) — the only in-expr enrichment that is NOT a
   // did-you-mean: when a statement's error is a tool-MISUSE shape (wrong kwarg / dangling
   // keyword / wrong arg type or shape / upstream argument rejection) and exactly one bound tool
@@ -802,6 +813,52 @@ export function unboundInExprDoor(
   };
 }
 
+// ─── envelope/import-form — the "this REPL has a module system" misfire ───
+// Forensic finding (2026-07-06): a benchmark model prepended `(import (scheme base))` (malformed
+// R7RS — real R7RS spells it `(import (scheme base))` too, but this REPL binds no `import` special
+// form at all) to EVERY program in an 11-call run; the runner never redirected it, so the model
+// hit "Unbound variable `import'" (or, once it tried stripping just the outer form, "Unbound
+// variable `scheme'" from the bare `(scheme base)` left behind) again and again with no lesson
+// attached. Neither head is a tool name or a data literal (unboundInExprDoor's two classes) or a
+// name the model itself top-level-defined/locally-bound (scopeConfusionDoor's three classes), so
+// both upstream doors legitimately return undefined and the bare wall would otherwise go untaught
+// forever. This door is a narrow, exact-match SIBLING check consulted between them (runner.ts):
+// after unboundInExprDoor (a tool literally named `import`/`scheme` is implausible, but a tool
+// door still takes precedence by design) and before scopeConfusionDoor (an import/scheme unbound
+// is never something the model defined or locally bound, so that classifier would fall through to
+// undefined anyway — this door catches it first with the actually-relevant, targeted lesson).
+
+/** The two unbound heads a malformed `(import (scheme base))` produces: the form's own head
+ *  symbol, and — once a caller strips only the outer form — the bare `scheme` head left behind
+ *  by `(scheme base)`. An EXACT match only (never fuzzy/prefix) — this is a single, precisely
+ *  known misfire shape, not a general did-you-mean surface. */
+const IMPORT_FORM_HEADS = new Set(["import", "scheme"]);
+
+/** Build the import-form door, or `undefined` when `attempted` is neither unbound head this
+ *  misfire produces. Returns a `Door` (never a bare string) so the caller renders it through
+ *  `DoorSession.enrichInline` exactly like every other unbound-in-expr/scope-confusion
+ *  enrichment — the SAME per-session verbosity gate (Rule 4) applies, so an 11-call run that
+ *  repeats this same mistake teaches the full lesson ONCE, then collapses to `terse` — never 11
+ *  verbose repeats. */
+export function importDoor(attempted: string): Door | undefined {
+  if (!IMPORT_FORM_HEADS.has(attempted)) return undefined;
+  const fact =
+    "There's no `(import ...)` or `(scheme ...)` module form here — `import` was deliberately " +
+    "removed from this language and there's no module system to invoke. The standard library is " +
+    "already fully bound into this REPL's scope, so nothing needs importing. Drop that form and " +
+    "resend the rest of the program unchanged.";
+  return {
+    code: "envelope/import-form",
+    tier: "explain-route",
+    fact,
+    reason: "",
+    script: "",
+    terse:
+      "no `(import ...)`/`(scheme ...)` form here — the standard library is already in scope; " +
+      "drop it and resend the rest of the program unchanged.",
+  };
+}
+
 // ─── envelope/scope-confusion — same-program cascade / cross-scope / repeated-local-binding
 // enrichment for a self-defined-then-unbound name ───
 // docs/working-proposals/manifold-scope-confusion-door.md (V-specified 2026-07-04). SIBLING of
@@ -963,12 +1020,25 @@ export function scopeConfusionDoor(input: ScopeConfusionInput): Door | undefined
  *  interpreter + a validating upstream): arrival's kwargs runtime, the `s/*` type-assertions, and
  *  an upstream JSON-Schema/zod argument rejection (MCP -32602, its plumbing frame already stripped
  *  by server.ts). Deliberately NOT matched — each owns its OWN teaching: the unbound-variable wall
- *  (the did-you-mean door), the attestation-required door, and any domain/execution prose. */
+ *  (the did-you-mean door), the attestation-required door, and any domain/execution prose.
+ *
+ *  The `Input validation error` entry is a downstream MCP SERVER's own tool-input rejection
+ *  (the TS MCP SDK's `McpServer` helper throws exactly `Input validation error: Invalid
+ *  arguments for tool <name>: <zod issues>` — verified against @modelcontextprotocol/sdk's
+ *  `validateToolInput`); `\binvalid arguments\b` already matches that exact wording, so this
+ *  entry is a deliberately WIDER, wording-independent net keyed on the SDK's own wrapper prefix
+ *  alone — it still classifies correctly if a future SDK release rephrases the "invalid
+ *  arguments" clause but keeps its "Input validation error:" preamble. Confirmed via the
+ *  downstream-JSON-schema-rejection benchmark case (54% unrecovered before the Example: line
+ *  landed, signature-echo.test.ts's "downstream -32602" cases) that this shape reaches
+ *  `signatureEchoFor` with the SDK's `MCP error <code>: ` frame already stripped by
+ *  server.ts's `stripJsonRpcFrame` (both stripped and unstripped forms match either way). */
 const TOOL_MISUSE_SHAPES: readonly RegExp[] = [
   /kwargs call has /, // dangling keyword / arity at the kwargs boundary
   /^s\/(?:number|integer|string|boolean|object|array): expected /, // s/* type-assertion failure
   /\binvalid arguments\b/i, // upstream JSON-Schema/zod argument rejection
   /\brequired propert(?:y|ies)\b/i, // JSON-Schema "must have required property"
+  /\bInput validation error\b/i, // the TS MCP SDK's downstream tool-input-rejection wrapper
 ];
 
 /** True iff an error message is an argument/validation/kwarg/arity failure (see the shape list). */

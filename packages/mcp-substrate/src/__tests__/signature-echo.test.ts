@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoundTool } from "../bound-tool.js";
+import { synthesizeExampleCall } from "../example-call.js";
 import { DoorSession, implicatedTool, isToolMisuseError, signatureEchoFor } from "../doors.js";
 
 describe("isToolMisuseError — the argument/validation/kwarg shapes only", () => {
@@ -20,6 +21,16 @@ describe("isToolMisuseError — the argument/validation/kwarg shapes only", () =
     expect(isToolMisuseError('s/number: expected a number, got string: "one"')).toBe(true);
     expect(isToolMisuseError("invalid arguments for add: a: Expected number, received string")).toBe(true);
     expect(isToolMisuseError("invalid arguments for add: 'a' is a required property")).toBe(true);
+  });
+
+  it("matches a downstream MCP server's own -32602 'Input validation error' rejection (the TS SDK's exact wording, both with and without the JSON-RPC frame server.ts strips)", () => {
+    const zodIssues =
+      '[{"code": "invalid_type", "expected": "object", "received": "string", "path": ["query"], ' +
+      '"message": "Expected object, received string"}]';
+    const stripped = `Input validation error: Invalid arguments for tool clinicaltrials_list_studies: ${zodIssues}`;
+    const withFrame = `MCP error -32602: ${stripped}`;
+    expect(isToolMisuseError(stripped)).toBe(true);
+    expect(isToolMisuseError(withFrame)).toBe(true);
   });
 
   it("does NOT match execution/domain prose, the attestation door, or the unbound wall", () => {
@@ -139,5 +150,54 @@ describe("signatureEchoFor + DoorSession.echoSignature", () => {
     const suffix = session.echoSignature("toy_add", "(toy_add :a number :b number) - Add", "(toy_add :a 0 :b 0)");
     expect(suffix).toBe("\nSignature: (toy_add :a number :b number) - Add\nExample: (toy_add :a 0 :b 0)");
     expect(JSON.parse(lines[0]!)).toEqual({ door: "envelope/signature-echo", seq: 1, tool: "toy_add" });
+  });
+});
+
+describe("A — a downstream -32602 'Input validation error' gets a synthesized Example: line, not just Signature:", () => {
+  it("end-to-end: signatureEchoFor implicates the tool, synthesizeExampleCall renders a real example off its schema, echoSignature appends BOTH lines", () => {
+    const qualified = "clinicaltrials_list_studies";
+    const schema = {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "object" as const,
+          properties: { condition: { type: "string" as const } },
+          required: ["condition"],
+        },
+      },
+      required: ["query"],
+    };
+    const tools = new Map([
+      [
+        qualified,
+        {
+          qualifiedName: qualified,
+          slug: "clinicaltrials",
+          tool: "list_studies",
+          schema,
+          signature: () => ({ params: [], signatureText: `(${qualified} :query object) - List studies` }),
+        },
+      ],
+    ]) as ReadonlyMap<string, BoundTool>;
+    const sigs = new Map([[qualified, `(${qualified} :query object) - List studies`]]);
+
+    const statement = `(${qualified} :query "condition:cancer")`;
+    const zodIssues =
+      '[{"code": "invalid_type", "expected": "object", "received": "string", "path": ["query"], ' +
+      '"message": "Expected object, received string"}]';
+    // The exact shape the model sees once server.ts's stripJsonRpcFrame drops the SDK's
+    // "MCP error -32602: " plumbing frame (runner.ts's `raw` at the misuse-echo branch).
+    const message = `Input validation error: Invalid arguments for tool ${qualified}: ${zodIssues}`;
+
+    const echo = signatureEchoFor(statement, message, sigs, tools);
+    expect(echo).toEqual({ tool: qualified, signatureText: `(${qualified} :query object) - List studies` });
+
+    const example = synthesizeExampleCall(echo!.tool, tools.get(echo!.tool)?.schema);
+    const lines: string[] = [];
+    const session = new DoorSession((l) => lines.push(l));
+    const suffix = session.echoSignature(echo!.tool, echo!.signatureText, example);
+    expect(suffix).toContain("\nSignature: ");
+    expect(suffix).toContain("\nExample: ");
+    expect(example).toBe(`(${qualified} :query {:condition "string value"})`);
   });
 });
