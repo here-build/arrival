@@ -60,7 +60,7 @@
   "dependencies": {
     "@here.build/arrival-chain": "workspace:^",
     "@here.build/arrival-sweet": "workspace:^",
-    "@here.build/arrival-chain-view": "workspace:^",
+    "@inhuman-tools/mercury": "workspace:^",
     "tsgo-wasm": "2026.6.4",
     "typescript": "6.0.2"
   },

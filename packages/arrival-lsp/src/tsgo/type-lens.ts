@@ -37,7 +37,7 @@
 // boot); each call loads one program+probe snapshot, reads diagnostics, and
 // releases the predecessor. Calls serialize through a small mutex.
 
-import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
+import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 
 import { balancePrefix, stringLiteralType } from "../balance.js";
 import { PROGRAM_FILE } from "../virtual-files.js";

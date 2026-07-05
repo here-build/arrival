@@ -24,7 +24,7 @@
 //     lambda/define params) + the ArrShape roster + host members — the
 //     substrate-baseline subtraction dance disappears with the substrate.
 
-import { emitTypes } from "@here.build/arrival-chain-view/types-emit";
+import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
 
 import { balancePrefix } from "../balance.js";
@@ -168,7 +168,7 @@ function bindingsAt(forest: readonly Node[], offset: number | null): SchemeBindi
     if (!isList(form)) return;
     const [head, second, third] = form.list;
     const contains = offset !== null && form.span !== undefined && form.span[0] <= offset && offset <= form.span[1];
-    if (isAtom(head) && head.atom === "define" && topLevel) {
+    if (isAtom(head) && (head.atom === "define" || head.atom === "define/overridable") && topLevel) {
       if (isAtom(second)) {
         const span = spanOf(form);
         if (span !== null)
