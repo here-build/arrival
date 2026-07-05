@@ -48,7 +48,8 @@ export interface PackContext<E = unknown> {
    *  the `preludeOnly` contract: assembly-time-only, not run-within-prelude-scope.
    *
    *  MID-RUN (`RuntimeAssembler.require`, §1.4): caller-supplied — a discarded child `C'` of
-   *  the live env (require-extension.ts). Undefined when that caller passes none. */
+   *  the live env (arrival-scheme-env-loader's `arrivalLoaderCapability`, `require/extension`'s
+   *  declaration). Undefined when that caller passes none. */
   readonly preludeScope?: PreludeBindTarget;
   /** The scope a capability's `prelude` TEXT is evaluated AGAINST — distinct from
    *  `preludeScope` (the bind target):
