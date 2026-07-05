@@ -17,12 +17,16 @@ import { symbol } from "../../common/symbol.js";
 import { Values } from "../../values/primitives/Values.js";
 import { unpromise } from "../../utils/promises.js";
 import { typecheck } from "../../utils/typecheck.js";
+import type { SchemeValue } from "../../values/types.js";
 
 // Scheme is inherently dynamic at the apply boundary — the relocated values /
 // call-with-values bodies receive Scheme values raw (the native identity contract
-// never runs), as the stdlib `doc({ value })` form did.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SchemeFunction = (...args: any[]) => any;
+// never runs), as the stdlib `doc({ value })` form did. `unknown` (not `any`) both
+// ways: this mirrors the file's OTHER callable-schema positions elsewhere in the
+// pack family (string-map/string-for-each's `z.custom<(...args: unknown[]) => unknown>()`
+// in lists.ts) rather than fully disabling the checker — callers here already narrow
+// before use (`maybe instanceof Values`), so nothing downstream needed `any`'s bypass.
+type SchemeFunction = (...args: unknown[]) => unknown;
 
 
 
@@ -43,11 +47,21 @@ export default new EnvCapability("scheme/r7rs/binding", {
     "set!": symbol.notImplemented`set!: set! mutates — violates value provenance (R7RS §4.1.6 omitted) — arrival is pure dataflow; rebinding a variable severs the lineage a value carries from its binding site. Bind a fresh name (let / letrec / define in a new scope) or thread the value through your dataflow instead`,
 
     "values": symbol.native`values: package zero or more values for a continuation`(
-      { input: z.array(z.unknown()), output: [z.unknown()] },
-      (...args: unknown[]): unknown => Values.from(args),
+      { input: z.array(z.value), output: [z.value] },
+      (...args: SchemeValue[]): SchemeValue => Values.from(args),
     ),
 
     "call-with-values": symbol.native`call-with-values: feed a producer's values into a consumer`(
+      // Output stays `z.unknown()`, NOT `z.value` — verified, not an oversight. The return
+      // flows through `unpromise` (utils/promises.ts), a genuinely-generic helper (also used by
+      // srfi-1's fold) whose OWN declared signature is `(value: unknown, fn: (x: unknown) =>
+      // unknown, …) => unknown` — it recurses through Promise/array/plain-object containers
+      // generically, so its result has no narrower honest static type here. Tightening this
+      // output to `z.value` was tried and reds at the `return unpromise(...)` line with "Type
+      // 'unknown' is not assignable to type 'SchemeValue'" — fixing it honestly would mean
+      // making the SHARED `unpromise` utility generic (out of scope: a cross-cutting helper, not
+      // this capability) or a bare `as SchemeValue` cast (banned — see the project's
+      // honest-types-no-casts convention). `z.unknown()` here is the honest type, not a gap.
       { input: [z.custom<SchemeFunction>(), z.custom<SchemeFunction>()], output: [z.unknown()] },
       (producer: SchemeFunction, consumer: SchemeFunction): unknown => {
         typecheck("call-with-values", producer, "function", 1);

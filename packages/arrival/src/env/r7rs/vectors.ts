@@ -13,10 +13,15 @@
  * raw exactly as the old \`{ value }\` form. Vector args are \`z.svector\`, indices
  * the \`schemeNumber\` tower, predicate/length returns the JS-boolean/number
  * scheme-zod codecs (decoded type \`boolean\`/\`number\`, matching the impls). The
- * representation-blind boundaries — \`asVector\`-coerced variadic/rest vectors
- * (\`vector-append\`, the HOF rest) and elements/list returns — are \`z.unknown()\`,
- * which keeps the bodies' \`unknown[]\` signatures byte-for-byte. The HOF callback
- * is the types-only \`z.custom\` procedure. Bodies are reproduced byte-for-byte.
+ * representation-blind boundaries — element/list returns (\`vector\`'s elements,
+ * \`vector-ref\`/\`vector->list\`'s returns) — are \`z.value\` (the typed \`z.unknown()\`
+ * replacement: same runtime acceptance, precise static output \`SchemeValue\`). The
+ * HOF callback is the types-only \`z.custom\` procedure; its variadic vector rest
+ * (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s args are \`inputRest\`/
+ * \`z.array\` over \`z.svector\` (2026-07-05 Contract-precision audit — see the sibling
+ * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`), not the
+ * bare \`z.unknown()\` the pre-audit contracts used. Bodies are reproduced byte-for-byte
+ * (only the impls' own param/return TYPE ANNOTATIONS were tightened to match).
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -72,15 +77,19 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     vector: symbol.native`vector: a vector of the given objects`(
-      { input: z.array(z.unknown()), output: [z.svector] },
-      (...objs: unknown[]): AVector => {
-        return withInputProvenance(objs, new AVector(CONSTANT_CTX, [...objs] as SchemeValue[]));
+      // Elements are scheme values by design (any object may sit in a vector slot) — the
+      // typed z.unknown() replacement, matching make-vector's own fill-slot convention.
+      { input: z.array(z.value), output: [z.svector] },
+      (...objs: SchemeValue[]): AVector => {
+        return withInputProvenance(objs, new AVector(CONSTANT_CTX, [...objs]));
       },
     ),
 
     "vector-append": symbol.native`vector-append: concatenation of the given vectors`(
-      { input: z.array(z.unknown()), output: [z.svector] },
-      (...vectors: unknown[]): AVector => {
+      // Args are vectors, not representation-blind values — z.svector, matching every other
+      // accessor in this file (vector-length/vector-copy/vector->string/…).
+      { input: z.array(z.svector), output: [z.svector] },
+      (...vectors: AVector[]): AVector => {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
         return withInputProvenance(vectors, new AVector(CONSTANT_CTX, ([] as SchemeValue[]).concat(...arrays)));
       },
@@ -100,17 +109,23 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector-ref": symbol.native`vector-ref: the element of vec at index k`(
-      { input: [z.unknown(), z.schemeNumber], output: [z.unknown()] },
+      // vec is a vector (z.svector, matching this file's own accessor convention); the
+      // returned element is a scheme value, representation-blind by design (z.value, not
+      // z.unknown()) — same identity-schema precision as vector->list's element output.
+      { input: [z.svector, z.schemeNumber], output: [z.value] },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
-      // borrowed AJSArray) — no asVector/instanceof reach-around. A non-vector declares no such
+      // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown` (not
+      // narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray too, which
+      // is NOT an AVector instance — z.svector's harvested type is a stand-in, not the full
+      // runtime domain (see scheme-zod.ts's own note on svector). A non-vector declares no such
       // method → a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
-      (vec: unknown, k: unknown): unknown => {
+      (vec: unknown, k: unknown): SchemeValue => {
         const m = (vec as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector-ref"];
         if (typeof m !== "function") {
           throw new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`);
         }
         const idx = typeof k === "number" ? k : (k as AExact).valueOf();
-        return (m as (i: number) => unknown).call(vec, idx as number);
+        return (m as (i: number) => SchemeValue).call(vec, idx as number);
       },
     ),
 
@@ -124,8 +139,10 @@ export default new EnvCapability("scheme/vectors", {
     "vector-copy!": symbol.notImplemented`vector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (vector-copy returns a fresh vector)`,
 
     "vector->list": symbol.native`vector->list: a list of vec's elements in [start, end)`(
-      { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.unknown()] },
-      (vec: unknown, start?: unknown, end?: unknown): unknown => {
+      // A list of scheme values, representation-blind by design — z.value, matching
+      // vector-ref's own element-output convention.
+      { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.value] },
+      (vec: unknown, start?: unknown, end?: unknown): SchemeValue => {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
@@ -189,12 +206,17 @@ export default new EnvCapability("scheme/vectors", {
     // other vector mutators; the non-mutating vector-copy above returns a fresh copy.)
 
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
+      // proc is the fixed HEAD (`input`); the spread vectors are the variadic TAIL
+      // (`inputRest`) — mirrors apply/for-each/string-map's own head/rest split. The rest is
+      // z.svector (this file's own vector-identity schema), not the representation-blind
+      // z.unknown() the old combined z.tuple([head], z.unknown()) used.
       {
-        input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.unknown()),
+        input: [z.custom<(...args: unknown[]) => SchemeValue>()],
+        inputRest: z.svector,
         output: [z.svector],
         fanout: true,
       },
-      (proc: (...args: unknown[]) => SchemeValue, ...vectors: unknown[]): AVector | Promise<AVector> => {
+      (proc: (...args: unknown[]) => SchemeValue, ...vectors: AVector[]): AVector | Promise<AVector> => {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
@@ -217,8 +239,13 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector-for-each": symbol.native`vector-for-each: apply proc across the vectors for effect`(
-      { input: z.tuple([z.custom<(...args: unknown[]) => unknown>()], z.unknown()), output: [z.void()] },
-      (proc: (...args: unknown[]) => unknown, ...vectors: unknown[]): void | Promise<void> => {
+      // Same head/rest migration as vector-map above (callable head, z.svector rest).
+      {
+        input: [z.custom<(...args: unknown[]) => unknown>()],
+        inputRest: z.svector,
+        output: [z.void()],
+      },
+      (proc: (...args: unknown[]) => unknown, ...vectors: AVector[]): void | Promise<void> => {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));

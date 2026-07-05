@@ -88,9 +88,45 @@ export type DecodedReturn<O extends VectorSpec> = O extends readonly [z.ZodTypeA
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
 
+/** The variadic TAIL schema after a fixed leading `input` tuple — `undefined` when a
+ *  contract has no rest (the default, unchanged shape). */
+export type RestSpec = z.ZodTypeAny | undefined;
+
+/** The fixed-tuple decoded-types half of `DecodedArgsWithRest` — pulled into its OWN
+ *  homomorphic-mapped-type alias (rather than written inline inside the spread below) because
+ *  TS's tuple-spread checker (`error TS2574: A rest element type must be an array type`) can't
+ *  see a mapped type over a still-abstract `I` as array-shaped when it's written directly inside
+ *  a `[...X, ...Y[]]` literal — naming it as its own tuple-constrained alias resolves it. Same
+ *  computation `DecodedArgs`'s tuple branch does. */
+type DecodedTupleArgs<T extends readonly z.ZodTypeAny[]> = { -readonly [K in keyof T]: z.output<T[K] & z.ZodTypeAny> };
+
+/** Decoded arg types WITH a rest tail: `input`'s fixed-tuple decoded types, followed by a
+ *  spread of `inputRest`'s element type (repeated 0+ times). A rest tail only composes with
+ *  a FIXED leading tuple `input` (never a bare single/kwargs schema — there's no well-defined
+ *  prefix length to split at), so a non-tuple `I` combined with a real `Rest` types to `never`
+ *  rather than silently doing something else. No rest (`Rest` defaults to `undefined`) falls
+ *  through to today's `DecodedArgs<I>`, BYTE-IDENTICAL — this is a strictly ADDITIVE change,
+ *  zero behavior/type difference for every existing declaration that doesn't set `inputRest`. */
+export type DecodedArgsWithRest<I extends VectorSpec, Rest extends RestSpec = undefined> =
+  Rest extends z.ZodTypeAny
+    ? I extends readonly z.ZodTypeAny[]
+      ? DecodedTupleArgs<I> extends infer Head extends readonly unknown[]
+        ? [...Head, ...z.output<Rest>[]]
+        : never
+      : never
+    : DecodedArgs<I>;
+
 /** A symbol's input/output contract. */
-export interface Contract<I extends VectorSpec, O extends VectorSpec> {
+export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
+  /** The variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first
+   *  arg is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
+   *  type parameter separate from the tail's, so the two can differ (`apply`'s happen to both be
+   *  `z.value`, but `DecodedArgsWithRest`'s mechanism doesn't assume that). Only meaningful when
+   *  `input` is a fixed tuple — combining it with a bare single-schema `input` (today's "wholly
+   *  variadic" shape) is a contract-authoring error: `normalizeInputVector` throws rather than
+   *  silently ignoring it. Optional; absent ⇒ byte-identical to the pre-`inputRest` behavior. */
+  inputRest?: Rest;
   output: O;
   /** ROSETTA-ONLY. `pure: true` makes the rosetta a TRANSFORM, not a source: it FORWARDS the
    *  union of its inputs' provenance instead of minting a fresh point at the call site (mirrors
@@ -115,10 +151,11 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec> {
 }
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
- *  `DecodedArgs` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
- *  contract tuple becomes a MUTABLE positional param list the impl can declare. */
-export type Impl<I extends VectorSpec, O extends VectorSpec> = (
-  ...args: DecodedArgs<I>
+ *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
+ *  contract tuple becomes a MUTABLE positional param list the impl can declare, and splices in
+ *  `inputRest`'s decoded element type as a spread tail when the contract declares one. */
+export type Impl<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = (
+  ...args: DecodedArgsWithRest<I, Rest>
 ) => MaybePromise<DecodedReturn<O>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,6 +374,35 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
   return Array.isArray(spec);
 }
 
+/** Normalize a contract's INPUT side to ONE combined `VectorSchema`, folding `inputRest` (when
+ *  present) into a `z.tuple(fixed, rest)` — the SAME shape `def.in` already prints/decodes for a
+ *  hand-authored variadic tuple (map/filter's `input: z.tuple([z.unknown()], z.unknown())`);
+ *  `inputRest` just gives that shape a name split across two contract fields instead of one
+ *  schema authored inline, so a fixed head and its variadic tail can be typed independently
+ *  (`DecodedArgsWithRest`'s two generic params). Absent `inputRest` ⇒ byte-identical to
+ *  `normalizeVector(input)` — this is what `bakeNative`/`bakeRosetta` call for `.in`/`inSchema`
+ *  (the OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
+function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
+  if (inputRest === undefined) return normalizeVector(input);
+  // `inputRest` needs a FIXED prefix length to split the call's raw args at — only a tuple
+  // `input` has one; a single schema (bare variadic, or a `z.kwargs` object) covers the WHOLE
+  // call with no well-defined split point. Combining `inputRest` with either is a contract-
+  // authoring bug: fail loudly here rather than silently ignoring the rest schema (which is what
+  // would happen if this guard didn't exist — `normalizeVector` would just return the single
+  // schema unchanged and the declared `inputRest` would silently never apply).
+  if (!isSchemaTuple(input)) {
+    throw new Error(
+      "inputRest requires `input` to be a fixed positional tuple (e.g. [z.string]) — a single " +
+        "schema `input` has no well-defined prefix length to split the rest at",
+    );
+  }
+  // Mirrors the exact `z.tuple(fixed, rest)` call shape `map`/`filter` already author inline —
+  // the cast narrows the (possibly empty, per `readonly z.ZodTypeAny[]`) tuple to the non-empty
+  // form `z.tuple`'s rest-bearing overload demands; zod's own runtime doesn't care about the
+  // static arity either way.
+  return z.tuple(input as [z.ZodTypeAny, ...z.ZodTypeAny[]], inputRest) as VectorSchema;
+}
+
 /** Did the author give a 1-tuple output? Then the impl returns a SINGLE value (we wrap
  *  it as a 1-element values-list); otherwise it returns the values-vector already. */
 function isSingleOutput(output: VectorSpec): boolean {
@@ -351,14 +417,18 @@ export interface NativeInput {
   kind: "native";
   name: string;
   doc?: string;
-  contract: Contract<VectorSpec, VectorSpec>;
+  // Widened over the full `RestSpec` union (not the default-`undefined` 2-arg shape) so a
+  // contract declaring `inputRest` is a valid `NativeInput.contract` too — the tagged-template
+  // factories (`native.ts`) hand this a `Contract<I, O, Rest>` for whatever concrete `Rest` the
+  // author declared.
+  contract: Contract<VectorSpec, VectorSpec, RestSpec>;
   impl: AnyFn;
 }
 export interface RosettaInput {
   kind: "rosetta";
   name: string;
   doc?: string;
-  contract: Contract<VectorSpec, VectorSpec>;
+  contract: Contract<VectorSpec, VectorSpec, RestSpec>;
   impl: AnyFn;
 }
 export interface DoorInput {
@@ -465,7 +535,7 @@ export function bakeNative(input: NativeInput): NativeSymbolDef {
     kind: "native",
     name: input.name,
     doc: input.doc,
-    in: normalizeVector(input.contract.input),
+    in: normalizeInputVector(input.contract.input, input.contract.inputRest),
     out: normalizeVector(input.contract.output),
     // NO runtime validation, NO codec — the impl works on scheme values directly.
     // "zod for types purely": the schemas live on the def for inference + the harvest.
@@ -475,7 +545,7 @@ export function bakeNative(input: NativeInput): NativeSymbolDef {
 }
 
 export function bakeRosetta(input: RosettaInput, opts: BakeRuntimeOpts = {}): RosettaSymbolDef {
-  const inSchema = normalizeVector(input.contract.input);
+  const inSchema = normalizeInputVector(input.contract.input, input.contract.inputRest);
   const outSchema = normalizeVector(input.contract.output);
   const singleOut = isSingleOutput(input.contract.output);
   // `pure: true` → TRANSFORM (forward input provenance); default → SOURCE (mint). Strict

@@ -105,12 +105,21 @@ export default new EnvCapability("scheme/core", {
     // Contract mirrors typecheck's real arity so the raw function binds cast-free:
     // fn (Valuable = anything with valueOf), arg (any scheme value), expected (a type
     // token or a predicate Function), optional position. The identity contract never runs.
+    // A plain FIXED 4-tuple with the 4th marked `.optional()` — NOT z.tuple(fixed, rest)'s
+    // unbounded tail. The real impl is a fixed 4-arity with the 4th genuinely optional
+    // (`position: number | null = null`), not a true variadic rest; the old .tuple(fixed,
+    // rest) shape was the INVERSE gap (unbounded rest where a fixed-with-one-optional-tail
+    // was meant). `arg` (2nd slot) is a generic scheme value (`type(arg)` branches over
+    // AExact/AInexact/APair/ASymbol/… in utils/typecheck.ts), so it's z.value — the typed
+    // replacement for z.unknown() at a native scheme-value slot — not host-blind data.
     typecheck: symbol.native`typecheck: assert arg matches an expected type (or throw a typed error)`(
       {
-        input: z.tuple(
-          [z.custom<{ valueOf(): unknown }>(), z.unknown(), z.custom<{ valueOf(): unknown } | Function>()],
-          z.custom<number | null>(),
-        ),
+        input: [
+          z.custom<{ valueOf(): unknown }>(),
+          z.value,
+          z.custom<{ valueOf(): unknown } | Function>(),
+          z.custom<number | null>().optional(),
+        ],
         output: [z.void()],
       },
       typecheck,

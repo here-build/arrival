@@ -69,9 +69,15 @@ export default new EnvCapability("scheme/equality", {
       },
     ),
 
-    // R7RS 6.5 Symbols
+    // R7RS 6.5 Symbols. Unlike `boolean=?` above, this is NOT representation-blind: the
+    // impl only ever checks `instanceof ASymbol` (no raw-JS-symbol unwrap branch), and
+    // symbols have no plain-JS counterpart in this language (no codec for them in
+    // scheme-zod.ts, unlike string/boolean/char/number — see equality-representation.test.ts's
+    // own "always boxed in practice" note for characters & symbols). So `z.symbol` (the SAME
+    // identity primitive `symbol->string`/`string->symbol` below already use) is the honest
+    // domain, not `z.unknown()` — this is a precision fix, not a blindness removal.
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.symbol), output: [z.boolean] },
       (...syms: unknown[]): boolean => {
         if (syms.length < 2) return true;
         const first = syms[0];

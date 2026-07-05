@@ -26,6 +26,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
+import type { ANumeric } from "../../values/numbers.js";
 import {
   asBytevector,
   stringValue,
@@ -68,8 +69,13 @@ export default new EnvCapability("scheme/bytevectors", {
     ),
 
     bytevector: symbol.native`bytevector: a bytevector built from the byte arguments`(
-      { input: z.array(z.unknown()), output: [z.sbytevector] },
-      (...bytes: unknown[]): ABytevector => {
+      // Wholly variadic + homogeneous (no distinct head, unlike for-each/string-map's
+      // callable-then-rest split) — every argument is a byte, so the fix is a single
+      // precise element schema, not an inputRest split. Each element flows through
+      // toIndex(b) below, exactly like make-bytevector's byte/k args — z.schemeNumber
+      // is that same op's own precedent for "this slot is a scheme number".
+      { input: z.array(z.schemeNumber), output: [z.sbytevector] },
+      (...bytes: ANumeric[]): ABytevector => {
         const result = new Uint8Array(bytes.length);
         for (const [i, b] of bytes.entries()) {
           result[i] = toIndex(b);
@@ -113,8 +119,14 @@ export default new EnvCapability("scheme/bytevectors", {
     ),
 
     "bytevector-append": symbol.native`bytevector-append: concatenation of all bytevector arguments`(
-      { input: z.array(z.unknown()), output: [z.sbytevector] },
-      (...bvs: unknown[]): ABytevector => {
+      // Wholly variadic + homogeneous, same shape as bytevector above — every argument
+      // IS a bytevector, so z.sbytevector (the semantic domain the sibling ops in this
+      // file already declare for their bv args — bytevector-copy, utf8->string) is the
+      // precise element schema. The raw-binary FFI polymorphism asBytevector tolerates
+      // stays a runtime-only property, unaffected by this types-only schema (see the
+      // module doc comment).
+      { input: z.array(z.sbytevector), output: [z.sbytevector] },
+      (...bvs: ABytevector[]): ABytevector => {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));
         const totalLen = views.reduce((sum, v) => sum + v.byteLength, 0);
         const result = new Uint8Array(totalLen);

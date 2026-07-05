@@ -13,15 +13,18 @@
 //                                 z.bigint → "bigint") plus the instanceof override
 //                                 below. Output is flattened to a single line.
 //
-//   2. the instanceof OVERRIDE  — z.instanceof(C) (the scheme primitives z.pair /
-//                                 z.schemeString / z.schemeExact / …) is "custom" to
-//                                 zod and UNREPRESENTABLE by default. But zod stashes
-//                                 the class on schema._zod.bag.Class, so we read
-//                                 _zod.bag.Class.name → "Pair" / "SchemeString" / …
-//                                 and emit it as a bare type reference. A small STATIC
-//                                 fallback (keyed by schema identity) carries the same
-//                                 names should bag.Class ever be absent (defensive — it
-//                                 is reachable for every scheme primitive today).
+//   2. the instanceof OVERRIDE  — the scheme-identity primitives (z.pair / z.schemeString /
+//                                 z.schemeExact / z.lambda / …) are "custom" to zod and
+//                                 UNREPRESENTABLE by default. `scheme-zod.ts`'s own
+//                                 `lookupName(schema)` resolves one of them to its canonical
+//                                 NAME (by identity — scheme-zod.ts is the one place that
+//                                 actually knows every vocabulary item, having declared them),
+//                                 and IMAGE_BY_NAME below maps that name to the TS image to
+//                                 emit. This file no longer maintains its own class-name-string
+//                                 or schema-identity recognition tables — a new scheme-zod
+//                                 primitive only needs ONE new entry, in scheme-zod.ts's own
+//                                 NAMES map, plus (if it should print as something other than
+//                                 the robust `unknown` default) one IMAGE_BY_NAME entry here.
 //
 //   3. signatureOf(def)         — the args-vector → function-signature composer.
 //                                 arrival's contract normalizes to ONE schema per side
@@ -68,40 +71,62 @@ const consUnknownNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode(
 const readonlyUnknownArrayNode: NodeBuilder = (ts) =>
   ts.factory.createTypeOperatorNode(ts.SyntaxKind.ReadonlyKeyword, ts.factory.createArrayTypeNode(unknownNode(ts)));
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
+/** `(...args: unknown[]) => unknown` — z.lambda's callable image. */
+const lambdaNode: NodeBuilder = (ts) => {
+  const restParam = ts.factory.createParameterDeclaration(
+    undefined,
+    ts.factory.createToken(ts.SyntaxKind.DotDotDotToken),
+    ts.factory.createIdentifier("args"),
+    undefined,
+    ts.factory.createArrayTypeNode(unknownNode(ts)),
+    undefined,
+  );
+  return ts.factory.createFunctionTypeNode(undefined, [restParam], unknownNode(ts));
+};
 
-// Keyed by INSTANCEOF CLASS NAME (`_zod.bag.Class.name`) — robust across the fresh
-// `z.instanceof` member instances a union like `z.schemeNumber` clones.
-const IMAGE_BY_CLASS: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
-  ["APair", consUnknownNode], // `z.pair | z.nil` → `Cons<unknown> | null` = List<unknown>
-  ["AString", stringNode],
-  ["AExact", bigintNode],
-  ["AInexact", numberNode],
-  ["ASymbol", stringNode],
-  ["ABytevector", uint8ArrayNode],
-  ["ANil", nullNode],
-  ["ABool", booleanNode],
-  ["ACharacter", stringNode],
-  ["AVector", readonlyUnknownArrayNode],
-]);
-// Keyed by SCHEMA IDENTITY — the custom-without-Class primitives (`z.custom`, no `bag.Class`).
-const IMAGE_BY_IDENTITY: ReadonlyMap<unknown, NodeBuilder> = new Map<unknown, NodeBuilder>([
-  [z.svector, readonlyUnknownArrayNode],
-  [z.value, unknownNode],
+// Keyed by the canonical NAME `scheme-zod.ts`'s `lookupName()` returns for a vocabulary
+// schema — NOT class-name-string, NOT schema-object-identity. Both of those lived here
+// as TWO SEPARATE tables before this fix, meaning every new scheme-zod primitive needed
+// a second, hand-authored entry in THIS file too (exactly what happened to `z.lambda` —
+// it shipped with no printer entry at all). scheme-zod.ts is the one place that actually
+// knows every vocabulary item's identity; this file now only needs to know how to PRINT
+// a given name, not how to RECOGNIZE one.
+const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
+  ["pair", consUnknownNode], // `z.pair | z.nil` → `Cons<unknown> | null` = List<unknown>
+  ["schemeString", stringNode],
+  ["schemeExact", bigintNode],
+  ["schemeInexact", numberNode],
+  ["symbol", stringNode],
+  ["sbytevector", uint8ArrayNode],
+  ["nil", nullNode],
+  ["schemeBool", booleanNode],
+  ["schemeChar", stringNode],
+  ["svector", readonlyUnknownArrayNode],
+  ["value", unknownNode],
+  ["lambda", lambdaNode],
 ]);
 
-/** The zod-to-ts override: a scheme primitive (instanceof/custom) → its plain-TS image, by class
- *  name then schema identity; an UNMAPPED scheme primitive → `unknown` (robust default — never
- *  throw; total-harvest). Non-custom schemas (object/array/union/literal/…) defer to zod-to-ts
- *  (return undefined). Fires per-node, so `z.pair | z.nil` prints as "Cons<unknown> | null". */
+/** The zod-to-ts override: a scheme-zod vocabulary schema → its plain-TS image, resolved by
+ *  `lookupName` (identity-based, owned by scheme-zod.ts itself); an UNMAPPED name (a vocabulary
+ *  item this file hasn't been taught to print yet — should not happen for anything registered
+ *  in scheme-zod.ts's own NAMES map, but kept as a robust default) → `unknown`, never throw
+ *  (total-harvest). Non-vocabulary schemas (object/array/union/literal/… and the codecs, which
+ *  print via zod-to-ts's native `io:"output"` handling) defer to zod-to-ts (return undefined).
+ *
+ *  CRUCIAL guard: only fires for a LEAF `z.custom`-kind schema (`_zod.def.type === "custom"`),
+ *  never a COMPOUND one — `lookupName` happily resolves a compound vocabulary export too
+ *  (e.g. `schemeNumber`, a union), but intercepting it here would short-circuit zod-to-ts's
+ *  own per-member union composition (the override must fire on EACH member — AExact/AInexact
+ *  — not once on the union as a whole). Fires per-node, so `z.pair | z.nil` prints as
+ *  "Cons<unknown> | null" and `z.schemeNumber` (a union of two customs) prints as
+ *  "bigint | number", never short-circuited to "unknown". */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
-  const s = schema as { _zod?: { def?: { type?: string }; bag?: { Class?: { name?: unknown } } } };
-  if (s?._zod?.def?.type !== "custom") return undefined; // not a scheme primitive → zod-to-ts handles it
-  const className = s._zod.bag?.Class?.name;
-  const byClass = typeof className === "string" ? IMAGE_BY_CLASS.get(className) : undefined;
-  if (byClass !== undefined) return byClass(typescript);
-  const byIdentity = IMAGE_BY_IDENTITY.get(schema);
-  if (byIdentity !== undefined) return byIdentity(typescript);
-  return unknownNode(typescript); // robust default — never throw
+  const s = schema as { _zod?: { def?: { type?: string } } };
+  if (s?._zod?.def?.type !== "custom") return undefined; // a compound (union/array/tuple/…) → recurse via zod-to-ts
+  const name = z.lookupName(schema);
+  if (name === undefined) return undefined; // not a scheme-zod vocabulary item → zod-to-ts handles it
+  const builder = IMAGE_BY_NAME.get(name);
+  return builder ? builder(typescript) : unknownNode(typescript); // robust default — never throw
 };
 
 /** Collapse zod-to-ts's pretty-printed (multi-line, indented) output to a single

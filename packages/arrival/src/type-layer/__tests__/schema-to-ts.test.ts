@@ -29,6 +29,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   it("prints the representation-blind value primitive as unknown", () => {
     expect(printType(z.value)).toBe("unknown");
   });
+  it("prints z.lambda as a callable signature, not degraded to unknown", () => {
+    expect(printType(z.lambda)).toBe("(...args: unknown[]) => unknown");
+  });
   it("prints a union of primitives as 'A | B' (override fires per-member)", () => {
     expect(printType(z.schemeNumber)).toBe("bigint | number");
   });

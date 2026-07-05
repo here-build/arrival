@@ -36,7 +36,7 @@ import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
-import { nil } from "../../values/primitives/ANil.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
@@ -121,7 +121,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     string: symbol.native`string: a string built from the character arguments`(
-      { input: z.array(z.unknown()), output: [z.schemeString] },
+      { input: z.array(z.schemeChar), output: [z.schemeString] },
       (...chars: unknown[]): AString => {
         // Union of every character argument — same shape as `vector` below.
         return withInputProvenance(chars, new AString(CONSTANT_CTX, chars.map(charValue).join("")));
@@ -152,7 +152,7 @@ export default new EnvCapability("scheme/strings", {
 
     // String comparison
     "string=?": symbol.native`string=?: typed equivalence over strings`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         if (strs.length >= 2) {
@@ -166,25 +166,25 @@ export default new EnvCapability("scheme/strings", {
     // string</>/<=/>= derive from SchemeString's arrival/tagless-final/lte (wave-1 Ord) via
     // the shared deriveOrd chain — same adapter as the char family.
     "string<?": symbol.native`string<?: strictly-increasing string order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       deriveOrd("<"),
     ),
     "string>?": symbol.native`string>?: strictly-decreasing string order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       deriveOrd(">"),
     ),
     "string<=?": symbol.native`string<=?: non-decreasing string order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       deriveOrd("<="),
     ),
     "string>=?": symbol.native`string>=?: non-increasing string order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       deriveOrd(">="),
     ),
 
     // Case-insensitive string comparison
     "string-ci=?": symbol.native`string-ci=?: case-insensitive string equivalence`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         if (strs.length >= 2) {
@@ -196,7 +196,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-ci<?": symbol.native`string-ci<?: case-insensitive strictly-increasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
@@ -210,7 +210,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-ci>?": symbol.native`string-ci>?: case-insensitive strictly-decreasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
@@ -224,7 +224,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-ci<=?": symbol.native`string-ci<=?: case-insensitive non-decreasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
@@ -238,7 +238,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-ci>=?": symbol.native`string-ci>=?: case-insensitive non-increasing order`(
-      { input: z.array(z.unknown()), output: [z.boolean] },
+      { input: z.array(z.schemeString), output: [z.boolean] },
       (...strs: unknown[]): boolean => {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
@@ -273,7 +273,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
-      { input: z.array(z.unknown()), output: [z.union([z.string, z.schemeString])] },
+      { input: z.array(z.schemeString), output: [z.union([z.string, z.schemeString])] },
       (...strs: unknown[]): string | AString => {
         // Collapsing op: the result inherits lineage from every input — and DEEP, so a
         // nested structure (a list/vector/array of inference-stamped values) is hoisted,
@@ -284,19 +284,22 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string->list": symbol.native`string->list: list of the string's characters`(
-      { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.unknown()] },
-      (str: unknown, start?: unknown, end?: unknown): unknown => {
+      {
+        input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.union([z.pair, z.nil])],
+      },
+      (str: unknown, start?: unknown, end?: unknown): APair | ANil => {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
-        let result: unknown = nil;
+        let result: APair | ANil = nil;
         for (let i = endIdx - 1; i >= startIdx; i--) result = new APair(CONSTANT_CTX, new ACharacter(CONSTANT_CTX, chars[i]), result);
         return result;
       },
     ),
 
     "list->string": symbol.native`list->string: string built from a list of characters`(
-      { input: [z.unknown()], output: [z.schemeString] },
+      { input: [z.union([z.pair, z.nil])], output: [z.schemeString] },
       (list: unknown): AString => {
         const chars: string[] = [];
         let current = list;
@@ -348,10 +351,16 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
+    // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
+    // apply's head/rest split. The head is the established callable-schema convention
+    // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry), and the rest
+    // is z.schemeString (this file's own string-identity schema) rather than the
+    // representation-blind z.unknown() the old contract used. Once the declared signature
+    // properly types the params, the old manual `const [proc, ...strings] = args as [...]`
+    // destructure-and-cast is redundant — proc/strings arrive as real typed parameters.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(
-      { input: z.array(z.unknown()), output: [z.string] },
-      (...args: unknown[]): string | Promise<string> => {
-        const [proc, ...strings] = args as [(...args: unknown[]) => unknown, ...unknown[]];
+      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.string] },
+      (proc: (...args: unknown[]) => unknown, ...strings: AString[]): string | Promise<string> => {
         invariant(strings.length > 0, "string-map: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
@@ -372,10 +381,11 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
+    // Same head/rest migration as string-map above (callable head, z.schemeString rest);
+    // the manual destructure-and-cast is likewise redundant once the signature is typed.
     "string-for-each": symbol.native`string-for-each: apply a procedure across the strings' characters`(
-      { input: z.array(z.unknown()), output: [z.void()] },
-      (...args: unknown[]): void | Promise<void> => {
-        const [proc, ...strings] = args as [(...args: unknown[]) => unknown, ...unknown[]];
+      { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.void()] },
+      (proc: (...args: unknown[]) => unknown, ...strings: AString[]): void | Promise<void> => {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
@@ -416,7 +426,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     concat: symbol.native`concat: the concatenation of all string arguments (LIPS extension)`(
-      { input: z.array(z.value), output: [z.string] },
+      { input: z.array(z.schemeString), output: [z.string] },
       (...args: SchemeValue[]): string => {
         for (const [i, arg] of args.entries()) typecheck("concat", arg, "string", i + 1);
         return args.join("");
@@ -424,7 +434,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
-      { input: [z.schemeString, z.value], output: [z.union([z.string, z.schemeString])] },
+      { input: [z.schemeString, z.union([z.pair, z.nil])], output: [z.union([z.string, z.schemeString])] },
       (separator: SchemeValue, list: SchemeValue): string | AString => {
         typecheck("join", separator, "string");
         typecheck("join", list, ["pair", "nil"]);
@@ -437,7 +447,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     split: symbol.native`split: a list of the string's pieces around the separator (LIPS extension)`(
-      { input: [z.value, z.schemeString], output: [z.value] },
+      { input: [z.value, z.schemeString], output: [z.union([z.pair, z.nil])] },
       (separator: unknown, string: unknown): APair | typeof nil => {
         typecheck("split", separator, ["regex", "string"]);
         typecheck("split", string, "string");

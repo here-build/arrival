@@ -19,7 +19,15 @@ import { tf } from "../../values/tagless-final.js";
 export default new EnvCapability("scheme/srfi-95", {
   symbols: {
     sort: symbol.sequence`sort: a sorted sequence (list→list, vector→vector); default order is the elements' own ≤; comparator is a SRFI-95 less?`(
-      { input: [z.unknown(), z.unknown().optional()], output: [z.unknown()] },
+      {
+        // seq: term-dispatched (arrival/tagless-final/sort) purely within the scheme-value
+        // universe (APair/AVector/AJSArray — all SchemeValue members), not host-blind —
+        // z.value, matching the sibling term-dispatch receiver `length` in lists.ts.
+        input: [z.value, z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        // The sorted sequence — every concrete term impl returns a SchemeValue subtype
+        // (APair|ANil for lists, AVector for vectors).
+        output: [z.value],
+      },
       (args, runCtx) => {
         const [seq, comparator] = args;
         const m = (seq as Record<string, unknown> | null | undefined)?.[tf("sort")];
