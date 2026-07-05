@@ -105,6 +105,22 @@ export type SerializeOpts = {
    *  manifold's competence.ts) uses this as the feedback half of the verbose→compact
    *  gradient: flip to compact for every LATER rendering this session. */
   onRemedyRendered?: (cls: "collection" | "string") => void;
+  /** A/B measurement knob (V's design, 2026-07-06): whether the reduced-output banner is
+   *  EMITTED AT ALL when a shrink actually occurred. The caps themselves are NEVER affected
+   *  by this option — it governs only whether the `#| ⚠ output reduced ... |#` line (fact +
+   *  remedy) is prepended to the already-capped `out`. This is deliberately NOT a third
+   *  `RemedyMode` value: `collectionRemedyMode`/`stringRemedyMode` gate the per-class
+   *  PEDAGOGY clause while always keeping the factual half (errors-as-doors: never hide that
+   *  a reduction happened); this knob is a strictly stronger, honest "no banner at all" mode
+   *  for measuring whether the banner's mere PRESENCE — not its content — affects model
+   *  behavior. `onRemedyRendered` also does not fire under "none": no clause was rendered,
+   *  so there is nothing for the caller's verbose→compact gradient to learn from.
+   *    - "full" (default when unset) — today's behaviour: banner renders whenever a shrink
+   *      happened, gated per-class by the RemedyMode options above.
+   *    - "none" — the capped `out` is returned as-is, no banner line, no `onRemedyRendered`
+   *      call. The truncation (caps, shrink-to-fit, hard-cut floor) still happens exactly as
+   *      before; only the announcement is silenced. */
+  truncationBanner?: "full" | "none";
 };
 
 /** Remedy-clause rendering mode — see `collectionRemedyMode`/`stringRemedyMode` above. */
@@ -730,7 +746,12 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   if (out.length > maxTotalChars) {
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
   }
-  if (squeezed) {
+  // truncationBanner: "none" (V's A/B measurement knob, 2026-07-06) — the caps/shrink/
+  // hard-cut above ALL still ran unconditionally; only this banner emission is skipped.
+  // No fact, no remedy, no `onRemedyRendered` call: there is no clause to give feedback
+  // about. See the option's doc comment above for why this is a distinct, stronger knob
+  // than the per-class RemedyMode options (which always keep the factual half).
+  if (squeezed && (opts.truncationBanner ?? "full") !== "none") {
     // Teach the RELEVANT remedy at the moment of over-fetch — a truncated result is the one
     // instant the "process it in-REPL, don't page it into context" lesson lands, because the
     // cost and the fix coincide. Tailored by what actually capped (collection / string / both).

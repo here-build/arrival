@@ -215,4 +215,31 @@ describe("renderObservation — raw top-level string truncation now carries a re
     renderObservation("short", { maxTotalChars: 100, onRemedyRendered: (cls) => renderedNone.push(cls) });
     expect(renderedNone).toEqual([]);
   });
+
+  describe('truncationBanner: "none" — the raw-string shortcut must ALSO go silent, not just the collection path', () => {
+    it('drops the "output reduced" note entirely, but still slices the string to the cap', () => {
+      const rendered = renderObservation(raw, { maxTotalChars: 100, truncationBanner: "none" });
+      expect(rendered).not.toContain("output reduced");
+      expect(rendered).not.toContain("⚠");
+      // Still a valid JSON string literal, capped at 100 chars of content.
+      expect(JSON.parse(rendered)).toBe(raw.slice(0, 100));
+    });
+
+    it("never fires onRemedyRendered under none — no clause to report", () => {
+      const rendered: string[] = [];
+      renderObservation(raw, { maxTotalChars: 100, truncationBanner: "none", onRemedyRendered: (cls) => rendered.push(cls) });
+      expect(rendered).toEqual([]);
+    });
+
+    it('default (unset) is unchanged — "full" banner still present', () => {
+      const rendered = renderObservation(raw, { maxTotalChars: 100 });
+      expect(rendered).toContain("output reduced");
+    });
+
+    it("an under-budget string is unaffected either way (nothing to silence)", () => {
+      const full = renderObservation("short", { maxTotalChars: 100 });
+      const none = renderObservation("short", { maxTotalChars: 100, truncationBanner: "none" });
+      expect(full).toBe(none);
+    });
+  });
 });

@@ -334,12 +334,13 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       const remedy = { collection: competence.remedyMode("collection"), string: competence.remedyMode("string") };
       const onRemedyRendered = (cls: TriggerClass): void => competence.markRendered(cls);
       return options.rendering === "sexpr"
-        ? toSExprString(value, observationCaps(effectiveMax, remedy, onRemedyRendered))
+        ? toSExprString(value, observationCaps(effectiveMax, remedy, onRemedyRendered, calibration.truncationBanner))
         : renderObservation(value, {
             maxTotalChars: effectiveMax,
             collectionRemedyMode: remedy.collection,
             stringRemedyMode: remedy.string,
             onRemedyRendered,
+            truncationBanner: calibration.truncationBanner,
           });
     };
 

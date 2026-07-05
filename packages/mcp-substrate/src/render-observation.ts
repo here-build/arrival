@@ -242,6 +242,16 @@ export function renderObservation(
      *  own `onRemedyRendered` for the exact firing rule. Absent ⇒ no feedback (the
      *  gradient-tracking caller, competence.ts, always passes one). */
     onRemedyRendered?: (cls: TriggerClass) => void;
+    /** A/B measurement knob (see arrival-serializer's `SerializeOpts.truncationBanner`):
+     *  "full" (default when unset) renders the reduced-output banner exactly as before;
+     *  "none" silences it — the caps/shrink themselves are UNCHANGED, only the announcement
+     *  is dropped. Threaded to BOTH rendering paths below: the collection/dict/list path
+     *  (via `observationCaps`, which forwards it into `SerializeOpts`) and this function's
+     *  OWN raw-top-level-string shortcut, whose `#| ⚠ output reduced: +N more chars ... |#`
+     *  note is a second, independent emission site that must ALSO vanish under "none" — a
+     *  half-silenced banner (collections quiet, raw strings still noisy) would defeat the
+     *  point of an honest A/B knob. */
+    truncationBanner?: "full" | "none";
   } = {},
 ): string {
   // A top-level RAW JS string (a provenance-less native return — e.g. substring/
@@ -261,6 +271,10 @@ export function renderObservation(
   if (typeof value === "string") {
     const cap = opts.maxTotalChars ?? DEFAULT_OBSERVATION_MAX_TOTAL_CHARS;
     if (value.length <= cap) return JSON.stringify(value);
+    const sliced = JSON.stringify(value.slice(0, cap));
+    // truncationBanner: "none" — the slice above (the actual cap enforcement) is
+    // UNCHANGED; only this note's emission is skipped, no fact, no remedy, no callback.
+    if ((opts.truncationBanner ?? "full") === "none") return sliced;
     const stringMode = opts.stringRemedyMode ?? "verbose";
     let remedy = "";
     if (stringMode !== "suppressed") {
@@ -270,7 +284,7 @@ export function renderObservation(
           : " — slice the long string with substring, or scan it with string-contains, to pull just the part you need";
       opts.onRemedyRendered?.("string");
     }
-    return `${JSON.stringify(value.slice(0, cap))} #| ⚠ output reduced: +${value.length - cap} more chars${remedy} |#`;
+    return `${sliced} #| ⚠ output reduced: +${value.length - cap} more chars${remedy} |#`;
   }
   // The `SerializeOptsPending` intersection covers the window where the serializer's
   // PUBLISHED dist .d.ts predates a SerializeOpts seam its src already has (`format`, and
@@ -282,6 +296,7 @@ export function renderObservation(
       opts.maxTotalChars,
       { collection: opts.collectionRemedyMode, string: opts.stringRemedyMode },
       opts.onRemedyRendered,
+      opts.truncationBanner,
     ),
     format: (sexpr) => format(sexpr),
   };
@@ -290,14 +305,16 @@ export function renderObservation(
 
 /** See the `SerializeOptsPending` note above `renderObservation`: the published dist's
  *  `SerializeOpts` may not yet declare `collectionRemedyMode`/`stringRemedyMode`/
- *  `onRemedyRendered` even though this function always sets them (as `undefined` when
- *  unset) — a structural superset, never a literal assigned where the narrower type is
- *  checked, so this widens safely regardless of which dist shape a consumer holds. */
+ *  `onRemedyRendered`/`truncationBanner` even though this function always sets them (as
+ *  `undefined` when unset) — a structural superset, never a literal assigned where the
+ *  narrower type is checked, so this widens safely regardless of which dist shape a
+ *  consumer holds. */
 type SerializeOptsPending = SerializeOpts & {
   format?: (sexpr: SExpr) => string;
   collectionRemedyMode?: RemedyMode;
   stringRemedyMode?: RemedyMode;
   onRemedyRendered?: (cls: TriggerClass) => void;
+  truncationBanner?: "full" | "none";
 };
 
 /** The observation-budget cap set, shared by BOTH rendering modes (manifold-tool.ts's
@@ -307,11 +324,13 @@ type SerializeOptsPending = SerializeOpts & {
  *  fits the budget fine). `remedy` + `onRemedyRendered` thread COMPETENCE v2's per-class
  *  gradient (competence.ts) through to the serializer's own mode options — absent ⇒
  *  unchanged behaviour (both clauses render verbose whenever their collection/string
- *  actually capped). */
+ *  actually capped). `truncationBanner` threads the A/B silence knob the same way — absent
+ *  ⇒ "full" (today's behaviour). */
 export function observationCaps(
   maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS,
   remedy?: { collection?: RemedyMode; string?: RemedyMode },
   onRemedyRendered?: (cls: TriggerClass) => void,
+  truncationBanner?: "full" | "none",
 ): SerializeOptsPending {
   return {
     maxTotalChars,
@@ -320,5 +339,6 @@ export function observationCaps(
     collectionRemedyMode: remedy?.collection,
     stringRemedyMode: remedy?.string,
     onRemedyRendered,
+    truncationBanner,
   };
 }

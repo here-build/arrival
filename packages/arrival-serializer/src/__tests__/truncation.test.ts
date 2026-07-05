@@ -187,6 +187,54 @@ describe("streaming truncation (opt-in)", () => {
     );
     expect(out).toMatch(/#\| \+95 more of 100 \|#/);
   });
+
+  describe("truncationBanner (A/B measurement knob: silence the announcement, keep the caps)", () => {
+    const heavy = Array.from({ length: 80 }, (_, i) => ({ id: i, payload: "y".repeat(400) }));
+
+    it('"none" caps the output exactly like the default, but emits zero ⚠ and no banner text', () => {
+      const full = toSExprString(heavy, { maxTotalChars: 4000 });
+      const none = toSExprString(heavy, { maxTotalChars: 4000, truncationBanner: "none" });
+      expect(full).toContain("⚠ output reduced to fit");
+      expect(none).not.toContain("⚠");
+      expect(none).not.toContain("output reduced");
+      expect(none.length).toBeLessThanOrEqual(4000);
+      // The "none" render is exactly the "full" render minus the prepended banner line.
+      expect(full.endsWith(`\n${none}`)).toBe(true);
+    });
+
+    it('"none" never fires onRemedyRendered — there is no clause to give feedback about', () => {
+      const rendered: string[] = [];
+      toSExprString(heavy, { maxTotalChars: 4000, truncationBanner: "none", onRemedyRendered: (cls) => rendered.push(cls) });
+      expect(rendered).toEqual([]);
+    });
+
+    it('"none" still hard-truncates content at the floor for pathologically nested input (caps enforced, only the note differs)', () => {
+      // Deeply nested structure that can't shrink below budget via item/string caps alone.
+      const deeplyNested = Array.from({ length: 50 }, (_, i) => ({ id: i, nested: { a: 1, b: 2, c: 3, d: 4 } }));
+      const out = toSExprString(deeplyNested, { maxTotalChars: 50, truncationBanner: "none" });
+      expect(out.length).toBeLessThanOrEqual(50 + 100); // hard-cut marker is separate from the banner
+      expect(out).not.toContain("⚠ output reduced to fit");
+    });
+
+    it('unset (default) is unchanged — "full" behaviour, banner present', () => {
+      const out = toSExprString(heavy, { maxTotalChars: 4000 });
+      expect(out).toContain("⚠ output reduced to fit");
+    });
+
+    it('explicit "full" is byte-identical to omitting the option', () => {
+      const omitted = toSExprString(heavy, { maxTotalChars: 4000 });
+      const explicit = toSExprString(heavy, { maxTotalChars: 4000, truncationBanner: "full" });
+      expect(explicit).toBe(omitted);
+    });
+
+    it('a result that never shrinks is unaffected by truncationBanner either way (no banner in either case)', () => {
+      const small = [1, 2, 3];
+      const full = toSExprString(small, { maxTotalChars: 4000 });
+      const none = toSExprString(small, { maxTotalChars: 4000, truncationBanner: "none" });
+      expect(full).toBe(none);
+      expect(full).not.toContain("⚠");
+    });
+  });
 });
 
 describe("SerializeOpts.format — a custom formatter rides the caps + shrink machinery", () => {

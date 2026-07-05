@@ -22,6 +22,16 @@ export interface CalibrationOptions {
   observationMaxTotalChars: number;
   /** type-hints/deliver.ts — race budget for one lens run before it's dropped from this call. */
   hintRaceBudgetMs: number;
+  /** A/B measurement knob (V's design, 2026-07-06; arrival-serializer's
+   *  `SerializeOpts.truncationBanner`, threaded through render-observation.ts): whether the
+   *  reduced-output banner (`#| ⚠ output reduced to fit response budget ... |#`, and its
+   *  raw-string-shortcut twin) is emitted at all when a call's output gets truncated. The
+   *  caps themselves are NEVER affected — "none" only silences the announcement, to measure
+   *  whether the banner's mere presence (as opposed to its content) changes model behavior.
+   *    - "full" (default) — today's behaviour, banner renders whenever a shrink happened.
+   *    - "none" — truncation still happens; the banner line is never emitted, and
+   *      `onRemedyRendered` never fires (there's no clause to give feedback about). */
+  truncationBanner: "full" | "none";
 }
 
 /** Today's hardcoded values, unchanged — the default for every consumer until a calibration
@@ -36,4 +46,5 @@ export const DEFAULT_CALIBRATION: CalibrationOptions = {
   defaultEvalTimeoutMs: 15_000,
   observationMaxTotalChars: 40_000,
   hintRaceBudgetMs: 300,
+  truncationBanner: "full",
 };
