@@ -764,7 +764,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
       opts.onRemedyRendered?.("string");
     }
     const remedy = clauses.length > 0 ? ` — ${clauses.join("; ")}` : "";
-    out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (request too large): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
+    out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (the result was larger): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
   }
   return out;
 };
