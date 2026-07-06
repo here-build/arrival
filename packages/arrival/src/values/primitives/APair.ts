@@ -14,6 +14,7 @@
  */
 import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { fromJs } from "./boxing.js";
@@ -644,7 +645,11 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
       elements.push(node.car);
       node = node.cdr;
     }
-    const results = elements.map((x) => fn(x));
+    // Route the element callback through the invocation seam (not a bare `fn(x)`): it dispatches
+    // the callee's apply term when it's a callable VALUE and otherwise invokes a host fn with an
+    // explicit `this = { ctx: { runCtx } }` — the fix for the `this=undefined` crash a bare
+    // `fn(x)` caused when the callback (`cadr`, a rosetta) read `this.ctx`.
+    const results = elements.map((x) => applyCallback(fn, [x], runCtx));
     if (runCtx?.speculate && results.some(is_promise)) {
       // map's count is known exactly up front (one output per input → bounds [1,1]), so its HalfBaked
       // interval is already a POINT — `length` is decidable immediately while the values still resolve,
@@ -696,7 +701,9 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
       elements.push(node.car);
       node = node.cdr;
     }
-    const verdicts = elements.map((x) => pred(x));
+    // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
+    // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.ctx`-reading callee.
+    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
     if (runCtx?.speculate && verdicts.some(is_promise)) {
       const slots = verdicts.map((r, i): Promise<SchemeValue[]> => {
@@ -731,7 +738,9 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
     while (node && !(node instanceof ANil)) {
       const p = node as APair;
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
-      acc = await fn(p.car, acc);
+      // Seam-routed. The dispatch erases the generic `Acc` return to `CallResult`, so cast back
+      // at this boundary — the reducer's result IS an `Acc` (a scheme value).
+      acc = (await applyCallback(fn, [p.car, acc], runCtx)) as Acc;
       node = p.cdr;
     }
     return acc;

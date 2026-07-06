@@ -17,6 +17,7 @@
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_nil, is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
@@ -204,7 +205,7 @@ export class AVector extends AValue {
       alternative: "use `vector-map` for vectors",
     });
     chargeHeap(runCtx, this.__vector__.length);
-    const results = this.__vector__.map((v) => fn(v));
+    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then((resolved): SchemeValue => {
         const boxed: SchemeValue = jsToScheme(this.ctx, resolved.map((v) => unwrapForeign(v)));
@@ -235,7 +236,7 @@ export class AVector extends AValue {
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await pred(v);
+      const verdict = await applyCallback(pred, [v], runCtx);
       if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
     return new AVector(this.ctx, out);
@@ -259,7 +260,7 @@ export class AVector extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
-    for (const v of this.__vector__) acc = await fn(v, acc);
+    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx)) as Acc;
     return acc;
   }
 

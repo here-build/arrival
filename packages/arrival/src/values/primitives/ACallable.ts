@@ -174,3 +174,34 @@ export class ARosettaProcedure extends AValue {
 /** The callable union — of concrete classes, not an abstract parent (better narrowing, clean
  *  `kind` discrimination, and it drops cleanly into the SchemeValue union). */
 export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure;
+
+/**
+ * The single invocation seam every callback site routes through — the evaluator call-head, the
+ * R7RS `apply`, and every HOF that applies an element callback (`APair.map`, `AVector.map`, …).
+ * Dispatches the `arrival/tagless-final/apply` term when the callee is a callable VALUE, and
+ * falls back to a bare host fn with an EXPLICIT, DEFINED `this = { ctx: { runCtx } }` — the fix
+ * for the whole `this=undefined` crash class (`APair.map` used to do a bare `fn(x)`, handing
+ * `undefined` to an impl that reads `this.ctx`). `canBounce` stays false: a HOF-applied callback
+ * is never in tail position, so a lambda fully runs rather than returning a bounce the HOF can't
+ * trampoline. This seam is what makes the native→ANativeProcedure flip (stage 1) non-breaking —
+ * both callee shapes are invoked identically here.
+ */
+// `args` is `readonly unknown[]`, not `SchemeValue[]`: the value algebra surfaces list/vector
+// elements as `unknown` (the spine-walk convention — narrowed at consumption, never asserted at
+// the slot), so the seam accepts that and casts ONCE here, at the boundary between the
+// unknown-typed algebra and the typed callable surface (the elements ARE scheme values).
+export function applyCallback(fn: unknown, args: readonly unknown[], runCtx: RunContext = CONSTANT_CTX): CallResult {
+  const term = (fn as Record<string, unknown> | null | undefined)?.[APPLY];
+  if (typeof term === "function") {
+    return (term as (args: SchemeValue[], runCtx: RunContext, canBounce?: boolean) => CallResult).call(
+      fn,
+      args as SchemeValue[],
+      runCtx,
+      false,
+    );
+  }
+  if (typeof fn === "function") {
+    return Reflect.apply(fn, { ctx: { runCtx } }, args as unknown[]) as CallResult;
+  }
+  throw new TypeError(`not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`);
+}
