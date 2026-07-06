@@ -139,7 +139,10 @@ export default new EnvCapability("scheme/macros", {
                 const names = [];
                 const new_expr = transform_syntax({
                   bindings,
-                  expr,
+                  // `expr` stays `unknown` above (the reassignment loop's honest contract);
+                  // transform_syntax's own domain is SchemeValue — assert at this ONE call
+                  // boundary rather than widening the reassignment's deliberate unknown.
+                  expr: expr as SchemeValue,
                   symbols,
                   scope: defChild,
                   names,

@@ -18,6 +18,7 @@ import { Values } from "../../values/primitives/Values.js";
 import { unpromise } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { type SchemeValue } from "../../values/types.js";
 
 // R7RS § 6.10 multiple-value primitives, relocated VERBATIM from stdlib.ts global_env
 // (husk dissolution). They live HERE, co-located with their only define-time shape —
@@ -58,21 +59,30 @@ export default new EnvCapability("scheme/r7rs/binding", {
       // MEMBRANE description; this is the decoupled TYPE-LEVEL narrowing for the harvest only.
       {
         input: [z.lambda, z.lambda],
-        output: [z.undefinedResult],
+        // R7RS: call-with-values RETURNS the consumer's result (a tail call into consumer with
+        // the producer's values as args) — it never discards. `z.undefinedResult` was wrong
+        // (the readonly-slot strictness pass surfaced the mismatch, not introduced it).
+        output: [z.value],
         type: "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, producer: unknown, consumer: unknown): unknown {
+      function (
+        this: { ctx?: { runCtx?: RunContext } },
+        producer: unknown,
+        consumer: unknown,
+      ): SchemeValue | Promise<SchemeValue> {
         // Seam-routed: producer/consumer are callable VALUES now, not bare fns. The producer is
         // usually a lambda, so its invocation may return a Promise — unwrap it BEFORE the
         // `instanceof Values` check, else a multi-value producer leaks the Promise as a single
         // arg (wrong arity).
         const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        // unpromise is a generic (unknown-typed) sync/async unwrap utility — assert at this
+        // one boundary that its result is what the callback below actually produces.
         return unpromise(applyCallback(producer, [], runCtx), (maybe) => {
           if (maybe instanceof Values) {
             return applyCallback(consumer, maybe.valueOf(), runCtx);
           }
           return applyCallback(consumer, [maybe], runCtx);
-        });
+        }) as SchemeValue | Promise<SchemeValue>;
       },
     ),
   },

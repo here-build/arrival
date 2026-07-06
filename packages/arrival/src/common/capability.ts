@@ -220,7 +220,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         spawned = spinUpAll(cellList, signal);
         await spawned;
       },
-      apply: async (env: SchemeEnv, ctx?: PackContext<SchemeEnv>) => {
+      async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
         // preludeOnly routing (design doc §1.3, phase-gated model): a baked native/rosetta def
         // marked `preludeOnly: true` binds onto `ctx.preludeScope` instead of the runtime env.
         // Under `assembleEnv` that target is the kernel's Map-backed shim, answered by a
@@ -278,12 +278,16 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // double-wrap the membrane (a second schemeToJs/jsToScheme over the codec output).
                 // Resource pre-spawning still applies if the capability owns cells.
                 const runFn = def.run;
+                // The four kinds' `.run` share the call SHAPE but not a common `this` type
+                // (tagless/tagless-guard declare none at all) — erase once here, the same
+                // boundary rosetta.ts's own `rawImpl` crosses.
+                const rawRun = runFn as (...args: unknown[]) => unknown;
                 const gatedRun =
                   cellList.length === 0
                     ? runFn
-                    : async function (...args: unknown[]) {
+                    : async function (this: unknown, ...args: unknown[]) {
                         await ensureSpawned();
-                        return runFn.apply(this, args);
+                        return rawRun.apply(this, args);
                       };
                 bindTarget(def).set(verb, gatedRun);
                 break;

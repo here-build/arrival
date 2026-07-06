@@ -41,15 +41,16 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       doc,
       in: normalizeVector(contract.input),
       out: normalizeVector(contract.output),
+      // Erased to the def's stored shape (SequenceSymbolDef.run is a discriminated-union
+      // member — deliberately non-generic, the same runtime-erasure boundary rosetta.ts's
+      // `run` crosses — `rawImpl`). By construction (the contract), the sliced args array
+      // always matches `DecodedArgs<I,"scheme">`.
       run: Object.assign(
-        function (
-          this: { ctx: EvalContext },
-          ...args: DecodedArgs<I, "scheme">
-        ): MaybePromise<DecodedReturn<O, "scheme">> {
-          return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
+        function (this: { ctx: EvalContext }, ...args: unknown[]) {
+          return impl(args as DecodedArgs<I, "scheme">, this.ctx?.runCtx ?? CONSTANT_CTX);
         },
         { fanout: true },
-      ),
+      ) as SequenceSymbolDef["run"],
       type: contract.type,
     };
   };

@@ -20,7 +20,6 @@ import { assembleEnv } from "../common/kernel.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalSchemeInto } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
-import { is_pair } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";

@@ -57,7 +57,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): Sch
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr);
+    return findImpl(arg, list.cdr as APair | ANil);
   }) as SchemeValue;
 }
 
