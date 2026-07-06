@@ -3,8 +3,8 @@
 // the shared types + helpers live in `./_bake.js`.
 
 import * as z from "../scheme-zod.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
-import { asEvalContext, describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
 
 /** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
@@ -16,12 +16,15 @@ import { tf, type TaglessOp } from "../../values/tagless-final.js";
  *  here (mirrors `taglessGuard`); the algebra, not this binder, is the completeness gate. */
 export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
-  const run = async (...args: unknown[]): Promise<unknown> => {
-    // Strip the evaluator-appended ctx iff the trailing arg looks like one (the shared
-    // `asEvalContext` probe). Unlike native, tagless is ctx-AWARE — it needs the run for the method.
-    const ctx = asEvalContext(args[args.length - 1]);
-    const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-    const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
+  // A `function`, NOT an arrow: unlike native, tagless is ctx-AWARE (it needs the run's
+  // runCtx for the receiver's method) — the evaluator hands the ctx via `this` (bare-fn
+  // dispatch is `Reflect.apply(fn, { ctx }, args)`), which an arrow body can never read
+  // (arrows always close over the OUTER lexical `this`, ignoring whatever the caller
+  // supplies). This was the actual bug: no trailing ctx ARG has been appended for a long
+  // while — every other factory (rosetta/sequence) already reads `this.ctx`.
+  const run = async function (this: { ctx?: { runCtx?: RunContext } }, ...args: unknown[]): Promise<unknown> {
+    const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+    const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
     // `name` is the pack author's template-literal string; the DECLARED op set is the type

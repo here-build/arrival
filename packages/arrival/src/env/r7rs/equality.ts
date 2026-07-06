@@ -49,7 +49,14 @@ export default new EnvCapability("scheme/equality", {
   symbols: {
     // R7RS 6.3 Booleans
     "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
-      { input: [z.boolean, z.boolean], inputRest: z.boolean, output: [z.boolean] },
+      // Input stays z.value (representation-blind), NOT z.boolean — the impl's own unwrap()
+      // below branches on raw JS boolean vs boxed ABool, so blindness is load-bearing here
+      // (unlike symbol=?, a bare instanceof check with no such branch). `z.boolean`'s codec
+      // `safeParse`s ONLY its scheme face (ABool instances) regardless of native/rosetta Face
+      // projection — using it here would silently reject the raw-JS-boolean half the impl
+      // genuinely accepts. Output stays z.boolean: the RETURN is always a real ABool (the
+      // schemeBool flyweight), never representation-blind.
+      { input: [z.value, z.value], inputRest: z.value, output: [z.boolean] },
       (...bools) => {
         if (bools.length < 2) return schemeTrue;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise

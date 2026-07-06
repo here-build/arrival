@@ -25,6 +25,7 @@
 // lineage so list elements stay grounded.
 
 import invariant from "tiny-invariant";
+import { type } from "../../utils/typecheck.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
@@ -362,6 +363,14 @@ export default new EnvCapability("scheme/srfi-13", {
           const s = stringValue(str);
           // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
           if (s === "") return nil;
+          // `symbol.native` contracts are TYPE-ONLY — never validated at runtime (native
+          // doctrine: no codec, no validation). `stringValue`'s fallback (`String(x)`) would
+          // silently coerce a non-string/char delimiter to SOME string instead of erroring, so
+          // the type-mismatch door needs an explicit guard here.
+          invariant(
+            delimiter instanceof AString || delimiter instanceof ACharacter,
+            () => `string-split: delimiter must be a string or character, got ${type(delimiter)}`,
+          );
           const delimiterStr = delimiter instanceof ACharacter ? charValue(delimiter) : stringValue(delimiter);
           const prov = collapseProvenance(str, delimiter);
           return APair.fromArray(

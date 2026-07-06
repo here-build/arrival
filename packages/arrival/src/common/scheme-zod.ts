@@ -46,6 +46,7 @@ import { R7RSError } from "../errors.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { type ACallable, ANativeProcedure, applyCallback } from "../values/primitives/ACallable.js";
 import { is_callable_value } from "../values/value-guards.js";
+import { tf } from "../values/tagless-final.js";
 
 export { tuple, union, record, array, enum, decode, encode } from "zod";
 // Structural combinators + codec/predicate constructors callers compose the vocabulary from.
@@ -87,7 +88,7 @@ export const symbol = z.instanceof(ASymbol);
 // it) avoids materializing a borrowed view during decode. `z.custom<AVector>` keeps the harvested
 // type AVector; the impls extract the payload via `asVector`, which handles both forms.
 export const svector = z.custom<AVector>(
-  (x) => typeof (x as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function",
+  (x) => typeof (x as Record<string, unknown> | null | undefined)?.[tf("vector?")] === "function",
 );
 export const sbytevector = z.instanceof(ABytevector);
 export const nil = z.instanceof(ANil);
@@ -184,16 +185,16 @@ export const list = listOf(z.custom<SchemeValue>());
  *  builds a real AVector. */
 export function vectorOf<E extends z.ZodType>(element: E) {
   return z.codec(
-    z.custom<AVector>(
-      (x) => typeof (x as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function",
-    ),
+    z.custom<AVector>((x) => typeof (x as Record<string, unknown> | null | undefined)?.[tf("vector?")] === "function"),
     z.array(element),
     {
       decode: (v) => {
         // The protocol admits AVector (payload on __vector__) and AJSArray (borrowed
         // source) — read whichever payload the answering value carries.
-        const payload = (v as { __vector__?: SchemeValue[]; source?: unknown[] }).__vector__ ?? (v as { source?: unknown[] }).source;
-        if (!Array.isArray(payload)) throw new TypeError("vector codec: the operand answers vector? but carries no array payload");
+        const payload =
+          (v as { __vector__?: SchemeValue[]; source?: unknown[] }).__vector__ ?? (v as { source?: unknown[] }).source;
+        if (!Array.isArray(payload))
+          throw new TypeError("vector codec: the operand answers vector? but carries no array payload");
         return payload as z.input<E>[];
       },
       encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
@@ -222,17 +223,13 @@ function isDictLike(x: unknown): boolean {
  *  AJSObject membrane when present; encode hands back the plain record (the dict IS the
  *  plain record — polyglot's own `dict` constructor doctrine). */
 export function dictOf<E extends z.ZodType>(valueSchema: E) {
-  return z.codec(
-    z.custom<Record<string, SchemeValue> | AJSObject>(isDictLike),
-    z.record(z.string(), valueSchema),
-    {
-      decode: (d) => {
-        const source = d instanceof AJSObject ? (d.source as Record<string, unknown>) : d;
-        return source as Record<string, z.input<E>>;
-      },
-      encode: (rec) => rec as Record<string, SchemeValue>,
+  return z.codec(z.custom<Record<string, SchemeValue> | AJSObject>(isDictLike), z.record(z.string(), valueSchema), {
+    decode: (d) => {
+      const source = d instanceof AJSObject ? (d.source as Record<string, unknown>) : d;
+      return source as Record<string, z.input<E>>;
     },
-  );
+    encode: (rec) => rec as Record<string, SchemeValue>,
+  });
 }
 
 /** A dict ↔ JS record with UNTYPED values. The plain form of `dictOf`. */
