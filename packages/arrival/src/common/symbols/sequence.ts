@@ -29,7 +29,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // `run` dispatches at runtime against a raw sliced-args array, which TS can't statically
     // match to `impl`'s own `DecodedArgs<I>` tuple — erase here, once, the same boundary
     // `rosetta.ts`'s `run` crosses. By construction (the contract), the array always matches.
-    const run = function (this: { ctx: EvalContext }, ...args: DecodedArgs<I>) {
+    const run = function (this: { ctx: EvalContext }, ...args: DecodedArgs<I, "scheme">) {
       return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
     };
     // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
@@ -42,7 +42,10 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       in: normalizeVector(contract.input),
       out: normalizeVector(contract.output),
       run: Object.assign(
-        function (this: { ctx: EvalContext }, ...args: DecodedArgs<I>): MaybePromise<DecodedReturn<O>> {
+        function (
+          this: { ctx: EvalContext },
+          ...args: DecodedArgs<I, "scheme">
+        ): MaybePromise<DecodedReturn<O, "scheme">> {
           return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
         },
         { fanout: true },

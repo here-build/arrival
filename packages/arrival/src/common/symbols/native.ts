@@ -17,16 +17,19 @@ import {
   type VectorSpec,
 } from "./_bake.js";
 
-/** Native host fn over SCHEME VALUES (no ctx, no validation). The schemas are
- *  scheme-identity; the impl receives the terms. `Rest` (inferred from `contract.inputRest`,
- *  defaulting to `undefined`) is the fixed-prefix-plus-rest split — see `Contract`/`Impl` in
- *  `_bake.ts`. Absent `inputRest` ⇒ `Rest` stays `undefined` and `impl`'s signature is
- *  byte-identical to before `inputRest` existed. */
+/** Native host fn over SCHEME VALUES (no ctx, no validation, no codec crossing). The impl
+ *  projects the contract's SCHEME face (`Impl<…, "scheme">` = each schema's `z.input` — the
+ *  value-algebra side; a rosetta projects `z.output`, the membrane side). For the pre-codec
+ *  identity schemas the faces coincide, so this is byte-identical for every existing
+ *  declaration; a codec-vocabulary schema (e.g. `z.string` = AString⇄string) now correctly
+ *  types the native impl's arg as the SCHEME value (AString), not the JS image. `Rest`
+ *  (inferred from `contract.inputRest`, defaulting to `undefined`) is the fixed-prefix-
+ *  plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
 export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
-    impl: Impl<I, O, Rest>,
+    impl: Impl<I, O, Rest, "scheme">,
   ): NativeSymbolDef => {
     // `fanout: true` → stamp the bound fn (capability binds def.impl raw; the lineage classifier
     // reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).

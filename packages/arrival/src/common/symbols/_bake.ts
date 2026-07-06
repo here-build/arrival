@@ -65,25 +65,40 @@ import { HandlerCallCtx } from "../../env/r7rs/exceptions.js";
  *  schema (`z.array` variadic / `z.tuple` / `z.union` overload). */
 export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
 
-/** The ONE shared traversal: map a VectorSpec through `z.output`. A tuple maps element-wise
- *  to a mutable tuple; a single schema infers bare (no wrapping — a variadic `z.array`
- *  schema's output is already an array, and a scalar schema's output stays a scalar).
+/** The TWO faces of one schema (uniform-scheme-zod-vocabulary redesign: zod points FROM the
+ *  scheme environment TOWARD the membrane). A codec's `z.input` is its SCHEME face (AString,
+ *  APair, ACallable) and its `z.output` the JS face (`string`, `array`, a callable) — one
+ *  vocabulary, two processing rules: `symbol.native` (a CONTOUR, stays in the value algebra)
+ *  projects the scheme face; `symbol.rosetta` (the MEMBRANE, decode-in/encode-out) projects
+ *  the JS face. A non-codec schema's faces coincide (`input ≡ output`), so every pre-codec
+ *  contract types identically under either face — the split is strictly additive. */
+export type Face = "scheme" | "js";
+type ProjectFace<S extends z.ZodTypeAny, F extends Face> = F extends "scheme" ? z.input<S> : z.output<S>;
+
+/** The ONE shared traversal: map a VectorSpec through the selected face (`z.output` for the
+ *  membrane/JS face — the default, byte-identical to the pre-Face behavior — or `z.input` for
+ *  the scheme face `symbol.native` projects). A tuple maps element-wise to a mutable tuple; a
+ *  single schema infers bare (no wrapping — a variadic `z.array` schema's output is already an
+ *  array, and a scalar schema's output stays a scalar).
  *  `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` are thin callers on top of this —
  *  they differ only in their OWN boundary handling (wrap a non-array single output in a
  *  1-tuple; collapse a 1-tuple to its bare value), never in how a spec's shape decodes. */
-export type SpecInfer<S extends VectorSpec> = S extends readonly z.ZodTypeAny[]
-  ? { -readonly [K in keyof S]: z.output<S[K] & z.ZodTypeAny> }
+export type SpecInfer<S extends VectorSpec, F extends Face = "js"> = S extends readonly z.ZodTypeAny[]
+  ? { -readonly [K in keyof S]: ProjectFace<S[K] & z.ZodTypeAny, F> }
   : S extends z.ZodTypeAny
-    ? z.output<S>
+    ? ProjectFace<S, F>
     : never;
 
-/** Decoded arg TYPES for the impl (the codec OUTPUT side). A bare tuple maps each
- *  element's `z.output`; an array-ish schema yields its element-array (variadic). */
-export type DecodedArgs<S extends VectorSpec> = SpecInfer<S> extends readonly unknown[] ? SpecInfer<S> : [SpecInfer<S>];
+/** Decoded arg TYPES for the impl (the selected face; default = the codec OUTPUT/JS side). A
+ *  bare tuple maps each element; an array-ish schema yields its element-array (variadic). */
+export type DecodedArgs<S extends VectorSpec, F extends Face = "js"> =
+  SpecInfer<S, F> extends readonly unknown[] ? SpecInfer<S, F> : [SpecInfer<S, F>];
 
 /** Decoded RETURN type: a single value when the output is a 1-tuple, else the
  *  values-vector (multiple-values). */
-export type DecodedReturn<O extends VectorSpec> = O extends readonly [z.ZodTypeAny] ? SpecInfer<O>[0] : SpecInfer<O>;
+export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
+  ? SpecInfer<O, F>[0]
+  : SpecInfer<O, F>;
 
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
@@ -105,13 +120,17 @@ export type RestSpec = z.ZodTypeAny | undefined;
  *  (`error TS2574: A rest element type must be an array type`) can't see a mapped type over a
  *  still-abstract `I` as array-shaped when it's written directly inside a `[...X, ...Y[]]`
  *  literal — a named alias resolves it. */
-export type DecodedArgsWithRest<I extends VectorSpec, Rest extends RestSpec = undefined> = Rest extends z.ZodTypeAny
+export type DecodedArgsWithRest<
+  I extends VectorSpec,
+  Rest extends RestSpec = undefined,
+  F extends Face = "js",
+> = Rest extends z.ZodTypeAny
   ? I extends readonly z.ZodTypeAny[]
-    ? SpecInfer<I> extends infer Head extends readonly unknown[]
-      ? [...Head, ...z.output<Rest>[]]
+    ? SpecInfer<I, F> extends infer Head extends readonly unknown[]
+      ? [...Head, ...ProjectFace<Rest, F>[]]
       : never
     : never
-  : DecodedArgs<I>;
+  : DecodedArgs<I, F>;
 
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
@@ -164,11 +183,15 @@ export type ImplInvocationCtx = { ctx: HandlerCallCtx };
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
  *  contract tuple becomes a MUTABLE positional param list the impl can declare, and splices in
- *  `inputRest`'s decoded element type as a spread tail when the contract declares one. */
-export type Impl<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = (
-  this: ImplInvocationCtx,
-  ...args: DecodedArgsWithRest<I, Rest>
-) => MaybePromise<DecodedReturn<O>>;
+ *  `inputRest`'s decoded element type as a spread tail when the contract declares one.
+ *  `F` selects the face the impl works on: `"js"` (default — rosetta, the decoded membrane
+ *  side) or `"scheme"` (native — the value-algebra side; `symbol.native` passes it). */
+export type Impl<
+  I extends VectorSpec,
+  O extends VectorSpec,
+  Rest extends RestSpec = undefined,
+  F extends Face = "js",
+> = (this: ImplInvocationCtx, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. AEntity — the baked, discriminated union (an interpreter primitive — TYPE-ONLY,
@@ -439,16 +462,15 @@ export function isSingleOutput(output: VectorSpec): boolean {
 
 /** The impl a `symbol.sequence` contract demands: ONE args array (not spread — the dual of
  *  native/rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`,
- *  the run's RunContext, decoded return (or a promise) out via `DecodedReturn<O>`. `DecodedArgs`/
- *  `DecodedReturn` are both `SpecInfer`-built — same decode semantics as native/rosetta, just
- *  gathered into one array instead of spread params (sequence's `run` slices the raw scheme args
- *  into exactly this array before calling impl — see `sequence.ts`). No `Rest`: a sequence
- *  contract's `Contract<I,O>` never carries `inputRest` (map/filter/sort's variadic tail, where
- *  any, is expressed as the tagless receiver's own term algebra, not a contract rest slot). */
+ *  the run's RunContext, decoded return (or a promise) out via `DecodedReturn<O>`. Projects the
+ *  SCHEME face (like `symbol.native` — a sequence op is a ctx-aware CONTOUR over scheme values,
+ *  never a membrane crossing). No `Rest`: a sequence contract's `Contract<I,O>` never carries
+ *  `inputRest` (map/filter/sort's variadic tail, where any, is expressed as the tagless
+ *  receiver's own term algebra, not a contract rest slot). */
 export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
-  args: DecodedArgs<I>,
+  args: DecodedArgs<I, "scheme">,
   runCtx: RunContext,
-) => MaybePromise<DecodedReturn<O>>;
+) => MaybePromise<DecodedReturn<O, "scheme">>;
 
 /** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
  *  `exec(src, { typecheck })` — see the decode note in `rosetta.ts` for the current
