@@ -24,12 +24,12 @@ export default new EnvCapability("scheme/srfi-95", {
         // seq: representation-blind at the SCHEME level (any receiver answering the
         // arrival/tagless-final/sort protocol — APair/AVector/AJSArray, every SchemeValue
         // member this dispatch could ever see), not host-blind — z.value is the typed
-        // replacement for z.unknown() at exactly this kind of native scheme-value slot
+        // replacement for z.value at exactly this kind of native scheme-value slot
         // (scheme-zod.ts), matching the sibling term-dispatch receiver `length` (lists.ts).
         // comparator: a callable predicate, not bare unknown — AValue.ts's single source of
         // truth declares `arrival/tagless-final/sort`'s own param as exactly
         // `(a: unknown, b: unknown) => unknown` (mirrored by deriveSortCompare, op-helpers.ts),
-        // so the contract states the SAME signature rather than a blanket z.unknown().
+        // so the contract states the SAME signature rather than a blanket z.value.
         input: [z.value, z.lambda.optional()],
         // output: the sorted sequence is a SchemeValue (APair | ANil for a list, AVector for a
         // vector) — z.value again, matching the term algebra's own declared return type.

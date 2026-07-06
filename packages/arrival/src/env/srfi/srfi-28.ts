@@ -82,7 +82,7 @@ export default new EnvCapability("scheme/srfi-28", {
         // string per SRFI-28, or `#f` per the SRFI-48/CL destination form, or anything else,
         // which throws the DEST_REASON teaching error) — there is no static fixed-prefix to
         // split `input`/`inputRest` at. Each element is `z.value` (the representation-BLIND
-        // scheme-value identity — narrower than the old `z.unknown()`, which was host-blind:
+        // scheme-value identity — narrower than the old `z.value`, which was host-blind:
         // it also accepted raw non-scheme JS), since a directive-fill arg can be ANY scheme
         // value (rendered via `displayOf`/`writeOf`).
         { input: z.array(z.value), output: [z.string] },

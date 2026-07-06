@@ -333,7 +333,7 @@ export default new EnvCapability("scheme/strings", {
     // apply's head/rest split. The head is the established callable-schema convention
     // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry), and the rest
     // is z.string (this file's own string-identity schema) rather than the
-    // representation-blind z.unknown() the old contract used. Once the declared signature
+    // representation-blind z.value the old contract used. Once the declared signature
     // properly types the params, the old manual `const [proc, ...strings] = args as [...]`
     // destructure-and-cast is redundant — proc/strings arrive as real typed parameters.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(

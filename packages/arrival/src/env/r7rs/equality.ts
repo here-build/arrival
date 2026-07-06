@@ -15,7 +15,7 @@
  * bound raw exactly as `{ value }` was, so the runtime behavior is unchanged. These
  * predicates are REPRESENTATION-BLIND by design (they accept a boxed SchemeBool /
  * SchemeSymbol OR a raw JS value that arrived via rosetta unwrapping — see
- * equality-representation.test.ts), so the honest input term is `z.unknown()`, and the
+ * equality-representation.test.ts), so the honest input term is `z.value`, and the
  * honest output is the `z.boolean` codec (DECODED type `boolean`) — the impl returns a JS
  * boolean, which native binds
  * and returns raw — downstream `structuralEqual` treats `true ≡ SchemeBool(true)`).
@@ -73,7 +73,7 @@ export default new EnvCapability("scheme/equality", {
     // scheme-zod.ts, unlike string/boolean/char/number — see equality-representation.test.ts's
     // own "always boxed in practice" note for characters & symbols). So `z.symbol` (the SAME
     // identity primitive `symbol->string`/`string->symbol` below already use) is the honest
-    // domain, not `z.unknown()` — this is a precision fix, not a blindness removal.
+    // domain, not `z.value` — this is a precision fix, not a blindness removal.
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
       (...syms) => {

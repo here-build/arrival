@@ -45,6 +45,18 @@ import { AVoid } from "../values/primitives/AVoid.js";
 import { R7RSError } from "../errors.js";
 
 export { tuple, union, record, array, enum, decode, encode } from "zod";
+// Structural combinators + codec/predicate constructors callers compose the vocabulary from.
+// NOTE (uniform-scheme-zod-vocabulary redesign): `custom`/`object`/`literal` are the raw escape
+// hatches the vocabulary is meant to REPLACE at call sites — re-exported for now so the
+// mid-narrowing surface loads, to be withdrawn from the caller surface once the `list`/`dict`/
+// `vector`/… codecs land and sites migrate (cut 3). `codec`/`config`/`toJSONSchema`/`fromJSONSchema`
+// stay (legitimate building blocks + the type-lens bridge). `z.instanceof` is deliberately NOT
+// re-exported (a keyword, and an instanceof check is exactly the representation-leak the
+// protocol-predicate vocabulary exists to forbid).
+export { custom, object, literal, codec, config, toJSONSchema, fromJSONSchema } from "zod";
+// Type helpers the bake machinery + contracts project through (`z.input`/`z.output` are the two
+// faces — scheme vs membrane; see the redesign doc). Type-only (no runtime binding).
+export type { input, output, infer, ZodType, ZodTypeAny, ZodObject, ZodCustom, ZodRawShape } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEME-IDENTITY PRIMITIVES — for `arrival.symbol` (native).

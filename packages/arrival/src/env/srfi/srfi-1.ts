@@ -63,7 +63,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): Sch
 
 export default new EnvCapability("scheme/srfi-1", {
   symbols: {
-    // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.unknown()], z.unknown())'s
+    // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.value], z.value)'s
     // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
     // exactly 2). pred uses the established callable-schema convention (z.custom<(...args)
     // => T>(), matching vector-map/vector-for-each/curry); seq stays z.value — it's dispatched
@@ -77,7 +77,7 @@ export default new EnvCapability("scheme/srfi-1", {
         // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
         // `seq` operand implements and returns a value in THAT SAME representation, so there is
         // no single richer scheme-zod collection type honest for every call site. `z.value` is
-        // still strictly tighter than the old `z.unknown()`: it excludes a raw non-scheme host
+        // still strictly tighter than the old `z.value`: it excludes a raw non-scheme host
         // value, which `unknown()` would wrongly admit.
         { input: [z.lambda, z.value], output: [z.value], fanout: true },
         (args, runCtx) => {

@@ -110,7 +110,7 @@ export const wrappedOps = {
  *  top-to-bottom, nothing to cross-reference. Each impl is `wrappedOps.<verb>` (the
  *  single source of the actual JS body — `wrappedOps` stays exactly as-is, still the
  *  public re-export other consumers import directly, see index.ts). Every input is
- *  representation-blind (`z.unknown()`, matching each verb's own `unknown`-typed
+ *  representation-blind (`z.value`, matching each verb's own `unknown`-typed
  *  param) except the genuinely-boolean/string returns, which get the concrete codec
  *  so the contract documents them honestly. NOTHING else lives here — the exception
  *  FORMS (raise/guard/with-exception-handler/error) and the machinery they need

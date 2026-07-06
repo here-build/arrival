@@ -16,7 +16,7 @@
  * cannot change runtime behavior; the bodies are reproduced byte-for-byte. The
  * bytevector args declare `z.sbytevector` (the op's semantic domain); the raw-binary
  * polymorphism stays a runtime property of `asBytevector`, unaffected by the types-only
- * schema. `bytevector?` keeps `z.unknown()` since it deliberately classifies ANY value.
+ * schema. `bytevector?` keeps `z.value` since it deliberately classifies ANY value.
  */
 
 import "../../errors.js";

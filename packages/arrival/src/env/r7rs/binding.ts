@@ -40,7 +40,7 @@ export default new EnvCapability("scheme/r7rs/binding", {
     ),
 
     "call-with-values": symbol.native`call-with-values: feed a producer's values into a consumer`(
-      // Output stays `z.unknown()`, NOT `z.value` — verified, not an oversight. The return
+      // Output stays `z.value`, NOT `z.value` — verified, not an oversight. The return
       // flows through `unpromise` (utils/promises.ts), a genuinely-generic helper (also used by
       // srfi-1's fold) whose OWN declared signature is `(value: unknown, fn: (x: unknown) =>
       // unknown, …) => unknown` — it recurses through Promise/array/plain-object containers
@@ -49,7 +49,7 @@ export default new EnvCapability("scheme/r7rs/binding", {
       // 'unknown' is not assignable to type 'SchemeValue'" — fixing it honestly would mean
       // making the SHARED `unpromise` utility generic (out of scope: a cross-cutting helper, not
       // this capability) or a bare `as SchemeValue` cast (banned — see the project's
-      // honest-types-no-casts convention). `z.unknown()` here is the honest type, not a gap.
+      // honest-types-no-casts convention). `z.value` here is the honest type, not a gap.
       // The two z.custom<SchemeFunction> params are UNREPRESENTABLE to the harvest printer
       // (it throws on `custom`), collapsing signatureOf to the catch-all `(...args: unknown[])
       // => unknown` and losing the two-procedure shape. `type` author-asserts the real

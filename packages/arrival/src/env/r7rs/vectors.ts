@@ -14,13 +14,13 @@
  * the \`schemeNumber\` tower, predicate/length returns the JS-boolean/number
  * scheme-zod codecs (decoded type \`boolean\`/\`number\`, matching the impls). The
  * representation-blind boundaries — element/list returns (\`vector\`'s elements,
- * \`vector-ref\`/\`vector->list\`'s returns) — are \`z.value\` (the typed \`z.unknown()\`
+ * \`vector-ref\`/\`vector->list\`'s returns) — are \`z.value\` (the typed \`z.value\`
  * replacement: same runtime acceptance, precise static output \`SchemeValue\`). The
  * HOF callback is the types-only \`z.custom\` procedure; its variadic vector rest
  * (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s args are \`inputRest\`/
  * \`z.array\` over \`z.svector\` (2026-07-05 Contract-precision audit — see the sibling
  * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`), not the
- * bare \`z.unknown()\` the pre-audit contracts used. Bodies are reproduced byte-for-byte
+ * bare \`z.value\` the pre-audit contracts used. Bodies are reproduced byte-for-byte
  * (only the impls' own param/return TYPE ANNOTATIONS were tightened to match).
  */
 
@@ -62,7 +62,7 @@ export default new EnvCapability("scheme/vectors", {
         assertAllocatable(len, "make-vector");
         // Materialize the fill into every slot AT construction. The fill slot takes any
         // scheme value by design, so its contract is \`z.value\` (output \`SchemeValue\`, the
-        // typed replacement for \`z.unknown()\`) and \`fill\` is \`SchemeValue\` — a provided
+        // typed replacement for \`z.value\`) and \`fill\` is \`SchemeValue\` — a provided
         // fill has crossed the membrane (JS null→nil), and the no-fill case maps each
         // slot to \`theVoid\` (the membrane's own undefined→theVoid image) rather than a
         // raw \`undefined\` — that unboxed slot is exactly the leak this layer dissolves,
@@ -79,7 +79,7 @@ export default new EnvCapability("scheme/vectors", {
 
     vector: symbol.native`vector: a vector of the given objects`(
       // Elements are scheme values by design (any object may sit in a vector slot) — the
-      // typed z.unknown() replacement, matching make-vector's own fill-slot convention.
+      // typed z.value replacement, matching make-vector's own fill-slot convention.
       { input: z.array(z.value), output: [z.svector] },
       (...objs: SchemeValue[]): AVector => {
         return withInputProvenance(objs, new AVector(CONSTANT_CTX, [...objs]));
@@ -112,7 +112,7 @@ export default new EnvCapability("scheme/vectors", {
     "vector-ref": symbol.native`vector-ref: the element of vec at index k`(
       // vec is a vector (z.svector, matching this file's own accessor convention); the
       // returned element is a scheme value, representation-blind by design (z.value, not
-      // z.unknown()) — same identity-schema precision as vector->list's element output.
+      // z.value) — same identity-schema precision as vector->list's element output.
       { input: [z.svector, z.schemeNumber], output: [z.value] },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
       // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown` (not
@@ -210,7 +210,7 @@ export default new EnvCapability("scheme/vectors", {
       // proc is the fixed HEAD (`input`); the spread vectors are the variadic TAIL
       // (`inputRest`) — mirrors apply/for-each/string-map's own head/rest split. The rest is
       // z.svector (this file's own vector-identity schema), not the representation-blind
-      // z.unknown() the old combined z.tuple([head], z.unknown()) used.
+      // z.value the old combined z.tuple([head], z.value) used.
       {
         input: [z.lambda],
         inputRest: z.svector,

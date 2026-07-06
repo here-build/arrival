@@ -44,7 +44,7 @@ export default new EnvCapability("scheme/srfi-235", {
     // callable-schema convention (z.custom<(...args) => T>(), matching vector-map/
     // vector-for-each/apply's own callable slots), and the rest is `z.value` (these are
     // real scheme terms flowing through a native call, not representation-blind
-    // `z.unknown()` — the old contract's shape before this fix).
+    // `z.value` — the old contract's shape before this fix).
     curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
       {
         input: [z.lambda],

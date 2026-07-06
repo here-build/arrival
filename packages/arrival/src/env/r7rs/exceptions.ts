@@ -81,7 +81,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // the original object type for R7RS exception handling.
     "%raise": symbol.native`%raise: throw obj directly (machinery — the R7RS forms build on this)`(
       // `obj` is genuinely ANY scheme value (raise accepts arbitrary data, R7RS §6.11) —
-      // `z.value` is the typed, representation-blind replacement for `z.unknown()` at this
+      // `z.value` is the typed, representation-blind replacement for `z.value` at this
       // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
       // the impl's own declared return type is `never` — it always throws.
       { input: [z.value], output: [z.undefinedResult] },
@@ -96,7 +96,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // The stack is a proper scheme list (nil, or a pair of a handler procedure + the rest
       // of the stack) — scheme-zod has no dedicated "list of procedures" vocabulary item, so
       // `z.value` (the representation-blind scheme-value identity) is the richest honest
-      // ceiling here, tighter than the old `z.unknown()` (host-blind).
+      // ceiling here, tighter than the old `z.value` (host-blind).
       { input: [], output: [z.value] },
       function (): SchemeValue {
         // Opaque storage (native ops run no validation) — the boundary cast states what

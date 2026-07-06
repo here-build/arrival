@@ -1043,7 +1043,7 @@ const CODEC_SCHEMA = new Map<NCodec<any, any>, z.ZodTypeAny>([
 
 /** The zod schema a NumSpec codec maps to (see the table above). Throws if a NEW NCodec
  *  is ever added to the pack without a matching CODEC_SCHEMA entry — a loud authoring
- *  error, not a silent `z.unknown()` regression. */
+ *  error, not a silent `z.value` regression. */
 function codecSchema(codec: NCodec<any, any>): z.ZodTypeAny {
   const schema = CODEC_SCHEMA.get(codec);
   invariant(schema, "numeric.ts: no zod schema mapped for this NCodec (add it to CODEC_SCHEMA)");
@@ -1128,7 +1128,7 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseXorF
 const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.value], output: [z.boolean] };
 
 /** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers.
- *  Input tightened from `z.unknown()` to `z.schemeNumber`: both impls' first act is
+ *  Input tightened from `z.value` to `z.schemeNumber`: both impls' first act is
  *  `coerceNumeric` on each operand (op-helpers.ts) — the contract states the SCHEME-LEVEL
  *  domain (a scheme exact/inexact value), matching every sibling `NumSpec`-driven contract
  *  above (`contractFromSpec` maps `SchemeNum` → `z.schemeNumber` the same way); the wider
@@ -1140,7 +1140,7 @@ const TWO_VALUE_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 };
 
 /** `1+`/`1-` — `(n: unknown) => ANumeric`. See `TWO_VALUE_OUTPUT_CONTRACT` above for why
- *  the input is `z.schemeNumber`, not `z.unknown()` (`onePlusFn`/`oneMinusFn` both
+ *  the input is `z.schemeNumber`, not `z.value` (`onePlusFn`/`oneMinusFn` both
  *  `coerceNumeric` their argument first). */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
