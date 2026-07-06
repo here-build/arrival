@@ -43,6 +43,8 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import type { SchemeValue } from "../values/types.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { R7RSError } from "../errors.js";
+import { type ACallable, ANativeProcedure, applyCallback } from "../values/primitives/ACallable.js";
+import { is_callable_value } from "../values/value-guards.js";
 
 export { tuple, union, record, array, enum, decode, encode } from "zod";
 // Structural combinators + codec/predicate constructors callers compose the vocabulary from.
@@ -129,6 +131,55 @@ export function isKwargs(schema: unknown): schema is z.ZodObject<z.ZodRawShape> 
 // scheme value on return. (`z.codec(in_, out, { decode, encode })`: decode maps the
 // stored A side → the B side; encode maps B → A. `z.output<ZodCodec<A,B>> = output<B>`.)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** A proper list ↔ JS array (uniform-vocabulary `list` primitive). The scheme face is the
+ *  pair-chain (APair | ANil — the LIST shape specifically; an AJSArray is a `vector` by protocol,
+ *  not a list); the JS face is `SchemeValue[]` (elements stay scheme values — element-wise
+ *  marshalling is a per-slot choice, not the container codec's). decode walks the spine (doors on
+ *  an improper or circular tail — the same doors env/r7rs's `to_array` levies); encode rebuilds
+ *  the chain. */
+export const list = z.codec(
+  z.custom<APair | ANil>((x) => x instanceof APair || x instanceof ANil),
+  z.array(z.custom<SchemeValue>()),
+  {
+    decode: (l) => {
+      const out: SchemeValue[] = [];
+      let node: unknown = l;
+      while (node instanceof APair) {
+        if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
+        out.push(node.car as SchemeValue);
+        node = node.cdr;
+      }
+      if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
+      return out;
+    },
+    encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil,
+  },
+);
+
+/** A callable ↔ a JS-invokable (uniform-vocabulary `procedure` primitive — a procedure is a
+ *  procedure in BOTH worlds; no native-only carve-out). The scheme face is any arrival callable
+ *  (an ACallable value, or — mid-migration — a bare bound fn); decode hands the host a plain JS
+ *  fn that routes through `applyCallback` (the one invocation seam), so the host never sees the
+ *  apply-term protocol. encode wraps a host fn into a first-class ANativeProcedure — a rosetta
+ *  NEVER returns a raw JS callback (the membrane-no-returned-callbacks guarantee, enforced by
+ *  construction here rather than by rule). */
+export const procedure = z.codec(
+  z.custom<ACallable | ((...args: unknown[]) => unknown)>((x) => typeof x === "function" || is_callable_value(x)),
+  z.custom<(...args: unknown[]) => unknown>((x) => typeof x === "function"),
+  {
+    decode: (fn) => {
+      return (...args: unknown[]) => applyCallback(fn, args);
+    },
+    encode: (fn) =>
+      new ANativeProcedure({
+        name: "<host-procedure>",
+        arity: { min: 0, max: null },
+        contract: undefined,
+        impl: (args) => fn(...args) as SchemeValue,
+      }),
+  },
+);
 
 /** SchemeString ↔ JS `string`. */
 export const string = z.codec(z.instanceof(AString), z.string(), {
