@@ -32,6 +32,10 @@ import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { hasMember, memberKeys, readMember } from "../membrane.js";
+import { schemeBool } from "../values/op-helpers.js";
+import { AString } from "../values/primitives/AString.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { type SchemeValue } from "../values/types.js";
 import { KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 
@@ -403,18 +407,16 @@ export default new EnvCapability("scheme/polyglot", {
       readMember,
     ),
     "@?": symbol.native`@?: #t iff obj has the member key`(
-      // `hasMember` returns a real JS `boolean` — the `z.boolean` codec (DECODED type
-      // `boolean`) is the established convention for a native predicate that returns a raw
-      // JS boolean bound raw (see equality.ts's `boolean=?`/`not`/`procedure?`/…).
+      // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the raw
+      // JS boolean `hasMember` returns is a membrane-layer detail).
       { input: [z.value, z.value], output: [z.boolean] },
-      hasMember,
+      (obj: unknown, key: unknown) => schemeBool(hasMember(obj, key)),
     ),
     "@keys": symbol.native`@keys: the own member keys of obj`(
-      // `memberKeys` returns a real JS `string[]` (never anything else) — `z.array(z.string)`
-      // (the string codec's decoded type is `string`) states that precisely instead of
-      // discarding it to `unknown`.
+      // `memberKeys` returns raw JS strings; the scheme face boxes each to AString
+      // (z.array(z.string)'s scheme side — Face split).
       { input: [z.value], output: [z.array(z.string)] },
-      memberKeys,
+      (obj: unknown) => memberKeys(obj).map((k) => new AString(CONSTANT_CTX, k)),
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
     // build an open-key map from interleaved `:key value` pairs. A keyword in arg
@@ -433,7 +435,10 @@ export default new EnvCapability("scheme/polyglot", {
       // z.value)` (keys are real JS strings; values are genuinely open) states that,
       // replacing the `z.value` that was discarding it.
       { input: z.array(z.value), output: [z.record(z.string, z.value)] },
-      (...args: unknown[]): Record<string, unknown> => {
+      // A deliberately-RAW open-key record constructor (the dict IS the plain record; glass
+      // via the dict protocol). The record's runtime shape is exactly the contract's image —
+      // assert across the record key-face gap.
+      ((...args: unknown[]): Record<string, unknown> => {
         const obj: Record<string, unknown> = {};
         for (let i = 0; i + 1 < args.length; i += 2) {
           const k = args[i] as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
@@ -443,7 +448,7 @@ export default new EnvCapability("scheme/polyglot", {
           obj[key] = args[i + 1];
         }
         return obj;
-      },
+      }) as unknown as (...args: SchemeValue[]) => Record<string, SchemeValue>,
     ),
   }),
 });
