@@ -42,8 +42,9 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
-import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { ArrivalError, currentRunEnv } from "../../eval/evaluator.js";
+import { heapBudgetMessage } from "../../heap-budget.js";
+import { ArrivalError } from "../../eval/evaluator.js";
+import { ctxOf } from "../../values/primitives/AValue.js";
 import {
   complex_bare_re,
   complex_re,
@@ -68,8 +69,9 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
       return [];
     }
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    const runEnv = currentRunEnv();
-    const meter = findHeapMeter(runEnv ?? null);
+    // Heap meter off the operand's ctx — the designed operand-ctx read (RunContext.ts),
+    // replacing the retired `currentRunEnv()` env back-channel.
+    const meter = ctxOf(list).heapMeter;
     const result: SchemeValue[] = [];
     let node = list;
     while (true) {

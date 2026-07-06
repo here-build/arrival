@@ -39,8 +39,8 @@ import { APair, concatPair, isCircularList } from "../../values/primitives/APair
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { is_false, is_function, is_promise } from "../../eval/guards.js";
 import { type, typeErrorMessage } from "../../utils/typecheck.js";
-import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { ArrivalError, currentRunEnv, isSpeculating } from "../../eval/evaluator.js";
+import { heapBudgetMessage } from "../../heap-budget.js";
+import { ArrivalError } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
@@ -84,8 +84,11 @@ function to_array(name: string, deep = false): (list: APair | ANil) => NestedArr
       return [];
     }
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    const runEnv = currentRunEnv();
-    const meter = findHeapMeter(runEnv ?? null);
+    // Heap meter off the OPERAND's ctx (the run-built list carries the run's RunContext;
+    // a quoted-literal carries CONSTANT_CTX → no meter, and is parse-bounded anyway). The
+    // designed operand-ctx read (RunContext.ts §what-lives-here), replacing the retired
+    // `currentRunEnv()` env back-channel.
+    const meter = ctxOf(list).heapMeter;
     const result: NestedArray[] = [];
     let node: unknown = list;
     while (true) {
@@ -233,7 +236,10 @@ function mapImpl(fn: SchemeValue, ...lists: Array<APair | ANil>): SchemeValue | 
   // Tier-2 speculation: map's count is exact up front (one output per input →
   // bounds [1,1]), so its HalfBaked interval is already a point — length is
   // decidable immediately while values still resolve.
-  if (hasPromises && isSpeculating()) {
+  // Speculation is run-constant; read it off the operand (lists[0] is a non-nil pair here,
+  // so it carries the run's RunContext). for-each discards this result, so the HalfBaked vs
+  // eager-list choice is inert for correctness — behavior-shape preserved.
+  if (hasPromises && ctxOf(lists[0]).speculate) {
     const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
     return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
   }

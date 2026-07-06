@@ -200,20 +200,18 @@ export interface EvalContext {
    * today's behavior. Propagated structurally like `tail`/`speculate` (the
    * `{ ...ctx }` spreads carry it into every child context).
    *
-   * Published at the apply boundary into the run-scoped `_currentStrict` holder
-   * (read via `isStrict()`); the inference-plane `car`/`cdr` (env/fl-interop.ts)
-   * consult it. Optional (like `speculate`) so the few `EvalContext` literals that
-   * omit the run-level options stay valid; the sole origin is `exec()` in
-   * generator-exec.ts.
+   * Carried on `ctx.runCtx.strict`; numeric's loose comparators read it off the
+   * reconstructed `this.ctx.runCtx` (the retired `_currentStrict` holder's replacement).
+   * Optional (like `speculate`) so the few `EvalContext` literals that omit the run-level
+   * options stay valid; the sole origin is `exec()` in generator-exec.ts.
    */
   strict?: boolean;
   /**
    * The per-run context (minted by `exec()`; see `values/primitives/RunContext`).
-   * Carries hermetic run-state — strict mode + the heap meter — as DATA threaded
-   * through evaluation, the channel that will replace the module-level holders
-   * (`_currentStrict`, the env heap-meter). Optional + currently UNREAD (scaffolding):
-   * ops read run-state off the holders today and migrate to `ctx.runCtx` / `operand.ctx`
-   * at N2. Propagated structurally like `strict`/`speculate` (the `{ ...ctx }` spreads).
+   * Carries hermetic run-state — strict mode, speculation, the heap meter — as DATA threaded
+   * through evaluation. Now the LIVE channel (stage 4): the run-constant holders
+   * (`_currentStrict`/`_speculate`) are retired and their readers consult `ctx.runCtx` /
+   * the operand ctx. Propagated structurally like `strict` (the `{ ...ctx }` spreads).
    */
   runCtx?: RunContext;
 }
@@ -294,28 +292,24 @@ let _dynamicCallSite: Invocation | undefined = undefined;
  */
 let _canBounce = false;
 
-/**
- * Tier-2 speculation flag, read synchronously by producer builtins (filter/map
- * in stdlib.ts) at apply time to decide whether to emit a lazy `HalfBaked`
- * carrier instead of awaiting the whole promise fan. Module-level so
- * variadic / HOF / value uses of the producers see it without a wrapper that
- * would break their arity. Saved/restored around each apply, mirroring
- * `_canBounce`. Off by default → eager, byte-identical path. See
- * docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
- */
-let _speculate = false;
-
-/** Producer builtins read this synchronously at apply time. */
-export const isSpeculating = (): boolean => _speculate;
+// The `_speculate`/`isSpeculating` holder is RETIRED (stage 4): speculation is run-CONSTANT
+// (RunContext.speculate) — its one external reader (lists.ts mapImpl) now reads it off the
+// operand's ctx, and the value-path consumers read `ctx.speculate` / `runCtx.speculate` directly.
+// The `_currentStrict`/`isStrict` holder is likewise retired: numeric's loose comparators read
+// `this.ctx.runCtx.strict` (the run ctx reconstructed by the native-value adapter). Both were
+// pure duplicates of RunContext. `_currentRunEnv` STAYS — it is not run-constant duplication but
+// the rosetta MEMBRANE's env back-channel (arrival-scheme-env-infer/prompt.ts evaluates an `s/…`
+// schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx carries no env).
 
 /**
  * Run-scoped CURRENT ENV, set to the resolver's lexical frame (`resolver.env`,
- * formerly `ctx.env`) at the same apply boundary as
- * `_canBounce`/`_dynamicCallSite`/`_speculate` (saved + restored in the
- * surrounding finally). This is the replacement for env-as-`this`: native
- * builtins that previously read their run env off `this` (the heap-meter
- * chokepoint `to_array`) now read it from here via `currentRunEnv()`. The
- * apply site passes `undefined` for `this` to BOTH arms — nothing reads it.
+ * formerly `ctx.env`) at the apply boundary alongside `_canBounce`/`_dynamicCallSite`
+ * (saved + restored in the surrounding finally). Sole remaining purpose (stage 4): the
+ * rosetta MEMBRANE's env back-channel — a rosetta impl running under a ctx-less `apply`
+ * (arrival-scheme-env-infer/prompt.ts) reads it to evaluate an `s/…` schema DSL and reach
+ * the infer capability. `runCtx` cannot supply this — it carries run-CONSTANT data, not an
+ * env. The heap-meter that once also rode this holder moved to the operand's ctx
+ * (`operand.ctx.heapMeter`, the designed read — see the three `to_array` copies).
  *
  * Why module-level: the meter
  * readers are variadic / HOF builtins (`filter`/`join`/`reverse`/`apply`,
@@ -329,13 +323,6 @@ let _currentRunEnv: Environment | undefined = undefined;
 /** The run's current env at apply time. Read by `to_array`'s heap-meter lookup
  *  (stdlib.ts) in place of the erased env-as-`this`. */
 export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
-
-let _currentStrict = false;
-/** The run's nil-tolerance mode at apply time (ExecOptions.strict -> EvalContext.strict).
- *  Read by the inference-plane projection ops (env/fl-interop.ts car/cdr): strict => a nil/null
- *  projection throws (R7RS-faithful); default => it resolves tolerantly to nil. Published at the
- *  apply boundary, not threaded through every native impl's arity — mirrors `currentRunEnv`. */
-export const isStrict = (): boolean => _currentStrict;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda passed as
@@ -2234,8 +2221,6 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     _dynamicCallSite = dynSite;
     const __savedCanBounce = _canBounce;
     _canBounce = true;
-    const __savedSpeculate = _speculate;
-    _speculate = ctx.speculate === true;
     const wrappedArgs = wrapLambdaArgs([arg], dynSite);
     let result: SchemeValue | Bounce | Promise<SchemeValue>;
     try {
@@ -2243,7 +2228,6 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;
-      _speculate = __savedSpeculate;
     }
 
     if (is_bounce(result)) {
@@ -3227,16 +3211,11 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     _dynamicCallSite = dynSite;
     const __savedCanBounce = _canBounce;
     _canBounce = (fn as LambdaFunction)[LAMBDA] === true || is_lambda(fn);
-    const __savedSpeculate = _speculate;
-    _speculate = ctx.speculate === true;
     const __savedRunEnv = _currentRunEnv;
-    // The run's heap meter is installed on the lexical frame chain (exec installs it
-    // on `runResolver.env`); the meter is found by walking `__parent__` from here, so
-    // publish the resolver's lexical frame (`resolver.env`) — byte-identical to the
-    // old `ctx.env`, which was that same frame.
+    // The rosetta membrane's env back-channel (arrival-scheme-env-infer/prompt.ts reads
+    // `currentRunEnv()` under a ctx-less `apply`). The meter/strict/speculate run-state that
+    // once also rode holders here now travels on `ctx.runCtx` / the operand ctx.
     _currentRunEnv = ctxResolver(ctx).env;
-    const __savedStrict = _currentStrict;
-    _currentStrict = ctx.strict === true;
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
@@ -3253,9 +3232,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;
-      _speculate = __savedSpeculate;
       _currentRunEnv = __savedRunEnv;
-      _currentStrict = __savedStrict;
     }
 
     // Bounce result — the callee was a Scheme lambda speaking the protocol

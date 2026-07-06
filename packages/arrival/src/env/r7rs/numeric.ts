@@ -50,7 +50,6 @@ import {
   withInputProvenance,
   type AOrd,
 } from "../../values/op-helpers.js";
-import { isStrict } from "../../eval/evaluator.js";
 import { type } from "../../utils/typecheck.js";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -790,9 +789,9 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // ── Loose (nil-tolerant) comparison overlay ──────────────────────────────────────
 // The base comparisons throw on a nil operand (coerceNumeric rejects it). The
 // inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom.
-// Under strict mode (RunContext.strict via the ambient `isStrict()` holder) loose is
-// gated off — an all-constant comparison like `(= '() '())` carries no operand to
-// thread strict, so the run holder is the only honest source.
+// Under strict mode (RunContext.strict, read off the reconstructed `this.ctx.runCtx`) loose
+// is gated off — an all-constant comparison like `(= '() '())` carries no operand to thread
+// strict, so the run ctx (not the operands) is the only honest source.
 const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
 const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
@@ -834,8 +833,13 @@ function looseOrderChain(sym, args) {
   return withInputProvenance(args, verdict);
 }
 function looseCompare(sym, core) {
-  const fn = function (...args) {
-    if (isStrict()) {
+  // strict is run-CONSTANT but can't ride the operands — an all-constant compare
+  // (`(= '() '())`) carries only CONSTANT_CTX operands. It rides the run's ctx, reconstructed
+  // onto `this.ctx.runCtx` by the native-value adapter (capability.ts) at every invocation
+  // path (call-head bare-fn, applyCallback fallback, ANativeProcedure impl). Replaces the
+  // retired ambient `isStrict()` holder.
+  const fn = function (this: { ctx?: { runCtx?: { strict?: boolean } } }, ...args) {
+    if (this?.ctx?.runCtx?.strict === true) {
       if (!args.every(isNumberOperand))
         throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core(...args);

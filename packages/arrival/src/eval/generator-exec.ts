@@ -208,7 +208,7 @@ export interface ExecOptions {
    * env-overlay nil guards (the `if (x == null) return nil` pattern in
    * fl-interop): nil-tolerance becomes a real evaluation mode threaded through
    * `EvalContext.strict`, not an env decoration. The inference-plane `car`/`cdr` (env/fl-interop.ts)
-   * read this via the run-scoped `isStrict()` (evaluator.ts): default ⇒ a nil/null
+   * read this off `ctx.runCtx.strict` (the retired `isStrict()` holder's replacement): default ⇒ a nil/null
    * projection yields nil, strict ⇒ the R7RS throw. A wrong-TYPE arg (car of a number/
    * string) throws in BOTH modes — tolerance is scoped to absence. The base `user_env`
    * car/cdr are unaffected (always R7RS-strict); `first`/`second`/… and the cxr
