@@ -10,7 +10,7 @@
 // list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
-import { resolveMethod, symbol } from "../../common/symbol.js";
+import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { typecheck } from "../../utils/typecheck.js";
 import { is_false, is_nil } from "../../eval/guards.js";
@@ -72,7 +72,14 @@ export default new EnvCapability("scheme/srfi-1", {
     // SequenceInput in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
     filter:
       symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
-        { input: [z.custom<(...args: unknown[]) => unknown>(), z.value], output: [z.unknown()], fanout: true },
+        // Output is `z.value` (the representation-BLIND scheme-value identity), NOT a "proper
+        // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
+        // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
+        // `seq` operand implements and returns a value in THAT SAME representation, so there is
+        // no single richer scheme-zod collection type honest for every call site. `z.value` is
+        // still strictly tighter than the old `z.unknown()`: it excludes a raw non-scheme host
+        // value, which `unknown()` would wrongly admit.
+        { input: [z.lambda, z.value], output: [z.value], fanout: true },
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = resolveMethod(seq, tf("filter"));
@@ -81,13 +88,18 @@ export default new EnvCapability("scheme/srfi-1", {
               `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${(tf("filter"))}).`,
             );
           }
-          return m.call(seq, pred, runCtx);
+          // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
+          // lookup, possibly async) — the cast states what the `filter` term contract actually
+          // guarantees (a scheme value, or a promise of one, in the receiver's own
+          // representation), mirroring this file's established "typecheck is not a TS guard;
+          // re-state it" idiom (see `findImpl` above).
+          return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
         },
       ),
     reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
     find: symbol.native`find: first list element matching the predicate, else nil`(
       {
-        input: [z.custom<(...args: unknown[]) => unknown>(), z.union([z.pair, z.nil])],
+        input: [z.lambda, z.union([z.pair, z.nil])],
         output: [z.value],
         // The z.custom predicate arg is unrepresentable to the harvest printer, collapsing the WHOLE
         // signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the real

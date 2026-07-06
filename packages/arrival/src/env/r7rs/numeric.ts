@@ -24,8 +24,13 @@
 
 import * as z from "../../common/scheme-zod.js";
 import invariant from "tiny-invariant";
-import { symbol } from "../../common/symbol.js";
-import type { Contract, RestSpec, VectorSpec } from "../../common/symbol.js";
+// `TypeError.invariant` (used below, e.g. `marshalCall`) is a global augmentation this
+// module never triggered itself — it type-checked and ran only because SOME other module
+// in the load graph (env/r7rs/lists.ts) happened to import it first as a side effect. Same
+// "roster-order accident" class the exceptions.ts header calls out; import it explicitly
+// here so this file's correctness doesn't depend on load order.
+import "@here.build/error-invariant";
+import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { SPECULATE } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -36,7 +41,15 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { Values } from "../../values/primitives/Values.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
-import { coerceNumeric, isSchemeNumber, isOrd, ORD_REL, nilOrderCompare, withInputProvenance, type AOrd } from "../../values/op-helpers.js";
+import {
+  coerceNumeric,
+  isSchemeNumber,
+  isOrd,
+  ORD_REL,
+  nilOrderCompare,
+  withInputProvenance,
+  type AOrd,
+} from "../../values/op-helpers.js";
 import { isStrict } from "../../eval/evaluator.js";
 import { type } from "../../utils/typecheck.js";
 
@@ -166,10 +179,20 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
   TypeError.invariant(inRest || args.length <= minArgs, `${name}: expected ${minArgs} args, got ${args.length}`);
   const jsArgs = args.map((arg, i) => {
     const prof = i < inCodecs.length ? inCodecs[i] : inRest!;
+    // `prof.match` IS a real type predicate (`(value: unknown) => value is S`), and
+    // `TypeError.invariant` is a TS assertion function (`asserts condition`) — the same
+    // narrowing machinery `if (prof.match(arg))` would give. So this assertion narrows
+    // `arg: unknown` down to `prof`'s own `S` with no cast: the old `arg as any` was
+    // already inert, just unproven at the call site. `S` resolves to `any` here because
+    // `prof` is picked dynamically per-index out of a heterogeneous codec list (`in`/
+    // `inRest` can each carry a DIFFERENT NCodec's S/J) — that heterogeneity is inherent
+    // to a shared dispatch table keyed by op name, not a typing gap.
     TypeError.invariant(prof.match(arg), `${name}: argument ${i} type mismatch`);
-    return prof.toJS(arg as any);
+    return prof.toJS(arg);
   });
-  const jsResult = fn(...(jsArgs as any));
+  // `jsArgs` is already `any[]` (each `prof.toJS(arg)` above returns `J = any`, same
+  // per-index-heterogeneity reason) — `fn` (`(...jsArgs: any[]) => any`) accepts it directly.
+  const jsResult = fn(...jsArgs);
   return out.fromJS(jsResult);
 }
 
@@ -184,12 +207,12 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
     let converted: ANumeric[];
     try {
       converted = callArgs.map(coerceNumeric);
-    } catch (cause) {
+    } catch (error) {
       // Name what actually failed — mirror isSchemeNumber's contract.
       const badIndex = callArgs.findIndex((a) => !isSchemeNumber(a));
       const typeNames = callArgs.map(type).join(", ");
-      const detail = badIndex >= 0 ? `argument ${badIndex} is ${type(callArgs[badIndex])}` : "argument type mismatch";
-      throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause });
+      const detail = badIndex === -1 ? "argument type mismatch" : `argument ${badIndex} is ${type(callArgs[badIndex])}`;
+      throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause: error });
     }
     const result: unknown = marshalCall(name, spec, converted);
     if (provenance.size > 0) {
@@ -414,7 +437,7 @@ function toIntegerPair(
 
 function bigintFloorDiv(a: bigint, b: bigint): bigint {
   const q = a / b;
-  if (a % b !== 0n && (a < 0n) !== (b < 0n)) {
+  if (a % b !== 0n && a < 0n !== b < 0n) {
     return q - 1n;
   }
   return q;
@@ -480,8 +503,7 @@ const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   return new AInexact(a.ctx, p.av % p.bv);
 };
 
-const absFn = (x: number | bigint): number | bigint =>
-  typeof x === "bigint" ? (x < 0n ? -x : x) : Math.abs(x);
+const absFn = (x: number | bigint): number | bigint => (typeof x === "bigint" ? (x < 0n ? -x : x) : Math.abs(x));
 
 // ── gcd / lcm ───────────────────────────────────────────────────────────────────
 
@@ -771,7 +793,7 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // Under strict mode (RunContext.strict via the ambient `isStrict()` holder) loose is
 // gated off — an all-constant comparison like `(= '() '())` carries no operand to
 // thread strict, so the run holder is the only honest source.
-const isNilOperand = (v) => v == null || (v)?.constructor?.name === "ANil";
+const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
 const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
 const LOOSE_NUM_PAIR = {
@@ -790,25 +812,32 @@ const ORD_FROM_LE = {
 const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
 function loosePairOrder(sym, a, b) {
   const nilCmp = nilOrderCompare(a, b);
-  if (nilCmp !== undefined) return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
+  if (nilCmp !== undefined)
+    return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
   if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
-  if (!isOrd(a) || !isOrd(b)) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
-  const le_ab = Boolean((a)["arrival/tagless-final/lte"](b));
-  const le_ba = Boolean((b)["arrival/tagless-final/lte"](a));
-  if (!le_ab && !le_ba) throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
+  if (!isOrd(a) || !isOrd(b))
+    throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
+  const le_ab = Boolean(a["arrival/tagless-final/lte"](b));
+  const le_ba = Boolean(b["arrival/tagless-final/lte"](a));
+  if (!le_ab && !le_ba)
+    throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
   return ORD_FROM_LE[sym](le_ab, le_ba);
 }
 function looseOrderChain(sym, args) {
   let verdict = true;
   for (let i = 0; i < args.length - 1; i++) {
-    if (!loosePairOrder(sym, args[i], args[i + 1])) { verdict = false; break; }
+    if (!loosePairOrder(sym, args[i], args[i + 1])) {
+      verdict = false;
+      break;
+    }
   }
   return withInputProvenance(args, verdict);
 }
 function looseCompare(sym, core) {
   const fn = function (...args) {
     if (isStrict()) {
-      if (!args.every(isNumberOperand)) throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
+      if (!args.every(isNumberOperand))
+        throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core(...args);
     }
     if (args.some(isNilOperand)) {
@@ -927,7 +956,7 @@ const exactFn = (z: unknown): AExact => {
   // JS Number.toString picks fixed (`0.5`) vs exponential (`1e-10`/`1e+21`) by
   // magnitude. Parse the mantissa+exponent and combine into a power-of-10 denom.
   const str = real.toString();
-  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i);
   if (expMatch) {
     const [, sign, intPart, fracPart = "", expStr] = expMatch;
     const exp = Number(expStr);
@@ -1094,43 +1123,67 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseXorF
  *  blind input (matches `lists.ts`'s own convention for "genuinely could be anything"). */
 const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.unknown()], output: [z.boolean] };
 
-/** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers. */
+/** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers.
+ *  Input tightened from `z.unknown()` to `z.schemeNumber`: both impls' first act is
+ *  `coerceNumeric` on each operand (op-helpers.ts) — the contract states the SCHEME-LEVEL
+ *  domain (a scheme exact/inexact value), matching every sibling `NumSpec`-driven contract
+ *  above (`contractFromSpec` maps `SchemeNum` → `z.schemeNumber` the same way); the wider
+ *  JS-side coercion `coerceNumeric` also accepts (raw bigint/number, a valueOf()-able
+ *  object) is an internal leniency, not a documented caller contract. */
 const TWO_VALUE_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.unknown(), z.unknown()],
+  input: [z.schemeNumber, z.schemeNumber],
   output: [z.schemeNumber, z.schemeNumber],
 };
 
-/** `1+`/`1-` — `(n: unknown) => ANumeric`. */
+/** `1+`/`1-` — `(n: unknown) => ANumeric`. See `TWO_VALUE_OUTPUT_CONTRACT` above for why
+ *  the input is `z.schemeNumber`, not `z.unknown()` (`onePlusFn`/`oneMinusFn` both
+ *  `coerceNumeric` their argument first). */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.unknown()],
+  input: [z.schemeNumber],
   output: [z.schemeNumber],
 };
 
-/** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. */
+/** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. Same reasoning as
+ *  `TWO_VALUE_OUTPUT_CONTRACT`: `shiftRightFn`/`shiftLeftFn` `coerceNumeric` both operands
+ *  before handing them to `marshalCall(arithmeticShiftSpec, …)`, which itself doors at
+ *  runtime if either isn't integer-shaped — the WIDE `schemeNumber` here is the honest
+ *  declared domain; the integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
 const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.unknown(), z.unknown()],
+  input: [z.schemeNumber, z.schemeNumber],
   output: [z.schemeNumber],
 };
 
-/** `lcm` — `(...args: unknown[]) => ANumeric`. */
+/** `lcm` — `(...args: unknown[]) => ANumeric`. `lcmFn` `coerceNumeric`s every arg before
+ *  its own exact/inexact bookkeeping — same reasoning as the contracts above. */
 const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: z.array(z.unknown()),
+  input: z.array(z.schemeNumber),
   output: [z.schemeNumber],
 };
 
 /** `inexact`/`exact->inexact` — `(z: unknown) => AInexact`: narrower than the generic
- *  scheme-number union, matching `inexactFn`'s own declared return type exactly. */
-const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.unknown()], output: [z.schemeInexact] };
+ *  scheme-number union, matching `inexactFn`'s own declared return type exactly. Input is
+ *  `z.schemeNumber` (`inexactFn` `coerceNumeric`s its argument first — same reasoning as
+ *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
+const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.schemeNumber],
+  output: [z.schemeInexact],
+};
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact`: narrower than the generic
- *  scheme-number union, matching `exactFn`'s own declared return type exactly. */
-const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.unknown()], output: [z.schemeExact] };
+ *  scheme-number union, matching `exactFn`'s own declared return type exactly. Input is
+ *  `z.schemeNumber` (`exactFn` `coerceNumeric`s its argument first — same reasoning as
+ *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
+const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.schemeNumber],
+  output: [z.schemeExact],
+};
 
 /** `number->string` — `(z: unknown, radix?: unknown) => string` (a RAW JS string, not a
  *  boxed AString — matches `z.string`'s DECODED type exactly; see the codec-bridge note
- *  on `Bool`/`z.boolean` above for why the codec's boxed INPUT side is inert here too). */
+ *  on `Bool`/`z.boolean` above for why the codec's boxed INPUT side is inert here too).
+ *  Both `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
 const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.unknown(), z.unknown().optional()],
+  input: [z.schemeNumber, z.schemeNumber.optional()],
   output: [z.string],
 };
 
@@ -1204,8 +1257,14 @@ export default new EnvCapability("scheme/numeric", {
       nativeNumericOp("gcd", gcdSpec),
     ),
     expt: symbol.native`expt: exponentiation`(contractFromSpec(exptSpec), exptOp),
-    max: symbol.native`max: maximum (inexactness contagious)`(contractFromSpec(maxSpec), nativeNumericOp("max", maxSpec)),
-    min: symbol.native`min: minimum (inexactness contagious)`(contractFromSpec(minSpec), nativeNumericOp("min", minSpec)),
+    max: symbol.native`max: maximum (inexactness contagious)`(
+      contractFromSpec(maxSpec),
+      nativeNumericOp("max", maxSpec),
+    ),
+    min: symbol.native`min: minimum (inexactness contagious)`(
+      contractFromSpec(minSpec),
+      nativeNumericOp("min", minSpec),
+    ),
 
     // ── Comparison (numeric core + FL-Ord fallback + nil-tolerant overlay) ────────
     "=": symbol.native`=: numeric equality (nil-tolerant)`(contractFromSpec(numEqSpec), looseCompare("=", numEqOp)),
@@ -1267,7 +1326,10 @@ export default new EnvCapability("scheme/numeric", {
       PREDICATE_CONTRACT,
       nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN),
     ),
-    "nan?": symbol.native`nan?: #t for NaN`(PREDICATE_CONTRACT, nativeTypePredicate("nan?", (n) => n.isNaN)),
+    "nan?": symbol.native`nan?: #t for NaN`(
+      PREDICATE_CONTRACT,
+      nativeTypePredicate("nan?", (n) => n.isNaN),
+    ),
 
     // ── Rounding ─────────────────────────────────────────────────────────────────
     floor: symbol.native`floor: largest integer ≤ n`(contractFromSpec(floorSpec), nativeNumericOp("floor", floorSpec)),
@@ -1334,12 +1396,16 @@ export default new EnvCapability("scheme/numeric", {
       truncateSlashFn as (...args: unknown[]) => unknown,
     ),
     lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),
-    "number?": symbol.native`number?: #t for any number`(
-      PREDICATE_CONTRACT,
-      ((value: unknown) => isSchemeNumber(value)) as (...args: unknown[]) => unknown,
+    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, ((value: unknown) =>
+      isSchemeNumber(value)) as (...args: unknown[]) => unknown),
+    "1+": symbol.native`1+: increment by one`(
+      ONE_ARG_NUM_OUTPUT_CONTRACT,
+      onePlusFn as (...args: unknown[]) => unknown,
     ),
-    "1+": symbol.native`1+: increment by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, onePlusFn as (...args: unknown[]) => unknown),
-    "1-": symbol.native`1-: decrement by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, oneMinusFn as (...args: unknown[]) => unknown),
+    "1-": symbol.native`1-: decrement by one`(
+      ONE_ARG_NUM_OUTPUT_CONTRACT,
+      oneMinusFn as (...args: unknown[]) => unknown,
+    ),
     ">>": symbol.native`>>: arithmetic-shift by the count`(
       TWO_ARG_NUM_OUTPUT_CONTRACT,
       shiftRightFn as (...args: unknown[]) => unknown,
@@ -1348,7 +1414,10 @@ export default new EnvCapability("scheme/numeric", {
       TWO_ARG_NUM_OUTPUT_CONTRACT,
       shiftLeftFn as (...args: unknown[]) => unknown,
     ),
-    inexact: symbol.native`inexact: exact→inexact conversion`(INEXACT_CONTRACT, inexactFn as (...args: unknown[]) => unknown),
+    inexact: symbol.native`inexact: exact→inexact conversion`(
+      INEXACT_CONTRACT,
+      inexactFn as (...args: unknown[]) => unknown,
+    ),
     exact: symbol.native`exact: inexact→exact conversion`(EXACT_CONTRACT, exactFn as (...args: unknown[]) => unknown),
     "exact->inexact": symbol.native`exact->inexact: R5RS spelling of inexact`(
       INEXACT_CONTRACT,

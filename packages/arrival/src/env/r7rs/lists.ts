@@ -79,6 +79,13 @@ const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue =
 // is itself a valid `NestedArray[]`, so the shallow caller (`listToArray`) keeps
 // its precise `SchemeValue[]` while the deep caller (`treeToArray`) gets the tree.
 type NestedArray = SchemeValue | NestedArray[];
+/** Structural check mirroring `NestedArray` exactly: a plain array recurses into every
+ *  element; a non-array is accepted as a leaf (it can be ANY SchemeValue — the same
+ *  representation-blind-leaf convention `z.value`/`flatten`'s output union already use
+ *  in this file). Used as `tree->array`'s output element validator, below. */
+function isNestedArray(v: unknown): v is NestedArray {
+  return !Array.isArray(v) || v.every(isNestedArray);
+}
 function to_array(name: string): (list: unknown) => SchemeValue[];
 function to_array(name: string, deep: true): (list: unknown) => NestedArray[];
 function to_array(name: string, deep = false): (list: unknown) => NestedArray[] {
@@ -277,10 +284,10 @@ export default new EnvCapability("scheme/lists", {
       // terms — so the receiver + return stay `unknown`; narrowing to a List would be FALSE
       // (it would exclude the vector case, exactly the z.value-not-z.union reasoning above).
       {
-        input: z.tuple([z.custom<(...args: unknown[]) => SchemeValue>()], z.value),
+        input: z.tuple([z.lambda], z.value),
         output: [z.value],
         fanout: true,
-        type: "(fn: (...args: unknown[]) => unknown, ...lists: unknown[]) => unknown",
+        type: "<R>(fn: (...args: unknown[]) => R, ...lists: unknown[]) => R[]",
       },
       (args, runCtx) => {
         const [fn, ...lists] = args;
@@ -312,7 +319,7 @@ export default new EnvCapability("scheme/lists", {
       // z.value. Output is UNSPECIFIED (R7RS §6.4), not a returned value — z.void(), matching
       // the convention string-for-each/vector-for-each already use.
       {
-        input: [z.custom<(...args: unknown[]) => SchemeValue>()],
+        input: [z.lambda],
         inputRest: z.union([z.pair, z.nil]),
         output: [z.void()],
         // The z.custom callable head collapses signatureOf to the catch-all `(...args:
@@ -609,7 +616,7 @@ export default new EnvCapability("scheme/lists", {
     // for a scheme-callable whose result is truthiness-tested via is_false, not used as data).
     member: symbol.native`member: first sublist whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
         output: [z.union([z.value, z.literal(false)])],
         // The optional z.custom compare collapses signatureOf to the catch-all; `type` restores
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
@@ -634,7 +641,7 @@ export default new EnvCapability("scheme/lists", {
     // member above.
     assoc: symbol.native`assoc: first alist entry whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.union([z.pair, z.nil]), z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
         output: [z.union([z.value, z.literal(false)])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
@@ -795,7 +802,13 @@ export default new EnvCapability("scheme/lists", {
       // printer, collapsing signatureOf to the catch-all `(...args: unknown[]) => unknown` (losing
       // both the single-arg arity and the array output). `type` restores it: one tree arg → a
       // nested JS array (`unknown[]`, the honest image of the NestedArray element).
-      { input: [z.value], output: [z.array(z.custom<NestedArray>())], type: "(tree: unknown) => unknown[]" },
+      // `isNestedArray` (above) actually REJECTS a malformed nested array (one that isn't
+      // recursively well-formed), unlike a no-op `z.custom<NestedArray>()`.
+      {
+        input: [z.value],
+        output: [z.array(z.custom<NestedArray>(isNestedArray))],
+        type: "(tree: unknown) => unknown[]",
+      },
       (list: unknown): NestedArray[] => treeToArray(list),
     ),
 

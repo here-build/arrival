@@ -77,7 +77,15 @@ export default new EnvCapability("scheme/srfi-28", {
   symbols: {
     format:
       symbol.native`format: (format fmt arg ...) or (format #f fmt arg ...) → the fmt string with ~a (display) ~s (write) ~d (decimal) ~F/~w,dF (fixed-point, e.g. ~,2f) ~% (newline) ~~ (tilde) directives filled from the args; string-only (a #t/port destination is a teaching door — no IO here) (SRFI-28/48)`(
-        { input: z.array(z.unknown()), output: [z.union([z.string, z.schemeString])] },
+        // A single homogeneous VARIADIC vector, not `[fmt, ...rest]` — the impl (below) is a
+        // real `(...args: unknown[])`, and args[0]'s true type is decided AT RUNTIME (a format
+        // string per SRFI-28, or `#f` per the SRFI-48/CL destination form, or anything else,
+        // which throws the DEST_REASON teaching error) — there is no static fixed-prefix to
+        // split `input`/`inputRest` at. Each element is `z.value` (the representation-BLIND
+        // scheme-value identity — narrower than the old `z.unknown()`, which was host-blind:
+        // it also accepted raw non-scheme JS), since a directive-fill arg can be ANY scheme
+        // value (rendered via `displayOf`/`writeOf`).
+        { input: z.array(z.value), output: [z.union([z.string, z.schemeString])] },
         (...args: unknown[]): string | AString => {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: first arg IS the format string. SRFI-48/CL: first arg is a

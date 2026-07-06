@@ -15,7 +15,7 @@ import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { gensym, type SymbolName } from "../../reader/values-repr.js";
-import type { ASymbol } from "../../values/primitives/ASymbol.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { typecheck } from "../../utils/typecheck.js";
 
 /** The irreducible scheme core pack: constants, syntax-binding macros.
@@ -104,7 +104,16 @@ export default new EnvCapability("scheme/core", {
     // image, per z.symbol's own IMAGE_BY_NAME entry) out.
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
       {
-        input: z.tuple([z.custom<SymbolName | ASymbol | null>().optional()]),
+        input: z.tuple([
+          // Structural check mirroring `SymbolName | ASymbol | null` exactly (values-repr.ts):
+          // a raw name (string/symbol/number), an ASymbol wrapper, or the no-hint default.
+          z
+            .custom<SymbolName | ASymbol | null>(
+              (v) =>
+                v === null || typeof v === "string" || typeof v === "symbol" || typeof v === "number" || v instanceof ASymbol,
+            )
+            .optional(),
+        ]),
         output: [z.symbol],
         type: "(name?: string) => string",
       },
@@ -129,10 +138,16 @@ export default new EnvCapability("scheme/core", {
     typecheck: symbol.native`typecheck: assert arg matches an expected type (or throw a typed error)`(
       {
         input: [
-          z.custom<{ valueOf(): unknown }>(),
+          // `Valuable` (utils/typecheck.ts) is structurally "has a callable .valueOf" — reject
+          // null/undefined (accessing .valueOf would throw) and anything without one.
+          z.custom<{ valueOf(): unknown }>((v) => v != null && typeof (v as { valueOf?: unknown }).valueOf === "function"),
           z.value,
-          z.custom<{ valueOf(): unknown } | Function>(),
-          z.custom<number | null>().optional(),
+          // `expected` is EITHER a predicate Function OR another Valuable (typecheck.ts calls
+          // `is_function(expected)` first, falls back to `.valueOf()` otherwise).
+          z.custom<{ valueOf(): unknown } | Function>(
+            (v) => typeof v === "function" || (v != null && typeof (v as { valueOf?: unknown }).valueOf === "function"),
+          ),
+          z.custom<number | null>((v) => v === null || typeof v === "number").optional(),
         ],
         output: [z.void()],
         type: "(fn: unknown, arg: unknown, expected: string | Function, position?: number) => void",
