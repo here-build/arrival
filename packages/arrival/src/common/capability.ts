@@ -44,24 +44,35 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
 
 type Fn = (...args: any[]) => unknown;
 
-/** A symbol is, during the symbol.* migration window, one of TWO families:
+/** A symbol is one of THREE families:
  *
- *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" }`)
- *    — the target form, dispatched by `kind` in apply();
- *  • a LEGACY form — a bare fn, a rosetta config (`withContext`/`type`/`options`), or a raw
- *    value binding (`{ value }`) — the shape unmigrated packs still use. Fn forms read `this`.
- *
- *  ─── TRANSITIONAL (deletion gate) ───────────────────────────────────────────────────────
- *  Accepting BOTH is a MIGRATION scaffold, not a permanent compat layer. The legacy arm
- *  (`isValueDef` / `isSymbolSpec` / the bare-Fn fallback below) is DELETED in Phase 2, once
- *  every pack is migrated to `symbol.native` / `symbol.rosetta` / `symbol.notImplemented`.
- *  `equality.ts` is the Phase-1 pilot; the rest of NATIVE_PACKS + the rosetta packs follow.
- *  Until then this union is open on both sides and apply() routes by shape.
+ *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" | … }`)
+ *    — dispatched by `kind` in apply(). This is the ONLY form every pack under
+ *    `foundations/arrival/**` now declares — the whole base stdlib + the infer/mcp/data/
+ *    approval palette (arrival-scheme-env-infer, arrival-chain) migrated off the legacy forms
+ *    below in the `symbol.rosetta`/`symbol.native` bake effort.
+ *  • a raw VALUE binding (`{ value }`) — a PERMANENT, deliberate arm, not a migration remnant.
+ *    Reserved for the CALLABLE RULE's one true exception: a binding `require`'s loader
+ *    machinery resolves and calls directly in JS-land, never through the scheme evaluator (no
+ *    rosetta marshal makes sense for a value that's never a scheme call target) —
+ *    `packs/ext-yaml.ts` / `packs/ext-toml.ts`'s `ext/yaml/resolve`-shaped bindings are the
+ *    known holders.
+ *  • a LEGACY form — a bare fn, or a rosetta config (`{ fn, withContext, type, options }`) —
+ *    read `this` (`ThisType<Activation<C,R>>`, bound at wire time). This was the `captureSymbols`
+ *    migration scaffold's target shape; `captureSymbols` itself is gone now that its only two
+ *    callers (arrival-chain's `arrivalDataCapability`/`arrivalSuperDefineCapability`) declare
+ *    baked forms directly. But the SHAPE remains load-bearing OUTSIDE `foundations/arrival` —
+ *    `McpEnvCapability`'s whole inline-annotation design (MCP `description`/`inputSchema` spliced
+ *    onto the same object as `fn`) is built on it, and every one of its downstream capabilities
+ *    (here.build's `saas/server/{arrival,mcp}`, inhuman's `saas/mcp`, the whole
+ *    `sift-submission/mcp/packs/*` forensics catalog) still authors verbs this way. Deleting this
+ *    arm is a SEPARATE, much larger migration (McpEnvCapability's annotation-lifting would need
+ *    to move to baked-symbol splicing first) — out of scope here; NOT dead code.
  *
  *  Named `SymbolDeclaration` (not `SymbolDef`) to keep it distinct from `symbol.js`'s
  *  `AEntity` — the two used to share the identical name `SymbolDef`, a real naming
- *  collision (this is the wider pre-bake authoring shape; `AEntity` is the narrower
- *  baked/discriminated result — `AEntity` is one arm of this union, not a synonym for it). */
+ *  collision (this is the wider authoring shape; `AEntity` is the narrower baked/discriminated
+ *  result — `AEntity` is one arm of this union, not a synonym for it). */
 export type SymbolDeclaration = AEntity | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
 
 /** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
@@ -79,52 +90,19 @@ const isBakedDef = (m: SymbolDeclaration): m is AEntity =>
     (m as { kind: unknown }).kind === "keyword" ||
     (m as { kind: unknown }).kind === "macro");
 
-// ── LEGACY-form guards (deleted with the legacy arm in Phase 2) ──────────────────────────
+// ── LEGACY-form guards — see `SymbolDeclaration`'s doc for why these stay ────────────────
 const isValueDef = (m: SymbolDeclaration): m is { value: unknown } =>
   typeof m === "object" && m !== null && "value" in m;
 const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
 /** A `symbols` record, or a BUILDER computing it from the activation (per-env config).
- *  The builder form is how helper-delegating packs (`defineXRosettas`) express symbols
- *  without re-homing their logic — see `captureSymbols`. */
+ *  The builder form is how a config-bearing capability closes host resolvers into its baked
+ *  verbs (`arrivalInferCapability`, `arrivalDataCapability`, …) without riding them on `this` —
+ *  or (legacy shape) how a helper-delegating pack used to express symbols via `captureSymbols`. */
 export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> =
   | (Record<string, SymbolDeclaration> & ThisType<Activation<C, R>>)
   | ((activation: Activation<C, R>) => Record<string, SymbolDeclaration>);
-
-/** Run an imperative `defineXRosettas(env, …)` helper against a recording host and
- *  return its wiring as a symbol record — so a helper-delegating pack becomes a
- *  declarative `symbols` builder, keeping the helper, no re-homing. `defineRosetta`
- *  → a rosetta symbol; `set` → a `{ value }` binding. */
-export function captureSymbols(wire: (host: SchemeEnv) => void): Record<string, SymbolDeclaration> {
-  const out: Record<string, SymbolDeclaration> = {};
-  // A recording host: the SUBSET of SchemeEnv a `defineXRosettas` helper actually
-  // exercises (defineRosetta → a rosetta symbol; set → a `{ value }` binding) is wired
-  // to capture into `out`. The scope-shaping verbs (registerResolver / list /
-  // allBoundNames / inherit-into-a-new-scope) have no meaning while RECORDING — a helper
-  // reaching for them during capture is a misuse, so they throw LOUD rather than silently
-  // mis-record. `inherit` returns the same recorder so a chained `.inherit().set(…)` lands
-  // in the same `out`. This genuinely satisfies SchemeEnv (no cast) — it is a faithful,
-  // capture-only implementation, not a laundered partial.
-  const recorderError = (verb: string) => new Error(`captureSymbols: ${verb} is not recordable`);
-  const host: SchemeEnv = {
-    defineRosetta: (name: string, cfg: RosettaSpec) => void (out[name] = cfg as SymbolDeclaration),
-    set: (name: string, value: unknown) => void (out[name] = { value }),
-    get: () => undefined,
-    inherit: () => host,
-    registerResolver: () => {
-      throw recorderError("registerResolver");
-    },
-    list: () => {
-      throw recorderError("list");
-    },
-    allBoundNames: () => {
-      throw recorderError("allBoundNames");
-    },
-  };
-  wire(host);
-  return out;
-}
 
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   /** zod schemas for per-env config; values are supplied + validated at `lower()`. */
@@ -147,12 +125,42 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
   resolvers?: readonly ResolverSpec[];
   /** DAG edges = capability grants. */
   deps?: readonly EnvCapability[];
-  /** the verbs this capability exposes: a `Record<name, RosettaConfig>` whose `fn`
-   *  reads `this` (`this.configuration.*` / `this.resources.*.live`), with `this`
-   *  typed as `Activation<C,R>` (ThisType, inferred). For env access, use a rosetta
-   *  spec with `withContext: true` — the env arrives via ctx, no imperative wiring.
-   *  Helper-delegating packs use the BUILDER form (`(activation) => captureSymbols(…)`). */
+  /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations
+   *  (the target form everything under `foundations/arrival` now uses), or (legacy shape,
+   *  still load-bearing for `McpEnvCapability`'s downstream population — see
+   *  `SymbolDeclaration`'s doc) a `Record<name, RosettaConfig>` whose `fn` reads `this`
+   *  (`this.configuration.*` / `this.resources.*.live`), with `this` typed as `Activation<C,R>`
+   *  (ThisType, inferred). A config-bearing BAKED capability instead uses the BUILDER form
+   *  (`(activation) => ({...})`) to close a host resolver from `configuration` into each verb's
+   *  impl — a baked rosetta's `this` is the per-call INVOCATION context
+   *  (`this.invocation`/`this.abortSignal`), not the activation, so config can't ride `this` there. */
   symbols?: SymbolsSpec<C, R>;
+}
+
+/** Every `.spec.prelude` reachable from `caps`, DAG order (a dep's prelude precedes its
+ *  dependent's — the same order `lower()`'s own `apply()` evaluates them in, so a
+ *  dependent's prelude may reference names its dep's prelude defined), deduplicated by
+ *  capability IDENTITY (a diamond-shaped dep graph — two capabilities sharing one dep —
+ *  must not double-emit its prelude).
+ *
+ *  For an EDITOR/type-lens's ambient scheme vocabulary: it needs EVERY capability actually
+ *  assembled into the real env, not a hand-picked subset named by the caller. A hand-picked
+ *  list silently drifts out of sync the moment a capability's own prelude changes or a new
+ *  capability joins the root-set — exactly the bug this closes (`define/overridable`'s
+ *  macro read as unresolved in studio's live editor because the caller named two
+ *  capabilities' preludes by hand instead of walking the real assembled set). */
+export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
+  const parts: string[] = [];
+  for (const cap of caps) {
+    if (seen.has(cap)) continue;
+    seen.add(cap);
+    if (cap.spec.deps !== undefined) {
+      const depsPrelude = collectPrelude(cap.spec.deps, seen);
+      if (depsPrelude !== "") parts.push(depsPrelude);
+    }
+    if (cap.spec.prelude !== undefined) parts.push(cap.spec.prelude);
+  }
+  return parts.join("\n");
 }
 
 /** A configured, lowerable env capability. The default export of every palette pack. */
@@ -248,7 +256,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // Bind it via `set`, NOT defineRosetta — routing it through defineRosetta would
                 // double-wrap the membrane (a second schemeToJs/jsToScheme over the codec output).
                 // Resource pre-spawning still applies if the capability owns cells.
-                const runFn = def.run as Fn & { __withCtx?: boolean };
+                const runFn = def.run;
                 const gatedRun =
                   cellList.length === 0
                     ? runFn
@@ -287,11 +295,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             continue;
           }
 
-          // ── LEGACY forms (deleted with this arm in Phase 2) ─────────────────────────
+          // ── the raw-value arm (see `SymbolDeclaration`'s doc) ────────────────────────
           if (isValueDef(def)) {
-            env.set(verb, def.value); // raw binding (e.g. a sentinel constant)
+            env.set(verb, def.value); // raw binding — a `require`-resolved value, never a scheme call target
             continue;
           }
+
+          // ── LEGACY forms — still McpEnvCapability's downstream authoring shape ──────
           const sym = isSymbolSpec(def) ? def : { fn: def };
           const bound = (sym.fn as Fn).bind(activation);
           // Activation middleware: first touch of ANY symbol spawns ALL resources
