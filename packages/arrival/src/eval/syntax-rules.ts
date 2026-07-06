@@ -22,7 +22,7 @@ import type { Capabilities } from "./Capabilities.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
-import { APair, concatPair } from "../values/primitives/APair.js";
+import { APair, __tieKnot, concatPair } from "../values/primitives/APair.js";
 import { Syntax } from "./Syntax.js";
 import { isNumeric } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
@@ -251,7 +251,14 @@ interface HygieneScope {
 // reads back through guards — a captured SchemeValue, an ellipsis APair list, a raw JS
 // array (nested ellipsis), `nil`, or `null` (empty-ellipsis sentinel) — so the honest
 // leaf type is `unknown`, narrowed at each read site (`is_pair`/`is_nil`/`Array.isArray`).
-type BindingCell = Record<string | symbol, unknown>;
+// A binding cell holds MATCHED CODE FRAGMENTS (scheme values); an ELLIPSIS cell additionally
+// holds per-repetition ARRAYS (the (x ...) accumulation) and the `null` sentinel ("matched,
+// zero repetitions") — never arbitrary host data.
+type BindingCell = Record<string | symbol, SchemeValue | SchemeValue[] | null | undefined>;
+// The TEMPLATE layer's value domain: expanded code plus the EnvLookup placeholders the
+// transformer plants (resolved at substitution) — the honest type of everything the
+// transform fns pass around. Collapses back to SchemeValue when expansion completes.
+type TemplateValue = SchemeValue | EnvLookup<SchemeValue>;
 interface MatchBindings {
   "...": { symbols: BindingCell; lists: unknown[] };
   symbols: BindingCell;
@@ -298,7 +305,7 @@ export function extract_patterns(
       const literal = pattern.literal(); // TODO: literal() may be SLOW
       if (symbols.includes(literal)) {
         const codeAsName = code instanceof ASymbol || typeof code === "string" || code instanceof RegExp;
-        if (!ASymbol.is(code, literal) && !(codeAsName && ASymbol.is(pattern, code))) {
+        if (!ASymbol.is(code, literal) && !(codeAsName && ASymbol.is(pattern, code as ASymbol | string | RegExp))) {
           return false;
         }
         // refFrame walks USE-site scope frames THEN capabilities, returning the owning frame
@@ -333,7 +340,8 @@ export function extract_patterns(
             const array_head = count > 0 ? code.slice(0, count) : code;
             const as_list = APair.fromArray(CONSTANT_CTX, array_head, false);
             bindings["..."].symbols[name] = bindings["..."].symbols[name]
-              ? concatPair(CONSTANT_CTX, bindings["..."].symbols[name], new APair(CONSTANT_CTX, as_list, nil))
+              ? // list-accumulation cell (the array style is the `??= []` cell in the symbol arm)
+                concatPair(CONSTANT_CTX, bindings["..."].symbols[name] as SchemeValue, new APair(CONSTANT_CTX, as_list, nil))
               : new APair(CONSTANT_CTX, as_list, nil);
           } else {
             bindings["..."].symbols[name] = APair.fromArray(CONSTANT_CTX, code, false);
@@ -385,7 +393,17 @@ export function extract_patterns(
           code_len--;
         }
         const rest = list.cdr;
-        list.cdr = nil;
+        // FRESH-PREFIX split (readonly-slot contract): the old `list.cdr = nil` SEVERED the
+        // user's input form in place — and never restored it, so a matched form's spine stayed
+        // corrupted in the source AST after expansion (a latent LIPS-heritage bug the readonly
+        // contract surfaced). Build the head segment as a fresh spine instead: elements SHARED
+        // (provenance preserved), spine fresh, the input form untouched.
+        const prefixEls: SchemeValue[] = [];
+        for (let n: APair = code; ; n = n.cdr as APair) {
+          prefixEls.push(n.car);
+          if (n === list) break;
+        }
+        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as APair;
         const new_sate = { ...state, trailing: improper_list };
         if (!traverse(pattern.cdr.cdr, rest, new_sate)) {
           return false;
@@ -401,11 +419,11 @@ export function extract_patterns(
         } else if (code instanceof APair && (code.car instanceof APair || code.car instanceof ANil)) {
           if (ellipsis) {
             if (bindings["..."].symbols[name]) {
-              let node = bindings["..."].symbols[name];
+              let node = bindings["..."].symbols[name] as SchemeValue; // list-accumulation cell
               node =
                 node instanceof ANil
-                  ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code, nil))
-                  : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
+                  ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code as SchemeValue, nil))
+                  : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code as SchemeValue, nil));
               bindings["..."].symbols[name] = node;
             } else {
               bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
@@ -433,17 +451,18 @@ export function extract_patterns(
               } else {
                 // case (a ... . b) for (a b . x)
                 const copy = code.clone();
-                copy.last_pair()!.cdr = nil;
+                // Ellipsis surgery on a PRIVATE clone — the knot door's third named consumer.
+                __tieKnot(copy.last_pair()!, "cdr", nil);
                 bindings["..."].symbols[name] = copy;
                 return traverse(pattern.cdr.cdr, last_pair.cdr, state);
               }
             }
             pattern_names.push(name);
             if (bindings["..."].symbols[name]) {
-              const node = bindings["..."].symbols[name];
-              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
+              const node = bindings["..."].symbols[name] as SchemeValue; // list-accumulation cell
+              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code as SchemeValue, nil));
             } else {
-              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
+              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code as SchemeValue, nil);
             }
           } else if (
             pattern.car instanceof ASymbol &&
@@ -496,11 +515,11 @@ export function extract_patterns(
         return true;
       }
       if (ellipsis) {
-        const cell = (bindings["..."].symbols[name] ??= []);
+        const cell = (bindings["..."].symbols[name] ??= [] as SchemeValue[]);
         invariant(Array.isArray(cell), "syntax: ellipsis binding cell must be an array");
-        cell.push(code);
+        cell.push(code as SchemeValue);
       } else {
-        bindings.symbols[name] = code;
+        bindings.symbols[name] = code as SchemeValue;
       }
       return true;
     }
@@ -664,7 +683,7 @@ export function transform_syntax({
     const n_type = typeof name;
     if (["string", "symbol"].includes(n_type)) {
       if (name in bindings.symbols) {
-        return bindings.symbols[name];
+        return bindings.symbols[name] as SchemeValue; // plain cell — never an array/null (ellipsis-only)
       } else if (typeof name === "string" && /\./.test(name)) {
         // calling method on pattern symbol #83
         const parts = name.split(".");
@@ -733,7 +752,7 @@ export function transform_syntax({
     bindings: BindingCell,
     state: { nested: boolean },
     next: (name: string | symbol, value: unknown) => void = () => {},
-  ): SchemeValue {
+  ): TemplateValue | undefined {
     if (Array.isArray(expr) && expr.length === 0) {
       return expr;
     }
@@ -787,7 +806,7 @@ export function transform_syntax({
               // concatPair. Discriminating on `car` keeps a pair from ever
               // reaching `.concat` (which APair does not have → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
-                return concatPair(CONSTANT_CTX, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next));
+                return concatPair(CONSTANT_CTX, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue);
               }
               return item.car;
             } else if (item.car instanceof APair) {
@@ -806,14 +825,14 @@ export function transform_syntax({
               }
             }
           }
-          return item;
+          return item as TemplateValue;
         }
       }
 
       return new APair(
         CONSTANT_CTX,
-        transform_ellipsis_expr(first, bindings, state, next),
-        transform_ellipsis_expr(expr.cdr, bindings, state, next),
+        transform_ellipsis_expr(first, bindings, state, next) as SchemeValue,
+        transform_ellipsis_expr(expr.cdr, bindings, state, next) as SchemeValue,
       );
     }
     return expr;
@@ -843,11 +862,12 @@ export function transform_syntax({
   function traverse(expr: SchemeValue, { disabled }: { disabled?: boolean } = {}): SchemeValue {
     if (expr instanceof APair) {
       const first = expr.car;
-      let second: SchemeValue, rest_second: SchemeValue;
-      if (expr.cdr instanceof APair) {
-        second = expr.cdr.car;
-        rest_second = expr.cdr.cdr;
-      }
+      // Derive both off ONE narrowed handle — `second`/`rest_second` exist iff the cdr is a
+      // pair, and TS threads that through the optional chain (the old two-let form tripped
+      // use-before-assign at every read).
+      const cdrPair = expr.cdr instanceof APair ? expr.cdr : undefined;
+      const second = cdrPair?.car;
+      const rest_second = cdrPair?.cdr;
       // escape ellispsis from R7RS e.g. (... ...): the escape form is
       // `(... <template>)`, so `first.cdr` must itself be a pair carrying
       // <template> in its car. Guard it before reading `.car` — a bare
@@ -861,7 +881,7 @@ export function transform_syntax({
         // and code was (x z) so y == null
         const values = Object.values(symbols);
         if (values.length > 0 && values.every((x) => x === null)) {
-          return traverse(rest_second, { disabled });
+          return traverse(rest_second as SchemeValue, { disabled });
         }
         const keys = get_names(symbols);
         // case of list as first argument ((x . y) ...) or (x ... ...)
@@ -878,7 +898,7 @@ export function transform_syntax({
           // nesting here?
           if (bindings["..."].lists[0] instanceof ANil) {
             if (!is_spread) {
-              return traverse(rest_second, { disabled });
+              return traverse(rest_second as SchemeValue, { disabled });
             }
             return nil;
           }
@@ -887,7 +907,7 @@ export function transform_syntax({
             // TODO: array
             new_expr = new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil));
           }
-          let result: unknown;
+          let result: SchemeValue;
           if (keys.length > 0) {
             let bind: BindingCell = { ...symbols };
             result = nil;
@@ -899,7 +919,7 @@ export function transform_syntax({
               const next = (key: string | symbol, value: unknown) => {
                 // ellipsis decide if what should be the next value
                 // there are two cases ((a . b) ...) and (a ...)
-                new_bind[key] = value;
+                new_bind[key] = value as SchemeValue;
               };
               let car = transform_ellipsis_expr(new_expr, bind, { nested: true }, next);
               // undefined can be null caused by null binding
@@ -909,9 +929,9 @@ export function transform_syntax({
                   car = car.valueOf();
                 }
                 if (is_spread) {
-                  result = result instanceof ANil ? car : concatPair(CONSTANT_CTX, result, car);
+                  result = result instanceof ANil ? (car as SchemeValue) : concatPair(CONSTANT_CTX, result, car as SchemeValue);
                 } else {
-                  result = new APair(CONSTANT_CTX, car, result);
+                  result = new APair(CONSTANT_CTX, car as SchemeValue, result);
                 }
               }
               bind = new_bind;
@@ -953,21 +973,21 @@ export function transform_syntax({
           const name = first.__name__;
           let bind: BindingCell = { [name]: symbols[name] };
           const is_null = symbols[name] === null;
-          let result: unknown = nil;
+          let result: SchemeValue = nil;
           while (true) {
             if (!have_binding(bind, true)) {
               break;
             }
             const new_bind: BindingCell = {};
             const next = (key: string | symbol, value: unknown) => {
-              new_bind[key] = value;
+              new_bind[key] = value as SchemeValue;
             };
             let value = transform_ellipsis_expr(expr, bind, { nested: false }, next);
             if (value !== undefined) {
               if (value instanceof EnvLookup) {
                 value = value.valueOf();
               }
-              result = new APair(CONSTANT_CTX, value, result);
+              result = new APair(CONSTANT_CTX, value as SchemeValue, result);
             }
             bind = new_bind;
           }
@@ -983,7 +1003,7 @@ export function transform_syntax({
             if (is_null) {
               return node;
             }
-            result = result instanceof ANil ? node : concatPair(CONSTANT_CTX, result, node);
+            result = result instanceof ANil ? node : concatPair(CONSTANT_CTX, result as SchemeValue, node);
           }
           return result;
         }

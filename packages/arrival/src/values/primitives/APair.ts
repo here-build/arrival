@@ -36,7 +36,8 @@ import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { tf } from "../tagless-final.js";
 
-interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
+interface PairWithMetadata<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue>
+  extends APair<Car, Cdr> {
   [CYCLES]?: { car?: string | APair; cdr?: string | APair };
   [REF]?: string;
   [LOCATION]?: SourceLocation;
@@ -175,6 +176,18 @@ function mark_cycles(pair: APair): void {
 // gone — dissolved into the per-value `["arrival/print"]()` protocol / `printValue`. APair was the
 // last place carrying a second copy of the universal value renderer.)
 
+/**
+ * INTERNAL knot-tying door — the ONE mutation path through APair's readonly slots. A cycle
+ * cannot be constructed immutably (a self-referential spine has no construction order), so the
+ * three knot-tying consumers — `clone` (this file), the reader's datum-label resolution
+ * (`Parser._resolve_pair`), and syntax-rules' ellipsis surgery on its private copies — patch
+ * through HERE, each use a named reviewable act (the `installHeapMeter` pattern: one designed
+ * door, never ad-hoc mutation). The ugly name IS the fence; not exported from the package index.
+ */
+export function __tieKnot(pair: APair, slot: "car" | "cdr", v: SchemeValue): void {
+  (pair as unknown as { car: SchemeValue; cdr: SchemeValue })[slot] = v;
+}
+
 export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue>
   extends AValue
   implements APairLike<Car, Cdr>
@@ -187,8 +200,8 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
 
   constructor(
     ctx: RunContext,
-    public readonly car?: Car,
-    public readonly cdr?: Cdr,
+    public readonly car: Car,
+    public readonly cdr: Cdr,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
     super(ctx, provenance);
@@ -303,10 +316,15 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
         if (visited.has(node)) {
           return visited.get(node);
         }
-        const pair = new APair(selfCtx) as PairWithMetadata;
+        // Register BEFORE descending (a cycle resolves to this very clone), constructed with
+        // the ORIGINAL slots as placeholders — real SchemeValues, so the readonly-required
+        // contract holds at construction. The knot door then overwrites with the cloned
+        // sub-spines (a cycle cannot be built immutably; this is one of the door's three
+        // named consumers).
+        const pair = new APair(selfCtx, node.car, node.cdr) as PairWithMetadata;
         visited.set(node, pair);
-        pair.car = deep ? cloneNode(node.car) : node.car;
-        pair.cdr = cloneNode(node.cdr);
+        __tieKnot(pair, "car", (deep ? cloneNode(node.car) : node.car) as SchemeValue);
+        __tieKnot(pair, "cdr", cloneNode(node.cdr) as SchemeValue);
         pair[CYCLES] = (node as PairWithMetadata)[CYCLES];
         return pair;
       }

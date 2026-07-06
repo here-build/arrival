@@ -11,7 +11,8 @@ import { DatumReference } from "../values/DatumReference.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
-import { is_nil, is_pair } from "../eval/guards.js";
+import { is_nil } from "../eval/guards.js";
+import { is_pair } from "../values/value-guards.js";
 import {
   is_builtin,
   is_bytevector_literal,
@@ -32,7 +33,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { parse_argument } from "../utils/parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { APair } from "../values/primitives/APair.js";
+import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
 import type { SchemeValue } from "../values/types.js";
@@ -305,8 +306,14 @@ export class Parser {
   }
 
   async read_list(): Promise<APair | ANil> {
-    let head: APair | typeof nil = nil;
-    let prev: APair | typeof nil = head;
+    // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
+    // location) left-to-right, then build the spine in ONE right fold — no in-place tail
+    // append. The improper dot-tail seeds the fold. An element may be a DatumReference
+    // placeholder (`#0#` before its label resolves) — reader-internal, patched by
+    // `_resolve_pair` via the knot door before any form leaves the reader; the per-cell cast
+    // below is that documented channel.
+    const items: Array<{ node: unknown; loc: ReturnType<Parser["_getLocation"]> }> = [];
+    let tail: unknown = nil;
     let dot = false;
     while (true) {
       const token = await this.peek();
@@ -320,26 +327,25 @@ export class Parser {
       }
       // Capture location BEFORE reading the object
       const loc = this._getLocation();
-      if (token === "." && !(head instanceof ANil)) {
+      if (token === "." && items.length > 0) {
         this.skip();
-        (prev as APair).cdr = await this._read_object();
+        tail = await this._read_object();
         dot = true;
       } else {
         invariant(!dot, "Parser: syntax error more than one element after dot");
-        const node = await this._read_object();
-        const cur = new APair(CONSTANT_CTX, node, nil);
-        if (loc) {
-          cur.setLocation(loc);
-        }
-        if (head instanceof ANil) {
-          head = cur;
-        } else {
-          (prev as APair).cdr = cur;
-        }
-        prev = cur;
+        items.push({ node: await this._read_object(), loc });
       }
     }
-    return head;
+    let chain: unknown = tail;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const cell = new APair(CONSTANT_CTX, items[i].node as SchemeValue, chain as SchemeValue);
+      const loc = items[i].loc;
+      if (loc) {
+        cell.setLocation(loc);
+      }
+      chain = cell;
+    }
+    return chain as APair | ANil;
   }
 
   /**
@@ -567,14 +573,18 @@ export class Parser {
   }
 
   async _resolve_pair(pair: APair): Promise<APair> {
+    // Datum-label resolution IS the knot-tying case: `#0=(1 #0#)` closes a cycle no
+    // construction order can express, so the placeholder patch goes through the door
+    // (one of its three named consumers). Patch-not-recurse on the resolved branch keeps
+    // the walk cycle-safe (the resolved value may BE an ancestor of this walk).
     if (pair instanceof APair) {
       if (pair.car instanceof DatumReference) {
-        pair.car = await pair.car.valueOf();
+        __tieKnot(pair, "car", (await pair.car.valueOf()) as SchemeValue);
       } else if (pair.car instanceof APair) {
         await this._resolve_pair(pair.car);
       }
       if (pair.cdr instanceof DatumReference) {
-        pair.cdr = await pair.cdr.valueOf();
+        __tieKnot(pair, "cdr", (await pair.cdr.valueOf()) as SchemeValue);
       } else if (pair.cdr instanceof APair) {
         await this._resolve_pair(pair.cdr);
       }
@@ -660,11 +670,13 @@ export class Parser {
       // read-time evaluator call was the ONLY reason the reader imported the evaluator — the cycle that
       // forced exec to dynamically import("stdlib") under the vestigial `lips` handle to break it.
       invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
+      // `object` may still be a DatumReference placeholder here — the reader-internal
+      // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
-        expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object, nil));
+        expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object as SchemeValue, nil));
         if (loc) expr.setLocation(loc);
       } else {
-        expr = new APair(CONSTANT_CTX, special.symbol, object);
+        expr = new APair(CONSTANT_CTX, special.symbol, object as SchemeValue);
         if (loc) expr.setLocation(loc);
       }
       return expr;

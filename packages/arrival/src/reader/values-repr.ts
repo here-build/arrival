@@ -173,7 +173,7 @@ export function patch_value(value: unknown): SchemeValue {
 // :: booleans) — none of which are members of the boxed SchemeValue union.
 // ----------------------------------------------------------------------
 export function is_atom(
-  obj: BoxedSchemeValue,
+  obj: unknown,
 ): obj is ASymbol | AString | ANil | ACharacter | AExact | AInexact | ABool {
   return (
     obj instanceof ASymbol ||
