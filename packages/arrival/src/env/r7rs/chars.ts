@@ -8,10 +8,11 @@
  * as bridge locals. The implementations — including inline comments — are
  * otherwise identical to the source.
  *
- * MIGRATED to the `symbol.native` API: each op declares a SCHEME-IDENTITY zod
- * contract (no codec, no validation — "zod for TYPES purely") and an impl bound
- * raw, exactly as the old `{ value }` form was. Native means the schema choice
- * cannot change runtime behavior; the bodies are reproduced byte-for-byte.
+ * MIGRATED to the `symbol.native` API: each op declares a zod contract and its impl
+ * works on the contract's SCHEME face (Face split — `Impl<…,"scheme">`): predicates
+ * return the schemeTrue/schemeFalse flyweights (a `z.boolean` output demands an
+ * ABool), digit-value's numeric arm boxes to AExact/AInexact. The raw JS returns
+ * were the LIPS-legacy leak.
  */
 
 import foldCase from "fold-case";
@@ -21,7 +22,8 @@ import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { charValue, coerceNumeric, deriveOrd } from "../../values/op-helpers.js";
+import { charValue, coerceNumeric, deriveOrd, schemeBool as bool, schemeFalse, schemeTrue } from "../../values/op-helpers.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -33,9 +35,9 @@ export default new EnvCapability("scheme/chars", {
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
-        if (chars.length < 2) return true;
+        if (chars.length < 2) return schemeTrue;
         const first = charValue(chars[0]);
-        return chars.slice(1).every((c) => charValue(c) === first);
+        return bool(chars.slice(1).every((c) => charValue(c) === first));
       },
     ),
 
@@ -62,9 +64,9 @@ export default new EnvCapability("scheme/chars", {
     "char-ci=?": symbol.native`char-ci=?: case-insensitive character equivalence`(
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
-        if (chars.length < 2) return true;
+        if (chars.length < 2) return schemeTrue;
         const first = charValue(chars[0]).toLowerCase();
-        return chars.slice(1).every((c) => charValue(c).toLowerCase() === first);
+        return bool(chars.slice(1).every((c) => charValue(c).toLowerCase() === first));
       },
     ),
 
@@ -72,9 +74,9 @@ export default new EnvCapability("scheme/chars", {
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
         for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() >= charValue(chars[i + 1]).toLowerCase()) return false;
+          if (charValue(chars[i]).toLowerCase() >= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
-        return true;
+        return schemeTrue;
       },
     ),
 
@@ -82,9 +84,9 @@ export default new EnvCapability("scheme/chars", {
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
         for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() <= charValue(chars[i + 1]).toLowerCase()) return false;
+          if (charValue(chars[i]).toLowerCase() <= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
-        return true;
+        return schemeTrue;
       },
     ),
 
@@ -92,9 +94,9 @@ export default new EnvCapability("scheme/chars", {
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
         for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() > charValue(chars[i + 1]).toLowerCase()) return false;
+          if (charValue(chars[i]).toLowerCase() > charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
-        return true;
+        return schemeTrue;
       },
     ),
 
@@ -102,9 +104,9 @@ export default new EnvCapability("scheme/chars", {
       { input: [], inputRest: z.char, output: [z.boolean] },
       (...chars) => {
         for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() < charValue(chars[i + 1]).toLowerCase()) return false;
+          if (charValue(chars[i]).toLowerCase() < charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
-        return true;
+        return schemeTrue;
       },
     ),
 
@@ -126,9 +128,9 @@ export default new EnvCapability("scheme/chars", {
           case "Lt":
           case "Lm":
           case "Lo":
-            return true;
+            return schemeTrue;
           default:
-            return false;
+            return schemeFalse;
         }
       },
     ),
@@ -144,9 +146,9 @@ export default new EnvCapability("scheme/chars", {
           case "Nd":
           case "Nl":
           case "No":
-            return true;
+            return schemeTrue;
           default:
-            return false;
+            return schemeFalse;
         }
       },
     ),
@@ -157,7 +159,7 @@ export default new EnvCapability("scheme/chars", {
         // JS \s ≈ Unicode White_Space property — covers ASCII tab/LF/CR/space
         // plus the Z* categories (Zs/Zl/Zp) plus a few format chars. Closer to
         // R7RS than getCategory alone (which would miss tab/LF as Cc).
-        return /^\s$/.test(charValue(char));
+        return bool(/^\s$/.test(charValue(char)));
       },
     ),
 
@@ -165,7 +167,7 @@ export default new EnvCapability("scheme/chars", {
       { input: [z.char], output: [z.boolean] },
       (char) => {
         const cp = charValue(char).codePointAt(0)!;
-        return unicodeProperties.getCategory(cp) === "Lu";
+        return bool(unicodeProperties.getCategory(cp) === "Lu");
       },
     ),
 
@@ -173,7 +175,7 @@ export default new EnvCapability("scheme/chars", {
       { input: [z.char], output: [z.boolean] },
       (char) => {
         const cp = charValue(char).codePointAt(0)!;
-        return unicodeProperties.getCategory(cp) === "Ll";
+        return bool(unicodeProperties.getCategory(cp) === "Ll");
       },
     ),
 
@@ -182,9 +184,14 @@ export default new EnvCapability("scheme/chars", {
       (char) => {
         const c = charValue(char);
         const codePoint = c.codePointAt(0)!;
-        if (!unicodeProperties.isDigit(codePoint)) return false;
+        if (!unicodeProperties.isDigit(codePoint)) return schemeFalse;
         const numericValue = unicodeProperties.getNumericValue(codePoint);
-        return numericValue === null ? false : numericValue;
+        if (numericValue === null) return schemeFalse;
+        // The scheme face of the numeric arm: exact for integers (digits), inexact for the
+        // rare fractional numeric values (vulgar-fraction No characters).
+        return Number.isInteger(numericValue)
+          ? new AExact(CONSTANT_CTX, BigInt(numericValue))
+          : new AInexact(CONSTANT_CTX, numericValue);
       },
     ),
 

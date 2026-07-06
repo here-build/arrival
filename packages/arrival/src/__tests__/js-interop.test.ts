@@ -41,13 +41,16 @@ describe("JS-interop: numbers", () => {
   });
 });
 
-describe("JS-interop: strings & booleans (auto-unwrapped — natural)", () => {
-  it("strings come back as raw JS strings", async () => {
+describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)", () => {
+  it("strings come back as AStrings (grafted String.prototype keeps interop natural)", async () => {
     const s = await one('(string-append "ab" "c")');
-    expect(typeof s).toBe("string");
+    // Boxed under the Face split (taintString always returns the AString scheme face —
+    // the raw-string no-provenance fast path was the LIPS-legacy leak). AString grafts
+    // String.prototype, so string-ish interop (concat, spread, JSON) still reads naturally.
+    expect(String(s)).toBe("abc");
     expect(s + "!").toBe("abc!");
-    expect([...s].length).toBe(3);
-    expect(JSON.stringify(s)).toBe('"abc"');
+    expect([...String(s)].length).toBe(3);
+    expect(JSON.stringify(String(s))).toBe('"abc"');
   });
 
   it("booleans come back as raw JS booleans", async () => {

@@ -29,6 +29,7 @@ import {
   charValue,
   coerceNumeric,
   deriveOrd,
+  schemeBool as bool,
   stringValue,
   toIndex,
   withInputProvenance,
@@ -45,6 +46,7 @@ import { EnvCapability } from "../../common/capability.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
+import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import {
   complex_bare_re,
   complex_re,
@@ -146,7 +148,7 @@ export default new EnvCapability("scheme/strings", {
           const first = stringValue(strs[0]);
           verdict = strs.slice(1).every((s) => stringValue(s) === first);
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -178,7 +180,7 @@ export default new EnvCapability("scheme/strings", {
           const first = stringValue(strs[0]).toLowerCase();
           verdict = strs.slice(1).every((s) => stringValue(s).toLowerCase() === first);
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -192,7 +194,7 @@ export default new EnvCapability("scheme/strings", {
             break;
           }
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -206,7 +208,7 @@ export default new EnvCapability("scheme/strings", {
             break;
           }
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -220,7 +222,7 @@ export default new EnvCapability("scheme/strings", {
             break;
           }
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -234,7 +236,7 @@ export default new EnvCapability("scheme/strings", {
             break;
           }
         }
-        return withInputProvenance(strs, verdict);
+        return withInputProvenance(strs, bool(verdict));
       },
     ),
 
@@ -248,13 +250,13 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.string, z.string], output: [z.union([z.bigint, z.boolean])] },
       (str, sub) => {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? false : new AExact(CONSTANT_CTX, BigInt(i)));
+        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(CONSTANT_CTX, BigInt(i)));
       },
     ),
 
     "string-contains?": symbol.native`string-contains?: #t iff str contains sub`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (str, sub) => withInputProvenance([str, sub], stringValue(str).includes(stringValue(sub))),
+      (str, sub) => withInputProvenance([str, sub], bool(stringValue(str).includes(stringValue(sub)))),
     ),
 
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
@@ -358,7 +360,10 @@ export default new EnvCapability("scheme/strings", {
           results.push(applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx));
         }
         const join = (chars: unknown[]) =>
-          chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join("");
+          new AString(
+            CONSTANT_CTX,
+            chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
+          );
         // proc may be an async membrane callback → await before joining, so the result
         // is a real string, not "[object Promise][object Promise]…" (see vector-map).
         if (results.some(is_promise)) {
@@ -379,7 +384,7 @@ export default new EnvCapability("scheme/strings", {
         output: [z.undefinedResult],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]): void | Promise<void> {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const strs = strings.map(stringValue);
@@ -389,7 +394,9 @@ export default new EnvCapability("scheme/strings", {
           const ret = applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
-        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);
+        // R7RS "unspecified" is theVoid on the scheme face (was a bare JS undefined).
+        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
+        return theVoid;
       },
     ),
 
@@ -410,9 +417,12 @@ export default new EnvCapability("scheme/strings", {
         // unwrap to the JS string + numeric indices the slice operates on (byte-identical to
         // the old `string.substring(start.valueOf(), end?.valueOf())`). `substring(s,
         // undefined)` means "to the end", so a missing `end` stays undefined.
-        return stringValue(string).substring(
-          Number(coerceNumeric(start).valueOf()),
-          end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
+        return new AString(
+          CONSTANT_CTX,
+          stringValue(string).substring(
+            Number(coerceNumeric(start).valueOf()),
+            end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
+          ),
         );
       },
     ),
@@ -424,7 +434,7 @@ export default new EnvCapability("scheme/strings", {
 
     join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
       { input: [z.string, z.union([z.pair, z.nil])], output: [z.union([z.string, z.string])] },
-      (separator: SchemeValue, list: SchemeValue): string | AString => {
+      (separator: SchemeValue, list: SchemeValue): AString => {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
         // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
         // strips the provenance the trace wires on. See provenance-collapse.ts.
@@ -435,12 +445,12 @@ export default new EnvCapability("scheme/strings", {
 
     "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
       { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
-      (arg, radix = 10) => {
-        // `arg` is an AString, `radix` an AExact/AInexact (or the JS-number default) — unwrap
+      (arg, radix) => {
+        // `arg` is an AString, `radix` an AExact/AInexact (or absent → base 10) — unwrap
         // to the JS string + number the regex tests and parse_* helpers consume (byte-identical
         // to the old `arg = arg.valueOf(); radix = radix.valueOf()`).
         const str = stringValue(arg);
-        const base = Number(coerceNumeric(radix).valueOf());
+        const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
         try {
           if (str.match(rational_bare_re) || str.match(rational_re)) {
             return parse_rational(str, base);
@@ -448,7 +458,7 @@ export default new EnvCapability("scheme/strings", {
             // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
             // Reject patterns like "3i", "33i", "3.3i" without leading sign
             if (/^#?[iexobd]*[0-9.]+i$/i.test(str)) {
-              return false;
+              return bool(false);
             }
             return parse_complex(str, base);
           } else {
@@ -462,9 +472,9 @@ export default new EnvCapability("scheme/strings", {
           }
         } catch {
           // Invalid number format - return #f per R7RS
-          return false;
+          return bool(false);
         }
-        return false;
+        return bool(false);
       },
     ),
   },

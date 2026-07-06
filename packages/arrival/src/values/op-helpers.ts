@@ -16,6 +16,7 @@ import { CONSTANT_CTX } from "./primitives/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
 
 import { AValue, unionProvenance } from "./primitives/AValue.js";
+import { type ABool, schemeFalse, schemeTrue } from "./primitives/ABool.js";
 import { fromJs } from "./primitives/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
@@ -205,9 +206,9 @@ export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => bool
   ">=": (a, b) => lte(b, a),
 };
 /** n-ary ordered comparison derived purely from the operands' `arrival/tagless-final/lte`. */
-export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => boolean {
+export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
-  return (...args: unknown[]): boolean => {
+  return (...args: unknown[]): ABool => {
     let verdict = true;
     for (let i = 0; i < args.length - 1; i++) {
       if (!rel(args[i] as AOrd, args[i + 1] as AOrd)) {
@@ -215,9 +216,10 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
         break;
       }
     }
-    // Plumbing: the ordering verdict carries its operands' provenance (forward, never
-    // mint) — the same grounding string-contains? and the numeric comparisons give a bool.
-    return withInputProvenance(args, verdict);
+    // The verdict is the boxed scheme face (flyweight; Face split). Plumbing: it carries
+    // its operands' provenance (forward, never mint — withInputProvenance clones the
+    // flyweight with the union when provenance rides, hands back the shared one when not).
+    return withInputProvenance(args, schemeBool(verdict));
   };
 }
 
@@ -381,3 +383,9 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
 
 // Re-export the provenance singletons cluster ops occasionally need for direct
 // boolean boxing, so a cluster need only import from this one leaf.
+export { schemeTrue, schemeFalse } from "./primitives/ABool.js";
+
+/** The scheme face of a predicate verdict — the shared flyweights (eq?-stable, empty
+ *  provenance). The one boxing point every env pack's boolean-returning native uses
+ *  under the Face split (a `z.boolean` output demands an ABool, never a raw JS boolean). */
+export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);

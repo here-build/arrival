@@ -187,9 +187,12 @@ describe("format — provenance (collapsing op, carries the union of fmt + args)
     expect(js(r)).toBe("x/y");
   });
 
-  it("a literal-only format carries no provenance (raw JS string)", async () => {
+  it("a literal-only format carries no provenance (empty-provenance AString)", async () => {
     const r = await run('(format "~a" "lit")');
-    expect(r).not.toBeInstanceOf(AValue);
+    // Boxed under the Face split (taintString always returns the AString scheme face);
+    // "no provenance" now means an EMPTY provenance set, not a raw unboxed string.
+    expect(r).toBeInstanceOf(AValue);
+    expect(((r as AValue).provenance as Set<number>).size).toBe(0);
     expect(js(r)).toBe("lit");
   });
 });

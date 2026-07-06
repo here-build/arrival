@@ -40,13 +40,10 @@ import { is_callable, is_false, is_macro } from "../../eval/guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
-import { stringValue, withInputProvenance } from "../../values/op-helpers.js";
+import { schemeBool as bool, stringValue, withInputProvenance } from "../../values/op-helpers.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { printValue } from "../../values/print.js";
-
-/** The scheme face of a predicate verdict — the shared flyweights (eq?-stable, empty provenance). */
-const bool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
 
 export default new EnvCapability("scheme/equality", {
   symbols: {

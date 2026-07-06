@@ -57,8 +57,8 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
   return acc;
 }
 
-/** Re-stamp a collapsed string with provenance — a provenance-carrying `SchemeString`
- *  when there is lineage to carry, else the bare string (no empty wrapper churn). */
-export function taintString(result: string, prov: Set<number>): string | AString {
-  return prov.size > 0 ? new AString(CONSTANT_CTX, result, prov) : result;
+/** Re-stamp a collapsed string with provenance. Always the boxed AString (the scheme face —
+ *  Face split; the old bare-string no-provenance fast path was the LIPS-legacy raw leak). */
+export function taintString(result: string, prov: Set<number>): AString {
+  return new AString(CONSTANT_CTX, result, prov);
 }
