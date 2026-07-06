@@ -30,7 +30,7 @@ export default new EnvCapability("scheme/srfi-95", {
         // truth declares `arrival/tagless-final/sort`'s own param as exactly
         // `(a: unknown, b: unknown) => unknown` (mirrored by deriveSortCompare, op-helpers.ts),
         // so the contract states the SAME signature rather than a blanket z.unknown().
-        input: [z.value, z.custom<(a: unknown, b: unknown) => unknown>().optional()],
+        input: [z.value, z.lambda.optional()],
         // output: the sorted sequence is a SchemeValue (APair | ANil for a list, AVector for a
         // vector) — z.value again, matching the term algebra's own declared return type.
         output: [z.value],

@@ -39,8 +39,7 @@
 //                       — accessor getters over the captured ctx); a pure verb is an arrow that
 //                       ignores `this`, so the call is byte-identical to `impl(decodedArgs)` and
 //                       materializes nothing. (This lazy invocation-`this` REPLACES the planned
-//                       `symbol.contextual`.) PROVENANCE MINTING is RESOLVED: the run-wrapper is
-//                       `__withCtx` at the binding level (lower() binds it raw; the evaluator
+//                       `symbol.contextual`.) PROVENANCE MINTING is RESOLVED: the evaluator
 //                       appends ctx), so it reads ctx.currentInvocation and mints/deep-stamps
 //                       EXACTLY as createRosettaWrapper does (a non-pure rosetta AEntity = a
 //                       source). withContext / argProvenance contract knobs are DROPPED here.
@@ -55,6 +54,8 @@ import { looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { Macro } from "../../eval/Macro.js";
 import { KEYWORD_ACCESSOR_FIELD } from "../../Environment.js";
+import { EvalContext } from "../../eval/evaluator.js";
+import { HandlerCallCtx } from "../../env/r7rs/exceptions.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -78,9 +79,7 @@ export type SpecInfer<S extends VectorSpec> = S extends readonly z.ZodTypeAny[]
 
 /** Decoded arg TYPES for the impl (the codec OUTPUT side). A bare tuple maps each
  *  element's `z.output`; an array-ish schema yields its element-array (variadic). */
-export type DecodedArgs<S extends VectorSpec> = SpecInfer<S> extends readonly unknown[]
-  ? SpecInfer<S>
-  : [SpecInfer<S>];
+export type DecodedArgs<S extends VectorSpec> = SpecInfer<S> extends readonly unknown[] ? SpecInfer<S> : [SpecInfer<S>];
 
 /** Decoded RETURN type: a single value when the output is a 1-tuple, else the
  *  values-vector (multiple-values). */
@@ -106,14 +105,13 @@ export type RestSpec = z.ZodTypeAny | undefined;
  *  (`error TS2574: A rest element type must be an array type`) can't see a mapped type over a
  *  still-abstract `I` as array-shaped when it's written directly inside a `[...X, ...Y[]]`
  *  literal — a named alias resolves it. */
-export type DecodedArgsWithRest<I extends VectorSpec, Rest extends RestSpec = undefined> =
-  Rest extends z.ZodTypeAny
-    ? I extends readonly z.ZodTypeAny[]
-      ? SpecInfer<I> extends infer Head extends readonly unknown[]
-        ? [...Head, ...z.output<Rest>[]]
-        : never
+export type DecodedArgsWithRest<I extends VectorSpec, Rest extends RestSpec = undefined> = Rest extends z.ZodTypeAny
+  ? I extends readonly z.ZodTypeAny[]
+    ? SpecInfer<I> extends infer Head extends readonly unknown[]
+      ? [...Head, ...z.output<Rest>[]]
       : never
-    : DecodedArgs<I>;
+    : never
+  : DecodedArgs<I>;
 
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
@@ -161,11 +159,14 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly preludeOnly?: boolean;
 }
 
+export type ImplInvocationCtx = { ctx: HandlerCallCtx };
+
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
  *  contract tuple becomes a MUTABLE positional param list the impl can declare, and splices in
  *  `inputRest`'s decoded element type as a spread tail when the contract declares one. */
 export type Impl<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = (
+  this: ImplInvocationCtx,
   ...args: DecodedArgsWithRest<I, Rest>
 ) => MaybePromise<DecodedReturn<O>>;
 
@@ -206,9 +207,8 @@ export interface RosettaSymbolDef {
   /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
    *  + (optionally) validates inputs, runs the (ctx-free) impl, awaits, encodes the output,
    *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
-   *  see bakeRosetta). Tagged `__withCtx` so EnvCapability.lower() can bind it directly and the
-   *  evaluator appends ctx as the trailing arg; a direct-JS caller (no ctx) is duck-type-safe. */
-  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+   *  see bakeRosetta). */
+  readonly run: (this: ImplInvocationCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
   readonly pure?: boolean;
   /** See `Contract.type`. */
@@ -227,7 +227,7 @@ export interface TaglessSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
 }
 
 /** A tagless GUARD — like `symbol.tagless`, but a receiver that declares no such method
@@ -240,7 +240,7 @@ export interface TaglessGuardSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
 }
 
 /** A ctx-aware op: the impl receives the scheme args AND the run's RunContext (the dual of
@@ -254,7 +254,7 @@ export interface SequenceSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: ((...schemeArgs: unknown[]) => Promise<unknown>) & { __withCtx?: boolean };
+  readonly run: (this: { ctx: EvalContext }, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** See `Contract.type`. */
   readonly type?: string;
 }

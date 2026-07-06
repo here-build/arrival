@@ -101,7 +101,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   it("null → Nil instance", () => {
     const result = fromJs(CONSTANT_CTX, null);
     expect(result).toBeInstanceOf(ANil);
-    expect(is_nil(result)).toBe(true);
+    expect(result instanceof ANil).toBe(true);
   });
 
   it("undefined → Void instance", () => {

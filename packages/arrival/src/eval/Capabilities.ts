@@ -71,13 +71,14 @@ export class Capabilities {
   }
 
   /** The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED:
-   *  probe the WHOLE base chain (`this.env → … → global_env` via `Environment.ref`), so a
-   *  native owned on the base leaf (`cons` on user_env) AND a builtin on global_env both
-   *  resolve to the one sentinel — replacing the GLASS `chainRoot.has` that only caught the
-   *  chain root. GLASS: the own-binding probe on the structural chain root. */
+   *  probe the WHOLE base chain (`this.env → … → global_env`) via `_lookupWithResolvers` — the
+   *  chain-walking lookup (own bindings → resolvers → parent) that replaced the removed
+   *  `Environment.ref` — so a native owned on the base leaf (`cons` on user_env) AND a builtin
+   *  on global_env both resolve to the one sentinel, unlike the GLASS `chainRoot.has` that only
+   *  caught the chain root. GLASS: the own-binding probe on the structural chain root. */
   refFrame(name: string): Environment | undefined {
     if (this.assembledBase) {
-      return this.env.ref(name) ? this.globalRoot : undefined;
+      return this.env._lookupWithResolvers(name) !== undefined ? this.globalRoot : undefined;
     }
     const root = this.chainRoot();
     return root.has(name) ? root : undefined;

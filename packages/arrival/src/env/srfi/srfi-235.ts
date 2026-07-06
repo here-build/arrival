@@ -16,7 +16,6 @@
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
-import { curry } from "../../utils/functional.js";
 
 export default new EnvCapability("scheme/srfi-235", {
   prelude: `
@@ -48,17 +47,28 @@ export default new EnvCapability("scheme/srfi-235", {
     // `z.unknown()` — the old contract's shape before this fix).
     curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
       {
-        input: [z.custom<(...args: unknown[]) => unknown>()],
+        input: [z.lambda],
         inputRest: z.value,
-        output: [z.custom<(...args: unknown[]) => unknown>()],
-        // Both z.custom callables (head + output) are unrepresentable to the harvest printer, so the
-        // whole signature collapses to the degrade path `(...args: unknown[]) => unknown` — hiding the
-        // two facts a caller most needs. Author-assert the real shape (checkable by eye against
-        // utils/functional.ts curry): the first arg is the function being curried, the rest are the
-        // leading partial args, and the RESULT is itself a function of the remaining args.
+        output: [z.lambda],
+        /*
+        * TODO: wire proper curry type; need declaration area for types:
+        *
+        type Curry<T extends (...args: any[]) => any> =
+          T extends (...args: infer Args) => infer R
+              ? Args extends []
+                  ? T
+                  : Args extends [infer FirstArg, ...infer RestArgs]
+                      ? RestArgs extends []
+                          ? T
+                          : (arg: FirstArg) => Curry<(...args: RestArgs) => R>
+                      : never
+              : never;
+        */
         type: "(fn: (...args: unknown[]) => unknown, ...args: unknown[]) => (...args: unknown[]) => unknown",
       },
-      curry,
+      function curry(fn, ...args) {
+        return fn.length > args.length ? (...curriedArgs) => curry(fn, ...args, ...curriedArgs) : fn(...args);
+      },
     ),
   },
 });

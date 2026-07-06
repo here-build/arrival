@@ -15,8 +15,12 @@ import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import { AString } from "../../values/primitives/AString.js";
+import { ImplInvocationCtx } from "../symbols/_bake.js";
 
-type WithCtxFn = ((...a: unknown[]) => unknown) & { __withCtx?: boolean };
+type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (
+  this: ImplInvocationCtx,
+  ...args: Args
+) => Result;
 
 /** A SchemeEnv that records every `set` binding, tagged so a test can tell WHICH scope a
  *  verb landed in (the runtime env vs. the prelude overlay). */
@@ -50,7 +54,6 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     expect(runtimeVerbs["prelude-only/verb"]).toBeUndefined(); // NOT on the runtime env
     const bound = overlayVerbs["prelude-only/verb"] as WithCtxFn;
     expect(typeof bound).toBe("function"); // IS on the overlay, same bind form (a real callable)
-    expect(bound.__withCtx).toBe(true);
   });
 
   it("an ORDINARY (non-preludeOnly) rosetta binds onto the runtime env as before — no regression", async () => {

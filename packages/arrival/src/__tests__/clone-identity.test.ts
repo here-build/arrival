@@ -69,7 +69,7 @@ describe("nil-clone witness sanity (NOT a bug — guards the test fixture)", () 
     expect(cloneNil()).toBeInstanceOf(ANil);
   });
   it("clone is_nil-true (guards.ts uses instanceof — the FIXED path)", () => {
-    expect(is_nil(cloneNil())).toBe(true);
+    expect(cloneNil() instanceof ANil).toBe(true);
   });
   it("clone is NOT === nil (heap-distinct from the singleton)", () => {
     expect(cloneNil() === nil).toBe(false);
@@ -222,7 +222,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     });
     expect(calls).toEqual([1]);
     expect(result).toBeInstanceOf(APair);
-    expect(is_nil((result as APair).cdr)).toBe(true);
+    expect((result as APair).cdr instanceof ANil).toBe(true);
   });
 
   // fantasy-land-lips.ts:94 — same shape as 89 but for `filterPair`. The
@@ -275,7 +275,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any)["arrival/tagless-final/traverse"](of, (x: unknown) => x);
     expect(ofCalls.length).toBe(1);
-    expect(is_nil(ofCalls[0])).toBe(true);
+    expect(ofCalls[0] instanceof ANil).toBe(true);
   });
 
   // fantasy-land-lips.ts:120 — `chainPair`'s base case
@@ -311,7 +311,7 @@ describe("sandbox-env.ts — `=== nil` identity-equality sites", () => {
     const accessor = readMember as (obj: unknown, key: unknown) => unknown;
     const result = accessor({ "()": "PHANTOM" }, cloneNil());
     // A nil-key access should be nil (not the phantom value at key "()").
-    expect(is_nil(result)).toBe(true);
+    expect(result instanceof ANil).toBe(true);
   });
 
   // Same shape but for the `@?` "has" accessor (membrane's `hasMember`).

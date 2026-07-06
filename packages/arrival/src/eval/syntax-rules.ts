@@ -24,14 +24,11 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
 import { APair, concatPair } from "../values/primitives/APair.js";
 import { Syntax } from "./Syntax.js";
-import { is_nil, is_pair } from "./guards.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
 import { isNumeric } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
 import { eqv } from "../values/structural-equal.js";
 import { type SchemeValue } from "../values/types.js";
-import { nil } from "../values/primitives/ANil.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../utils/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../reader/values-repr.js";
 
@@ -48,8 +45,8 @@ function same_atom(a, b) {
     return a.source === b.source;
   }
   // Strings (raw or boxed) compare by value — the "friendly" compat layer.
-  if (AString.isString(a)) {
-    return AString.isString(b) && a.valueOf() === b.valueOf();
+  if (a instanceof AString) {
+    return b instanceof AString && a.valueOf() === b.valueOf();
   }
   // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, which lives
   // entirely in the value kernel (instanceof + .equals/__char__/.value). This
@@ -83,7 +80,7 @@ export function macro_expand(): SchemeFunction {
     }
 
     function is_procedure(value: unknown, node: APair) {
-      return value === define && is_pair(node.cdr) && is_pair(node.cdr.car);
+      return value === define && node.cdr instanceof APair && node.cdr.car instanceof APair;
     }
 
     function is_lambda(value: unknown) {
@@ -93,15 +90,18 @@ export function macro_expand(): SchemeFunction {
     function proc_bindings(node: unknown) {
       const names: (string | symbol)[] = [];
       while (true) {
-        if (is_nil(node)) {
+        if (node instanceof ANil) {
           break;
         } else {
           if (node instanceof ASymbol) {
             names.push(node.valueOf());
             break;
           }
-          invariant(is_pair(node), `macroexpand: proc_bindings expected pair got ${type(node)}`);
-          invariant(node.car instanceof ASymbol, `macroexpand: proc_bindings name expected symbol got ${type(node.car)}`);
+          invariant(node instanceof APair, `macroexpand: proc_bindings expected pair got ${type(node)}`);
+          invariant(
+            node.car instanceof ASymbol,
+            `macroexpand: proc_bindings name expected symbol got ${type(node.car)}`,
+          );
           names.push(node.car.valueOf());
           node = node.cdr;
         }
@@ -110,11 +110,11 @@ export function macro_expand(): SchemeFunction {
     }
 
     function let_binding(node: SchemeValue): (string | symbol)[] {
-      invariant(is_pair(node), `macroexpand: let bindings expected pair got ${type(node)}`);
+      invariant(node instanceof APair, `macroexpand: let bindings expected pair got ${type(node)}`);
       return [
         ...bindings,
         ...node.to_array(false).map(function (node: unknown) {
-          invariant(is_pair(node), `macroexpand: Invalid let binding expectig pair got ${type(node)}`);
+          invariant(node instanceof APair, `macroexpand: Invalid let binding expectig pair got ${type(node)}`);
           invariant(node.car instanceof ASymbol, `macroexpand: let binding name expected symbol got ${type(node.car)}`);
           return node.car.valueOf();
         }),
@@ -127,16 +127,18 @@ export function macro_expand(): SchemeFunction {
       // Syntax no longer extends Macro — list both (a Syntax carries __defmacro__ too).
       // `=== true` because Macro.__defmacro__ is optional (boolean | undefined); a type
       // predicate must yield a strict boolean.
-      return (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ === true && !bindings.includes(name);
+      return (
+        (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ === true && !bindings.includes(name)
+      );
     }
 
     async function expand_let_binding(node: unknown, n?: number): Promise<SchemeValue> {
-      if (is_nil(node)) {
+      if (node instanceof ANil) {
         return nil;
       }
-      invariant(is_pair(node), `macroexpand: let binding list expected pair got ${type(node)}`);
+      invariant(node instanceof APair, `macroexpand: let binding list expected pair got ${type(node)}`);
       const pair = node.car;
-      invariant(is_pair(pair), `macroexpand: let binding expected pair got ${type(pair)}`);
+      invariant(pair instanceof APair, `macroexpand: let binding expected pair got ${type(pair)}`);
       return new APair(
         CONSTANT_CTX,
         new APair(CONSTANT_CTX, pair.car, await traverse(pair.cdr, n ?? -1, env)),
@@ -145,7 +147,7 @@ export function macro_expand(): SchemeFunction {
     }
 
     async function traverse(node: unknown, n: number, env: Environment): Promise<SchemeValue> {
-      if (is_pair(node) && node.car instanceof ASymbol) {
+      if (node instanceof APair && node.car instanceof ASymbol) {
         if (node[DATA]) {
           return node;
         }
@@ -156,7 +158,7 @@ export function macro_expand(): SchemeFunction {
         const is_binding = is_let || is_procedure(value, node) || is_lambda(value);
 
         const nodeCdr = node.cdr;
-        if (is_binding && is_pair(nodeCdr) && is_pair(nodeCdr.car)) {
+        if (is_binding && nodeCdr instanceof APair && nodeCdr.car instanceof APair) {
           let second;
           if (is_let) {
             bindings = let_binding(nodeCdr.car);
@@ -165,7 +167,11 @@ export function macro_expand(): SchemeFunction {
             bindings = proc_bindings(nodeCdr.car);
             second = nodeCdr.car;
           }
-          return new APair(CONSTANT_CTX, node.car, new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)));
+          return new APair(
+            CONSTANT_CTX,
+            node.car,
+            new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)),
+          );
         } else if (is_macro(name, value)) {
           // Split by the transformer's HONEST return shape (no flag toggles it):
           // Syntax.expand -> { expr, scope }, re-expanded in its hygiene scope;
@@ -173,7 +179,7 @@ export function macro_expand(): SchemeFunction {
           let result: SchemeValue;
           if (value instanceof Syntax) {
             const { expr, scope } = await value.expand(node, { ...args, env });
-            if (is_pair(expr)) {
+            if (expr instanceof APair) {
               if ((n !== -1 && n <= 1) || n < recur_guard) {
                 return expr;
               }
@@ -189,7 +195,7 @@ export function macro_expand(): SchemeFunction {
           if (result instanceof ASymbol) {
             return quote(result);
           }
-          if (is_pair(result)) {
+          if (result instanceof APair) {
             if ((n !== -1 && n <= 1) || n < recur_guard) {
               return result;
             }
@@ -206,26 +212,26 @@ export function macro_expand(): SchemeFunction {
       // TODO: CYCLE DETECT
       // traverse is only ever called on a pair (every recursive call is `is_pair`-gated,
       // and the entry points pass forms); an atom reaching here is a structural bug.
-      invariant(is_pair(node), `macroexpand: traverse expected pair got ${type(node)}`);
+      invariant(node instanceof APair, `macroexpand: traverse expected pair got ${type(node)}`);
       let car = node.car;
-      if (is_pair(car)) {
+      if (car instanceof APair) {
         car = await traverse(car, n, env);
       }
       let cdr = node.cdr;
-      if (is_pair(cdr)) {
+      if (cdr instanceof APair) {
         cdr = await traverse(cdr, n, env);
       }
       return new APair(CONSTANT_CTX, car, cdr);
     }
 
-    invariant(is_pair(code), `macroexpand: expected a form got ${type(code)}`);
-    const depth = is_pair(code.cdr) && isNumeric(code.cdr.car) ? Number(code.cdr.car.valueOf()) : -1;
+    invariant(code instanceof APair, `macroexpand: expected a form got ${type(code)}`);
+    const depth = code.cdr instanceof APair && isNumeric(code.cdr.car) ? Number(code.cdr.car.valueOf()) : -1;
     const expanded = await traverse(code, depth, env);
-    invariant(is_pair(expanded), `macroexpand: expansion did not yield a form`);
+    invariant(expanded instanceof APair, `macroexpand: expansion did not yield a form`);
     // `quote` only marks pairs/symbols as data (a no-op passthrough for any other datum),
     // so narrow the head to the two shapes it acts on; an atom head returns unchanged.
     const head = expanded.car;
-    return is_pair(head) || head instanceof ASymbol ? quote(head) : head;
+    return head instanceof APair || head instanceof ASymbol ? quote(head) : head;
   };
 }
 
@@ -326,14 +332,9 @@ export function extract_patterns(
             const count = code.length - 2;
             const array_head = count > 0 ? code.slice(0, count) : code;
             const as_list = APair.fromArray(CONSTANT_CTX, array_head, false);
-            if (bindings["..."].symbols[name]) {
-              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, 
-                bindings["..."].symbols[name],
-                new APair(CONSTANT_CTX, as_list, nil),
-              );
-            } else {
-              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, as_list, nil);
-            }
+            bindings["..."].symbols[name] = bindings["..."].symbols[name]
+              ? concatPair(CONSTANT_CTX, bindings["..."].symbols[name], new APair(CONSTANT_CTX, as_list, nil))
+              : new APair(CONSTANT_CTX, as_list, nil);
           } else {
             bindings["..."].symbols[name] = APair.fromArray(CONSTANT_CTX, code, false);
           }
@@ -356,26 +357,24 @@ export function extract_patterns(
     }
     // pattern (a b (x ...)) and (x ...) match nil
     if (
-      is_pair(pattern) &&
-      is_pair(pattern.car) &&
-      is_pair(pattern.car.cdr) &&
-      ASymbol.is(pattern.car.cdr.car, ellipsis_symbol)
+      pattern instanceof APair &&
+      pattern.car instanceof APair &&
+      pattern.car.cdr instanceof APair &&
+      ASymbol.is(pattern.car.cdr.car, ellipsis_symbol) &&
+      code instanceof ANil &&
+      pattern.car.car instanceof ASymbol
     ) {
-      if (is_nil(code)) {
-        if (pattern.car.car instanceof ASymbol) {
-          const name = pattern.car.car.valueOf();
-          invariant(!bindings["..."].symbols[name], "syntax: named ellipsis can only appear onces");
-          bindings["..."].symbols[name] = code;
-        }
-      }
+      const name = pattern.car.car.valueOf();
+      invariant(!bindings["..."].symbols[name], "syntax: named ellipsis can only appear onces");
+      bindings["..."].symbols[name] = code;
     }
-    if (is_pair(pattern) && is_pair(pattern.cdr) && ASymbol.is(pattern.cdr.car, ellipsis_symbol)) {
+    if (pattern instanceof APair && pattern.cdr instanceof APair && ASymbol.is(pattern.cdr.car, ellipsis_symbol)) {
       // pattern (... ???) - SRFI-46
-      if (!is_nil(pattern.cdr.cdr) && is_pair(pattern.cdr.cdr)) {
+      if (!(pattern.cdr.cdr instanceof ANil) && pattern.cdr.cdr instanceof APair) {
         // if we have (x ... a b) we need to remove two from the end
         const list_len = pattern.cdr.cdr.length();
-        const improper_list = !is_nil(pattern.last_pair()!.cdr);
-        if (!is_pair(code)) {
+        const improper_list = !(pattern.last_pair()!.cdr instanceof ANil);
+        if (!(code instanceof APair)) {
           return false;
         }
         let code_len = code.length();
@@ -397,19 +396,16 @@ export function extract_patterns(
         if (bindings["..."].symbols[name] && !pattern_names.includes(name) && !ellipsis) {
           throw new Error("syntax: named ellipsis can only appear onces");
         }
-        if (is_nil(code)) {
-          if (ellipsis) {
-            bindings["..."].symbols[name] = nil;
-          } else {
-            bindings["..."].symbols[name] = null;
-          }
-        } else if (is_pair(code) && (is_pair(code.car) || is_nil(code.car))) {
+        if (code instanceof ANil) {
+          bindings["..."].symbols[name] = ellipsis ? nil : null;
+        } else if (code instanceof APair && (code.car instanceof APair || code.car instanceof ANil)) {
           if (ellipsis) {
             if (bindings["..."].symbols[name]) {
               let node = bindings["..."].symbols[name];
-              node = is_nil(node)
-                ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code, nil))
-                : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
+              node =
+                node instanceof ANil
+                  ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code, nil))
+                  : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code, nil));
               bindings["..."].symbols[name] = node;
             } else {
               bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
@@ -418,10 +414,10 @@ export function extract_patterns(
             bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
           }
         } else {
-          if (is_pair(code)) {
+          if (code instanceof APair) {
             // cons (a . b) => (var ... . x)
-            if (!is_pair(code.cdr) && !is_nil(code.cdr)) {
-              if (is_nil(pattern.cdr.cdr)) {
+            if (!(code.cdr instanceof APair) && !(code.cdr instanceof ANil)) {
+              if (pattern.cdr.cdr instanceof ANil) {
                 return false;
               } else if (!bindings["..."].symbols[name]) {
                 bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code.car, nil);
@@ -430,8 +426,8 @@ export function extract_patterns(
             }
             // code as improper list
             const last_pair = code.last_pair()!;
-            if (!is_nil(last_pair.cdr)) {
-              if (is_nil(pattern.cdr.cdr)) {
+            if (!(last_pair.cdr instanceof ANil)) {
+              if (pattern.cdr.cdr instanceof ANil) {
                 // case (a ...) for (a b . x)
                 return false;
               } else {
@@ -451,7 +447,7 @@ export function extract_patterns(
             }
           } else if (
             pattern.car instanceof ASymbol &&
-            is_pair(pattern.cdr) &&
+            pattern.cdr instanceof APair &&
             ASymbol.is(pattern.cdr.car, ellipsis_symbol)
           ) {
             // empty ellipsis with rest  (a b ... . d) #290
@@ -463,15 +459,15 @@ export function extract_patterns(
           }
         }
         return true;
-      } else if (is_pair(pattern.car)) {
+      } else if (pattern.car instanceof APair) {
         var names = [...pattern_names];
-        if (is_nil(code)) {
+        if (code instanceof ANil) {
           bindings["..."].lists.push(nil);
           return true;
         }
         let node = code;
         const new_state = { ...state, pattern_names: names, ellipsis: true };
-        while (is_pair(node)) {
+        while (node instanceof APair) {
           if (!traverse(pattern.car, node.car, new_state)) {
             return false;
           }
@@ -483,7 +479,7 @@ export function extract_patterns(
         var names = [...pattern_names];
         let node = code;
         const new_state = { ...state, pattern_names: names, ellipsis: true };
-        while (is_pair(node)) {
+        while (node instanceof APair) {
           if (!traverse(pattern.car, node.car, new_state)) {
             return false;
           }
@@ -508,12 +504,12 @@ export function extract_patterns(
       }
       return true;
     }
-    if (is_pair(pattern) && is_pair(code)) {
+    if (pattern instanceof APair && code instanceof APair) {
       const patternCar = pattern.car;
       const patternCdr = pattern.cdr;
       if (trailing && patternCar instanceof ASymbol && patternCdr instanceof ASymbol) {
         // handle (x ... y . z)
-        if (!is_nil(code.cdr)) {
+        if (!(code.cdr instanceof ANil)) {
           return false;
         }
         const car = patternCar.valueOf();
@@ -523,35 +519,36 @@ export function extract_patterns(
         return true;
         //return is_pair(code.cdr) && code.cdr.length() > 1;
       }
-      if (is_nil(code.cdr)) {
-        // last item in in call using in recursive calls on
+      if (
+        code.cdr instanceof ANil && // last item in in call using in recursive calls on
         // last element of the list
         // case of pattern (p . rest) and code (0)
-        if (patternCar instanceof ASymbol && patternCdr instanceof ASymbol) {
-          // fix for SRFI-26 in recursive call of (b) ==> (<> . x)
-          // where <> is symbol
-          if (!traverse(patternCar, code.car, state)) {
-            return false;
-          }
-          let name: string | symbol = patternCdr.valueOf();
-          if (!(name in bindings.symbols)) {
-            bindings.symbols[name] = nil;
-          }
-          name = patternCar.valueOf();
-          if (!(name in bindings.symbols)) {
-            bindings.symbols[name] = code.car;
-          }
-          return true;
+        patternCar instanceof ASymbol &&
+        patternCdr instanceof ASymbol
+      ) {
+        // fix for SRFI-26 in recursive call of (b) ==> (<> . x)
+        // where <> is symbol
+        if (!traverse(patternCar, code.car, state)) {
+          return false;
         }
+        let name: string | symbol = patternCdr.valueOf();
+        if (!(name in bindings.symbols)) {
+          bindings.symbols[name] = nil;
+        }
+        name = patternCar.valueOf();
+        if (!(name in bindings.symbols)) {
+          bindings.symbols[name] = code.car;
+        }
+        return true;
       }
       // case (x y) ===> (var0 var1 ... warn) where var1 match nil
       // trailing: true start processing of (var ... x . y)
       if (
-        is_pair(pattern.cdr) &&
-        is_pair(pattern.cdr.cdr) &&
+        pattern.cdr instanceof APair &&
+        pattern.cdr.cdr instanceof APair &&
         pattern.cdr.car instanceof ASymbol &&
         ASymbol.is(pattern.cdr.cdr.car, ellipsis_symbol) &&
-        is_pair(pattern.cdr.cdr.cdr) &&
+        pattern.cdr.cdr.cdr instanceof APair &&
         !ASymbol.is(pattern.cdr.cdr.cdr.car, ellipsis_symbol) &&
         traverse(pattern.car, code.car, state) &&
         traverse(pattern.cdr.cdr.cdr, code.cdr, { ...state, trailing: true })
@@ -568,14 +565,14 @@ export function extract_patterns(
       if (car && cdr) {
         return true;
       }
-    } else if (is_nil(pattern) && (is_nil(code) || code === undefined)) {
+    } else if (pattern instanceof ANil && (code instanceof ANil || code === undefined)) {
       // undefined is case when you don't have body ...
       // and you do recursive call
       return true;
     } else {
       // pattern (...)
       invariant(
-        !is_pair(pattern) || !is_pair(pattern.car) || !ASymbol.is(pattern.car.car, ellipsis_symbol),
+        !(pattern instanceof APair) || !(pattern.car instanceof APair) || !ASymbol.is(pattern.car.car, ellipsis_symbol),
         "syntax: invalid usage of ellipsis",
       );
       return false;
@@ -612,7 +609,7 @@ export function restore_data_gensyms(node, gensyms) {
     if (n instanceof ASymbol) {
       return data ? restore(n) : n;
     }
-    if (is_pair(n)) {
+    if (n instanceof APair) {
       const head = n.car;
       let childData = data;
       if (head instanceof ASymbol) {
@@ -639,7 +636,7 @@ interface GensymRecord {
 // `names` accumulator, and the `ellipsis` marker. These are plain JS handles, not a SchemeValue.
 interface TransformOptions {
   bindings: MatchBindings;
-  expr: unknown;
+  expr: SchemeValue;
   scope: Resolver;
   symbols: unknown[];
   names: GensymRecord[];
@@ -647,21 +644,20 @@ interface TransformOptions {
 }
 
 // ----------------------------------------------------------------------
-export function transform_syntax(options: TransformOptions) {
+export function transform_syntax({
+  bindings,
+  expr,
+  scope: defChild,
+  symbols,
+  names,
+  ellipsis: ellipsis_symbol,
+}: TransformOptions) {
   // `scope` is now the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
   // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set (P3 3b.2).
-  const { bindings, expr, scope: defChild, symbols, names, ellipsis: ellipsis_symbol } = options;
   const gensyms: Record<string | symbol, ASymbol> = {};
 
-  function valid_symbol(symbol: unknown): symbol is ASymbol | string | symbol {
-    if (symbol instanceof ASymbol) {
-      return true;
-    }
-    return ["string", "symbol"].includes(typeof symbol);
-  }
-
-  function transform(symbol: unknown) {
-    invariant(valid_symbol(symbol), `syntax: internal error, need symbol got ${type(symbol)}`);
+  function transform(symbol: SchemeValue): SchemeValue {
+    invariant(symbol instanceof ASymbol, `syntax: internal error, need symbol got ${type(symbol)}`);
     const name = symbol.valueOf();
     invariant(name !== ellipsis_symbol, "syntax: internal error, ellipsis not transformed");
     // symbols are gensyms from nested syntax-rules
@@ -733,12 +729,11 @@ export function transform_syntax(options: TransformOptions) {
   }
 
   function transform_ellipsis_expr(
-    expr: unknown,
+    expr: SchemeValue,
     bindings: BindingCell,
     state: { nested: boolean },
     next: (name: string | symbol, value: unknown) => void = () => {},
-  ): unknown {
-    const { nested } = state;
+  ): SchemeValue {
     if (Array.isArray(expr) && expr.length === 0) {
       return expr;
     }
@@ -749,22 +744,20 @@ export function transform_syntax(options: TransformOptions) {
         // name = expr.literal();
       }
       if (bound) {
-        if (is_pair(bound)) {
-          const { car, cdr } = bound;
-          if (nested) {
-            if (is_pair(car)) {
-              const { car: caar, cdr: cadr } = car;
-              if (!is_nil(cadr)) {
-                next(name, new APair(CONSTANT_CTX, cadr, nil));
+        if (bound instanceof APair) {
+          if (state.nested) {
+            if (bound.car instanceof APair) {
+              if (bound.car.cdr instanceof ANil) {
+                return bound.car.car;
               }
-              return caar;
+              next(name, new APair(CONSTANT_CTX, bound.car.cdr, nil));
             }
-            return car;
+            return bound.car;
           }
-          if (!is_nil(cdr)) {
-            next(name, cdr);
+          if (bound.cdr instanceof ANil) {
+            return bound.car;
           }
-          return car;
+          next(name, bound.cdr);
         } else if (Array.isArray(bound)) {
           next(name, bound.slice(1));
           return bound[0];
@@ -772,78 +765,56 @@ export function transform_syntax(options: TransformOptions) {
       }
       return transform(expr);
     }
-    const is_array = Array.isArray(expr);
-    if (is_pair(expr) || is_array) {
-      const first = is_array ? expr[0] : expr.car;
-      const second = is_array ? expr[1] : is_pair(expr.cdr) && expr.cdr.car;
+
+    if (expr instanceof APair) {
+      const first = expr.car;
+      const second = expr.cdr instanceof APair && expr.cdr.car;
       if (first instanceof ASymbol && ASymbol.is(second, ellipsis_symbol)) {
         const name = first.valueOf();
         const item = bindings[name];
         if (item === null) {
           return;
         } else if (name in bindings) {
-          if (is_pair(item)) {
-            const { car, cdr } = item;
-            const rest_expr = is_array ? expr.slice(2) : is_pair(expr.cdr) ? expr.cdr.cdr : nil;
-            if (nested) {
-              if (!is_nil(cdr)) {
-                next(name, cdr);
+          if (item instanceof APair) {
+            const rest_expr = expr.cdr instanceof APair ? expr.cdr.cdr : nil;
+            if (state.nested) {
+              if (!(item.cdr instanceof ANil)) {
+                next(name, item.cdr);
               }
-              if ((is_array && Array.isArray(rest_expr) && rest_expr.length > 0) || (!is_nil(rest_expr) && !is_array)) {
-                const rest = transform_ellipsis_expr(rest_expr, bindings, state, next);
-                // Dispatch on the runtime shape of `car`, not the template's
-                // shape (`is_array` is about `expr`). A JS-array `car` concats
-                // with Array.prototype.concat; a pair `car` concats with
-                // concatPair. Discriminating on `car` keeps a pair from ever
-                // reaching `.concat` (which APair does not have → throw).
-                if (Array.isArray(car)) {
-                  return car.concat(rest);
-                } else if (is_pair(car)) {
-                  return concatPair(CONSTANT_CTX, car, rest);
-                } else {
-                }
+              // Dispatch on the runtime shape of `car`, not the template's
+              // shape (`is_array` is about `expr`). A JS-array `car` concats
+              // with Array.prototype.concat; a pair `car` concats with
+              // concatPair. Discriminating on `car` keeps a pair from ever
+              // reaching `.concat` (which APair does not have → throw).
+              if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
+                return concatPair(CONSTANT_CTX, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next));
               }
-              return car;
-            } else if (is_pair(car)) {
-              if (!is_nil(car.cdr)) {
-                next(name, new APair(CONSTANT_CTX, car.cdr, cdr));
+              return item.car;
+            } else if (item.car instanceof APair) {
+              if (!(item.car.cdr instanceof ANil)) {
+                next(name, new APair(CONSTANT_CTX, item.car.cdr, item.cdr));
               }
               // wrap with EnvLookup to handle undefined
-              return new EnvLookup(car.car);
-            } else if (is_nil(cdr)) {
-              return car;
-            } else if (is_pair(expr)) {
+              return new EnvLookup(item.car.car);
+            } else if (item.cdr instanceof ANil) {
+              return item.car;
+            } else if (expr instanceof APair) {
               const last_pair = expr.last_pair()!;
               if (last_pair.cdr instanceof ASymbol) {
                 next(name, item.last_pair());
-                return car;
+                return item.car;
               }
             }
-          } else if (Array.isArray(item)) {
-            if (nested) {
-              next(name, item.slice(1));
-              return APair.fromArray(CONSTANT_CTX, item);
-            } else {
-              const rest = item.slice(1);
-              if (rest.length > 0) {
-                next(name, rest);
-              }
-              return item[0];
-            }
-          } else {
-            return item;
           }
+          return item;
         }
       }
-      const rest_expr = is_array ? expr.slice(1) : expr.cdr;
-      const head = transform_ellipsis_expr(first, bindings, state, next);
-      const rest = transform_ellipsis_expr(rest_expr, bindings, state, next);
-      if (is_array) {
-        // template was an array → the recursion on the array tail yields an array.
-        invariant(Array.isArray(rest), "syntax: ellipsis array tail must transform to an array");
-        return [head, ...rest];
-      }
-      return new APair(CONSTANT_CTX, head, rest);
+
+      return new APair(
+        CONSTANT_CTX,
+        transform_ellipsis_expr(first, bindings, state, next),
+        transform_ellipsis_expr(expr.cdr, bindings, state, next),
+      );
     }
     return expr;
   }
@@ -860,7 +831,7 @@ export function transform_syntax(options: TransformOptions) {
         if (x === null) {
           return !skip_nulls;
         }
-        return is_pair(x) || is_nil(x) || (Array.isArray(x) && x.length > 0);
+        return x instanceof APair || x instanceof ANil;
       })
     );
   }
@@ -869,18 +840,11 @@ export function transform_syntax(options: TransformOptions) {
     return [...Object.keys(object), ...Object.getOwnPropertySymbols(object)];
   }
 
-  function traverse(expr: unknown, { disabled }: { disabled?: boolean } = {}): unknown {
-    const is_array = Array.isArray(expr);
-    if (is_array && expr.length === 0) {
-      return expr;
-    }
-    if (is_pair(expr) || is_array) {
-      const first = is_array ? expr[0] : expr.car;
-      let second: unknown, rest_second: unknown;
-      if (is_array) {
-        second = expr[1];
-        rest_second = expr.slice(2);
-      } else if (is_pair(expr.cdr)) {
+  function traverse(expr: SchemeValue, { disabled }: { disabled?: boolean } = {}): SchemeValue {
+    if (expr instanceof APair) {
+      const first = expr.car;
+      let second: SchemeValue, rest_second: SchemeValue;
+      if (expr.cdr instanceof APair) {
         second = expr.cdr.car;
         rest_second = expr.cdr.cdr;
       }
@@ -888,8 +852,8 @@ export function transform_syntax(options: TransformOptions) {
       // `(... <template>)`, so `first.cdr` must itself be a pair carrying
       // <template> in its car. Guard it before reading `.car` — a bare
       // `(...)` would leave `first.cdr` as nil, whose `.car` is undefined.
-      if (!disabled && is_pair(first) && ASymbol.is(first.car, ellipsis_symbol) && is_pair(first.cdr)) {
-        return new APair(CONSTANT_CTX, first.cdr.car, is_pair(expr) ? traverse(expr.cdr) : nil);
+      if (!disabled && first instanceof APair && ASymbol.is(first.car, ellipsis_symbol) && first.cdr instanceof APair) {
+        return new APair(CONSTANT_CTX, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil);
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
@@ -907,12 +871,12 @@ export function transform_syntax(options: TransformOptions) {
         // of rest, x will also have it's own mapping to 1 and y to 2
         // in case of usage outside of ellipsis list e.g.: (x y)
         const is_spread =
-          first instanceof ASymbol && is_pair(rest_second) && ASymbol.is(rest_second.car, ellipsis_symbol);
-        if (is_pair(first) || is_spread) {
+          first instanceof ASymbol && rest_second instanceof APair && ASymbol.is(rest_second.car, ellipsis_symbol);
+        if (first instanceof APair || is_spread) {
           // lists is free ellipsis on pairs ((???) ...)
           // TODO: will this work in every case? Do we need to handle
           // nesting here?
-          if (is_nil(bindings["..."].lists[0])) {
+          if (bindings["..."].lists[0] instanceof ANil) {
             if (!is_spread) {
               return traverse(rest_second, { disabled });
             }
@@ -926,7 +890,7 @@ export function transform_syntax(options: TransformOptions) {
           let result: unknown;
           if (keys.length > 0) {
             let bind: BindingCell = { ...symbols };
-            result = is_array ? [] : nil;
+            result = nil;
             while (true) {
               if (!have_binding(bind)) {
                 break;
@@ -945,36 +909,25 @@ export function transform_syntax(options: TransformOptions) {
                   car = car.valueOf();
                 }
                 if (is_spread) {
-                  if (is_array) {
-                    if (Array.isArray(result) && Array.isArray(car)) {
-                      result.push(...car);
-                    } else {
-                    }
-                  } else {
-                    result = is_nil(result) ? car : concatPair(CONSTANT_CTX, result, car);
-                  }
-                } else if (is_array) {
-                  invariant(Array.isArray(result), "syntax: array ellipsis result must be an array");
-                  result.push(car);
+                  result = result instanceof ANil ? car : concatPair(CONSTANT_CTX, result, car);
                 } else {
                   result = new APair(CONSTANT_CTX, car, result);
                 }
               }
               bind = new_bind;
             }
-            if (is_pair(result) && !is_spread && !is_array) {
+            if (result instanceof APair && !is_spread) {
               result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
             }
             // case of (list) ... (rest code)
-            if (is_array) {
-              if (rest_second) {
-                const rest = traverse(rest_second, { disabled });
-                invariant(Array.isArray(result), "syntax: array ellipsis result must be an array");
-                return result.concat(rest);
-              }
-              return result;
-            }
-            if (is_pair(expr) && is_pair(expr.cdr) && !is_nil(expr.cdr.cdr) && is_pair(expr.cdr.cdr) && !ASymbol.is(expr.cdr.cdr.car, ellipsis_symbol)) {
+
+            if (
+              expr instanceof APair &&
+              expr.cdr instanceof APair &&
+              !(expr.cdr.cdr instanceof ANil) &&
+              expr.cdr.cdr instanceof APair &&
+              !ASymbol.is(expr.cdr.cdr.car, ellipsis_symbol)
+            ) {
               const rest = traverse(expr.cdr.cdr, { disabled });
               return concatPair(CONSTANT_CTX, result, rest);
             }
@@ -992,7 +945,7 @@ export function transform_syntax(options: TransformOptions) {
             return nil;
           }
         } else if (first instanceof ASymbol) {
-          if (is_pair(rest_second) && ASymbol.is(rest_second.car, ellipsis_symbol)) {
+          if (rest_second instanceof APair && ASymbol.is(rest_second.car, ellipsis_symbol)) {
             // case (x ... ...)
           } else {
           }
@@ -1000,7 +953,7 @@ export function transform_syntax(options: TransformOptions) {
           const name = first.__name__;
           let bind: BindingCell = { [name]: symbols[name] };
           const is_null = symbols[name] === null;
-          let result: unknown = is_array ? [] : nil;
+          let result: unknown = nil;
           while (true) {
             if (!have_binding(bind, true)) {
               break;
@@ -1014,61 +967,52 @@ export function transform_syntax(options: TransformOptions) {
               if (value instanceof EnvLookup) {
                 value = value.valueOf();
               }
-              if (is_array) {
-                invariant(Array.isArray(result), "syntax: array ellipsis result must be an array");
-                result.push(value);
-              } else {
-                result = new APair(CONSTANT_CTX, value, result);
-              }
+              result = new APair(CONSTANT_CTX, value, result);
             }
             bind = new_bind;
           }
-          if (is_pair(result) && !is_array) {
+          if (result instanceof APair) {
             result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
           }
           // case if (x ... y ...) second spread is not processed
           // and (??? . x) last symbol
           // by ellipsis transformation
-          const exprCdr = is_pair(expr) ? expr.cdr : nil;
-          if (is_pair(exprCdr) && (is_pair(exprCdr.cdr) || exprCdr.cdr instanceof ASymbol)) {
+          const exprCdr = expr instanceof APair ? expr.cdr : nil;
+          if (exprCdr instanceof APair && (exprCdr.cdr instanceof APair || exprCdr.cdr instanceof ASymbol)) {
             const node = traverse(exprCdr.cdr, { disabled });
             if (is_null) {
               return node;
             }
-            if (is_nil(result)) {
-              result = node;
-            } else {
-              result = concatPair(CONSTANT_CTX, result, node);
-            }
+            result = result instanceof ANil ? node : concatPair(CONSTANT_CTX, result, node);
           }
           return result;
         }
       }
       const head = traverse(first, { disabled });
-      let rest: unknown;
+      let rest: SchemeValue;
       let is_syntax = false;
       if (first instanceof ASymbol) {
         const value = defChild.lookupSettled(first);
         is_syntax = value instanceof Macro && value.__name__ === "syntax-rules";
       }
-      if (is_syntax && is_pair(expr) && is_pair(expr.cdr)) {
+      if (is_syntax && expr instanceof APair && expr.cdr instanceof APair) {
         const exprCdr = expr.cdr;
         rest =
           exprCdr.car instanceof ASymbol
             ? new APair(
                 CONSTANT_CTX,
                 traverse(exprCdr.car, { disabled }),
-                is_pair(exprCdr.cdr)
+                exprCdr.cdr instanceof APair
                   ? new APair(
                       CONSTANT_CTX,
-                      is_pair(exprCdr.cdr.cdr) ? exprCdr.cdr.cdr.car : nil,
-                      traverse(is_pair(exprCdr.cdr.cdr) ? exprCdr.cdr.cdr.cdr : nil, { disabled }),
+                      exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.car : nil,
+                      traverse(exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.cdr : nil, { disabled }),
                     )
                   : nil,
               )
             : new APair(CONSTANT_CTX, exprCdr.car, traverse(exprCdr.cdr, { disabled }));
       } else {
-        rest = is_pair(expr) ? traverse(expr.cdr, { disabled }) : nil;
+        rest = expr instanceof APair ? traverse(expr.cdr, { disabled }) : nil;
       }
       return new APair(CONSTANT_CTX, head, rest);
     }
@@ -1088,18 +1032,4 @@ export function transform_syntax(options: TransformOptions) {
   }
 
   return traverse(expr, {});
-}
-
-// -------------------------------------------------------------------------
-export function self_evaluated(obj) {
-  const type = typeof obj;
-  return (
-    ["string", "function"].includes(type) ||
-    typeof obj === "symbol" ||
-    obj instanceof ASymbol ||
-    obj instanceof AString ||
-    obj instanceof RegExp ||
-    obj instanceof AExact ||
-    obj instanceof AInexact
-  );
 }

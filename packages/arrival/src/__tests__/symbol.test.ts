@@ -37,7 +37,7 @@ describe("symbol.native — scheme-identity, no validation", () => {
 
   it("runs the impl on the raw scheme term with NO decode/validate", () => {
     const def = symbol.native`car-ish: first of a pair`(
-      { input: [z.pair], output: [z.schemeString] },
+      { input: [z.pair], output: [z.string] },
       (p) => p.car as AString,
     );
     const arg = new APair(CONSTANT_CTX, new AString(CONSTANT_CTX, "hello"), nil);

@@ -131,13 +131,6 @@ export class ASymbol extends AValue {
     return this.__name__ as string;
   }
 
-  serialize(): SchemeSymbolName | [string] {
-    if (isString(this.__name__)) {
-      return this.__name__;
-    }
-    return [symbol_to_string(this.__name__ as symbol)];
-  }
-
   valueOf(): SchemeSymbolName {
     // For symbols, return the symbol itself (used as environment keys)
     // For strings, return the string

@@ -22,7 +22,7 @@
 // The host hooks are bound via `symbol.native` — RAW, the exact semantic of the old
 // `env.set(name, fn)` / `{ value }` form (native's impl is bound as-is, no codec, no
 // validation). They are host plumbing (a results sink, a JS stack), not scheme value-ops,
-// so contracts lean on `z.unknown()` (representation-blind) rather than a typed scheme
+// so contracts lean on `z.value` (representation-blind) rather than a typed scheme
 // identity — but the shape is now the target `symbol.*` form, not the legacy `{ value }`
 // escape hatch, so the runtime behavior stays byte-identical to the old harness.
 
@@ -109,7 +109,7 @@ export function createChibiHarness(): ChibiHarness {
     symbols: {
       // chibi `format` shim — kept for surface parity (the current suite does not call it).
       format: symbol.native`format: chibi (format) shim — ~a/~s substitution, ~% newline, ~~ tilde`(
-        { input: [z.unknown()], inputRest: z.unknown(), output: [z.string] },
+        { input: [z.value], inputRest: z.value, output: [z.string] },
         (fmt: unknown, ...args: unknown[]): string => {
           let result = String(fmt);
           let argIndex = 0;
@@ -127,7 +127,7 @@ export function createChibiHarness(): ChibiHarness {
       ),
 
       "error-object-message": symbol.native`error-object-message: the error's message, from a JS Error/string/other`(
-        { input: [z.unknown()], output: [z.string] },
+        { input: [z.value], output: [z.string] },
         (err: unknown): string => {
           if (err instanceof Error) return err.message;
           if (typeof err === "string") return err;
@@ -136,7 +136,7 @@ export function createChibiHarness(): ChibiHarness {
       ),
 
       "error-object?": symbol.native`error-object?: #t iff obj is a JS Error or an error-shaped object`(
-        { input: [z.unknown()], output: [z.boolean] },
+        { input: [z.value], output: [z.boolean] },
         (obj: unknown): boolean =>
           obj instanceof Error || (typeof obj === "object" && obj !== null && "message" in obj),
       ),
@@ -145,7 +145,7 @@ export function createChibiHarness(): ChibiHarness {
       // `thunk` is the raw scheme closure the `test` macro hands over; calling it from
       // JS (await) is the SAME path the old `env.set("js-run-test", …)` used.
       "js-run-test": symbol.native`js-run-test: run thunk, compare its result to expected, record the outcome`(
-        { input: [z.unknown(), z.unknown(), z.lambda], output: [z.void()] },
+        { input: [z.value, z.value, z.lambda], output: [z.undefinedResult] },
         async (name: unknown, expected: unknown, thunk: (...args: unknown[]) => unknown): Promise<void> => {
           const testName = typeof name === "string" ? name : String(name);
           try {
@@ -165,14 +165,14 @@ export function createChibiHarness(): ChibiHarness {
 
       // ── The JS-side group stack (replaces the scheme `set!` bookkeeping) ───────────
       "js-test-begin": symbol.native`js-test-begin: push the current group, enter a new one named 'name'`(
-        { input: [z.unknown()], output: [z.void()] },
+        { input: [z.value], output: [z.undefinedResult] },
         (name: unknown): void => {
           groupStack.push(currentGroup);
           currentGroup = String(name);
         },
       ),
       "js-test-end": symbol.native`js-test-end: pop the JS-side group stack back to the parent group`(
-        { input: [], output: [z.void()] },
+        { input: [], output: [z.undefinedResult] },
         (): void => {
           currentGroup = groupStack.pop() ?? "R7RS";
         },
@@ -180,19 +180,19 @@ export function createChibiHarness(): ChibiHarness {
 
       // Callbacks the `test-error` macro fires (raw bindings, as before).
       "*test-pass-callback*": symbol.native`*test-pass-callback*: record a passing outcome`(
-        { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.void()] },
+        { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
         (name: unknown, expected: unknown, actual: unknown): void => {
           results.push({ name: String(name), group: currentGroup, passed: true, expected, actual });
         },
       ),
       "*test-fail-callback*": symbol.native`*test-fail-callback*: record a failing outcome`(
-        { input: [z.unknown(), z.unknown(), z.unknown()], output: [z.void()] },
+        { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
         (name: unknown, expected: unknown, actual: unknown): void => {
           results.push({ name: String(name), group: currentGroup, passed: false, expected, actual });
         },
       ),
       "*test-error-callback*": symbol.native`*test-error-callback*: record a thrown-error outcome`(
-        { input: [z.unknown(), z.unknown()], output: [z.void()] },
+        { input: [z.value, z.value], output: [z.undefinedResult] },
         (name: unknown, error: unknown): void => {
           results.push({ name: String(name), group: currentGroup, passed: false, error: String(error) });
         },

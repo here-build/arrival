@@ -26,7 +26,7 @@
  * cycle) — which is exactly why generator-exec.ts can import `GLOBAL_NATIVE_PACKS` here.
  */
 
-import { R7RSError, R7RSReadError, R7RSFileError } from "./errors.js";
+import { R7RSError, R7RSFileError, R7RSReadError } from "./errors.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { EnvCapability } from "./common/capability.js";
 import { symbol } from "./common/symbol.js";
@@ -119,23 +119,23 @@ export const wrappedOps = {
 export const exceptionsCapability = new EnvCapability("scheme/exceptions", {
   symbols: {
     "error-object?": symbol.native`error-object?: #t iff obj is an R7RS error object`(
-      { input: [z.unknown()], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean] },
       wrappedOps["error-object?"],
     ),
     "error-object-message": symbol.native`error-object-message: the error object's message string`(
-      { input: [z.unknown()], output: [z.string] },
+      { input: [z.value], output: [z.string] },
       wrappedOps["error-object-message"],
     ),
     "error-object-irritants": symbol.native`error-object-irritants: the error object's irritants as a list`(
-      { input: [z.unknown()], output: [z.unknown()] },
+      { input: [z.value], output: [z.value] },
       wrappedOps["error-object-irritants"],
     ),
     "read-error?": symbol.native`read-error?: #t iff obj is a read error`(
-      { input: [z.unknown()], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean] },
       wrappedOps["read-error?"],
     ),
     "file-error?": symbol.native`file-error?: #t iff obj is a file error`(
-      { input: [z.unknown()], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean] },
       wrappedOps["file-error?"],
     ),
   },

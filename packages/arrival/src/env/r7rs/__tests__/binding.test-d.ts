@@ -70,7 +70,7 @@ describe("scheme/r7rs/binding Contract precision — call-with-values", () => {
   // `unknown` both ways, NOT the disabling `any` the migration originally carried over from the
   // untyped stdlib `doc({ value })` form (binding.ts's local `SchemeFunction` alias, fixed
   // alongside this audit).
-  const callable = z.custom<(...args: unknown[]) => unknown>();
+  const callable = z.lambda;
 
   test("producer/consumer decode as (...args: unknown[]) => unknown — precise, not any-typed", () => {
     // Checked per-position (not as one combined tuple literal) — expectTypeOf's overload

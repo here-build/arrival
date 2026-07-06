@@ -36,10 +36,4 @@ describe("scheme/core Contract precision — author-asserted `type` recovers the
   it("gensym: an optional string name hint → a fresh symbol (string image), not (...args: unknown[]) => unknown", () => {
     expect(signatureOf(def("gensym"))).toBe("(name?: string) => string");
   });
-
-  it("typecheck: the assertion's real 4-arity + void return, not the catch-all degrade", () => {
-    expect(signatureOf(def("typecheck"))).toBe(
-      "(fn: unknown, arg: unknown, expected: string | Function, position?: number) => void",
-    );
-  });
 });

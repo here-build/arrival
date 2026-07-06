@@ -54,7 +54,7 @@
  */
 import { is_pair } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
-import type { APair } from "./primitives/APair.js";
+import { APair } from "./primitives/APair.js";
 import type { SchemeValue } from "./types.js";
 
 /** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes
@@ -170,7 +170,7 @@ const isSym = (x: unknown, name: string): boolean => x instanceof ASymbol && opN
 
 /** A datum that is neither a variable (SchemeSymbol) nor an application (Pair). */
 function isLiteral(x: unknown): boolean {
-  return !(x instanceof ASymbol) && !is_pair(x);
+  return !(x instanceof ASymbol) && !(x instanceof APair);
 }
 
 // A reader AST datum is `unknown` at an arbitrary car/cdr slot: `APair`'s
@@ -183,7 +183,7 @@ function isLiteral(x: unknown): boolean {
 function operands(app: APair): unknown[] {
   const out: unknown[] = [];
   let n: unknown = app.cdr;
-  while (is_pair(n)) {
+  while (n instanceof APair) {
     out.push(n.car);
     n = n.cdr;
   }
@@ -196,7 +196,7 @@ const isProvBearing = (n: LineageNode): boolean => n.kind !== "literal";
  *  index must be a self-evaluating exact integer; a variable index (`(vector-ref
  *  x n)`) leaves the form a plain op (no static field — the key isn't known). */
 function literalIndex(x: unknown): number | null {
-  if (x instanceof ASymbol || is_pair(x)) return null;
+  if (x instanceof ASymbol || x instanceof APair) return null;
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
   return typeof v === "number" && Number.isInteger(v) ? v : null;
 }
@@ -230,7 +230,7 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
     if (keyName !== null && keyName.length > 1 && keyName.startsWith(":")) {
       return { step: { field: keyName.slice(1) }, argExpr: args[0] };
     }
-    if (!(key instanceof ASymbol) && !is_pair(key)) {
+    if (!(key instanceof ASymbol) && !(key instanceof APair)) {
       const kv = (key as { valueOf?: () => unknown })?.valueOf?.();
       if (typeof kv === "string") return { step: { field: kv }, argExpr: args[0] };
       const ki = literalIndex(key);
@@ -257,7 +257,7 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
 function lambdaParams(formals: unknown): string[] {
   const out: string[] = [];
   let n: unknown = formals;
-  while (is_pair(n)) {
+  while (n instanceof APair) {
     if (n.car instanceof ASymbol) out.push(opName(n.car));
     n = n.cdr;
   }
@@ -273,9 +273,9 @@ function lambdaParams(formals: unknown): string[] {
  * shaping structure; walk() never descends it (cone neutrality).
  */
 function classifyFanTemplate(fn: unknown, c: Classifier, subst: Subst): LineageNode | undefined {
-  if (!is_pair(fn) || !isSym(fn.car, "lambda")) return undefined;
+  if (!(fn instanceof APair) || !isSym(fn.car, "lambda")) return undefined;
   const afterKw = fn.cdr;
-  if (!is_pair(afterKw)) return undefined;
+  if (!(afterKw instanceof APair)) return undefined;
   const params = lambdaParams(afterKw.car);
   const bodyForms = afterKw.cdr; // (body…) — classify the LAST (begin pass-through)
   // The element binds the params as leaves; the surrounding subst still applies to
@@ -441,19 +441,19 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
 
 /** `(if test then else?)` → mux(selector=test, arms=[then, else?]). */
 function classifyIf(rest: unknown, c: Classifier, subst: Subst): LineageNode {
-  if (!is_pair(rest)) return { kind: "literal" };
+  if (!(rest instanceof APair)) return { kind: "literal" };
   const test = rest.car;
   const afterTest = rest.cdr;
-  const then_ = is_pair(afterTest) ? afterTest.car : undefined;
-  const elseRest = is_pair(afterTest) ? afterTest.cdr : undefined;
-  const else_ = is_pair(elseRest) ? elseRest.car : undefined;
+  const then_ = afterTest instanceof APair ? afterTest.car : undefined;
+  const elseRest = afterTest instanceof APair ? afterTest.cdr : undefined;
+  const else_ = elseRest instanceof APair ? elseRest.car : undefined;
   const arms = [then_, else_].filter((a) => a !== undefined).map((a) => classifyWith(a, c, subst));
   return { kind: "mux", op: "if", selector: classifyWith(test, c, subst), arms };
 }
 
 /** `(when/unless test body…)` ≡ a one-armed `if` over `(begin body…)`. */
 function classifyGuardedBody(rest: unknown, c: Classifier, subst: Subst, op: string): LineageNode {
-  if (!is_pair(rest)) return { kind: "literal" };
+  if (!(rest instanceof APair)) return { kind: "literal" };
   const test = rest.car;
   const body = classifyBegin(rest.cdr, c, subst);
   return { kind: "mux", op, selector: classifyWith(test, c, subst), arms: [body] };
@@ -470,10 +470,10 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   const tests: LineageNode[] = [];
   const arms: LineageNode[] = [];
   let node: unknown = rest;
-  while (is_pair(node)) {
+  while (node instanceof APair) {
     const clause = node.car;
     node = node.cdr;
-    if (!is_pair(clause)) continue;
+    if (!(clause instanceof APair)) continue;
     const test = clause.car;
     const body = clause.cdr;
 
@@ -485,13 +485,14 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
     const testNode = classifyWith(test, c, subst);
     tests.push(testNode);
 
-    if (is_pair(body) && isSym(body.car, "=>")) {
+    if (body instanceof APair && isSym(body.car, "=>")) {
       // (test => proc): arm value is (proc test) — proc's operand cone unioned
       // with the test cone (the test value flows into the arm).
       const procRest = body.cdr;
-      const procNode = is_pair(procRest) ? classifyWith(procRest.car, c, subst) : ({ kind: "literal" } as LineageNode);
+      const procNode =
+        procRest instanceof APair ? classifyWith(procRest.car, c, subst) : ({ kind: "literal" } as LineageNode);
       arms.push(combine("=>", [procNode, testNode]));
-    } else if (is_pair(body)) {
+    } else if (body instanceof APair) {
       arms.push(classifyBegin(body, c, subst)); // normal clause body
     } else {
       arms.push(testNode); // `(test)` with no body returns the test value itself
@@ -508,12 +509,12 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
  * not transparently inlineable — so it stays opaque over its RHSs + body.
  */
 function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boolean): LineageNode {
-  if (!is_pair(rest)) return { kind: "literal" };
+  if (!(rest instanceof APair)) return { kind: "literal" };
 
   // Named let: (let name (bindings) body…) — recursion ⇒ opaque (not inlineable).
   if (rest.car instanceof ASymbol) {
     const afterName = rest.cdr;
-    if (!is_pair(afterName)) return { kind: "literal" };
+    if (!(afterName instanceof APair)) return { kind: "literal" };
     const rhss = letBindingValues(afterName.car).map((v) => classifyWith(v, c, subst));
     const body = classifyBegin(afterName.cdr, c, subst);
     return { kind: "opaque", op: "named-let", children: [...rhss, body].filter(isProvBearing) };
@@ -526,12 +527,12 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
   // RHS in the OUTER subst (parallel); `let*`/`letrec` extend as they go.
   const extended = new Map(subst);
   let bindNode: unknown = bindings;
-  while (is_pair(bindNode)) {
+  while (bindNode instanceof APair) {
     const binding = bindNode.car;
     bindNode = bindNode.cdr;
-    if (!is_pair(binding) || !(binding.car instanceof ASymbol)) continue;
+    if (!(binding instanceof APair) || !(binding.car instanceof ASymbol)) continue;
     const name = opName(binding.car);
-    const rhsExpr = is_pair(binding.cdr) ? binding.cdr.car : undefined;
+    const rhsExpr = binding.cdr instanceof APair ? binding.cdr.car : undefined;
     const rhsSubst = sequential ? extended : subst; // let* sees prior bindings; let does not
     const rhsNode = rhsExpr === undefined ? ({ kind: "literal" } as LineageNode) : classifyWith(rhsExpr, c, rhsSubst);
     extended.set(name, rhsNode);
@@ -544,9 +545,9 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
 function letBindingValues(bindings: unknown): unknown[] {
   const out: unknown[] = [];
   let n: unknown = bindings;
-  while (is_pair(n)) {
+  while (n instanceof APair) {
     const b = n.car;
-    if (is_pair(b) && is_pair(b.cdr)) out.push(b.cdr.car);
+    if (b instanceof APair && b.cdr instanceof APair) out.push(b.cdr.car);
     n = n.cdr;
   }
   return out;
@@ -556,7 +557,7 @@ function letBindingValues(bindings: unknown): unknown[] {
 function classifyBegin(body: unknown, c: Classifier, subst: Subst): LineageNode {
   let last: unknown;
   let n: unknown = body;
-  while (is_pair(n)) {
+  while (n instanceof APair) {
     last = n.car;
     n = n.cdr;
   }

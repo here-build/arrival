@@ -1,6 +1,4 @@
 import { CLASS } from "../well-known-symbols.js";
-import { trim_lines } from "../utils/trim-lines.js";
-import { typecheck } from "../utils/typecheck.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import type { Resolver } from "./Resolver.js";
@@ -38,10 +36,13 @@ export class Macro {
   __defmacro__?: boolean;
 
   constructor(name: string, fn: Function, doc?: string, dump?: boolean) {
-    typecheck("Macro", name, "string", 1);
-    typecheck("Macro", fn, "function", 2);
     if (doc) {
-      this.__doc__ = dump ? doc : trim_lines(doc);
+      this.__doc__ = dump
+        ? doc
+        : doc
+            .split("\n")
+            .map((line) => line.trim())
+            .join("\n");
     }
     this.__name__ = name;
     this.__fn__ = fn;

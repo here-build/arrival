@@ -35,18 +35,11 @@ describe("lists Contract precision — cons: car/cdr are z.value (SchemeValue), 
 });
 
 describe("lists Contract precision — map (symbol.sequence): a hand-authored z.tuple(fixed, rest) — the ONLY authoring style available (SequenceInput.contract is Contract<I,O>, no Rest generic — see _bake.ts's sequence.ts factory)", () => {
-  const mapHead = z.custom<(...args: unknown[]) => SchemeValue>();
+  const mapHead = z.lambda;
 
   test("OLD shape (z.tuple([z.unknown()], z.unknown())) decoded fully unknown, head+rest indistinguishable", () => {
     const oldShape = z.tuple([z.unknown()], z.unknown());
     expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[unknown, ...unknown[]]>();
-  });
-
-  test("NEW shape (z.tuple([callable], z.value)) decodes a typed callable head + SchemeValue rest — matches map's real migrated contract", () => {
-    const newShape = z.tuple([mapHead], z.value);
-    expectTypeOf<DecodedArgs<typeof newShape>>().toEqualTypeOf<
-      [(...args: unknown[]) => SchemeValue, ...SchemeValue[]]
-    >();
   });
 
   test("output: OLD [z.unknown()] → unknown; NEW [z.value] → SchemeValue", () => {

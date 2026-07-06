@@ -245,7 +245,10 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
     { input: [z.union([z.pair, z.nil]), z.string], output: [z.string] },
     () => "",
   );
-  const setTimer = symbol.native`set-timer: start a timer`({ input: [z.number], output: [z.void()] }, () => undefined);
+  const setTimer = symbol.native`set-timer: start a timer`(
+    { input: [z.number], output: [z.undefinedResult] },
+    () => undefined,
+  );
   const entries = [
     ["get_route", getRoute],
     ["set_timer", setTimer],

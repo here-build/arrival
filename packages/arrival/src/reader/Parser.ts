@@ -36,7 +36,7 @@ import { APair } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
 import type { SchemeValue } from "../values/types.js";
-import type { ANil } from "../values/primitives/ANil.js";
+import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
 
@@ -320,7 +320,7 @@ export class Parser {
       }
       // Capture location BEFORE reading the object
       const loc = this._getLocation();
-      if (token === "." && !is_nil(head)) {
+      if (token === "." && !(head instanceof ANil)) {
         this.skip();
         (prev as APair).cdr = await this._read_object();
         dot = true;
@@ -331,7 +331,7 @@ export class Parser {
         if (loc) {
           cur.setLocation(loc);
         }
-        if (is_nil(head)) {
+        if (head instanceof ANil) {
           head = cur;
         } else {
           (prev as APair).cdr = cur;
@@ -524,7 +524,7 @@ export class Parser {
       // The method is async, so awaiting the resolver is the direct equivalent of the
       // former `unpromise` then-callback (`_resolve_object` always returns a Promise).
       const resolved = await this._resolve_object(object);
-      if (is_pair(resolved)) {
+      if (resolved instanceof APair) {
         // mark cycles on parser level
         resolved.mark_cycles();
       }
@@ -560,22 +560,22 @@ export class Parser {
   // both unreachable and type-incoherent (they built `SchemeValue[]` / `Record<…>`
   // values that are not SchemeValue); removed rather than hardened with a cast.
   async _resolve_object(object: SchemeValue): Promise<SchemeValue> {
-    if (is_pair(object)) {
+    if (object instanceof APair) {
       return this._resolve_pair(object);
     }
     return object;
   }
 
   async _resolve_pair(pair: APair): Promise<APair> {
-    if (is_pair(pair)) {
+    if (pair instanceof APair) {
       if (pair.car instanceof DatumReference) {
         pair.car = await pair.car.valueOf();
-      } else if (is_pair(pair.car)) {
+      } else if (pair.car instanceof APair) {
         await this._resolve_pair(pair.car);
       }
       if (pair.cdr instanceof DatumReference) {
         pair.cdr = await pair.cdr.valueOf();
-      } else if (is_pair(pair.cdr)) {
+      } else if (pair.cdr instanceof APair) {
         await this._resolve_pair(pair.cdr);
       }
     }
@@ -621,11 +621,14 @@ export class Parser {
         // Convert list to a boxed bytevector (#u8(...) literal producer). R7RS
         // literals are immutable → freeze (see the #(...) case above).
         let litBv: ABytevector;
-        if (is_nil(list)) {
+        if (list instanceof ANil) {
           litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(0));
         } else {
           const arr = list.to_array(false) as number[];
-          litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
+          litBv = new ABytevector(
+            CONSTANT_CTX,
+            new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
+          );
         }
         litBv.freeze();
         return litBv;
@@ -701,7 +704,7 @@ export class Parser {
         // Opt-in SRFI-105 curly-infix — the pre-2026-07 default, verbatim.
         const elements = await this.read_curly_elements();
         const datum = canonicalizeCurly(elements, loc);
-        if (loc && is_pair(datum)) {
+        if (loc && datum instanceof APair) {
           datum.setLocation(loc);
         }
         return datum;
@@ -727,7 +730,7 @@ export class Parser {
       this._enterNesting(")");
       this.skip();
       const list = await this.read_list();
-      if (loc && is_pair(list)) {
+      if (loc && list instanceof APair) {
         list.setLocation(loc);
       }
       return list;

@@ -31,14 +31,15 @@ import type { Keyword } from "./Keyword.js";
 // errors.ts (which already `import type { SchemeValue }`s from here) is a pure
 // compile-time cycle TS resolves with no runtime circular dependency.
 import type { R7RSError } from "../errors.js";
-// A `LipsFunction` is a JS function used as a Scheme procedure carrying optional
+// A `AProcedure` is a JS function used as a Scheme procedure carrying optional
 // LIPS metadata — the metadata-bearing form of the bare callable arm below, and
 // a first-class *value* (unlike Macro/Syntax/Environment, which are env bindings
 // but never values). It has no runtime brand distinguishing it from a plain
 // procedure, so a value resolved from the env arrives typed as one and must be
 // admitted here. `import type` keeps the edge to Environment.ts (which itself
 // `import type { SchemeValue }`s from here) a pure compile-time cycle.
-import type { LipsFunction } from "../Environment.js";
+import { ImplInvocationCtx } from "../common/symbols/_bake.js";
+import type { ACallable } from "./primitives/ACallable.js";
 
 /**
  * Opaque marker for the trampoline's bounce sentinel. The real `Bounce`
@@ -73,14 +74,24 @@ export type SchemeValue =
   // A caught R7RS condition object, bound as the catch variable.
   | R7RSError
   // A JS function used as a Scheme procedure, with optional LIPS metadata.
-  | LipsFunction
-  // A plain procedure value (builtin): args in, one value out.
-  | ((...args: SchemeValue[]) => SchemeValue)
-  // A Scheme lambda value: its body may return a value synchronously, a bounce
-  // token (under the trampoline's bounce protocol), or a Promise (JS-host entry
-  // path). The trampolined/async return is the honest truth of a lambda's call;
-  // the non-value returns are narrowed out at the call boundary before any use.
-  | ((...args: SchemeValue[]) => SchemeValue | SchemeBounceMarker | Promise<SchemeValue>);
+  | AProcedure
+  // A callable-as-value (stage 0 of the callable-as-value rework): ALambda /
+  // ANativeProcedure / ARosettaProcedure. Additive alongside the legacy `AProcedure` fn arm
+  // until the migration replaces it. `import type` keeps the edge to primitives/ACallable.ts
+  // (which type-imports SchemeValue from here) a pure compile-time cycle.
+  | ACallable;
+
+// A Scheme lambda value: its body may return a value synchronously, a bounce
+// token (under the trampoline's bounce protocol), or a Promise (JS-host entry
+// path). The trampolined/async return is the honest truth of a lambda's call;
+// the non-value returns are narrowed out at the call boundary before any use.
+export type AProcedure<Args extends [...SchemeValue[]] = [...any[]], Result extends SchemeValue = any> = ((
+  this: ImplInvocationCtx,
+  ...args: Args
+) => Result | SchemeBounceMarker | Promise<Result>) & {
+  __name__?: string | symbol;
+  __code__?: unknown;
+};
 
 // -------------------------------------------------------------------------
 // :: SchemeStringLike interface - duck-typing for SchemeString class
@@ -104,7 +115,7 @@ export function isString(x: unknown): x is SchemeStringLike | string {
 
 // Forward declaration for Pair (implemented in lips.ts)
 // This allows Nil.append to return the right type without circular dependency
-export interface APairLike<Car = unknown, Cdr = unknown> {
+export interface APairLike<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue> {
   car: Car;
   cdr: Cdr;
 }

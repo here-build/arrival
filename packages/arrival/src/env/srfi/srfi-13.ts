@@ -29,38 +29,25 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { typecheck } from "../../utils/typecheck.js";
-import {
-  assertAllocatable,
-  charValue,
-  stringValue,
-  toIndex,
-  withInputProvenance,
-} from "../../values/op-helpers.js";
+import { assertAllocatable, charValue, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_false, is_nil, is_promise, is_pair as is_pair_raw } from "../../eval/guards.js";
+import { is_false, is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { findHeapMeter, heapBudgetMessage } from "../../heap-budget.js";
-import { currentRunEnv, ArrivalError } from "../../eval/evaluator.js";
-import type { SchemeValue } from "../../values/types.js";
-
-// Pack-local refinement of `is_pair` — same shadow strings.ts/lists.ts carry (the
-// shared guard narrows only to `APair<unknown, unknown>`; every list walked here is
-// fully boxed, so the refined predicate lets `.car`/`.cdr` produce `SchemeValue`).
-const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
+import { ArrivalError, currentRunEnv } from "../../eval/evaluator.js";
+import type { AProcedure, SchemeValue } from "../../values/types.js";
 
 // Pack-local copy of the list→array bridge helper `string-join` needs — byte-identical
 // to the strings.ts/lists.ts copies (incl. the per-run heap-meter charge at the
 // collection choke); pack isolation forbids a cross-pack import.
 function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
-  return function recur(list: SchemeValue): SchemeValue[] {
-    typecheck(name, list, ["pair", "nil"]);
-    if (is_nil(list)) {
+  return function recur(list: APair | ANil): SchemeValue[] {
+    if (list instanceof ANil) {
       return [];
     }
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
@@ -69,7 +56,7 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
     const result: SchemeValue[] = [];
     let node = list;
     while (true) {
-      if (is_pair(node)) {
+      if (node instanceof APair) {
         if (node.have_cycles("cdr")) {
           break;
         }
@@ -80,7 +67,7 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
         }
         node = node.cdr;
       } else {
-        invariant(is_nil(node), `${name}: can't convert improper list`);
+        invariant(node instanceof ANil, `${name}: can't convert improper list`);
         break;
       }
     }
@@ -98,18 +85,16 @@ const isWhitespace = (c: string): boolean => /\s/u.test(c);
 
 /** Per-character match flags for a criterion; a promise when the predicate is async. */
 function criterionFlags(
-  name: string,
-  criterion: unknown,
+  criterion: ACharacter | AProcedure,
   chars: readonly string[],
 ): boolean[] | Promise<boolean[]> {
   if (criterion instanceof ACharacter) {
     const ch = charValue(criterion);
     return chars.map((c) => c === ch);
   }
-  typecheck(name, criterion, ["character", "function"]);
   const pred = criterion as (c: unknown) => unknown;
   const results = chars.map((c) => pred(new ACharacter(CONSTANT_CTX, c)));
-  const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v) && !is_nil(v));
+  const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v) && !(v instanceof ANil));
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {
     return (promise_all(results) as Promise<unknown[]>).then(collapse);
@@ -127,7 +112,7 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
   return (str: unknown, criterion?: unknown): AString | Promise<AString> => {
     const chars = [...stringValue(str)];
     // Default criterion: whitespace (SRFI-13's char-set:whitespace, sans charsets).
-    const flags = criterion === undefined ? chars.map(isWhitespace) : criterionFlags(name, criterion, chars);
+    const flags = criterion === undefined ? chars.map(isWhitespace) : criterionFlags(criterion, chars);
     return afterFlags(flags, (f) => {
       let start = 0;
       let end = chars.length;
@@ -160,7 +145,7 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
 export default new EnvCapability("scheme/srfi-13", {
   symbols: {
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
-      { input: [z.schemeString], output: [z.boolean] },
+      { input: [z.string], output: [z.boolean] },
       (str: unknown): boolean => {
         return withInputProvenance([str], stringValue(str).length === 0);
       },
@@ -168,171 +153,180 @@ export default new EnvCapability("scheme/srfi-13", {
 
     // SRFI-13 argument order: the AFFIX comes first — (string-prefix? prefix s).
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
-      { input: [z.schemeString, z.schemeString], output: [z.boolean] },
+      { input: [z.string, z.string], output: [z.boolean] },
       (prefix: unknown, str: unknown): boolean => {
         return withInputProvenance([prefix, str], stringValue(str).startsWith(stringValue(prefix)));
       },
     ),
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
-      { input: [z.schemeString, z.schemeString], output: [z.boolean] },
+      { input: [z.string, z.string], output: [z.boolean] },
       (suffix: unknown, str: unknown): boolean => {
         return withInputProvenance([suffix, str], stringValue(str).endsWith(stringValue(suffix)));
       },
     ),
 
     // Index-or-#f, like string-contains (#f is the ONLY false value — index 0 is truthy).
-    "string-index": symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown()], output: [z.union([z.schemeExact, z.boolean])] },
-      (str: unknown, criterion: unknown): AExact | boolean | Promise<AExact | boolean> => {
-        const chars = [...stringValue(str)];
-        return afterFlags(criterionFlags("string-index", criterion, chars), (f) => {
-          const i = f.indexOf(true);
-          return withInputProvenance([str, criterion], i < 0 ? false : new AExact(CONSTANT_CTX, BigInt(i)));
-        });
-      },
-    ),
+    "string-index":
+      symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
+        { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])] },
+        (str: unknown, criterion: unknown): AExact | boolean | Promise<AExact | boolean> => {
+          const chars = [...stringValue(str)];
+          return afterFlags(criterionFlags(criterion, chars), (f) => {
+            const i = f.indexOf(true);
+            return withInputProvenance([str, criterion], i === -1 ? false : new AExact(CONSTANT_CTX, BigInt(i)));
+          });
+        },
+      ),
 
-    "string-count": symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown()], output: [z.schemeExact] },
-      (str: unknown, criterion: unknown): AExact | Promise<AExact> => {
-        const chars = [...stringValue(str)];
-        return afterFlags(criterionFlags("string-count", criterion, chars), (f) => {
-          const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
-          return withInputProvenance([str, criterion], new AExact(CONSTANT_CTX, BigInt(n)));
-        });
-      },
-    ),
+    "string-count":
+      symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
+        { input: [z.string, z.value], output: [z.bigint] },
+        (str: unknown, criterion: unknown): AExact | Promise<AExact> => {
+          const chars = [...stringValue(str)];
+          return afterFlags(criterionFlags(criterion, chars), (f) => {
+            const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
+            return withInputProvenance([str, criterion], new AExact(CONSTANT_CTX, BigInt(n)));
+          });
+        },
+      ),
 
-    "string-take": symbol.native`string-take: the first n characters of the string; n out of range is an error (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber], output: [z.schemeString] },
-      sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
-    ),
+    "string-take":
+      symbol.native`string-take: the first n characters of the string; n out of range is an error (SRFI-13)`(
+        { input: [z.string, z.schemeNumber], output: [z.string] },
+        sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
+      ),
 
-    "string-drop": symbol.native`string-drop: the string without its first n characters; n out of range is an error (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber], output: [z.schemeString] },
-      sliceImpl("string-drop", (chars, k) => chars.slice(k)),
-    ),
+    "string-drop":
+      symbol.native`string-drop: the string without its first n characters; n out of range is an error (SRFI-13)`(
+        { input: [z.string, z.schemeNumber], output: [z.string] },
+        sliceImpl("string-drop", (chars, k) => chars.slice(k)),
+      ),
 
-    "string-take-right": symbol.native`string-take-right: the last n characters of the string; n out of range is an error (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber], output: [z.schemeString] },
-      sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
-    ),
+    "string-take-right":
+      symbol.native`string-take-right: the last n characters of the string; n out of range is an error (SRFI-13)`(
+        { input: [z.string, z.schemeNumber], output: [z.string] },
+        sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
+      ),
 
-    "string-drop-right": symbol.native`string-drop-right: the string without its last n characters; n out of range is an error (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber], output: [z.schemeString] },
-      sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
-    ),
+    "string-drop-right":
+      symbol.native`string-drop-right: the string without its last n characters; n out of range is an error (SRFI-13)`(
+        { input: [z.string, z.schemeNumber], output: [z.string] },
+        sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
+      ),
 
-    "string-trim": symbol.native`string-trim: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown().optional()], output: [z.schemeString] },
-      trimImpl("string-trim", "both"),
-    ),
+    "string-trim":
+      symbol.native`string-trim: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+        { input: [z.string, z.value.optional()], output: [z.string] },
+        trimImpl("string-trim", "both"),
+      ),
 
-    "string-trim-left": symbol.native`string-trim-left: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown().optional()], output: [z.schemeString] },
-      trimImpl("string-trim-left", "left"),
-    ),
+    "string-trim-left":
+      symbol.native`string-trim-left: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+        { input: [z.string, z.value.optional()], output: [z.string] },
+        trimImpl("string-trim-left", "left"),
+      ),
 
-    "string-trim-right": symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-      { input: [z.schemeString, z.unknown().optional()], output: [z.schemeString] },
-      trimImpl("string-trim-right", "right"),
-    ),
+    "string-trim-right":
+      symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+        { input: [z.string, z.value.optional()], output: [z.string] },
+        trimImpl("string-trim-right", "right"),
+      ),
 
     // SRFI-13 pads to EXACTLY len: `string-pad` right-justifies (pads on the left,
     // TRUNCATES from the left when too long — keeps the string's tail);
     // `string-pad-right` left-justifies (pads/truncates on the right).
-    "string-pad": symbol.native`string-pad: right-justified to exactly len — pads on the left with char (default space), truncates from the left when too long (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber, z.schemeChar.optional()], output: [z.schemeString] },
-      (str: unknown, len: unknown, char?: unknown): AString => {
-        const chars = [...stringValue(str)];
-        const k = toIndex(len);
-        // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
-        assertAllocatable(k, "string-pad");
-        const fill = char === undefined ? " " : charValue(char);
-        const text = chars.length >= k ? chars.slice(chars.length - k).join("") : fill.repeat(k - chars.length) + chars.join("");
-        // Like make-string: a present fill char contributes lineage; the length shapes only.
-        return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
-      },
-    ),
+    "string-pad":
+      symbol.native`string-pad: right-justified to exactly len — pads on the left with char (default space), truncates from the left when too long (SRFI-13)`(
+        { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
+        (str: unknown, len: unknown, char?: unknown): AString => {
+          const chars = [...stringValue(str)];
+          const k = toIndex(len);
+          // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
+          assertAllocatable(k, "string-pad");
+          const fill = char === undefined ? " " : charValue(char);
+          const text =
+            chars.length >= k ? chars.slice(chars.length - k).join("") : fill.repeat(k - chars.length) + chars.join("");
+          // Like make-string: a present fill char contributes lineage; the length shapes only.
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
+        },
+      ),
 
-    "string-pad-right": symbol.native`string-pad-right: left-justified to exactly len — pads on the right with char (default space), truncates on the right when too long (SRFI-13)`(
-      { input: [z.schemeString, z.schemeNumber, z.schemeChar.optional()], output: [z.schemeString] },
-      (str: unknown, len: unknown, char?: unknown): AString => {
-        const chars = [...stringValue(str)];
-        const k = toIndex(len);
-        assertAllocatable(k, "string-pad-right");
-        const fill = char === undefined ? " " : charValue(char);
-        const text = chars.length >= k ? chars.slice(0, k).join("") : chars.join("") + fill.repeat(k - chars.length);
-        return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
-      },
-    ),
+    "string-pad-right":
+      symbol.native`string-pad-right: left-justified to exactly len — pads on the right with char (default space), truncates on the right when too long (SRFI-13)`(
+        { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
+        (str: unknown, len: unknown, char?: unknown): AString => {
+          const chars = [...stringValue(str)];
+          const k = toIndex(len);
+          assertAllocatable(k, "string-pad-right");
+          const fill = char === undefined ? " " : charValue(char);
+          const text = chars.length >= k ? chars.slice(0, k).join("") : chars.join("") + fill.repeat(k - chars.length);
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
+        },
+      ),
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
-      { input: [z.schemeString], output: [z.schemeString] },
+      { input: [z.string], output: [z.string] },
       (str: unknown): AString => {
         return withInputProvenance([str], new AString(CONSTANT_CTX, [...stringValue(str)].reverse().join("")));
       },
     ),
 
-    "string-join": symbol.native`string-join: the list of strings folded to one with a delimiter (default single space) (SRFI-13)`(
-      {
-        input: [z.value, z.schemeString.optional()],
-        output: [z.union([z.string, z.schemeString])],
-        // scheme-zod has no element-typed list schema, so the list input is `z.value` (→ `unknown`)
-        // and the output union images to the redundant `string | string`. Author-assert what the
-        // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
-        // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
-        type: "(list: List<string>, delimiter?: string) => string",
-      },
-      (list: SchemeValue, delimiter?: unknown): string | AString => {
-        typecheck("string-join", list, ["pair", "nil"]);
-        const parts = to_array("string-join")(list);
-        for (const [i, part] of parts.entries()) typecheck("string-join", part, "string", i + 1);
-        const sep = delimiter === undefined ? " " : stringValue(delimiter);
-        // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
-        // every element's lineage (+ the delimiter's) — see string-append/join.
-        return taintString(parts.map(stringValue).join(sep), collapseProvenance(list, delimiter));
-      },
-    ),
+    "string-join":
+      symbol.native`string-join: the list of strings folded to one with a delimiter (default single space) (SRFI-13)`(
+        {
+          input: [z.union([z.pair, z.nil]), z.string.optional()],
+          output: [z.union([z.string, z.string])],
+          // scheme-zod has no element-typed list schema, so the list input is `z.value` (→ `unknown`)
+          // and the output union images to the redundant `string | string`. Author-assert what the
+          // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
+          // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
+          type: "(list: List<string>, delimiter?: string) => string",
+        },
+        (list, delimiter) => {
+          const parts = to_array("string-join")(list);
+          const sep = delimiter === undefined ? " " : stringValue(delimiter);
+          // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
+          // every element's lineage (+ the delimiter's) — see string-append/join.
+          return taintString(parts.map(stringValue).join(sep), collapseProvenance(list, delimiter));
+        },
+      ),
 
     // NOTE the inversion vs trim: tokenize's criterion selects TOKEN chars (what to
     // KEEP), trim's selects what to SHED. Default: maximal non-whitespace runs.
-    "string-tokenize": symbol.native`string-tokenize: the list of maximal runs of token chars — default non-whitespace, or chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-      {
-        input: [z.schemeString, z.unknown().optional()],
-        output: [z.value],
-        // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
-        // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
-        // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
-        // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
-        type: "(str: string, criterion?: unknown) => List<string>",
-      },
-      (str: unknown, criterion?: unknown): APair | ANil | Promise<APair | ANil> => {
-        const chars = [...stringValue(str)];
-        const flags =
-          criterion === undefined
-            ? chars.map((c) => !isWhitespace(c))
-            : criterionFlags("string-tokenize", criterion, chars);
-        return afterFlags(flags, (f) => {
-          // Splitting op: each token is a fresh derived string — taint each with the
-          // source's lineage so list elements stay grounded (cf. string-split below).
-          const prov = collapseProvenance(str, criterion);
-          const tokens: (string | AString)[] = [];
-          let current = "";
-          for (let i = 0; i < chars.length; i++) {
-            if (f[i]) {
-              current += chars[i];
-            } else if (current !== "") {
-              tokens.push(taintString(current, prov));
-              current = "";
+    "string-tokenize":
+      symbol.native`string-tokenize: the list of maximal runs of token chars — default non-whitespace, or chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+        {
+          input: [z.string, z.value.optional()],
+          output: [z.value],
+          // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
+          // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
+          // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
+          // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
+          type: "(str: string, criterion?: unknown) => List<string>",
+        },
+        (str: unknown, criterion?: unknown): APair | ANil | Promise<APair | ANil> => {
+          const chars = [...stringValue(str)];
+          const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
+          return afterFlags(flags, (f) => {
+            // Splitting op: each token is a fresh derived string — taint each with the
+            // source's lineage so list elements stay grounded (cf. string-split below).
+            const prov = collapseProvenance(str, criterion);
+            const tokens: (string | AString)[] = [];
+            let current = "";
+            for (const [i, char] of chars.entries()) {
+              if (f[i]) {
+                current += char;
+              } else if (current !== "") {
+                tokens.push(taintString(current, prov));
+                current = "";
+              }
             }
-          }
-          if (current !== "") tokens.push(taintString(current, prov));
-          return APair.fromArray(CONSTANT_CTX, tokens);
-        });
-      },
-    ),
+            if (current !== "") tokens.push(taintString(current, prov));
+            return APair.fromArray(CONSTANT_CTX, tokens);
+          });
+        },
+      ),
 
     // SRFI-152 (NOT SRFI-13 — string-split is absent there); bound in this pack anyway
     // because it is the #1 symbol models reach for after seeing string-contains.
@@ -345,29 +339,28 @@ export default new EnvCapability("scheme/srfi-13", {
     // than teach the string-only form, complete the grain: accept a character
     // delimiter, coerced to the single-char string it denotes — string-only
     // behavior (including the empty-subject/empty-list rule below) is unchanged.
-    "string-split": symbol.native`string-split: the list of the string's pieces around a literal delimiter — a string, or a single character (Gauche/Guile/MIT accept a char delimiter too); empty string yields '() (SRFI-152)`(
-      {
-        input: [z.schemeString, z.union([z.schemeString, z.schemeChar])],
-        output: [z.value],
-        // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the pieces — a proper
-        // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
-        // `string | string` (schemeString and schemeChar both print `string`); the honest image is a
-        // single `string` delimiter. Both recovered by the author assertion.
-        type: "(str: string, delimiter: string) => List<string>",
-      },
-      (str: unknown, delimiter: unknown): APair | ANil => {
-        typecheck("string-split", str, "string", 1);
-        typecheck("string-split", delimiter, ["string", "character"], 2);
-        const s = stringValue(str);
-        // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
-        if (s === "") return nil;
-        const delimiterStr = delimiter instanceof ACharacter ? charValue(delimiter) : stringValue(delimiter);
-        const prov = collapseProvenance(str, delimiter);
-        return APair.fromArray(
-          CONSTANT_CTX,
-          s.split(delimiterStr).map((piece) => taintString(piece, prov)),
-        );
-      },
-    ),
+    "string-split":
+      symbol.native`string-split: the list of the string's pieces around a literal delimiter — a string, or a single character (Gauche/Guile/MIT accept a char delimiter too); empty string yields '() (SRFI-152)`(
+        {
+          input: [z.string, z.union([z.string, z.char])],
+          output: [z.value],
+          // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the pieces — a proper
+          // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
+          // `string | string` (string and schemeChar both print `string`); the honest image is a
+          // single `string` delimiter. Both recovered by the author assertion.
+          type: "(str: string, delimiter: string) => List<string>",
+        },
+        (str, delimiter) => {
+          const s = stringValue(str);
+          // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
+          if (s === "") return nil;
+          const delimiterStr = delimiter instanceof ACharacter ? charValue(delimiter) : stringValue(delimiter);
+          const prov = collapseProvenance(str, delimiter);
+          return APair.fromArray(
+            CONSTANT_CTX,
+            s.split(delimiterStr).map((piece) => taintString(piece, prov)),
+          );
+        },
+      ),
   },
 });

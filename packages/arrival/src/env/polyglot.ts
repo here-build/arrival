@@ -388,32 +388,32 @@ export default new EnvCapability("scheme/polyglot", {
     },
   ],
   symbols: () => ({
-    // `obj`/`key` stay `z.unknown()` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
+    // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
     // `readMember`/`hasMember`/`memberKeys` dispatch on `instanceof AJSObject` / `Array.isArray`
     // / plain-prototype checks, and are called directly with raw (non-scheme) JS values from
     // outside the evaluator too (see clone-identity.test.ts). The OUTPUT sides below were the
-    // imprecise part — each op has a single, unconditional real return type; `z.unknown()`
+    // imprecise part — each op has a single, unconditional real return type; `z.value`
     // there was discarding it, not describing a genuinely-blind slot.
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       // `readMember` always returns a real scheme value (nil / a boxed read / an AJSArray-
       // wrapped array) — never something OUTSIDE SchemeValue. `z.value` (the identity term for
       // "a polymorphic accessor's operand", scheme-zod.ts's own worked example) replaces the
-      // `z.unknown()` that was discarding this.
-      { input: [z.unknown(), z.unknown()], output: [z.value] },
+      // `z.value` that was discarding this.
+      { input: [z.value, z.value], output: [z.value] },
       readMember,
     ),
     "@?": symbol.native`@?: #t iff obj has the member key`(
       // `hasMember` returns a real JS `boolean` — the `z.boolean` codec (DECODED type
       // `boolean`) is the established convention for a native predicate that returns a raw
       // JS boolean bound raw (see equality.ts's `boolean=?`/`not`/`procedure?`/…).
-      { input: [z.unknown(), z.unknown()], output: [z.boolean] },
+      { input: [z.value, z.value], output: [z.boolean] },
       hasMember,
     ),
     "@keys": symbol.native`@keys: the own member keys of obj`(
       // `memberKeys` returns a real JS `string[]` (never anything else) — `z.array(z.string)`
       // (the string codec's decoded type is `string`) states that precisely instead of
       // discarding it to `unknown`.
-      { input: [z.unknown()], output: [z.array(z.string)] },
+      { input: [z.value], output: [z.array(z.string)] },
       memberKeys,
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
@@ -425,14 +425,14 @@ export default new EnvCapability("scheme/polyglot", {
     // it to a JS/Python object literal. (Plain `symbol.native`: dict reads no membrane
     // primitive, only KEYWORD_ACCESSOR_FIELD at call-time, so it needs no deferral.)
     dict: symbol.native`dict: an open-key map built from interleaved :key value pairs`(
-      // Input stays flat `z.unknown()` — each interleaved position is genuinely either a
+      // Input stays flat `z.value` — each interleaved position is genuinely either a
       // keyword-pluck object (read for its key) or an arbitrary stored value; there's no
       // well-typed way to express the alternation over a flat variadic without a shape that
       // no longer matches the real call form. The OUTPUT, though, is unconditional: this impl
       // always builds (and only ever builds) a plain string-keyed record — `z.record(z.string,
-      // z.unknown())` (keys are real JS strings; values are genuinely open) states that,
-      // replacing the `z.unknown()` that was discarding it.
-      { input: z.array(z.unknown()), output: [z.record(z.string, z.unknown())] },
+      // z.value)` (keys are real JS strings; values are genuinely open) states that,
+      // replacing the `z.value` that was discarding it.
+      { input: z.array(z.value), output: [z.record(z.string, z.value)] },
       (...args: unknown[]): Record<string, unknown> => {
         const obj: Record<string, unknown> = {};
         for (let i = 0; i + 1 < args.length; i += 2) {

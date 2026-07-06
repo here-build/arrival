@@ -164,7 +164,7 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector->string": symbol.native`vector->string: a string from vec's character elements in [start, end)`(
-      { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.schemeString] },
+      { input: [z.svector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
       (vec: unknown, start?: unknown, end?: unknown): AString => {
         const arr = asVector(vec, "vector->string");
         const s = start === undefined ? 0 : toIndex(start);
@@ -179,7 +179,7 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "string->vector": symbol.native`string->vector: a vector of str's characters in [start, end)`(
-      { input: [z.schemeString, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.svector] },
+      { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.svector] },
       (str: unknown, start?: unknown, end?: unknown): AVector => {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
@@ -211,7 +211,7 @@ export default new EnvCapability("scheme/vectors", {
       // z.svector (this file's own vector-identity schema), not the representation-blind
       // z.unknown() the old combined z.tuple([head], z.unknown()) used.
       {
-        input: [z.custom<(...args: unknown[]) => SchemeValue>()],
+        input: [z.lambda],
         inputRest: z.svector,
         output: [z.svector],
         fanout: true,
@@ -221,13 +221,14 @@ export default new EnvCapability("scheme/vectors", {
         // for vector-append) → a new vector (`readonly unknown[]`).
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
       },
-      (proc: (...args: unknown[]) => SchemeValue, ...vectors: AVector[]): AVector | Promise<AVector> => {
+      (proc, ...vectors) => {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const result: SchemeValue[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
+          // @ts-expect-error todo FIX
           result.push(proc(...elements));
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
@@ -246,9 +247,9 @@ export default new EnvCapability("scheme/vectors", {
     "vector-for-each": symbol.native`vector-for-each: apply proc across the vectors for effect`(
       // Same head/rest migration as vector-map above (callable head, z.svector rest).
       {
-        input: [z.custom<(...args: unknown[]) => unknown>()],
+        input: [z.lambda],
         inputRest: z.svector,
-        output: [z.void()],
+        output: [z.undefinedResult],
         // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
       },

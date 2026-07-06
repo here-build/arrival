@@ -23,12 +23,11 @@ import { theVoid } from "../values/primitives/AVoid.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
  *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk. */
-const source = (impl: () => unknown) =>
-  symbol.rosetta`t: test source`({ input: [], output: [z.unknown()] }, impl);
+const source = (impl: () => unknown) => symbol.rosetta`t: test source`({ input: [], output: [z.value] }, impl);
 
 /** A SOURCE rosetta echoing its scheme argument — the identity fast path through
  *  jsToScheme returns the very same box, which the return walk then deep-attests. */
-const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.unknown()] }, (v: unknown) => v);
+const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.value] }, (v: unknown) => v);
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
   it("refuses the exempt singletons: nil, #void, interned symbols, #t/#f flyweights", async () => {
@@ -66,7 +65,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("a PURE rosetta's return is NOT machine-attested (a transform, not a source)", async () => {
     const pureDef = symbol.rosetta`p: pure transform`(
-      { input: [], output: [z.unknown()], pure: true },
+      { input: [], output: [z.number], pure: true },
       () => 42,
     );
     expect(isAttested(await pureDef.run())).toBe(false);

@@ -27,7 +27,7 @@ const sumReadings = symbol.rosetta`sum-readings: total the readings`(
   () => 0,
 );
 const setTimer = symbol.rosetta`set-timer: start a timer`(
-  { input: [z.number], output: [z.void()] },
+  { input: [z.number], output: [z.undefinedResult] },
   () => undefined,
 );
 const makeRoute = symbol.rosetta`make-route: build a fresh route`(

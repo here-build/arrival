@@ -22,15 +22,15 @@
  * `define` is a frame rebind (let/lambda/letrec/define), not value mutation.
  */
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { Environment, type BindingName, type EnvironmentValue } from "../Environment.js";
+import { type BindingName, Environment, type EnvironmentValue } from "../Environment.js";
 import { resolveMemberPath } from "../member-walk.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
+import { ImplInvocationCtx } from "../common/symbols/_bake.js";
 
 // ============================================================================
 // Environment lookup without lips runtime dependency
@@ -41,27 +41,28 @@ import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 // the 1-step base case; cadr…caddddr are the deeper compositions. No "aside" resolver, no
 // field-access/typecheck duplication — composites inherit the atoms' nil-tolerance (ANil reads
 // runCtx.strict), provenance (APair re-stamps), and the totalic "primitive does not support
-// car" throw for free. __withCtx so the apply boundary hands it the run ctx.
+// car" throw for free.
 const CXR_RE = /^c[ad]+r$/;
 function cxrUnfold(name: string): SchemeValue | undefined {
   if (!CXR_RE.test(name)) return undefined;
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  const fn = (arg: unknown, ctx?: unknown): unknown => {
-    const runCtx = (ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX;
+  return function (this: ImplInvocationCtx, arg: unknown): unknown {
+    // `this?.` (not just `this.ctx?.`): a native HOF (`map`/`vector-map`) invokes this
+    // synthesized accessor as a plain callback with `this === undefined`, so reading
+    // `this.ctx` would throw before the `?.` on `.ctx` could guard it.
+    const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
     let v: unknown = arg;
     for (const t of steps) {
-      const method = t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr";
-      const m = (v as Record<string, unknown> | null | undefined)?.[method];
-      if (typeof m !== "function") {
-        const kind = v instanceof AValue ? v.kind : v == null ? String(v) : typeof v;
-        throw new TypeError(`${name}: the ${kind} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${method}).`);
-      }
+      const m = v?.[`arrival/tagless-final/${t === "a" ? "car" : "cdr"}`];
+      TypeError.invariant(
+        typeof m === "function",
+        () =>
+          `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
+      );
       v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
     }
     return v;
-  };
-  (fn as { __withCtx?: boolean }).__withCtx = true;
-  return fn as SchemeValue;
+  } satisfies SchemeValue;
 }
 
 /**

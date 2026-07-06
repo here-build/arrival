@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { is_nil } from "../eval/guards.js";
+import { ANil } from "../values/primitives/ANil.js";
 
 /**
  * Strict mode is the R7RS portability CONTROL — NOT the default. The `#void`/`#null`
@@ -28,6 +29,6 @@ describe("strict rejects the #void/#null reader literals (portability control)",
 
   it("loose (default): #null resolves to nil", async () => {
     const [result] = await exec("#null");
-    expect(is_nil(result)).toBe(true);
+    expect((result)).toBeInstanceOf(ANil);
   });
 });

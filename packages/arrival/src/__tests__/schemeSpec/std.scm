@@ -44,14 +44,6 @@
     (t.is (find odd? (list 0 2 4 3)) 3)
     (t.is (find odd? (list 0 2 4 6)) '())))
 
-(test "std: typecheck"
-  (lambda (t)
-    (t.is (to.throw (typecheck "test" 10 (list "string"))) true)
-    (t.is (try (typecheck "test" 10 (list "string") 0) (catch (e) e.message))
-      "Expecting a string got number in expression `test` (argument 0)")
-    (t.is (try (typecheck "test" 10 (list "string" "character") 0) (catch (e) e.message))
-      "Expecting string or character got number in expression `test` (argument 0)")))
-
 (test "std: fold/curry"
   (lambda (t)
 

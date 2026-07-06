@@ -12,38 +12,28 @@
  * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
  * cycle detection is Floyd's tortoise-and-hare.
  */
-import { CLASS } from "../../well-known-symbols.js";
+import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { fromJs } from "./boxing.js";
-import { withInputProvenance, deriveSortCompare } from "../op-helpers.js";
-import { structuralEqual, type SeenMap } from "../structural-equal.js";
+import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
+import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
-import { is_false, is_native, is_nil, is_pair as is_pair_raw, is_plain_object } from "../value-guards.js";
+import { is_false, is_native, is_nil, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AHalfBaked } from "./AHalfBaked.js";
 import type { SchemeValue } from "../types.js";
-import { ABytevector } from "./ABytevector.js";
+import { type APairLike } from "../types.js";
 import { AString } from "./AString.js";
-import { AVector } from "./AVector.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "../primitives/AExact.js";
 import { AInexact } from "../primitives/AInexact.js";
-import { CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
-import { type APairLike } from "../types.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
-
-// The shared `is_pair` narrows only to `APair<unknown, unknown>`, leaving every
-// guarded `.car`/`.cdr` typed `unknown`. In a live cons cell both slots hold a
-// `SchemeValue` (that IS the union of everything the interpreter can hold), so a
-// file-local shadow refines the guard to the slot truth — same runtime predicate
-// (`o instanceof APair`), zero call-site churn. (Same fix evaluator.ts applies.)
-const is_pair = (o: unknown): o is APair<SchemeValue, SchemeValue> => is_pair_raw(o);
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
   [CYCLES]?: { car?: string | APair; cdr?: string | APair };
@@ -101,7 +91,7 @@ function unwind(result: Thunk | void): void {
 export function isCircularList(head: unknown): boolean {
   let slow: unknown = head;
   let fast: unknown = head;
-  while (is_pair(fast) && is_pair(fast.cdr)) {
+  while (fast instanceof APair && fast.cdr instanceof APair) {
     slow = (slow as APair).cdr;
     fast = fast.cdr.cdr;
     if (slow === fast) return true;
@@ -110,7 +100,7 @@ export function isCircularList(head: unknown): boolean {
 }
 
 function is_cycle(pair: unknown): boolean {
-  if (!is_pair(pair)) {
+  if (!(pair instanceof APair)) {
     return false;
   }
   if (pair.have_cycles()) {
@@ -132,7 +122,7 @@ function mark_cycles(pair: APair): void {
   }
 
   function set(node: PairWithMetadata, type: "car" | "cdr", child: unknown, parents: APair[]): boolean {
-    if (is_pair(child) && parents.includes(child)) {
+    if (child instanceof APair && parents.includes(child)) {
       if (!refs.includes(child)) {
         refs.push(child);
       }
@@ -149,7 +139,7 @@ function mark_cycles(pair: APair): void {
   }
 
   const detect = trampoline(function detect_thunk(pair: unknown, parents: APair[]): Thunk | void {
-    if (is_pair(pair)) {
+    if (pair instanceof APair) {
       const pairWithCycles = pair as PairWithMetadata;
       delete pairWithCycles[REF];
       delete pairWithCycles[CYCLES];
@@ -170,7 +160,7 @@ function mark_cycles(pair: APair): void {
 
   function mark_node(node: PairWithMetadata, type: "car" | "cdr"): void {
     const cycleData = node[CYCLES];
-    if (cycleData && is_pair(cycleData[type])) {
+    if (cycleData && cycleData[type] instanceof APair) {
       const count = ref_nodes.indexOf(cycleData[type]);
       cycleData[type] = `#${count}#`;
     }
@@ -191,7 +181,10 @@ function mark_cycles(pair: APair): void {
 // gone — dissolved into the per-value `["arrival/print"]()` protocol / `printValue`. APair was the
 // last place carrying a second copy of the universal value renderer.)
 
-export class APair<Car = unknown, Cdr = unknown> extends AValue implements APairLike<Car, Cdr> {
+export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue>
+  extends AValue
+  implements APairLike<Car, Cdr>
+{
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "pair";
   readonly kind = "pair" as const;
@@ -211,7 +204,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   static match(obj: unknown, item: string | RegExp | ASymbol): boolean {
     if (obj instanceof ASymbol) {
       return ASymbol.is(obj, item);
-    } else if (is_pair(obj)) {
+    } else if (obj instanceof APair) {
       return APair.match(obj.car, item) || APair.match(obj.cdr, item);
     } else if (Array.isArray(obj)) {
       return obj.some((x) => APair.match(x, item));
@@ -233,7 +226,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: boolean): APair | ANil | unknown[];
   static fromArray(ctx: RunContext, array: unknown, deep = true, quote = false): APair | ANil | unknown[] {
     if (
-      is_pair(array) ||
+      array instanceof APair ||
       (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[DATA])
     ) {
       return array as APair | unknown[];
@@ -294,7 +287,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     let len = 0;
     let node: APair | unknown = this;
     while (true) {
-      if (!node || is_nil(node) || !is_pair(node) || node.have_cycles("cdr")) {
+      if (!node || node instanceof ANil || !(node instanceof APair) || node.have_cycles("cdr")) {
         break;
       }
       len++;
@@ -312,11 +305,11 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     const selfCtx = this.ctx;
 
     function cloneNode(node: unknown): unknown {
-      if (is_pair(node)) {
+      if (node instanceof APair) {
         if (visited.has(node)) {
           return visited.get(node);
         }
-        const pair = new APair(selfCtx, ) as PairWithMetadata;
+        const pair = new APair(selfCtx) as PairWithMetadata;
         visited.set(node, pair);
         pair.car = deep ? cloneNode(node.car) : node.car;
         pair.cdr = cloneNode(node.cdr);
@@ -332,7 +325,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   last_pair(): APair | undefined {
     let node: APair = this;
     while (true) {
-      if (!is_pair(node.cdr)) {
+      if (!(node.cdr instanceof APair)) {
         return node;
       }
       if (node.have_cycles("cdr")) {
@@ -348,7 +341,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     // here because `have_cycles()` misses runtime `set-cdr!` cycles.
     invariant(!isCircularList(this), "cannot convert a circular list to an array");
     let result: unknown[] = [];
-    if (is_pair(this.car)) {
+    if (this.car instanceof APair) {
       if (deep) {
         result.push(this.car.to_array());
       } else {
@@ -361,12 +354,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       if (deep && car !== null && car !== undefined && typeof car === "object" && "valueOf" in car) {
         // But preserve SchemeSymbol, SchemeString, and number types even in deep mode
         // as they are Scheme values that should remain wrapped
-        if (
-          car instanceof ASymbol ||
-          car instanceof AString ||
-          car instanceof AExact ||
-          car instanceof AInexact
-        ) {
+        if (car instanceof ASymbol || car instanceof AString || car instanceof AExact || car instanceof AInexact) {
           result.push(car);
         } else {
           result.push((car as { valueOf(): unknown }).valueOf());
@@ -375,7 +363,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
         result.push(car);
       }
     }
-    if (is_pair(this.cdr)) {
+    if (this.cdr instanceof APair) {
       result = [...result, ...this.cdr.to_array(deep)];
     }
     return result;
@@ -385,7 +373,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     let node: APair | unknown = this;
     const result: Record<string, unknown> = {};
     while (true) {
-      if (is_pair(node) && is_pair(node.car)) {
+      if (node instanceof APair && node.car instanceof APair) {
         const pair = node.car;
         let name: unknown = pair.car;
         if (name instanceof ASymbol) {
@@ -395,7 +383,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
           name = name.valueOf();
         }
         let cdr: unknown = pair.cdr;
-        if (is_pair(cdr)) {
+        if (cdr instanceof APair) {
           cdr = cdr.to_object(literal);
         }
         if (is_native(cdr) && !literal) {
@@ -414,9 +402,9 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     let node: APair | unknown = this;
     let result: T | ANil = nil;
     while (true) {
-      if (is_nil(node)) {
+      if (node instanceof ANil) {
         break;
-      } else if (is_pair(node)) {
+      } else if (node instanceof APair) {
         result = fn(result, node.car);
         node = node.cdr;
       } else {
@@ -431,18 +419,18 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     const selfCtx = this.ctx;
 
     function recur(pair: unknown): unknown {
-      if (is_pair(pair)) {
+      if (pair instanceof APair) {
         if ((pair as APair & { replace?: boolean }).replace) {
           delete (pair as APair & { replace?: boolean }).replace;
           return pair;
         }
         let car = fn(pair.car);
-        if (is_pair(car)) {
+        if (car instanceof APair) {
           car = recur(car);
           visited.push(car as APair);
         }
         let cdr = fn(pair.cdr);
-        if (is_pair(cdr)) {
+        if (cdr instanceof APair) {
           cdr = recur(cdr);
           visited.push(cdr as APair);
         }
@@ -455,7 +443,9 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
   }
 
   map(fn: (val: unknown) => unknown): APair | ANil {
-    return this.car === undefined ? nil : new APair(this.ctx, fn(this.car), is_nil(this.cdr) ? nil : (this.cdr as APair).map(fn));
+    return this.car === undefined
+      ? nil
+      : new APair(this.ctx, fn(this.car), this.cdr instanceof ANil ? nil : (this.cdr as APair).map(fn));
   }
 
   mark_cycles(): this {
@@ -500,7 +490,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     let node: APair = this;
     let first = true;
 
-    while (is_pair(node)) {
+    while (node instanceof APair) {
       const nodeWithCycles = node as PairWithMetadata;
       if (!first) {
         if (nodeWithCycles[REF]) {
@@ -525,7 +515,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
       node = node.cdr as APair;
     }
 
-    if (!is_nil(node) && !is_pair(node)) {
+    if (!(node instanceof ANil) && !(node instanceof APair)) {
       parts.push(" . ", printValue(node));
     }
 
@@ -553,9 +543,9 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     let node: unknown = this;
     while (true) {
       switch (true) {
-        case is_nil(node):
+        case node instanceof ANil:
           return list;
-        case is_pair(node): {
+        case node instanceof APair: {
           invariant(!seen.has(node), "Pair.toJs: cycle detected mid-traversal");
           seen.add(node);
           const car = node.car;
@@ -588,11 +578,11 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     return {
       next(): IteratorResult<unknown> {
         const cur = node;
-        if (is_nil(cur)) {
+        if (cur instanceof ANil) {
           node = nil;
           return { value: undefined, done: true };
         }
-        if (!is_pair(cur)) {
+        if (!(cur instanceof APair)) {
           node = nil;
           return { value: cur, done: false };
         }
@@ -649,7 +639,7 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     // guarded, not laundered.
     const elements: unknown[] = [];
     let node: unknown = this;
-    while (is_pair(node)) {
+    while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
       elements.push(node.car);
       node = node.cdr;
@@ -701,13 +691,13 @@ export class APair<Car = unknown, Cdr = unknown> extends AValue implements APair
     // re-emit these as the materialised filtered list.
     const elements: SchemeValue[] = [];
     let node: unknown = this;
-    while (is_pair(node)) {
+    while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
       elements.push(node.car);
       node = node.cdr;
     }
     const verdicts = elements.map((x) => pred(x));
-    const kept = (verdict: unknown): boolean => !is_false(verdict) && !is_nil(verdict);
+    const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
     if (runCtx?.speculate && verdicts.some(is_promise)) {
       const slots = verdicts.map((r, i): Promise<SchemeValue[]> => {
         const contribute = (verdict: unknown): SchemeValue[] => (kept(verdict) ? [elements[i]] : []);
@@ -898,7 +888,7 @@ function traversePair(ctx: RunContext, of: (x: unknown) => unknown, f: (x: unkno
 // recursive base `return b ?? nil` did — purity: a's spine is fresh, b untouched).
 // An improper `a` still contributes its phantom `undefined` car before the non-Pair
 // tail ends the walk, matching the recursive form.
-export function concatPair(ctx: RunContext, a: unknown, b: unknown): APair | ANil {
+export function concatPair(ctx: RunContext, a: SchemeValue, b: SchemeValue): APair | ANil {
   const cars: unknown[] = [];
   let node: unknown = a;
   while (node && !(node instanceof ANil)) {

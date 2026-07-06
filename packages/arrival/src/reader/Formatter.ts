@@ -1,6 +1,6 @@
 // Scheme source pretty-printer / re-indenter. Works purely off the tokenizer's metadata (col/line per
 // token) — the indentation model follows the community Scheme style guide and GNU Emacs scheme-mode,
-// encoded as the token-pattern `rules` table. Originates from the LIPS formatter.
+// encoded as the token-pattern `rules` table.
 import { CLASS } from "../well-known-symbols.js";
 import { is_special, is_symbol_string } from "./token-guards.js";
 import { tokenize } from "./tokenize.js";
@@ -294,7 +294,7 @@ export class Formatter {
           if (!input[i].match(pattern[p])) {
             return -1;
           }
-        } else if (AString.isString(pattern[p])) {
+        } else if (pattern[p] instanceof AString) {
           if (pattern[p].valueOf() !== input[i]) {
             return -1;
           }

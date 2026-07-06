@@ -20,12 +20,14 @@
 // laziness omissions in `control.ts`; and the §6.13/§6.14 host-interface omissions
 // in `host.ts`. (The former `_unimplemented.ts` manifest is dissolved into these.)
 
+import syntax from "./syntax.js";
 import binding from "./binding.js";
 import exceptions from "./exceptions.js";
 import lists from "./lists.js";
 import control from "./control.js";
 import host from "./host.js";
 
+export { default as syntax } from "./syntax.js";
 export { default as binding } from "./binding.js";
 export { default as exceptions } from "./exceptions.js";
 export { default as lists } from "./lists.js";
@@ -33,4 +35,4 @@ export { default as control } from "./control.js";
 export { default as host } from "./host.js";
 
 /** The whole R7RS derived-syntax set — assemble all, or `.filter()` a subset. */
-export const allR7rs = [binding, exceptions, lists, control, host] as const;
+export const allR7rs = [syntax, binding, exceptions, lists, control, host] as const;

@@ -250,9 +250,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
               case "tagless":
               case "tagless-guard":
               case "rosetta": {
-                // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper, already
-                // tagged `__withCtx` (so the evaluator appends ctx and the wrapper mints
-                // provenance — same spine as createRosettaWrapper; see symbol.ts bakeRosetta).
+                // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper.
                 // Bind it via `set`, NOT defineRosetta — routing it through defineRosetta would
                 // double-wrap the membrane (a second schemeToJs/jsToScheme over the codec output).
                 // Resource pre-spawning still applies if the capability owns cells.
@@ -260,13 +258,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 const gatedRun =
                   cellList.length === 0
                     ? runFn
-                    : Object.assign(
-                        async (...args: unknown[]) => {
-                          await ensureSpawned();
-                          return runFn(...args);
-                        },
-                        { __withCtx: runFn.__withCtx },
-                      );
+                    : async function (...args: unknown[]) {
+                        await ensureSpawned();
+                        return runFn.apply(this, args);
+                      };
                 bindTarget(def).set(verb, gatedRun);
                 break;
               }

@@ -9,15 +9,16 @@ import { jsToScheme } from "../../rosetta.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import {
   asEvalContext,
+  type BakeRuntimeOpts,
   collectKwargsObject,
+  type Contract,
+  type Impl,
+  ImplInvocationCtx,
   isSingleOutput,
   makeInvocationContext,
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
-  type BakeRuntimeOpts,
-  type Contract,
-  type Impl,
   type RestSpec,
   type RosettaSymbolDef,
   type VectorSpec,
@@ -53,24 +54,21 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // The interpretive wrapper. Mirrors createRosettaWrapper's spine
     // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
-    // provenance mint at the end. Tagged `__withCtx` (below) so the evaluator appends
-    // EvalContext as the trailing arg; a direct-JS caller (tests) passes a scheme value
-    // there instead — duck-typed so it is NOT mis-stripped (mirrors createRosettaWrapper).
-    const run = async (...args: unknown[]): Promise<unknown> => {
+    // provenance mint at the end.
+    const run = async function (this: ImplInvocationCtx, ...args: unknown[]): Promise<unknown> {
       // Strip the evaluator-appended ctx iff the trailing arg LOOKS like one. By the time
       // the wrapper runs under the evaluator the scheme DATA args are already scheme values
       // (AValue subclasses / raw arrays-primitives); the genuine EvalContext is the only raw
       // plain object carrying resolver/currentInvocation/tap/signal that reaches here (probe
       // keys on `resolver` — the single always-present field since ejection P5 removed `env`).
       // Same probe as createRosettaWrapper's looksLikeEvalContext.
-      const ctx = asEvalContext(args[args.length - 1]);
-      const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
+      const ctx = asEvalContext(this.ctx);
 
       // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
       // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
       // when no invocation is in ctx (direct-JS calls) is this input union — exactly
       // createRosettaWrapper's behavior.
-      const inputAValues = schemeArgs.filter((a): a is AValue => a instanceof AValue);
+      const inputAValues = args.filter((a): a is AValue => a instanceof AValue);
       const inputProvenance = unionProvenance(inputAValues);
 
       // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
@@ -94,8 +92,8 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // member. `isKwargs` narrows `contract.input` from `VectorSpec` to the branded
       // object schema — no cast needed.
       const decodedArgs: readonly unknown[] = z.isKwargs(contract.input)
-        ? [z.decode(contract.input, collectKwargsObject(schemeArgs))]
-        : z.decode(inSchema, schemeArgs);
+        ? [z.decode(contract.input, collectKwargsObject(args))]
+        : z.decode(inSchema, args);
 
       // 2. RUN the impl with a per-call **invocation `this`** (the lazy invocation-context). The
       //    impl still receives ONLY the decoded scheme args positionally — ctx is NOT a param. A
@@ -153,10 +151,6 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
         return pure ? boxed : attestDeep(freshIfSingleton(boxed));
       });
     };
-    // ALWAYS tag — the wrapper needs ctx appended to mint (mirrors createRosettaWrapper,
-    // where every wrapper is __withCtx post-flip). The strip-guard above keeps direct-JS
-    // calls (no ctx) safe.
-    (run as { __withCtx?: boolean }).__withCtx = true;
 
     return {
       kind: "rosetta",

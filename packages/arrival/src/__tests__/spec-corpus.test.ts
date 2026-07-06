@@ -19,6 +19,7 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { is_nil } from "../eval/guards.js";
 import { theVoid } from "../values/primitives/AVoid.js";
+import { ANil } from "../values/primitives/ANil.js";
 
 interface CorpusCase {
   name: string;
@@ -55,17 +56,17 @@ function renderAst(v: unknown): string {
       parts.push(renderAst(node.car));
       node = node.cdr;
     }
-    const tail = is_nil(node) ? "" : ` . ${renderAst(node)}`;
+    const tail = (node instanceof ANil) ? "" : ` . ${renderAst(node)}`;
     return `(${parts.join(" ")}${tail})`;
   }
   if (v instanceof AString) return JSON.stringify(v.toString());
-  if (is_nil(v)) return "()";
+  if (v instanceof ANil) return "()";
   return String(v);
 }
 
 /** Eval-result fold — the corpus README's value convention. */
 function toJson(v: unknown): unknown {
-  if (v == null || is_nil(v) || v === theVoid) return null;
+  if (v == null || v instanceof ANil || v === theVoid) return null;
   if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
   if (v instanceof ABool) return Boolean(v.valueOf());
   if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") return v;

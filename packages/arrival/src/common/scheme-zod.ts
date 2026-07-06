@@ -27,8 +27,6 @@
 //
 // So the chosen codec fully declares the boundary; there is no ambiguity about how a
 // returned JS number re-enters scheme. (`z.codec` requires zod 4 — pinned 4.3.6, verified.)
-
-export * from "zod";
 import * as z from "zod";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
@@ -43,6 +41,10 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import type { SchemeValue } from "../values/types.js";
+import { AVoid } from "../values/primitives/AVoid.js";
+import { R7RSError } from "../errors.js";
+
+export { tuple, union, record, array, enum, decode, encode } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEME-IDENTITY PRIMITIVES — for `arrival.symbol` (native).
@@ -74,6 +76,8 @@ export const svector = z.custom<AVector>(
 );
 export const sbytevector = z.instanceof(ABytevector);
 export const nil = z.instanceof(ANil);
+export const undefinedResult = z.instanceof(AVoid);
+export const error = z.instanceof(R7RSError);
 
 /** A callable scheme value — a JS function, whether a user `(lambda …)` (carries the
  *  well-known LAMBDA brand) or a bare native/rosetta reference (see eval/guards.ts's
@@ -119,21 +123,20 @@ export const string = z.codec(z.instanceof(AString), z.string(), {
   decode: (s) => s.toJs(),
   encode: (s) => new AString(CONSTANT_CTX, s),
 });
-/** The identity (native-flavored) half of `string` — DERIVED, not re-declared: zod's
- *  `z.codec(...)` is a `ZodPipe` exposing its constituent schemas as public `.in`/`.out`
- *  accessors, and `string.in` IS (by reference) the exact `z.instanceof(AString)` passed
- *  above — one declaration, reused, instead of a second independent one that happened to
- *  describe the same class. (The harvest printer keys `IMAGE_BY_CLASS` off `_zod.bag.Class.name`,
- *  not schema identity, so this is invisible to `schema-to-ts.ts` — verified.) */
-export const schemeString = string.in;
 
 /** SchemeBool ↔ JS `boolean`. */
 export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
   decode: (b) => b.value,
   encode: (b) => new ABool(CONSTANT_CTX, b),
 });
-/** See `schemeString`'s comment — derived from `boolean.in`, not re-declared. */
-export const schemeBool = boolean.in;
+export const booleanFalse = z.codec(
+  z.instanceof(ABool).refine(({ value }) => !value),
+  z.boolean().refine((value) => value === false),
+  {
+    decode: (b) => b.value,
+    encode: (b) => new ABool(CONSTANT_CTX, b),
+  },
+);
 
 /** SchemeCharacter ↔ JS `string` (single grapheme). `.length(1)` makes the JS side
  *  actually ENFORCE "single grapheme" (the doc comment's own claim) instead of merely
@@ -142,8 +145,6 @@ export const char = z.codec(z.instanceof(ACharacter), z.string().length(1), {
   decode: (c) => c.valueOf(),
   encode: (c) => new ACharacter(CONSTANT_CTX, c),
 });
-/** See `schemeString`'s comment — derived from `char.in`, not re-declared. */
-export const schemeChar = char.in;
 
 // ── the NUMBER CODEC FAMILY ───────────────────────────────────────────────────
 // The boundary number-representation is declared by WHICH of these the author picks.
@@ -154,18 +155,11 @@ export const schemeChar = char.in;
  *  total (any bigint IS an exact integer). */
 export const exact = z.codec(z.instanceof(AExact), z.bigint(), {
   decode: (n) => {
-    if (n.denom !== 1n) {
-      throw new Error(`exact codec: exact rational ${n.toString()} has no integer bigint form`);
-    }
+    Error.invariant(n.denom === 1n, `exact codec: exact rational ${n.toString()} has no integer bigint form`);
     return n.num;
   },
   encode: (n) => new AExact(CONSTANT_CTX, n),
 });
-/** See `schemeString`'s comment — derived from `exact.in`, not re-declared. The identity
- *  side accepts ANY AExact (the full domain the old standalone `z.instanceof(AExact)`
- *  accepted, including non-integer rationals) — only the codec's own `decode` doors on a
- *  value that can't be a faithful bigint; the bare identity schema never narrows. */
-export const schemeExact = exact.in;
 
 /** SchemeInexact ↔ JS `number`. Total — `.real` is always a valid JS number, so unlike
  *  `exact` this codec never doors. encode is total too (any JS number IS a valid inexact). */
@@ -173,8 +167,6 @@ export const inexact = z.codec(z.instanceof(AInexact), z.number(), {
   decode: (n) => n.real,
   encode: (n) => new AInexact(CONSTANT_CTX, n),
 });
-/** See `schemeString`'s comment — derived from `inexact.in`, not re-declared. */
-export const schemeInexact = inexact.in;
 
 /** Either numeric tower class — the ONE identity term for a native numeric op, reused
  *  (not re-spelled) as the shared `.in` side of every number codec below (number/integer/
@@ -185,7 +177,7 @@ export const schemeInexact = inexact.in;
  *  COMPOSITION with no fifth standalone codec needed. identity-based lookups (`lookupName`,
  *  below) need the union's OWN members to be the exact same objects those names are
  *  registered against, not mere same-class clones. */
-export const schemeNumber = z.union([schemeExact, schemeInexact]);
+export const schemeNumber = z.union([exact, inexact]);
 
 const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
@@ -194,44 +186,38 @@ const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
  *  safe range and SchemeInexact reals decode directly. Anything that would lose
  *  precision DOORS — a teaching error, never a silent narrowing. */
 function exactToJsNumberOrDoor(n: AExact): number {
-  if (n.denom !== 1n) {
-    // A non-integer rational can't be a faithful JS number (e.g. 1/3). The door tells
-    // the author to choose `z.bigint` / the `schemeExact` identity term for full fidelity.
-    throw new Error(
-      `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the schemeExact identity primitive`,
-    );
-  }
-  if (n.num > SAFE_MAX || n.num < SAFE_MIN) {
-    throw new Error(
-      `number codec: exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
-    );
-  }
+  // A non-integer rational can't be a faithful JS number (e.g. 1/3). The door tells
+  // the author to choose `z.bigint` / the `schemeExact` identity term for full fidelity.
+  Error.invariant(
+    n.denom === 1n,
+    `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the schemeExact identity primitive`,
+  );
+  Error.invariant(
+    n.num <= SAFE_MAX && n.num >= SAFE_MIN,
+    `number codec: exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
+  );
   return Number(n.num);
 }
 
 /** SchemeExact|SchemeInexact ↔ JS `number`. decode lowers (DOORS on precision loss);
  *  encode of a JS number → SchemeInexact (the float type the consumer chose). */
-export const number = z.codec(schemeNumber, z.number(), {
+export const number = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number(), {
   decode: (n) => (n instanceof AInexact ? n.real : exactToJsNumberOrDoor(n)),
   encode: (n) => new AInexact(CONSTANT_CTX, n),
 });
 
 /** SchemeExact|SchemeInexact ↔ JS `number` constrained to SAFE INTEGERS. decode
  *  validates it IS a safe integer (DOORS otherwise); encode → SchemeExact (exact). */
-export const integer = z.codec(schemeNumber, z.number().int(), {
+export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
   decode: (n) => {
     if (n instanceof AInexact) {
-      if (!Number.isSafeInteger(n.real)) {
-        throw new Error(`integer codec: inexact ${n.toString()} is not a safe integer`);
-      }
+      TypeError.invariant(Number.isSafeInteger(n.real), `integer codec: inexact ${n.toString()} is not a safe integer`);
       return n.real;
     }
     return exactToJsNumberOrDoor(n); // exactToJsNumberOrDoor already rejects rationals + out-of-range
   },
   encode: (n) => {
-    if (!Number.isSafeInteger(n)) {
-      throw new Error(`integer codec: ${n} is not a safe integer`);
-    }
+    TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
     return new AExact(CONSTANT_CTX, BigInt(n));
   },
 });
@@ -239,18 +225,15 @@ export const integer = z.codec(schemeNumber, z.number().int(), {
 /** SchemeExact|SchemeInexact ↔ JS `bigint` (exact, arbitrary precision — always faithful
  *  for an integer term). decode → bigint; encode → SchemeExact. A non-integer rational
  *  or a non-integral inexact DOORS (a bigint has no fractional part). */
-export const bigint = z.codec(schemeNumber, z.bigint(), {
+export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.bigint(), {
   decode: (n) => {
     if (n instanceof AInexact) {
-      if (!Number.isInteger(n.real)) {
-        throw new Error(`bigint codec: inexact ${n.toString()} has a fractional part`);
-      }
+      TypeError.invariant(Number.isInteger(n.real), `bigint codec: inexact ${n.toString()} has a fractional part`);
       return BigInt(n.real);
+    } else {
+      TypeError.invariant(n.denom === 1n, `bigint codec: exact rational ${n.toString()} has no integer bigint form`);
+      return n.num;
     }
-    if (n.denom !== 1n) {
-      throw new Error(`bigint codec: exact rational ${n.toString()} has no integer bigint form`);
-    }
-    return n.num;
   },
   encode: (n) => new AExact(CONSTANT_CTX, n),
 });
@@ -264,7 +247,7 @@ export const bigint = z.codec(schemeNumber, z.bigint(), {
  *  (env/r7rs/numeric.ts) promoted here so its shape has a name other codec authors can
  *  reuse — decode/encode reproduce `AnyNum.toJS`/`.fromJS` exactly. */
 export const numberOrBigint = z.codec(
-  schemeNumber,
+  z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
   z.union([z.number(), z.bigint()]),
   {
     decode: (n) => {
@@ -302,13 +285,13 @@ const NAMES = new Map<unknown, string>([
   [svector, "svector"],
   [sbytevector, "sbytevector"],
   [nil, "nil"],
-  [schemeExact, "schemeExact"],
-  [schemeInexact, "schemeInexact"],
+  [exact, "exact"],
+  [inexact, "inexact"],
   [schemeNumber, "schemeNumber"],
   [lambda, "lambda"],
-  [schemeString, "schemeString"],
-  [schemeBool, "schemeBool"],
-  [schemeChar, "schemeChar"],
+  [string, "string"],
+  [boolean, "boolean"],
+  [char, "char"],
 ]);
 
 /** The canonical NAME of a scheme-zod vocabulary schema, by identity — `undefined` if

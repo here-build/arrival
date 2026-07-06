@@ -85,7 +85,7 @@ export default new EnvCapability("scheme/srfi-28", {
         // scheme-value identity — narrower than the old `z.unknown()`, which was host-blind:
         // it also accepted raw non-scheme JS), since a directive-fill arg can be ANY scheme
         // value (rendered via `displayOf`/`writeOf`).
-        { input: z.array(z.value), output: [z.union([z.string, z.schemeString])] },
+        { input: z.array(z.value), output: [z.string] },
         (...args: unknown[]): string | AString => {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: first arg IS the format string. SRFI-48/CL: first arg is a

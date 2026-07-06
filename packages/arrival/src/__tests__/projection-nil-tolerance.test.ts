@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { is_nil, is_false } from "../eval/guards.js";
+import { ANil } from "../values/primitives/ANil.js";
 
 /**
  * car/cdr nil-tolerance across interpreter modes × all primitive types.
@@ -48,8 +49,8 @@ const TYPE_ERRORS: [string, string][] = [
 
 describe("car/cdr nil-tolerance: absent value '() — the ONLY mode-dependent cell", () => {
   it("default (tolerant): (car '()) and (cdr '()) resolve to nil", async () => {
-    expect(is_nil((await run("(car '())", false))[0])).toBe(true);
-    expect(is_nil((await run("(cdr '())", false))[0])).toBe(true);
+    expect(((await run("(car '())", false))[0])).toBeInstanceOf(ANil);
+    expect(((await run("(cdr '())", false))[0])).toBeInstanceOf(ANil);
   });
   it("strict: (car '()) and (cdr '()) throw the R7RS pair typecheck", async () => {
     await expect(run("(car '())", true)).rejects.toThrow();
@@ -94,7 +95,7 @@ describe("base env (user_env) shares the unified nil-projection — strict drive
     await expect(exec("(cdr '())", { strict: true })).rejects.toThrow();
   });
   it("default (tolerant): (car '()) and (cdr '()) project to nil — uniform with the inference env", async () => {
-    expect(is_nil((await exec("(car '())", { strict: false }))[0])).toBe(true);
-    expect(is_nil((await exec("(cdr '())", { strict: false }))[0])).toBe(true);
+    expect(((await exec("(car '())", { strict: false }))[0])).toBeInstanceOf(ANil);
+    expect(((await exec("(cdr '())", { strict: false }))[0])).toBeInstanceOf(ANil);
   });
 });

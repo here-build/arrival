@@ -78,13 +78,6 @@ describe("2026-07-05 audit — runtime Contract precision on the REAL exported o
     expect(def.in.safeParse([fn, properList]).success).toBe(true);
     expect(def.in.safeParse([fn, properList, "extra"]).success).toBe(false);
   });
-
-  it("typecheck: input is now a fixed 4-tuple (3 required + 1 genuinely optional) — a 5th arg used to slip through the old unbounded rest", () => {
-    const def = contractDef(corePack, "typecheck");
-    expect(def.in.safeParse([valuable, 1, valuable]).success).toBe(true); // 3 — 4th omitted, allowed by .optional()
-    expect(def.in.safeParse([valuable, 1, valuable, 2]).success).toBe(true); // 4 — all positions present
-    expect(def.in.safeParse([valuable, 1, valuable, 2, "extra"]).success).toBe(false); // 5 — was true before the fix
-  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -59,12 +59,13 @@ function bitCount(i: bigint): bigint {
 
 export default new EnvCapability("scheme/srfi-151", {
   symbols: {
-    "bit-count": symbol.native`bit-count: number of 1 bits in a non-negative exact integer; for a negative one, the number of 0 bits in its two's-complement representation (SRFI-151)`(
-      { input: [z.schemeExact], output: [z.schemeExact] },
-      (i: unknown): AExact => {
-        const n = exactIntArg("bit-count", i);
-        return withInputProvenance([i], new AExact(CONSTANT_CTX, bitCount(n)));
-      },
-    ),
+    "bit-count":
+      symbol.native`bit-count: number of 1 bits in a non-negative exact integer; for a negative one, the number of 0 bits in its two's-complement representation (SRFI-151)`(
+        { input: [z.bigint], output: [z.exact] },
+        (i: unknown): AExact => {
+          const n = exactIntArg("bit-count", i);
+          return withInputProvenance([i], new AExact(CONSTANT_CTX, bitCount(n)));
+        },
+      ),
   },
 });

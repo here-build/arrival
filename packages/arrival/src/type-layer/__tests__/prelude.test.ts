@@ -37,7 +37,7 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
     () => "",
   );
   const setTimer = symbol.rosetta`set-timer: start a timer`(
-    { input: [z.number], output: [z.void()] },
+    { input: [z.number], output: [z.undefinedResult] },
     () => undefined,
   );
   const entries = [

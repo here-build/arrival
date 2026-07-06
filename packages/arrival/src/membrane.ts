@@ -57,6 +57,7 @@ import {
 import { InteropAccessError } from "./errors.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
+import { type ACallable } from "./values/primitives/ACallable.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
 // The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
@@ -128,6 +129,7 @@ export type BoxedSchemeValue =
   | LambdaContext
   | SchemeEnvironment
   | Keyword
+  | ACallable
   | Function;
 
 /**

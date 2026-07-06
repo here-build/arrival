@@ -30,21 +30,10 @@ export {
   markInteropPrivate as markSandboxPrivate,
   markInteropBoundary as markAsSandboxBoundary,
 } from "./interop-access.js";
-export {
-  schemeToJs,
-  jsToScheme,
-  createRosettaWrapper,
-  type RosettaFunction,
-} from "./rosetta.js";
+export { schemeToJs, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 
 // Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md §5.
-export {
-  type AKind,
-  AValue,
-  EMPTY_PROVENANCE,
-  pointProvenance,
-  unionProvenance,
-} from "./values/primitives/AValue.js";
+export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 
 // A* aliases for arrival-chain compatibility — both spellings work until L4
 // deletes the draft AValue there. Re-exports live here (not in AValue.ts) to
@@ -106,11 +95,7 @@ export { rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
 // concrete `Environment` class). Re-surfaced on the barrel from its real home
 // (`./common/scheme-env.ts`, also reachable via the `@here.build/arrival/scheme-env`
 // subpath) so barrel-style consumers (arrival-chain, arrival-mcp) name the interface.
-export {
-  type SchemeEnv,
-  type RosettaSpec,
-  type ResolverSpec,
-} from "./common/scheme-env.js";
+export { type SchemeEnv, type RosettaSpec, type ResolverSpec } from "./common/scheme-env.js";
 
 // Number system - SchemeExact (rationals) and SchemeInexact (floats/complex)
 export { AExact } from "./values/primitives/AExact.js";
@@ -120,11 +105,7 @@ export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 // Bridge (numeric coercion re-export + the R7RS exception verbs + bootstrap). The
 // numeric core (the former Operator/Codec stack + the operator instances) is carved
 // into the `scheme/numeric` pack and is no longer part of the public surface.
-export {
-  coerceNumeric,
-  wrappedOps as wrappedOps,
-  initBridge as initBridge,
-} from "./bridge.js";
+export { coerceNumeric, wrappedOps as wrappedOps, initBridge as initBridge } from "./bridge.js";
 
 // Generator-based Evaluator (alternative to main evaluate function)
 // Uses flat trampoline for true stack safety and better performance

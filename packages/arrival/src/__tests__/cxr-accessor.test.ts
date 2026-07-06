@@ -14,11 +14,13 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 import { global_env } from "../env-roots.js";
 import { inferenceEnv } from "../inference-env.js";
-import { is_nil } from "../eval/guards.js";
 import { schemeToJs } from "../rosetta.js";
+import { ANil } from "../values/primitives/ANil.js";
 
-const evalIn = (env: typeof global_env) => async (expr: string): Promise<unknown> =>
-  schemeToJs((await exec(expr, { env }))[0], {});
+const evalIn =
+  (env: typeof global_env) =>
+  async (expr: string): Promise<unknown> =>
+    schemeToJs((await exec(expr, { env }))[0], {});
 
 // element index k ≡ (car (cdr^k x)) ≡ "ca" + "d"×k + "r"
 const cxrForIndex = (k: number): string => `ca${"d".repeat(k)}r`;
@@ -61,7 +63,7 @@ for (const [label, env] of [["global_env", global_env], ["inferenceEnv", inferen
     it("an accessor that walks off the end follows the run's nil-projection — tolerant ⇒ nil, strict ⇒ throw", async () => {
       // (cadr (list 1)): cdr → (), then car of () — the unified ANil nil-projection. The WHOLE
       // family now inherits the atoms' mode-gating (the old strict resolver always threw here).
-      expect(is_nil((await exec("(cadr '(1))", { env }))[0])).toBe(true);
+      expect(((await exec("(cadr '(1))", { env }))[0])).toBeInstanceOf(ANil);
       await expect(exec("(cadr '(1))", { env, strict: true })).rejects.toThrow();
     });
   });

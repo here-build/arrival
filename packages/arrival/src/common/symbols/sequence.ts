@@ -4,14 +4,17 @@
 
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import {
-  asEvalContext,
+  type Contract,
+  DecodedArgs,
+  DecodedReturn,
+  MaybePromise,
   normalizeVector,
   parseNameDoc,
-  type Contract,
   type SequenceImpl,
   type SequenceSymbolDef,
   type VectorSpec,
 } from "./_bake.js";
+import { EvalContext } from "../../eval/evaluator.js";
 
 /** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. `impl`'s args/return are
@@ -26,14 +29,9 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // `run` dispatches at runtime against a raw sliced-args array, which TS can't statically
     // match to `impl`'s own `DecodedArgs<I>` tuple — erase here, once, the same boundary
     // `rosetta.ts`'s `run` crosses. By construction (the contract), the array always matches.
-    const rawImpl = impl as (...args: unknown[]) => unknown;
-    const run = async (...args: unknown[]): Promise<unknown> => {
-      const ctx = asEvalContext(args[args.length - 1]);
-      const schemeArgs = ctx === undefined ? args : args.slice(0, -1);
-      const runCtx = ctx?.runCtx ?? CONSTANT_CTX;
-      return await rawImpl(schemeArgs, runCtx);
+    const run = function (this: { ctx: EvalContext }, ...args: DecodedArgs<I>) {
+      return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
     };
-    (run as { __withCtx?: boolean }).__withCtx = true;
     // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
     // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
     if (contract.fanout) (run as { fanout?: boolean }).fanout = true;
@@ -43,7 +41,12 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       doc,
       in: normalizeVector(contract.input),
       out: normalizeVector(contract.output),
-      run,
+      run: Object.assign(
+        function (this: { ctx: EvalContext }, ...args: DecodedArgs<I>): MaybePromise<DecodedReturn<O>> {
+          return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
+        },
+        { fanout: true },
+      ),
       type: contract.type,
     };
   };

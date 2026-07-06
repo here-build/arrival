@@ -5,26 +5,26 @@
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { printType, signatureOf } from "../schema-to-ts.js";
+import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
   it("prints z.pair as Cons<unknown> (so z.pair | z.nil = List<unknown>)", () => {
     expect(printType(z.pair)).toBe("Cons<unknown>");
   });
   it("prints z.schemeString as string", () => {
-    expect(printType(z.schemeString)).toBe("string");
+    expect(printType(z.string)).toBe("string");
   });
   it("prints the numeric tower as exact=bigint / inexact=number", () => {
-    expect(printType(z.schemeExact)).toBe("bigint");
-    expect(printType(z.schemeInexact)).toBe("number");
+    expect(printType(z.bigint)).toBe("bigint");
+    expect(printType(z.inexact)).toBe("number");
   });
   it("prints the rest of the scheme-identity primitives as their plain-TS image", () => {
     expect(printType(z.symbol)).toBe("string");
     expect(printType(z.svector)).toBe("readonly unknown[]");
     expect(printType(z.sbytevector)).toBe("Uint8Array");
     expect(printType(z.nil)).toBe("null");
-    expect(printType(z.schemeBool)).toBe("boolean");
-    expect(printType(z.schemeChar)).toBe("string");
+    expect(printType(z.boolean)).toBe("boolean");
+    expect(printType(z.char)).toBe("string");
   });
   it("prints the representation-blind value primitive as unknown", () => {
     expect(printType(z.value)).toBe("unknown");
@@ -69,10 +69,46 @@ describe("printType — compounds", () => {
     expect(printType(z.tuple([z.string, z.number]))).toBe("[string, number]");
   });
   it("prints a tuple mixing codec + identity members", () => {
-    expect(printType(z.tuple([z.pair, z.schemeString]))).toBe("[Cons<unknown>, string]");
+    expect(printType(z.tuple([z.pair, z.string]))).toBe("[Cons<unknown>, string]");
   });
   it("prints a union as 'A | B'", () => {
     expect(printType(z.union([z.string, z.number]))).toBe("string | number");
+  });
+});
+
+describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", () => {
+  // `tagToJsonSchema`'s object case sets `additionalProperties: false` — zod's
+  // reconstruction (`z.fromJSONSchema`) renders that as an explicit index
+  // signature banning extra keys, so every object in these expectations carries
+  // a trailing `[x: string]: never` member (real, correct TS — not noise).
+  it("prints an object tag's scalar fields", () => {
+    expect(sTagToTsType(["object", ["title", "string"], ["count", "number"]])).toBe(
+      "{ title: string; count: number; [x: string]: never }",
+    );
+  });
+  it("a field description prints as a JSDoc comment (zod-to-ts's own convention)", () => {
+    expect(sTagToTsType(["object", ["summary", "string", "a one-line summary"]])).toBe(
+      "{ /** a one-line summary */ summary: string; [x: string]: never }",
+    );
+  });
+  it("prints a nested array field", () => {
+    expect(sTagToTsType(["object", ["tags", ["array", "string"]]])).toBe(
+      "{ tags: string[]; [x: string]: never }",
+    );
+  });
+  it("prints a nested object field", () => {
+    expect(sTagToTsType(["object", ["author", ["object", ["name", "string"]]]])).toBe(
+      "{ author: { name: string; [x: string]: never }; [x: string]: never }",
+    );
+  });
+  it("an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)", () => {
+    expect(sTagToTsType(["object", ["title", "string"], ["nickname", "string/optional"]])).toBe(
+      "{ title: string; nickname?: string | undefined; [x: string]: never }",
+    );
+  });
+  it("a malformed/unrepresentable tag degrades to unknown, never throws", () => {
+    expect(sTagToTsType(["object", ["bad"]])).toBe("unknown");
+    expect(sTagToTsType(null)).not.toBeUndefined();
   });
 });
 

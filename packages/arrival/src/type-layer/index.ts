@@ -20,6 +20,6 @@
 
 export { assembleHarvestedPrelude, assemblePreludeFromSignatures, type HarvestedPrelude } from "./prelude.js";
 export { createQueryLens, type QueryLens, type SlotArrayKind } from "./query.js";
-export { printType, signatureOf } from "./schema-to-ts.js";
+export { printType, signatureOf, sTagToTsType } from "./schema-to-ts.js";
 export { lower, type LoweredStatement } from "./lower.js";
 export { createDiagnoseLens, type DiagnoseLens, type RawMappedDiagnostic } from "./diagnose.js";

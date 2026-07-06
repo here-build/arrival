@@ -21,7 +21,7 @@
 
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
-import type { SchemeValue } from "../types.js";
+import type { SchemeValue, SchemeBounceMarker } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
 const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
@@ -46,6 +46,7 @@ export type AKind =
   | "symbol"
   | "character"
   | "procedure"
+  | "lambda"
   | "object"
   | "js-array"
   | "vector"
@@ -154,4 +155,15 @@ export interface AValue {
   ["arrival/tagless-final/reduce"]?<Acc>(fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>, initial: Acc, runCtx?: RunContext): Acc | Promise<Acc>;
   /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
   ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue;
+  /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
+   *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
+   *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
+   *  is threaded (never via `this` — `this` is the callable value itself, per the receiver
+   *  convention), and `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
+   *  ignore it, only a scheme lambda reads it). See docs/working-proposals/callable-as-value-run-ctx.md. */
+  ["arrival/tagless-final/apply"]?(
+    args: SchemeValue[],
+    runCtx: RunContext,
+    canBounce?: boolean,
+  ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
 }

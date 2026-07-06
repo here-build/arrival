@@ -613,8 +613,9 @@ describe("Chibi R7RS Official Tests", () => {
     }
     summary.unexpected++;
     it(display, () => {
-      const detail = r.error ? `ERROR ${r.error}` : `expected ${String(r.expected)}, got ${String(r.actual)}`;
-      throw new Error(`${r.name}: ${detail}`);
+      throw new Error(
+        `${r.name}: ${r.error ? `ERROR ${r.error}` : `expected ${String(r.expected)}, got ${String(r.actual)}`}`,
+      );
     });
   }
 

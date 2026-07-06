@@ -30,11 +30,11 @@ describe("scheme/strings Contract precision — array-element tightening (string
   });
 
   test("NEW `string` shape: z.array(z.schemeChar) decodes to ACharacter[], not unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeChar>>>>().toEqualTypeOf<ACharacter[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>>>().toEqualTypeOf<ACharacter[]>();
   });
 
   test("NEW comparison/string-append/concat shape: z.array(z.schemeString) decodes to AString[], not unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeString>>>>().toEqualTypeOf<AString[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.string>>>>().toEqualTypeOf<AString[]>();
   });
 });
 
@@ -54,7 +54,7 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
   });
 
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
-    expectTypeOf<DecodedArgs<[typeof z.schemeString, typeof listSchema]>>().toEqualTypeOf<[AString, APair | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema]>>().toEqualTypeOf<[AString, APair | ANil]>();
   });
 });
 
@@ -64,7 +64,7 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
   test("string: a wrong-typed char rest element (raw string, not ACharacter) must NOT compile", () => {
     if (RUN) {
       symbol.native`s: proof`(
-        { input: z.array(z.schemeChar), output: [z.schemeString] },
+        { input: z.array(z.char), output: [z.string] },
         // @ts-expect-error — elements decode via z.schemeChar (ACharacter), annotating them string is wrong
         (...chars: string[]): AString => chars as unknown as AString,
       );
@@ -75,7 +75,7 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
   test("string->list: a wrong-typed return (bare string, not APair | ANil) must NOT compile", () => {
     if (RUN) {
       symbol.native`sl: proof`(
-        { input: [z.schemeString], output: [z.union([z.pair, z.nil])] },
+        { input: [z.string], output: [z.union([z.pair, z.nil])] },
         // @ts-expect-error — output decodes to APair | ANil, returning a string is wrong
         (str: AString): string => str.valueOf(),
       );
@@ -86,7 +86,7 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
   test("list->string: a wrong-typed param (string, not APair | ANil) must NOT compile", () => {
     if (RUN) {
       symbol.native`ls: proof`(
-        { input: [z.union([z.pair, z.nil])], output: [z.schemeString] },
+        { input: [z.union([z.pair, z.nil])], output: [z.string] },
         // @ts-expect-error — arg decodes to APair | ANil, annotating it string is wrong
         (list: string): AString => list as unknown as AString,
       );

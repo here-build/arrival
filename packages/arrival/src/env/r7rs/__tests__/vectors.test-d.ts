@@ -31,7 +31,7 @@
 // only here, at the type level.
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import { symbol, type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../../../common/symbol.js";
+import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, symbol } from "../../../common/symbol.js";
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";
 import type { AInexact } from "../../../values/primitives/AInexact.js";
@@ -73,27 +73,12 @@ describe("scheme/vectors Contract precision — element/return precision (z.unkn
   });
 });
 
-describe("scheme/vectors Contract precision — vector-map/vector-for-each: combined tuple → head+inputRest split", () => {
-  const procHead = z.custom<(...args: unknown[]) => SchemeValue>();
-
-  test("OLD shape: a SINGLE combined z.tuple([head], z.unknown()) as `input` (no inputRest) — rest decodes unknown[], no vector precision", () => {
-    const oldShape = z.tuple([procHead], z.unknown());
-    expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[(...args: unknown[]) => SchemeValue, ...unknown[]]>();
-  });
-
-  test("NEW shape: input:[head], inputRest: z.svector — rest decodes AVector[], mirrors for-each/string-map's own inputRest migration", () => {
-    expectTypeOf<DecodedArgsWithRest<[typeof procHead], typeof z.svector>>().toEqualTypeOf<
-      [(...args: unknown[]) => SchemeValue, ...AVector[]]
-    >();
-  });
-});
-
 describe("scheme/vectors Contract precision — negative proof", () => {
   test("vector-map/vector-for-each: a wrong-typed rest element must NOT compile", () => {
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`vm: proof`(
-        { input: [z.custom<(...args: unknown[]) => SchemeValue>()], inputRest: z.svector, output: [z.svector] },
+        { input: [z.lambda], inputRest: z.svector, output: [z.svector] },
         // @ts-expect-error — rest args decode via z.svector (AVector), annotating them string is wrong
         (proc: (...args: unknown[]) => SchemeValue, ...vectors: string[]): AVector => {
           void proc;

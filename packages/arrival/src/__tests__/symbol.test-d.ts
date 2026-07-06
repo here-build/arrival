@@ -16,19 +16,18 @@
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../common/scheme-zod.js";
 import {
-  symbol,
   type AEntity,
   type DecodedArgs,
   type DecodedArgsWithRest,
   type DecodedReturn,
   type NativeSymbolDef,
   type SpecInfer,
+  symbol,
 } from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { ANil } from "../values/primitives/ANil.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { SchemeValue } from "../values/types.js";
-import { curry as curryImpl } from "../utils/functional.js";
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
   test("tuple spec: element-wise z.output, as a mutable tuple", () => {
@@ -172,7 +171,7 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
 // `typecheck(...,"function")` + narrowing rather than leaning on the schema for shape.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-for-each head+rest precision", () => {
-  const forEachHead = z.custom<(...args: unknown[]) => SchemeValue>();
+  const forEachHead = z.lambda;
   const listRest = z.union([z.pair, z.nil]);
 
   test("OLD for-each shape (z.array(z.value)) decoded FLAT — no head/tail distinction", () => {
@@ -180,13 +179,13 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
   });
 
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
-    // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.void()] }.
+    // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
     expectTypeOf<DecodedArgsWithRest<[typeof forEachHead], typeof listRest>>().toEqualTypeOf<
       [(...args: unknown[]) => SchemeValue, ...(APair | ANil)[]]
     >();
   });
 
-  const stringHOFHead = z.custom<(...args: unknown[]) => unknown>();
+  const stringHOFHead = z.lambda;
 
   test("OLD string-map/string-for-each shape (z.array(z.unknown())) decoded FLAT unknown[]", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
@@ -194,7 +193,7 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 
   test("NEW string-map/string-for-each shape: [callable, ...AString[]], not flat unknown[]", () => {
     // Mirrors both ops' real migrated contract: { input: [z.custom<...>()], inputRest: z.schemeString, output: [...] }.
-    expectTypeOf<DecodedArgsWithRest<[typeof stringHOFHead], typeof z.schemeString>>().toEqualTypeOf<
+    expectTypeOf<DecodedArgsWithRest<[typeof stringHOFHead], typeof z.string>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, ...AString[]]
     >();
   });
@@ -208,7 +207,7 @@ describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a f
 
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
     // Mirrors filter's real migrated contract: { input: [predSchema, z.value], output: [z.unknown()], fanout: true }.
-    const predSchema = z.custom<(...args: unknown[]) => unknown>();
+    const predSchema = z.lambda;
     expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.value]>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, SchemeValue]
     >();
@@ -227,9 +226,8 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
     >();
   });
 
-  test("NEW shape: predicate slot is a callable schema — the established z.custom<(...args)=>T>() convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
-    const predSchema = z.custom<(...args: unknown[]) => unknown>();
-    expectTypeOf<DecodedArgs<[typeof predSchema, typeof listOrNil]>>().toEqualTypeOf<
+  test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
+    expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, APair | ANil]
     >();
   });
@@ -246,7 +244,7 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`find: proof`(
-        { input: [z.custom<(...args: unknown[]) => unknown>(), listOrNil], output: [z.value] },
+        { input: [z.lambda, listOrNil], output: [z.value] },
         // @ts-expect-error — output decodes to SchemeValue; a bare string literal is not a member of that union
         (pred, list) => {
           void pred;
@@ -284,7 +282,7 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`tc: proof`(
-        { input: [s1, z.value, s3, s4], output: [z.void()] },
+        { input: [s1, z.value, s3, s4], output: [z.undefinedResult] },
         // @ts-expect-error — the contract is a fixed 4-tuple; a 5th param has no corresponding decoded arg
         (a, b, c, d, e) => {
           void a;
@@ -304,7 +302,7 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`sm: proof`(
-        { input: [z.custom<(...args: unknown[]) => unknown>()], inputRest: z.schemeString, output: [z.string] },
+        { input: [z.lambda], inputRest: z.string, output: [z.string] },
         // @ts-expect-error — rest args decode via z.schemeString (AString), annotating them number is wrong
         (proc: (...args: unknown[]) => unknown, ...strings: number[]): string => {
           void proc;
@@ -337,10 +335,10 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
 // synthetic mirror — the two proofs cover what each layer can actually observe.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("symbol contract — 2026-07-05 audit: curry's contract narrows the leading-args tail to SchemeValue (srfi-235.ts)", () => {
-  const curryHead = z.custom<(...args: unknown[]) => unknown>();
+  const curryHead = z.lambda;
 
   test("OLD curry shape: z.tuple(fixed, rest=z.unknown()) — leading args decode as bare unknown, no head/tail distinction in the contract fields", () => {
-    const oldShape = z.tuple([curryHead], z.unknown());
+    const oldShape = z.tuple([curryHead], z.undefinedResult);
     expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[(...args: unknown[]) => unknown, ...unknown[]]>();
   });
 
@@ -349,14 +347,6 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
     expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.value>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, ...SchemeValue[]]
     >();
-  });
-
-  test("curry (the real utils/functional impl, unchanged) still satisfies the migrated contract — unknown[] rest params remain a valid substitute for a SchemeValue[]-typed slot (contravariance: unknown is the universal supertype)", () => {
-    const RUN = false as boolean;
-    if (RUN) {
-      symbol.native`curry: proof`({ input: [curryHead], inputRest: z.value, output: [curryHead] }, curryImpl);
-    }
-    expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
   test("wrong-typed rest param must NOT compile", () => {

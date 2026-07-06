@@ -1121,7 +1121,7 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseXorF
  *  `finite?`/`infinite?`/`nan?`/`number?` — all `(value: unknown) => boolean`, TOTAL
  *  over the value domain (never throws, a non-number is simply `#f`). Representation-
  *  blind input (matches `lists.ts`'s own convention for "genuinely could be anything"). */
-const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.unknown()], output: [z.boolean] };
+const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.value], output: [z.boolean] };
 
 /** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers.
  *  Input tightened from `z.unknown()` to `z.schemeNumber`: both impls' first act is
@@ -1166,7 +1166,7 @@ const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
  *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
 const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.schemeInexact],
+  output: [z.inexact],
 };
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact`: narrower than the generic
@@ -1175,7 +1175,7 @@ const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
  *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.schemeExact],
+  output: [z.bigint],
 };
 
 /** `number->string` — `(z: unknown, radix?: unknown) => string` (a RAW JS string, not a

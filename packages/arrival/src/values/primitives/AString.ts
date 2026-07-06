@@ -8,7 +8,6 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ACharacter } from "./ACharacter.js";
-import { typecheck } from "../../utils/typecheck.js";
 import { withInputProvenance } from "../op-helpers.js";
 
 type StringLike = string | AString | { valueOf(): string };
@@ -21,20 +20,9 @@ export class AString extends AValue {
 
   __string__: string;
 
-  constructor(
-    ctx: RunContext,
-    string: ACharacter[] | StringLike,
-    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-  ) {
+  constructor(ctx: RunContext, string: ACharacter[] | StringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
-    this.__string__ = Array.isArray(string)
-      ? string
-          .map((x, i) => {
-            typecheck("SchemeString", x, "character", i + 1);
-            return x.toString();
-          })
-          .join("")
-      : string.valueOf();
+    this.__string__ = Array.isArray(string) ? string.map((x) => x.toString()).join("") : string.valueOf();
   }
 
   get length(): number {
@@ -74,12 +62,10 @@ export class AString extends AValue {
   }
 
   get(n: NumberLike): string {
-    typecheck("SchemeString::get", n, "number");
     return [...this.__string__][typeof n === "number" ? n : n.valueOf()];
   }
 
   cmp(string: StringLike): number {
-    typecheck("SchemeString::cmp", string, "string");
     const a = this.valueOf();
     const b = string.valueOf();
     if (a < b) {

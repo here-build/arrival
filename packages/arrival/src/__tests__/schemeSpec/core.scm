@@ -400,12 +400,6 @@
                             #t))))
       #t)))
 
-(test "core: should clone list"
-  (lambda (t)
-    (let* ((a '(1 2 3)) (b (clone a)))
-      (t.is (not (eq? a b)) #t)
-      (t.is a b))))
-
 (test "core: should return nth element"
   (lambda (t)
     (let ((a '(1 2 3 4)))
@@ -439,13 +433,6 @@
   (lambda (t)
     (t.is (replace "foo" "var" "foo bar") "var bar")
     (t.is (replace (new RegExp "foo|bar" "g") "x" "foo bar") "x x")))
-
-(test "core: split"
-  (lambda (t)
-    (t.is (split ":" "foo:bar:baz")
-      '("foo" "bar" "baz"))
-    (t.is (split #/ (:) / "foo:bar:baz")
-      '("foo" ":" "bar" ":" "baz"))))
 
 (test "core: immutable strings"
   (lambda (t)

@@ -18,6 +18,7 @@ import { AExact } from "../values/primitives/AExact.js";
 import { is_pair } from "../values/value-guards.js";
 import { is_promise } from "../eval/guards.js";
 import type { SchemeValue } from "../values/types.js";
+import { APair } from "../values/primitives/APair.js";
 
 /** A promise plus its resolver, so a test can settle slots one at a time. */
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
@@ -142,7 +143,7 @@ describe("HalfBaked — force / refine fold", () => {
     const pair = await list.force();
     // Pair → array round-trip: dropped slot contributes nothing. The slots carry
     // boxed AExact integers, so narrow each element and read its numeric value.
-    const nums = is_pair(pair) ? [...pair].map((v) => (v instanceof AExact ? v.valueOf() : v)) : [];
+    const nums = pair instanceof APair ? [...pair].map((v) => (v instanceof AExact ? v.valueOf() : v)) : [];
     expect(nums).toEqual([10, 30]);
   });
 

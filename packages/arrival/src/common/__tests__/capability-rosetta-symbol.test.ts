@@ -23,8 +23,9 @@ import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
+import { ImplInvocationCtx } from "../symbols/_bake.js";
 
-type WithCtxFn = ((...a: unknown[]) => unknown) & { __withCtx?: boolean };
+type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (this: ImplInvocationCtx, ...args: Args) => Result;
 
 /** A SchemeEnv that records every `set` binding (native + rosetta SymbolDefs route through set). */
 function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
@@ -69,13 +70,6 @@ async function wireRosetta(def: RosettaSymbolDef): Promise<WithCtxFn> {
 }
 
 describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
-  it("binds the run wrapper (tagged __withCtx) via set, not defineRosetta", async () => {
-    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
-    const verb = await wireRosetta(def);
-    expect(typeof verb).toBe("function");
-    expect(verb.__withCtx).toBe(true); // the evaluator will append ctx
-  });
-
   it("decodes scheme→JS, runs impl, encodes JS→scheme through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -97,7 +91,6 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { ctx, marked } = ctxWithInvocation(42);
-    // The evaluator appends ctx as the trailing arg for a __withCtx fn — replicate that here.
     const out = (await verb(new AString(CONSTANT_CTX, "hello"), ctx)) as AInexact;
 
     expect(out).toBeInstanceOf(AInexact);

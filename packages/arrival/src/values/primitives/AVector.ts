@@ -22,7 +22,7 @@ import { is_nil, is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
-import { nil } from "./ANil.js";
+import { ANil, nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
 // The membrane's JS→Scheme boxing fn — used by the cross-out Functor `map` to re-present
 // the stripped-raw results array as a lazy auto-wrapping AJSArray (raw `.source` inside,
@@ -236,7 +236,7 @@ export class AVector extends AValue {
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
       const verdict = await pred(v);
-      if (!is_false(verdict) && !is_nil(verdict)) out.push(v);
+      if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
     return new AVector(this.ctx, out);
   }

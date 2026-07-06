@@ -22,7 +22,6 @@ import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";
-import { is_pair } from "../values/value-guards.js";
 
 type SchemeFunction = (...args: any[]) => any;
 
@@ -54,7 +53,7 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
   function traverse(node) {
     if (is_promise(node)) {
       promises.push(node);
-    } else if (is_pair(node)) {
+    } else if (node instanceof APair) {
       if (!node.have_cycles("car")) {
         traverse(node.car);
       }
@@ -67,7 +66,8 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
   }
 
   async function promise(node) {
-    const pair = new APair(CONSTANT_CTX, 
+    const pair = new APair(
+      CONSTANT_CTX,
       node.have_cycles("car") ? node.car : await resolve(node.car),
       node.have_cycles("cdr") ? node.cdr : await resolve(node.cdr),
     );
@@ -81,7 +81,7 @@ export function resolve_promises(arg: SchemeValue): SchemeValue {
     if (Array.isArray(node)) {
       return promise_all(node.map(resolve));
     }
-    if (is_pair(node) && promises.length > 0) {
+    if (node instanceof APair && promises.length > 0) {
       return promise(node);
     }
     return node;

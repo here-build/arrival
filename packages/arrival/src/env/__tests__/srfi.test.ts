@@ -1,10 +1,24 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { exec, sandboxedEnv } from "../../index.js";
+import { exec, sandboxedEnv, schemeToJs } from "../../index.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
+import * as z from "../../common/scheme-zod.js";
+import type { SequenceSymbolDef } from "../../common/symbol.js";
 
-import { allSrfi, srfi1, srfi13, srfi26, srfi43, srfi128, srfi189, srfi2, srfi8, srfi235 } from "../srfi/index.js";
+import {
+  allSrfi,
+  srfi1,
+  srfi13,
+  srfi26,
+  srfi43,
+  srfi95,
+  srfi128,
+  srfi189,
+  srfi2,
+  srfi8,
+  srfi235,
+} from "../srfi/index.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
@@ -120,5 +134,79 @@ describe("@here.build/arrival/srfi-1 — positional accessors", () => {
     expect(await num("(last (cons 1 (cons 2 3)))")).toBe(2);
     expect(await num("(car (last-pair (cons 1 (cons 2 3))))")).toBe(2);
     expect(await num("(cdr (last-pair (cons 1 (cons 2 3))))")).toBe(3);
+  });
+});
+
+// SRFI-95 `sort` — contract ELEMENT PRECISION. `sort` is a `symbol.sequence` (ctx-aware,
+// term-dispatched): its impl signature is fixed `(args: unknown[], runCtx) => unknown`
+// regardless of the contract (bakeSequence/sequence.ts never thread I/O through `Impl<I,O>`
+// the way native/rosetta do), and the runtime harvest printer (schema-to-ts.ts) currently
+// degrades EVERY unregistered `z.custom` schema to "unknown" (same as `z.unknown()`) — so
+// neither the impl body nor `printType`/`signatureOf` can observe this fix. The only place
+// the precision is provable is the schema TREE itself, introspected via zod v4's PUBLIC
+// `.type` / `.def` / `.unwrap()` (the same style schema-to-ts.ts already uses internally).
+function bakedSort(): SequenceSymbolDef {
+  const symbols = srfi95.spec.symbols;
+  // srfi-95.ts declares `symbols` as a plain record (not the activation-builder function
+  // form), and `sort` as `symbol.sequence` — both verified by reading the source.
+  return (symbols as Record<string, SequenceSymbolDef>).sort;
+}
+
+describe("SRFI-95 sort — contract element precision", () => {
+  it("declares the receiver as the representation-blind SCHEME identity (z.value), not host-blind z.unknown()", () => {
+    const items = bakedSort().in.def["items"];
+    // Reference-identity (not just shape) — z.value is the shared module singleton, so this
+    // proves the FILE chose it deliberately, not merely "some schema that happens to accept anything".
+    expect(items[0]).toBe(z.value);
+  });
+
+  it("declares the comparator (less?) as a callable predicate schema, not z.unknown()", () => {
+    const items = bakedSort().in.def["items"];
+    const comparator = items[1];
+    expect(comparator.type).toBe("optional");
+    // AValue.ts's single-source-of-truth member signature is
+    // `(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue`
+    // (deriveSortCompare, op-helpers.ts, matches exactly) — a callable, never bare `unknown`.
+    expect(comparator.unwrap().type).toBe("custom");
+  });
+
+  it("declares the output as the representation-blind scheme identity (z.value), matching the receiver algebra's declared SchemeValue return", () => {
+    const items = bakedSort().out.def["items"];
+    expect(items[0]).toBe(z.value);
+  });
+});
+
+describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the builtin dispatch)", () => {
+  async function sortEnv() {
+    const env = sandboxedEnv.inherit(`s95-${Math.random().toString(36).slice(2)}`);
+    await assembleEnv(env as unknown as SchemeEnv, [srfi95.lower({ evalScheme }) as never]);
+    return (src: string) => exec(src, { env });
+  }
+
+  it("sorts a list by the elements' own total order (no comparator) — list in, list out", async () => {
+    const raw = await sortEnv();
+    const [result] = await raw("(sort (list 3 1 2))");
+    expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
+  });
+
+  it("sorts a vector, container-preserving — vector in, vector out", async () => {
+    const raw = await sortEnv();
+    const [result] = await raw("(sort (vector 3 1 2))");
+    expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
+  });
+
+  // it.fails (not it): DISCOVERED, NOT FIXED here — out of scope for this file. `deriveSortCompare`
+  // (values/op-helpers.ts) calls a user-supplied comparator directly (`comparator(a, b)`), not via
+  // `call_function` (eval/call-function.ts, which resolves bounces/promises for a Scheme lambda
+  // value). Any REAL Scheme-evaluated lambda comparator — regardless of body/direction, verified
+  // with both `>` and an explicit `(if (> a b) #t #f)` — scrambles to the same wrong order; only
+  // the no-comparator path (native `arrival/tagless-final/lte`, no lambda involved) is unaffected.
+  // Asserts the IDEAL SRFI-95 behavior so this auto-promotes to a hard failure (prompting `it()`)
+  // the day someone fixes the comparator call site — mirrors src/__tests__/js-interop.test.ts's
+  // established it.fails convention for a documented, characterized gap.
+  it.fails("honors an explicit less? comparator (SRFI-95 signature) — BROKEN: see comment", async () => {
+    const raw = await sortEnv();
+    const [result] = await raw("(sort (list 1 3 2) (lambda (a b) (> a b)))");
+    expect(schemeToJs(result, {})).toEqual([3, 2, 1]);
   });
 });

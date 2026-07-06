@@ -23,6 +23,5 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): Tagl
     if (fn === undefined) return false; // graceful #f — the receiver simply can't answer
     return await fn.call(receiver, ...leading, runCtx);
   };
-  (run as { __withCtx?: boolean }).__withCtx = true;
-  return { kind: "tagless-guard", name, doc, in: z.array(z.unknown()), out: z.unknown(), run };
+  return { kind: "tagless-guard", name, doc, in: z.array(z.value), out: z.value, run };
 }

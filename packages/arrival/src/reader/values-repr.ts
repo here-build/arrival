@@ -22,6 +22,10 @@ import { DATA } from "../well-known-symbols.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 import { is_nil, is_pair } from "../values/value-guards.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { BoxedSchemeValue } from "../membrane.js";
+import { APair } from "../values/primitives/APair.js";
 
 // The symbol-NAME surface these reader/macro helpers operate on. This is the
 // pre-boxing JS layer — exactly what ASymbol's own constructor accepts as a name
@@ -106,7 +110,7 @@ export function quote(value: SchemeValue | PromiseLike<SchemeValue>): SchemeValu
   if (isPendingDatum(value)) {
     return value.then(quote);
   }
-  if (is_pair(value)) {
+  if (value instanceof APair) {
     value[DATA] = true;
   } else if (value instanceof ASymbol) {
     value[DATA] = true;
@@ -154,7 +158,7 @@ export function box(object: unknown): SchemeValue {
 // :: through this leaf instead of the deferred stdlib runtime slot.
 // ----------------------------------------------------------------------
 export function patch_value(value: unknown): SchemeValue {
-  if (is_pair(value)) {
+  if (value instanceof APair) {
     value.mark_cycles();
     return quote(value);
   }
@@ -168,16 +172,16 @@ export function patch_value(value: unknown): SchemeValue {
 // :: `null` is the membrane's #f sibling, raw `true`/`false` are pre-L1
 // :: booleans) — none of which are members of the boxed SchemeValue union.
 // ----------------------------------------------------------------------
-export function is_atom(obj: unknown): boolean {
+export function is_atom(
+  obj: BoxedSchemeValue,
+): obj is ASymbol | AString | ANil | ACharacter | AExact | AInexact | ABool {
   return (
     obj instanceof ASymbol ||
-    AString.isString(obj) ||
-    is_nil(obj) ||
-    obj === null ||
+    obj instanceof AString ||
+    obj instanceof ANil ||
     obj instanceof ACharacter ||
     obj instanceof AExact ||
     obj instanceof AInexact ||
-    obj === true ||
-    obj === false
+    obj instanceof ABool
   );
 }

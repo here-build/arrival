@@ -10,10 +10,9 @@
 // list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
-import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
+import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { typecheck } from "../../utils/typecheck.js";
-import { is_false, is_nil } from "../../eval/guards.js";
+import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import type { APair } from "../../values/primitives/APair.js";
 import { unpromise } from "../../utils/promises.js";
@@ -47,17 +46,15 @@ import type { SchemeValue } from "../../values/types.js";
 // a car/cdr back through this SchemeValue-returning fn casts it, mirroring lists.ts's own established
 // "typecheck is not a TS guard; re-state it" idiom: `typecheck` above already re-validates
 // pair-or-nil on every recursive call, so the cast states a runtime-enforced invariant, not a blind one.
-function findImpl(arg: (...args: unknown[]) => unknown, list: APair<unknown, unknown> | ANil): SchemeValue {
-  typecheck("find", arg, "function");
-  typecheck("find", list, ["pair", "nil"]);
+function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): SchemeValue {
   if (list instanceof ANil) {
     return nil;
   }
-  return unpromise(arg(list.car), function (value: unknown) {
-    if (!is_false(value) && !is_nil(value)) {
+  return unpromise(arg(list.car), function (value) {
+    if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr as APair<unknown, unknown> | ANil);
+    return findImpl(arg, list.cdr);
   }) as SchemeValue;
 }
 
@@ -320,7 +317,6 @@ export default new EnvCapability("scheme/srfi-1", {
           (%some fn (map cdr lists)))))
 
 (define (some fn . lists)
-  (typecheck "some" fn "function")
   (%some fn lists))
 
 (define (%every fn lists)
@@ -329,7 +325,6 @@ export default new EnvCapability("scheme/srfi-1", {
       (and (apply fn (map car lists)) (%every fn (map cdr lists)))))
 
 (define (every fn . lists)
-  (typecheck "every" fn "function")
   (%every fn lists))
 
 ;; zip — transpose parallel lists into a list of tuples; stops at the shortest.
@@ -347,7 +342,6 @@ export default new EnvCapability("scheme/srfi-1", {
 
 ;; unfold — build a list by iterating fn from init; fn returns (head . next) or #f to stop.
 (define (unfold fn init)
-  (typecheck "unfold" fn "function")
   (let iter ((pair (fn init)) (result '()))
     (if (not pair)
         (reverse result)

@@ -12,6 +12,7 @@
 import { Environment } from "../Environment.js";
 import { user_env, global_env } from "../env-roots.js";
 import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
+import { isHostRuntimeBug } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import type { LexicalScope } from "./LexicalScope.js";
@@ -23,7 +24,7 @@ import { is_pair } from "./guards.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
-import type { APair } from "../values/primitives/APair.js";
+import { APair } from "../values/primitives/APair.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -79,7 +80,6 @@ export function ensureBaseAssembled(): Promise<void> {
     // this import no longer registers anything — it is kept only as a load-order anchor and is
     // a no-op (ES modules evaluate once). The whole module is dynamic-import-only by design
     // (no static importer), which is what lets the package declare `sideEffects: false`.
-    await import("../stdlib.js");
     const { GLOBAL_NATIVE_PACKS } = await import("../bridge.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");
     const evalScheme: EvalSchemeInto = (env, src) =>
@@ -320,7 +320,7 @@ export async function exec(
     // Thread strict into the reader so the R7RS control rejects loose-mode literals
     // (#void/#null) at parse time. Default false ⇒ loose parse, unchanged.
     parsed = await readerParse(code, undefined, strict ?? false);
-  } else if (is_pair(code)) {
+  } else if (code instanceof APair) {
     // Single expression - evaluate directly
     parsed = [code];
   } else {
@@ -416,7 +416,8 @@ export async function exec(
           ),
         );
       } catch (e) {
-        if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
+        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause))
+          throw e.cause;
         throw e;
       }
       results.push(result);

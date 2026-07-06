@@ -25,17 +25,16 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSy
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
     const fn = resolveMethod(receiver, method);
-    if (fn === undefined) {
-      throw new TypeError(
+    TypeError.invariant(
+      fn !== undefined,
+      () =>
         `${name}: the ${describeReceiver(receiver)} primitive does not support \`${name}\` ` +
-          `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
-      );
-    }
+        `(it declares no ${method}). A tagless op lives ON the arrival terms whose algebra implements it.`,
+    );
     return await fn.call(receiver, ...leading, runCtx);
   };
-  (run as { __withCtx?: boolean }).__withCtx = true;
   // No contract: the placeholder harvest surface is fixed (like `taglessGuard`). The real
   // per-op types live on the receiver's `arrival/tagless-final/<name>` member (AValue), the
   // source of truth — `tagless-final.ts` derives the op-name type from there.
-  return { kind: "tagless", name, doc, in: z.array(z.unknown()), out: z.unknown(), run };
+  return { kind: "tagless", name, doc, in: z.array(z.value), out: z.value, run };
 }

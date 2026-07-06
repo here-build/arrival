@@ -40,7 +40,7 @@ import { ASymbol } from "./primitives/ASymbol.js";
 import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
-import type { APair } from "./primitives/APair.js";
+import { APair } from "./primitives/APair.js";
 import type { SchemeValue } from "./types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
 
@@ -61,7 +61,7 @@ export type ShadowSkip =
  *  keyword projection (where-provenance has no static node — out of scope). Both
  *  are recognised from the SURFACE head, before any expansion. */
 export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
-  if (!is_pair(form)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
+  if (!(form instanceof APair)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
   const head = (form as APair).car;
   if (!(head instanceof ASymbol)) return null; // computed operator — fall through (classify stringifies it)
   const op = String(head.valueOf());

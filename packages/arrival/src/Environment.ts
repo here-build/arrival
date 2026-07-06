@@ -1,24 +1,21 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import type { ResolverSpec } from "./common/scheme-env.js";
+import { type ResolverSpec, type SchemeEnv } from "./common/scheme-env.js";
 import type { EOF } from "./values/primitives/EOF.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import type { Macro } from "./eval/Macro.js";
 import { AExact } from "./values/primitives/AExact.js";
 import { AInexact } from "./values/primitives/AInexact.js";
-import type { SchemeValue } from "./values/types.js";
-import { nil } from "./values/primitives/ANil.js";
-import type { RosettaFunction } from "./rosetta.js";
-import { createRosettaWrapper } from "./rosetta.js";
-import type { SchemeEnv } from "./common/scheme-env.js";
-import { typecheck } from "./utils/typecheck.js";
+import type { AProcedure, SchemeValue } from "./values/types.js";
+import { createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
+import { HeapMeter } from "./heap-budget.js";
 
 /**
  * Brand on a keyword-accessor pluck function carrying its bare field name
@@ -40,19 +37,10 @@ export const KEYWORD_ACCESSOR_FIELD = Symbol.for("@here.build/arrival/keyword-ac
 export type BindingName = string | symbol | ASymbol | AString;
 
 /**
- * A function with optional LIPS metadata.
- */
-export interface LipsFunction extends Function {
-  __doc__?: string;
-  __name__?: string | symbol;
-  __code__?: unknown;
-}
-
-/**
  * Value that can be stored in an environment.
  * This includes all SchemeValues plus runtime-specific types like Macro, Syntax, etc.
  */
-export type EnvironmentValue = SchemeValue | LipsFunction | Macro | Syntax | EOF | Environment | RegExp;
+export type EnvironmentValue = SchemeValue | AProcedure | Macro | Syntax | EOF | Environment | RegExp;
 
 // -------------------------------------------------------------------------
 // :: Member access — formerly reached up into the stdlib monolith through a
@@ -93,14 +81,14 @@ function ownProps(obj: object): (string | symbol)[] {
  */
 export class Environment implements SchemeEnv {
   static [CLASS] = "environment";
-  private __resolvers__: ResolverSpec[] = [];
+  private readonly __resolvers__: ResolverSpec[] = [];
   /**
    * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
    * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
    * scope. Absent ⇒ no allocation bound (the default for un-budgeted callers). Run-scoped, not
    * chained-and-shared: the nearest one up the chain wins, so concurrent runs meter independently.
    */
-  __heapMeter__?: import("./heap-budget.js").HeapMeter;
+  __heapMeter__?: HeapMeter;
 
   // -------------------------------------------------------------------------
   // :: Fallback Resolver Management
@@ -200,7 +188,6 @@ export class Environment implements SchemeEnv {
   }
 
   merge(env: Environment, name: string | symbol = "merge"): Environment {
-    typecheck("Environment::merge", env, "environment");
     return this.inherit(name, env.__env__);
   }
 
@@ -209,7 +196,6 @@ export class Environment implements SchemeEnv {
     // is never a binding, so it falls through to `_lookupWithResolvers` (below) where
     // the polyglot capability's `keyword-accessor` resolver (membrane.ts) maps it to
     // the `@`-alias pluck — exactly like the `c[ad]+r` catchall. One catchall path.
-    typecheck("Environment::get", symbol, ["symbol", "string"]);
     const { throwError = true } = options;
 
     // Normalize to string/symbol name
@@ -231,7 +217,6 @@ export class Environment implements SchemeEnv {
   }
 
   set(name: BindingName, value: EnvironmentValue | number | bigint): this {
-    typecheck("Environment::set", name, ["string", "symbol"]);
     let storedValue: EnvironmentValue;
 
     // Numbers get special handling (convert to SchemeExact/SchemeInexact for typed numeric ops)
@@ -239,7 +224,9 @@ export class Environment implements SchemeEnv {
       if (Number.isNaN(value)) {
         storedValue = new AInexact(CONSTANT_CTX, value);
       } else {
-        storedValue = Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
+        storedValue = Number.isSafeInteger(value)
+          ? new AExact(CONSTANT_CTX, BigInt(value))
+          : new AInexact(CONSTANT_CTX, value);
       }
     } else if (typeof value === "bigint") {
       storedValue = new AExact(CONSTANT_CTX, value);
@@ -277,36 +264,7 @@ export class Environment implements SchemeEnv {
     return this;
   }
 
-  constant(name: string, value: EnvironmentValue): this {
-    invariant(!Object.hasOwn(this.__env__, name), `Environment::constant: ${name} already exists`);
-    Object.defineProperty(this.__env__, name, {
-      value,
-      enumerable: true,
-    });
-    return this;
-  }
-
   has(name: string): boolean {
-    return this.__env__.hasOwnProperty(name);
+    return Object.hasOwn(this.__env__, name);
   }
-
-  ref(name: string): Environment | undefined {
-    let env: Environment | null = this;
-    while (true) {
-      if (!env) {
-        break;
-      }
-      if (env.has(name)) {
-        return env;
-      }
-      env = env.__parent__;
-    }
-  }
-
-  // The runtime bootstrap is NO LONGER an Environment concern. It used to live here as
-  // `init()` / `initialized` — a per-env trigger indirection that `exec` drove and that
-  // dynamic-imported the bridge. That ceremony is gone: the lazy, realm-cached base
-  // assembly lives in the one entry point that needs it (`ensureBaseAssembled` in
-  // eval/generator-exec.ts, exposed publicly as `initBridge`), driven directly by `exec`.
-  // The scope-node is just a scope again.
 }

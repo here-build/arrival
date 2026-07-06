@@ -130,6 +130,11 @@ export class ArrivalError extends Error {
     public readonly cause?: Error,
   ) {
     super(message);
+    Error.captureStackTrace?.(cause ?? this);
+  }
+
+  get stack() {
+    return this.cause?.stack ?? super.stack;
   }
 
   toString(): string {
@@ -146,6 +151,23 @@ export class ArrivalError extends Error {
     }
     return result;
   }
+}
+
+// A RAW HOST-runtime error — a V8/engine throw from a native impl body that skipped its
+// contract (`Cannot read properties of undefined`, `x is not a function`, a non-iterable
+// spread), NOT an arrival-authored type error. The two are both `TypeError`s and share no
+// class or `.cause` brand (`TypeError.invariant` carries no cause; `wrapOperator` does), so
+// the only honest discriminant is the message: these phrasings are engine-authored and
+// arrival never writes them. A host bug is an INTERNAL arrival defect (an impl that bypassed
+// its zod/typecheck contract), so it must keep its scheme stack rather than surface bare.
+// Matching is intentionally conservative — a miss just falls back to today's behavior.
+const HOST_RUNTIME_BUG_RE =
+  /Cannot read propert|reading '|is not a function|is not iterable|is not a constructor|Spread syntax requires|Maximum call stack|is not defined/;
+export function isHostRuntimeBug(e: unknown): e is Error {
+  return (
+    (e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError) &&
+    HOST_RUNTIME_BUG_RE.test(e.message)
+  );
 }
 
 // -------------------------------------------------------------------------
@@ -189,7 +211,7 @@ export class PortabilityError extends ArrivalError {
     /** The portable alternative, e.g. "use `vector-map` for vectors". */
     public readonly alternative?: string,
   ) {
-    super(`${op}: not portable in strict mode — ${rule}` + (alternative ? ` (${alternative})` : ""));
+    super(`${op}: not portable in strict mode — ${rule}${alternative ? ` (${alternative})` : ""}`);
   }
 }
 

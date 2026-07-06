@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------------
 import { EOF } from "../values/primitives/EOF.js";
-import { is_function, is_instance, is_iterator, is_pair } from "../values/value-guards.js";
+import { is_function, is_instance, is_iterator } from "../values/value-guards.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -53,7 +53,7 @@ export function typecheck(fn: Valuable, arg: unknown, expected: Valuable | Funct
   }
   let match = false;
   let exp: unknown = expected;
-  if (is_pair(exp)) {
+  if (exp instanceof APair) {
     exp = exp.to_array();
   }
   if (Array.isArray(exp)) {

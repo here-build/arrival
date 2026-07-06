@@ -27,8 +27,6 @@ export interface RosettaSpec {
   fn: (...args: any[]) => unknown;
   /** Optional ambient `.d.ts` member-body type fragment, harvested by the type-lens. */
   type?: string;
-  /** Receive the EvalContext as a context argument (host-side). */
-  withContext?: boolean;
   /** Rosetta options (e.g. `{ argProvenance: true }`) — passed through verbatim. */
   options?: unknown;
   /** PURE (provenance-PROPAGATING) rosetta — forwards its inputs' provenance instead of

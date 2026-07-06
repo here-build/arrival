@@ -31,7 +31,7 @@ export type TaglessOp = StripTaglessPrefix<keyof AValue>;
 /** Runtime list of the declared ops (keyof is type-only). Pinned in lock-step with AValue's
  *  tagless members by the bidirectional proof in `__tests__/tagless-final.test-d.ts` — adding an
  *  op on one side without the other (or a typo'd name here) reds the type-test. */
-export const TAGLESS_OP_NAMES = ["equals", "lte", "length", "map", "filter", "reduce", "sort"] as const;
+export const TAGLESS_OP_NAMES = ["equals", "lte", "length", "map", "filter", "reduce", "sort", "apply"] as const;
 
 /** Build a prefixed tagless method-name from an op name, type-safe:
  *  `tf("map")` → `"arrival/tagless-final/map"`. The one place callers form the key. */

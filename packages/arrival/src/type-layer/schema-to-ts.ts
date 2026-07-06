@@ -46,6 +46,7 @@
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod.js";
+import { tagToJsonSchema } from "../common/schema-tag.js";
 import type { AEntity } from "../common/symbol.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,14 +94,14 @@ const lambdaNode: NodeBuilder = (ts) => {
 // a given name, not how to RECOGNIZE one.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
   ["pair", consUnknownNode], // `z.pair | z.nil` → `Cons<unknown> | null` = List<unknown>
-  ["schemeString", stringNode],
-  ["schemeExact", bigintNode],
-  ["schemeInexact", numberNode],
+  ["string", stringNode],
+  ["exact", bigintNode],
+  ["inexact", numberNode],
   ["symbol", stringNode],
   ["sbytevector", uint8ArrayNode],
   ["nil", nullNode],
-  ["schemeBool", booleanNode],
-  ["schemeChar", stringNode],
+  ["boolean", booleanNode],
+  ["char", stringNode],
   ["svector", readonlyUnknownArrayNode],
   ["value", unknownNode],
   ["lambda", lambdaNode],
@@ -166,6 +167,24 @@ export function printType(schema: z.ZodTypeAny): string {
     unrepresentable: "throw",
   });
   return flatten(printNode(node));
+}
+
+/**
+ * Print an s/* schema-DSL TAG (`tagToJsonSchema`'s own input shape — e.g.
+ * `["object", ["summary", "string", "a one-line summary"]]`) as a TS type string —
+ * the STATIC projection `env/schema.ts`'s header promises alongside the runtime one
+ * (`tagToJsonSchema` → `z.fromJSONSchema`, the validator). Routes through the SAME
+ * JSON Schema lowering and the SAME zod reconstruction the runtime validator uses, so
+ * this can never disagree with what a tag actually validates as. Never throws — a
+ * malformed or unrepresentable tag degrades to "unknown" (the harvest's total-coverage
+ * posture, matching `signatureOf`'s own catch-all).
+ */
+export function sTagToTsType(tag: unknown): string {
+  try {
+    return printType(z.fromJSONSchema(tagToJsonSchema(tag) as Parameters<typeof z.fromJSONSchema>[0]));
+  } catch {
+    return "unknown";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

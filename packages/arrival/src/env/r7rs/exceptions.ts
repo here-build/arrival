@@ -26,6 +26,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { nil, type ANil } from "../../values/primitives/ANil.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
+import { ImplInvocationCtx } from "../../common/symbols/_bake.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-run isolation — the fix for the cross-request handler-stack leak.
@@ -68,27 +69,8 @@ const handlerStacks = new WeakMap<RunContext, unknown>();
 /** The minimal structural slice of `EvalContext` these machinery verbs need — NOT the full
  *  `EvalContext` (keeps this pack decoupled from evaluator.ts's evolving shape, mirroring
  *  `arrival-scheme-env-loader`'s `loader.ts` narrow ctx type for the same reason). */
-interface HandlerCallCtx {
+export interface HandlerCallCtx {
   runCtx?: RunContext;
-}
-
-/** Structural check for "does this look like the evaluator's appended ctx" — the same
- *  defensive shape `loader.ts`'s `popEvalContext` uses for its own `__withCtx` verbs, so a
- *  direct (non-evaluator) JS call degrades to the shared fallback bucket instead of
- *  mis-reading a real trailing scheme argument as ctx. */
-function isEvalCtx(v: unknown): v is HandlerCallCtx {
-  return typeof v === "object" && v !== null && ("runCtx" in v || "resolver" in v);
-}
-
-/** Pop the evaluator-appended ctx off a `__withCtx` impl's raw args (always the LAST
- *  element when present — the evaluator does `[...wrappedArgs, ctx]` unconditionally). */
-function popCtx(args: unknown[]): HandlerCallCtx | undefined {
-  const last = args.at(-1);
-  if (isEvalCtx(last)) {
-    args.pop();
-    return last;
-  }
-  return undefined;
 }
 
 const runKeyOf = (ctx: HandlerCallCtx | undefined): RunContext => ctx?.runCtx ?? CONSTANT_CTX;
@@ -102,15 +84,13 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // `z.value` is the typed, representation-blind replacement for `z.unknown()` at this
       // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
       // the impl's own declared return type is `never` — it always throws.
-      { input: [z.value], output: [z.never()] },
+      { input: [z.value], output: [z.undefinedResult] },
       (obj: unknown): never => {
         throw obj;
       },
     ),
     // Read / replace the handler stack (machinery; the R7RS forms push/pop through these
-    // instead of mutating a scheme binding with `set!`). `__withCtx: true` so each call
-    // reads the invoking run's `RunContext` off the evaluator-appended ctx (see the
-    // per-run-isolation block above) — from SCHEME's perspective these are still ordinary
+    // instead of mutating a scheme binding with `set!`). from SCHEME's perspective these are still ordinary
     // zero/one-arg calls; the ctx channel is invisible to the calling scheme code.
     "%current-handlers": symbol.native`%current-handlers: read the exception-handler stack (machinery)`(
       // The stack is a proper scheme list (nil, or a pair of a handler procedure + the rest
@@ -118,30 +98,21 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // `z.value` (the representation-blind scheme-value identity) is the richest honest
       // ceiling here, tighter than the old `z.unknown()` (host-blind).
       { input: [], output: [z.value] },
-      Object.assign(
-        (...args: unknown[]): SchemeValue => {
-          const ctx = popCtx(args);
-          // Opaque storage (native ops run no validation) — the boundary cast states what
-          // every write below actually stores: a scheme value (nil, or a handler-stack pair).
-          return (handlerStacks.get(runKeyOf(ctx)) ?? nil) as SchemeValue;
-        },
-        { __withCtx: true as const },
-      ),
+      function (): SchemeValue {
+        // Opaque storage (native ops run no validation) — the boundary cast states what
+        // every write below actually stores: a scheme value (nil, or a handler-stack pair).
+        return (handlerStacks.get(runKeyOf(this.ctx)) ?? nil) as SchemeValue;
+      },
     ),
     "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
       // Input is the same list shape `%current-handlers` reads (see above). Output is
       // ALWAYS `nil` (the impl's own `return nil`) — `z.nil` is the exact honest type here,
       // not merely a wide one.
       { input: [z.value], output: [z.nil] },
-      Object.assign(
-        (...args: unknown[]): ANil => {
-          const ctx = popCtx(args);
-          const [handlers] = args;
-          handlerStacks.set(runKeyOf(ctx), handlers);
-          return nil;
-        },
-        { __withCtx: true as const },
-      ),
+      function (handlers) {
+        handlerStacks.set(runKeyOf(this.ctx), handlers);
+        return nil;
+      },
     ),
     "make-error-object": symbol.native`make-error-object: build an R7RS error object from a message and irritants`(
       // `message` is display-rendered via `.valueOf()`/`String()` regardless of scheme type
@@ -150,11 +121,11 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // real validator (`instanceof R7RSError`): the impl always returns this ONE concrete
       // host `Error` subclass, never an arbitrary scheme value.
       {
-        input: [z.value],
+        input: [z.string],
         inputRest: z.value,
-        output: [z.custom<R7RSError>((v) => v instanceof R7RSError)],
+        output: [z.error],
       },
-      (message: unknown, ...irritants: unknown[]): R7RSError => {
+      (message, ...irritants) => {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         return new R7RSError(msg, ...irritants);
       },

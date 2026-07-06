@@ -15,6 +15,7 @@
 import { AValue } from "./primitives/AValue.js";
 import { is_pair } from "./value-guards.js";
 import { AVector } from "./primitives/AVector.js";
+import { APair } from "./primitives/APair.js";
 
 export function deepProvenance(value: unknown): ReadonlySet<number> {
   const acc = new Set<number>();
@@ -25,7 +26,7 @@ export function deepProvenance(value: unknown): ReadonlySet<number> {
     seen.add(v);
     if (v instanceof AValue) {
       for (const p of v.provenance) acc.add(p);
-      if (is_pair(v)) {
+      if (v instanceof APair) {
         walk(v.car);
         walk(v.cdr);
       } else if (v instanceof AVector) {

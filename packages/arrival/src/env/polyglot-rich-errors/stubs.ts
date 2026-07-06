@@ -49,17 +49,6 @@
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 
-// ── 1. Common Lisp `type-of` ─────────────────────────────────────────────────
-const TYPE_OF_REASON =
-  "type-of is not implemented — this runtime has no single reflective type-of-object function (Common Lisp CLHS); use the granular type predicates instead: pair?, string?, number?, symbol?, boolean?, vector?, dict?, procedure?, null?";
-
-// ── 2. `<>` — SRFI-26 cut placeholder / SQL not-equal ────────────────────────
-// A bare reference is a genuine misuse either way — see srfi-26.ts, which
-// recognizes `<>` only as a string-matched placeholder INSIDE cut/cute's macro
-// expansion, never as a standalone bound symbol.
-const CUT_OR_NOTEQUAL_REASON =
-  "<> is not a standalone bound symbol — it has two real readings and neither is a bare value: (1) SRFI-26's cut/cute placeholder token, valid ONLY inside a (cut ...) / (cute ...) form, e.g. (cut f <>) — referenced bare it means nothing; (2) SQL's not-equal operator — if that's what you meant, use (not (equal? a b)) or (not (= a b))";
-
 // ── 3. Hash-table spellings not already doored by srfi-stubs.ts ─────────────
 // Mirrors srfi-stubs.ts's HASH_TABLE_REASON verbatim (same design omission —
 // dicts are native & immutable — reached via a different dialect's name for the
@@ -71,26 +60,16 @@ const HASH_LIBRARY_REASON =
 const IO_REASON =
   "output is omitted from arrival by design — ambient IO has no construction-site to root a value's lineage at, the same reason random/date are omitted (see srfi-stubs.ts); return the value instead of printing it, it flows to the caller directly";
 
-// ── 5. Mutation / dialect-specific iteration macros ──────────────────────────
-const SETF_REASON =
-  "setf is not implemented — this is a pure sandbox with no in-place mutation of bindings or structures; rebind with (define ...) or thread a new value through instead of mutating one in place";
-const DEFUN_REASON = "defun is not implemented — Common Lisp's function-definition form; use (define (name args ...) body ...) instead";
-const LOOP_REASON =
-  "loop is not implemented — Common Lisp's iteration macro has no single compositional equivalent here; use named let, map/filter/reduce, or the SRFI-1 iteration helpers (iota, unfold, fold-right) instead";
-const NREVERSE_REASON =
-  "nreverse is not implemented — it reverses a list destructively (in place); reverse (R7RS) is bound and returns a fresh reversed list instead";
-const FOR_LIST_REASON =
-  "for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead";
-const FOR_FOLD_REASON =
-  "for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot.ts's frequencies/group-by for worked examples)";
-
 export default new EnvCapability("scheme/polyglot-rich-errors", {
   symbols: {
     // 1. Common Lisp type-of
-    "type-of": symbol.notImplemented`type-of: ${TYPE_OF_REASON}`,
+    "type-of": symbol.notImplemented`type-of: type-of is not implemented — this runtime has no single reflective type-of-object function (Common Lisp CLHS); use the granular type predicates instead: pair?, string?, number?, symbol?, boolean?, vector?, dict?, procedure?, null?`,
 
-    // 2. <> — SRFI-26 placeholder / SQL not-equal
-    "<>": symbol.notImplemented`<>: ${CUT_OR_NOTEQUAL_REASON}`,
+    // ── 2. `<>` — SRFI-26 cut placeholder / SQL not-equal ────────────────────────
+    // A bare reference is a genuine misuse either way — see srfi-26.ts, which
+    // recognizes `<>` only as a string-matched placeholder INSIDE cut/cute's macro
+    // expansion, never as a standalone bound symbol.
+    "<>": symbol.notImplemented`<>: <> is not a standalone bound symbol — it has two real readings and neither is a bare value: (1) SRFI-26's cut/cute placeholder token, valid ONLY inside a (cut ...) / (cute ...) form, e.g. (cut f <>) — referenced bare it means nothing; (2) SQL's not-equal operator — if that's what you meant, use (not (equal? a b)) or (not (= a b))`,
 
     // 3. Hash-table spellings (Racket + CL) not already in srfi-stubs.ts
     "make-hash": symbol.notImplemented`make-hash: ${HASH_LIBRARY_REASON}`,
@@ -104,11 +83,11 @@ export default new EnvCapability("scheme/polyglot-rich-errors", {
     print: symbol.notImplemented`print: ${IO_REASON}`,
 
     // 5. Mutation / dialect-specific iteration macros
-    setf: symbol.notImplemented`setf: ${SETF_REASON}`,
-    defun: symbol.notImplemented`defun: ${DEFUN_REASON}`,
-    loop: symbol.notImplemented`loop: ${LOOP_REASON}`,
-    nreverse: symbol.notImplemented`nreverse: ${NREVERSE_REASON}`,
-    "for/list": symbol.notImplemented`for/list: ${FOR_LIST_REASON}`,
-    "for/fold": symbol.notImplemented`for/fold: ${FOR_FOLD_REASON}`,
+    setf: symbol.notImplemented`setf: setf is not implemented — this is a pure sandbox with no in-place mutation of bindings or structures; rebind with (define ...) or thread a new value through instead of mutating one in place`,
+    defun: symbol.notImplemented`defun: defun is not implemented — Common Lisp's function-definition form; use (define (name args ...) body ...) instead`,
+    loop: symbol.notImplemented`loop: loop is not implemented — Common Lisp's iteration macro has no single compositional equivalent here; use named let, map/filter/reduce, or the SRFI-1 iteration helpers (iota, unfold, fold-right) instead`,
+    nreverse: symbol.notImplemented`nreverse: nreverse is not implemented — it reverses a list destructively (in place); reverse (R7RS) is bound and returns a fresh reversed list instead`,
+    "for/list": symbol.notImplemented`for/list: for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead`,
+    "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot.ts's frequencies/group-by for worked examples)`,
   },
 });

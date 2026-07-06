@@ -21,6 +21,7 @@ import { ABool } from "./primitives/ABool.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
+import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./primitives/ACallable.js";
 import { CLASS } from "../well-known-symbols.js";
 // Type-only — narrows the brand result to the evaluator's macro/syntax types so
 // `is_macro_value` stays signature-compatible with eval/guards' `is_macro`. An
@@ -112,6 +113,30 @@ export function is_macro_value(o: unknown): o is Macro | Syntax {
 // ----------------------------------------------------------------------
 export function is_function(o: unknown): o is Function {
   return typeof o === "function" && "bind" in o && typeof o.bind === "function";
+}
+
+// ----------------------------------------------------------------------
+// Callable-as-value guards (stage 0 of the callable-as-value rework; see
+// docs/working-proposals/callable-as-value-run-ctx.md). `instanceof` is evaluated at call
+// time, so importing these value classes into this leaf adds no init-time cycle. The legacy
+// bare-fn `is_callable`/`is_macro` (eval/guards.js) coexist until the migration retires them.
+// ----------------------------------------------------------------------
+export function is_lambda(o: unknown): o is ALambda {
+  return o instanceof ALambda;
+}
+export function is_native_procedure(o: unknown): o is ANativeProcedure {
+  return o instanceof ANativeProcedure;
+}
+export function is_rosetta_procedure(o: unknown): o is ARosettaProcedure {
+  return o instanceof ARosettaProcedure;
+}
+/** A host-JS primitive callable — native (contour) OR rosetta (membrane). */
+export function is_procedure(o: unknown): o is ANativeProcedure | ARosettaProcedure {
+  return o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
+}
+/** Any callable value — a lambda or a host-JS primitive. */
+export function is_callable_value(o: unknown): o is ACallable {
+  return o instanceof ALambda || o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
 }
 
 // ----------------------------------------------------------------------

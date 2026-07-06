@@ -13,7 +13,6 @@ export {
   is_iterator,
   is_native,
   is_nil,
-  is_pair,
   is_plain_object,
 } from "../values/value-guards.js";
 

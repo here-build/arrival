@@ -39,6 +39,8 @@ import { describe, it, expect } from "vitest";
 import { is_pair, is_nil } from "../values/value-guards.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { APair } from "../values/primitives/APair.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 const MINT_A = 500;
@@ -60,12 +62,12 @@ const sources: EnvSetup = (env) => {
  * size-0 (ungrounded) leaf: an unstamped value is exactly the ungrounded case.
  */
 function leafGroundingSizes(v: unknown, out: number[] = []): number[] {
-  if (is_pair(v)) {
+  if (v instanceof APair) {
     leafGroundingSizes(v.car, out);
     leafGroundingSizes(v.cdr, out);
     return out;
   }
-  if (is_nil(v)) return out; // structural list terminator — not a data leaf
+  if (v instanceof ANil) return out; // structural list terminator — not a data leaf
   out.push(v instanceof AValue ? v.provenance.size : 0);
   return out;
 }
