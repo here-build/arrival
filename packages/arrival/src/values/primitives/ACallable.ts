@@ -58,8 +58,13 @@ export class ALambda extends AValue {
   readonly kind = "lambda" as const;
   readonly name: string | symbol;
   readonly arity: Arity;
-  /** The captured lexical scope (a Resolver). Opaque until stage 2. */
+  /** The captured lexical scope (a Resolver). */
   readonly scope: unknown;
+  /** Mutable display name — `(define foo (lambda …))` stamps it post-construction (the evaluator's
+   *  define-naming step), and tracers read it. Distinct from the immutable `name`. */
+  __name__?: string | symbol;
+  /** Positional parameter names, for tracer↔param-slot correlation. */
+  __params__?: string[];
   readonly #runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
 
   constructor(opts: {

@@ -26,6 +26,7 @@ import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { LAMBDA } from "./well-known-symbols.js";
+import { is_lambda } from "./values/value-guards.js";
 
 // Membrane warnings (warnMembrane / setMembraneWarnings) now live in the leaf `membrane-warn.ts`,
 // shared with boxing.ts's `function` boxer — extracted so the value layer needn't import this
@@ -350,7 +351,7 @@ export function jsToScheme(
   // CALLABLE RULE shape: a scheme lambda over a directly-bound native verb) gets VOIDED the moment
   // it flows back out through `require`'s own rosetta wrapper — which re-runs every return value
   // through `jsToScheme` — even though it was never a "borrowed JS callback" to begin with.
-  if (tag === "function" && LAMBDA in value) {
+  if ((tag === "function" && LAMBDA in value) || is_lambda(value)) {
     return value;
   }
 

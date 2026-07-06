@@ -29,8 +29,8 @@ import { Environment, type EnvironmentValue, KEYWORD_ACCESSOR_FIELD } from "../E
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_plain_object, is_promise } from "./guards.js";
-import { is_callable_value } from "../values/value-guards.js";
-import { applyCallback } from "../values/primitives/ACallable.js";
+import { is_callable_value, is_lambda } from "../values/value-guards.js";
+import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
@@ -355,6 +355,9 @@ function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): S
     if (typeof a === "function" && (a as { [LAMBDA]?: boolean })[LAMBDA]) {
       if (!out) out = [...args];
       out[i] = wrapLambda(a as LambdaFunction, dynSite);
+    } else if (is_lambda(a)) {
+      if (!out) out = [...args];
+      out[i] = wrapLambdaValue(a, dynSite);
     }
   }
   return out ?? args;
@@ -399,6 +402,31 @@ function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): La
   wrapped[LAMBDA] = true;
   if (lambda.__name__) wrapped.__name__ = lambda.__name__;
   if (lambda.__params__) wrapped.__params__ = lambda.__params__;
+  return wrapped;
+}
+
+/** The ALambda twin of {@link wrapLambda}: re-install `_dynamicCallSite` on each invocation of a
+ *  lambda VALUE passed as a HOF arg. Delegates to the original's apply term (its runner is
+ *  private) inside the same save/deeper-of-two/restore the fn wrapper uses; the holder is read in
+ *  the runner's synchronous prologue, so the finally-restore never races the bounced body. */
+function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALambda {
+  const wrapped = new ALambda({
+    name: lambda.name,
+    arity: lambda.arity,
+    scope: lambda.scope,
+    ctx: lambda.ctx,
+    runner: (values, runCtx, canBounce) => {
+      const saved = _dynamicCallSite;
+      _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
+      try {
+        return lambda["arrival/tagless-final/apply"](values, runCtx, canBounce);
+      } finally {
+        _dynamicCallSite = saved;
+      }
+    },
+  });
+  wrapped.__name__ = lambda.__name__;
+  wrapped.__params__ = lambda.__params__;
   return wrapped;
 }
 
@@ -452,9 +480,10 @@ function is_data_marked(o: unknown): o is DataMarked {
   return (o as Record<symbol, unknown>)[DATA] === true;
 }
 
-/** Type guard for LambdaFunction */
-function is_lambda_function(o: unknown): o is LambdaFunction {
-  return typeof o === "function";
+/** A nameable lambda — a legacy branded fn OR an ALambda value. Both carry a mutable
+ *  `__name__` the define-naming step stamps. */
+function is_lambda_function(o: unknown): o is LambdaFunction | ALambda {
+  return typeof o === "function" || o instanceof ALambda;
 }
 
 /** The evaluator generator type - third param is what yield returns */
@@ -1515,76 +1544,38 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Capture the resolver (lexical scope) at definition time
   const closureResolver = ctxResolver(ctx);
 
-  // Create a closure function
-  const lambda: LambdaFunction = function (this: unknown, ...values: SchemeValue[]) {
-    // Create a new environment frame
+  // The runner — the lambda body, INJECTED into the ALambda value (the value layer names no
+  // evaluator symbol; same seam `Macro` uses). `canBounce` replaces the `_canBounce` module
+  // global: true ⇒ hand back the body generator as a Bounce for the trampoline (TCO — a
+  // `(define (loop) (loop))` stays flat); false ⇒ run to completion (a JS/HOF caller wants a
+  // value/promise). `runCtx` is accepted for the apply-term contract; the body still evaluates
+  // against the DEFINITION-time ctx exactly as before (call-time runCtx threading is a later cut).
+  const runner = (values: SchemeValue[], _runCtx: RunContext, canBounce: boolean): CallResult => {
     const callResolver = closureResolver.child("lambda", "lambda");
-
-    // Bind arguments
     let argNode: SchemeValue = args;
     let i = 0;
-
-    // Handle proper list of args
     while (argNode instanceof APair) {
       const argName = argNode.car;
-      if (argName instanceof ASymbol) {
-        callResolver.define(argName, values[i]);
-      }
+      if (argName instanceof ASymbol) callResolver.define(argName, values[i]);
       i++;
       argNode = argNode.cdr;
     }
-
-    // Handle rest arg: (lambda (a b . rest) ...)
+    // Rest arg: (lambda (a b . rest) …)
     if (argNode instanceof ASymbol) {
-      // Rest of args go into this symbol as a list
       callResolver.define(argNode, APair.fromArray(ctx.runCtx ?? CONSTANT_CTX, values.slice(i), false));
     }
-
-    // Pick up the dynamic call site if evaluatePair set it just before
-    // invoking us; otherwise fall back to the lexical ctx's invocation.
-    // See _dynamicCallSite comment near EvalContext.
+    // Dynamic call site: the caller (evaluatePair / wrapLambda) set the holder just before
+    // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
+    // prologue, so a wrapLambda finally-restore after this point is harmless (bodyCtx captured it).
     const dynamicInv = _dynamicCallSite ?? ctx.currentInvocation;
-    // The body's evaluation context. Lambda bodies start in tail position
-    // by R7RS §3.5: the last expression in the body is tail w.r.t. the
-    // lambda's caller, so we set tail=true here and let evalBegin/evalIf/
-    // etc. propagate it to the structurally-terminal expression.
-    const bodyCtx: EvalContext = {
-      ...ctx,
-      resolver: callResolver,
-      currentInvocation: dynamicInv,
-      tail: true,
-    };
-
-    // Bounce protocol: if the calling evaluatePair flagged that it speaks
-    // the protocol (`_canBounce === true`), return the body generator as a
-    // Bounce token instead of spawning a fresh `run(...)` here. The outer
-    // trampoline then drives the body directly — the host stack stays flat
-    // across the lambda boundary, so `(define (loop) (loop)) (loop)` no
-    // longer accumulates one await per recursion (which V8 caps at ~10k
-    // before RangeError). See `_canBounce` for the protocol war story.
-    //
-    // When `_canBounce` is false the caller is JS code (HOF callback, JS
-    // host entry via `exec`, etc.) that expects a SchemeValue or Promise;
-    // we fall through to the original `run(...)` path so its return shape
-    // is unchanged.
-    if (_canBounce) {
-      return makeBounce(evalBegin(body, bodyCtx));
-    }
-
-    // Evaluate body - returns a promise that runs the generator.
-    // Forward the signal: a lambda invoked inside a long-running computation
-    // must honor the same abort budget as the outer `run()` call.
-    return run(evalBegin(body, bodyCtx), {
-      signal: ctx.signal,
-    });
+    // Lambda bodies start in tail position (R7RS §3.5): the terminal body expr is tail w.r.t. the
+    // caller, so tail=true here propagates through evalBegin/evalIf/… to it.
+    const bodyCtx: EvalContext = { ...ctx, resolver: callResolver, currentInvocation: dynamicInv, tail: true };
+    if (canBounce) return makeBounce(evalBegin(body, bodyCtx));
+    return run(evalBegin(body, bodyCtx), { signal: ctx.signal });
   };
 
-  // Mark as lambda for identification
-  lambda[LAMBDA] = true;
-
-  // Stash positional parameter names so tracers can correlate symbol uses
-  // inside the body to the parameter slot they bind. Variadic-only
-  // lambdas leave __params__ empty.
+  // Positional parameter names + arity (introspection + tracer↔param-slot correlation).
   const params: string[] = [];
   let walk: SchemeValue = args;
   while (walk instanceof APair) {
@@ -1592,8 +1583,16 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (p instanceof ASymbol) params.push(symbol_name(p));
     walk = walk.cdr;
   }
-  lambda.__params__ = params;
+  const hasRest = walk instanceof ASymbol;
 
+  const lambda = new ALambda({
+    name: "lambda",
+    arity: { min: params.length, max: hasRest ? null : params.length },
+    scope: closureResolver,
+    runner,
+    ctx: ctx.runCtx ?? CONSTANT_CTX,
+  });
+  lambda.__params__ = params;
   return lambda;
 }
 
@@ -2207,11 +2206,24 @@ function* evalOr(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext): EvalGenerator {
   invariant(is_callable(proc), "=> requires a procedure");
 
-  // A callable VALUE (ANativeProcedure) is invoked through the seam — its apply term, `runCtx`
-  // threaded — not the bare-fn `Reflect.apply` arms below (which key off `is_function`).
+  // A callable VALUE dispatches through its apply term. An ALambda in tail position hands back a
+  // Bounce so a self-recursive `=>` collapses on the trampoline (TCO), routed exactly like the
+  // legacy lambda arm below; an ANativeProcedure returns a value/promise (canBounce ignored).
   if (is_callable_value(proc)) {
-    const r = applyCallback(proc, [arg], ctx.runCtx ?? CONSTANT_CTX);
-    return is_promise(r) ? yield r : r;
+    const dynSite = ctx.currentInvocation;
+    const __savedDynamicCallSite = _dynamicCallSite;
+    _dynamicCallSite = dynSite;
+    let r: CallResult;
+    try {
+      r = proc["arrival/tagless-final/apply"](wrapLambdaArgs([arg], dynSite), ctx.runCtx ?? CONSTANT_CTX, is_lambda(proc));
+    } finally {
+      _dynamicCallSite = __savedDynamicCallSite;
+    }
+    if (is_bounce(r)) {
+      if (ctx.tail) return yield { tailCall: { generator: r.generator } } as unknown as SchemeValue;
+      return yield { call: r.generator, tail: true };
+    }
+    return is_promise(r) ? yield r : (r as SchemeValue);
   }
 
   // Lambdas (and named-let loop fns) speak the bounce protocol; route them
@@ -3214,7 +3226,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const __savedDynamicCallSite = _dynamicCallSite;
     _dynamicCallSite = dynSite;
     const __savedCanBounce = _canBounce;
-    _canBounce = (fn as LambdaFunction)[LAMBDA] === true;
+    _canBounce = (fn as LambdaFunction)[LAMBDA] === true || is_lambda(fn);
     const __savedSpeculate = _speculate;
     _speculate = ctx.speculate === true;
     const __savedRunEnv = _currentRunEnv;
@@ -3231,8 +3243,12 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // A callable VALUE is invoked through the seam (its apply term, `runCtx` threaded
       // explicitly); a bare fn keeps the legacy `this = { ctx }` apply. No `this`-smuggling on
       // the value path.
+      // A callable VALUE dispatches through its apply term with the computed `_canBounce` (an
+      // ALambda in tail position hands back a Bounce for the trampoline — TCO; an ANativeProcedure
+      // ignores canBounce). NOT `applyCallback`, which forces canBounce=false (the HOF-callback
+      // contract). A bare fn keeps the legacy `this = { ctx }` apply.
       result = is_callable_value(fn)
-        ? (applyCallback(fn, wrappedArgs, ctx.runCtx ?? CONSTANT_CTX) as SchemeValue)
+        ? (fn["arrival/tagless-final/apply"](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, _canBounce) as SchemeValue)
         : Reflect.apply(fn, { ctx }, wrappedArgs);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;

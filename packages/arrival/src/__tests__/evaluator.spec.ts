@@ -19,7 +19,7 @@ import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
-import { LAMBDA } from "../well-known-symbols.js";
+import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
 import { list, num, sym } from "./helpers.js";
 
@@ -312,8 +312,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const code = list(sym("define"), list(sym("add"), sym("a"), sym("b")), list(sym("+"), sym("a"), sym("b")));
         await exec(code, { env });
         const add = env._lookupWithResolvers("add");
-        // Scheme lambdas are JS functions with the LAMBDA-symbol marker
-        expect(typeof add).toBe("function");
+        // Scheme lambdas are ALambda values (callable-as-value) carrying a mutable __name__.
+        expect(add).toBeInstanceOf(ALambda);
         expect((add as { __name__?: string }).__name__).toBe("add");
       });
     });
@@ -325,9 +325,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should create a callable function", async () => {
         // (lambda (x) x)
         const code = list(sym("lambda"), list(sym("x")), sym("x"));
-        const fn = (await exec(code, { env })) as Function;
-        expect(typeof fn).toBe("function");
-        expect(LAMBDA in fn).toBe(true);
+        const fn = await exec(code, { env });
+        // A lambda is an ALambda value declaring the apply term (its callability).
+        expect(fn).toBeInstanceOf(ALambda);
+        expect(typeof (fn as Record<string, unknown>)["arrival/tagless-final/apply"]).toBe("function");
       });
 
       it("should execute lambda with arguments", async () => {

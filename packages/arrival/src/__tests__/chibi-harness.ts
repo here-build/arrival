@@ -29,6 +29,8 @@
 import * as z from "../common/scheme-zod.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
+import { applyCallback } from "../values/primitives/ACallable.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** One recorded outcome — a single chibi `(test …)` / `(test-error …)` / … evaluation. */
 export interface ChibiTestResult {
@@ -146,10 +148,12 @@ export function createChibiHarness(): ChibiHarness {
       // JS (await) is the SAME path the old `env.set("js-run-test", …)` used.
       "js-run-test": symbol.native`js-run-test: run thunk, compare its result to expected, record the outcome`(
         { input: [z.value, z.value, z.lambda], output: [z.undefinedResult] },
-        async (name: unknown, expected: unknown, thunk: (...args: unknown[]) => unknown): Promise<void> => {
+        async (name: unknown, expected: unknown, thunk: unknown): Promise<void> => {
           const testName = typeof name === "string" ? name : String(name);
           try {
-            const result = await thunk();
+            // `thunk` is a scheme closure — a callable VALUE (ALambda), not a bare fn — so invoke
+            // it through the seam, not `thunk()`.
+            const result = await applyCallback(thunk, [], CONSTANT_CTX);
             results.push({
               name: testName,
               group: currentGroup,
