@@ -28,15 +28,15 @@ describe("§2 — plain scheme defines are stored verbatim, in insertion order",
 });
 
 describe("G13.1 — tool-valued defines degrade at insertion", () => {
-  it("a define whose source references an `_`-qualified tool symbol as its head degrades to `declare const <name>: unknown`", () => {
+  it("a define whose source references a `/`-qualified tool symbol as its head degrades to `declare const <name>: unknown`", () => {
     const ring = createContextRing();
-    ring.push("x", '(define x (shop_list-orders :status "open"))');
+    ring.push("x", '(define x (shop/list-orders :status "open"))');
     expect(ring.entries()).toEqual(["declare const x: unknown"]);
   });
 
   it("tool-symbol detection is ANYWHERE in the form, not only the head position (doc §2: 'a qualified head anywhere in the form')", () => {
     const ring = createContextRing();
-    ring.push("y", "(define y (+ 1 (shop_get-price :id 5)))");
+    ring.push("y", "(define y (+ 1 (shop/get-price :id 5)))");
     expect(ring.entries()).toEqual(["declare const y: unknown"]);
   });
 
@@ -79,11 +79,11 @@ describe("G13.3 — ~8k-char FIFO eviction", () => {
   });
 });
 
-describe("knownToolNames — closes the `_`-shape blind spot (found+fixed 2026-07-05)", () => {
+describe("knownToolNames — closes the slugless-binding blind spot (found+fixed 2026-07-05)", () => {
   // bind.ts: `qualifiedName = server.slug === "" ? tool.name : ...` — a slugless single-server
   // binding's qualified name is the tool's BARE name, verbatim. When that bare name has no
-  // underscore either (a real tool literally named `price`), TOOL_SYMBOL alone cannot see it
-  // (there is no `_` anywhere in the source). `createContextRing`'s optional roster parameter
+  // `/` either (a real tool literally named `price`), TOOL_SYMBOL alone cannot see it
+  // (there is no `/` anywhere in the source). `createContextRing`'s optional roster parameter
   // closes this without changing the frozen `push`/`entries` contract.
 
   it("regression pin: with NO roster supplied, an underscore-free tool reference is NOT degraded (documents the blind spot as it was found)", () => {
@@ -129,7 +129,7 @@ describe("knownToolNames — closes the `_`-shape blind spot (found+fixed 2026-0
 
   it("the pre-existing TOOL_SYMBOL heuristic and the roster check OR together — either one is enough", () => {
     const ring = createContextRing(["price"]); // roster only knows "price"
-    ring.push("s", '(define s (shop_search :q "x"))'); // NOT in roster, but `_`-shaped
+    ring.push("s", '(define s (shop/search :q "x"))'); // NOT in roster, but `/`-shaped
     expect(ring.entries()).toEqual(["declare const s: unknown"]);
   });
 });

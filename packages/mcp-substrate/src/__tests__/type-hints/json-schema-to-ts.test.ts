@@ -7,7 +7,7 @@
 // OBSERVED TS DIAGNOSTIC CODES (recorded from an actual run against `createDiagnoseLens`, not
 // assumed from the HINT_WHITELIST — "observation beats expectation" per the task brief):
 //
-//   (a) wrong value type, `(shop_list-orders :count "five")` where `count:number`
+//   (a) wrong value type, `(shop/list-orders :count "five")` where `count:number`
 //       → TS2322 (type not assignable), reported at the specific PROPERTY (`count: "five"`)
 //         inside the fresh object-literal argument — not TS2345. TS attributes a per-property
 //         mismatch inside an object literal to the property assignment itself (2322); 2345
@@ -181,30 +181,29 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
 
   function buildLens() {
     const prelude = assembleManifoldPrelude([
-      ["shop_list-orders", SHOP_LIST_ORDERS],
-      ["shop_find-customer", SHOP_FIND_CUSTOMER],
-      ["weather_get", WEATHER_GET],
+      ["shop/list-orders", SHOP_LIST_ORDERS],
+      ["shop/find-customer", SHOP_FIND_CUSTOMER],
+      ["weather/get", WEATHER_GET],
     ]);
     return { prelude, lens: createDiagnoseLens(prelude) };
   }
 
-  it("assembles a `declare const _` namespace entry for each non-identifier (hyphenated) qualified name — the `_` join character itself needs no escaping", () => {
+  it("assembles a `declare const _` namespace entry for each non-identifier qualified name — the `/` join character needs escaping (ROLLED BACK 2026-07-06)", () => {
     const { prelude } = buildLens();
     expect(prelude.prelude).toContain("declare const _:");
-    // "shop_list-orders": the `_` join char is ALREADY a valid TS identifier char (name-escape.ts's
-    // IDENTIFIER regex admits it) — only the hyphen inside "list-orders" still needs escaping.
-    expect(prelude.prelude).toContain("shop_list$dash$orders");
-    // "weather_get" (slug + tool, no hyphen anywhere) is a FIXED POINT of the escape lens —
-    // no escaping at all, unlike the legacy `/`-joined convention where every qualified name
-    // needed at least the slash escaped.
-    expect(prelude.prelude).toContain("weather_get");
-    expect(prelude.prelude).not.toContain("weather_get$");
-    expect(prelude.members).toEqual(["shop_list-orders", "shop_find-customer", "weather_get"]);
+    // "shop/list-orders": the `/` join char is NOT a valid TS identifier char (name-escape.ts's
+    // NAMED map escapes it to `$slash$`), and the hyphen inside "list-orders" also needs escaping.
+    expect(prelude.prelude).toContain("shop$slash$list$dash$orders");
+    // "weather/get" (slug + tool, no hyphen anywhere) still needs the slash escaped — under the
+    // restored `/`-joined convention every qualified name needs at least the slash escaped,
+    // unlike the interim `_`-joined convention where a hyphen-free name was a fixed point.
+    expect(prelude.prelude).toContain("weather$slash$get");
+    expect(prelude.members).toEqual(["shop/list-orders", "shop/find-customer", "weather/get"]);
   });
 
   it("(a) wrong value type: a string where count:number is declared → the checker catches it (TS2322, now whitelisted)", () => {
     const { lens } = buildLens();
-    const { diagnostics } = lens.diagnose('(shop_list-orders :count "five")', []);
+    const { diagnostics } = lens.diagnose('(shop/list-orders :count "five")', []);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]!.code).toBe(2322); // observed — see header comment
     expect(diagnostics[0]!.expected).toBeDefined();
@@ -213,7 +212,7 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
 
   it("(b) typo'd key with a close-spelling candidate present → an unknown-property diagnostic with did-you-mean", () => {
     const { lens } = buildLens();
-    const { diagnostics } = lens.diagnose('(shop_find-customer :contry "US")', []);
+    const { diagnostics } = lens.diagnose('(shop/find-customer :contry "US")', []);
     expect(diagnostics.length).toBeGreaterThan(0);
     const d = diagnostics.find((x) => x.propertyName !== undefined) ?? diagnostics[0]!;
     expect([2353, 2561]).toContain(d.code);
@@ -223,7 +222,7 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
 
   it("(c) unknown extra key with no close spelling → excess-property diagnostic, no candidate required", () => {
     const { lens } = buildLens();
-    const { diagnostics } = lens.diagnose('(shop_find-customer :country "US" :zzzzz_unrelated_key 1)', []);
+    const { diagnostics } = lens.diagnose('(shop/find-customer :country "US" :zzzzz_unrelated_key 1)', []);
     expect(diagnostics.length).toBeGreaterThan(0);
     const d = diagnostics.find((x) => x.propertyName === "zzzzz_unrelated_key");
     expect(d).toBeDefined();
@@ -232,25 +231,25 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
 
   it("(d) enum violation: a value outside the declared union → the checker catches it (TS2322, now whitelisted)", () => {
     const { lens } = buildLens();
-    const { diagnostics } = lens.diagnose('(weather_get :unit "kelvin")', []);
+    const { diagnostics } = lens.diagnose('(weather/get :unit "kelvin")', []);
     expect(diagnostics.length).toBeGreaterThan(0);
     expect(diagnostics[0]!.code).toBe(2322); // observed — see header comment
   });
 
   it("(e) the polarity case — a genuinely correct call produces ZERO diagnostics", () => {
     const { lens } = buildLens();
-    expect(lens.diagnose("(shop_list-orders :count 42)", []).diagnostics).toEqual([]);
-    expect(lens.diagnose('(shop_find-customer :country "US")', []).diagnostics).toEqual([]);
-    expect(lens.diagnose('(weather_get :unit "celsius")', []).diagnostics).toEqual([]);
+    expect(lens.diagnose("(shop/list-orders :count 42)", []).diagnostics).toEqual([]);
+    expect(lens.diagnose('(shop/find-customer :country "US")', []).diagnostics).toEqual([]);
+    expect(lens.diagnose('(weather/get :unit "celsius")', []).diagnostics).toEqual([]);
   });
 
   it("a no-params tool call type-checks clean, and a stray argument bites", () => {
     const prelude = assembleManifoldPrelude([
-      ["shop_list-orders", SHOP_LIST_ORDERS],
-      ["fx_ping", { type: "object", properties: {} }],
+      ["shop/list-orders", SHOP_LIST_ORDERS],
+      ["fx/ping", { type: "object", properties: {} }],
     ]);
     const lens = createDiagnoseLens(prelude);
-    expect(lens.diagnose("(fx_ping)", []).diagnostics).toEqual([]);
+    expect(lens.diagnose("(fx/ping)", []).diagnostics).toEqual([]);
   });
 
   it(
@@ -259,7 +258,7 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
       "kwarg) is now whitelisted, so it reaches select.ts instead of being silently dropped",
     () => {
       const { lens } = buildLens();
-      const { diagnostics } = lens.diagnose('(shop_list-orders :count "five")', []);
+      const { diagnostics } = lens.diagnose('(shop/list-orders :count "five")', []);
       expect(diagnostics.some((d) => d.code === 2322)).toBe(true);
       expect(HINT_WHITELIST as readonly number[]).toContain(2322);
     },

@@ -111,7 +111,7 @@ export type SelectHints = (
  *  invisible, a wrong hint is poison. The returned string must never contain the TS
  *  carrier vocabulary (Cons<, readonly, Promise<, TS\d{4}, "undefined") — pinned by the
  *  vocabulary-blacklist test. `statementHead` is the failing form's head for the
- *  trailing-block naming (G12), e.g. ":total" or "shop_list-orders". */
+ *  trailing-block naming (G12), e.g. ":total" or "shop/list-orders". */
 export type RenderHint = (hint: SelectedHint, statementHead: string) => string | null;
 
 /** Context-ring contract (Ring 1; doc §2/G3/G13). Lives on the per-rebuild world object

@@ -161,13 +161,10 @@ export function toolArrowType(schema: ToolJsonSchema | undefined, _outputSchema?
 
 /**
  * Assemble the manifold's own type-hint prelude directly from tool JSON Schemas — no
- * `SymbolDef`/zod in the path. `qualifiedName` is the same `${server-slug}_${tool-name}` bind.ts
- * binds — an `_`-joined name like `server_tool` is ALREADY a valid bare TS identifier (see
- * `name-escape.ts`'s `isTsIdentifier`: its char-class already admits `_`, and `_` was never
- * escaped even under the legacy `/`-joined shape), so no special-casing is needed here; the
- * prelude assembler's `_`-namespace escape only still engages for a name that collides with an
- * ECMAScript reserved word (`isTsIdentifier`'s OTHER exclusion) or a stray non-identifier
- * character from an unusual upstream tool name.
+ * `SymbolDef`/zod in the path. `qualifiedName` is the same `${server-slug}/${tool-name}` bind.ts
+ * binds (a non-TS-identifier like `server/tool` lands in the `_` namespace automatically, via the
+ * prelude assembler's own escape — see `name-escape.ts`; the lowering emits the matching
+ * `_.server$slash$tool(...)` access, so no special-casing is needed here).
  */
 export function assembleManifoldPrelude(
   tools: Iterable<readonly [qualifiedName: string, input: ToolJsonSchema | undefined, output?: ToolJsonSchema]>,

@@ -4,7 +4,7 @@
 //
 // Two invariants beyond plain FIFO storage:
 //   • Tool-valued defines degrade at INSERTION (G13.1): a define whose source references any
-//     qualified tool symbol anywhere in the form is stored as `declare const <name>:
+//     `/`-qualified tool symbol anywhere in the form is stored as `declare const <name>:
 //     unknown`, NEVER re-lowered from source — a mis-typed tool binding would poison the
 //     current program's diagnostics; `unknown` yields only off-whitelist codes (no false hint).
 //   • ~8k-char FIFO cap (G13.3): the cap bounds re-lowering latency (the ring re-lowers on
@@ -30,30 +30,25 @@ export interface SerializableContextRing extends ContextRing {
 /** ~8k-char total cap (G13.3). "~8k" — the eviction target; entries() stays at/under it. */
 const MAX_TOTAL_CHARS = 8000;
 
-/** An `_`-qualified tool symbol anywhere in the form (a slug head with non-empty name tail,
- *  e.g. `shop_list-orders` — today's real qualified-name join character, bind.ts). The bare
- *  `_` inside an ordinary identifier and pure-numeric-ish runs never match on their own — the
- *  slug must begin with a letter. Detection is textual, matching the doc's "references any
- *  tool symbol … a qualified head anywhere in the form"; over-degrading is the SAFE direction
- *  (a degraded entry produces no hint, never a false one) — this is deliberately the SAME
- *  over-flagging tradeoff session-history.ts's sibling `TOOL_SYMBOL` documents at length (kept
- *  as an independent constant here, not a shared import — see that file's header). A legacy
- *  `/`-joined attempt is not matched: it can no longer resolve to a bound symbol post-flip, so
- *  it never reaches a SUCCESSFUL define this ring records in the first place.
+/** A `/`-qualified tool symbol anywhere in the form (a slug head with non-empty name tail,
+ *  e.g. `shop/list-orders`). The bare `/` division operator and pure-numeric ratios never
+ *  match — the slug must begin with a letter. Detection is textual, matching the doc's
+ *  "references any tool symbol … a `/`-qualified head anywhere in the form"; over-degrading
+ *  is the SAFE direction (a degraded entry produces no hint, never a false one).
  *
- *  ★ BLIND SPOT found + closed 2026-07-05 (full account: session-history.ts's sibling
- *  `TOOL_SYMBOL` doc): this assumes every qualified name contains `_`, which is false for a
- *  SLUGLESS single-server binding (bind.ts: `qualifiedName = server.slug === "" ? tool.name :
- *  ...`) bound to a tool whose own bare name also has no underscore (e.g. `price`, `click`).
- *  Such a define was NOT degraded — verified directly, its raw tool-invoking source stayed in
- *  the ring — which is the dangerous direction here (a mis-typed tool binding poisoning this
+ *  ★ BLIND SPOT found 2026-07-05 (full account: session-history.ts's sibling `TOOL_SYMBOL`
+ *  doc): this assumes every qualified name contains `/`, which is false for a SLUGLESS
+ *  single-server binding (bind.ts: `qualifiedName = server.slug === "" ? tool.name : ...`)
+ *  bound to a tool whose own bare name has no separator either (e.g. `price`, `click`). Such
+ *  a define was NOT degraded — verified directly, its raw tool-invoking source stayed in the
+ *  ring — which is the dangerous direction here (a mis-typed tool binding poisoning this
  *  program's diagnostics, the exact failure G13.1 exists to prevent), the mirror image of
  *  session-history.ts's re-invocation risk from the same gap. `createContextRing`'s optional
  *  `knownToolNames` closes it — see `knownToolPattern` below. */
 // Flagged by sonarjs/slow-regex: bounded input (one statement's source text); same accepted
 // tradeoff as session-history.ts's identical sibling constant.
 // eslint-disable-next-line sonarjs/slow-regex
-const TOOL_SYMBOL = /[A-Z][\w.-]*_[\w.-]+/i;
+const TOOL_SYMBOL = /[A-Z][\w.-]*\/[\w.-]+/i;
 
 /** Token-boundary chars for {@link knownToolPattern} — byte-identical to session-history.ts's
  *  own copy (duplicated, not imported, matching this pair's existing `TOOL_SYMBOL` convention):
@@ -79,8 +74,8 @@ function knownToolPattern(names: Iterable<string>): RegExp | undefined {
 }
 
 /** `knownToolNames` — the REAL bound-tool roster (manifold-tool.ts's `toolSchemas.keys()`),
- *  when the caller has one — closes `TOOL_SYMBOL`'s underscore-blind-spot (see its doc above)
- *  without weakening the existing shape heuristic (both checks OR together). Optional and
+ *  when the caller has one — closes `TOOL_SYMBOL`'s slugless-binding blind spot (see its doc
+ *  above) without weakening the existing shape heuristic (both checks OR together). Optional and
  *  defaulted to empty so every existing direct caller (this package's own unit tests, which
  *  construct a ring with no env/roster at all) keeps today's exact behavior. Note this is a
  *  constructor-only parameter — {@link ContextRing}'s `push`/`entries` contract (the part

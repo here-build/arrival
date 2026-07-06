@@ -214,7 +214,7 @@ function arityBody(d: MappedDiagnostic): string | null {
   // The parameter list is pre-rendered in scheme-facing vocabulary by the lens adapter
   // (signatureText); when a fixture carries the callee's key set instead, restate from
   // candidateProperties; failing both, an already scheme-facing `expected` signature string
-  // (e.g. "(toy_add :a number :b number)") stands in. Never free-compose it.
+  // (e.g. "(toy/add :a number :b number)") stands in. Never free-compose it.
   if (d.signatureText !== undefined && d.signatureText.length > 0) {
     return `wrong number of arguments — the parameters are ${d.signatureText}.`;
   }

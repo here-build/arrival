@@ -45,7 +45,7 @@ interface TextBlock {
 }
 
 /** The failing form's HEAD for trailing-block naming (G12): the first token after the
- *  opening paren (`:total`, `shop_list-orders`), or the whole trimmed atom when headless. */
+ *  opening paren (`:total`, `shop/list-orders`), or the whole trimmed atom when headless. */
 function headOf(statement: string): string {
   const match = /^\(?\s*([^\s()]+)/.exec(statement.trim());
   return match?.[1] ?? statement.trim();

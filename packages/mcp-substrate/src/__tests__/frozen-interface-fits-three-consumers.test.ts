@@ -18,26 +18,26 @@ describe("frozen interface fits 3 consumer shapes", () => {
     // bypassResolution (keyed by bare-name forms — stays binder-only), toolParts
     // ({slug, tool} — becomes BoundTool's identity fields).
     const toolParts = new Map<string, { slug: string; tool: string }>([
-      ["github_search", { slug: "github", tool: "search" }],
+      ["github/search", { slug: "github", tool: "search" }],
     ]);
-    const signatureByName = new Map<string, string>([["github_search", "(github_search :query string) - search"]]);
+    const signatureByName = new Map<string, string>([["github/search", "(github/search :query string) - search"]]);
 
     const schema: ToolJsonSchema = { type: "object", properties: { query: { type: "string" } }, required: ["query"] };
     const fields = orderedFields(schema);
     expect(fields).toHaveLength(1);
 
     const bound: BoundTool = {
-      qualifiedName: "github_search",
-      slug: toolParts.get("github_search")!.slug,
-      tool: toolParts.get("github_search")!.tool,
+      qualifiedName: "github/search",
+      slug: toolParts.get("github/search")!.slug,
+      tool: toolParts.get("github/search")!.tool,
       schema,
       signature: (): ToolSignature => ({
         params: fields.map((f) => ({ name: f.name, optional: f.optional, typeToken: "string", schema: f.prop })),
-        signatureText: signatureByName.get("github_search")!,
+        signatureText: signatureByName.get("github/search")!,
       }),
     };
     const registry: ReadonlyMap<string, BoundTool> = new Map([[bound.qualifiedName, bound]]);
-    expect(registry.get("github_search")?.signature().signatureText).toContain("github_search");
+    expect(registry.get("github/search")?.signature().signatureText).toContain("github/search");
   });
 
   it("fits the runner's own internals (calibration overrides, session store round-trip)", async () => {

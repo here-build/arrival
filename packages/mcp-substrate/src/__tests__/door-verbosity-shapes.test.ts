@@ -30,7 +30,7 @@ const TOOL_NAMING = { toolName: "scheme-repl-with-all-mcp-tools", argName: "repl
 function toolParts(entries: ReadonlyArray<{ slug: string; tool: string }>): ReadonlyMap<string, BoundTool> {
   const map = new Map<string, BoundTool>();
   for (const entry of entries) {
-    const qualified = entry.slug === "" ? entry.tool : `${entry.slug}_${entry.tool}`;
+    const qualified = entry.slug === "" ? entry.tool : `${entry.slug}/${entry.tool}`;
     map.set(qualified, {
       qualifiedName: qualified,
       slug: entry.slug,
@@ -63,9 +63,9 @@ describe("DoorSession per-SHAPE verbosity gate (distinct shapes under one code d
     expect(explicit.verbosityKey).toBe("envelope/unbound-in-expr#explicit");
     expect(serverMenu.verbosityKey).toBe("envelope/unbound-in-expr#server-menu");
 
-    // Shape A fires first → VERBOSE (carries the "keep the full server_tool-name form" teaching).
+    // Shape A fires first → VERBOSE (carries the "keep the full server/tool-name form" teaching).
     expect(session.enrichInline(explicit, "searchNodes")).toContain(
-      "Tool symbols keep their full server_tool-name form",
+      "Tool symbols keep their full server/tool-name form",
     );
 
     // Shape B is an UNRELATED lesson → VERBOSE on ITS first occurrence. (Before the fix this
@@ -134,12 +134,12 @@ describe("DoorSession per-SHAPE verbosity gate (distinct shapes under one code d
     const plainTie = ambiguousBypassDoor(
       "search_files",
       { path: "/a" },
-      ["backup_search_files", "filesystem_search_files"],
+      ["backup/search_files", "filesystem/search_files"],
       TOOL_NAMING,
     );
     // Shape B — a single candidate whose canonical spelling ALSO names a global symbol: a DISTINCT
     // lesson (why an exact-looking match still wasn't auto-applied), with its own shape key.
-    const collision = ambiguousBypassDoor("map", { fn: "double" }, ["utils_map"], TOOL_NAMING, "map");
+    const collision = ambiguousBypassDoor("map", { fn: "double" }, ["utils/map"], TOOL_NAMING, "map");
 
     expect(plainTie.code).toBe("envelope/bare-tool-call");
     expect(collision.code).toBe("envelope/bare-tool-call");
@@ -161,7 +161,7 @@ describe("DoorSession per-SHAPE verbosity gate (distinct shapes under one code d
 
   it("bareToolCallDoor (single-shape code) is unaffected — a repeat still collapses to terse under the code fallback", () => {
     const session = new DoorSession(() => {});
-    const door = bareToolCallDoor("t_a", { x: 1 }, ["t_a"], TOOL_NAMING);
+    const door = bareToolCallDoor("t_a", { x: 1 }, ["t/a"], TOOL_NAMING);
     expect(door.verbosityKey).toBeUndefined(); // no shape key → gated by door.code, exactly as before
     const first = session.render(door, "t_a");
     const second = session.render(door, "t_a");

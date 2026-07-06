@@ -59,42 +59,42 @@ function toolParts(entries: Record<string, { slug: string; tool: string }>): Rea
 }
 
 describe("implicatedTool — pick the one tool, or skip when ambiguous", () => {
-  const bound = ["toy_add", "toy_greet", "fs_read_file"];
+  const bound = ["toy/add", "toy/greet", "fs/read_file"];
   const boundParts = toolParts({
-    toy_add: { slug: "toy", tool: "add" },
-    toy_greet: { slug: "toy", tool: "greet" },
-    fs_read_file: { slug: "fs", tool: "read_file" },
+    "toy/add": { slug: "toy", tool: "add" },
+    "toy/greet": { slug: "toy", tool: "greet" },
+    "fs/read_file": { slug: "fs", tool: "read_file" },
   });
 
   it("one tool in the statement → that tool (message need not name it)", () => {
-    expect(implicatedTool("(toy_add :a 1 :b)", "kwargs call has a dangling keyword …", bound, boundParts)).toBe(
-      "toy_add",
+    expect(implicatedTool("(toy/add :a 1 :b)", "kwargs call has a dangling keyword …", bound, boundParts)).toBe(
+      "toy/add",
     );
     expect(
       implicatedTool(
-        '(toy_add :a (s/number "x") :b 2)',
+        '(toy/add :a (s/number "x") :b 2)',
         's/number: expected a number, got string: "x"',
         bound,
         boundParts,
       ),
-    ).toBe("toy_add");
+    ).toBe("toy/add");
   });
 
   it("several tools → only the one the message uniquely names (bare or qualified)", () => {
     expect(
       implicatedTool(
-        "(toy_add :a (toy_greet :name 5) :b 2)",
+        "(toy/add :a (toy/greet :name 5) :b 2)",
         "invalid arguments for greet: name: Expected string",
         bound,
         boundParts,
       ),
-    ).toBe("toy_greet");
+    ).toBe("toy/greet");
   });
 
   it("several tools, message names none → undefined (skip)", () => {
     expect(
       implicatedTool(
-        '(toy_add :a (toy_greet :name "hi") :b)',
+        '(toy/add :a (toy/greet :name "hi") :b)',
         "kwargs call has a dangling keyword …",
         bound,
         boundParts,
@@ -108,54 +108,54 @@ describe("implicatedTool — pick the one tool, or skip when ambiguous", () => {
     ).toBeUndefined();
   });
 
-  it("qualified names tokenize whole — a bare `add` substring never mis-binds toy_add", () => {
-    // `read_file` present as its qualified token (the `\w` charset already covers `_`, so
-    // `fs_read_file` tokenizes whole); `toy_add` absent though the word `add` is in prose.
+  it("qualified names tokenize whole — a bare `add` substring never mis-binds toy/add", () => {
+    // `read_file` present as its qualified token (SYMBOL_TOKEN's charset covers `/`, so
+    // `fs/read_file` tokenizes whole); `toy/add` absent though the word `add` is in prose.
     expect(
       implicatedTool(
-        '(fs_read_file :path "/x")',
+        '(fs/read_file :path "/x")',
         "invalid arguments for read_file: add is not a key",
         bound,
         boundParts,
       ),
-    ).toBe("fs_read_file");
+    ).toBe("fs/read_file");
   });
 });
 
 describe("signatureEchoFor + DoorSession.echoSignature", () => {
-  const sigs = new Map([["toy_add", "(toy_add :a number :b number) - Add"]]);
-  const sigParts = toolParts({ toy_add: { slug: "toy", tool: "add" } });
+  const sigs = new Map([["toy/add", "(toy/add :a number :b number) - Add"]]);
+  const sigParts = toolParts({ "toy/add": { slug: "toy", tool: "add" } });
 
   it("returns the implicated tool + its signature on a misuse shape, undefined otherwise", () => {
-    expect(signatureEchoFor("(toy_add :a 1 :b)", "kwargs call has a dangling keyword …", sigs, sigParts)).toEqual({
-      tool: "toy_add",
-      signatureText: "(toy_add :a number :b number) - Add",
+    expect(signatureEchoFor("(toy/add :a 1 :b)", "kwargs call has a dangling keyword …", sigs, sigParts)).toEqual({
+      tool: "toy/add",
+      signatureText: "(toy/add :a number :b number) - Add",
     });
     // execution error → undefined; unbound → undefined; tool-less → undefined
-    expect(signatureEchoFor("(toy_add :a 1 :b 2)", "ValueError: boom", sigs, sigParts)).toBeUndefined();
+    expect(signatureEchoFor("(toy/add :a 1 :b 2)", "ValueError: boom", sigs, sigParts)).toBeUndefined();
     expect(signatureEchoFor("(other_thing)", "kwargs call has a dangling keyword …", sigs, sigParts)).toBeUndefined();
   });
 
   it("echoSignature returns the below-line suffix and logs one telemetry line", () => {
     const lines: string[] = [];
     const session = new DoorSession((l) => lines.push(l));
-    const suffix = session.echoSignature("toy_add", "(toy_add :a number :b number) - Add");
-    expect(suffix).toBe("\nSignature: (toy_add :a number :b number) - Add");
-    expect(JSON.parse(lines[0]!)).toEqual({ door: "envelope/signature-echo", seq: 1, tool: "toy_add" });
+    const suffix = session.echoSignature("toy/add", "(toy/add :a number :b number) - Add");
+    expect(suffix).toBe("\nSignature: (toy/add :a number :b number) - Add");
+    expect(JSON.parse(lines[0]!)).toEqual({ door: "envelope/signature-echo", seq: 1, tool: "toy/add" });
   });
 
   it("echoSignature appends an Example line when a synthesized example is supplied, without disturbing the telemetry shape", () => {
     const lines: string[] = [];
     const session = new DoorSession((l) => lines.push(l));
-    const suffix = session.echoSignature("toy_add", "(toy_add :a number :b number) - Add", "(toy_add :a 0 :b 0)");
-    expect(suffix).toBe("\nSignature: (toy_add :a number :b number) - Add\nExample: (toy_add :a 0 :b 0)");
-    expect(JSON.parse(lines[0]!)).toEqual({ door: "envelope/signature-echo", seq: 1, tool: "toy_add" });
+    const suffix = session.echoSignature("toy/add", "(toy/add :a number :b number) - Add", "(toy/add :a 0 :b 0)");
+    expect(suffix).toBe("\nSignature: (toy/add :a number :b number) - Add\nExample: (toy/add :a 0 :b 0)");
+    expect(JSON.parse(lines[0]!)).toEqual({ door: "envelope/signature-echo", seq: 1, tool: "toy/add" });
   });
 });
 
 describe("A — a downstream -32602 'Input validation error' gets a synthesized Example: line, not just Signature:", () => {
   it("end-to-end: signatureEchoFor implicates the tool, synthesizeExampleCall renders a real example off its schema, echoSignature appends BOTH lines", () => {
-    const qualified = "clinicaltrials_list_studies";
+    const qualified = "clinicaltrials/list_studies";
     const schema = {
       type: "object" as const,
       properties: {

@@ -23,7 +23,7 @@
 // this feature has no license to bend, and the two consumers genuinely want different data
 // projected from the same event.
 //
-// TOOL-VALUED DEFINES (`(define x (some_tool ...))`) — replaying the statement verbatim
+// TOOL-VALUED DEFINES (`(define x (some/tool ...))`) — replaying the statement verbatim
 // would RE-INVOKE the tool. Chosen handling: SKIP-AND-NOTE, matching V's compactness goal:
 //   • no snapshotted value bloats the history (a tool result is frequently unserializable —
 //     an opaque host resource, a closure, a handle tied to this process);
@@ -42,44 +42,36 @@ import { exec, type SchemeEnv } from "@here.build/arrival";
  *  narrow cast as manifold-tool.ts / bind.test.ts. */
 type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
 
-/** A qualified tool symbol anywhere in the form — the same textual detection rule as
+/** A `/`-qualified tool symbol anywhere in the form — the same textual detection rule as
  *  type-hints/context-ring.ts's `TOOL_SYMBOL` (kept as a sibling constant rather than a
  *  shared import: this module intentionally does not reach into that frozen contract's
  *  implementation file).
  *
- *  Detects an `_`-joined shape — today's real qualified-name join character (bind.ts). A
- *  legacy `/`-joined attempt is NOT matched here (deliberately): a `/`-joined call can no
- *  longer resolve to a bound symbol at all post-flip, so it never reaches `push()` in the
- *  first place (only a define whose OWN evaluation SUCCEEDED is ever pushed — see this
- *  module's `push()` contract) — there is no genuine tool call this regex could still be
- *  missing by dropping `/`.
+ *  Detects the manifold's own `/`-joined qualified-name shape (bind.ts). A `/` is never legal
+ *  inside an ordinary scheme identifier (this dialect's OWN library/SRFI symbols are
+ *  consistently kebab-case — see catalog.ts's preamble), so this is deliberately NOT trying to
+ *  precisely recognize "a real bound tool call" (that would need the live toolset, which this
+ *  module never has); it recognizes "looks like it MIGHT be one". Over-flagging is the safe
+ *  direction — worst case a plain define that merely CONTAINS a `foo/bar`-shaped literal is
+ *  skipped from replay, never the reverse.
  *
- *  Unlike `/` (never legal inside an ordinary identifier), `_` is a common word separator
- *  this dialect's OWN library/SRFI symbols never use (they are consistently kebab-case — see
- *  catalog.ts's preamble) but a bound tool's bare name often does (`search_museum_objects`) —
- *  so this is deliberately NOT trying to precisely recognize "a real bound tool call" (that
- *  would need the live toolset, which this module never has); it recognizes "looks like it
- *  MIGHT be one". Over-flagging is the safe direction — worst case a plain define that merely
- *  CONTAINS an underscored literal (an ordinary `my_variable`) is skipped from replay, never
- *  the reverse.
- *
- *  ★ BLIND SPOT found + closed 2026-07-05: this assumes EVERY qualified tool name contains
- *  `_` — false for a SLUGLESS single-server binding (bind.ts: `qualifiedName = server.slug
- *  === "" ? tool.name : ...`, "the natural single-server shape") whose tool's own bare name
- *  has no underscore either (a real tool literally named `price`, `click`, `search`, ...).
- *  `(define p (price ...))` then matches NEITHER `_` nor anything else here, so `toolValued`
- *  came out `false` — the OPPOSITE of "over-flagging is the safe direction": replay actually
- *  RE-INVOKES the tool, verified directly (a fresh env's replay bumped a probe tool's
- *  invocation counter from 1 to 2), the exact side-effect repetition this module exists to
- *  prevent. `createSessionHistory`'s optional `knownToolNames` closes this — see
- *  `knownToolPattern` below, which needs no `_` assumption at all because it matches the
- *  REAL roster, not a shape guess. Omitted (or empty — e.g. a hand-rolled test env with no
- *  roster to offer) ⇒ this regex alone, unchanged from before. */
+ *  ★ BLIND SPOT (found + closed 2026-07-05, still applies): this assumes EVERY qualified tool
+ *  name contains `/` — false for a SLUGLESS single-server binding (bind.ts: `qualifiedName =
+ *  server.slug === "" ? tool.name : ...`, "the natural single-server shape"), whose bare tool
+ *  name carries no separator at all (a real tool literally named `price`, `click`, `search`,
+ *  ...). `(define p (price ...))` then matches nothing here, so `toolValued` came out `false`
+ *  — the OPPOSITE of "over-flagging is the safe direction": replay actually RE-INVOKES the
+ *  tool, verified directly (a fresh env's replay bumped a probe tool's invocation counter from
+ *  1 to 2), the exact side-effect repetition this module exists to prevent.
+ *  `createSessionHistory`'s optional `knownToolNames` closes this — see `knownToolPattern`
+ *  below, which needs no shape assumption at all because it matches the REAL roster, not a
+ *  shape guess. Omitted (or empty — e.g. a hand-rolled test env with no roster to offer) ⇒
+ *  this regex alone, unchanged from before. */
 // Flagged by sonarjs/slow-regex: bounded input (one statement's source text, never
 // attacker-scaled beyond what the manifold call itself already caps); over-flagging (never
 // re-invoking a tool) is the accepted tradeoff this file's header documents at length.
 // eslint-disable-next-line sonarjs/slow-regex
-const TOOL_SYMBOL = /[A-Z][\w.-]*_[\w.-]+/i;
+const TOOL_SYMBOL = /[A-Z][\w.-]*\/[\w.-]+/i;
 
 /** Token-boundary chars for {@link knownToolPattern} — mirrors competence.ts's own
  *  `BEFORE`/`AFTER` (duplicated, not imported: this file's existing convention above is
@@ -132,9 +124,9 @@ export interface SessionHistory {
 }
 
 /** `knownToolNames` — the REAL bound-tool roster (manifold-tool.ts's `toolSchemas.keys()`),
- *  when the caller has one — closes `TOOL_SYMBOL`'s underscore-blind-spot (see its doc above)
- *  without weakening the existing shape heuristic (both checks OR together; either one seeing
- *  a tool reference is enough). Optional and defaulted to empty so every existing direct
+ *  when the caller has one — closes `TOOL_SYMBOL`'s slugless-binding blind spot (see its doc
+ *  above) without weakening the existing shape heuristic (both checks OR together; either one
+ *  seeing a tool reference is enough). Optional and defaulted to empty so every existing direct
  *  caller (this package's own unit tests) keeps today's exact behavior. */
 export function createSessionHistory(knownToolNames: Iterable<string> = []): SessionHistory {
   // Insertion-ordered store; rebind moves the name to newest (delete-then-set) — same

@@ -191,13 +191,12 @@ function editDistance(a: string, b: string): number {
 
 /** Canonical form of an identifier: lowercase, with camelCase word-boundaries AND the
  *  three separators arrival-manifold's naming space actually uses — `-` (kebab-case),
- *  `_` (snake_case — also today's qualified-name join character), `/` (the legacy
- *  namespace separator a model might still reach for out of habit) — all collapsed to
- *  the SAME token, so `searchNodes`, `search-nodes`, and `search_nodes` compare equal. A
- *  qualified `server_tool` name normalizes as ONE token too (`memory_search_nodes` →
- *  `memorysearchnodes`) — callers that want the bare tool part alone (ignoring a real
- *  server prefix) must read it off bind.ts's `tools` map (never re-split the
- *  qualified string — see bind.ts's module header) before calling this.
+ *  `_` (snake_case), `/` (namespace — also today's qualified-name join character) —
+ *  all collapsed to the SAME token, so `searchNodes`, `search-nodes`, and `search_nodes`
+ *  compare equal. A qualified `server/tool` name normalizes as ONE token too
+ *  (`memory/search_nodes` → `memorysearchnodes`) — callers that want the bare tool part
+ *  alone (ignoring a real server prefix) must strip it first (see {@link bareNameOf})
+ *  before calling this.
  *
  *  Exported and deliberately generic — not `unboundInExprDoor`-private — so a future
  *  naming-convention research thread (or any other symbol-identity comparison across
@@ -221,13 +220,13 @@ export function normalizeSymbolName(s: string): string {
 }
 
 /** Nearest bound names for an unknown tool: scored against each qualified name AND its
- *  bare tool-name part (so `search_files` finds `filesystem_search_files`, and a
- *  hyphen/case-mangled `filesystem-search-files` lands one edit away), prefix matches
- *  score ahead of pure distance, top 3. The bare part is read off `tools` — bind.ts's
- *  structural (slug, tool) record — never re-derived by splitting `qualified` (that split
- *  is ambiguous once `_` is both the join character and a common word separator; see
- *  bind.ts's module header). A `qualified` absent from `tools` (defensive — every real
- *  bound name has an entry) falls back to comparing the full string only. */
+ *  bare tool-name part (so `search_files` finds `filesystem/search_files`, and an
+ *  underscore-mangled `filesystem_search_files` lands one edit away), prefix matches
+ *  score ahead of pure distance, top 3. The bare part is read off `tools` (bind.ts's
+ *  structural (slug, tool) record) — reading the map is equivalent to splitting on the
+ *  last `/` (unambiguous either way) but avoids the extra indirection. A `qualified`
+ *  absent from `tools` (defensive — every real bound name has an entry) falls back to
+ *  comparing the full string only. */
 export function nearestBoundNames(
   attempted: string,
   qualifiedNames: readonly string[],
@@ -341,7 +340,7 @@ export function unknownToolDoor(
 ): Door {
   const nearest = nearestBoundNames(attempted, qualifiedNames, tools);
   const menu = nearest.length > 0 ? `Did you mean: ${nearest.join(", ")}?\n  ` : "";
-  const retryHead = nearest[0] ?? "server_tool-name";
+  const retryHead = nearest[0] ?? "server/tool-name";
   return {
     code: "envelope/unknown-tool",
     tier: "suggest-menu",
@@ -378,28 +377,25 @@ export function unknownToolDoor(
 // already know the exact token; it should never be TOLD a fact when we are only guessing.
 //
 // Only the ENUMERABLE tool bindings the caller holds participate here — manifold-tool.ts threads
-// `signatureByName`'s keys (the exact qualified `server_tool` inventory bound into the env, one
+// `signatureByName`'s keys (the exact qualified `server/tool` inventory bound into the env, one
 // entry per tool, never a library builtin or an `s/*` validator — bind.ts populates it ONLY
 // inside the per-tool loop). There is no library-name fallback set here by design — a typo of a
 // well-known lisp-dialect symbol is arrival's curated concern, not "any bound non-tool name" (a
 // far broader, uncurated set the manifold has no business guessing over).
 //
 // Steps run IN ORDER, first hit wins:
-//   1. NORMALIZED BARE-NAME MATCH — `attempted` (or its bare part, after stripping a LEGACY `/`
-//      prefix — see {@link bareNameOf}) canonicalizes (normalizeSymbolName) to the SAME form as
-//      some bound tool's bare name (read off `tools`, bind.ts's structural (slug, tool)
-//      record — never re-split from the qualified string): `searchNodes` / `search-nodes` both
-//      → `search_nodes`. An EXACT canonical-form equality, not a fuzzy score — a naming-
-//      CONVENTION difference, not a typo. Exactly ONE match is certain → the EXPLICIT fact door;
-//      several (the same bare name bound on multiple servers) is a genuine tie, not a certainty
-//      → the did-you-mean list stands.
+//   1. NORMALIZED BARE-NAME MATCH — `attempted` (or its bare part, after stripping a real `/`
+//      prefix) canonicalizes (normalizeSymbolName) to the SAME form as some bound tool's bare
+//      name: `searchNodes` / `search-nodes` both → `search_nodes`. An EXACT canonical-form
+//      equality, not a fuzzy score — a naming-CONVENTION difference, not a typo. Exactly ONE
+//      match is certain → the EXPLICIT fact door; several (the same bare name bound on multiple
+//      servers) is a genuine tie, not a certainty → the did-you-mean list stands.
 //   2. RIGHT SERVER, WRONG TOOL — `attempted` carries a recognizable `server<sep>tool` shape
-//      whose head names a REAL bound server, using the correct `_` (just a garbled tool part) or
-//      a WRONG separator (`.`, `:`, `/` — the legacy shape, still a plausible habit). If the tool
-//      part THEN canonical-matches exactly one real tool on that server, it's really a step-1 hit
-//      reached via the split (explicit fact); several matching ties the same way step 1 does;
-//      otherwise every tool bound on that server is listed, so the model sees the whole menu
-//      instead of guessing again blind.
+//      whose head names a REAL bound server, using the correct `/` (just a garbled tool part) or
+//      a WRONG separator (`.`, `:`, `_`). If the tool part THEN canonical-matches exactly one
+//      real tool on that server, it's really a step-1 hit reached via the split (explicit fact);
+//      several matching ties the same way step 1 does; otherwise every tool bound on that server
+//      is listed, so the model sees the whole menu instead of guessing again blind.
 //   3. FUZZY FALLBACK (tool names only) — nothing normalizes or splits cleanly: the existing
 //      edit-distance/prefix `nearestBoundNames`, widened to ~10 candidates, still gated by
 //      `isCloseName` so genuinely-far junk yields nothing rather than a wrong suggestion. Within
@@ -407,35 +403,20 @@ export function unknownToolDoor(
 //      the ONLY such candidate is still a certainty — promoted to the explicit fact door; a
 //      genuinely ambiguous or loose-only (prefix/distance-2) set renders as the guess list.
 
-/** Strip a LEGACY `/`-qualified prefix from `s`, if present (`filesystem/search_files` →
- *  `search_files`) — a "/" is a namespace separator ONLY with a non-empty part on BOTH sides; a
- *  name that literally ends in "/" or IS "/" is not namespaced, so the whole name is its own bare
- *  name (otherwise the empty tail would prefix-match everything).
- *
- *  Unlike today's real join character (`_` — see bind.ts's module header), a literal `/` is
- *  NEVER part of ANY naming convention this dialect's identifiers use (camelCase / kebab-case /
- *  snake_case never contain one), so stripping whatever precedes the LAST `/` remains an
- *  unambiguous signal REGARDLESS of whether that prefix text names a real bound server — a
- *  wrong-but-well-formed guess still isolates the intended tool-name tail. This is deliberately
- *  narrower than {@link detectServerToolSplit} (which validates a split point against the KNOWN
- *  slug roster before trusting it): this helper never validates, it only recognizes the one
- *  character that stays unambiguous by construction.
- *
- *  This is an ATTEMPTED-string (arbitrary, possibly garbled) heuristic ONLY. A REAL qualified
- *  name's (slug, tool) parts are ALWAYS known exactly via bind.ts's `tools` map — never
- *  re-derive them by calling this on a name you already have bound. */
+/** Bare name of a qualified `server/tool` symbol (`filesystem/search_files` → `search_files`).
+ *  A "/" is a namespace separator ONLY with a non-empty part on BOTH sides — a name that
+ *  literally ends in "/" or IS "/" is not namespaced, so the whole name is its own bare name
+ *  (otherwise the empty tail would prefix-match everything). Exported: bind.ts's bypass-
+ *  resolution map (the env-side auto-translation verdict) reuses it to derive the SAME
+ *  bare-tail form this door's tiers already match against. */
 export const bareNameOf = (qualified: string): string => {
   const i = qualified.lastIndexOf("/");
   return i <= 0 || i === qualified.length - 1 ? qualified : qualified.slice(i + 1);
 };
 
-/** Group qualified tool names by SERVER SLUG, read off `tools` (bind.ts's structural
- *  (slug, tool) record for each bound name — never re-split from the qualified string; splitting
- *  is ambiguous once `_` both joins slug+tool AND commonly appears inside either half, see
- *  bind.ts's module header). A name with an empty slug (a single-server, slug-less binding) has
- *  no server concept and never contributes here or to {@link detectServerToolSplit} — it can
- *  only ever be a tier-1/tier-3 hit. A name absent from `tools` (defensive) is skipped the
- *  same way. */
+/** Group qualified tool names by SERVER SLUG (the segment before the first `/`). A name with no
+ *  `/` (a single-server empty-slug binding) has no server concept and never contributes here or
+ *  to {@link detectServerToolSplit} — it can only ever be a tier-1/tier-3 hit. */
 function groupToolsByServer(
   qualifiedToolNames: readonly string[],
   tools: ReadonlyMap<string, BoundTool>,
@@ -451,30 +432,17 @@ function groupToolsByServer(
   return groups;
 }
 
-/** Wrong-shape separators a model might reach for in place of the manifold's `_` — kebab-case's
+/** Wrong-shape separators a model might reach for in place of the manifold's `/` — kebab-case's
  *  `-` is deliberately EXCLUDED (a legitimate word separator inside a bare tool name, not a
- *  namespace mistake, and folded into tier 1 via {@link normalizeSymbolName} instead). `/` is
- *  included here now (rather than tried first, unconditionally) — it's the LEGACY separator, a
- *  plausible old-convention habit, but no longer the presumed-correct shape. */
-const WRONG_SEPARATORS = [".", ":", "/"] as const;
+ *  namespace mistake, and folded into tier 1 via {@link normalizeSymbolName} instead). */
+const WRONG_SEPARATORS = [".", ":", "_"] as const;
 
 /** Find a `server<sep>tool` split of `attempted` whose HEAD names a real bound server — trying
- *  `_` first (today's correct shape, across EVERY occurrence, leftmost first), then each wrong
- *  separator in turn, leftmost occurrence first. Returns the real slug (its bound casing) and
- *  the raw tool-part guess, or `undefined` when no split's head is a real server — the common
- *  case: no server prefix was attempted at all, or `attempted` is unrelated to any bound server.
- *
- *  Deliberately does NOT early-return on mere PRESENCE of `_` the way the old `/`-based version
- *  did (`if (attempted.includes("/")) return trySeparator("/")` — trusting the model's OWN
- *  stated separator completely once a `/` appeared ANYWHERE, never second-guessing with another
- *  separator). That shortcut was safe for `/` because it was rare/exclusive: its presence WAS a
- *  reliable signal of intent. It is UNSAFE for `_`: a slug or bare tool name may itself contain
- *  one (`search_nodes`), so `_`'s mere presence in a string using a DIFFERENT separator as its
- *  actual namespace divider (`memory.search_nodes` — `.` is the real split point, `_` is just
- *  internal to the tool name) does not mean `_` is THAT string's separator. So `_` is tried
- *  first across every occurrence (giving it priority as the presumed hypothesis), but a FAILED
- *  `_` attempt falls through to the wrong-separator list rather than giving up — the correct
- *  generalization once the presumed-correct character is no longer exclusive. */
+ *  `/` alone when `attempted` contains one (the correct shape, just possibly a garbled tool
+ *  part), else each wrong separator in turn, leftmost occurrence first. Returns the real slug
+ *  (its bound casing) and the raw tool-part guess, or `undefined` when no split's head is a real
+ *  server — the common case: no server prefix was attempted at all, or `attempted` is unrelated
+ *  to any bound server. */
 function detectServerToolSplit(
   attempted: string,
   serverGroups: ReadonlyMap<string, readonly string[]>,
@@ -490,8 +458,7 @@ function detectServerToolSplit(
       from = i + 1;
     }
   };
-  const viaCorrectSeparator = trySeparator("_");
-  if (viaCorrectSeparator) return viaCorrectSeparator;
+  if (attempted.includes("/")) return trySeparator("/");
   for (const sep of WRONG_SEPARATORS) {
     const found = trySeparator(sep);
     if (found) return found;
@@ -499,15 +466,9 @@ function detectServerToolSplit(
   return undefined;
 }
 
-/** TIER 1: every bound tool whose bare name (read off `tools`, never re-split from the
- *  qualified string) canonicalizes equal to `attempted`'s bare part. A LEGACY `/` prefix on
- *  `attempted`, if any, is stripped first via {@link bareNameOf} — still an unambiguous signal in
- *  arbitrary text (see its doc) — everything else about the string, including a garbled prefix,
- *  folds into the canonical form. `attempted` is deliberately NOT stripped on `_`: unlike `/`, an
- *  underscore in `attempted` might be the real separator, might be internal to the intended bare
- *  name, or might be both at once (`toy_whois_json`) — {@link detectServerToolSplit} (tier 2)
- *  resolves that ambiguity by validating against the KNOWN slug roster; this tier only handles
- *  the unconditionally-safe case. */
+/** TIER 1: every bound tool whose bare name canonicalizes equal to `attempted`'s bare part (a
+ *  real `/` prefix on `attempted`, if any, is stripped first via {@link bareNameOf} — everything
+ *  else about the string, including a garbled prefix, folds into the canonical form). */
 function tier1Matches(
   attempted: string,
   qualifiedToolNames: readonly string[],
@@ -636,7 +597,7 @@ function explicitToolDoor(
   toolNaming: ToolNaming,
 ): Door {
   const teach = isNamespaced(qualifiedName, tools)
-    ? ` Tool symbols keep their full server_tool-name form inside ${toolNaming.argName}.`
+    ? ` Tool symbols keep their full server/tool-name form inside ${toolNaming.argName}.`
     : "";
   const example = renderExampleCall(qualifiedName, toolSchemas);
   return {
@@ -667,7 +628,7 @@ function tier1Door(
   toolNaming: ToolNaming,
 ): Door {
   const namespaced = matches.some((m) => isNamespaced(m, tools));
-  const teach = namespaced ? ` Tool symbols keep their full server_tool-name form inside ${toolNaming.argName}.` : "";
+  const teach = namespaced ? ` Tool symbols keep their full server/tool-name form inside ${toolNaming.argName}.` : "";
   const examples = renderExampleCalls(matches, toolSchemas);
   return {
     code: "envelope/unbound-in-expr",
@@ -1046,11 +1007,9 @@ export function isToolMisuseError(message: string): boolean {
   return TOOL_MISUSE_SHAPES.some((re) => re.test(message));
 }
 
-/** Whole scheme-symbol tokens in a source string. The charset recovers a qualified
- *  `slug_tool-name` symbol as ONE token (`\w` already covers `_`; `/` stays admitted too, for
- *  a model still writing the legacy namespaced shape), so exact set-membership against the
- *  bound names is a longest-match by construction — `toy_add` tokenizes whole, never as a bare
- *  `add`. */
+/** Whole scheme-symbol tokens in a source string. The charset recovers a `slug/tool-name`
+ *  qualified symbol as ONE token, so exact set-membership against the bound names is a
+ *  longest-match by construction — `toy/add` tokenizes whole, never as a bare `add`. */
 const SYMBOL_TOKEN = /\w[\w./-]*/g;
 const tokensOf = (source: string): Set<string> => new Set(source.match(SYMBOL_TOKEN));
 
@@ -1108,7 +1067,7 @@ export function emptyExprDoor(toolNaming: ToolNaming): Door {
       "as a silent success, which is worse than this error.",
     script:
       `Retry — call the ${toolNaming.toolName} tool with at least one form in ${toolNaming.argName}, e.g. ` +
-      "(server_tool-name :key value); the tool description lists every bound symbol.",
+      "(server/tool-name :key value); the tool description lists every bound symbol.",
     terse: `${toolNaming.argName} is empty — provide at least one Scheme expression.`,
   };
 }
@@ -1122,7 +1081,7 @@ export function invalidArgsDoor(program: unknown, toolNaming: ToolNaming): Door 
     tier: "explain-route",
     fact: `${toolNaming.argName} must be a string of Scheme source, or an array of such strings — got ${got}.`,
     reason: `The ${toolNaming.toolName} tool takes {${toolNaming.argName}: string | string[]}; every operation is written inside it.`,
-    script: `Retry — call the ${toolNaming.toolName} tool with ${toolNaming.argName} = "(server_tool-name :key value)".`,
+    script: `Retry — call the ${toolNaming.toolName} tool with ${toolNaming.argName} = "(server/tool-name :key value)".`,
     terse: `${toolNaming.argName} must be a string or array of strings — got ${got}.`,
   };
 }
