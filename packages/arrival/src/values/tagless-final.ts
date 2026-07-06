@@ -16,7 +16,7 @@
 import type { AValue } from "./primitives/AValue.js";
 
 /** The ONE spelling of the tagless-final method-name prefix. Every consumer imports THIS. */
-export const TAGLESS_PREFIX = "arrival/tagless-final/";
+const TAGLESS_PREFIX = "arrival/tagless-final/";
 export type TaglessPrefix = typeof TAGLESS_PREFIX;
 
 /** Strip the tagless prefix off a key: `"arrival/tagless-final/map"` → `"map"`, else `never`
@@ -25,13 +25,8 @@ type StripTaglessPrefix<K> = K extends `${TaglessPrefix}${infer Op}` ? Op : neve
 
 /** The declared op names — the type-wired range of `symbol.tagless` keys, DERIVED from AValue's
  *  `arrival/tagless-final/<op>` members (the single source of truth). Add an op by declaring its
- *  optional method on AValue (+ `TAGLESS_OP_NAMES` below) and it appears here automatically. */
+ *  optional method on AValue and it appears here automatically. */
 export type TaglessOp = StripTaglessPrefix<keyof AValue>;
-
-/** Runtime list of the declared ops (keyof is type-only). Pinned in lock-step with AValue's
- *  tagless members by the bidirectional proof in `__tests__/tagless-final.test-d.ts` — adding an
- *  op on one side without the other (or a typo'd name here) reds the type-test. */
-export const TAGLESS_OP_NAMES = ["equals", "lte", "length", "map", "filter", "reduce", "sort", "apply"] as const;
 
 /** Build a prefixed tagless method-name from an op name, type-safe:
  *  `tf("map")` → `"arrival/tagless-final/map"`. The one place callers form the key. */

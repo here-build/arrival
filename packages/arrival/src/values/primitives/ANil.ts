@@ -6,11 +6,13 @@
  * no TDZ — and ESM live-bindings resolve APair at call-time regardless of which
  * file loads first. (The former `setPairConstructor` late-bound DI is dissolved.)
  */
+import { type SchemeValue } from "../types.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
+import { tf } from "../tagless-final.js";
 
 export class ANil extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -69,7 +71,7 @@ export class ANil extends AValue {
   // Semigroup so the algebra is total over all lists (wave 2,
   // plan-2026-06-10-algebras-in-entities.md). Returns `other` as-is — the
   // identity does not allocate.
-  ["arrival/tagless-final/concat"]<T>(other: T): T {
+  ["arrival/tagless-final/concat"]<T extends SchemeValue>(other: T): T {
     return other;
   }
 
@@ -79,12 +81,12 @@ export class ANil extends AValue {
   // strict is read from the active run, never nil.ctx): strict ⇒ the R7RS "() is not a pair"
   // throw; tolerant ⇒ nil, so a multi-leaf proof grounds its OTHER leaves rather than crashing
   // on one absent read.
-  ["arrival/tagless-final/car"](runCtx: RunContext): unknown {
+  ["arrival/tagless-final/car"](runCtx: RunContext): ANil {
     if (runCtx.strict) throw new TypeError("car: () is not a pair");
     return nil;
   }
 
-  ["arrival/tagless-final/cdr"](runCtx: RunContext): unknown {
+  ["arrival/tagless-final/cdr"](runCtx: RunContext): ANil {
     if (runCtx.strict) throw new TypeError("cdr: () is not a pair");
     return nil;
   }
@@ -124,5 +126,4 @@ export class ANil extends AValue {
   }
 }
 
-export const nil = new ANil(CONSTANT_CTX, );
-
+export const nil = new ANil(CONSTANT_CTX);

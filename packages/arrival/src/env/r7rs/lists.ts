@@ -155,7 +155,7 @@ const lengthImpl = (obj: unknown): SchemeValue => {
   // onto each term; the term also levies the circular-list check). TOTALIC: a receiver with no
   // length algebra is a type error, never a silent 0. A non-term carrier with a bare `.length`
   // (a membrane-wrapped JS array) falls back to that property.
-  const m = (obj as Record<string, unknown>)["arrival/tagless-final/length"];
+  const m = (obj as Record<string, unknown>)[tf("length")];
   if (typeof m === "function") {
     return (m as () => SchemeValue).call(obj);
   }
@@ -381,8 +381,8 @@ export default new EnvCapability("scheme/lists", {
     // provenance every value carries. These doors (errors-as-doors) teach the why and
     // route to the fresh-allocation alternative — dissolved here from the deleted
     // core.ts purity-door manifesto, co-located with the pairs-and-lists pack that owns
-    // the type. (`list-set!` above stays a working spine-mutator — pre-existing, not in
-    // the doored set; flagged for review.)
+    // the type. (`list-set!` joined the doored set 2026-07-07 — the review this comment
+    // used to flag resolved in favor of the invariant.)
     "set-car!": symbol.notImplemented`set-car!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "set-cdr!": symbol.notImplemented`set-cdr!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "append!": symbol.notImplemented`append!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (append, which builds a fresh list)`,
@@ -485,22 +485,11 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    "list-set!": symbol.native`list-set!: store obj at index k (mutates the spine)`(
-      // obj (the stored value) is any scheme value — z.value, not z.value (matches cons's
-      // car/cdr). Output stays z.undefinedResult (already precise; unaffected by this fix).
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber, z.value], output: [z.undefinedResult] },
-      (list: unknown, k: unknown, obj: unknown): AVoid => {
-        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
-        let current: unknown = list;
-        for (let i = 0; i < count; i++) {
-          TypeError.invariant(current instanceof APair, `list-set!: list too short`);
-          current = current.cdr;
-        }
-        TypeError.invariant(current instanceof APair, `list-set!: index out of bounds`);
-        current.car = obj;
-        return theVoid;
-      },
-    ),
+    // list-set! DOORED (2026-07-07, V's call): it was the last surviving in-place spine
+    // mutator — set!/set-car!/set-cdr!/vector-set!/string-fill! are all doored by the same
+    // purity invariant, and its survival was a LIPS-relocation oversight, not a design
+    // decision. An in-place write falsifies the construction-site provenance the spine carries.
+    "list-set!": symbol.notImplemented`list-set!: every value is frozen by design — mutating a list in place would falsify the provenance lineage its spine carries; build the updated list instead (e.g. (append (list-head lst k) (list obj) (list-tail lst (+ k 1))))`,
 
     "list-copy": symbol.native`list-copy: a fresh copy of the list spine (R7RS freshness)`(
       // Output is z.value, not z.value — like list-tail, list-copy explicitly tolerates an

@@ -24,7 +24,7 @@ import type { SeenMap } from "../structural-equal.js";
 import type { SchemeValue, SchemeBounceMarker } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
-const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
+export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
 /**
  * The run-context of a maybe-boxed operand. At the membrane an operand often
@@ -83,6 +83,14 @@ export abstract class AValue {
    *  could be a narrower subtype), and a cast would re-mute the very signal this migration surfaces. */
   abstract withProvenance(p: ReadonlySet<number>): SchemeValue;
 
+  // ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
+  // Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
+  // implements the SUBSET it can handle and omits the rest (the `symbol.taglessGuard` presence
+  // check is what dispatches). The `undefined` lives in the `?` — declared METHOD-style on purpose:
+  // a subclass may override an optional method, but overriding a function-typed *property*
+  // (`?: (…) => …`) trips TS2425, so these stay methods. `equals` is additionally `abstract` on the
+  // class above (required — every value is a Setoid). tagless-final.ts derives the op-name type +
+  // runtime lock-step from `keyof AValue` — add an op by declaring it here.
   /**
    * Fantasy Land Setoid — structural equality, ON THE TERM. Making this abstract
    * forces EVERY subtype to own its `equal?` comparison (totality): a subtype
@@ -94,6 +102,63 @@ export abstract class AValue {
    * fresh walk; leaf Setoids ignore it.
    */
   abstract ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean;
+  /** Order — the ≤ of an Ord type (numbers, strings, chars, symbols, bytevectors). */
+  ["arrival/tagless-final/lte"]?(other: unknown): boolean;
+  /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
+  ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
+  /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */
+  ["arrival/tagless-final/map"]?(
+    fn: (x: unknown) => unknown | Promise<unknown>,
+    runCtx?: RunContext,
+  ): SchemeValue | Promise<SchemeValue>;
+  /** Filterable — keep elements matching a pred (or RegExp). */
+  ["arrival/tagless-final/filter"]?(
+    pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
+    runCtx?: RunContext,
+  ): SchemeValue | Promise<SchemeValue>;
+  /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. */
+  ["arrival/tagless-final/reduce"]?<Acc>(
+    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
+    initial: Acc,
+    runCtx?: RunContext,
+  ): Acc | Promise<Acc>;
+  /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
+  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue;
+  /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
+   *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
+   *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
+   *  is threaded (never via `this` — `this` is the callable value itself, per the receiver
+   *  convention), and `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
+   *  ignore it, only a scheme lambda reads it). See docs/working-proposals/callable-as-value-run-ctx.md. */
+  ["arrival/tagless-final/apply"]?(
+    args: SchemeValue[],
+    runCtx: RunContext,
+    canBounce?: boolean,
+  ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
+  /** Projection — the head of a pair-shaped term (APair computes on the term; ANil's is
+   *  strict-gated: tolerant ⇒ nil, strict ⇒ the R7RS throw; AJSArray answers via its view). */
+  ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
+  /** Projection — the tail (same family as `car`). */
+  ["arrival/tagless-final/cdr"]?(runCtx?: RunContext): SchemeValue;
+  /** Indexed read — the element at k (vector-shaped terms; a borrowed AJSArray answers too). */
+  ["arrival/tagless-final/vector-ref"]?(k: number): SchemeValue;
+  /** Semigroup — `this ⋄ other`: container-preserving PURE append (list/vector/bytevector
+   *  concat builds a fresh spine, never mutates an operand). */
+  ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;
+  /** Chain (Monad) — map then flatten (the re-homed fantasy-land `chain`). */
+  ["arrival/tagless-final/chain"]?(f: (x: unknown) => unknown): SchemeValue;
+  /** Traversable — effectful traversal; `of` lifts into the applicative. Return stays
+   *  `unknown` honestly: the traversal's carrier is the applicative's, not the term's. */
+  ["arrival/tagless-final/traverse"]?(of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown;
+  /** Apply (Applicative) — accumulate through an applicative carrier (APair's traverse
+   *  machinery probes it on mapped elements; optional — a carrier that implements it opts in). */
+  ["arrival/tagless-final/ap"]?(other: unknown): unknown;
+  // ── Type-predicate GUARDS (symbol.taglessGuard): the receiver answers its own kind; a value
+  // lacking the method answers #f (the guard's graceful default — no instanceof reach-around).
+  ["arrival/tagless-final/vector?"]?(): boolean;
+  ["arrival/tagless-final/pair?"]?(): boolean;
+  ["arrival/tagless-final/symbol?"]?(): boolean;
+  ["arrival/tagless-final/char?"]?(): boolean;
 }
 
 /** Per `docs/spec/arrival-chain.md` §5.1: distinct-by-reference, forward singleton, union ≥2. */
@@ -119,8 +184,6 @@ export function pointProvenance(callId: number): ReadonlySet<number> {
   return new Set([callId]);
 }
 
-export { EMPTY_PROVENANCE };
-
 // ============================================================================
 // INTEROP BOUNDARY (defensive on the abstract base)
 // ============================================================================
@@ -133,37 +196,3 @@ export { EMPTY_PROVENANCE };
 // boundary from the base prototype chain, so accidental method exposure
 // degrades to "blocked" rather than "exposed."
 // ============================================================================
-
-// ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
-// Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
-// implements the SUBSET it can handle and omits the rest (the `symbol.taglessGuard` presence
-// check is what dispatches). The `undefined` lives in the `?` — declared METHOD-style on purpose:
-// a subclass may override an optional method, but overriding a function-typed *property*
-// (`?: (…) => …`) trips TS2425, so these stay methods. `equals` is additionally `abstract` on the
-// class above (required — every value is a Setoid). tagless-final.ts derives the op-name type +
-// runtime lock-step from `keyof AValue` — add an op by declaring it here.
-export interface AValue {
-  /** Order — the ≤ of an Ord type (numbers, strings, chars, symbols, bytevectors). */
-  ["arrival/tagless-final/lte"]?(other: unknown): boolean;
-  /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
-  ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
-  /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */
-  ["arrival/tagless-final/map"]?(fn: (x: unknown) => unknown | Promise<unknown>, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
-  /** Filterable — keep elements matching a pred (or RegExp). */
-  ["arrival/tagless-final/filter"]?(pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
-  /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. */
-  ["arrival/tagless-final/reduce"]?<Acc>(fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>, initial: Acc, runCtx?: RunContext): Acc | Promise<Acc>;
-  /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
-  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue;
-  /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
-   *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
-   *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
-   *  is threaded (never via `this` — `this` is the callable value itself, per the receiver
-   *  convention), and `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
-   *  ignore it, only a scheme lambda reads it). See docs/working-proposals/callable-as-value-run-ctx.md. */
-  ["arrival/tagless-final/apply"]?(
-    args: SchemeValue[],
-    runCtx: RunContext,
-    canBounce?: boolean,
-  ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
-}

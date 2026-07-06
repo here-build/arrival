@@ -187,7 +187,7 @@ const EXPECTED_FAILURES: { pattern: string | RegExp; reason: string }[] = [
   // destined for the door once reached.)
   // -----------------------------------------------------------------------
   {
-    pattern: /string-set!|string-fill!|string-copy!|vector-set!|vector-fill!|vector-copy!|bytevector-u8-set!|bytevector-copy!|set-car!|set-cdr!|append!/,
+    pattern: /string-set!|string-fill!|string-copy!|vector-set!|vector-fill!|vector-copy!|bytevector-u8-set!|bytevector-copy!|set-car!|set-cdr!|append!|list-set!/,
     reason: "intentional — purity invariant (frozen entities); writing methods are doored. See plan-2026-06-11-purity-pass",
   },
   {

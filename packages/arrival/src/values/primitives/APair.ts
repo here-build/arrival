@@ -21,12 +21,11 @@ import { fromJs } from "./boxing.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
-import { is_false, is_native, is_nil, is_plain_object } from "../value-guards.js";
+import { is_false, is_native, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AHalfBaked } from "./AHalfBaked.js";
-import type { SchemeValue } from "../types.js";
-import { type APairLike } from "../types.js";
+import { type APairLike, type SchemeValue } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "../primitives/AExact.js";
@@ -35,6 +34,7 @@ import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
+import { tf } from "../tagless-final.js";
 
 interface PairWithMetadata<Car = unknown, Cdr = unknown> extends APair<Car, Cdr> {
   [CYCLES]?: { car?: string | APair; cdr?: string | APair };
@@ -58,24 +58,17 @@ class Thunk {
   }
 }
 
-// ----------------------------------------------------------------------
-type TrampolineFn = (pair: unknown, parents: APair[]) => Thunk | void;
-
-function trampoline(fn: TrampolineFn): (pair: unknown, parents: APair[]) => void {
+function trampoline(fn: (pair: unknown, parents: APair[]) => Thunk | void): (pair: unknown, parents: APair[]) => void {
   return function (pair: unknown, parents: APair[]): void {
-    unwind(fn(pair, parents));
-  };
-}
-
-// ----------------------------------------------------------------------
-function unwind(result: Thunk | void): void {
-  while (result instanceof Thunk) {
-    const thunk = result;
-    result = result.fn();
-    if (!(result instanceof Thunk)) {
-      thunk.cont();
+    let result = fn(pair, parents);
+    while (result instanceof Thunk) {
+      const thunk = result;
+      result = result.fn();
+      if (!(result instanceof Thunk)) {
+        thunk.cont();
+      }
     }
-  }
+  };
 }
 
 /**
@@ -192,13 +185,13 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
   [DATA]?: boolean;
   [LOCATION]?: SourceLocation;
 
-  car: Car;
-  cdr: Cdr;
-
-  constructor(ctx: RunContext, car?: Car, cdr?: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+  constructor(
+    ctx: RunContext,
+    public readonly car?: Car,
+    public readonly cdr?: Cdr,
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+  ) {
     super(ctx, provenance);
-    this.car = car as Car;
-    this.cdr = cdr as Cdr;
   }
 
   // Static methods
@@ -415,11 +408,12 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
     return result;
   }
 
-  transform(fn: (val: unknown) => unknown): APair {
+  transform(fn: (val: SchemeValue) => SchemeValue): APair {
+    // todo visited is unused - review
     const visited: APair[] = [];
     const selfCtx = this.ctx;
 
-    function recur(pair: unknown): unknown {
+    function recur(pair: SchemeValue): SchemeValue {
       if (pair instanceof APair) {
         if ((pair as APair & { replace?: boolean }).replace) {
           delete (pair as APair & { replace?: boolean }).replace;
@@ -443,7 +437,7 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
     return recur(this) as APair;
   }
 
-  map(fn: (val: unknown) => unknown): APair | ANil {
+  map(fn: (val: SchemeValue) => SchemeValue): APair | ANil {
     return this.car === undefined
       ? nil
       : new APair(this.ctx, fn(this.car), this.cdr instanceof ANil ? nil : (this.cdr as APair).map(fn));
@@ -601,9 +595,7 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
   // Setoid forces it. Mirrors SchemeVector's seen-threaded Setoid.)
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     return (
-      other instanceof APair &&
-      structuralEqual(this.car, other.car, seen) &&
-      structuralEqual(this.cdr, other.cdr, seen)
+      other instanceof APair && structuralEqual(this.car, other.car, seen) && structuralEqual(this.cdr, other.cdr, seen)
     );
   }
 
@@ -654,14 +646,15 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
       // map's count is known exactly up front (one output per input → bounds [1,1]), so its HalfBaked
       // interval is already a POINT — `length` is decidable immediately while the values still resolve,
       // carrying speculation THROUGH a map sitting between a filter and the length/comparison.
-      const slots = results.map((r): Promise<SchemeValue[]> =>
-        is_promise(r) ? (r as Promise<unknown>).then((v) => [v as SchemeValue]) : Promise.resolve([r as SchemeValue]),
+      const slots = results.map(
+        (r): Promise<SchemeValue[]> =>
+          is_promise(r) ? (r as Promise<unknown>).then((v) => [v as SchemeValue]) : Promise.resolve([r as SchemeValue]),
       );
       return AHalfBaked.collection(this.ctx, slots, () => [1, 1]);
     }
     if (results.some(is_promise)) {
-      return (promise_all(results) as Promise<unknown[]>).then(
-        (resolved) => APair.fromArray(this.ctx, resolved, false),
+      return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
+        APair.fromArray(this.ctx, resolved, false),
       );
     }
     return APair.fromArray(this.ctx, results, false);
@@ -684,7 +677,7 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
   // (Absorbed from the stdlib `filter` builtin, which this term-dispatch now SUPERSEDES — shadowed-
   // redundant, removed in the stdlib-cleanup pass; the term owns the algebra AND its speculation
   // strategy, reading `runCtx.speculate` off the ctx `symbol.tagless` threads it.)
-  ["arrival/tagless-final/filter"](
+  [tf("filter")](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
   ): APair | ANil | AHalfBaked | Promise<APair | ANil> {
@@ -713,11 +706,19 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
       return AHalfBaked.collection(this.ctx, slots, () => [0, 1]);
     }
     if (verdicts.some(is_promise)) {
-      return (promise_all(verdicts) as Promise<unknown[]>).then(
-        (results) => APair.fromArray(this.ctx, elements.filter((_, i) => kept(results[i])), false),
+      return (promise_all(verdicts) as Promise<unknown[]>).then((results) =>
+        APair.fromArray(
+          this.ctx,
+          elements.filter((_, i) => kept(results[i])),
+          false,
+        ),
       );
     }
-    return APair.fromArray(this.ctx, elements.filter((_, i) => kept(verdicts[i])), false);
+    return APair.fromArray(
+      this.ctx,
+      elements.filter((_, i) => kept(verdicts[i])),
+      false,
+    );
   }
 
   // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
@@ -755,10 +756,7 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
   // box"), the container box DROPS, an empty list is nil. The container-preserving return
   // (list→list) is achieved structurally — the term returns its own shape. ES Array.sort is
   // sync + STABLE; the runCtx symbol.sequence threads charges runCtx.heapMeter before materializing (Option A).
-  ["arrival/tagless-final/sort"](
-    comparator?: (a: unknown, b: unknown) => unknown,
-    runCtx?: RunContext,
-  ): APair | ANil {
+  [tf("sort")](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): APair | ANil {
     chargeHeap(runCtx, countPairElements(this));
     const out: unknown[] = [];
     let node: unknown = this;
@@ -848,25 +846,17 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
   }
 
   // Applicative — single-element list.
-  static ["arrival/tagless-final/of"](value: unknown): APair {
+  static ["arrival/tagless-final/of"](value: SchemeValue): APair {
     return new APair(CONSTANT_CTX, value, nil);
   }
 }
 
-// Structure-algebra recursors for the term methods above. They terminate on
-// `instanceof Nil`, not `=== nil` — see the class-body comment for why.
-
-// The empty-list sentinel: `new Pair()` (no args) yields `Pair(undefined, nil)`,
-// the shape arrival uses for "empty list" wherever a bare Pair is constructed.
-// EVERY Pair recursor must honor it, else folding through it would yield a phantom
-// `undefined` element. `instanceof Nil` (not `=== nil`) catches provenance clones in
-// the cdr. (Shared by the surviving traverse/chain recursors AND the async-aware
-// map/filter/reduce methods on the class body above.)
-function isEmptyPairSentinel(p: APair): boolean {
-  return p.car === undefined && p.cdr instanceof ANil;
-}
-
-function traversePair(ctx: RunContext, of: (x: unknown) => unknown, f: (x: unknown) => unknown, pair: unknown): unknown {
+function traversePair(
+  ctx: RunContext,
+  of: (x: unknown) => SchemeValue,
+  f: (x: unknown) => unknown,
+  pair: unknown,
+): unknown {
   // Iterative right fold (was self-recursive → O(depth) host stack). traverse is a
   // RIGHT fold: collect each `f(car)` left-to-right (preserving f-call order), then
   // combine from the tail with `of(nil)` as the seed — `ap` when the mapped head is
@@ -874,19 +864,22 @@ function traversePair(ctx: RunContext, of: (x: unknown) => unknown, f: (x: unkno
   // recursive unwind exactly: same of-call count/order (base `of(nil)` first, then one
   // wrap per element from last to first), same ap-vs-leaf branch per node, and the same
   // single phantom step on an improper/non-Pair tail (no sentinel guard, as before).
-  const heads: ({ ["arrival/tagless-final/ap"]?: (m: unknown) => unknown } | undefined)[] = [];
+  // `heads` holds the MAPPED values (`f(car)` results) — unknown by f's own honest type;
+  // each is probed for the applicative `ap` term at combine time.
+  const heads: unknown[] = [];
   let node: unknown = pair;
   while (node && !(node instanceof ANil)) {
     const p = node as APair;
-    heads.push(f(p.car) as { ["arrival/tagless-final/ap"]?: (m: unknown) => unknown } | undefined);
+    heads.push(f(p.car));
     node = p.cdr;
   }
-  let acc = of(nil);
+  let acc: unknown = of(nil);
   for (let i = heads.length; i--; ) {
     const mappedCar = heads[i];
-    acc = mappedCar?.["arrival/tagless-final/ap"]
-      ? mappedCar["arrival/tagless-final/ap"](acc)
-      : of(new APair(ctx, mappedCar, acc));
+    const apFn = (mappedCar as AValue | null | undefined)?.[tf("ap")];
+    acc = apFn
+      ? apFn.call(mappedCar, acc)
+      : of(new APair(ctx, mappedCar as SchemeValue, acc as SchemeValue));
   }
   return acc;
 }
@@ -898,7 +891,7 @@ function traversePair(ctx: RunContext, of: (x: unknown) => unknown, f: (x: unkno
 // An improper `a` still contributes its phantom `undefined` car before the non-Pair
 // tail ends the walk, matching the recursive form.
 export function concatPair(ctx: RunContext, a: SchemeValue, b: SchemeValue): APair | ANil {
-  const cars: unknown[] = [];
+  const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node && !(node instanceof ANil)) {
     const p = node as APair;
