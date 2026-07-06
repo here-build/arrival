@@ -679,9 +679,10 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    reverse: symbol.native`reverse: the list (or array) reversed (LIPS-polymorphic)`(
-      // LIPS-polymorphic over pair | nil | raw JS array; a borrowed array is not a
-      // SchemeValue, so the contract is representation-blind (`z.unknown`).
+    reverse: symbol.native`reverse: the list reversed`(
+      // pair | nil ONLY — the impl below has no raw-array branch (unlike nth/array->list),
+      // so z.union([z.nil, z.pair]) is the honest input domain, not a representation-blind
+      // z.value; a bare array throws (the impl's own final `else` branch).
       { input: [z.union([z.nil, z.pair])], output: [z.value] },
       (arg) => {
         if (arg instanceof ANil) {
@@ -703,7 +704,7 @@ export default new EnvCapability("scheme/lists", {
       // return arbitrary host data (a borrowed array isn't a SchemeValue) — matches
       // `reverse`'s own established representation-blind precedent in this exact file, so
       // z.value would be dishonest here (it would silently exclude that real return path).
-      { input: [z.schemeNumber, z.pair], output: [z.value], type: "<T>(index: number, list: T[]): T | null" },
+      { input: [z.schemeNumber, z.value], output: [z.value], type: "<T>(index: number, list: T[]): T | null" },
       (index, obj) => {
         // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed
         // AExact resolves through valueOf), exactly as the bare `count < index` did.

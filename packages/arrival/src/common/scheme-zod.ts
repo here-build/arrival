@@ -433,6 +433,8 @@ const NAMES = new Map<unknown, string>([
   [string, "string"],
   [boolean, "boolean"],
   [char, "char"],
+  [undefinedResult, "undefinedResult"],
+  [error, "error"],
 ]);
 
 /** The canonical NAME of a scheme-zod vocabulary schema, by identity — `undefined` if

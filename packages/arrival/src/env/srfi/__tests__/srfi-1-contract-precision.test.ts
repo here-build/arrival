@@ -11,11 +11,12 @@
 // its receiver to `["pair","nil"]` (list-only — NOT representation-agnostic like map/filter/sort), so
 // `List<unknown>` is the true input domain, and the matched car / nil result is any scheme value.
 //
-// `filter` (also z.custom-degraded) is DELIBERATELY left un-overridden: it is one of the closed
-// tagless-algebra ops (map/filter/reduce/length) whose canonical generic List-AND-vector type is
-// hand-declared in `type-layer/carriers.ts` ("the closed tagless algebra zod cannot express"). A
-// flat single-line `type:` string would be a strictly-inferior competing source of truth for a name
-// carriers.ts already owns — so filter's degrade path is expected and handled one layer up.
+// `filter` was ALSO z.custom-degraded when this file was authored, and left un-overridden
+// (carriers.ts's closed tagless-algebra type was meant to be the one source of truth for it).
+// Since then, the uniform-vocabulary migration gave `z.lambda` a real printer image
+// (schema-to-ts.ts's IMAGE_BY_NAME) — it no longer THROWS on print, so filter's own
+// `[z.lambda, z.value] => [z.value]` contract now composes to a real (non-degraded)
+// signature via the normal path, without needing a `type:` override at all.
 import { describe, expect, it } from "vitest";
 import srfi1 from "../srfi-1.js";
 import type { AEntity } from "../../../common/symbol.js";
@@ -33,7 +34,7 @@ describe("scheme/srfi-1 Contract harvest precision — author-asserted `type:` r
     expect(signatureOf(def("find"))).toBe("(pred: (x: unknown) => unknown, list: List<unknown>) => unknown");
   });
 
-  it("filter: left un-overridden BY DESIGN — carriers.ts owns the tagless-algebra type; signatureOf stays on its degrade path", () => {
-    expect(signatureOf(def("filter"))).toBe("(...args: unknown[]) => unknown");
+  it("filter: no `type:` override needed anymore — z.lambda's printer image composes a real signature directly", () => {
+    expect(signatureOf(def("filter"))).toBe("(a: (...args: unknown[]) => unknown, b: unknown) => unknown");
   });
 });

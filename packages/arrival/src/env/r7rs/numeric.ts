@@ -1179,7 +1179,7 @@ const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
  *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.bigint],
+  output: [z.exact],
 };
 
 /** `number->string` — `(z: unknown, radix?: unknown) => string` (a RAW JS string, not a

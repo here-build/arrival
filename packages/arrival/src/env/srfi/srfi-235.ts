@@ -16,6 +16,9 @@
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { is_callable_value } from "../../values/value-guards.js";
 
 export default new EnvCapability("scheme/srfi-235", {
   prelude: `
@@ -66,12 +69,17 @@ export default new EnvCapability("scheme/srfi-235", {
         */
         type: "(fn: (...args: unknown[]) => unknown, ...args: unknown[]) => (...args: unknown[]) => unknown",
       },
-      // A plain named fn (not an impl-`this` reader); typed loosely and recursion-safe —
-      // the returned curried layer and the terminal `fn(...)` never touch `this`.
-      function curry(fn: (...a: unknown[]) => unknown, ...args: unknown[]): unknown {
-        return fn.length > args.length
-          ? (...curriedArgs: unknown[]) => curry(fn, ...args, ...curriedArgs)
-          : fn(...args);
+      // `fn` is a scheme callable VALUE (ALambda/ANativeProcedure/ARosettaProcedure), not a bare
+      // JS function — invoking it directly (`fn(...)`) throws. Route through `applyCallback`,
+      // the one invocation seam, and read the needed arity off the callable's own `.arity.min`
+      // (a bare JS host fn falls back to `.length`). `this.ctx.runCtx` per the native convention
+      // (capability.ts's native bind: `hostImpl.apply({ ctx: { runCtx } }, args)`).
+      function curry(this: { ctx?: { runCtx?: RunContext } }, fn: unknown, ...args: unknown[]): unknown {
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        const needed = is_callable_value(fn) ? fn.arity.min : (fn as (...a: unknown[]) => unknown).length;
+        return needed > args.length
+          ? (...curriedArgs: unknown[]) => curry.call({ ctx: { runCtx } }, fn, ...args, ...curriedArgs)
+          : applyCallback(fn, args, runCtx);
       } as unknown as (fn: (...a: unknown[]) => unknown, ...args: unknown[]) => (...a: unknown[]) => unknown,
     ),
   },

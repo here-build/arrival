@@ -72,6 +72,7 @@ const consUnknownNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode(
 const readonlyUnknownArrayNode: NodeBuilder = (ts) =>
   ts.factory.createTypeOperatorNode(ts.SyntaxKind.ReadonlyKeyword, ts.factory.createArrayTypeNode(unknownNode(ts)));
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
+const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
 /** `(...args: unknown[]) => unknown` — z.lambda's callable image. */
 const lambdaNode: NodeBuilder = (ts) => {
   const restParam = ts.factory.createParameterDeclaration(
@@ -105,6 +106,10 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   ["svector", readonlyUnknownArrayNode],
   ["value", unknownNode],
   ["lambda", lambdaNode],
+  ["undefinedResult", voidNode], // R7RS's "unspecified" return — the honest TS analog is void
+  // "error" has NO entry here on purpose: an unmapped NAME still falls through to the
+  // `unknownNode` default below (never throw) — R7RSError has no ambient carrier type to
+  // reference, so "unknown" is the honest print, not a gap.
 ]);
 
 /** The zod-to-ts override: a scheme-zod vocabulary schema → its plain-TS image, resolved by
@@ -224,8 +229,11 @@ function paramList(input: z.ZodTypeAny): string {
   if (def.type === "tuple") {
     const items = def.items ?? [];
     const params = items.map((item, i) => `${paramName(i)}: ${printType(item)}`);
-    // A variadic tail (z.tuple([...], rest)) → a trailing rest param.
-    if (def.rest != null) params.push(`...rest: ${printType(def.rest)}[]`);
+    // A variadic tail (z.tuple([...], rest)) → a trailing rest param. A ZERO-item tuple+rest
+    // (e.g. `{input: [], inputRest: z.value}`) has no fixed prefix at all — structurally the
+    // same "purely variadic" shape as the array-ish branch below, so it gets the same "args"
+    // name; only a genuine fixed-head-plus-tail earns the "rest" name.
+    if (def.rest != null) params.push(`...${items.length === 0 ? "args" : "rest"}: ${printType(def.rest)}[]`);
     return `(${params.join(", ")})`;
   }
   // array-ish (z.array) input → variadic rest of the element type.

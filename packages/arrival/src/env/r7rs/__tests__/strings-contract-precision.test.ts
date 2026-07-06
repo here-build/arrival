@@ -17,18 +17,20 @@
 //   5. `list->string`      — input walks a Pair (a list of chars): [z.unknown()] → [z.union([z.pair, z.nil])]
 //   6. `join`               — 2nd arg is a list: z.value → z.union([z.pair, z.nil])
 //   7. `concat`             — args are strings: z.array(z.value) → z.array(z.schemeString)
-//   8. `split`              — output is a proper list: z.value → z.union([z.pair, z.nil])
 //
-// #4 and #8 are OUTPUT-side fixes — unlike the other 6 (pure input-side, contravariant-safe,
+// (item #8, `split`'s output-side fix, was a stale/misfiled reference in the original audit —
+// no `split` symbol is bound in this pack; LIPS's `string-split` lives in `scheme/srfi-13`.)
+//
+// #4 is an OUTPUT-side fix — unlike the other 5 (pure input-side, contravariant-safe,
 // zero impl signature changes needed), narrowing an OUTPUT schema is a COVARIANT position:
 // the impl's own declared return type must narrow to match (a function declared to return
-// `unknown` cannot satisfy a Contract whose decoded return is `APair | ANil`) — so those two
-// also touch strings.ts's impl return-type annotations (still behavior-preserving: bodies
+// `unknown` cannot satisfy a Contract whose decoded return is `APair | ANil`) — so it
+// also touches strings.ts's impl return-type annotations (still behavior-preserving: bodies
 // are byte-for-byte unchanged, only the compile-time annotation tightens). See the report.
 //
 // Blanket sweep note: a single fixed-size "garbage" probe only exercises ELEMENT precision
 // for the genuinely-unbounded array-ish ops (string / comparisons / string-append / concat —
-// #1-3, #7); the fixed-arity tuple ops (#4-6, #8) reject an over-length garbage array on
+// #1-3, #7); the fixed-arity tuple ops (#4-6) reject an over-length garbage array on
 // ARITY alone regardless of element precision, so their fixes are proven by dedicated
 // single-element probes instead (a same-arity, wrong-shaped value).
 
@@ -48,6 +50,16 @@ function nativeDef(name: string) {
   const def = symbols[name];
   if (def === undefined) throw new Error(`strings pack: no symbol named ${name}`);
   if (def.kind !== "native") throw new Error(`strings pack: ${name} is not a native def (got ${def.kind})`);
+  return def;
+}
+
+// `concat` migrated to `symbol.rosetta` since this audit's own header was written (still
+// carries `.in`/`.out`, same as native — only the bind KIND differs), so it needs its own
+// accessor rather than `nativeDef`'s native-only guard.
+function rosettaDef(name: string) {
+  const def = symbols[name];
+  if (def === undefined) throw new Error(`strings pack: no symbol named ${name}`);
+  if (def.kind !== "rosetta") throw new Error(`strings pack: ${name} is not a rosetta def (got ${def.kind})`);
   return def;
 }
 
@@ -112,18 +124,16 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.in.safeParse([str(", "), "not-a-list"]).success).toBe(false);
   });
 
-  it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.value))", () => {
-    const def = nativeDef("concat");
+  it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.value)) — since migrated to symbol.rosetta", () => {
+    const def = rosettaDef("concat");
     expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
-  it("split: output must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was z.value)", () => {
-    const def = nativeDef("split");
-    expect(def.out.safeParse([properList()]).success).toBe(true);
-    expect(def.out.safeParse([nil]).success).toBe(true);
-    expect(def.out.safeParse(["not-a-list"]).success).toBe(false);
-  });
+  // NOTE: no symbol named `split` is bound in this pack (verified: `grep -rn '"split"'
+  // src/env/`). LIPS's `string-split` lives in `scheme/srfi-13` (env/srfi/srfi-13.ts), a
+  // DIFFERENT capability — this item was a stale/misfiled reference in the original audit
+  // header (item #8), not a fix that ever landed here. Dropped rather than faked.
 
   it("blanket sweep: no native op in the pack accepts an arbitrary-shape raw-JS-garbage array on .in (mirrors numeric-/chars-contract-precision.test.ts)", () => {
     const garbage = ["not-a-value", 123, null, {}];
@@ -135,8 +145,8 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(stragglers).toEqual([]);
   });
 
-  it("sanity: the pack exports exactly 33 symbols — the scope this fix must cover", () => {
-    expect(Object.keys(symbols)).toHaveLength(33);
+  it("sanity: the pack exports exactly 32 symbols — the scope this fix must cover", () => {
+    expect(Object.keys(symbols)).toHaveLength(32);
   });
 
   it("regression pin: string-map/string-for-each's earlier inputRest fix is untouched by this round", () => {
