@@ -33,17 +33,10 @@ let activeCaps: Caps = NO_CAPS;
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
 const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
 
-// What actually got capped during the current render pass — so the reduced-output banner
-// can teach the RELEVANT remedy (process the collection in-REPL / slice the string) rather
-// than a generic line. Reset per render() pass (below); read after the shrink loop settles.
-let cappedCollection = false;
-let cappedString = false;
-
 /** Render the first `maxItems` of an array, appending a `+N more of TOTAL` marker when
  *  truncated. STREAMING — `slice` then map, so the dropped tail is never rendered. */
 const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => {
   if (arr.length <= activeCaps.maxItems) return arr.map(render);
-  cappedCollection = true;
   const shown: SExpr[] = arr.slice(0, activeCaps.maxItems).map(render);
   shown.push(truncatedMarker(`+${arr.length - activeCaps.maxItems} more of ${arr.length}`));
   return shown;
@@ -53,7 +46,6 @@ const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => 
  *  `slice` never walks the dropped tail. */
 const capString = (full: string): string => {
   if (full.length <= activeCaps.maxStringChars) return full;
-  cappedString = true;
   return `${full.slice(0, activeCaps.maxStringChars)}…(+${full.length - activeCaps.maxStringChars} chars)`;
 };
 
@@ -84,47 +76,7 @@ export type SerializeOpts = {
    *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
    *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
   format?: (sexpr: SExpr) => string;
-  /** COMPETENCE v2 (V's design, 2026-07-05): the collection-processing remedy clause
-   *  ("filter/map/reduce the collection…") rendering mode. The banner's FACTUAL half (that
-   *  reduction happened + the applied limits) is NEVER gated by this — only this one
-   *  teaching clause is:
-   *    - "verbose" (default when unset) — the full teaching sentence.
-   *    - "compact" — the short reminder form of the SAME pattern, for a caller (arrival-
-   *      manifold's competence.ts) that has already rendered this teaching once this session.
-   *    - "suppressed" — the clause is dropped entirely; the factual half still renders.
-   *  Independent of `stringRemedyMode`; a caller may set either, both, or neither. */
-  collectionRemedyMode?: RemedyMode;
-  /** Same as `collectionRemedyMode`, for the string-slicing remedy clause ("slice the long
-   *  string with substring…"). */
-  stringRemedyMode?: RemedyMode;
-  /** Fires synchronously, at most once per class per `toSExprString` call, exactly when that
-   *  class's remedy clause was ACTUALLY included in the rendered banner (its collection/
-   *  string capped THIS render AND its mode wasn't "suppressed") — regardless of whether the
-   *  included text was verbose or compact. Never fires for a class that didn't cap, or whose
-   *  mode was "suppressed" (nothing rendered, nothing to learn from). The caller (arrival-
-   *  manifold's competence.ts) uses this as the feedback half of the verbose→compact
-   *  gradient: flip to compact for every LATER rendering this session. */
-  onRemedyRendered?: (cls: "collection" | "string") => void;
-  /** A/B measurement knob (V's design, 2026-07-06): whether the reduced-output banner is
-   *  EMITTED AT ALL when a shrink actually occurred. The caps themselves are NEVER affected
-   *  by this option — it governs only whether the `#| ⚠ output reduced ... |#` line (fact +
-   *  remedy) is prepended to the already-capped `out`. This is deliberately NOT a third
-   *  `RemedyMode` value: `collectionRemedyMode`/`stringRemedyMode` gate the per-class
-   *  PEDAGOGY clause while always keeping the factual half (errors-as-doors: never hide that
-   *  a reduction happened); this knob is a strictly stronger, honest "no banner at all" mode
-   *  for measuring whether the banner's mere PRESENCE — not its content — affects model
-   *  behavior. `onRemedyRendered` also does not fire under "none": no clause was rendered,
-   *  so there is nothing for the caller's verbose→compact gradient to learn from.
-   *    - "full" (default when unset) — today's behaviour: banner renders whenever a shrink
-   *      happened, gated per-class by the RemedyMode options above.
-   *    - "none" — the capped `out` is returned as-is, no banner line, no `onRemedyRendered`
-   *      call. The truncation (caps, shrink-to-fit, hard-cut floor) still happens exactly as
-   *      before; only the announcement is silenced. */
-  truncationBanner?: "full" | "none";
 };
-
-/** Remedy-clause rendering mode — see `collectionRemedyMode`/`stringRemedyMode` above. */
-export type RemedyMode = "verbose" | "compact" | "suppressed";
 
 export type SExprSerializable =
   | string
@@ -349,7 +301,6 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
       entries.push(`:${String(key)}`, toSExpr(value, visited));
     }
     if (all.length > activeCaps.maxItems) {
-      cappedCollection = true;
       entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
     }
     return ["map", ...entries];
@@ -382,7 +333,6 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
       entries.push(`:${key}`, toSExpr(value, visited));
     }
     if (all.length > activeCaps.maxItems) {
-      cappedCollection = true;
       entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
     }
     return ["dict", ...entries];
@@ -720,8 +670,6 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
 
   const render = (): string => {
     activeCaps = { maxItems, maxStringChars };
-    cappedCollection = false;
-    cappedString = false;
     try {
       return format(toSExpr(obj));
     } finally {
@@ -730,7 +678,6 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   };
 
   let out = render();
-  let squeezed = false;
   // Shrink-to-fit: tighten BOTH caps toward the floor and re-render. Each pass is itself
   // capped, so a re-run never re-walks a huge tail. Fair across siblings — no tail-cut.
   while (out.length > maxTotalChars && (maxItems > FLOOR_ITEMS || maxStringChars > FLOOR_STRING)) {
@@ -738,54 +685,16 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     maxItems = Math.max(FLOOR_ITEMS, Math.floor(maxItems * factor));
     maxStringChars = Math.max(FLOOR_STRING, Math.floor(maxStringChars * factor));
     out = render();
-    squeezed = true;
   }
 
   // Floor still over budget (pathological nesting) → hard-cut the CONTENT as the genuine
-  // last resort, before the note (so a successful squeeze isn't chopped by the note's length).
+  // last resort. The reduction is still signaled INLINE (errors-as-doors: a shrink must
+  // never be silent) via this hard-cut marker plus the per-collection/per-string elision
+  // markers `capItems`/`capString` already wove into the content itself — there is no
+  // separate top-of-output banner (measured null effect on task pass-rate, 2026-07-06;
+  // removed to stop spending tokens on a line that taught nothing).
   if (out.length > maxTotalChars) {
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
-  }
-  // truncationBanner: "none" (V's A/B measurement knob, 2026-07-06) — the caps/shrink/
-  // hard-cut above ALL still ran unconditionally; only this banner emission is skipped.
-  // No fact, no remedy, no `onRemedyRendered` call: there is no clause to give feedback
-  // about. See the option's doc comment above for why this is a distinct, stronger knob
-  // than the per-class RemedyMode options (which always keep the factual half).
-  if (squeezed && (opts.truncationBanner ?? "full") !== "none") {
-    // Teach the RELEVANT remedy at the moment of over-fetch — a truncated result is the one
-    // instant the "process it in-REPL, don't page it into context" lesson lands, because the
-    // cost and the fix coincide. Tailored by what actually capped (collection / string / both).
-    // The banner states the APPLIED `maxTotalChars` — whether that's the world default or a
-    // caller's per-call override (possibly clamped to a bound), the number here is always the
-    // budget actually honored, so a clamped request is never a silent reinterpretation.
-    //
-    // COMPETENCE v2 GATING (arrival-manifold's competence.ts): each class's clause renders
-    // independently, driven by its OWN mode — never gated by the other class's mode/state.
-    // The FACTUAL part of the banner (the reduction happened, the applied limits) is never
-    // gated — only these per-class pedagogy clauses are. `onRemedyRendered` fires exactly
-    // when a clause was actually included, so the caller can advance its own verbose→compact
-    // gradient for next time.
-    const collectionMode: RemedyMode = opts.collectionRemedyMode ?? "verbose";
-    const stringMode: RemedyMode = opts.stringRemedyMode ?? "verbose";
-    const clauses: string[] = [];
-    if (cappedCollection && collectionMode !== "suppressed") {
-      clauses.push(
-        collectionMode === "compact"
-          ? "filter/map/reduce first, e.g. (map (lambda (x) (:field x)) coll)"
-          : "filter/map/reduce the collection in your program to keep only the items you need, instead of paging them all back",
-      );
-      opts.onRemedyRendered?.("collection");
-    }
-    if (cappedString && stringMode !== "suppressed") {
-      clauses.push(
-        stringMode === "compact"
-          ? "(substring s 0 2000) or (string-contains s \"needle\") to pull just the part you need"
-          : "slice the long string with substring, or scan it with string-contains, to pull just the part you need",
-      );
-      opts.onRemedyRendered?.("string");
-    }
-    const remedy = clauses.length > 0 ? ` — ${clauses.join("; ")}` : "";
-    out = `#| ⚠ output reduced to fit response budget of ${maxTotalChars} chars (the result was larger): showing ≤${maxItems} items per collection, ≤${maxStringChars} chars per string${remedy} |#\n${out}`;
   }
   return out;
 };

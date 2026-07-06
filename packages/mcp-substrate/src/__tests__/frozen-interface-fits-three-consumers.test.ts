@@ -41,11 +41,11 @@ describe("frozen interface fits 3 consumer shapes", () => {
   });
 
   it("fits the runner's own internals (calibration overrides, session store round-trip)", async () => {
-    const calibration: CalibrationOptions = { ...DEFAULT_CALIBRATION, competenceWindowSize: 20 };
-    expect(calibration.competenceWindowSize).toBe(20);
+    const calibration: CalibrationOptions = { ...DEFAULT_CALIBRATION, futilityRingSize: 20 };
+    expect(calibration.futilityRingSize).toBe(20);
 
     const store: AsyncSessionStore = createInMemorySessionStore();
-    await store.set("session-1", JSON.stringify({ history: [], competence: {} }));
+    await store.set("session-1", JSON.stringify({ history: [] }));
     const restored = await store.get("session-1");
     expect(restored).toBeDefined();
   });

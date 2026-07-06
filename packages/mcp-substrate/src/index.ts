@@ -1,7 +1,6 @@
 export * from "./attachment-sink.js";
 export * from "./bound-tool.js";
 export * from "./calibration.js";
-export * from "./competence.js";
 export * from "./content-block.js";
 export * from "./doors.js";
 export * from "./example-call.js";

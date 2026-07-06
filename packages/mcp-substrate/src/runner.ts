@@ -37,7 +37,6 @@ import { toSExprString } from "@here.build/arrival-serializer";
 import type { AttachmentSink } from "./attachment-sink.js";
 import type { BoundTool, ToolNaming } from "./bound-tool.js";
 import { type CalibrationOptions, DEFAULT_CALIBRATION } from "./calibration.js";
-import { createCompetenceTracker, type CompetenceState, type TriggerClass } from "./competence.js";
 import type { ContentBlock } from "./content-block.js";
 import {
   DoorSession,
@@ -250,33 +249,34 @@ export interface DoorsRunnerOptions {
 }
 
 /** The FULL teaching-state bundle {@link DoorsRunner.exportSession} serializes — history,
- *  competence window, futility rings, DoorSession dedup, context-ring, local-binding tracker, all
- *  plain data (V's 2026-07-05 "map but async" decision, docs/working-proposals/
+ *  futility rings, DoorSession dedup, context-ring, local-binding tracker, all plain data (V's
+ *  2026-07-05 "map but async" decision, docs/working-proposals/
  *  arrival-manifold-package-split-2026-07-05.md). `cache` is reserved for the Phase-4 replay-cache
  *  fix (a tool-valued define's wire-safe VALUE, so a restore doesn't drop it) — deliberately NOT
  *  populated by Phase 2 (no such mechanism exists in the ported `session-history.ts` replay yet;
  *  populating this field ahead of that fix would be indistinguishable from a real cache with none
  *  of its behavior), kept in the blob schema now so Phase 4 is a value-population change, not a
- *  schema migration. */
+ *  schema migration. `competence` (COMPETENCE v2's rolling-window remedy-gradient state) was
+ *  removed 2026-07-06 alongside the truncation banner it fed — a measured null effect on task
+ *  pass-rate made the banner (and the gradient that tuned its remedy clause) dead weight. A blob
+ *  from before that date may still carry a `competence` key; `restoreSession` below ignores it
+ *  rather than choking on an unknown field (never re-serialized going forward). */
 interface SessionBlob {
   v: 1;
   history: readonly SessionHistoryEntry[];
   cache: Record<string, string>;
-  competence: CompetenceState;
   futility: FutilityState;
   localBindings: LocalBindingState;
   doorSession: { seen: readonly string[]; pendingFollow: readonly (readonly [string, DoorCode])[]; seq: number };
   contextRing: readonly (readonly [string, string])[];
 }
 
-/** Session-scoped stateful runner — NOT a pure function. Holds door session, competence window,
- *  local-binding tracker, session-history, context-ring, and call/generation counters across
- *  calls to `run()`. */
+/** Session-scoped stateful runner — NOT a pure function. Holds door session, local-binding
+ *  tracker, session-history, context-ring, and call/generation counters across calls to `run()`. */
 export interface DoorsRunner {
   run(input: RunInput): Promise<RunResult>;
-  /** Serializes the FULL teaching-state bundle to one JSON blob (history, cache, competence
-   *  window, futility rings, DoorSession dedup, context-ring) — everything `AsyncSessionStore`
-   *  round-trips. */
+  /** Serializes the FULL teaching-state bundle to one JSON blob (history, cache, futility rings,
+   *  DoorSession dedup, context-ring) — everything `AsyncSessionStore` round-trips. */
   exportSession(): string;
   restoreSession(blob: string): void;
 }
@@ -287,7 +287,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
 
   const session = options.session ?? new DoorSession();
   const tracker = options.tracker;
-  const competence = createCompetenceTracker(calibration.competenceWindowSize, calibration.competenceStableThreshold);
   const localBindingTracker = createLocalBindingTracker();
   let callCounter = 0;
   let generation = 0;
@@ -331,17 +330,9 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
 
     const render = (value: unknown, maxTotalCharsOverride?: number): string => {
       const effectiveMax = maxTotalCharsOverride ?? calibration.observationMaxTotalChars;
-      const remedy = { collection: competence.remedyMode("collection"), string: competence.remedyMode("string") };
-      const onRemedyRendered = (cls: TriggerClass): void => competence.markRendered(cls);
       return options.rendering === "sexpr"
-        ? toSExprString(value, observationCaps(effectiveMax, remedy, onRemedyRendered, calibration.truncationBanner))
-        : renderObservation(value, {
-            maxTotalChars: effectiveMax,
-            collectionRemedyMode: remedy.collection,
-            stringRemedyMode: remedy.string,
-            onRemedyRendered,
-            truncationBanner: calibration.truncationBanner,
-          });
+        ? toSExprString(value, observationCaps(effectiveMax))
+        : renderObservation(value, { maxTotalChars: effectiveMax });
     };
 
     // Derived FRESH from this call's tools (never cached across calls — RunInput.tools is the
@@ -400,8 +391,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
 
       const blocks: ContentBlock[] = [];
       let failures = 0;
-      let callUsedCollection = false;
-      let callUsedString = false;
       const erroredStatementIndexes: number[] = [];
 
       for (const [index, form] of forms.entries()) {
@@ -421,8 +410,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             return result;
           }
           const facts = statementFacts[index]!;
-          if (facts.usesCollectionOps) callUsedCollection = true;
-          if (facts.usesStringOps) callUsedString = true;
           blocks.push(
             ...raced
               .filter((r) => r !== theVoid)
@@ -488,8 +475,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
         }
       }
 
-      competence.recordCall(callUsedCollection, callUsedString);
-
       if (tracker) {
         for (const { tool, door } of tracker.drainPending()) {
           blocks.push({ type: "text", text: session.renderNote(door, tool) });
@@ -530,7 +515,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       v: 1,
       history: sessionHistory!.entries(),
       cache: {},
-      competence: competence.exportState(),
       futility: tracker?.exportState() ?? [],
       localBindings: localBindingTracker.exportState(),
       doorSession: session.exportState(),
@@ -543,7 +527,6 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
     const parsed = JSON.parse(blob) as SessionBlob;
     ensureRosterSeeded([]);
     sessionHistory!.restoreEntries(parsed.history);
-    competence.importState(parsed.competence);
     tracker?.importState(parsed.futility);
     localBindingTracker.importState(parsed.localBindings);
     session.importState(parsed.doorSession);

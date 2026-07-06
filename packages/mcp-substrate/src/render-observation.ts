@@ -22,12 +22,10 @@
 
 import { formatSExpr, type SerializeOpts, toSExprString, type SExpr } from "@here.build/arrival-serializer";
 
-import type { RemedyMode, TriggerClass } from "./competence.js";
-
-/** Default total observation budget — same order of magnitude as arrival-serializer's own
- *  DEFAULT_TOTAL (that constant isn't exported, so this is a local twin). Overridable per
- *  server via the `observation.maxTotalChars` config knob (config.ts → manifold-tool.ts). */
-export const DEFAULT_OBSERVATION_MAX_TOTAL_CHARS = 40_000;
+/** Default total observation budget. Overridable per server via the `observation.maxTotalChars`
+ *  config knob (config.ts → manifold-tool.ts). 20k (2026-07-06 measurement: weakly-best budget
+ *  across the tested range, +2.8pp pass rate [0.0,+5.6] vs 8k) — down from the earlier 40k. */
+export const DEFAULT_OBSERVATION_MAX_TOTAL_CHARS = 20_000;
 
 /** Streaming-cap seeds for the normal (under-budget) case: generous enough that a real
  *  tool observation is never truncated below the total budget (a single string may consume
@@ -228,32 +226,7 @@ function format(node: SExpr, indent = 0): string {
  * collection past SEED_MAX_ITEMS items overflows it anyway. An under-budget observation
  * renders byte-identically to the uncapped formatter.
  */
-export function renderObservation(
-  value: unknown,
-  opts: {
-    maxTotalChars?: number;
-    /** COMPETENCE v2 (competence.ts): per-class remedy rendering mode — see
-     *  arrival-serializer's `SerializeOpts.collectionRemedyMode`/`stringRemedyMode`. Absent ⇒
-     *  "verbose" (unchanged legacy behaviour: the remedy clause always shows when its
-     *  collection/string actually capped). */
-    collectionRemedyMode?: RemedyMode;
-    stringRemedyMode?: RemedyMode;
-    /** Feedback fired when a class's remedy clause actually rendered — see the serializer's
-     *  own `onRemedyRendered` for the exact firing rule. Absent ⇒ no feedback (the
-     *  gradient-tracking caller, competence.ts, always passes one). */
-    onRemedyRendered?: (cls: TriggerClass) => void;
-    /** A/B measurement knob (see arrival-serializer's `SerializeOpts.truncationBanner`):
-     *  "full" (default when unset) renders the reduced-output banner exactly as before;
-     *  "none" silences it — the caps/shrink themselves are UNCHANGED, only the announcement
-     *  is dropped. Threaded to BOTH rendering paths below: the collection/dict/list path
-     *  (via `observationCaps`, which forwards it into `SerializeOpts`) and this function's
-     *  OWN raw-top-level-string shortcut, whose `#| ⚠ output reduced: +N more chars ... |#`
-     *  note is a second, independent emission site that must ALSO vanish under "none" — a
-     *  half-silenced banner (collections quiet, raw strings still noisy) would defeat the
-     *  point of an honest A/B knob. */
-    truncationBanner?: "full" | "none";
-  } = {},
-): string {
+export function renderObservation(value: unknown, opts: { maxTotalChars?: number } = {}): string {
   // A top-level RAW JS string (a provenance-less native return — e.g. substring/
   // string-append over literals) hits the SExpr intermediate as a bare TOKEN and renders
   // unquoted, while the same value provenance-boxed (AString) renders quoted — breaking
@@ -261,84 +234,44 @@ export function renderObservation(
   // capped like any other string. (Nested raw strings inside raw containers share the
   // token fate at the serializer level — no interpreter path produces those today.)
   //
-  // This shortcut now carries the SAME string-remedy clause the serializer's own
-  // truncation banner does (errors-as-doors: a truncation banner with no remedy is an
-  // anti-door), routed through the identical COMPETENCE v2 gating the collection/string
-  // paths use elsewhere in this file — `opts.stringRemedyMode` (verbose the first time
-  // this world, compact after, suppressed once stably demonstrated) and
-  // `opts.onRemedyRendered("string")` so the caller's gradient advances exactly as it
-  // would for a capped-inside-a-collection string.
+  // The elision itself is still signaled INLINE (errors-as-doors: a truncation must never
+  // be silent) — the `…(+N chars)` style suffix a boxed AString gets from the serializer's
+  // own `capString` — mirrored here for the raw-string shortcut so both paths carry the
+  // same honest signal without a separate top-of-output banner.
   if (typeof value === "string") {
     const cap = opts.maxTotalChars ?? DEFAULT_OBSERVATION_MAX_TOTAL_CHARS;
     if (value.length <= cap) return JSON.stringify(value);
     const sliced = JSON.stringify(value.slice(0, cap));
-    // truncationBanner: "none" — the slice above (the actual cap enforcement) is
-    // UNCHANGED; only this note's emission is skipped, no fact, no remedy, no callback.
-    if ((opts.truncationBanner ?? "full") === "none") return sliced;
-    const stringMode = opts.stringRemedyMode ?? "verbose";
-    let remedy = "";
-    if (stringMode !== "suppressed") {
-      remedy =
-        stringMode === "compact"
-          ? ` — (substring s 0 2000) or (string-contains s "needle") to pull just the part you need`
-          : " — slice the long string with substring, or scan it with string-contains, to pull just the part you need";
-      opts.onRemedyRendered?.("string");
-    }
-    return `${sliced} #| ⚠ output reduced: +${value.length - cap} more chars${remedy} |#`;
+    return `${sliced}…(+${value.length - cap} chars)`;
   }
   // The `SerializeOptsPending` intersection covers the window where the serializer's
-  // PUBLISHED dist .d.ts predates a SerializeOpts seam its src already has (`format`, and
-  // now `collectionRemedyMode`/`stringRemedyMode`/`onRemedyRendered` — live benchmark
-  // runners hold the current dist, the orchestrator rebuilds after they drain). Redundant —
-  // and harmless — once the dist catches up.
+  // PUBLISHED dist .d.ts predates a SerializeOpts seam its src already has (`format` —
+  // live benchmark runners hold the current dist, the orchestrator rebuilds after they
+  // drain). Redundant — and harmless — once the dist catches up.
   const serializeOpts: SerializeOptsPending = {
-    ...observationCaps(
-      opts.maxTotalChars,
-      { collection: opts.collectionRemedyMode, string: opts.stringRemedyMode },
-      opts.onRemedyRendered,
-      opts.truncationBanner,
-    ),
+    ...observationCaps(opts.maxTotalChars),
     format: (sexpr) => format(sexpr),
   };
   return toSExprString(value, serializeOpts);
 }
 
 /** See the `SerializeOptsPending` note above `renderObservation`: the published dist's
- *  `SerializeOpts` may not yet declare `collectionRemedyMode`/`stringRemedyMode`/
- *  `onRemedyRendered`/`truncationBanner` even though this function always sets them (as
- *  `undefined` when unset) — a structural superset, never a literal assigned where the
- *  narrower type is checked, so this widens safely regardless of which dist shape a
- *  consumer holds. */
+ *  `SerializeOpts` may not yet declare `format` even though this function always sets it — a
+ *  structural superset, never a literal assigned where the narrower type is checked, so this
+ *  widens safely regardless of which dist shape a consumer holds. */
 type SerializeOptsPending = SerializeOpts & {
   format?: (sexpr: SExpr) => string;
-  collectionRemedyMode?: RemedyMode;
-  stringRemedyMode?: RemedyMode;
-  onRemedyRendered?: (cls: TriggerClass) => void;
-  truncationBanner?: "full" | "none";
 };
 
 /** The observation-budget cap set, shared by BOTH rendering modes (manifold-tool.ts's
  *  "sexpr" escape hatch passes these to `toSExprString` directly): total budget + seeds
  *  sized to only ever bite once the budget is actually exceeded — never the serializer's
  *  tighter general-purpose defaults (100 items would truncate a 150-element list that
- *  fits the budget fine). `remedy` + `onRemedyRendered` thread COMPETENCE v2's per-class
- *  gradient (competence.ts) through to the serializer's own mode options — absent ⇒
- *  unchanged behaviour (both clauses render verbose whenever their collection/string
- *  actually capped). `truncationBanner` threads the A/B silence knob the same way — absent
- *  ⇒ "full" (today's behaviour). */
-export function observationCaps(
-  maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS,
-  remedy?: { collection?: RemedyMode; string?: RemedyMode },
-  onRemedyRendered?: (cls: TriggerClass) => void,
-  truncationBanner?: "full" | "none",
-): SerializeOptsPending {
+ *  fits the budget fine). */
+export function observationCaps(maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS): SerializeOptsPending {
   return {
     maxTotalChars,
     maxItems: SEED_MAX_ITEMS,
     maxStringChars: maxTotalChars,
-    collectionRemedyMode: remedy?.collection,
-    stringRemedyMode: remedy?.string,
-    onRemedyRendered,
-    truncationBanner,
   };
 }

@@ -15,7 +15,7 @@
 import { exec, sandboxedEnv } from "@here.build/arrival";
 import { describe, expect, it } from "vitest";
 
-import { renderObservation } from "../render-observation.js";
+import { DEFAULT_OBSERVATION_MAX_TOTAL_CHARS, renderObservation } from "../render-observation.js";
 
 // `exec`'s `env` option is typed against arrival's concrete (intentionally UNEXPORTED)
 // `Environment` class; `sandboxedEnv.inherit(...)` returns the public structural
@@ -143,24 +143,26 @@ describe("renderObservation — caps + shrink ride the brace notation natively",
   it("reduces an oversize result to fit the budget WITHOUT leaving the brace notation", async () => {
     // SerializeOpts.format: the brace formatter is plugged into toSExprString's own
     // streaming caps + fair shrink-to-fit — no more parens fallback for oversize results.
+    // No top-of-output banner (removed 2026-07-06) — the inline `+N more of TOTAL` marker
+    // is the only signal, and the budget is genuinely honored (no ⚠/"output reduced" text).
     const env = freshEnv();
     const [value] = await run(env, String.raw`(map (lambda (x) (make-string 3000 #\a)) (iota 100))`);
     const rendered = renderObservation(value);
-    expect(rendered).toMatch(/^#\| ⚠ output reduced to fit response budget/);
+    expect(rendered.length).toBeLessThanOrEqual(DEFAULT_OBSERVATION_MAX_TOTAL_CHARS);
     expect(rendered).toMatch(/#\| \+\d+ more of \d+ \|#/);
     expect(rendered).not.toMatch(/\(list/);
-    expect(rendered.split("\n")[1]?.startsWith("[")).toBe(true);
+    expect(rendered.startsWith("[")).toBe(true);
   });
 
   it("honors a caller-provided maxTotalChars budget", async () => {
     const env = freshEnv();
     const [value] = await run(env, "(iota 2000)");
-    const roomy = renderObservation(value); // default 40k budget — renders in full
+    const roomy = renderObservation(value); // default budget — renders in full
     expect(roomy).not.toContain("output reduced");
     const tight = renderObservation(value, { maxTotalChars: 500 });
-    expect(tight).toMatch(/^#\| ⚠ output reduced to fit response budget/);
+    expect(tight.length).toBeLessThanOrEqual(500);
     expect(tight).toMatch(/#\| \+\d+ more of 2000 \|#/);
-    expect(tight.split("\n")[1]?.startsWith("[")).toBe(true);
+    expect(tight.startsWith("[")).toBe(true);
   });
 
   it("keeps a capped dict's truncation marker inside the braces", () => {
@@ -177,69 +179,23 @@ describe("renderObservation — caps + shrink ride the brace notation natively",
   });
 });
 
-describe("renderObservation — raw top-level string truncation now carries a remedy (regression: the pre-existing no-remedy gap)", () => {
+describe("renderObservation — raw top-level string truncation carries an inline elision marker, no banner", () => {
   // A provenance-less native string (e.g. a bare JS string returned top-level, not boxed
-  // in an AString) hits the shortcut branch in renderObservation directly — the ONE path
-  // that, before this fix, emitted the factual `+N more chars` note with zero teaching
-  // clause. It's now routed through the same collectionRemedyMode/stringRemedyMode gating
-  // every other truncation path uses.
+  // in an AString) hits the shortcut branch in renderObservation directly. Truncation is
+  // signaled INLINE (the `…(+N chars)` suffix, matching the serializer's own `capString`
+  // convention) — there is no separate top-of-output banner (removed 2026-07-06: measured
+  // null effect on task pass-rate).
   const raw = "x".repeat(1000);
 
-  it("verbose (default, unset mode) carries the full teaching sentence", () => {
+  it("caps the string and appends the inline elision marker", () => {
     const rendered = renderObservation(raw, { maxTotalChars: 100 });
-    expect(rendered).toContain("#| ⚠ output reduced: +900 more chars");
-    expect(rendered).toContain(
-      "slice the long string with substring, or scan it with string-contains, to pull just the part you need",
-    );
+    expect(rendered).toContain("…(+900 chars)");
+    expect(rendered).not.toContain("⚠");
+    expect(rendered).not.toContain("output reduced");
   });
 
-  it("compact mode keeps an exact-syntax action kernel, not a bare technique name (errors-as-doors: 'substring helps' is an anti-door)", () => {
-    const rendered = renderObservation(raw, { maxTotalChars: 100, stringRemedyMode: "compact" });
-    expect(rendered).toContain("(substring s 0 2000)");
-    expect(rendered).toContain('(string-contains s "needle")');
-    expect(rendered).not.toContain("slice the long string with substring");
-  });
-
-  it("suppressed mode drops the remedy clause but keeps the factual +N more chars note", () => {
-    const rendered = renderObservation(raw, { maxTotalChars: 100, stringRemedyMode: "suppressed" });
-    expect(rendered).toContain("output reduced: +900 more chars");
-    expect(rendered).not.toContain("substring");
-  });
-
-  it("fires onRemedyRendered('string') exactly when the remedy actually rendered on this path", () => {
-    const rendered: string[] = [];
-    renderObservation(raw, { maxTotalChars: 100, onRemedyRendered: (cls) => rendered.push(cls) });
-    expect(rendered).toEqual(["string"]);
-
-    const renderedNone: string[] = [];
-    renderObservation("short", { maxTotalChars: 100, onRemedyRendered: (cls) => renderedNone.push(cls) });
-    expect(renderedNone).toEqual([]);
-  });
-
-  describe('truncationBanner: "none" — the raw-string shortcut must ALSO go silent, not just the collection path', () => {
-    it('drops the "output reduced" note entirely, but still slices the string to the cap', () => {
-      const rendered = renderObservation(raw, { maxTotalChars: 100, truncationBanner: "none" });
-      expect(rendered).not.toContain("output reduced");
-      expect(rendered).not.toContain("⚠");
-      // Still a valid JSON string literal, capped at 100 chars of content.
-      expect(JSON.parse(rendered)).toBe(raw.slice(0, 100));
-    });
-
-    it("never fires onRemedyRendered under none — no clause to report", () => {
-      const rendered: string[] = [];
-      renderObservation(raw, { maxTotalChars: 100, truncationBanner: "none", onRemedyRendered: (cls) => rendered.push(cls) });
-      expect(rendered).toEqual([]);
-    });
-
-    it('default (unset) is unchanged — "full" banner still present', () => {
-      const rendered = renderObservation(raw, { maxTotalChars: 100 });
-      expect(rendered).toContain("output reduced");
-    });
-
-    it("an under-budget string is unaffected either way (nothing to silence)", () => {
-      const full = renderObservation("short", { maxTotalChars: 100 });
-      const none = renderObservation("short", { maxTotalChars: 100, truncationBanner: "none" });
-      expect(full).toBe(none);
-    });
+  it("an under-budget string is unaffected — no marker, plain JSON string", () => {
+    const rendered = renderObservation("short", { maxTotalChars: 100 });
+    expect(rendered).toBe('"short"');
   });
 });

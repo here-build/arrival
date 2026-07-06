@@ -5,31 +5,27 @@
 // runner is extracted — a classic site for a default to silently drift during that conversion
 // (`10`→`8`, `0.7`→`0.75`, …). Some constants were already pinned (manifold-tool.test.ts pins the
 // response-size/attachments SCHEMA defaults verbatim) — this file adds the ones that were not:
-// competence.ts's WINDOW_SIZE/STABLE_THRESHOLD, futility.ts's RING_SIZE, and doors.ts's
-// TIER3_TOP/isCloseName distance-gate constants.
+// futility.ts's RING_SIZE, and doors.ts's TIER3_TOP/isCloseName distance-gate constants.
+// (competence.ts's WINDOW_SIZE/STABLE_THRESHOLD were pinned here too until 2026-07-06, when the
+// whole COMPETENCE v2 remedy-gradient mechanism was removed alongside the truncation banner it
+// fed — a measured null effect on task pass-rate.)
 //
-// THIS FILE ADDS `export` TO FOUR PREVIOUSLY MODULE-PRIVATE CONSTANTS (competence.ts's
-// WINDOW_SIZE/STABLE_THRESHOLD, futility.ts's RING_SIZE, doors.ts's TIER3_TOP) AND ONE FUNCTION
-// (doors.ts's isCloseName) — see each symbol's own doc comment for the one-line justification.
-// This is the ONLY production-code touch anywhere in this test-safety-net batch: purely additive
-// (an `export` keyword), zero behavior change, and it is exactly what Round 1 already calls for
-// as a first, minimal step toward "these become injected options" — done here as "these become
-// OBSERVABLE" only, deliberately stopping short of actually wiring them as options (that is real
-// design work for the migration itself, not a side effect of writing a test).
+// THIS FILE ADDS `export` TO PREVIOUSLY MODULE-PRIVATE CONSTANTS (futility.ts's RING_SIZE,
+// doors.ts's TIER3_TOP) AND ONE FUNCTION (doors.ts's isCloseName) — see each symbol's own doc
+// comment for the one-line justification. This is the ONLY production-code touch anywhere in
+// this test-safety-net batch: purely additive (an `export` keyword), zero behavior change, and
+// it is exactly what Round 1 already calls for as a first, minimal step toward "these become
+// injected options" — done here as "these become OBSERVABLE" only, deliberately stopping short
+// of actually wiring them as options (that is real design work for the migration itself, not a
+// side effect of writing a test).
 
 import { describe, expect, it } from "vitest";
 
 import type { BoundTool } from "../bound-tool.js";
-import { STABLE_THRESHOLD, WINDOW_SIZE } from "../competence.js";
 import { isCloseName, TIER3_TOP } from "../doors.js";
 import { RING_SIZE } from "../futility.js";
 
 describe("calibration-constant registry — today's documented defaults, pinned literally", () => {
-  it("competence.ts", () => {
-    expect(WINDOW_SIZE).toBe(10);
-    expect(STABLE_THRESHOLD).toBe(0.7);
-  });
-
   it("futility.ts", () => {
     expect(RING_SIZE).toBe(6);
   });
