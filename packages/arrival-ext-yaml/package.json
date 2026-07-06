@@ -1,0 +1,43 @@
+{
+  "name": "@here.build/arrival-ext-yaml",
+  "description": "The .yaml/.yml require resolver as an opt-in EnvCapability - the package that OWNS the yaml parser dependency (dep-isolation per the env-quasi-packages rule).",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "here.build",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "src/**/*",
+    "!**/__tests__",
+    "!**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-scheme-env-loader": "workspace:^",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.2",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}
