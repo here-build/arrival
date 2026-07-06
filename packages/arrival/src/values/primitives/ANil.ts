@@ -43,7 +43,7 @@ export class ANil extends AValue {
     return {};
   }
 
-  append(x: unknown): APair {
+  append(x: SchemeValue): APair {
     return new APair(CONSTANT_CTX, x, nil);
   }
 

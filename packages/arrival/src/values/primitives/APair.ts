@@ -259,14 +259,14 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
       } else if (typeof car === "bigint") {
         car = new AExact(ctx, car);
       }
-      result = new APair(ctx, car, result);
+      result = new APair(ctx, car as SchemeValue, result);
     }
     return result;
   }
 
   static fromPairs(ctx: RunContext, array: [string, unknown][]): APair | ANil {
     return array.reduce<APair | ANil>((list, pair) => {
-      return new APair(ctx, new APair(ctx, new ASymbol(ctx, pair[0]), pair[1]), list);
+      return new APair(ctx, new APair(ctx, new ASymbol(ctx, pair[0]), pair[1] as SchemeValue), list);
     }, nil);
   }
 
@@ -840,7 +840,7 @@ export class APair<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValu
 
   // Traversable — effectful traversal; `of` lifts into the applicative.
   ["arrival/tagless-final/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
-    return traversePair(this.ctx, of, f, this);
+    return traversePair(this.ctx, of as (x: unknown) => SchemeValue, f, this);
   }
 
   // Chain (Monad) — map then flatten. Flattening reuses the PURE list-concat
