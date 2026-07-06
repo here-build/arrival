@@ -33,7 +33,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import type { AVector } from "../values/primitives/AVector.js";
+import { AVector } from "../values/primitives/AVector.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -43,6 +43,7 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import type { SchemeValue } from "../values/types.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { R7RSError } from "../errors.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
 import { type ACallable, ANativeProcedure, applyCallback } from "../values/primitives/ACallable.js";
 import { is_callable_value } from "../values/value-guards.js";
 
@@ -138,24 +139,104 @@ export function isKwargs(schema: unknown): schema is z.ZodObject<z.ZodRawShape> 
  *  marshalling is a per-slot choice, not the container codec's). decode walks the spine (doors on
  *  an improper or circular tail — the same doors env/r7rs's `to_array` levies); encode rebuilds
  *  the chain. */
-export const list = z.codec(
-  z.custom<APair | ANil>((x) => x instanceof APair || x instanceof ANil),
-  z.array(z.custom<SchemeValue>()),
-  {
-    decode: (l) => {
-      const out: SchemeValue[] = [];
-      let node: unknown = l;
-      while (node instanceof APair) {
-        if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
-        out.push(node.car as SchemeValue);
-        node = node.cdr;
-      }
-      if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
-      return out;
+// ── COLLECTION FACTORIES — nested shapes compose for free ────────────────────
+// zod 4 codec pipelines apply element codecs on both directions: `listOf(string)`
+// decodes to `string[]` (spine walk → each element through the string codec) and
+// encodes back (each element encoded, then the chain rebuilt). Verified empirically:
+// a codec whose OUT side is `z.array(inner)` runs inner.decode per element after the
+// container transform, and inner.encode per element before it. So `listOf(vectorOf(
+// string))`, `dictOf(list)`, … nest arbitrarily with no extra machinery here.
+
+/** A proper list of `element` ↔ a JS array of the element's JS face. The scheme face is the
+ *  pair-chain (an AJSArray is a `vector` by protocol, not a list). decode walks the spine
+ *  (doors on improper/circular — the same doors env/r7rs's `to_array` levies); encode
+ *  rebuilds the chain from the element-encoded values. */
+export function listOf<E extends z.ZodType>(element: E) {
+  return z.codec(
+    z.custom<APair | ANil>((x) => x instanceof APair || x instanceof ANil),
+    z.array(element),
+    {
+      decode: (l) => {
+        const out: unknown[] = [];
+        let node: unknown = l;
+        while (node instanceof APair) {
+          if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
+          out.push(node.car);
+          node = node.cdr;
+        }
+        if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
+        // The out-side `z.array(element)` parse runs element.decode per slot after this.
+        return out as z.input<E>[];
+      },
+      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil,
     },
-    encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil,
-  },
-);
+  );
+}
+
+/** A proper list ↔ JS array with UNTYPED elements (elements stay scheme values —
+ *  element marshalling is a per-slot choice). The plain form of `listOf`. */
+export const list = listOf(z.custom<SchemeValue>());
+
+/** A vector-by-PROTOCOL of `element` ↔ a JS array of the element's JS face. The scheme
+ *  face is anything answering `arrival/tagless-final/vector?` — a boxed AVector OR a
+ *  borrowed AJSArray (glass, per the uniform-vocabulary design: protocol, never a class
+ *  check). decode materializes via the same payload read `asVector` performs; encode
+ *  builds a real AVector. */
+export function vectorOf<E extends z.ZodType>(element: E) {
+  return z.codec(
+    z.custom<AVector>(
+      (x) => typeof (x as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector?"] === "function",
+    ),
+    z.array(element),
+    {
+      decode: (v) => {
+        // The protocol admits AVector (payload on __vector__) and AJSArray (borrowed
+        // source) — read whichever payload the answering value carries.
+        const payload = (v as { __vector__?: SchemeValue[]; source?: unknown[] }).__vector__ ?? (v as { source?: unknown[] }).source;
+        if (!Array.isArray(payload)) throw new TypeError("vector codec: the operand answers vector? but carries no array payload");
+        return payload as z.input<E>[];
+      },
+      encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
+    },
+  );
+}
+
+/** A vector ↔ JS array with UNTYPED elements. The plain form of `vectorOf`. */
+export const vector = vectorOf(z.custom<SchemeValue>());
+
+/** Is `x` a dict — the native open-key record (`{…}` / `(dict …)`)? The same
+ *  record-vs-class-instance disambiguation `readMember`/`dict?` use: a plain record
+ *  (proto Object.prototype or null), possibly under an AJSObject wrapper (glass). An
+ *  array, scalar, or foreign class instance is NOT a dict. */
+function isDictLike(x: unknown): boolean {
+  if (x == null) return false;
+  const source = x instanceof AJSObject ? x.source : x;
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return false;
+  const proto = Object.getPrototypeOf(source);
+  return proto === Object.prototype || proto === null;
+}
+
+/** A dict of `valueSchema` values ↔ a JS `Record<string, …>` of the value's JS face.
+ *  The scheme face is the open-key record BY PROTOCOL (a plain record or an AJSObject
+ *  wrapping one — glass); keys are real JS strings on both faces. decode unwraps the
+ *  AJSObject membrane when present; encode hands back the plain record (the dict IS the
+ *  plain record — polyglot's own `dict` constructor doctrine). */
+export function dictOf<E extends z.ZodType>(valueSchema: E) {
+  return z.codec(
+    z.custom<Record<string, SchemeValue> | AJSObject>(isDictLike),
+    z.record(z.string(), valueSchema),
+    {
+      decode: (d) => {
+        const source = d instanceof AJSObject ? (d.source as Record<string, unknown>) : d;
+        return source as Record<string, z.input<E>>;
+      },
+      encode: (rec) => rec as Record<string, SchemeValue>,
+    },
+  );
+}
+
+/** A dict ↔ JS record with UNTYPED values. The plain form of `dictOf`. */
+export const dict = dictOf(z.custom<SchemeValue>());
 
 /** A callable ↔ a JS-invokable (uniform-vocabulary `procedure` primitive — a procedure is a
  *  procedure in BOTH worlds; no native-only carve-out). The scheme face is any arrival callable
