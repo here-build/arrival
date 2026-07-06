@@ -77,9 +77,11 @@ describe("SRFI-189 — Maybe & Either", () => {
     expect(await run("(either-bind (left 'err) (lambda (x) (right x)))")).toBe("(left err)");
   });
   it("predicates", async () => {
-    expect(await run("(just? (just 1))")).toBe("true");
-    expect(await run("(maybe? (nothing))")).toBe("true");
-    expect(await run("(either? (left 1))")).toBe("true");
+    // These SRFI preludes bottom out in the equality pack's predicates, which box now
+    // (the Face split: eq?/equal?/not return the schemeTrue/schemeFalse flyweights).
+    expect(await run("(just? (just 1))")).toBe("#t");
+    expect(await run("(maybe? (nothing))")).toBe("#t");
+    expect(await run("(either? (left 1))")).toBe("#t");
   });
 });
 

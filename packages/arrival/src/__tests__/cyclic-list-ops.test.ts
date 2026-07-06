@@ -23,7 +23,7 @@ const cyclic = (op: string) => `(let ((c '#0=(1 2 3 . #0#))) ${op})`;
 
 describe("list ops on a RUNTIME-cyclic list terminate (no spin / stack overflow)", () => {
   it("list? on a circular list → #f", async () => {
-    expect(await run(cyclic("(list? c)"))).toBe("false");
+    expect(await run(cyclic("(list? c)"))).toBe("#f");
   });
   it("length on a circular list raises a clean error", async () => {
     await expect(run(cyclic("(length c)"))).rejects.toThrow(/circular/i);
@@ -43,8 +43,8 @@ describe("list ops on a RUNTIME-cyclic list terminate (no spin / stack overflow)
 });
 
 describe("acyclic list ops unaffected", () => {
-  it("list? proper → #t", async () => expect(await run(`(list? (list 1 2 3))`)).toBe("true"));
-  it("list? improper → #f", async () => expect(await run(`(list? (cons 1 2))`)).toBe("false"));
+  it("list? proper → #t", async () => expect(await run(`(list? (list 1 2 3))`)).toBe("#t"));
+  it("list? improper → #f", async () => expect(await run(`(list? (cons 1 2))`)).toBe("#f"));
   it("length proper → 3", async () => expect(await run(`(length (list 1 2 3))`)).toBe("3"));
   it("reverse proper", async () => expect(await run(`(reverse (list 1 2 3))`)).toBe("(3 2 1)"));
   it("list-copy proper", async () => expect(await run(`(list-copy (list 1 2 3))`)).toBe("(1 2 3)"));

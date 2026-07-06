@@ -395,7 +395,9 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     if (err) {
       expect(err.message).not.toMatch(/circular structure|JSON/i);
     } else {
-      expect(typeof result === "boolean" || result === true || result === false).toBe(true);
+      // A verdict is the boxed scheme boolean (`equal?` returns the schemeTrue/schemeFalse
+      // flyweights under the Face split; raw JS booleans were the LIPS-legacy form).
+      expect(String(result) === "#t" || String(result) === "#f" || typeof result === "boolean").toBe(true);
     }
   });
 });

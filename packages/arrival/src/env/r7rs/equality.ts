@@ -10,15 +10,15 @@
  * extraction.
  *
  * MIGRATED (Phase-1 pilot) to the `symbol.native` API: each op declares a zod
- * contract and an impl, replacing the inline `{ value }` form. Native means the
- * schemas are SCHEME-IDENTITY (no codec, no validation) — the impl IS the binding,
- * bound raw exactly as `{ value }` was, so the runtime behavior is unchanged. These
- * predicates are REPRESENTATION-BLIND by design (they accept a boxed SchemeBool /
- * SchemeSymbol OR a raw JS value that arrived via rosetta unwrapping — see
- * equality-representation.test.ts), so the honest input term is `z.value`, and the
- * honest output is the `z.boolean` codec (DECODED type `boolean`) — the impl returns a JS
- * boolean, which native binds
- * and returns raw — downstream `structuralEqual` treats `true ≡ SchemeBool(true)`).
+ * contract and an impl, replacing the inline `{ value }` form. Native means the impl
+ * works on the contract's SCHEME face (`Impl<…,"scheme">` — each schema's `z.input`;
+ * the Face projection split): a `z.boolean` output demands an ABool, so every
+ * predicate returns the shared `schemeTrue`/`schemeFalse` FLYWEIGHTS (eq?-stable,
+ * empty-provenance — the boxed twin of the raw `true`/`false` these impls returned
+ * under the LIPS-legacy raw-bind reading; `structuralEqual` treats them identically).
+ * Inputs stay REPRESENTATION-BLIND by design (a boxed SchemeBool / SchemeSymbol OR a
+ * raw JS value that arrived via rosetta unwrapping — see
+ * equality-representation.test.ts), so the honest input term is `z.value`.
  *
  * ALSO HOLDS the R7RS TYPE predicates `string?` / `pair?` / `null?` / `boolean?` /
  * `symbol?` / `list?` — relocated VERBATIM from the legacy `stdlib.ts` global_env as
@@ -31,7 +31,7 @@
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { ABool } from "../../values/primitives/ABool.js";
+import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../values/primitives/AJSObject.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
@@ -45,13 +45,16 @@ import { ctxOf } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { printValue } from "../../values/print.js";
 
+/** The scheme face of a predicate verdict — the shared flyweights (eq?-stable, empty provenance). */
+const bool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
+
 export default new EnvCapability("scheme/equality", {
   symbols: {
     // R7RS 6.3 Booleans
     "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
       { input: [z.boolean, z.boolean], inputRest: z.boolean, output: [z.boolean] },
       (...bools) => {
-        if (bools.length < 2) return true;
+        if (bools.length < 2) return schemeTrue;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
         // the type-guard one line up would already have rejected the schemeTrue
@@ -62,8 +65,8 @@ export default new EnvCapability("scheme/equality", {
           return undefined;
         };
         const first = unwrap(bools[0]);
-        if (first === undefined) return false;
-        return bools.every((b) => unwrap(b) === first);
+        if (first === undefined) return schemeFalse;
+        return bool(bools.every((b) => unwrap(b) === first));
       },
     ),
 
@@ -77,11 +80,11 @@ export default new EnvCapability("scheme/equality", {
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
       (...syms) => {
-        if (syms.length < 2) return true;
+        if (syms.length < 2) return schemeTrue;
         const first = syms[0];
-        if (!(first instanceof ASymbol)) return false;
+        if (!(first instanceof ASymbol)) return schemeFalse;
         const firstName = first.__name__;
-        return syms.every((s) => s instanceof ASymbol && s.__name__ === firstName);
+        return bool(syms.every((s) => s instanceof ASymbol && s.__name__ === firstName));
       },
     ),
 
@@ -111,8 +114,8 @@ export default new EnvCapability("scheme/equality", {
       { input: [z.lambda], output: [z.boolean] },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
-      (obj: unknown): boolean => {
-        return is_callable(obj) && !is_macro(obj);
+      (obj: unknown): ABool => {
+        return bool(is_callable(obj) && !is_macro(obj));
       },
     ),
 
@@ -128,12 +131,12 @@ export default new EnvCapability("scheme/equality", {
     // write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.value], output: [z.string] },
-      (obj): string => printValue(obj),
+      (obj): AString => new AString(CONSTANT_CTX, printValue(obj)),
     ),
 
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (a, b) => structuralEqual(a, b),
+      (a, b) => bool(structuralEqual(a, b)),
     ),
 
     // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates, relocated
@@ -144,12 +147,12 @@ export default new EnvCapability("scheme/equality", {
     // equivalence predicates above.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (x, y) => eq(x, y),
+      (x, y) => bool(eq(x, y)),
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (x, y) => eqv(x, y),
+      (x, y) => bool(eqv(x, y)),
     ),
 
     // R7RS 6.3 — logical negation, relocated VERBATIM from stdlib.ts global_env
@@ -161,7 +164,7 @@ export default new EnvCapability("scheme/equality", {
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
       // (a truthy object in JS), so `!value` would wrongly return false here.
       // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
-      (value) => is_false(value),
+      (value) => bool(is_false(value)),
     ),
 
     // ── R7RS type predicates (relocated from stdlib.ts global_env, POC) ──────────
@@ -170,7 +173,7 @@ export default new EnvCapability("scheme/equality", {
     // value that crossed the rosetta membrane.
     "string?": symbol.native`string?: boxed-or-raw string test`(
       { input: [z.value], output: [z.boolean] },
-      (obj) => obj instanceof AString,
+      (obj) => bool(obj instanceof AString),
     ),
 
     // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
@@ -183,14 +186,14 @@ export default new EnvCapability("scheme/equality", {
       // null/undefined no longer reach here — the membrane boxes JS null→nil and
       // undefined→theVoid before any value enters the language — so the legacy
       // global_env's `|| null || undefined` nullish tolerance is dissolved.
-      (obj) => obj instanceof ANil,
+      (obj) => bool(obj instanceof ANil),
     ),
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
       { input: [z.value], output: [z.boolean] },
       // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
       // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
-      (obj) => obj instanceof ABool,
+      (obj) => bool(obj instanceof ABool),
     ),
 
     "symbol?": symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
@@ -208,12 +211,12 @@ export default new EnvCapability("scheme/equality", {
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         { input: [z.value], output: [z.boolean] },
-        (obj: unknown): boolean => {
-          if (obj == null) return false;
+        (obj: unknown): ABool => {
+          if (obj == null) return schemeFalse;
           const source = obj instanceof AJSObject ? obj.source : obj;
-          if (typeof source !== "object" || source === null || Array.isArray(source)) return false;
+          if (typeof source !== "object" || source === null || Array.isArray(source)) return schemeFalse;
           const proto = Object.getPrototypeOf(source);
-          return proto === Object.prototype || proto === null;
+          return bool(proto === Object.prototype || proto === null);
         },
       ),
 
@@ -224,18 +227,18 @@ export default new EnvCapability("scheme/equality", {
       // reader #0= cycles).
       (obj) => {
         if (obj instanceof APair && isCircularList(obj)) {
-          return false;
+          return schemeFalse;
         }
         let node: unknown = obj;
         while (true) {
           if (node instanceof ANil) {
-            return true;
+            return schemeTrue;
           }
           if (!(node instanceof APair)) {
-            return false;
+            return schemeFalse;
           }
           if (node.have_cycles("cdr")) {
-            return false;
+            return schemeFalse;
           }
           node = node.cdr;
         }

@@ -49,11 +49,10 @@ describe("boolean landmine — complement (bridge): async + boxed-bool", () => {
 
 describe("boolean landmine — not / is_false honor SchemeBool", () => {
   it("not of a SchemeBool predicate result", async () => {
-    // `not` routes through is_false (handles SchemeBool(false)) but currently
-    // RETURNS a raw JS boolean — it's itself part of the predicate-flip surface,
-    // so this is "true"/"false" today and becomes "#t"/"#f" once predicates box.
-    expect(await run(`(not (${EVEN_SB} 1))`)).toBe("true"); // (even? 1)→#f, not #f → true
-    expect(await run(`(not (${EVEN_SB} 2))`)).toBe("false");
+    // Predicates BOX now (the Face split): `not` returns the schemeTrue/schemeFalse
+    // flyweights, printing the R7RS forms — exactly the flip this comment foresaw.
+    expect(await run(`(not (${EVEN_SB} 1))`)).toBe("#t"); // (even? 1)→#f, not #f → #t
+    expect(await run(`(not (${EVEN_SB} 2))`)).toBe("#f");
   });
   it("if/cond treat a SchemeBool(false) as falsy", async () => {
     expect(await run(`(if (${EVEN_SB} 1) 'yes 'no)`)).toBe("no");
