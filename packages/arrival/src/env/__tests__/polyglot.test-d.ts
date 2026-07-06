@@ -1,5 +1,5 @@
 // polyglot.test-d.ts — TYPE-LEVEL proofs for the scheme/polyglot Contract precision fix
-// (env/polyglot.ts): `@` / `@?` / `@keys` / `dict` all declared `output: [z.unknown()]`,
+// (env/polyglot.ts): `@` / `@?` / `@keys` / `dict` all declared `output: [z.custom<unknown>()]`,
 // discarding each op's own precise return type (`readMember` returns `SchemeValue`,
 // `hasMember` returns `boolean`, `memberKeys` returns `string[]`, `dict`'s impl always
 // builds a `Record<string, unknown>`). This file proves the FIXED contracts' decoded
@@ -12,9 +12,9 @@
 // REJECT what it used to silently accept) lives in the sibling
 // `polyglot-contract-precision.test.ts`.
 //
-// ★HONEST ACCOUNTING (see the audit report): `@`'s fix (`z.unknown()` → `z.value`) has NO
+// ★HONEST ACCOUNTING (see the audit report): `@`'s fix (`z.custom<unknown>()` → `z.value`) has NO
 // mechanical red/green of ANY kind — `z.value` is `z.custom<SchemeValue>()` with no
-// refinement, runtime-identical to `z.unknown()` (scheme-zod.ts's own doc comment), and
+// refinement, runtime-identical to `z.custom<unknown>()` (scheme-zod.ts's own doc comment), and
 // `readMember`'s real impl was ALREADY typed `SchemeValue`-returning, so tightening the
 // annotation causes no compile transition either. The proof below for `@` is a pure
 // mechanism/documentation proof (the shape decodes correctly), not a RED-before-fix probe —
@@ -39,8 +39,8 @@ describe("scheme/polyglot Contract precision — representative fixes decode pre
     expectTypeOf<DecodedReturn<[KeysOutput]>>().toEqualTypeOf<string[]>();
   });
 
-  test("dict: out z.record(z.string, z.unknown()) — decodes to Record<string, unknown>, not unknown", () => {
-    type DictOutput = ReturnType<typeof z.record<typeof z.string, ReturnType<typeof z.unknown>>>;
+  test("dict: out z.record(z.string, z.custom<unknown>()) — decodes to Record<string, unknown>, not unknown", () => {
+    type DictOutput = ReturnType<typeof z.record<typeof z.string, z.ZodCustom<unknown>>>;
     expectTypeOf<DecodedReturn<[DictOutput]>>().toEqualTypeOf<Record<string, unknown>>();
   });
 });
@@ -53,7 +53,7 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
   test("@?-shaped: a non-boolean return must NOT compile against z.boolean output", () => {
     if (RUN) {
       symbol.native`hasmember-proof: proof`(
-        { input: [z.unknown(), z.unknown()], output: [z.boolean] },
+        { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.boolean] },
         // @ts-expect-error — must return boolean, not a bare number
         (obj: unknown, key: unknown): number => 42,
       );
@@ -64,7 +64,7 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
   test("@keys-shaped: a non-string-array return must NOT compile against z.array(z.string) output", () => {
     if (RUN) {
       symbol.native`memberkeys-proof: proof`(
-        { input: [z.unknown()], output: [z.array(z.string)] },
+        { input: [z.custom<unknown>()], output: [z.array(z.string)] },
         // @ts-expect-error — must return string[], not number[]
         (obj: unknown): number[] => [1, 2, 3],
       );
@@ -75,7 +75,7 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
   test("dict-shaped: an array return must NOT compile against the record output", () => {
     if (RUN) {
       symbol.native`dict-proof: proof`(
-        { input: z.array(z.unknown()), output: [z.record(z.string, z.unknown())] },
+        { input: z.array(z.custom<unknown>()), output: [z.record(z.string, z.custom<unknown>())] },
         // @ts-expect-error — must return Record<string, unknown>, not an array
         (...args: unknown[]): unknown[] => args,
       );
@@ -86,7 +86,7 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
   test("@-shaped (documentation only — see the honest accounting above): a non-SchemeValue return must NOT compile against z.value output", () => {
     if (RUN) {
       symbol.native`readmember-proof: proof`(
-        { input: [z.unknown(), z.unknown()], output: [z.value] },
+        { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.value] },
         // @ts-expect-error — must return SchemeValue, not a bare number
         (obj: unknown, key: unknown): number => 42,
       );

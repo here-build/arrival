@@ -10,26 +10,22 @@
 // erase the concrete `I`/`O` on any REAL exported capability (see symbol.test-d.ts's "apply's
 // own declared shape" note), so each proof below is a SYNTHETIC contract mirroring the op's
 // real declared shape (built from the SAME scheme-zod.ts schemas), not a probe of the erased
-// runtime export. The runtime-observable half of numeric/bytevectors/strings/equality's sibling
-// audits (a `def.in.safeParse(garbage)` proof) does NOT apply here — see the note below.
+// runtime export.
 //
-// NO RUNTIME "*-contract-precision.test.ts" SIBLING: unlike bytevectors/strings/equality's
-// fixes (which moved `z.unknown()` → a REFINED `z.instanceof(...)`-backed identity schema with
-// real safeParse teeth), `z.value` is `z.custom<SchemeValue>()` with NO refinement — scheme-zod.ts
-// documents this explicitly: "accepts anything at runtime (byte-identical to `z.unknown()` —
-// and native ops run NO validation anyway), but its STATIC output is `SchemeValue`". So
-// `z.array(z.unknown()).safeParse(garbage)` and `z.array(z.value).safeParse(garbage)` accept
-// the exact same runtime inputs — there is no red-to-green `safeParse` delta to prove. The
-// entire fix here is static (the impl's inferred arg/return types, and the future `.d.ts`
-// harvest print), which is exactly what `.test-d.ts` — not a runtime test — is for.
+// UPDATE (uniform-scheme-zod-vocabulary redesign, 2026-07-06/07): `z.unknown()` is no longer
+// exported from scheme-zod at all — every genuinely-scheme-value slot uses `z.value` now (the
+// codebase-wide sweep). The "OLD shape" proofs below stand in `z.custom<unknown>()` — a real,
+// still-exported schema whose `z.output` is exactly `unknown`, byte-identical to what
+// `z.unknown()` decoded to — so the historical contrast (bare `unknown` vs. `SchemeValue`)
+// stays provable without referencing a removed export.
 //
-// RED-before: none of these schemas are NEW (z.value already existed, used throughout
-// lists.ts/lists.ts's `apply`/`list`), so this suite does not fail to COMPILE before the fix
-// (unlike numeric.test-d.ts's genuinely-new `z.numberOrBigint`). The real RED for this kind of
-// fix is the BUILD break on binding.ts itself the moment the contract tightens ahead of the
-// impl signature (native.ts: "a wrong-typed impl is a COMPILE error — that inference is the
-// load-bearing proof") — reproduced here as the `@ts-expect-error` negative proof below, and
-// captured verbatim (real tsc output) in the accompanying report.
+// call-with-values's output ALSO moved off its intermediate `z.undefinedResult` shape (a REAL
+// bug: R7RS call-with-values returns the consumer's result, never void — see binding.ts's own
+// fix comment) onto `z.value`, matching `values`'s own contract. The `unpromise` return-type
+// gap this file used to document (a bare cast would be needed to narrow it) is resolved the
+// same way `rosetta.ts`'s `rawImpl` / this session's other erasure-boundary casts are: an
+// INERT assertion (true by construction — the callback only ever produces `applyCallback`'s
+// result) at the one call site, not a lie about the contract.
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
@@ -37,9 +33,9 @@ import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/sy
 import type { SchemeValue } from "../../../values/types.js";
 
 describe("scheme/r7rs/binding Contract precision — values", () => {
-  test("OLD shape (z.array(z.unknown())) decoded flat unknown[] / unknown — no scheme-term precision", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  test("OLD shape (z.array(z.custom<unknown>())) decoded flat unknown[] / unknown — no scheme-term precision", () => {
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
   });
 
   test("NEW shape: z.array(z.value) / [z.value] — args are SchemeValue[], return is SchemeValue (matches Values.from's own fixed signature)", () => {
@@ -83,16 +79,12 @@ describe("scheme/r7rs/binding Contract precision — call-with-values", () => {
     expectTypeOf<Decoded["length"]>().toEqualTypeOf<2>();
   });
 
-  test("output STAYS z.unknown() — the real, verified, honest type (not a gap)", () => {
-    // Mirrors call-with-values's real (unchanged) contract shape: output: [z.unknown()].
-    // Tightening this to z.value was TRIED (see the report's tsc transcript) and reds at the
-    // `return unpromise(...)` line — `unpromise` (utils/promises.ts) is a genuinely-generic,
-    // widely-shared helper (also used by srfi-1's fold) whose own honest signature returns
-    // `unknown`; narrowing this call site would need either a bare cast (banned — see the
-    // project's honest-types-no-casts convention) or making the SHARED unpromise utility
-    // generic (a cross-cutting change well outside this ONE capability). `z.unknown()` here is
-    // the correct, verified type — this proof pins that decision so a future pass doesn't
-    // re-flag it without re-verifying.
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  test("output is z.value — call-with-values RETURNS the consumer's result (R7RS never discards)", () => {
+    // Mirrors call-with-values's CORRECTED contract shape: output: [z.value]. The intermediate
+    // `z.undefinedResult` shape (claiming "void") was a real bug the readonly-slot strictness
+    // pass surfaced — see binding.ts's fix comment. `z.unknown()`, the shape this proof once
+    // pinned, is no longer even expressible (dropped from scheme-zod's surface entirely by the
+    // uniform-vocabulary sweep) — z.value is now both the honest AND the only available choice.
+    expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 });

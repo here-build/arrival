@@ -1,7 +1,7 @@
 // bytevectors.test-d.ts — TYPE-LEVEL proofs for the scheme/bytevectors Contract precision fix.
 //
 // `bytevector` and `bytevector-append` (env/r7rs/bytevectors.ts) declared a wholly-variadic
-// `input: z.array(z.unknown())` — every argument decoded as a flat `unknown[]`, discarding the
+// `input: z.array(z.custom<unknown>())` — every argument decoded as a flat `unknown[]`, discarding the
 // op's own homogeneous element domain (a byte for `bytevector`; a bytevector for
 // `bytevector-append`). Unlike `for-each`/`string-map` (a DISTINCT callable head + a
 // differently-typed rest tail, migrated via `inputRest` — see symbol.test-d.ts's 2026-07-05
@@ -26,17 +26,17 @@ import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";
 
 describe("bytevector Contract precision — wholly-variadic homogeneous element domains", () => {
-  test("OLD bytevector shape (z.array(z.unknown())) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
+  test("OLD bytevector shape (z.array(z.custom<unknown>())) decoded FLAT unknown[]", () => {
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
   test("NEW bytevector shape: z.array(z.schemeNumber) decodes to ANumeric[] — each arg IS a scheme number, not unknown", () => {
     // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.sbytevector] }.
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>>>().toEqualTypeOf<ANumeric[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<ANumeric[]>();
   });
 
-  test("OLD bytevector-append shape (z.array(z.unknown())) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
+  test("OLD bytevector-append shape (z.array(z.custom<unknown>())) decoded FLAT unknown[]", () => {
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
   test("NEW bytevector-append shape: z.array(z.sbytevector) decodes to ABytevector[] — each arg IS a bytevector, not unknown", () => {

@@ -1,7 +1,7 @@
 // numeric.test-d.ts — TYPE-LEVEL proofs for the numeric-pack Contract precision fix.
 //
 // `bind` (numeric.ts) used to degrade EVERY one of the pack's 81 ops' outer
-// `symbol.native` Contract to `{ input: z.array(z.unknown()), output: [z.unknown()] }`,
+// `symbol.native` Contract to `{ input: z.array(z.custom<unknown>()), output: [z.custom<unknown>()] }`,
 // discarding the op's own precise `NumSpec` (`in`/`inRest`/`out` — the six `NCodec`s
 // carved at the top of numeric.ts). This file proves the FIXED codec→zod bridge
 // produces schemas whose DECODED types are precise, for one representative op per
@@ -27,12 +27,12 @@ import type { ANumeric } from "../../../values/numbers.js";
 
 describe("numeric Contract precision — representative NumSpec shapes decode precisely", () => {
   test("pure-variadic (+): in:[], inRest:SchemeNum, out:SchemeNum — args are ANumeric[], return ANumeric (matches addFn's own (...args: ANumeric[]) => ANumeric)", () => {
-    expectTypeOf<DecodedArgsWithRest<[], typeof z.schemeNumber>>().toEqualTypeOf<ANumeric[]>();
-    expectTypeOf<DecodedReturn<[typeof z.schemeNumber]>>().toEqualTypeOf<ANumeric>();
+    expectTypeOf<DecodedArgsWithRest<[], typeof z.schemeNumber, "scheme">>().toEqualTypeOf<ANumeric[]>();
+    expectTypeOf<DecodedReturn<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<ANumeric>();
   });
 
   test("fixed-head-plus-rest (-): in:[SchemeNum], inRest:SchemeNum, out:SchemeNum — matches subFn's (first: ANumeric, ...rest: ANumeric[]) => ANumeric", () => {
-    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeNumber], typeof z.schemeNumber>>().toEqualTypeOf<
+    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeNumber], typeof z.schemeNumber, "scheme">>().toEqualTypeOf<
       [ANumeric, ...ANumeric[]]
     >();
   });
@@ -55,8 +55,8 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
-  test("multi-value output (floor/): a 2-tuple output decodes as a [ANumeric, ANumeric] values-vector, not [z.unknown()]", () => {
-    expectTypeOf<DecodedReturn<[typeof z.schemeNumber, typeof z.schemeNumber]>>().toEqualTypeOf<
+  test("multi-value output (floor/): a 2-tuple output decodes as a [ANumeric, ANumeric] values-vector, not [z.custom<unknown>()]", () => {
+    expectTypeOf<DecodedReturn<[typeof z.schemeNumber, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
       [ANumeric, ANumeric]
     >();
   });

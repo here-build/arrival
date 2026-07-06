@@ -25,24 +25,24 @@ import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
 describe("scheme/strings Contract precision — array-element tightening (string / comparisons / string-append / concat)", () => {
-  test("OLD shape (z.array(z.unknown())) decoded FLAT unknown[] — no element precision", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
+  test("OLD shape (z.array(z.custom<unknown>())) decoded FLAT unknown[] — no element precision", () => {
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
   test("NEW `string` shape: z.array(z.schemeChar) decodes to ACharacter[], not unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>>>().toEqualTypeOf<ACharacter[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>, "scheme">>().toEqualTypeOf<ACharacter[]>();
   });
 
   test("NEW comparison/string-append/concat shape: z.array(z.schemeString) decodes to AString[], not unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.string>>>>().toEqualTypeOf<AString[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.string>>, "scheme">>().toEqualTypeOf<AString[]>();
   });
 });
 
 describe("scheme/strings Contract precision — list-shaped slots (string->list output / list->string input / join 2nd-arg / split output)", () => {
   const listSchema = z.union([z.pair, z.nil]);
 
-  test("OLD shape ([z.unknown()]) decoded to a bare unknown — no list-shape guarantee", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  test("OLD shape ([z.custom<unknown>()]) decoded to a bare unknown — no list-shape guarantee", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | ANil, not unknown (string->list / split)", () => {
@@ -54,7 +54,7 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
   });
 
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
-    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema]>>().toEqualTypeOf<[AString, APair | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<[AString, APair | ANil]>();
   });
 });
 

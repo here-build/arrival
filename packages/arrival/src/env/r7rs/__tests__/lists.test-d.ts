@@ -22,9 +22,9 @@ import type { APair } from "../../../values/primitives/APair.js";
 import type { ANil } from "../../../values/primitives/ANil.js";
 import type { SchemeValue } from "../../../values/types.js";
 
-describe("lists Contract precision — cons: car/cdr are z.value (SchemeValue), not z.unknown()", () => {
-  test("OLD shape (z.unknown() x2) decoded [unknown, unknown]", () => {
-    expectTypeOf<DecodedArgs<[ReturnType<typeof z.unknown>, ReturnType<typeof z.unknown>]>>().toEqualTypeOf<
+describe("lists Contract precision — cons: car/cdr are z.value (SchemeValue), not z.custom<unknown>()", () => {
+  test("OLD shape (z.custom<unknown>() x2) decoded [unknown, unknown]", () => {
+    expectTypeOf<DecodedArgs<[z.ZodCustom<unknown>, z.ZodCustom<unknown>]>>().toEqualTypeOf<
       [unknown, unknown]
     >();
   });
@@ -37,21 +37,21 @@ describe("lists Contract precision — cons: car/cdr are z.value (SchemeValue), 
 describe("lists Contract precision — map (symbol.sequence): a hand-authored z.tuple(fixed, rest) — the ONLY authoring style available (SequenceInput.contract is Contract<I,O>, no Rest generic — see _bake.ts's sequence.ts factory)", () => {
   const mapHead = z.lambda;
 
-  test("OLD shape (z.tuple([z.unknown()], z.unknown())) decoded fully unknown, head+rest indistinguishable", () => {
-    const oldShape = z.tuple([z.unknown()], z.unknown());
+  test("OLD shape (z.tuple([z.custom<unknown>()], z.custom<unknown>())) decoded fully unknown, head+rest indistinguishable", () => {
+    const oldShape = z.tuple([z.custom<unknown>()], z.custom<unknown>());
     expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[unknown, ...unknown[]]>();
   });
 
-  test("output: OLD [z.unknown()] → unknown; NEW [z.value] → SchemeValue", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  test("output: OLD [z.custom<unknown>()] → unknown; NEW [z.value] → SchemeValue", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 });
 
-describe("lists Contract precision — make-list: fill is z.value.optional(), output is z.union([z.pair, z.nil]) (a proper list), not z.unknown()", () => {
-  test("OLD shape: [z.schemeNumber, z.unknown().optional()] → [AExact|AInexact, unknown] (optional-unknown collapses to unknown)", () => {
+describe("lists Contract precision — make-list: fill is z.value.optional(), output is z.union([z.pair, z.nil]) (a proper list), not z.custom<unknown>()", () => {
+  test("OLD shape: [z.schemeNumber, z.custom<unknown>().optional()] → [AExact|AInexact, unknown] (optional-unknown collapses to unknown)", () => {
     expectTypeOf<
-      DecodedArgs<[typeof z.schemeNumber, ReturnType<ReturnType<typeof z.unknown>["optional"]>]>
+      DecodedArgs<[typeof z.schemeNumber, ReturnType<z.ZodCustom<unknown>["optional"]>]>
     >().toEqualTypeOf<[z.output<typeof z.schemeNumber>, unknown]>();
   });
 
@@ -61,22 +61,22 @@ describe("lists Contract precision — make-list: fill is z.value.optional(), ou
     >();
   });
 
-  test("output: OLD [z.unknown()] → unknown; NEW [z.union([z.pair, z.nil])] → APair | ANil — make-list ALWAYS returns a proper list (nil when k=0, else a pair chain)", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+  test("output: OLD [z.custom<unknown>()] → unknown; NEW [z.union([z.pair, z.nil])] → APair | ANil — make-list ALWAYS returns a proper list (nil when k=0, else a pair chain)", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
     expectTypeOf<DecodedReturn<[ReturnType<typeof z.union<[typeof z.pair, typeof z.nil]>>]>>().toEqualTypeOf<
       APair | ANil
     >();
   });
 });
 
-describe("lists Contract precision — list-tail / list-ref: output is z.value (SchemeValue), not z.unknown() — a sublist/element can be ANY scheme value (an improper-list tail, or a bare car), so z.value (not a pair|nil union) is the honest ceiling", () => {
-  test("both OLD ([z.unknown()]) and NEW ([z.value]) output shapes", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+describe("lists Contract precision — list-tail / list-ref: output is z.value (SchemeValue), not z.custom<unknown>() — a sublist/element can be ANY scheme value (an improper-list tail, or a bare car), so z.value (not a pair|nil union) is the honest ceiling", () => {
+  test("both OLD ([z.custom<unknown>()]) and NEW ([z.value]) output shapes", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 });
 
-describe("lists Contract precision — list-set!: obj (3rd, stored arg) is z.value, not z.unknown()", () => {
+describe("lists Contract precision — list-set!: obj (3rd, stored arg) is z.value, not z.custom<unknown>()", () => {
   test("NEW 3-tuple shape decodes [APair|ANil, AExact|AInexact, SchemeValue] — matches list-set!'s real migrated contract", () => {
     const listSchema = z.union([z.pair, z.nil]);
     expectTypeOf<DecodedArgs<[typeof listSchema, typeof z.schemeNumber, typeof z.value]>>().toEqualTypeOf<
@@ -85,9 +85,9 @@ describe("lists Contract precision — list-set!: obj (3rd, stored arg) is z.val
   });
 });
 
-describe("lists Contract precision — memq/memv/assq/assv/member/assoc: output models the REAL 'match-or-raw-false' domain — z.union([z.value, z.literal(false)]), not a bare z.unknown()", () => {
-  test("OLD shape [z.unknown()] → unknown", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+describe("lists Contract precision — memq/memv/assq/assv/member/assoc: output models the REAL 'match-or-raw-false' domain — z.union([z.value, z.literal(false)]), not a bare z.custom<unknown>()", () => {
+  test("OLD shape [z.custom<unknown>()] → unknown", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
   });
 
   test("NEW shape [z.union([z.value, z.literal(false)])] → SchemeValue | false — a matched sublist/entry, or the raw #f sentinel these ops return on no-match (relies on the interpreter's downstream boxing of a raw `false`, the SAME established pattern as length's own AExact(0n)-vs-raw-number note)", () => {
@@ -96,7 +96,7 @@ describe("lists Contract precision — memq/memv/assq/assv/member/assoc: output 
   });
 });
 
-describe("lists Contract precision — member/assoc: obj is z.value (not z.unknown()); compare's return type is `unknown` (not `boolean`) — matches srfi-1.ts's filter predicate convention and the is_false-guarded actual usage", () => {
+describe("lists Contract precision — member/assoc: obj is z.value (not z.custom<unknown>()); compare's return type is `unknown` (not `boolean`) — matches srfi-1.ts's filter predicate convention and the is_false-guarded actual usage", () => {
   test("OLD compare schema: (a: unknown, b: unknown) => boolean", () => {
     const oldCompare = z.custom<(a: unknown, b: unknown) => boolean>().optional();
     expectTypeOf<DecodedArgs<[typeof oldCompare]>>().toEqualTypeOf<[((a: unknown, b: unknown) => boolean) | undefined]>();
@@ -116,17 +116,17 @@ describe("lists Contract precision — member/assoc: obj is z.value (not z.unkno
   });
 });
 
-describe("lists Contract precision — nth: index is z.schemeNumber, not z.unknown() (obj stays z.unknown() BY DESIGN — LIPS-polymorphic array|pair, matches reverse's own precedent)", () => {
-  test("NEW shape: [z.schemeNumber, z.unknown()] decodes [AExact|AInexact, unknown] — matches nth's real migrated contract", () => {
-    expectTypeOf<DecodedArgs<[typeof z.schemeNumber, ReturnType<typeof z.unknown>]>>().toEqualTypeOf<
+describe("lists Contract precision — nth: index is z.schemeNumber, not z.custom<unknown>() (obj stays z.custom<unknown>() BY DESIGN — LIPS-polymorphic array|pair, matches reverse's own precedent)", () => {
+  test("NEW shape: [z.schemeNumber, z.custom<unknown>()] decodes [AExact|AInexact, unknown] — matches nth's real migrated contract", () => {
+    expectTypeOf<DecodedArgs<[typeof z.schemeNumber, z.ZodCustom<unknown>]>>().toEqualTypeOf<
       [z.output<typeof z.schemeNumber>, unknown]
     >();
   });
 });
 
-describe("lists Contract precision — list->array: output is z.array(z.value) (SchemeValue[]), not z.unknown() — matches listToArray's own declared TS return type exactly", () => {
-  test("OLD [z.unknown()] → unknown; NEW [z.array(z.value)] → SchemeValue[]", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
+describe("lists Contract precision — list->array: output is z.array(z.value) (SchemeValue[]), not z.custom<unknown>() — matches listToArray's own declared TS return type exactly", () => {
+  test("OLD [z.custom<unknown>()] → unknown; NEW [z.array(z.value)] → SchemeValue[]", () => {
+    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
     expectTypeOf<DecodedReturn<[ReturnType<typeof z.array<typeof z.value>>]>>().toEqualTypeOf<SchemeValue[]>();
   });
 });
@@ -145,9 +145,9 @@ describe("lists Contract precision — tree->array: output is z.array(...) over 
   });
 });
 
-describe("lists Contract precision — flatten: output is z.union([z.pair, z.nil, z.array(z.unknown())]) — matches `.flatten()`'s own declared TS return type (APair | ANil | unknown[]) exactly, tighter than a bare z.unknown()", () => {
+describe("lists Contract precision — flatten: output is z.union([z.pair, z.nil, z.array(z.custom<unknown>())]) — matches `.flatten()`'s own declared TS return type (APair | ANil | unknown[]) exactly, tighter than a bare z.custom<unknown>()", () => {
   test("the union decodes to APair | ANil | unknown[]", () => {
-    const flattenOutput = z.union([z.pair, z.nil, z.array(z.unknown())]);
+    const flattenOutput = z.union([z.pair, z.nil, z.array(z.custom<unknown>())]);
     expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<APair | ANil | unknown[]>();
   });
 });
