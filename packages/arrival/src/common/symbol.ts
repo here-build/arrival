@@ -55,4 +55,5 @@ export type {
   AEntity,
   BakeRuntimeOpts,
   InvocationContext,
+  ImplInvocationCtx,
 } from "./symbols/_bake.js";
