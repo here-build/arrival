@@ -312,7 +312,8 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
     expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
   });
   it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
-    expect(vectorSymbols["vector-length"].impl!(mkArr())).toBe(2);
+    // vector-length boxes its count now (AExact — the scheme face of z.number's output).
+    expect(Number((vectorSymbols["vector-length"].impl!(mkArr()) as { valueOf(): unknown }).valueOf())).toBe(2);
     expect(elemProvs(vectorSymbols["vector->list"].impl!(mkArr()))).toEqual([[100], [101]]);
     expect(vectorSymbols["vector-copy"].impl!(mkArr())).toBeInstanceOf(AVector);
   });

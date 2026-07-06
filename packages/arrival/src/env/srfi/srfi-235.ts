@@ -66,9 +66,13 @@ export default new EnvCapability("scheme/srfi-235", {
         */
         type: "(fn: (...args: unknown[]) => unknown, ...args: unknown[]) => (...args: unknown[]) => unknown",
       },
-      function curry(fn, ...args) {
-        return fn.length > args.length ? (...curriedArgs) => curry(fn, ...args, ...curriedArgs) : fn(...args);
-      },
+      // A plain named fn (not an impl-`this` reader); typed loosely and recursion-safe —
+      // the returned curried layer and the terminal `fn(...)` never touch `this`.
+      function curry(fn: (...a: unknown[]) => unknown, ...args: unknown[]): unknown {
+        return fn.length > args.length
+          ? (...curriedArgs: unknown[]) => curry(fn, ...args, ...curriedArgs)
+          : fn(...args);
+      } as unknown as (fn: (...a: unknown[]) => unknown, ...args: unknown[]) => (...a: unknown[]) => unknown,
     ),
   },
 });

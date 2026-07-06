@@ -262,7 +262,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
           "prov": [],
         },
         "vectorLength": {
-          "ctor": "Number",
+          "ctor": "AExact",
           "prov": [],
         },
         "vectorMap": {

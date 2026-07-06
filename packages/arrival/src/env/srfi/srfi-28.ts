@@ -86,7 +86,7 @@ export default new EnvCapability("scheme/srfi-28", {
         // it also accepted raw non-scheme JS), since a directive-fill arg can be ANY scheme
         // value (rendered via `displayOf`/`writeOf`).
         { input: z.array(z.value), output: [z.string] },
-        (...args: unknown[]): string | AString => {
+        (...args: unknown[]): AString => {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: first arg IS the format string. SRFI-48/CL: first arg is a
           // destination; we admit `#f` only, and then the SECOND arg is the format.

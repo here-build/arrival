@@ -31,6 +31,10 @@ import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCallback } from "../values/primitives/ACallable.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { AString } from "../values/primitives/AString.js";
+import { type ABool } from "../values/primitives/ABool.js";
+import { type AVoid, theVoid } from "../values/primitives/AVoid.js";
+import { schemeBool } from "../values/op-helpers.js";
 
 /** One recorded outcome — a single chibi `(test …)` / `(test-error …)` / … evaluation. */
 export interface ChibiTestResult {
@@ -112,7 +116,7 @@ export function createChibiHarness(): ChibiHarness {
       // chibi `format` shim — kept for surface parity (the current suite does not call it).
       format: symbol.native`format: chibi (format) shim — ~a/~s substitution, ~% newline, ~~ tilde`(
         { input: [z.value], inputRest: z.value, output: [z.string] },
-        (fmt: unknown, ...args: unknown[]): string => {
+        (fmt: unknown, ...args: unknown[]): AString => {
           let result = String(fmt);
           let argIndex = 0;
           result = result.replace(/~[as%~]/g, (match) => {
@@ -124,23 +128,23 @@ export function createChibiHarness(): ChibiHarness {
             if (match === "~~") return "~";
             return match;
           });
-          return result;
+          return new AString(CONSTANT_CTX, result);
         },
       ),
 
       "error-object-message": symbol.native`error-object-message: the error's message, from a JS Error/string/other`(
         { input: [z.value], output: [z.string] },
-        (err: unknown): string => {
-          if (err instanceof Error) return err.message;
-          if (typeof err === "string") return err;
-          return String(err);
+        (err: unknown): AString => {
+          if (err instanceof Error) return new AString(CONSTANT_CTX, err.message);
+          if (typeof err === "string") return new AString(CONSTANT_CTX, err);
+          return new AString(CONSTANT_CTX, String(err));
         },
       ),
 
       "error-object?": symbol.native`error-object?: #t iff obj is a JS Error or an error-shaped object`(
         { input: [z.value], output: [z.boolean] },
-        (obj: unknown): boolean =>
-          obj instanceof Error || (typeof obj === "object" && obj !== null && "message" in obj),
+        (obj: unknown): ABool =>
+          schemeBool(obj instanceof Error || (typeof obj === "object" && obj !== null && "message" in obj)),
       ),
 
       // The runner: evaluate the (deferred) thunk, compare against `expected`, record.
@@ -148,7 +152,7 @@ export function createChibiHarness(): ChibiHarness {
       // JS (await) is the SAME path the old `env.set("js-run-test", …)` used.
       "js-run-test": symbol.native`js-run-test: run thunk, compare its result to expected, record the outcome`(
         { input: [z.value, z.value, z.lambda], output: [z.undefinedResult] },
-        async (name: unknown, expected: unknown, thunk: unknown): Promise<void> => {
+        async (name: unknown, expected: unknown, thunk: unknown): Promise<AVoid> => {
           const testName = typeof name === "string" ? name : String(name);
           try {
             // `thunk` is a scheme closure — a callable VALUE (ALambda), not a bare fn — so invoke
@@ -164,41 +168,47 @@ export function createChibiHarness(): ChibiHarness {
           } catch (e) {
             results.push({ name: testName, group: currentGroup, passed: false, error: String(e) });
           }
+          return theVoid;
         },
       ),
 
       // ── The JS-side group stack (replaces the scheme `set!` bookkeeping) ───────────
       "js-test-begin": symbol.native`js-test-begin: push the current group, enter a new one named 'name'`(
         { input: [z.value], output: [z.undefinedResult] },
-        (name: unknown): void => {
+        (name: unknown): AVoid => {
           groupStack.push(currentGroup);
           currentGroup = String(name);
+          return theVoid;
         },
       ),
       "js-test-end": symbol.native`js-test-end: pop the JS-side group stack back to the parent group`(
         { input: [], output: [z.undefinedResult] },
-        (): void => {
+        (): AVoid => {
           currentGroup = groupStack.pop() ?? "R7RS";
+          return theVoid;
         },
       ),
 
       // Callbacks the `test-error` macro fires (raw bindings, as before).
       "*test-pass-callback*": symbol.native`*test-pass-callback*: record a passing outcome`(
         { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, expected: unknown, actual: unknown): void => {
+        (name: unknown, expected: unknown, actual: unknown): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: true, expected, actual });
+          return theVoid;
         },
       ),
       "*test-fail-callback*": symbol.native`*test-fail-callback*: record a failing outcome`(
         { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, expected: unknown, actual: unknown): void => {
+        (name: unknown, expected: unknown, actual: unknown): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: false, expected, actual });
+          return theVoid;
         },
       ),
       "*test-error-callback*": symbol.native`*test-error-callback*: record a thrown-error outcome`(
         { input: [z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, error: unknown): void => {
+        (name: unknown, error: unknown): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: false, error: String(error) });
+          return theVoid;
         },
       ),
     },

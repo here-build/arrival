@@ -30,11 +30,11 @@ import { applyCallback } from "../../values/primitives/ACallable.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { theVoid } from "../../values/primitives/AVoid.js";
+import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import type { AExact } from "../../values/primitives/AExact.js";
+import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
@@ -104,8 +104,8 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       { input: [z.svector], output: [z.number] },
-      (vec: unknown): number => {
-        return asVector(vec, "vector-length").length;
+      (vec: unknown): AExact => {
+        return new AExact(CONSTANT_CTX, BigInt(asVector(vec, "vector-length").length));
       },
     ),
 
@@ -255,7 +255,7 @@ export default new EnvCapability("scheme/vectors", {
         // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]): void | Promise<void> {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
         const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
@@ -267,8 +267,10 @@ export default new EnvCapability("scheme/vectors", {
           if (is_promise(ret)) pending.push(ret);
         }
         // Await any async side effects before returning, so for-each does not complete
-        // while promises are still outstanding.
-        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);
+        // while promises are still outstanding. R7RS "unspecified" is theVoid on the
+        // scheme face (was a bare JS undefined).
+        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
+        return theVoid;
       },
     ),
   },

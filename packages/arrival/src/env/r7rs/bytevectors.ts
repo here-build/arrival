@@ -26,7 +26,8 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
-import { asBytevector, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import { AExact } from "../../values/primitives/AExact.js";
 import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/bytevectors", {
@@ -41,12 +42,12 @@ export default new EnvCapability("scheme/bytevectors", {
         // predicate accepts boxed OR raw — mirroring asBytevector's coercion. (Vectors
         // differ: a raw JS array is an R7RS list, not a vector, so vector? is
         // instanceof-only — see the boxing plan's (a)/(b) disambiguation.)
-        return (
+        return schemeBool(
           obj instanceof ABytevector ||
-          obj instanceof Uint8Array ||
-          obj instanceof ArrayBuffer ||
-          obj instanceof DataView ||
-          (typeof Buffer !== "undefined" && obj instanceof Buffer)
+            obj instanceof Uint8Array ||
+            obj instanceof ArrayBuffer ||
+            obj instanceof DataView ||
+            (typeof Buffer !== "undefined" && obj instanceof Buffer),
         );
       },
     ),
@@ -74,12 +75,12 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
       { input: [z.sbytevector], output: [z.number] },
-      (bv) => asBytevector(bv, "bytevector-length").byteLength,
+      (bv) => new AExact(CONSTANT_CTX, BigInt(asBytevector(bv, "bytevector-length").byteLength)),
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.sbytevector, z.schemeNumber], output: [z.number] },
-      (bv, k) => asBytevector(bv, "bytevector-u8-ref")[toIndex(k)],
+      (bv, k) => new AExact(CONSTANT_CTX, BigInt(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!)),
     ),
 
     // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────

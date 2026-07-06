@@ -37,6 +37,10 @@ import * as z from "./common/scheme-zod.js";
 import { NATIVE_PACKS } from "./env/native-packs.js";
 import { APair } from "./values/primitives/APair.js";
 import { nil } from "./values/primitives/ANil.js";
+import { type ABool } from "./values/primitives/ABool.js";
+import { AString } from "./values/primitives/AString.js";
+import { schemeBool } from "./values/op-helpers.js";
+import { type SchemeValue } from "./values/types.js";
 import "./errors.js";
 
 // `coerceNumeric` (+ the numeric coercion / provenance helpers) lives in the leaf
@@ -58,11 +62,11 @@ export const wrappedOps = {
   // R7RS Exception Handling (Section 6.11) — the predicate surface
   // ============================================================================
 
-  "error-object?"(obj: unknown): boolean {
-    return obj instanceof R7RSError;
+  "error-object?"(obj: unknown): ABool {
+    return schemeBool(obj instanceof R7RSError);
   },
 
-  "error-object-message"(err: unknown): string {
+  "error-object-message"(err: unknown): AString {
     // R7RS § 6.11: `error-object-message` is only defined over error objects
     // (values produced by the `error` procedure). The previous permissive
     // implementation returned `err.message` for any JS `Error` and stringified
@@ -70,27 +74,27 @@ export const wrappedOps = {
     // from "some other thrown value happened to expose a message field."
     // Fail loudly instead.
     TypeError.invariant(err instanceof R7RSError, "error-object-message: argument is not an error object");
-    return err.message;
+    return new AString(CONSTANT_CTX, err.message);
   },
 
-  "error-object-irritants"(err: unknown): unknown {
+  "error-object-irritants"(err: unknown): SchemeValue {
     if (err instanceof R7RSError) {
       // Convert JS array to Scheme list
-      let result: unknown = nil;
+      let result: SchemeValue = nil;
       for (let i = err.irritants.length - 1; i >= 0; i--) {
-        result = new APair(CONSTANT_CTX, err.irritants[i], result);
+        result = new APair(CONSTANT_CTX, err.irritants[i] as SchemeValue, result);
       }
       return result;
     }
     return nil;
   },
 
-  "read-error?"(obj: unknown): boolean {
-    return obj instanceof R7RSReadError;
+  "read-error?"(obj: unknown): ABool {
+    return schemeBool(obj instanceof R7RSReadError);
   },
 
-  "file-error?"(obj: unknown): boolean {
-    return obj instanceof R7RSFileError;
+  "file-error?"(obj: unknown): ABool {
+    return schemeBool(obj instanceof R7RSFileError);
   },
 };
 

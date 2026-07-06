@@ -30,7 +30,8 @@ import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { assertAllocatable, charValue, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import { assertAllocatable, charValue, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -48,16 +49,17 @@ import type { AProcedure, SchemeValue } from "../../values/types.js";
 // to the strings.ts/lists.ts copies (incl. the per-run heap-meter charge at the
 // collection choke); pack isolation forbids a cross-pack import.
 function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
-  return function recur(list: APair | ANil): SchemeValue[] {
+  return function recur(list: SchemeValue): SchemeValue[] {
     if (list instanceof ANil) {
       return [];
     }
+    invariant(list instanceof APair, `${name}: can't convert a non-list`);
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
     // Heap meter off the operand's ctx — the designed operand-ctx read (RunContext.ts),
     // replacing the retired `currentRunEnv()` env back-channel.
     const meter = ctxOf(list).heapMeter;
     const result: SchemeValue[] = [];
-    let node = list;
+    let node: unknown = list;
     while (true) {
       if (node instanceof APair) {
         if (node.have_cycles("cdr")) {
@@ -88,7 +90,7 @@ const isWhitespace = (c: string): boolean => /\s/u.test(c);
 
 /** Per-character match flags for a criterion; a promise when the predicate is async. */
 function criterionFlags(
-  criterion: ACharacter | AProcedure,
+  criterion: unknown,
   chars: readonly string[],
 ): boolean[] | Promise<boolean[]> {
   if (criterion instanceof ACharacter) {
@@ -149,23 +151,23 @@ export default new EnvCapability("scheme/srfi-13", {
   symbols: {
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
-      (str: unknown): boolean => {
-        return withInputProvenance([str], stringValue(str).length === 0);
+      (str: unknown): ABool => {
+        return withInputProvenance([str], schemeBool(stringValue(str).length === 0));
       },
     ),
 
     // SRFI-13 argument order: the AFFIX comes first — (string-prefix? prefix s).
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (prefix: unknown, str: unknown): boolean => {
-        return withInputProvenance([prefix, str], stringValue(str).startsWith(stringValue(prefix)));
+      (prefix: unknown, str: unknown): ABool => {
+        return withInputProvenance([prefix, str], schemeBool(stringValue(str).startsWith(stringValue(prefix))));
       },
     ),
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (suffix: unknown, str: unknown): boolean => {
-        return withInputProvenance([suffix, str], stringValue(str).endsWith(stringValue(suffix)));
+      (suffix: unknown, str: unknown): ABool => {
+        return withInputProvenance([suffix, str], schemeBool(stringValue(str).endsWith(stringValue(suffix))));
       },
     ),
 
@@ -173,11 +175,14 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
         { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])] },
-        (str: unknown, criterion: unknown): AExact | boolean | Promise<AExact | boolean> => {
+        (str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> => {
           const chars = [...stringValue(str)];
           return afterFlags(criterionFlags(criterion, chars), (f) => {
             const i = f.indexOf(true);
-            return withInputProvenance([str, criterion], i === -1 ? false : new AExact(CONSTANT_CTX, BigInt(i)));
+            return withInputProvenance(
+              [str, criterion],
+              i === -1 ? schemeBool(false) : new AExact(CONSTANT_CTX, BigInt(i)),
+            );
           });
         },
       ),
