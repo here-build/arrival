@@ -29,6 +29,8 @@ import { Environment, type EnvironmentValue, KEYWORD_ACCESSOR_FIELD } from "../E
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_plain_object, is_promise } from "./guards.js";
+import { is_callable_value } from "../values/value-guards.js";
+import { applyCallback } from "../values/primitives/ACallable.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
@@ -2205,6 +2207,13 @@ function* evalOr(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext): EvalGenerator {
   invariant(is_callable(proc), "=> requires a procedure");
 
+  // A callable VALUE (ANativeProcedure) is invoked through the seam — its apply term, `runCtx`
+  // threaded — not the bare-fn `Reflect.apply` arms below (which key off `is_function`).
+  if (is_callable_value(proc)) {
+    const r = applyCallback(proc, [arg], ctx.runCtx ?? CONSTANT_CTX);
+    return is_promise(r) ? yield r : r;
+  }
+
   // Lambdas (and named-let loop fns) speak the bounce protocol; route them
   // through the trampoline so a tail `=>` collapses instead of overflowing.
   if (is_function(proc) && (proc as LambdaFunction)[LAMBDA] === true) {
@@ -3145,14 +3154,18 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn);
     }
   } else {
-    if (!is_function(first)) {
+    if (!is_function(first) && !is_callable_value(first)) {
       throw nonCallableHeadError(first);
     }
     fn = first;
   }
 
-  // Check what kind of callable we have
-  if (is_function(fn) && !is_macro(fn)) {
+  // Check what kind of callable we have. A callable VALUE (ANativeProcedure — a first-class
+  // AValue, not a bare fn) enters the same block: it shares the arg-eval / HalfBaked-force /
+  // bounce plumbing, and only the invocation primitive below branches (its apply term vs
+  // Reflect.apply). The SPECULATE / LAMBDA markers are copied onto the value so the force-skip
+  // and _canBounce checks read them uniformly.
+  if ((is_function(fn) || is_callable_value(fn)) && !is_macro(fn)) {
     // Regular function - evaluate args then call
     // FLAT: yield { call } instead of yield*
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
@@ -3215,7 +3228,12 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
-      result = Reflect.apply(fn, { ctx }, wrappedArgs);
+      // A callable VALUE is invoked through the seam (its apply term, `runCtx` threaded
+      // explicitly); a bare fn keeps the legacy `this = { ctx }` apply. No `this`-smuggling on
+      // the value path.
+      result = is_callable_value(fn)
+        ? (applyCallback(fn, wrappedArgs, ctx.runCtx ?? CONSTANT_CTX) as SchemeValue)
+        : Reflect.apply(fn, { ctx }, wrappedArgs);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;

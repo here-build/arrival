@@ -26,6 +26,7 @@
 
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -92,8 +93,8 @@ function criterionFlags(
     const ch = charValue(criterion);
     return chars.map((c) => c === ch);
   }
-  const pred = criterion as (c: unknown) => unknown;
-  const results = chars.map((c) => pred(new ACharacter(CONSTANT_CTX, c)));
+  // Seam-routed: the criterion predicate is a callable VALUE now, not a bare fn.
+  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(CONSTANT_CTX, c)], CONSTANT_CTX));
   const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v) && !(v instanceof ANil));
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {

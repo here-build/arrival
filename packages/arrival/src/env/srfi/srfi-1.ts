@@ -16,6 +16,8 @@ import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import type { APair } from "../../values/primitives/APair.js";
 import { unpromise } from "../../utils/promises.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -50,7 +52,8 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): Sch
   if (list instanceof ANil) {
     return nil;
   }
-  return unpromise(arg(list.car), function (value) {
+  // Seam-routed: `arg` is a callable VALUE now (ANativeProcedure), not a bare fn.
+  return unpromise(applyCallback(arg, [list.car], CONSTANT_CTX), function (value) {
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }

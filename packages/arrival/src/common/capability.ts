@@ -20,6 +20,10 @@ import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./sch
 import type { AEntity } from "./symbol.js";
 import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
+import { ANativeProcedure } from "../values/primitives/ACallable.js";
+import { type RunContext } from "../values/primitives/RunContext.js";
+import { type SchemeValue } from "../values/types.js";
+import { SPECULATE } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
@@ -240,12 +244,31 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           // ── BAKED symbol.* forms — dispatch by kind (the target path). ──────────────
           if (isBakedDef(def)) {
             switch (def.kind) {
-              case "native":
-                // The impl works on SCHEME VALUES, no codec, no validation — bind it raw,
-                // exactly like the legacy `{ value: fn }` path (and provenance-transparent:
-                // a native value-op is a pure transform, never a source).
-                bindTarget(def).set(verb, def.impl);
+              case "native": {
+                // A native is a CONTOUR primitive — bind it as a first-class ANativeProcedure
+                // (callable-as-value), invoked through its `arrival/tagless-final/apply` term.
+                // The stored impl adapts the term surface `(args, runCtx)` to the legacy host
+                // impl, which reads only `runCtx` off `this.ctx` (verified: no native reads any
+                // other invocation field) — so `{ ctx: { runCtx } }` is behavior-identical, with
+                // no `this=undefined` crash from a HOF-invoked native. Provenance-transparent: a
+                // native value-op is a pure transform, never a source.
+                const hostImpl = def.impl as (this: { ctx: { runCtx: RunContext } }, ...a: unknown[]) => unknown;
+                const proc = new ANativeProcedure({
+                  name: verb,
+                  // Arity is introspection-only in this cut (natives self-check); tighten from
+                  // `def.in` when the MCP/type-lens surface consumes it.
+                  arity: { min: 0, max: null },
+                  contract: def,
+                  impl: (args, runCtx) => hostImpl.apply({ ctx: { runCtx } }, args) as SchemeValue,
+                });
+                // Preserve the markers the call-head force-skip (`[SPECULATE]`) and the lineage
+                // classifier (`.fanout`) read OFF THE BOUND VALUE, now the ANativeProcedure.
+                const markers = def.impl as { [SPECULATE]?: boolean; fanout?: boolean };
+                if (markers[SPECULATE]) (proc as { [SPECULATE]?: boolean })[SPECULATE] = true;
+                if (markers.fanout) (proc as { fanout?: boolean }).fanout = true;
+                bindTarget(def).set(verb, proc);
                 break;
+              }
               case "sequence":
               case "tagless":
               case "tagless-guard":

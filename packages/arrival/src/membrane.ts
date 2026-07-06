@@ -57,7 +57,7 @@ import {
 import { InteropAccessError } from "./errors.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
-import { type ACallable } from "./values/primitives/ACallable.js";
+import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./values/primitives/ACallable.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
 // The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
@@ -195,6 +195,14 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
 
     // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
     case typeof value === "function" && LAMBDA in value:
+
+    // Callable-as-value primitives — ALambda / ANativeProcedure / ARosettaProcedure. They are
+    // AValues, not foreign objects: pass through `set` untouched (without this they'd hit the
+    // `else` fromJS branch and be materialized to an AJSObject dict — the "not callable, a dict
+    // sits in call-head" regression when a native was flipped to ANativeProcedure).
+    case value instanceof ALambda:
+    case value instanceof ANativeProcedure:
+    case value instanceof ARosettaProcedure:
       return true;
 
     default:

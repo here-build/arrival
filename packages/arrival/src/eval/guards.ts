@@ -3,7 +3,7 @@ import { Syntax } from "./Syntax.js";
 // Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
-import { is_function } from "../values/value-guards.js";
+import { is_function, is_callable_value } from "../values/value-guards.js";
 
 export {
   has_own_symbol,
@@ -43,5 +43,5 @@ export function is_promise(o: unknown): o is Promise<unknown> {
 // disjunct (a duck-type check for the deleted AJSFunction "js-function" tag — always false once the
 // class was removed) is gone with it.
 export function is_callable(o: unknown): boolean {
-  return is_function(o) || is_macro(o);
+  return is_function(o) || is_macro(o) || is_callable_value(o);
 }

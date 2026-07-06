@@ -16,7 +16,9 @@
 // lips.ts.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { is_callable_value } from "../values/value-guards.js";
+import { applyCallback } from "../values/primitives/ACallable.js";
 import { LambdaContext } from "./LambdaContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
@@ -28,8 +30,14 @@ type SchemeFunction = (...args: any[]) => any;
 export function call_function(
   fn: SchemeFunction,
   args: SchemeValue[],
-  { use_dynamic }: { use_dynamic?: boolean } = {},
+  { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx?: RunContext } = {},
 ) {
+  // A callable VALUE (ANativeProcedure/ALambda/ARosettaProcedure) is invoked through the
+  // seam — its apply term, `runCtx` threaded — not as a bare fn (`fn.apply` would throw
+  // "apply called on an object, not a function"). Bare fns keep the LambdaContext path below.
+  if (is_callable_value(fn)) {
+    return resolve_promises(applyCallback(fn, args, runCtx ?? CONSTANT_CTX) as SchemeValue);
+  }
   // F1/F2 dissolved (P3 3b.3 step 6): the callers (the HOF dispatch in env/r7rs/lists.ts)
   // always pass `{}`, so `env`/`dynamic_env` were always undefined and `env?.new_frame(...)`
   // always short-circuited — `new_frame` was a phantom (no definition; the optional-chain

@@ -16,6 +16,8 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { Values } from "../../values/primitives/Values.js";
 import { unpromise } from "../../utils/promises.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 
 // R7RS § 6.10 multiple-value primitives, relocated VERBATIM from stdlib.ts global_env
 // (husk dissolution). They live HERE, co-located with their only define-time shape —
@@ -59,15 +61,17 @@ export default new EnvCapability("scheme/r7rs/binding", {
         output: [z.undefinedResult],
         type: "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
       },
-      (producer, consumer): unknown => {
-        // The producer is usually a generator-lambda, so `producer.apply` returns
-        // a Promise — unwrap it BEFORE the `instanceof Values` check, else a
-        // multi-value producer leaks the Promise as a single arg (wrong arity).
-        return unpromise(producer.apply(undefined), (maybe) => {
+      function (this: { ctx?: { runCtx?: RunContext } }, producer: unknown, consumer: unknown): unknown {
+        // Seam-routed: producer/consumer are callable VALUES now, not bare fns. The producer is
+        // usually a lambda, so its invocation may return a Promise — unwrap it BEFORE the
+        // `instanceof Values` check, else a multi-value producer leaks the Promise as a single
+        // arg (wrong arity).
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        return unpromise(applyCallback(producer, [], runCtx), (maybe) => {
           if (maybe instanceof Values) {
-            return consumer.apply(undefined, maybe.valueOf());
+            return applyCallback(consumer, maybe.valueOf(), runCtx);
           }
-          return consumer(maybe);
+          return applyCallback(consumer, [maybe], runCtx);
         });
       },
     ),

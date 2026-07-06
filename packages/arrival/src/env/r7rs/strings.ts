@@ -18,7 +18,8 @@
  */
 
 import foldCase from "fold-case";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
@@ -286,7 +287,6 @@ export default new EnvCapability("scheme/strings", {
         let current: SchemeValue = list;
         while (current && current !== nil && current instanceof APair) {
           chars.push(charValue(current.car));
-          // @ts-expect-error todo FIX on types level
           current = current.cdr;
         }
         return new AString(CONSTANT_CTX, chars.join(""));
@@ -345,13 +345,15 @@ export default new EnvCapability("scheme/strings", {
         output: [z.string],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
       },
-      (proc, ...strings) => {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]) {
         invariant(strings.length > 0, "string-map: expected at least one string");
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          results.push(proc(...strs.map((s) => new ACharacter(CONSTANT_CTX, s[i]))));
+          // Seam-routed: `proc` is a callable VALUE now, not a bare fn.
+          results.push(applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx));
         }
         const join = (chars: unknown[]) =>
           chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join("");
@@ -375,13 +377,14 @@ export default new EnvCapability("scheme/strings", {
         output: [z.undefinedResult],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
       },
-      (proc: (...args: unknown[]) => unknown, ...strings: AString[]): void | Promise<void> => {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]): void | Promise<void> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = proc(...strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])));
+          const ret = applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => undefined);

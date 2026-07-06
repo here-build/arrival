@@ -25,7 +25,8 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -221,15 +222,16 @@ export default new EnvCapability("scheme/vectors", {
         // for vector-append) → a new vector (`readonly unknown[]`).
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
       },
-      (proc, ...vectors) => {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const result: SchemeValue[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
-          // @ts-expect-error todo FIX
-          result.push(proc(...elements));
+          // Seam-routed: `proc` is a callable VALUE now, not a bare fn.
+          result.push(applyCallback(proc, elements, runCtx) as SchemeValue);
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
         // the list \`map\` (stdlib.ts): if any slot is a promise, await them all so the
@@ -253,14 +255,15 @@ export default new EnvCapability("scheme/vectors", {
         // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
       },
-      (proc: (...args: unknown[]) => unknown, ...vectors: AVector[]): void | Promise<void> => {
+      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]): void | Promise<void> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
+        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
-          const ret = proc(...elements);
+          const ret = applyCallback(proc, elements, runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
         // Await any async side effects before returning, so for-each does not complete

@@ -163,7 +163,10 @@ export class ArrivalError extends Error {
 // Matching is intentionally conservative — a miss just falls back to today's behavior.
 const HOST_RUNTIME_BUG_RE =
   /Cannot read propert|reading '|is not a function|is not iterable|is not a constructor|Spread syntax requires|Maximum call stack|is not defined/;
-export function isHostRuntimeBug(e: unknown): e is Error {
+// Returns `boolean`, NOT a `e is Error` predicate: it is a refinement on the message of an
+// already-error value, not an Error-narrowing. A predicate would make a `? :`'s else-branch
+// subtract `Error` from an already-`Error` operand → `never` (evaluator.ts failAndWrap).
+export function isHostRuntimeBug(e: unknown): boolean {
   return (
     (e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError) &&
     HOST_RUNTIME_BUG_RE.test(e.message)

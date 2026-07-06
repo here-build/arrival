@@ -13,6 +13,7 @@
 
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./primitives/RunContext.js";
+import { applyCallback } from "./primitives/ACallable.js";
 
 import { AValue, unionProvenance } from "./primitives/AValue.js";
 import { fromJs } from "./primitives/boxing.js";
@@ -247,12 +248,16 @@ const describeOrdElement = (v: unknown): string =>
  *    first cut) — so a number is consulted as a number, not coerced to a less?-truthiness. */
 export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unknown): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {
+    // The comparator is a callable VALUE now (ANativeProcedure) — invoke through the seam, not
+    // as a bare fn. Sort is synchronous; a native comparator returns a settled value (a lambda
+    // comparator would return a promise, the pre-existing async-comparator limitation).
+    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], CONSTANT_CTX);
     return (a, b) => {
-      const v = comparator(a, b);
+      const v = call(a, b);
       if (typeof v === "number") return v;
       if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
       // `less?` predicate: a truthy verdict means a precedes b.
-      return !is_false(v) ? -1 : !is_false(comparator(b, a)) ? 1 : 0;
+      return !is_false(v) ? -1 : !is_false(call(b, a)) ? 1 : 0;
     };
   }
   return (a, b) => {

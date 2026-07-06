@@ -29,6 +29,7 @@
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 
 import * as z from "../../common/scheme-zod.js";
 import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
@@ -182,7 +183,7 @@ function multiListMap(
       call_function(
         fn,
         arrays.map((a) => a[i]),
-        {},
+        { runCtx },
       ),
     );
   }
@@ -398,10 +399,11 @@ export default new EnvCapability("scheme/lists", {
       // The final tail element must be a PROPER list — `listToArray` (pack-local, the same
       // to_array the bridge used) is the door: it rejects an improper/atom final arg loudly
       // ("can't convert improper list") rather than crashing on a non-iterable spread.
-      (fn: (...args: unknown[]) => unknown, ...rest: unknown[]) => {
+      function (this: { ctx?: { runCtx?: RunContext } }, fn: unknown, ...rest: unknown[]) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
         const spread = listToArray(rest[rest.length - 1] as APair | ANil);
-        return fn(...rest.slice(0, -1), ...spread);
+        // Seam-routed: `fn` is a callable VALUE (ANativeProcedure/lambda) now, not a bare fn.
+        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this?.ctx?.runCtx ?? CONSTANT_CTX);
       },
     ),
 

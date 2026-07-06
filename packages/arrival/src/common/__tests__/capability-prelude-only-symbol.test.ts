@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
+import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import type { PackContext } from "../kernel.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
@@ -101,6 +102,8 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     await cap.lower({}).apply(runtimeEnv, ctx);
 
     expect(runtimeVerbs["prelude-only/native-verb"]).toBeUndefined();
-    expect(typeof overlayVerbs["prelude-only/native-verb"]).toBe("function");
+    // A native binds as a first-class ANativeProcedure (callable-as-value) now, not a bare fn —
+    // still routed onto the overlay preludeScope, the invariant this test pins.
+    expect(overlayVerbs["prelude-only/native-verb"]).toBeInstanceOf(ANativeProcedure);
   });
 });
