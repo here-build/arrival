@@ -19,6 +19,7 @@ import {
   type SymbolDeclaration,
 } from "@here.build/arrival/capability";
 import type { Resource } from "@here.build/arrival/resources";
+import invariant from "tiny-invariant";
 import * as z from "zod";
 
 type AnyActivation = Activation<any, any>;
@@ -181,10 +182,29 @@ export class McpEnvCapability<
    */
   constructor(name: string, spec: McpCapabilitySpec<C, R>, annotationKeys: readonly string[] = MCP_ANNOTATION_KEYS) {
     const explicit = spec.annotations ?? {};
-    // Only the record form can be inspected statically; a builder passes through (its annotations
-    // come from the explicit record). Lift inline fields, then arm inputSchema parsing.
+    // Only the RECORD form can be inspected statically — `liftInlineAnnotations` walks the
+    // object literal's own keys. A BUILDER (`(activation) => {...}`) can't be peeked without
+    // actually calling it, and calling it here would need a fake activation before `lower()`
+    // ever supplies real `configuration`/`resources` — unsafe (a verb's closure could read
+    // config that doesn't exist yet, or capture a placeholder that silently diverges from the
+    // real one). So a builder-form `symbols` DOORS here rather than silently skipping the lift:
+    // any inline `description`/`inputSchema` an author put on a verb inside the builder's
+    // returned record would otherwise vanish with zero signal (no catalog entry, no arg
+    // validation) — exactly the failure mode this capability exists to prevent. Every real
+    // McpEnvCapability today (here.build's project/general discovery, inhuman's project
+    // discovery, sift's whole forensics catalog) already uses the record form; a subclass that
+    // genuinely needs a builder should annotate via the explicit `annotations` record instead
+    // (no inline splicing) — that path is untouched by this check.
+    invariant(
+      typeof spec.symbols !== "function",
+      `McpEnvCapability "${name}": builder-form \`symbols\` (a function) is not supported — inline ` +
+        "annotation fields (description/inputSchema/dynamicDescription/aliases) can't be lifted off a " +
+        "builder without invoking it before real configuration/resources exist. Use the record form " +
+        "(`symbols: { ... }`), or pass annotations via the explicit `annotations: { name: {...} }` field " +
+        "alongside a builder if the verbs themselves need no inline catalog metadata.",
+    );
     const lifted =
-      typeof spec.symbols === "function" || spec.symbols === undefined
+      spec.symbols === undefined
         ? { symbols: spec.symbols, annotations: explicit }
         : liftInlineAnnotations(spec.symbols, explicit, annotationKeys);
     super(name, {
