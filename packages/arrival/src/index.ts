@@ -66,6 +66,13 @@ export { APair } from "./values/primitives/APair.js";
 // from an ordinary cons list, the same way `APair`/`ANil`/`AString`/`ASymbol` are already
 // exported for that purpose.
 export { AVector } from "./values/primitives/AVector.js";
+// The ONE invocation seam for any JS site calling a scheme callable (callable-as-value rework):
+// dispatches a callable VALUE's apply term, else a bare fn with a defined `this`. External
+// packages that resolve a verb off an env and call it (the env-loader's require registry
+// overlay calling a registered `ext/*/resolve`) MUST route through this — a bound native is an
+// ANativeProcedure value now, not `typeof === "function"`. `is_callable_value` is its guard.
+export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
+export { is_callable_value } from "./values/value-guards.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
 // `SchemeValue` — the honest union of every value the interpreter can hold. A cross-package
 // AST-walking consumer (mcp-substrate's statement-facts.ts) needs to name this type for its

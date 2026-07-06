@@ -130,7 +130,10 @@ export class ArrivalError extends Error {
     public readonly cause?: Error,
   ) {
     super(message);
-    Error.captureStackTrace?.(cause ?? this);
+    // Capture on THIS wrapper only — capturing on the cause would OVERWRITE the cause's
+    // original stack with the wrap site (`new ArrivalError` as the apparent thrower),
+    // destroying the one trace that says where the underlying error actually happened.
+    Error.captureStackTrace?.(this);
   }
 
   get stack() {
