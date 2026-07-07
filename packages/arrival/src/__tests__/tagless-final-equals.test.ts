@@ -17,7 +17,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
-import type { SchemeValue } from "../values/types.js";
+import type { AList, SchemeValue } from "../values/types.js";
 import { tf } from "../values/tagless-final.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,8 +62,8 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
 const LIST_OPS = opsOf(listsCap);
 
 // Build a proper list of Pairs terminated by nil.
-function list(...xs: unknown[]): APair | ANil {
-  let acc: APair | ANil = nil;
+function list(...xs: unknown[]): AList {
+  let acc: AList = nil;
   for (let i = xs.length - 1; i >= 0; i--) acc = new APair(CONSTANT_CTX, xs[i], acc);
   return acc as APair;
 }

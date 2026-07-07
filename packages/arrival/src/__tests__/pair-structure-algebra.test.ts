@@ -18,6 +18,7 @@ import { structuralEqual } from "../values/structural-equal.js";
 import { functorLaws } from "./algebra-laws.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { tf } from "../values/tagless-final.js";
+import type { AList } from "../values/types.js";
 
 
 type FL = Record<string, any>;
@@ -27,7 +28,7 @@ type FL = Record<string, any>;
 // list (nil) and length up to 4 so associativity has something to bite on.
 const intList = fc
   .array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 })
-  .map((arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil);
+  .map((arr) => APair.fromArray(CONSTANT_CTX, arr, false) as AList);
 
 // Non-empty variant for tests that need a Pair head (Functor laws map over a
 // Pair; nil has its own trivial behavior covered separately).

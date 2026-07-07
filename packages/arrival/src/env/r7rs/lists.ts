@@ -40,7 +40,7 @@ import { SPECULATE } from "../../well-known-symbols.js";
 import { call_function } from "../../eval/call-function.js";
 import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
-import type { AProcedure, SchemeValue } from "../../values/types.js";
+import type { AList, AProcedure, SchemeValue } from "../../values/types.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -54,8 +54,8 @@ const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue =
 // its remaining consumers; these reproduce the same logic byte-for-byte (incl.
 // the per-run heap-meter charge `to_array` levies at the collection choke) so
 // the relocated defs are behavior-identical.
-function to_array(name: string): (list: APair<any, any> | ANil) => SchemeValue[] {
-  return function recur(list: APair<any, any> | ANil): SchemeValue[] {
+function to_array(name: string): (list: AList) => SchemeValue[] {
+  return function recur(list: AList): SchemeValue[] {
     if (list instanceof ANil) {
       return [];
     }
@@ -138,7 +138,7 @@ const lengthImpl = (obj: unknown): SchemeValue => {
 // a multi-list map.
 function multiListMap(
   fn: AProcedure,
-  lists: readonly (APair<any, any> | ANil)[],
+  lists: readonly AList[],
   runCtx: RunContext,
 ): SchemeValue | Promise<SchemeValue> {
   if (lists.some((list) => list instanceof ANil)) return nil;
@@ -171,7 +171,7 @@ function multiListMap(
 // mapImpl's per-arg `isProperList` cycle-check raises "map: argument N is not a
 // list", whereas multiListMap lets listToArray raise its own circular-list error.
 // Unifying the two is a deferred behavior-preserving cleanup.
-function mapImpl(fn: SchemeValue, ...lists: Array<APair<any, any> | ANil>): SchemeValue | Promise<SchemeValue> {
+function mapImpl(fn: SchemeValue, ...lists: Array<AList>): SchemeValue | Promise<SchemeValue> {
   // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
   // as a type-level assertion so `call_function` sees the JS-callable it needs.
   invariant(is_callable(fn), `map: the first argument is not a procedure`);
@@ -255,7 +255,7 @@ export default new EnvCapability("scheme/lists", {
           // that documented, real invariant rather than widening the contract's own DecodedReturn.
           return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
         }
-        return multiListMap(fn, lists as readonly (APair<any, any> | ANil)[], runCtx);
+        return multiListMap(fn, lists as readonly AList[], runCtx);
       },
     ),
     // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
@@ -338,7 +338,7 @@ export default new EnvCapability("scheme/lists", {
       // ("can't convert improper list") rather than crashing on a non-iterable spread.
       function (this: CallCtx, fn: unknown, ...rest: unknown[]) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
-        const spread = listToArray(rest[rest.length - 1] as APair<any, any> | ANil);
+        const spread = listToArray(rest[rest.length - 1] as AList);
         // Seam-routed: `fn` is a callable VALUE (ANativeProcedure/lambda) now, not a bare fn.
         // applyCallback pins canBounce=false, so a Bounce never reaches here — the CallResult
         // narrows to value-or-promise.
@@ -354,11 +354,11 @@ export default new EnvCapability("scheme/lists", {
       // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
       // testable ceiling (see lists-contract-precision.test.ts).
       { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
-      (k: unknown, fill?: unknown): APair<any, any> | ANil => {
+      (k: unknown, fill?: unknown): AList => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         // The default fill is #f — the flyweight ABool (Face split), not a raw JS false.
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
-        let result: APair<any, any> | ANil = nil;
+        let result: AList = nil;
         for (let i = 0; i < count; i++) {
           result = new APair(CONSTANT_CTX, value, result);
         }

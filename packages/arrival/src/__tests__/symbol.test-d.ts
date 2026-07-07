@@ -25,9 +25,8 @@ import {
   symbol,
 } from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
-import type { ANil } from "../values/primitives/ANil.js";
 import type { AString } from "../values/primitives/AString.js";
-import type { SchemeValue } from "../values/types.js";
+import type { AList, SchemeValue } from "../values/types.js";
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
   test("tuple spec: element-wise z.output, as a mutable tuple", () => {
@@ -181,7 +180,7 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
     // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
     expectTypeOf<DecodedArgsWithRest<[typeof forEachHead], typeof listRest>>().toEqualTypeOf<
-      [(...args: unknown[]) => SchemeValue, ...(APair | ANil)[]]
+      [(...args: unknown[]) => SchemeValue, ...AList[]]
     >();
   });
 
@@ -222,13 +221,13 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
 
   test("OLD shape: predicate slot z.unknown() decodes to a bare unknown, not a callable", () => {
     expectTypeOf<DecodedArgs<[ReturnType<typeof z.unknown>, typeof listOrNil]>>().toEqualTypeOf<
-      [unknown, APair | ANil]
+      [unknown, AList]
     >();
   });
 
   test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
     expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, APair | ANil]
+      [(...args: unknown[]) => unknown, AList]
     >();
   });
 

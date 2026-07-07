@@ -19,8 +19,7 @@
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/symbol.js";
-import type { APair } from "../../../values/primitives/APair.js";
-import type { ANil } from "../../../values/primitives/ANil.js";
+import type { AList } from "../../../values/types.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
@@ -46,16 +45,16 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | ANil, not unknown (string->list / split)", () => {
-    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<APair<any, any> | ANil>();
+    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<AList>();
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | ANil], not [unknown] (list->string)", () => {
-    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[APair<any, any> | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[AList]>();
   });
 
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
     expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<
-      [AString, APair<any, any> | ANil]
+      [AString, AList]
     >();
   });
 });

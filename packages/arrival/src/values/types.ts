@@ -112,3 +112,15 @@ export interface APairLike<Car extends SchemeValue = SchemeValue, Cdr extends Sc
   car: Car;
   cdr: Cdr;
 }
+
+// AList: the "APair | ANil" scheme-list spine spelled out ~50x across the codebase.
+// Deliberately NOT recursive (type AList<T> = APair<T, AList<T>|ANil>) -- APair's own
+// method shapes are already self-referential through Cdr (see AConcatPair/APairValue),
+// and a prior "type instantiation excessively deep" error on APair itself was fixed by
+// falling back to APair<any,any>. A second layer of alias recursion risks the same wall.
+// Car/Cdr default to `any`, matching the inline union verbatim -- no call site in this
+// codebase threads a real element type through the Cdr slot today. The `extends SchemeValue`
+// bound (mirroring APairLike above and APair's own class signature) is load-bearing, not
+// decoration -- APair<Car, Cdr>'s own params require it, so a bare unconstrained `Car = any`
+// fails to satisfy APair's constraint at the alias's own declaration site.
+export type AList<Car extends SchemeValue = any, Cdr extends SchemeValue = any> = APair<Car, Cdr> | ANil;

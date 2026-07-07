@@ -44,7 +44,7 @@ import { promise_all } from "../../utils/promises.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import type { AProcedure, SchemeValue } from "../../values/types.js";
+import type { AList, AProcedure, SchemeValue } from "../../values/types.js";
 
 // Pack-local copy of the list→array bridge helper `string-join` needs — byte-identical
 // to the strings.ts/lists.ts copies (incl. the per-run heap-meter charge at the
@@ -314,7 +314,7 @@ export default new EnvCapability("scheme/srfi-13", {
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        (str: unknown, criterion?: unknown): APair<any, any> | ANil | Promise<APair<any, any> | ANil> => {
+        (str: unknown, criterion?: unknown): AList | Promise<AList> => {
           const chars = [...stringValue(str)];
           const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
           return afterFlags(flags, (f) => {

@@ -25,7 +25,7 @@ import { is_false, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AHalfBaked } from "./AHalfBaked.js";
-import { type APairLike, type SchemeValue } from "../types.js";
+import { type AList, type APairLike, type SchemeValue } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "./AExact.js";
@@ -217,12 +217,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // ⟹ `APair | ANil` (build path, or pass-through of an already-pair input); `quote: true` ⟹
   // the data-array can also flow back untouched. This lets every build-path caller drop the
   // historical `as APair | ANil` cast honestly — the narrow type is the real one, not a widen.
-  static fromArray(ctx: RunContext, array: unknown, deep?: boolean, quote?: false): APair<any, any> | ANil;
-  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: true): APair<any, any> | ANil | unknown[];
+  static fromArray(ctx: RunContext, array: unknown, deep?: boolean, quote?: false): AList;
+  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: true): AList | unknown[];
   // `quote` not known statically (the internal recursion threads the runtime flag): can't promise
   // the data-array won't flow back, so the return stays wide. No external caller hits this arm.
-  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: boolean): APair<any, any> | ANil | unknown[];
-  static fromArray(ctx: RunContext, array: unknown, deep = true, quote = false): APair<any, any> | ANil | unknown[] {
+  static fromArray(ctx: RunContext, array: unknown, deep: boolean, quote: boolean): AList | unknown[];
+  static fromArray(ctx: RunContext, array: unknown, deep = true, quote = false): AList | unknown[] {
     if (
       array instanceof APair ||
       (quote && Array.isArray(array) && (array as unknown as { [key: symbol]: unknown })[DATA])
@@ -231,13 +231,13 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     const arr = Array.isArray(array) ? array : [...(array as Iterable<unknown>)];
     if (deep === false) {
-      let list: APair<any, any> | ANil = nil;
+      let list: AList = nil;
       for (let i = arr.length; i--; ) {
         list = new APair(ctx, arr[i], list);
       }
       return list;
     }
-    let result: APair<any, any> | ANil = nil;
+    let result: AList = nil;
     let i = arr.length;
     while (i--) {
       let car: unknown = arr[i];
@@ -255,13 +255,13 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return result;
   }
 
-  static fromPairs(ctx: RunContext, array: [string, unknown][]): APair<any, any> | ANil {
-    return array.reduce<APair<any, any> | ANil>((list, pair) => {
+  static fromPairs(ctx: RunContext, array: [string, unknown][]): AList {
+    return array.reduce<AList>((list, pair) => {
       return new APair(ctx, new APair(ctx, new ASymbol(ctx, pair[0]), pair[1] as SchemeValue), list);
     }, nil);
   }
 
-  static fromObject(ctx: RunContext, obj: Record<string, unknown>): APair<any, any> | ANil {
+  static fromObject(ctx: RunContext, obj: Record<string, unknown>): AList {
     const array = Object.keys(obj).map((key) => [key, obj[key]] as [string, unknown]);
     return APair.fromPairs(ctx, array);
   }
@@ -287,7 +287,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // Instance methods
-  flatten(): APair<any, any> | ANil | unknown[] {
+  flatten(): AList | unknown[] {
     return APair.fromArray(this.ctx, this.to_array().flat(Infinity));
   }
 
@@ -424,7 +424,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return recur(this) as APair<any, any>;
   }
 
-  map(fn: (val: SchemeValue) => SchemeValue): APair<any, any> | ANil {
+  map(fn: (val: SchemeValue) => SchemeValue): AList {
     return this.car === undefined
       ? nil
       : new APair(this.ctx, fn(this.car), this.cdr instanceof ANil ? nil : (this.cdr as APair<any, any>).map(fn));
@@ -564,7 +564,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // ----------------------------------------------------------------------
 
   [Symbol.iterator](): Iterator<unknown> {
-    let node: APair<any, any> | ANil = this;
+    let node: AList = this;
     return {
       next(): IteratorResult<unknown> {
         const cur = node;
@@ -591,7 +591,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ["arrival/tagless-final/map"](
     fn: (x: unknown) => unknown | Promise<unknown>,
     runCtx?: RunContext,
-  ): APair<any, any> | ANil | AHalfBaked | Promise<APair<any, any> | ANil> {
+  ): AList | AHalfBaked | Promise<AList> {
     chargeHeap(runCtx, countPairElements(this));
     // Spine-walk surfacing elements as `unknown` — the file's canonical convention
     // (`to_array(): unknown[]`, lineage.ts list-walks): a list element's union
@@ -639,7 +639,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ["arrival/tagless-final/filter"](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
-  ): APair<any, any> | ANil | AHalfBaked | Promise<APair<any, any> | ANil> {
+  ): AList | AHalfBaked | Promise<AList> {
     chargeHeap(runCtx, countPairElements(this));
     const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
     const elements: SchemeValue[] = [];
@@ -709,7 +709,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ["arrival/tagless-final/sort"](
     comparator?: (a: unknown, b: unknown) => unknown,
     runCtx?: RunContext,
-  ): APair<any, any> | ANil {
+  ): AList {
     chargeHeap(runCtx, countPairElements(this));
     const out: unknown[] = [];
     let node: unknown = this;
@@ -773,13 +773,13 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Chain (Monad) — map then flatten, via the pure list-concat Semigroup below. No
   // `global_env.get("append")` back-edge (the old monkey-patch's require("./stdlib") hack
   // existed only because this method lived outside the class — see plan wave 2).
-  ["arrival/tagless-final/chain"](f: (x: unknown) => APair<any, any> | ANil): APair<any, any> | ANil {
+  ["arrival/tagless-final/chain"](f: (x: unknown) => AList): AList {
     return chainPair(this.ctx, f, this);
   }
 
   // Semigroup — list append. `this ⋄ other` = this list's elements followed by other's. Pure:
   // builds a fresh spine, never mutates either operand (unlike the in-place `append` method above).
-  ["arrival/tagless-final/concat"]<T extends APair<any, any> | ANil>(other: T): AConcatPair<APair<Car, Cdr>, T> {
+  ["arrival/tagless-final/concat"]<T extends AList>(other: T): AConcatPair<APair<Car, Cdr>, T> {
     return concatPair<APair<Car, Cdr>, T>(this.ctx, this, other);
   }
 }
@@ -813,7 +813,7 @@ function traversePair(
   return acc;
 }
 
-type AConcatPair<Car extends SchemeValue, Cdr extends APair<any, any> | ANil> =
+type AConcatPair<Car extends SchemeValue, Cdr extends AList> =
   Car extends APair<infer Caar, infer Cadr>
     ? Cadr extends ANil
       ? APair<Caar, Cdr>
@@ -824,7 +824,7 @@ type AConcatPair<Car extends SchemeValue, Cdr extends APair<any, any> | ANil> =
 // self-recursive on `a`'s cdr → O(depth) host stack): collect a's cars in order, then prepend
 // them onto `b` (shared by reference — purity: a's spine is fresh, b untouched). An improper
 // `a` still contributes its phantom `undefined` car before the non-Pair tail ends the walk.
-export function concatPair<Car extends SchemeValue, Cdr extends APair<any, any> | ANil>(
+export function concatPair<Car extends SchemeValue, Cdr extends AList>(
   ctx: RunContext,
   a: Car,
   b: Cdr,
@@ -836,7 +836,7 @@ export function concatPair<Car extends SchemeValue, Cdr extends APair<any, any> 
     cars.push(p.car);
     node = p.cdr;
   }
-  let result: APair<any, any> | ANil = (b ?? nil) as APair<any, any> | ANil;
+  let result: AList = (b ?? nil) as AList;
   for (let i = cars.length; i--; ) {
     result = new APair(ctx, cars[i], result);
   }
@@ -848,15 +848,15 @@ export function concatPair<Car extends SchemeValue, Cdr extends APair<any, any> 
 // stack): map each car left-to-right (preserving f-call order), then concat from the right onto
 // `nil` — the same right-associated fold the recursion produced (concat is associative, so the
 // flattened result is identical). An improper tail still maps its phantom `f(undefined)`.
-function chainPair(ctx: RunContext, f: (x: unknown) => APair<any, any> | ANil, pair: unknown): APair<any, any> | ANil {
-  const parts: (APair<any, any> | ANil)[] = [];
+function chainPair(ctx: RunContext, f: (x: unknown) => AList, pair: unknown): AList {
+  const parts: AList[] = [];
   let node: unknown = pair;
   while (node && !(node instanceof ANil)) {
     const p = node as APair<any, any>;
     parts.push(f(p.car));
     node = p.cdr;
   }
-  let result: APair<any, any> | ANil = nil;
+  let result: AList = nil;
   for (let i = parts.length; i--; ) {
     result = concatPair(ctx, parts[i], result);
   }

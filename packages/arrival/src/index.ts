@@ -66,6 +66,10 @@ export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitiv
 // AST-walking consumer (mcp-substrate's statement-facts.ts) names this type in its own
 // signatures when walking a real parsed form, not a plain-object `Node` shape.
 export type { SchemeValue } from "./values/types.js";
+// `AList` — the non-recursive `APair | ANil` scheme-list-spine alias. Public because
+// mcp-substrate and arrival-chain import `APair`/`ANil` externally and spell this union
+// out themselves today.
+export type { AList } from "./values/types.js";
 
 // No eager bootstrap. The runtime base assembles lazily on the first `exec` (the
 // realm-cached `ensureBaseAssembled`, exposed as `initBridge` below) — importing the

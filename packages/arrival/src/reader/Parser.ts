@@ -36,7 +36,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
-import type { SchemeValue } from "../values/types.js";
+import type { AList, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
@@ -303,7 +303,7 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(): Promise<APair<any, any> | ANil> {
+  async read_list(): Promise<AList> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
@@ -343,7 +343,7 @@ export class Parser {
       }
       chain = cell;
     }
-    return chain as APair<any, any> | ANil;
+    return chain as AList;
   }
 
   /**
