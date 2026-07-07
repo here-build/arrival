@@ -2,13 +2,11 @@
 //
 // These are the JS-implemented R7RS domains (chars / strings / lists / vectors /
 // bytevectors + combinators + equality). `initBridge` ASSEMBLES them onto
-// `global_env` (the native root) via `assembleEnv`. They used to reach the env by
-// being spread into the `wrappedOps` monolith and applied imperatively by
-// `applyToEnvironment`; now each is a live `EnvCapability` — the sole home of its
-// domain's primitives. They are symbol-only (`{ value }` bindings, no prelude, no
-// resources, no deps), so a pack's `apply` reduces to the very same `env.set` loop
-// `applyToEnvironment` ran — the swap is behavior-identical, just sourced from the
-// capability rather than its `_OPS` twin.
+// `global_env` (the native root) via `assembleEnv`. Each is a live `EnvCapability` —
+// the sole home of its domain's primitives, symbol-only (`{ value }` bindings, no
+// prelude, no resources, no deps) — so a pack's `apply` reduces to the same `env.set`
+// loop the legacy `applyToEnvironment`/`wrappedOps` monolith ran; behavior-identical,
+// just sourced from the capability rather than its `_OPS` twin.
 //
 // Sibling of `BASE_PACKS` (the `.scm`-defined packs assembled onto `user_env`).
 // Together they are the full pack-assembled surface. The remaining monolith is the

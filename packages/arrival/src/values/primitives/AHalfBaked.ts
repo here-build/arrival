@@ -100,9 +100,6 @@ export class AHalfBaked extends AValue {
   // ── memoized collapse ──────────────────────────────────────────────────
   private forced?: Promise<SchemeValue>;
 
-  // Print protocol — a speculative carrier with no [CLASS] tag and no own toString, so the printer's
-  // generic branch renders it "#<instance>" (behavior-preserving). Rarely printed: a HalfBaked is
-
   private constructor(
     ctx: RunContext,
     domain: "collection" | "number",
@@ -155,7 +152,9 @@ export class AHalfBaked extends AValue {
     return hb;
   }
 
-  // forced before egress, so this is mostly a completeness entry.
+  // Print protocol — no [CLASS] tag and no own toString, so the printer's generic branch
+  // renders it "#<instance>" (behavior-preserving). Rarely printed: a HalfBaked is forced
+  // before egress, so this is mostly a completeness entry.
   ["arrival/print"](): string {
     return "#<instance>";
   }
@@ -261,15 +260,13 @@ export class AHalfBaked extends AValue {
     return { __halfBaked__: this.domain, lo, hi };
   }
 
-  // — identity never recurses.)
+  // Setoid — IDENTITY. A HalfBaked is a still-resolving computation (a fan of promise-slots /
+  // a narrowing interval), not a settled value; two distinct HalfBakeds are never `equal?` even
+  // with the same interval. The abstract AValue Setoid forces this method; identity is the
+  // faithful minimal choice. (`seen` unused — identity never recurses.)
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this === other;
   }
-
-  // Setoid (Fantasy Land) — IDENTITY. A HalfBaked is a still-resolving computation
-  // (a fan of promise-slots / a narrowing interval), not a settled value; two distinct
-  // HalfBakeds are never `equal?` even with the same interval. The abstract AValue
-  // Setoid forces this method; identity is the faithful minimal choice. (`seen` unused
 
   withProvenance(p: Provenance): AHalfBaked {
     return new AHalfBaked(this.ctx, this.domain, this.slots, this.records, this.source, p);

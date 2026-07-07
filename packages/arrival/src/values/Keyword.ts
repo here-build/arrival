@@ -32,9 +32,8 @@ export class Keyword extends AValue {
     return `#<keyword:${this.name}>`;
   }
 
-  // A constant syntactic marker carries no provenance lineage — stamping is a no-op, so it
-  // returns the receiver unchanged. Typed `this` (honest + cast-free: `return this` IS the
-  // canonical `this`-typed expression), never the abstract `AValue` the base no longer declares.
+  // A constant syntactic marker carries no provenance lineage — stamping is a no-op,
+  // returning the receiver unchanged.
   withProvenance(): this {
     return this;
   }
@@ -47,10 +46,9 @@ export class Keyword extends AValue {
     return `#<keyword:${this.name}>`;
   }
 
-  // Print protocol — BEHAVIOR-PRESERVING. The printer renders a Keyword through its generic
-  // constructor-name branch (`#<Keyword>`), NOT this toString (`#<keyword:name>`): the printer's
-  // own-toString shortcut needs `hasOwnProperty("toString")`, which is false for a prototype
-  // method. (toString's `#<keyword:name>` is more informative — flagged as a wire-up improvement.)
+  // The printer renders a Keyword via its generic constructor-name branch (`#<Keyword>`), NOT
+  // this toString (`#<keyword:name>`): the printer's own-toString shortcut needs
+  // `hasOwnProperty("toString")`, false for a prototype method.
   ["arrival/print"](): string {
     return `#<${this.constructor.name}>`;
   }

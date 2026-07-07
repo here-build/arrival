@@ -1,22 +1,18 @@
 /**
- * Bytevector value-domain ops (R7RS Section 6.9) extracted from the `wrappedOps`
- * bridge object. These are the non-mutating bytevector primitives plus the two
- * bridges to/from strings (`utf8->string` / `string->utf8`). They are polymorphic
- * by design — `bytevector?` and the `asBytevector` coercion accept boxed
- * `SchemeBytevector` as well as raw binary (`Uint8Array`/`ArrayBuffer`/`DataView`/
- * Node `Buffer`) that legitimately flows unboxed through the membrane from FFI.
- * The mutating ops (`bytevector-u8-set!` / `bytevector-copy!`) are intentionally
- * omitted under the purity invariant and doored in this pack. Bodies are
- * reproduced verbatim from `bridge.ts`; the only change is sourcing shared
- * helpers via `../op-helpers.js`.
+ * Bytevector value-domain ops (R7RS Section 6.9): the non-mutating bytevector
+ * primitives plus the two bridges to/from strings (`utf8->string` /
+ * `string->utf8`). Polymorphic by design — `bytevector?` and the `asBytevector`
+ * coercion accept boxed `SchemeBytevector` as well as raw binary (`Uint8Array`/
+ * `ArrayBuffer`/`DataView`/Node `Buffer`) that legitimately flows unboxed through
+ * the membrane from FFI. The mutating ops (`bytevector-u8-set!` /
+ * `bytevector-copy!`) are omitted under the purity invariant and doored below.
  *
- * MIGRATED to the `symbol.native` API: each op declares a SCHEME-IDENTITY zod
- * contract (no codec, no validation — "zod for TYPES purely") and an impl bound
- * raw, exactly as the old `{ value }` form was. Native means the schema choice
- * cannot change runtime behavior; the bodies are reproduced byte-for-byte. The
- * bytevector args declare `z.sbytevector` (the op's semantic domain); the raw-binary
- * polymorphism stays a runtime property of `asBytevector`, unaffected by the types-only
- * schema. `bytevector?` keeps `z.value` since it deliberately classifies ANY value.
+ * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
+ * validation — "zod for TYPES purely") and an impl bound raw. The bytevector
+ * args declare `z.sbytevector` (the op's semantic domain); the raw-binary
+ * polymorphism stays a runtime property of `asBytevector`, unaffected by the
+ * types-only schema. `bytevector?` keeps `z.value` since it deliberately
+ * classifies ANY value.
  */
 
 import "../../errors.js";
@@ -35,13 +31,12 @@ export default new EnvCapability("scheme/bytevectors", {
     "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
       { input: [z.value], output: [z.boolean] },
       (obj) => {
-        // Polymorphic by design (NOT a transition shim): scheme producers mint
-        // SchemeBytevector, but raw binary legitimately flows from FFI through the
-        // membrane unboxed (membrane preserves Uint8Array identity), and a raw
-        // Uint8Array/ArrayBuffer/DataView/Buffer genuinely IS bytevector-like. So the
-        // predicate accepts boxed OR raw — mirroring asBytevector's coercion. (Vectors
-        // differ: a raw JS array is an R7RS list, not a vector, so vector? is
-        // instanceof-only — see the boxing plan's (a)/(b) disambiguation.)
+        // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
+        // binary legitimately flows from FFI through the membrane unboxed (it
+        // preserves Uint8Array identity), and a raw Uint8Array/ArrayBuffer/
+        // DataView/Buffer genuinely IS bytevector-like. The predicate accepts boxed
+        // OR raw, mirroring asBytevector's coercion. (Vectors differ: a raw JS array
+        // is an R7RS list, not a vector, so vector? is instanceof-only.)
         return schemeBool(
           obj instanceof ABytevector ||
             obj instanceof Uint8Array ||
@@ -85,9 +80,8 @@ export default new EnvCapability("scheme/bytevectors", {
 
     // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────
     // A bytevector is a frozen entity; an in-place write would falsify the
-    // construction-site provenance it carries. Doored here (errors-as-doors),
-    // co-located with the pack that owns the type — dissolved from the deleted
-    // core.ts manifesto. The non-mutating bytevector-copy below stays.
+    // construction-site provenance it carries. The non-mutating bytevector-copy
+    // below stays.
     "bytevector-u8-set!": symbol.notImplemented`bytevector-u8-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy / a fresh bytevector)`,
     "bytevector-copy!": symbol.notImplemented`bytevector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy returns a fresh bytevector)`,
 
@@ -107,11 +101,9 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "bytevector-append": symbol.native`bytevector-append: concatenation of all bytevector arguments`(
       // Wholly variadic + homogeneous, same shape as bytevector above — every argument
-      // IS a bytevector, so z.sbytevector (the semantic domain the sibling ops in this
-      // file already declare for their bv args — bytevector-copy, utf8->string) is the
-      // precise element schema. The raw-binary FFI polymorphism asBytevector tolerates
-      // stays a runtime-only property, unaffected by this types-only schema (see the
-      // module doc comment).
+      // IS a bytevector, so z.sbytevector is the precise element schema. The raw-binary
+      // FFI polymorphism asBytevector tolerates stays a runtime-only property,
+      // unaffected by this types-only schema (see the module doc comment).
       { input: [], inputRest: z.sbytevector, output: [z.sbytevector] },
       (...bvs) => {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));

@@ -1,15 +1,15 @@
 /**
  * Resolver — the evaluator's name-resolution + scope-construction facade.
  *
- * EJECTION P3, phase 3b.3: the Resolver holds a {@link LexicalScope} and a
- * {@link Capabilities} base as TWO separate fields, and resolution COMPOSES them
- * (`scope.lookup(name) ?? capabilities.lookup(name)`, with the keyword/cxr/dotted
- * synth wrapping that same composed lookup). Two modes, one code path:
+ * Holds a {@link LexicalScope} and a {@link Capabilities} base as TWO separate
+ * fields; resolution COMPOSES them (`scope.lookup(name) ?? capabilities.lookup(name)`,
+ * with the keyword/cxr/dotted synth wrapping that same composed lookup). Two modes,
+ * one code path:
  *
  *   GLASS (custom-env + bare-ctx fallback): no explicit base, so `capabilities`
  *     wraps the SAME base-linked env the scope wraps. The scope walk already reaches
  *     the base, so the `?? capabilities` half never fires on a hit and the composition
- *     collapses to `env_get(env, sym)` — byte-identical to 3b.2.
+ *     collapses to `env_get(env, sym)`.
  *   CUT (the default exec path): an explicit assembled base + a null-rooted lexical
  *     root, so the scope resolves program names and the base resolves builtins —
  *     genuinely decoupled. The base propagates verbatim through {@link Resolver.child}.
@@ -77,8 +77,8 @@ function cxrUnfold(name: string): SchemeValue | undefined {
  * that is a let-bound lexical name must still resolve), then walking members through the
  * membrane. Else throw Unbound. `lookup` is the raw bindings probe: a single-env
  * `_lookupWithResolvers` for the glass standalone, `scope.lookup ?? capabilities.lookup`
- * for the Resolver. Environment.get no longer does the member walk (ejection P1: get is
- * pure name-resolution); name-resolution lives here, member-access in member-walk.ts.
+ * for the Resolver. `Environment.get` does pure name-resolution only; member-access
+ * lives here / in member-walk.ts.
  */
 function resolveSynth(
   sym: ASymbol,
@@ -127,10 +127,9 @@ export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | unde
 }
 
 /**
- * The semantic role of a nested frame. In 3a this is metadata only (every frame
- * is an `env.inherit`, identically); 3b reads it to decide which frames belong to
- * the lexical chain vs the capability base. Mirrors the existing debug-name passed
- * to `Environment.inherit`.
+ * The semantic role of a nested frame. Currently metadata only (every frame is an
+ * `env.inherit` identically) — future work reads it to distinguish the lexical chain
+ * from the capability base. Mirrors the existing debug-name passed to `Environment.inherit`.
  */
 export type ScopeKind =
   | "lambda"
@@ -152,13 +151,13 @@ export class Resolver {
 
   /**
    * Hold the lexical scope and the capability base SEPARATELY. WITH an explicit
-   * `capabilities` (the cut) → `scope` wraps the given (post-cut: null-rooted) lexical
-   * env, `capabilities` is the assembled base, propagated unchanged to every child.
+   * `capabilities` (the cut) → `scope` wraps the given null-rooted lexical env,
+   * `capabilities` is the assembled base, propagated unchanged to every child.
    * WITHOUT (glass) → `capabilities = new Capabilities(scopeEnv)`, the SAME base-linked
    * env the scope wraps, so the composed `scope.lookup ?? capabilities.lookup` collapses
-   * to one `scopeEnv._lookupWithResolvers` walk (byte-identical to 3b.2 — the scope walk
-   * already reaches the base, so the `??` half never fires on a hit). `scope` is memoized
-   * per env ({@link LexicalScope.for}) so hygiene's `refFrame(name) === defResolver.scope`
+   * to one `scopeEnv._lookupWithResolvers` walk (the scope walk already reaches the base,
+   * so the `??` half never fires on a hit). `scope` is memoized per env
+   * ({@link LexicalScope.for}) so hygiene's `refFrame(name) === defResolver.scope`
    * identity compare holds.
    */
   constructor(
@@ -170,7 +169,7 @@ export class Resolver {
     this.capabilities = capabilities ?? new Capabilities(scopeEnv);
   }
 
-  /** The lexical frame env — the ride-along consumers' `resolver.env` expectation (removed at P5). */
+  /** The lexical frame env — kept for consumers that still expect `resolver.env`. */
   get env(): Environment {
     return this.scope.env;
   }
@@ -240,10 +239,9 @@ export class Resolver {
   }
 
   /**
-   * A fresh nested lexical frame carrying the SAME capability base. ★The linchpin:
-   * children no longer re-derive the base from their (post-cut: null-rooted) env —
-   * `this.capabilities` propagates verbatim, so the macro/hygiene seam keeps a stable
-   * `globalRoot` across expansion frames. ≡ `new Resolver(env.inherit(name), caps, kind)`.
+   * A fresh nested lexical frame carrying the SAME capability base — `this.capabilities`
+   * propagates verbatim (never re-derived from the child env), so the macro/hygiene seam
+   * keeps a stable `globalRoot` across expansion frames. ≡ `new Resolver(env.inherit(name), caps, kind)`.
    */
   child(name?: string | symbol, kind?: ScopeKind): Resolver {
     return new Resolver(this.env.inherit(name), this.capabilities, kind);

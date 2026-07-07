@@ -10,17 +10,13 @@
 // pass (materialize a 1M list a handful of times) stays well under a generous cap. Monotonic, like the
 // EvalTrace entry cap: we bound cumulative work, not live heap.
 //
-// WHERE the charge happens: native collection ops charge the meter per element at ONE of two
-// chokepoints — `to_array` (stdlib.ts, the eager list->array path used by append/join/reverse/…)
-// and the sequence-op dispatch in `env/fl-interop.ts` (`chargeSequenceHeap`, covering filter/map/
-// reduce). History: filter/map/reduce over a Pair were once re-routed through a `flCollectValues`
-// collect→apply→reconstruct bridge that charged the meter; the Fantasy-Land→tagless-final dissolution
-// replaced that bridge with delegation to each term's OWN arrival/tagless-final method, which walks
-// the spine/array DIRECTLY (bypassing to_array AND the deleted flCollectValues). The charge moved to
-// the env-layer dispatch — counted by input element BEFORE delegating — because the value terms must
-// stay evaluator-free (no currentRunEnv import; the meter is run-scoped env state, not a value-algebra
-// concern). `to_array` alone was once the sole point, which orphaned the bound when the ops left it;
-// charging at both points closes that gap.
+// WHERE the charge happens: two chokepoints, both counting by input element BEFORE the op runs —
+// `to_array` (stdlib.ts, the eager list->array path used by append/join/reverse/…) and the
+// sequence-op dispatch in `env/fl-interop.ts` (`chargeSequenceHeap`, covering filter/map/reduce,
+// which walk the spine/array directly via each term's own arrival/tagless-final method). The
+// dispatch-level charge is necessary because value terms must stay evaluator-free (no currentRunEnv
+// import; the meter is run-scoped env state, not a value-algebra concern) — `to_array` alone can't
+// see ops that bypass it.
 //
 // The meter lives on the RUN's environment (installed by `exec`), found by walking the parent chain
 // from the run-scoped `currentRunEnv()` — so it is run-scoped and safe against async interleaving of
@@ -67,11 +63,10 @@ export function heapBudgetMessage(max: number): string {
   );
 }
 
-/** Charge the run's allocation meter by `count` elements and contain the run if it passes `max`.
- *  Option A: the materializing tagless terms (APair/AVector map/filter/reduce/sort) charge their
- *  OWN heap through the runCtx `symbol.tagless` threads them — the primitive owns its algebra AND
- *  its cost. A meter-less run (no heapBudget) is a no-op. (Was `chargeSequenceHeap` at the env-layer
- *  dispatch in fl-interop; dissolved onto the terms.) */
+/** Charge the run's allocation meter by `count` elements; contain the run if it passes `max`.
+ *  Materializing tagless terms (APair/AVector map/filter/reduce/sort) charge their OWN heap
+ *  through the runCtx `symbol.tagless` threads them — the primitive owns its algebra AND its
+ *  cost. A meter-less run (no heapBudget) is a no-op. */
 export function chargeHeap(runCtx: RunContext | undefined, count: number): void {
   const meter = runCtx?.heapMeter;
   if (meter === undefined) return;

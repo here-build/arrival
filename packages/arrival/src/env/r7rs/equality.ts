@@ -1,32 +1,24 @@
 /**
- * Equality / identity predicates pack.
+ * Equality / identity predicates pack: the R7RS equivalence-and-identity
+ * predicates — `boolean=?` and `symbol=?` (typed equivalence over the boxed
+ * boolean/symbol towers), `equal?` (structural recursion delegated to
+ * `structuralEqual`, the single representation-blind equality home), and the
+ * `procedure?` type predicate.
  *
- * Holds the R7RS equivalence-and-identity predicates extracted verbatim from
- * the interpreter's `wrappedOps` hot path: `boolean=?` and `symbol=?` (typed
- * equivalence over the boxed boolean/symbol towers), `equal?` (structural
- * recursion delegated to `structuralEqual`, the single representation-blind
- * equality home), and the `procedure?` type predicate. Op bodies are
- * reproduced byte-for-byte — this is a behavior-preserving mechanical
- * extraction.
- *
- * MIGRATED (Phase-1 pilot) to the `symbol.native` API: each op declares a zod
- * contract and an impl, replacing the inline `{ value }` form. Native means the impl
- * works on the contract's SCHEME face (`Impl<…,"scheme">` — each schema's `z.input`;
- * the Face projection split): a `z.boolean` output demands an ABool, so every
+ * Each op declares a zod contract and an impl working on the contract's SCHEME
+ * face (`Impl<…,"scheme">`): a `z.boolean` output demands an ABool, so every
  * predicate returns the shared `schemeTrue`/`schemeFalse` FLYWEIGHTS (eq?-stable,
- * empty-provenance — the boxed twin of the raw `true`/`false` these impls returned
- * under the LIPS-legacy raw-bind reading; `structuralEqual` treats them identically).
- * Inputs stay REPRESENTATION-BLIND by design (a boxed SchemeBool / SchemeSymbol OR a
- * raw JS value that arrived via rosetta unwrapping — see
- * equality-representation.test.ts), so the honest input term is `z.value`.
+ * empty-provenance; `structuralEqual` treats them identically). Inputs stay
+ * REPRESENTATION-BLIND by design (a boxed SchemeBool/SchemeSymbol OR a raw JS
+ * value that arrived via rosetta unwrapping — see equality-representation.test.ts),
+ * so the honest input term is `z.value`.
  *
  * ALSO HOLDS the R7RS TYPE predicates `string?` / `pair?` / `null?` / `boolean?` /
- * `symbol?` / `list?` — relocated VERBATIM from the legacy `stdlib.ts` global_env as
- * the stdlib-elimination POC. These are the value-domain-agnostic type tests (a
- * string/pair/symbol test belongs with `procedure?`, not in any one cluster). Bodies
- * are reproduced byte-for-byte; `list?` inlines the proper-list-with-cycle-detection
- * walk (stdlib's `isProperList`) over the canonical `is_pair`/`is_nil`/`isCircularList`
- * primitives. (`number?` / `real?` stay OUT — the numbers pack already binds them.)
+ * `symbol?` / `list?` — the value-domain-agnostic type tests (a string/pair/symbol
+ * test belongs with `procedure?`, not in any one cluster). `list?` inlines the
+ * proper-list-with-cycle-detection walk over the canonical `is_pair`/`is_nil`/
+ * `isCircularList` primitives. (`number?`/`real?` stay OUT — the numbers pack
+ * already binds them.)
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -99,8 +91,7 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     // R7RS 6.5 — symbol/string conversion. NATIVE (below the membrane): they touch the
-    // SchemeSymbol host type directly. Relocated VERBATIM from arrival-extensions (husk
-    // dissolution) — genuine R7RS 6.5 base, just misfiled, so they join symbol=? here.
+    // SchemeSymbol host type directly, so they join symbol=? here.
     // Provenance PLUMBING: forward the input's provenance via withInputProvenance, never mint.
     "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
       { input: [z.symbol], output: [z.string] },
@@ -130,13 +121,9 @@ export default new EnvCapability("scheme/equality", {
     // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
     // `printValue` dispatches each AValue's own `["arrival/print"]()`, the leaf handles the
     // non-AValue residual). Representation-blind and value-domain-agnostic — it renders ANY
-    // value to its R7RS external representation — so it belongs here with the other
-    // value-agnostic natives relocated VERBATIM from the legacy stdlib.ts global_env, not in
-    // any one type cluster. The output is the `z.string` codec (decoded type `string`),
-    // matching `printValue`'s JS-string return, bound raw exactly as the old `{ value }` form.
-    // (DEFERRED: the 2-arg `(repr x write?)` write-mode form exists only in skipped schemeSpec
-    // .scm and was never honored — the prior stub ignored the 2nd arg and `printValue` has no
-    // write-mode flag. Matches the current 1-arg behavior.)
+    // value to its R7RS external representation — so it belongs here, not in any one type
+    // cluster. (DEFERRED: the 2-arg `(repr x write?)` write-mode form is not honored —
+    // `printValue` has no write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.value], output: [z.string] },
       (obj) => new AString(ctxOf(obj), printValue(obj)),
@@ -147,12 +134,10 @@ export default new EnvCapability("scheme/equality", {
       (a, b) => bool(structuralEqual(a, b)),
     ),
 
-    // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates, relocated
-    // VERBATIM from stdlib.ts global_env (husk dissolution). `eqv?` reduces to `eq?`
-    // today (`eqv` = `eq` + explicit number/char equality, both already routed
-    // through each scalar's Setoid inside `eq`); both delegate to the single
-    // comparison home in `structural-equal.ts`. Representation-blind like the
-    // equivalence predicates above.
+    // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates. `eqv?`
+    // reduces to `eq?` today (`eqv` = `eq` + explicit number/char equality, both
+    // already routed through each scalar's Setoid inside `eq`); both delegate to
+    // the single comparison home in `structural-equal.ts`.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.value, z.value], output: [z.boolean] },
       (x, y) => bool(eq(x, y)),
@@ -163,10 +148,9 @@ export default new EnvCapability("scheme/equality", {
       (x, y) => bool(eqv(x, y)),
     ),
 
-    // R7RS 6.3 — logical negation, relocated VERBATIM from stdlib.ts global_env
-    // (husk dissolution). Native pack (Phase 1) binds onto global_env BEFORE the
-    // scheme/core prelude (Phase 2) that calls `not` at macro-define time, so the
-    // move is load-order-safe.
+    // R7RS 6.3 — logical negation. This native pack binds onto global_env BEFORE
+    // the scheme/core prelude that calls `not` at macro-define time, so the
+    // binding order is load-order-safe.
     not: symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
       { input: [z.value], output: [z.boolean] },
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
@@ -175,10 +159,9 @@ export default new EnvCapability("scheme/equality", {
       (value) => bool(is_false(value)),
     ),
 
-    // ── R7RS type predicates (relocated from stdlib.ts global_env, POC) ──────────
-    // Reproduced byte-for-byte from the legacy global_env defs. Representation-blind
-    // like the equivalence predicates above: each accepts a boxed AValue OR a raw JS
-    // value that crossed the rosetta membrane.
+    // ── R7RS type predicates ──────────────────────────────────────────────────
+    // Representation-blind like the equivalence predicates above: each accepts a
+    // boxed AValue OR a raw JS value that crossed the rosetta membrane.
     "string?": symbol.native`string?: boxed-or-raw string test`({ input: [z.value], output: [z.boolean] }, (obj) =>
       bool(obj instanceof AString),
     ),
@@ -222,9 +205,8 @@ export default new EnvCapability("scheme/equality", {
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
       { input: [z.value], output: [z.boolean] },
-      // Reproduces stdlib's `isProperList` body verbatim: a circular list is NOT a
-      // proper list (R7RS). Detect runtime cycles (have_cycles below only catches
-      // reader #0= cycles).
+      // A circular list is NOT a proper list (R7RS); detect runtime cycles too
+      // (have_cycles below only catches reader #0= cycles).
       (obj) => {
         if (obj instanceof APair && isCircularList(obj)) {
           return schemeFalse;

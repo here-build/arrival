@@ -1,25 +1,24 @@
 // scanner.ts — Track O, Layer S: the structural validity oracle.
 //
-// This is arrival's implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
-// (sift/src/sampler/oracle-contract.ts). It reports the parse state at the end of an ACCEPTED
+// arrival's implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
+// (sift/src/sampler/oracle-contract.ts). Reports the parse state at the end of an ACCEPTED
 // PREFIX — paren depth, string/comment, operator-vs-argument position, form kind, whether the
 // program is COMPLETE-ABLE here — and the structural next-token classes. Every method is a PURE
-// FUNCTION OF THE PREFIX: no lookahead, no backtracking. That is what aligns the constraint with
+// FUNCTION OF THE PREFIX: no lookahead, no backtracking, aligning the constraint with
 // autoregressive generation (the model emits token t from 1..t-1 and never revises).
 //
 // === Why this is a single-pass scanner, not the Lexer FSM ===
+// (see docs/audit-2026-06-09-workplan-dag.md, Track O §2, for the integration plan this follows)
 //
-// The integration plan (docs/audit-2026-06-09-workplan-dag.md, Track O §2) is explicit that O1
-// "can be self-sufficient on comment depth" and "carry its own nesting counter (as the prototype
-// does)." The decisive, verified reason: the oracle is DEFINED ON TRUNCATED INPUT — EOF is its
-// normal case — but the real Lexer (src/Lexer.ts) THROWS `Unterminated` on exactly the truncated
-// prefixes the oracle must report gracefully:
+// The oracle is DEFINED ON TRUNCATED INPUT — EOF is its normal case — but the real Lexer
+// (src/Lexer.ts) THROWS `Unterminated` on exactly the truncated prefixes the oracle must report
+// gracefully:
 //
 //   "(foo \"abc"   → Lexer throws; oracle must report { inString: true }
 //   "#| open"      → Lexer throws; oracle must report { inComment: true }
 //
 // A bare paren inside an unterminated string is data, not structure — the oracle must KNOW that,
-// and the Lexer cannot tell us because it crashes before yielding the state. So Layer S ports the
+// and the Lexer can't tell us because it crashes before yielding the state. So Layer S ports the
 // proven single-pass semantics of sift's `prefix-oracle.ts` (the S-only reference) directly. The
 // genuinely-shared, non-crashing machinery from arrival is `specials.names()` — the reader-macro
 // set ('  ` ,@ , #( …) — which the scanner consults to classify quote/quasiquote prefixes.

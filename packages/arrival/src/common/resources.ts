@@ -1,19 +1,16 @@
 // resources — the env's PORTS (Erlang ports / TC39 disposables), as a FACTORY.
 //
-// A `Resource<H>` is a factory of disposables: each `acquire` mints a fresh handle
-// whose teardown is a TC39 `Symbol.asyncDispose`. The factory wrapper around it —
-// `ResourceCell` — adds the one thing the TC39 spec deliberately omits: the
-// RE-ACQUIRABLE CYCLE. From that single seam fall three behaviours, all the same
-// operation (`get()` — acquire-if-needed, single-flight):
-//   • LAZY spawn        — nobody calls get() until a wired symbol is first used →
-//                         the port opens on first access, not at spin-up.
-//   • PARALLEL acquire  — N concurrent get()s share ONE in-flight acquire; a group
-//                         of cells warms via Promise.all.
-//   • RECONSTRUCTION    — wind-down disposes the handle; the next get() opens a
-//                         FRESH one (resume / on-demand respawn). The Ref is stable.
+// A `Resource<H>` is a factory of disposables: each `acquire` mints a fresh handle whose
+// teardown is a TC39 `Symbol.asyncDispose`. `ResourceCell` wraps it with the one thing the
+// TC39 spec omits — the RE-ACQUIRABLE CYCLE. One operation (`get()` — acquire-if-needed,
+// single-flight) yields three behaviours:
+//   • LAZY spawn        — the port opens on first `get()` (first symbol use), not at spin-up.
+//   • PARALLEL acquire  — N concurrent get()s share ONE in-flight acquire (Promise.all warms a group).
+//   • RECONSTRUCTION    — wind-down disposes the handle; the next get() opens a FRESH one
+//                         (resume / on-demand respawn). The Ref identity is stable throughout.
 //
-// The TC39 reuse is exact: the handle's release IS `[Symbol.asyncDispose]`; this
-// module never reinvents disposal, only the cycle around it.
+// Disposal itself is never reinvented — the handle's release IS `[Symbol.asyncDispose]`;
+// this module only adds the cycle around it.
 
 /** A typed, cyclable boundary to something external — an Erlang port. `kind` is the
  *  driver class ("socket"); H is the handle CONTRACT consumers depend on. Two
@@ -49,7 +46,6 @@ export interface Ref<H> {
   readonly isLive: boolean;
 }
 
-// ResourceNotLiveError relocated to errors.ts (the single error home); imported for the throw below.
 import { ResourceNotLiveError } from "../errors.js";
 
 /** Wrap a plain `value + close()` into a disposable handle — so a driver author

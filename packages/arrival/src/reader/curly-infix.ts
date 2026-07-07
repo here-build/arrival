@@ -5,7 +5,7 @@
 // runs — so the evaluator, the value layer, the stored/canonical form, and the AI face never see
 // `{}`. That is the SRFI-105 "pure reader transform" property, and it's why curly-infix offloads.
 //
-// DIVERGENCE FROM SRFI-105 (intentional, formal, predictable — V 2026-06-15): where SRFI-105 emits
+// DIVERGENCE FROM SRFI-105 (intentional, formal, predictable): where SRFI-105 emits
 // `($nfx$ …)` for mixed operators and leaves precedence to the app, we resolve the *arithmetic*
 // operators here, at read-time, in plain TS (no `$nfx$` symbol is ever emitted, no Scheme macro is
 // involved). Precedence is granted only where it is overlearned (PEMDAS); every other operator mix

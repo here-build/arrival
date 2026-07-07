@@ -3,11 +3,8 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `SRFI2_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// DIALECT UNIFICATION: the bootstrap historically defined `and-let*` with
-// `define-syntax`/`syntax-rules`, which is FULL-env-only (the sandbox's matcher
-// has no `define-syntax`). This module re-expresses it once as a recursive
-// `define-macro` (the sandbox-supported path), and the bootstrap now
-// single-sources from here — one definition for both envs.
+// `define-macro`, not `define-syntax`/`syntax-rules` — the sandbox's matcher has no
+// `define-syntax`, so this is the one definition serving both envs.
 import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/srfi-2", {

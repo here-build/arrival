@@ -22,9 +22,7 @@ import {
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 
-// Radix-aware bigint parser. Moved here from the deleted reader/serialize.ts (this is its only
-// consumer — the exact/rational/float parsers below). The rest of serialize.ts was a deserializer
-// for a compact JSON form nothing ever produced (no serializer existed), so it was dissolved.
+// Radix-aware bigint parser — the only consumer is the exact/rational/float parsers below.
 export function parseBigInt(str: string, radix: number = 10): bigint {
   str = str.trim();
   const negative = str.startsWith("-");
@@ -41,9 +39,7 @@ export function parseBigInt(str: string, radix: number = 10): bigint {
   return negative ? -result : result;
 }
 
-// -------------------------------------------------------------------------
-// :: ref: https://github.com/bestiejs/punycode.js/blob/master/punycode.js
-// -------------------------------------------------------------------------
+// ref: https://github.com/bestiejs/punycode.js/blob/master/punycode.js
 export function ucs2decode(string: string): number[] {
   const output: number[] = [];
   let counter = 0;
@@ -51,14 +47,13 @@ export function ucs2decode(string: string): number[] {
   while (counter < length) {
     const value = string.charCodeAt(counter++);
     if (value >= 0xd8_00 && value <= 0xdb_ff && counter < length) {
-      // It's a high surrogate, and there is a next character.
+      // High surrogate — decode the pair with the next code unit.
       const extra = string.charCodeAt(counter++);
       if ((extra & 0xfc_00) === 0xdc_00) {
-        // Low surrogate.
+        // Low surrogate: combine into one astral codepoint.
         output.push(((value & 0x3_ff) << 10) + (extra & 0x3_ff) + 0x1_00_00);
       } else {
-        // It's an unmatched surrogate; only append this code unit, in case the
-        // next code unit is the high surrogate of a surrogate pair.
+        // Unmatched high surrogate — keep it standalone; back up so the next unit is re-read.
         output.push(value);
         counter--;
       }
@@ -69,7 +64,6 @@ export function ucs2decode(string: string): number[] {
   return output;
 }
 
-// -------------------------------------------------------------------------
 export function num_pre_parse(arg: string): {
   radix?: number;
   inexact?: boolean;
@@ -105,7 +99,6 @@ export function num_pre_parse(arg: string): {
   return options;
 }
 
-// ----------------------------------------------------------------------
 export function parse_rational(arg: string, radix = 10): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const parts = parse.number!.split("/");
@@ -118,7 +111,6 @@ export function parse_rational(arg: string, radix = 10): AExact | AInexact {
   return new AExact(CONSTANT_CTX, num, denom);
 }
 
-// ----------------------------------------------------------------------
 export function parse_integer(arg: string, radix = 10): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const r = parse.radix || radix;
@@ -128,7 +120,6 @@ export function parse_integer(arg: string, radix = 10): AExact | AInexact {
   return new AExact(CONSTANT_CTX, parseBigInt(parse.number!, r));
 }
 
-// ----------------------------------------------------------------------
 export function parse_character(arg: string): ACharacter {
   let m = arg.match(/#\\x([0-9a-f]+)$/i);
   let char: string | undefined;
@@ -145,7 +136,6 @@ export function parse_character(arg: string): ACharacter {
   return new ACharacter(CONSTANT_CTX, char);
 }
 
-// ----------------------------------------------------------------------
 export function parse_big_int(str: string): {
   exponent: number | undefined;
   mantisa: bigint | undefined;
@@ -167,12 +157,10 @@ export function parse_big_int(str: string): {
   return { exponent, mantisa };
 }
 
-// ----------------------------------------------------------------------
 export function string_to_float(str: string): number {
   return Number.parseFloat(str);
 }
 
-// ----------------------------------------------------------------------
 export function parse_float(arg: string): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const value = string_to_float(parse.number!);
@@ -185,7 +173,7 @@ export function parse_float(arg: string): AExact | AInexact {
     if (is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(parse.number!)) {
       return new AExact(CONSTANT_CTX, BigInt(Math.round(value)));
     }
-    // calculate big int and big fraction by hand - it don't fit into JS float
+    // Calculate big int and big fraction by hand — doesn't fit in a JS float.
     const { mantisa, exponent } = parse_big_int(parse.number!);
     if (mantisa !== undefined && exponent !== undefined) {
       const expAbs = Math.abs(exponent);
@@ -197,15 +185,12 @@ export function parse_float(arg: string): AExact | AInexact {
       }
     }
   }
-  // For inexact floats, check if exact was requested
+  // Inexact float, but exact was requested — approximate as a rational via its decimal string.
   if (parse.exact) {
-    // Convert float to rational approximation
-    // Use a simple continued fraction approach for reasonable precision
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
       return new AExact(CONSTANT_CTX, BigInt(Math.round(floatVal)));
     }
-    // Convert decimal to fraction
     const str = floatVal.toString();
     const decimalIndex = str.indexOf(".");
     if (decimalIndex !== -1) {
@@ -220,7 +205,6 @@ export function parse_float(arg: string): AExact | AInexact {
   return new AInexact(CONSTANT_CTX, value);
 }
 
-// ----------------------------------------------------------------------
 export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
   // Complex literals are DOORED — arrival is reals-only (R7RS § 6.2.3 permits
   // omitting complex). The reader recognized the complex shape upstream (complex_re);
@@ -231,7 +215,6 @@ export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
   return complexDoor();
 }
 
-// ----------------------------------------------------------------------
 export function parse_string(string: string): AString {
   // handle non JSON escapes and skip unicode escape \u (even partial)
   string = string
@@ -333,7 +316,6 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
   return segments;
 }
 
-// ----------------------------------------------------------------------
 export function parse_symbol(arg: string): ASymbol {
   if (!arg.includes("|")) {
     return new ASymbol(CONSTANT_CTX, arg);

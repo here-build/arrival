@@ -1,8 +1,7 @@
 // BASE_PACKS — the scheme stdlib as a capability set, the pack-assembled base.
 //
-// These are the `scheme/*` capabilities. `initBridge`
-// ASSEMBLES them onto user_env (assembleEnv) — this IS the scheme-stdlib load path
-// (it replaced the legacy hand-concatenated prelude string). Each pack's prelude +
+// These are the `scheme/*` capabilities. `initBridge` ASSEMBLES them onto user_env
+// (assembleEnv) — this IS the scheme-stdlib load path. Each pack's prelude +
 // symbols + resolvers become the LIVE source of the env's scheme surface.
 //
 // `scheme/core` is the precedence floor (constants, syntax-binding

@@ -22,8 +22,7 @@ export interface TokenMeta {
 
 // `Lexer.peek` has no boolean overload, so `peek(true)`'s inferred return is the broad
 // `EOF | TokenMeta | string | null` union even though meta mode always yields a TokenMeta.
-// Narrow back to the real shape through a guard rather than a blind cast (the pattern the
-// Formatter already uses against this exact widening).
+// Narrow back to the real shape through a guard rather than a blind cast.
 function isTokenMeta(value: unknown): value is TokenMeta {
   return (
     typeof value === "object" &&
@@ -33,7 +32,6 @@ function isTokenMeta(value: unknown): value is TokenMeta {
   );
 }
 
-// ----------------------------------------------------------------------
 function tokens(str: string | AString): TokenMeta[] {
   if (str instanceof AString) {
     str = str.valueOf();
@@ -52,10 +50,9 @@ function tokens(str: string | AString): TokenMeta[] {
   return result;
 }
 
-// ----------------------------------------------------------------------
 // `meta` is not a runtime flag the type system can branch on, so make it an overload: meta
 // mode returns the lexer's `TokenMeta[]` records; default mode returns the cleaned `string[]`
-// (whitespace-trimmed, comment-stripped). Resolves the Formatter's noted "cleaner fix here".
+// (whitespace-trimmed, comment-stripped).
 export function tokenize(str: string | AString, meta: true): TokenMeta[];
 export function tokenize(str: string | AString, meta?: false): string[];
 export function tokenize(str: string | AString, meta = false): TokenMeta[] | string[] {
@@ -67,7 +64,7 @@ export function tokenize(str: string | AString, meta = false): TokenMeta[] | str
   } else {
     const result = tokens(str)
       .map(function (token) {
-        // we don't want literal space character to be trimmed
+        // character literals `#\ ` and `#\newline` are meaningful whitespace — don't trim them
         if (token.token === String.raw`#\ ` || token.token == "#\\\n") {
           return token.token;
         }
@@ -80,7 +77,6 @@ export function tokenize(str: string | AString, meta = false): TokenMeta[] | str
   }
 }
 
-// ----------------------------------------------------------------------
 function strip_s_comments(tokens: string[]): string[] {
   let s_count = 0;
   let s_start: number | null = null;

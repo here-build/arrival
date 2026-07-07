@@ -21,26 +21,16 @@ import { HeapMeter } from "./heap-budget.js";
 // :: Type definitions for Environment bindings
 // -------------------------------------------------------------------------
 
-/**
- * A name that can be used to look up values in an environment.
- * Supports strings, symbols (both primitive and SchemeSymbol), and SchemeString.
- */
+/** A name usable to look up values in an environment: string, symbol, ASymbol, or AString. */
 export type BindingName = string | symbol | ASymbol | AString;
 
-/**
- * Value that can be stored in an environment.
- * This includes all SchemeValues plus runtime-specific types like Macro, Syntax, etc.
- */
+/** Anything storable in an environment: SchemeValues plus runtime types (Macro, Syntax, etc). */
 export type EnvironmentValue = SchemeValue | AProcedure | Macro | Syntax | EOF | Environment | RegExp;
 
 // -------------------------------------------------------------------------
-// :: Member access — formerly reached up into the stdlib monolith through a
-// :: deferred runtime slot (the last LIPS-era DI channel). Both pieces are pure
-// :: functions of leaf values, so Environment now owns them directly:
-// ::   • own-keys enumeration (string keys + symbols, matching what clone()
-// ::     preserves) for list();
-// ::   • the dot-notation member walk (foo.bar.baz) for get(), which had no other
-// ::     caller in the package.
+// :: Member access — both pure functions of leaf values, owned directly by
+// :: Environment: own-keys enumeration (matching what clone() preserves) for
+// :: list(), and the dot-notation member walk (foo.bar.baz) for get().
 // -------------------------------------------------------------------------
 
 /** Own string keys + own symbols of a binding record (what `clone()` preserves). */
@@ -48,14 +38,12 @@ function ownProps(obj: object): (string | symbol)[] {
   return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
 
-// -------------------------------------------------------------------------
 /**
  * The low-level lexical FRAME-STORAGE primitive: a `__name__`/`__env__` binding
  * record with a `__parent__` link and its own fallback resolvers, plus a run-scoped
  * heap meter. One `__parent__`-linked chain is a scope.
  *
- * It is the storage the evaluator's resolution model wraps — NOT the model itself
- * (ejection P3/P5):
+ * It is the storage the evaluator's resolution model wraps — NOT the model itself:
  *   - {@link LexicalScope} (eval/LexicalScope.ts) wraps an Environment as the
  *     lexical-binding chain (let/lambda/letrec/… frames a program introduces).
  *   - {@link Capabilities} (eval/Capabilities.ts) wraps the assembled base
@@ -74,10 +62,10 @@ export class Environment implements SchemeEnv {
   static [CLASS] = "environment";
   private readonly __resolvers__: ResolverSpec[] = [];
   /**
-   * Per-run allocation meter (see `heap-budget.ts`). Installed by `exec` on the run's top env when a
-   * `heapBudget` is requested, and found by `to_array` walking the parent chain from the calling
-   * scope. Absent ⇒ no allocation bound (the default for un-budgeted callers). Run-scoped, not
-   * chained-and-shared: the nearest one up the chain wins, so concurrent runs meter independently.
+   * Per-run allocation meter (`heap-budget.ts`). Installed by `exec` on the run's top env
+   * when a `heapBudget` is requested; found by `to_array` walking the parent chain from the
+   * calling scope. Absent ⇒ no allocation bound. Run-scoped not chained-and-shared: the
+   * nearest one up the chain wins, so concurrent runs meter independently.
    */
   __heapMeter__?: HeapMeter;
 
@@ -95,20 +83,15 @@ export class Environment implements SchemeEnv {
     public __parent__: Environment | null = null,
   ) {}
 
-  /**
-   * Register a fallback resolver.
-   * Resolvers are tried in order when normal lookup fails.
-   */
+  /** Register a fallback resolver. Resolvers are tried in order when normal lookup fails. */
   registerResolver(resolver: ResolverSpec): this {
-    // Fail LOUD on a malformed resolver. An `undefined`/`.resolve`-less entry would
-    // otherwise push silently (an empty `__resolvers__.some(...)` short-circuits before
-    // it could throw) and only surface much later as a "cannot read 'resolve'" crash at
-    // lookup time — the symptom of a module-eval-time TDZ capture (see polyglot.ts).
+    // Fail LOUD on a malformed resolver — a silent push would only surface later as a
+    // "cannot read 'resolve'" crash at lookup time (symptom of a module-eval-time TDZ
+    // capture, see polyglot.ts).
     invariant(
       resolver != null && typeof resolver.resolve === "function" && typeof resolver.id === "string",
       "registerResolver: resolver must have a string id and a resolve() function",
     );
-    // Prevent duplicate registration
     if (!this.__resolvers__.some((r) => r.id === resolver.id)) {
       this.__resolvers__.push(resolver);
     }
@@ -128,10 +111,8 @@ export class Environment implements SchemeEnv {
 
   /**
    * Every name bound anywhere up the `__parent__` chain from this scope, de-duplicated
-   * (a name shadowed by a closer layer appears once). The chain-walk that was formerly
-   * open-coded by the MCP discovery tool (poking `__parent__`/`list` from outside);
-   * encapsulated here so the scope-node owns its own traversal and consumers type against
-   * the `SchemeEnv` contract. Unsorted — the caller imposes any ordering/filtering.
+   * (a name shadowed by a closer layer appears once). Unsorted — the caller imposes any
+   * ordering/filtering.
    */
   allBoundNames(): (string | symbol)[] {
     const names = new Set<string | symbol>();
@@ -152,18 +133,15 @@ export class Environment implements SchemeEnv {
    * Resolve a name within one env layer before yielding to its parent. The
    * direct-bindings → resolvers → parent ordering is a precedence contract, not an
    * optimization: a module's explicit binding must WIN over its own lazy resolver
-   * (so a pinned override can't be undone by a catch-all fallback in the same layer),
-   * and BOTH must win over the parent (so a closer module shadows a deeper dependency). A
-   * resolver returns `undefined` to mean "not mine, keep looking"; that is why the
-   * loop treats `undefined` as yield rather than as a found nil.
+   * (a pinned override can't be undone by a catch-all fallback in the same layer),
+   * and BOTH must win over the parent (a closer module shadows a deeper dependency).
+   * A resolver returns `undefined` to mean "not mine, keep looking" — never a found nil.
    */
   _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
     if (Object.hasOwn(this.__env__, name as string)) {
       return this.__env__[name as string];
     }
 
-    // Resolvers fire only AFTER a direct miss — a generated binding never masks an
-    // explicit one in the same layer. `undefined` = "not mine"; anything else is the hit.
     for (const resolver of this.__resolvers__) {
       const result = resolver.resolve(String(name));
       if (result !== undefined) {
@@ -183,19 +161,18 @@ export class Environment implements SchemeEnv {
   }
 
   get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue | undefined {
-    // `:key` keyword accessors are no longer special-cased here: a `:`-prefixed symbol
-    // is never a binding, so it falls through to `_lookupWithResolvers` (below) where
-    // the polyglot capability's `keyword-accessor` resolver (membrane.ts) maps it to
-    // the `@`-alias pluck — exactly like the `c[ad]+r` catchall. One catchall path.
+    // `:key` keyword accessors aren't special-cased here: a `:`-prefixed symbol is never
+    // a binding, so it falls through to `_lookupWithResolvers` where the polyglot
+    // capability's `keyword-accessor` resolver (membrane.ts) maps it to the `@`-alias
+    // pluck — exactly like the `c[ad]+r` catchall. One catchall path.
     const { throwError = true } = options;
 
-    // Normalize to string/symbol name
     let name: string | symbol = symbol as string | symbol;
     if (symbol instanceof ASymbol || symbol instanceof AString) {
       name = symbol.valueOf();
     }
 
-    // First, try direct lookup for the literal symbol (handles names like %as.data)
+    // Direct lookup for the literal symbol (handles names like %as.data)
     const directValue = this._lookupWithResolvers(name);
     if (directValue !== undefined) {
       return patch_value(directValue);
@@ -210,7 +187,7 @@ export class Environment implements SchemeEnv {
   set(name: BindingName, value: EnvironmentValue | number | bigint): this {
     let storedValue: EnvironmentValue;
 
-    // Numbers get special handling (convert to SchemeExact/SchemeInexact for typed numeric ops)
+    // Numbers convert to AExact/AInexact for typed numeric ops
     if (typeof value === "number") {
       if (Number.isNaN(value)) {
         storedValue = new AInexact(CONSTANT_CTX, value);
@@ -222,23 +199,20 @@ export class Environment implements SchemeEnv {
     } else if (typeof value === "bigint") {
       storedValue = new AExact(CONSTANT_CTX, value);
     }
-    // Already a Scheme value - pass through
     else if (isSchemeValue(value)) {
       storedValue = value;
     }
-    // Primitives (boolean, string, symbol) pass through
     else if (typeof value === "boolean" || typeof value === "string" || typeof value === "symbol") {
       storedValue = value as EnvironmentValue;
     }
-    // Functions pass through as-is (membrane wrapping happens at interop points, not storage)
+    // Membrane wrapping happens at interop points, not storage
     else if (typeof value === "function") {
       storedValue = value as EnvironmentValue;
     }
-    // Error objects pass through unwrapped for exception handling (R7RSError, etc.)
+    // Unwrapped for exception handling (R7RSError, etc.)
     else if (value instanceof Error) {
       storedValue = value as EnvironmentValue;
     }
-    // Objects get wrapped via membrane
     else {
       storedValue = fromJS(value) as EnvironmentValue;
     }

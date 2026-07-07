@@ -8,8 +8,6 @@ import { isSchemeString, isString } from "../types.js";
 import { nil } from "./ANil.js";
 import type { CallResult } from "./ACallable.js";
 
-type SchemeSymbolName = string | symbol;
-
 /**
  * Provenance × interning invariant: `SchemeSymbol.list[name]` is the canonical
  * empty-provenance instance shared by every reader. `withProvenance` must NOT
@@ -44,36 +42,35 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
 
 /** A real keyword name: `:`-prefixed, length > 1 (a bare `:` is not one) — matches
  *  `values/lineage.ts`'s `memberRead`/`type-layer/lower.ts`'s `isKeyword`. */
-function isKeywordName(name: SchemeSymbolName): name is string {
+function isKeywordName(name: string): name is string {
   return typeof name === "string" && name.length > 1 && name.startsWith(":");
 }
 
 export class ASymbol extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "symbol";
-  // via the no-double-gensym path carries no slot — hence `?` + `string | number`.
-  static readonly literal: unique symbol = Symbol.for("__literal__");
   // Interning is per run context — see `internTables` / `internTableFor` above.
-  // Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for`
-  // registry value is unchanged) so the gensym literal slot can be a DECLARED
-  // computed field below — a single typed key, not the broad symbol index
-  // signature that esbuild rejects. The slot is written by `gensym`'s
-  // `hidden_prop(symbol, "__literal__", name)` (reader/values-repr.ts); `name`
-  // is a string (named gensym) or number (anonymous `#:gN`), and a gensym minted
+  /** Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for` registry
+   *  value is unchanged) so the gensym literal slot can be a DECLARED computed field below —
+   *  a single typed key, not the broad symbol index signature esbuild rejects. Written by
+   *  `gensym`'s `hidden_prop(symbol, "__literal__", name)` (reader/values-repr.ts); `name` is
+   *  a string (named gensym) or number (anonymous `#:gN`); a gensym minted via the
+   *  no-double-gensym path carries no slot at all — hence `?` + `string | number`. */
+  static readonly literal: unique symbol = Symbol.for("__literal__");
   static readonly object = Symbol.for("__object__");
   readonly kind = "symbol" as const;
-  declare __name__: SchemeSymbolName;
+  declare __name__: string;
   declare [ASymbol.literal]?: string | number;
 
   constructor(
     ctx: RunContext,
-    name: SchemeSymbolName | SchemeStringLike,
+    name: string | SchemeStringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
     intern: symbol | true = true,
   ) {
     super(ctx, provenance);
     // Unwrap SchemeStringLike to plain string
-    const unwrapped: SchemeSymbolName = isSchemeString(name) ? name.valueOf() : name;
+    const unwrapped: string = isSchemeString(name) ? name.valueOf() : name;
 
     // A keyword redirects to AKeywordSymbol — a real subclass with a statically-declared
     // `apply` method, not a per-instance patch. `new.target` distinguishes "someone called
@@ -149,24 +146,20 @@ export class ASymbol extends AValue {
     return this.__name__ as string;
   }
 
-  valueOf(): SchemeSymbolName {
-    // For symbols, return the symbol itself (used as environment keys)
-    // For strings, return the string
+  valueOf(): string {
+    // Returned raw — used as environment keys.
     return this.__name__;
   }
 
-  // Setoid (Fantasy Land). Symbol ≡ symbol with the same `__name__` — `===`
-  // works for both string names and gensym ES6 symbols (interned identity).
-  // Mirrors `SchemeSymbol.is` (which compares `__name__`), preserving
-  // structuralEqual / equal? behavior. (algebras-in-entities migration.)
+  // Setoid — symbol ≡ symbol with the same `__name__`; `===` works for both string names and
+  // gensym ES6 symbols (interned identity). Mirrors `ASymbol.is`.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof ASymbol && this.__name__ === other.__name__;
   }
 
-  // Ord (Fantasy Land, extends Setoid). Lexicographic over STRING names.
-  // A gensym's `__name__` is an ES6 symbol with no meaningful order — falling
-  // back to `String(...)` gives a STABLE total order within a run (Symbol
-  // toString is stable), so totality/antisymmetry/transitivity still hold.
+  // Ord (extends Setoid) — lexicographic over STRING names. A gensym's `__name__` is an ES6
+  // symbol with no meaningful order — falling back to `String(...)` gives a STABLE total
+  // order within a run (Symbol toString is stable), so totality/antisymmetry/transitivity hold.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return other instanceof ASymbol && String(this.__name__) <= String(other.__name__);
   }
@@ -230,14 +223,9 @@ function is_gensym(symbol: unknown): boolean {
 }
 
 // ============================================================================
-// INTEROP BOUNDARY
-// ============================================================================
-// War story (2026-05-28 audit): SchemeSymbol tracks gensym/literal metadata via
-// well-known symbols (`SchemeSymbol.literal`, `SchemeSymbol.object`), and
-// symbol-to-field auto-resolution would expose any class- or prototype-level
-// property to inference-plane scheme. Marking the boundary blocks inherited-property
-// access on instances. (The former static `list` intern table — a read-write
-// poisoning surface — is gone: interning now lives in the module-scope per-ctx
-// `internTables` WeakMap above, not a class member, so it isn't symbol-field
-// reachable at all.)
+// INTEROP BOUNDARY: ASymbol tracks gensym/literal metadata via well-known symbols
+// (`literal`, `object`); symbol-to-field auto-resolution would otherwise expose any class-
+// or prototype-level property to inference-plane scheme. This marker blocks inherited-
+// property access on instances. Interning lives in the module-scope `internTables` WeakMap
+// (not a class member), so it isn't symbol-field reachable at all.
 // ============================================================================

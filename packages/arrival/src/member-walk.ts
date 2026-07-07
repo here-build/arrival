@@ -1,8 +1,7 @@
-// Member-path walk — relocated from `Environment.walkMembers` (ejection P1: `Environment.get`
-// is pure name-resolution now). Given a resolved base VALUE and a dotted member path
-// (`["bar","baz"]`), walk it and return the member. Pure value-member access, no Environment —
-// the evaluator's dotted-symbol resolution (`env_get`) calls this after resolving the base
-// NAME in scope, so name-resolution (scope) and member-access (value) are finally separated.
+// Member-path walk. Given a resolved base VALUE and a dotted member path (`["bar","baz"]`),
+// walk it and return the member. Pure value-member access, no Environment — the evaluator's
+// dotted-symbol resolution (`env_get`) calls this after resolving the base NAME in scope, so
+// name-resolution (scope) and member-access (value) stay separated.
 import invariant from "tiny-invariant";
 import { AJSObject } from "./values/primitives/AJSObject.js";
 import { accessMember, NOT_FOUND } from "./interop-access.js";

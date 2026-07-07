@@ -137,14 +137,13 @@ export class ACharacter extends AValue {
     return new ACharacter(this.ctx, this.__char__, p);
   }
 
-  // Setoid (Fantasy Land). Char ≡ char iff same grapheme. Matches the value
-  // semantics of __char__. structuralEqual / equal? consult this first.
-  // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
+  // Setoid — char ≡ char iff same grapheme. Matches __char__'s value semantics;
+  // structuralEqual/equal? consult this first.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof ACharacter && this.__char__ === other.__char__;
   }
 
-  // Ord (Fantasy Land, extends Setoid). Ordered by code point.
+  // Ord (extends Setoid) — ordered by code point.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       other instanceof ACharacter &&

@@ -193,14 +193,10 @@ export function pointProvenance(callId: number): ReadonlySet<number> {
 }
 
 // ============================================================================
-// INTEROP BOUNDARY (defensive on the abstract base)
-// ============================================================================
-// War story (2026-05-28 audit): the symbol-to-field auto-resolution in
-// `accessMember` walks the prototype chain of any object reachable from
-// inference-plane scheme. Subtypes (SchemeString, Pair, …) graft methods onto their
-// own prototypes — those subtypes are individually marked at their definition
-// sites — but marking the abstract `AValue` base is a defensive belt: any
-// future AValue subtype that forgets its own marker still inherits the
-// boundary from the base prototype chain, so accidental method exposure
-// degrades to "blocked" rather than "exposed."
+// INTEROP BOUNDARY (defensive on the abstract base): `accessMember`'s symbol-to-field
+// auto-resolution walks the prototype chain of any object reachable from inference-plane
+// scheme. Subtypes (AString, APair, …) mark themselves individually at their definition
+// sites; marking the abstract `AValue` base too is a defensive belt — a future subtype that
+// forgets its own marker still inherits the boundary, so exposure degrades to "blocked"
+// rather than "exposed."
 // ============================================================================

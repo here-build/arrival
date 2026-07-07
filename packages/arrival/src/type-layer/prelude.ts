@@ -6,10 +6,10 @@
 // `get_route(list("a"), "fast")` type-checks against the harvested signature, and the
 // Σ∩T narrow drops the provably ill-typed candidates.
 //
-// We HARVEST from the AEntity defs directly (schema-to-ts.signatureOf) rather than route
-// through `OracleEnv.signatureOf`: that method is a contract SHARED with sift (type-identical,
-// O0-conformance-proven), so re-typing it to a TS string would invert the cross-package arrow.
-// The harvest is one-directional (defs → prelude text) and lives entirely in this package.
+// Harvests from the AEntity defs directly (schema-to-ts.signatureOf) rather than through
+// `OracleEnv.signatureOf`: that method is a contract shared with sift (type-identical,
+// O0-conformance-proven), so re-typing it to a TS string would invert the cross-package
+// arrow. The harvest stays one-directional (defs → prelude text), entirely in this package.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -20,8 +20,8 @@ import { signatureOf } from "./schema-to-ts.js";
 
 // carriers.ts as AMBIENT text: strip the leading `export ` so `interface Cons`, `type List`,
 // and `declare function map` are GLOBAL in the lens's virtual program (the lowered program
-// references `list`/`car`/`map` + the carriers unqualified). Resolved against the shipped src
-// tree (from dist/.../prelude.js that is `../../src/type-layer`; from src it is `.`).
+// references `list`/`car`/`map` + the carriers unqualified). Path resolves against the
+// shipped src tree — `../../src/type-layer` from `dist/.../prelude.js`, `.` from src.
 function carrierVocabularyPath(): string {
   const o = process.env.ARRIVAL_CARRIERS_PATH;
   if (o !== undefined) return o;
@@ -47,9 +47,9 @@ export interface HarvestedPrelude {
 /**
  * Assemble the ambient prelude for a set of `[name, arrow-signature]` grant entries.
  * Identifier-safe names become `declare const <name>: <sig>`; operator / non-identifier names
- * become ESCAPED, dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the
- * lowering emits the matching escaped access). `sig` is used verbatim — callers that harvest
- * from an `AEntity` (`assembleHarvestedPrelude`) or from a tool's JSON Schema
+ * become escaped, dotted members of a `declare const _: { … }` namespace (`+` → `_.$plus$`; the
+ * lowering emits the matching escaped access — name-escape.ts). `sig` is used verbatim — callers
+ * that harvest from an `AEntity` (`assembleHarvestedPrelude`) or from a tool's JSON Schema
  * (arrival-manifold's `assembleManifoldPrelude`) both funnel through this one assembly.
  */
 export function assemblePreludeFromSignatures(
@@ -60,9 +60,6 @@ export function assemblePreludeFromSignatures(
   const operatorDecls: string[] = [];
   for (const [name, sig] of entries) {
     members.push(name);
-    // identifier-safe → a top-level `declare const`; everything else → an ESCAPED, dotted member of
-    // the `_` namespace (`get-route` → `_.get$dash$route`), so `typeof _.<name>` is a legal type
-    // query and `_.` autocompletes (name-escape.ts — the scheme-name ⇄ TS-identifier lens).
     if (isTsIdentifier(name)) identDecls.push(`declare const ${name}: ${sig};`);
     else operatorDecls.push(`  ${escapeName(name)}: ${sig};`);
   }

@@ -44,9 +44,8 @@ function printForeign(value: unknown): string {
   return String(value);
 }
 
-// A raw JS procedure (a Scheme lambda carries the LAMBDA brand; a native is a bare function). The
-// old `#<procedure(native)>` split rode on the fragile, half-dead `is_native_function` heuristic and
-// is dropped — every procedure is `#<procedure:name>` or `#<procedure>`.
+// A raw JS procedure (a Scheme lambda carries the LAMBDA brand; a native is a bare function) —
+// every procedure renders as `#<procedure:name>` or `#<procedure>`, no native/lambda split.
 function functionRepr(fn: object): string {
   const f = fn as { __name__?: string | symbol; name?: string };
   if (f.__name__ != null) {

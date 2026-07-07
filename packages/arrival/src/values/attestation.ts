@@ -2,16 +2,16 @@
  * attestation — the branded-value registry behind the manifold's `s/*` family
  * (design: second-foundation/arrival-manifold/docs/attestation-design.md).
  *
- * This is PROVENANCE/TAINT-FLOW, NOT TYPING — and deliberately NOT the provenance
- * set. Provenance has union/forward algebra (it survives computation via
+ * PROVENANCE/TAINT-FLOW, NOT TYPING — and deliberately not the provenance set.
+ * Provenance has union/forward algebra (survives computation via
  * `withInputProvenance`); attestation needs DROP-ON-COMPUTE algebra: a computed
  * value (`(+ (:a r) 1)`, `string-append`, any fresh box) must lose its inputs'
  * attestation so a model has to re-assert what the new value IS. An identity-keyed
  * WeakSet expresses "drop unless explicitly carried" natively: every builtin mints
- * fresh boxes (values/op-helpers.ts `withInputProvenance` — always a fresh
- * construction or a `withProvenance` clone), so computation drops attestation for
- * free, while reference-passing (`let`, lambda args, stored container elements,
- * `if`/`cond` selects) preserves it for free.
+ * fresh boxes (op-helpers.ts `withInputProvenance` — always a fresh construction
+ * or a `withProvenance` clone), so computation drops attestation for free, while
+ * reference-passing (`let`, lambda args, stored container elements, `if`/`cond`
+ * selects) preserves it for free.
  *
  * Three stamp sites, each mirroring an existing provenance touch:
  *   1. the `bakeRosetta` return walk (common/symbols/_bake.ts step 4) — a SOURCE

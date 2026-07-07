@@ -6,13 +6,12 @@
 // ── s/* is the only place where types appear explicitly ──────────────────────────────────
 //
 // "s/* is the only place where types appear explicitly." No parallel tag subsets, no
-// hand-rolled lowerings — one type language, one lowering. Before
-// this capability existed, `arrival/overridable` carried its OWN hand-rolled scalar subset
-// (`"string"`/`"number"`/`"boolean"`/a bare `("enum" …)` list) that could — and did — silently
-// drift from what the wire schema and the HTTP validator actually accept. That subset is gone:
-// every `define/overridable` type tag now goes through the SAME s/* vocabulary a hosted
-// function's `(s/object …)` signature uses, lowered by the SAME `tagToJsonSchema` recursion
-// (`../common/schema-tag.js`) every other consumer lowers through.
+// hand-rolled lowerings — one type language, one lowering. A hand-rolled scalar subset
+// per-consumer (as `arrival/overridable` once carried) can silently drift from what the wire
+// schema and the HTTP validator actually accept — so every `define/overridable` type tag goes
+// through the SAME s/* vocabulary a hosted function's `(s/object …)` signature uses, lowered by
+// the SAME `tagToJsonSchema` recursion (`../common/schema-tag.js`) every other consumer lowers
+// through.
 //
 // ── why this lives in CORE, not "a schema DSL for endpoints" ──────────────────────────────
 //

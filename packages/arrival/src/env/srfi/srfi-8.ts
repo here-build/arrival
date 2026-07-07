@@ -3,11 +3,9 @@
 // SINGLE SOURCE: `base-packs.ts` assembles `SRFI8_SCM` and
 // evals it (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// DIALECT UNIFICATION: the bootstrap historically defined `receive` with
-// `define-syntax`/`syntax-rules`, which is FULL-env-only (the sandbox's matcher
-// has no `define-syntax`). This module re-expresses it once as `define-macro`
-// (the sandbox-supported path, same form the threading/cut packs already use),
-// and the bootstrap now single-sources from here — one definition for both envs.
+// `define-macro` (same form the threading/cut packs use), not `define-syntax`/
+// `syntax-rules` — the sandbox's matcher has no `define-syntax`, so this is the
+// one definition serving both envs.
 import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/srfi-8", {

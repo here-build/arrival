@@ -124,15 +124,13 @@ function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number
  *  falls through emitNode's default dispatch instead, keeping its prior application-call
  *  lowering: `const` cannot appear there). `(define (f a b…) body…)` → `const f = (a: any,
  *  b: any) => body` (a multi-form body folds to a comma sequence, mirroring emitLambda;
- *  `: any` params are advisory polarity, avoiding TS7006 under noImplicitAny). This kills
- *  the dominant 2304 mass (`define` lowering as a CALL to an undeclared `define` function
- *  today) and makes downstream type hints reachable through a define'd helper.
+ *  `: any` params are advisory polarity, avoiding TS7006 under noImplicitAny).
  *
- *  KNOWN ACCEPTED RISK: a same-program REDEFINE of the same top-level name now fires
- *  TS2451 ("Cannot redeclare block-scoped variable") — 0 occurrences observed across the
- *  2,200-program corpus this rework is calibrated against. Not engineered around (`var`
- *  would silently shadow scoping semantics elsewhere; `let` would invite a different
- *  mutation-shaped false positive) — flagged here rather than hidden.
+ *  KNOWN ACCEPTED RISK: a same-program REDEFINE of the same top-level name fires TS2451
+ *  ("Cannot redeclare block-scoped variable") — 0 occurrences observed across the
+ *  2,200-program calibration corpus. Not engineered around (`var` would silently shadow
+ *  scoping semantics elsewhere; `let` would invite a different mutation-shaped false
+ *  positive) — flagged here rather than hidden.
  *
  *  Returns undefined for a malformed `(define)`/`(define ())` (no target) — the caller
  *  falls back to the ordinary application-call lowering. */
@@ -290,7 +288,7 @@ function emitList(node: ListNode): string {
       case "unquote":
       case "unquote-splicing":
         // A stray unquote/unquote-splicing OUTSIDE a quasiquote (malformed, but kept
-        // inert): degrade to the live inner expression, same as before.
+        // inert): degrade to the live inner expression.
         return items[1] === undefined ? "undefined" : emitNode(items[1]);
       // ── s.* combinators: TS RESERVED-WORD forms lowered to calls on the `s` property
       // bag (carriers.ts) instead of a bare head — `if(...)`/`let(...)`/`do(...)` as a
@@ -304,7 +302,7 @@ function emitList(node: ListNode): string {
       case "letrec":
       case "letrec*":
         // Advisory fidelity only — mutual-recursion scoping is not modeled; same flat
-        // emission as plain `let` (s.let), per the design decision.
+        // emission as plain `let` (s.let).
         return emitLetBindings(items[1], items.slice(2));
       case "cond":
         return emitCond(items.slice(1));
@@ -325,7 +323,7 @@ function emitList(node: ListNode): string {
 }
 
 /** `(quote X)` from `'X`. A quoted atom → its value image (symbol → identifier — benign
- *  2304 noise, unchanged this round; number/string → itself). A quoted LIST recurses as
+ *  2304 noise; number/string → itself). A quoted LIST recurses as
  *  QUOTED DATA (never as an application) — `'(("a" 1))` → `list(list("a", 1))`, never the
  *  false-positive `list("a"(1))` that treating the nested list as a call would produce (a
  *  string-literal head would get CALLED). A dotted datum `'(a . b)` → `cons(a, b)`, folding
@@ -335,7 +333,7 @@ function emitQuote(datum: Node | undefined): string {
 }
 
 /** One datum in QUOTED context: a nested list recurses (never applies), an atom keeps its
- *  plain value image (symbol → identifier, unchanged this round). */
+ *  plain value image (symbol → identifier). */
 function emitQuotedDatum(datum: Node): string {
   return isList(datum) ? emitQuoteLikeList(datum.list, emitQuotedDatum) : emitNode(datum);
 }

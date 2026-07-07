@@ -4,7 +4,6 @@ import type { SchemeValue } from "../values/types.js";
 import type { MacroInvokeContext } from "./Macro.js";
 import type { Resolver } from "./Resolver.js";
 
-// Type for syntax object (can be Syntax or Function)
 type SyntaxLike = Syntax | Function;
 
 /**
@@ -66,10 +65,9 @@ export class Syntax {
    */
   __code__?: SchemeValue;
   /**
-   * The def-time Resolver (P3 3a.4) — wraps `__env__`, the hygiene identity root.
-   * Captured here (and closed over by the transformer in env/macros.ts) so 3b can
-   * swap the hygiene ALGORITHM without re-plumbing this seam. In 3a it is a glass
-   * over the same base-linked def env; hygiene still reaches base the old way.
+   * The def-time Resolver — wraps `__env__`, the hygiene identity root. Captured
+   * here and closed over by the transformer in env/macros.ts; currently a glass
+   * over the same base-linked def env, so hygiene still reaches base through it.
    */
   __resolver__: Resolver | undefined;
 
@@ -78,16 +76,13 @@ export class Syntax {
     this.__fn__ = fn;
     this.__env__ = env;
     this.__resolver__ = resolver;
-    // allow macroexpand
     this.__defmacro__ = true;
   }
 
-  // A `syntax-rules` transformer is Exp→Exp: it ALWAYS returns the transcribed
-  // form + its hygiene scope (`MacroExpansion`), never a value, and that shape
-  // does not depend on a flag — so this is `expand`, not a boolean-switched
-  // `invoke`. (The old `macro_expand` arg toggled nothing for `Syntax`; the
-  // transformer in env/macros.ts `void`s it. Both call sites passed `true`, so
-  // it is pinned `true` here, keeping the fexpr args byte-identical.)
+  // A `syntax-rules` transformer is Exp→Exp: it always returns the transcribed
+  // form + hygiene scope (`MacroExpansion`), never a value — hence `expand`, not
+  // a boolean-switched `invoke`. `macro_expand` is pinned `true`; the transformer
+  // in env/macros.ts ignores it, kept only for fexpr-arg parity with `Macro.invoke`.
   expand(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
     const args = {
       error,
@@ -97,8 +92,8 @@ export class Syntax {
       macro_expand: true,
       runCtx,
       // Use-site resolver (from the dispatch) + the def-time one captured on this
-      // Syntax. Both staged for 3b; the 3a transformer closes over its own def
-      // Resolver for hygiene, so threading these changes nothing observable.
+      // Syntax; the transformer closes over its own def Resolver for hygiene, so
+      // passing both changes nothing observable yet.
       resolver,
       defResolver: this.__resolver__,
     };

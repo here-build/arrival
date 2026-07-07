@@ -4,7 +4,7 @@
 // `set!`. The lens compiles a lowered program against an ambient prelude, so every grant symbol
 // must be NAMEABLE in TS — and not as a string key (`_["nil?"]`), because a `typeof` type query
 // cannot bracket-index (only walk a dotted entity name) and the LSP cannot autocomplete a string
-// index. So we ESCAPE each non-identifier name into a valid TS identifier and expose it as a
+// index. So each non-identifier name is ESCAPED into a valid TS identifier and exposed as a
 // DOTTED member (`_.nil$question$`): `typeof _.nil$question$` is legal, and `_.<TAB>` autocompletes.
 //
 // THE LENS (a predicate-safe, stable iso):
@@ -12,13 +12,13 @@
 //   • unescapeName: TS-identifier → scheme-name      (backward)
 //   • LAW (round-trip): unescapeName(escapeName(x)) === x  for every scheme name x.
 //   • IMAGE: escapeName(x) is ALWAYS a valid TS identifier (`/^[A-Za-z_$][A-Za-z0-9_$]*$/`).
-//   • PREDICATE-SAFE / STABLE: an already-identifier-safe name is a FIXED POINT (escape = id), so
-//     `get_route` ⇄ `get_route` unchanged; only `-?!+./…`-bearing names move. Deterministic.
+//   • FIXED POINT: an already-identifier-safe name passes through unchanged (`get_route` ⇄
+//     `get_route`); only `-?!+./…`-bearing names move. Deterministic.
 //
-// `$` is the escape sigil — it never occurs in a scheme symbol, so it is unambiguous (and a literal
-// `$`, were one to appear, round-trips through `$dollar$`). Each non-identifier char becomes a
-// `$token$`: a NAMED token for the R7RS extended set (`?`→`question`, readable), a bare digit for a
-// leading digit (`1+`→`$1$plus$`), and a `$u<hex>$` codepoint fallback for the total long tail.
+// `$` is the escape sigil — never occurs in a scheme symbol, so it's unambiguous (a literal `$`
+// round-trips through `$dollar$`). Each non-identifier char becomes a `$token$`: a NAMED token
+// for the R7RS extended set (`?`→`question`, readable), a bare digit for a leading digit
+// (`1+`→`$1$plus$`), and a `$u<hex>$` codepoint fallback for the long tail.
 
 /** The R7RS extended-identifier specials, named for readability. `_` is identifier-safe (never
  *  escaped); the un-named long tail (`'"()[]{}|\;,` space, …) routes through the `u<hex>` fallback,
@@ -38,12 +38,11 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
  *  the `IDENTIFIER` char regex: `for`/`class`/`new`/`return`/… as a plain identifier or CALL head
  *  (`for(...)`) is a PARSE ERROR (the token starts a statement, not an expression). A scheme
  *  symbol equal to one of these is perfectly legal; the lexical IDENTIFIER position is not — so
- *  these are excluded from `isTsIdentifier`, routing them through the escaped, dotted `_` member
- *  path instead (`_.for`, a legal property access). Deliberately NARROW: TS's *contextual* /
- *  soft type-level keywords (`any`, `string`, `number`, `unknown`, `type`, `declare`, `of`, `as`,
- *  `is`, `infer`, `keyof`, `readonly`, `namespace`, `module`, `get`, `set`, `undefined`, …) are
- *  NOT reserved — `const string = 1` is valid TS — so they stay OUT of this set and keep printing
- *  bare (over-escaping them would be harmless but pointless, and this set's job is exactness). */
+ *  these are excluded from `isTsIdentifier`, routed through the escaped, dotted `_` member path
+ *  instead (`_.for`, a legal property access). Deliberately NARROW: TS's *contextual* keywords
+ *  (`any`, `string`, `type`, `declare`, `as`, `is`, `infer`, `keyof`, `readonly`, `undefined`, …)
+ *  are NOT reserved (`const string = 1` is valid TS) and stay OUT — over-escaping them would be
+ *  harmless but pointless, and this set's job is exactness. */
 const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
   "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import",
@@ -78,9 +77,9 @@ function charFor(token: string): string {
 }
 
 /**
- * Forward leg of the lens: a scheme symbol name → a valid TS identifier. An identifier-safe name is
- * returned unchanged (fixed point); otherwise each char that is not `[A-Za-z0-9_]` — and a LEADING
- * digit — becomes a `$token$`, so the result always starts with `[A-Za-z_$]` and is a valid TS id.
+ * Forward leg of the lens: a scheme symbol name → a valid TS identifier. Each char that is not
+ * `[A-Za-z0-9_]` — and a LEADING digit — becomes a `$token$`, so the result always starts with
+ * `[A-Za-z_$]` and is a valid TS id.
  */
 export function escapeName(name: string): string {
   if (isTsIdentifier(name)) return name;
@@ -100,8 +99,7 @@ const TOKEN = /\$([a-z][a-z0-9]*|[0-9]|u[0-9a-f]+)\$/g;
 
 /**
  * Backward leg of the lens: a TS identifier (an escaped name) → the original scheme symbol name.
- * Literal identifier runs pass through; each `$token$` decodes via `charFor`. The inverse of
- * `escapeName` on its image — `unescapeName(escapeName(x)) === x` for every scheme name x.
+ * Literal identifier runs pass through; each `$token$` decodes via `charFor`.
  */
 export function unescapeName(escaped: string): string {
   return escaped.replace(TOKEN, (_, token: string) => charFor(token));

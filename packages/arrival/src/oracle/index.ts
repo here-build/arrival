@@ -1,10 +1,10 @@
 // oracle/index.ts — Track O assembly point (the local module export).
 //
-// This is the public face of the constraint-kernel oracle (Track A of
-// sift/docs/CONSTRAINT-KERNEL-SPEC.md). It assembles the Layer-S structural reader (scanner.ts)
-// behind the contract interfaces (contract.ts). The package-level public export is the deferred
-// `Ocontract`/`A3` node (it adds this through src/index.ts's explicit allowlist) — this file is the
-// module-local boundary that node will re-export; do NOT edit src/index.ts here.
+// Public face of the constraint-kernel oracle (Track A of sift/docs/CONSTRAINT-KERNEL-SPEC.md).
+// Assembles the Layer-S structural reader (scanner.ts) behind the contract interfaces
+// (contract.ts). The package-level public export is the deferred `Ocontract`/`A3` node, added
+// through src/index.ts's explicit allowlist — this file is the module-local boundary that node
+// re-exports; do NOT edit src/index.ts here.
 //
 // Σ (O2) and T (O3) layers attach to this assembly later; today the scanner degrades them
 // gracefully per the contract (validSymbols/expectedType → null, produces → true).
@@ -33,12 +33,10 @@ import type { OracleEnvΣ } from "./sigma.js";
 import type { Environment } from "../Environment.js";
 
 /**
- * The assembled oracle. Given an `env` (a live {@link Environment} or a pre-built {@link OracleEnvΣ})
- * it is Σ-LIVE: `validSymbols()` returns the position-filtered bound set. Given nothing it is the
- * Layer-S structural scanner — Σ/T degrade to null/true per the contract (graceful degradation).
- *
- * This preserves the existing contract: `makeOracle()` with no argument is byte-identical to the
- * Layer-S scanner; Σ attaches only when an env is supplied, and T (O3) lands behind the same surface.
+ * The assembled oracle. Given an `env` (a live {@link Environment} or pre-built {@link OracleEnvΣ})
+ * it is Σ-LIVE: `validSymbols()` returns the position-filtered bound set. Given nothing, it's the
+ * Layer-S structural scanner — Σ/T degrade to null/true per the contract. `makeOracle()` with no
+ * argument stays byte-identical to the Layer-S scanner; T (O3) will land behind the same surface.
  */
 export function makeOracle(env?: Environment | OracleEnvΣ): OracleScanner {
   if (!env) return structuralScanner;

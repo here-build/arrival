@@ -10,14 +10,10 @@
 // exit are non-deterministic). They are omitted BY DESIGN; each door (errors-as-
 // doors) teaches the why and routes the caller back to pure dataflow.
 //
-// ─── HOME DECISION (flagged for review) ──────────────────────────────────────────
 // §6.13 and §6.14 are WHOLE-section omissions — arrival ships no ports or system
 // subsystem, so no existing pack "owns" them. They share one rationale (host effects
 // have no construction-site), so they get ONE dedicated host pack here rather than
-// being scattered, or left "aside" in a manifest. This completes the dissolution of
-// the central `_unimplemented.ts` manifest into live, teaching capabilities. If
-// review prefers, this pack is the most trimmable part of the change — it adds only
-// teaching doors, none of them test-load-bearing.
+// being scattered across unrelated packs.
 //
 // SINGLE SOURCE: `r7rs/index.ts` adds this to `allR7rs`, so `base-packs.ts`
 // assembles it into the base env.

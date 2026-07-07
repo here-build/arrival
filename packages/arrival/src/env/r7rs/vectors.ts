@@ -1,27 +1,22 @@
 /**
- * Vector value-domain primitives (R7RS Section 6.8) — extracted verbatim from
- * the interpreter's \`wrappedOps\` hot path. A vector is exactly a boxed
- * \`SchemeVector\` so the container carries provenance and hosts algebra
+ * Vector value-domain primitives (R7RS Section 6.8). A vector is exactly a
+ * boxed \`SchemeVector\` so the container carries provenance and hosts algebra
  * instances. The mutating members of the family (\`vector-set!\`,
  * \`vector-fill!\`, \`vector-copy!\`) are OMITTED by the purity invariant (frozen
  * entities, doored in this pack); only the non-mutating constructors,
  * accessors, and the higher-order \`vector-map\` / \`vector-for-each\` (which await
  * async membrane callbacks before settling) live here.
  *
- * MIGRATED to the \`symbol.native\` API: each op declares a SCHEME-IDENTITY zod
- * contract (no codec, no validation — "zod for types purely") and an impl bound
- * raw exactly as the old \`{ value }\` form. Vector args are \`z.svector\`, indices
- * the \`schemeNumber\` tower, predicate/length returns the JS-boolean/number
- * scheme-zod codecs (decoded type \`boolean\`/\`number\`, matching the impls). The
- * representation-blind boundaries — element/list returns (\`vector\`'s elements,
- * \`vector-ref\`/\`vector->list\`'s returns) — are \`z.value\` (the typed \`z.value\`
- * replacement: same runtime acceptance, precise static output \`SchemeValue\`). The
- * HOF callback is the types-only \`z.custom\` procedure; its variadic vector rest
- * (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s args are \`inputRest\`/
- * \`z.array\` over \`z.svector\` (2026-07-05 Contract-precision audit — see the sibling
- * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`), not the
- * bare \`z.value\` the pre-audit contracts used. Bodies are reproduced byte-for-byte
- * (only the impls' own param/return TYPE ANNOTATIONS were tightened to match).
+ * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
+ * validation — "zod for types purely") and an impl bound raw. Vector args are
+ * \`z.svector\`, indices the \`schemeNumber\` tower, predicate/length returns the
+ * JS-boolean/number scheme-zod codecs. The representation-blind boundaries —
+ * element/list returns (\`vector\`'s elements, \`vector-ref\`/\`vector->list\`'s
+ * returns) — are \`z.value\` (same runtime acceptance, precise static output
+ * \`SchemeValue\`). The HOF callback is the types-only \`z.custom\` procedure; its
+ * variadic vector rest (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s
+ * args are \`inputRest\`/\`z.array\` over \`z.svector\` (see the sibling
+ * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`).
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -63,14 +58,11 @@ export default new EnvCapability("scheme/vectors", {
         // >10s hang the audit caught.
         assertAllocatable(len, "make-vector");
         // Materialize the fill into every slot AT construction. The fill slot takes any
-        // scheme value by design, so its contract is \`z.value\` (output \`SchemeValue\`, the
-        // typed replacement for \`z.value\`) and \`fill\` is \`SchemeValue\` — a provided
-        // fill has crossed the membrane (JS null→nil), and the no-fill case maps each
-        // slot to \`theVoid\` (the membrane's own undefined→theVoid image) rather than a
-        // raw \`undefined\` — that unboxed slot is exactly the leak this layer dissolves,
-        // and \`theVoid\` keeps \`slot\` a genuine \`SchemeValue\` so \`Array.from\` infers
-        // \`SchemeValue[]\` with no cast. Folding the slot into \`Array.from\`'s map (vs a
-        // follow-up \`arr.fill\`) keeps it inside that single boundary.
+        // scheme value by design (z.value / SchemeValue) — a provided fill has crossed
+        // the membrane (JS null→nil), and the no-fill case maps each slot to \`theVoid\`
+        // (the membrane's own undefined→theVoid image) rather than a raw \`undefined\`,
+        // which would leak an unboxed slot. Folding the slot into \`Array.from\`'s map
+        // (vs a follow-up \`arr.fill\`) keeps it inside that single boundary.
         const slot: SchemeValue = fill === undefined ? theVoid : fill;
         const arr = Array.from({ length: len }, () => slot);
         // Boxed into SchemeVector so the container carries provenance and hosts
@@ -112,16 +104,15 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector-ref": symbol.native`vector-ref: the element of vec at index k`(
-      // vec is a vector (z.svector, matching this file's own accessor convention); the
-      // returned element is a scheme value, representation-blind by design (z.value, not
-      // z.value) — same identity-schema precision as vector->list's element output.
+      // vec is a vector (z.svector); the returned element is a scheme value,
+      // representation-blind by design (z.value) — same precision as vector->list's
+      // element output.
       { input: [z.svector, z.schemeNumber], output: [z.value] },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
-      // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown` (not
-      // narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray too, which
-      // is NOT an AVector instance — z.svector's harvested type is a stand-in, not the full
-      // runtime domain (see scheme-zod.ts's own note on svector). A non-vector declares no such
-      // method → a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
+      // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown`
+      // (not narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray
+      // too, which is NOT an AVector instance. A non-vector declares no such method →
+      // a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
       (vec: unknown, k: unknown): SchemeValue => {
         const m = (vec as Record<string, unknown> | null | undefined)?.[tf("vector-ref")];
         if (typeof m !== "function") {
@@ -134,9 +125,8 @@ export default new EnvCapability("scheme/vectors", {
 
     // ── PURITY DOORS — vector mutators OMITTED by design (R7RS §6.8) ─────────────
     // A vector is a frozen entity; an in-place write would falsify the construction-
-    // site provenance it carries. Doored here (errors-as-doors), co-located with the
-    // pack that owns the vector type — dissolved from the deleted core.ts manifesto.
-    // The non-mutating vector-copy / vector-map below construct fresh vectors instead.
+    // site provenance it carries. The non-mutating vector-copy / vector-map below
+    // construct fresh vectors instead.
     "vector-set!": symbol.notImplemented`vector-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (vector-map / vector-copy / a fresh vector)`,
     "vector-fill!": symbol.notImplemented`vector-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-vector with the fill / vector-map)`,
     "vector-copy!": symbol.notImplemented`vector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (vector-copy returns a fresh vector)`,
@@ -210,9 +200,8 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
       // proc is the fixed HEAD (`input`); the spread vectors are the variadic TAIL
-      // (`inputRest`) — mirrors apply/for-each/string-map's own head/rest split. The rest is
-      // z.svector (this file's own vector-identity schema), not the representation-blind
-      // z.value the old combined z.tuple([head], z.value) used.
+      // (`inputRest`) — mirrors apply/for-each/string-map's own head/rest split. The rest
+      // is z.svector (this file's own vector-identity schema), not representation-blind.
       {
         input: [z.lambda],
         inputRest: z.svector,

@@ -1,10 +1,8 @@
 /**
- * Reader-macro registry: maps a source prefix (`'`, `` ` ``, `,`, `,@`, `#(`, …)
- * to the SchemeSymbol it expands to and an expansion `type`. The lexer consults
- * this table to recognize special syntax at read time, before the evaluator ever
- * sees a form. The table is FIXED (no runtime add/remove reader-macro verb exists),
- * so the upstream-LIPS `on`/`off`/`trigger` event system was dissolved. Derived
- * from upstream LIPS.
+ * Reader-macro registry: maps a source prefix (`'`, `` ` ``, `,`, `,@`, `#(`, …) to the
+ * SchemeSymbol it expands to and an expansion `type`. The lexer consults this table to
+ * recognize special syntax at read time, before the evaluator ever sees a form. The
+ * table is FIXED — no runtime add/remove reader-macro verb exists.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -39,11 +37,9 @@ const defined_specials = [
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));
 
-// The registry is a pure, frozen data literal — built by mapping each [seq, symbol, type]
-// to the same `{ seq, symbol, type }` entry the old `append()` produced. This is pure
-// module-eval (no mutation, no side-effect), evaluated before any reader by construction;
-// it replaces the former `__list__ = {}` + imperative `for (… of defined_specials) append(…)`
-// loop. `names()` / `get()` / `type()` read it unchanged.
+// Pure, frozen data literal: maps each [seq, symbol, type] to a { seq, symbol, type }
+// entry, built at module-eval (no mutation, no side-effect) before any reader runs.
+// `names()` / `get()` / `type()` read it unchanged.
 export const __list__ = Object.freeze(
   Object.fromEntries(defined_specials.map(([seq, symbol, type]) => [seq, { seq, symbol, type }])),
 );

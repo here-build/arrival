@@ -51,10 +51,8 @@ type Fn = (...args: any[]) => unknown;
 /** A symbol is one of THREE families:
  *
  *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" | … }`)
- *    — dispatched by `kind` in apply(). This is the ONLY form every pack under
- *    `foundations/arrival/**` now declares — the whole base stdlib + the infer/mcp/data/
- *    approval palette (arrival-scheme-env-infer, arrival-chain) migrated off the legacy forms
- *    below in the `symbol.rosetta`/`symbol.native` bake effort.
+ *    — dispatched by `kind` in apply(). The ONLY form every pack under `foundations/arrival/**`
+ *    declares.
  *  • a raw VALUE binding (`{ value }`) — a PERMANENT, deliberate arm, not a migration remnant.
  *    Reserved for the CALLABLE RULE's one true exception: a binding `require`'s loader
  *    machinery resolves and calls directly in JS-land, never through the scheme evaluator (no
@@ -62,21 +60,17 @@ type Fn = (...args: any[]) => unknown;
  *    `packs/ext-yaml.ts` / `packs/ext-toml.ts`'s `ext/yaml/resolve`-shaped bindings are the
  *    known holders.
  *  • a LEGACY form — a bare fn, or a rosetta config (`{ fn, withContext, type, options }`) —
- *    read `this` (`ThisType<Activation<C,R>>`, bound at wire time). This was the `captureSymbols`
- *    migration scaffold's target shape; `captureSymbols` itself is gone now that its only two
- *    callers (arrival-chain's `arrivalDataCapability`/`arrivalSuperDefineCapability`) declare
- *    baked forms directly. But the SHAPE remains load-bearing OUTSIDE `foundations/arrival` —
- *    `McpEnvCapability`'s whole inline-annotation design (MCP `description`/`inputSchema` spliced
- *    onto the same object as `fn`) is built on it, and every one of its downstream capabilities
- *    (here.build's `saas/server/{arrival,mcp}`, inhuman's `saas/mcp`, the whole
- *    `sift-submission/mcp/packs/*` forensics catalog) still authors verbs this way. Deleting this
- *    arm is a SEPARATE, much larger migration (McpEnvCapability's annotation-lifting would need
- *    to move to baked-symbol splicing first) — out of scope here; NOT dead code.
+ *    read `this` (`ThisType<Activation<C,R>>`, bound at wire time). Gone from `foundations/
+ *    arrival/**` itself, but load-bearing OUTSIDE it: `McpEnvCapability`'s whole
+ *    inline-annotation design (MCP `description`/`inputSchema` spliced onto the same object as
+ *    `fn`) is built on it, and every downstream capability (here.build's `saas/server/
+ *    {arrival,mcp}`, inhuman's `saas/mcp`, the `sift-submission/mcp/packs/*` forensics catalog)
+ *    still authors verbs this way. Deleting this arm needs McpEnvCapability's annotation-lifting
+ *    to move to baked-symbol splicing first — a separate migration; NOT dead code.
  *
- *  Named `SymbolDeclaration` (not `SymbolDef`) to keep it distinct from `symbol.js`'s
- *  `AEntity` — the two used to share the identical name `SymbolDef`, a real naming
- *  collision (this is the wider authoring shape; `AEntity` is the narrower baked/discriminated
- *  result — `AEntity` is one arm of this union, not a synonym for it). */
+ *  Named `SymbolDeclaration`, not `SymbolDef`, to stay distinct from `symbol.js`'s `AEntity` —
+ *  the wider authoring shape vs. the narrower baked/discriminated result (`AEntity` is one arm
+ *  of this union, not a synonym for it). */
 export type SymbolDeclaration = AEntity | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
 
 /** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
@@ -142,17 +136,13 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
 }
 
 /** Every `.spec.prelude` reachable from `caps`, DAG order (a dep's prelude precedes its
- *  dependent's — the same order `lower()`'s own `apply()` evaluates them in, so a
- *  dependent's prelude may reference names its dep's prelude defined), deduplicated by
- *  capability IDENTITY (a diamond-shaped dep graph — two capabilities sharing one dep —
- *  must not double-emit its prelude).
+ *  dependent's — matching `lower()`'s own `apply()` evaluation order, so a dependent's prelude
+ *  may reference names its dep's prelude defined), deduplicated by capability IDENTITY (a
+ *  diamond-shaped dep graph must not double-emit a shared dep's prelude).
  *
- *  For an EDITOR/type-lens's ambient scheme vocabulary: it needs EVERY capability actually
- *  assembled into the real env, not a hand-picked subset named by the caller. A hand-picked
- *  list silently drifts out of sync the moment a capability's own prelude changes or a new
- *  capability joins the root-set — exactly the bug this closes (`define/overridable`'s
- *  macro read as unresolved in studio's live editor because the caller named two
- *  capabilities' preludes by hand instead of walking the real assembled set). */
+ *  For an EDITOR/type-lens's ambient scheme vocabulary: walk the actually-assembled capability
+ *  set, never a hand-picked subset — a hand-picked list silently drifts the moment a
+ *  capability's prelude changes or a new capability joins the root-set. */
 export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
   const parts: string[] = [];
   for (const cap of caps) {
@@ -221,19 +211,12 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
-        // preludeOnly routing (design doc §1.3, phase-gated model): a baked native/rosetta def
-        // marked `preludeOnly: true` binds onto `ctx.preludeScope` instead of the runtime env.
-        // Under `assembleEnv` that target is the kernel's Map-backed shim, answered by a
-        // phase-gated resolver on the base env — so the symbol is resolvable by every
-        // later-applied capability's prelude (C3 dep order) and by nothing else: once the C3
-        // loop ends the resolver goes silent, and the name is a plain unbound-variable
-        // EVERYWHERE at runtime, including from lambdas a prelude defined (closures walk the
-        // live chain at call time — `preludeOnly` means ASSEMBLY-TIME-ONLY; a prelude bridges a
-        // value to runtime by capturing the CALL'S RESULT in an ordinary define, never the
-        // verb). Same bind form either way (native → raw impl; rosetta → the gated run
-        // wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
-        // apply outside any assembly), fall back to `env` so the symbol is never silently
-        // dropped.
+        // preludeOnly routing (design doc §1.3): a baked native/rosetta def marked
+        // `preludeOnly: true` binds onto `ctx.preludeScope` instead of the runtime env — see
+        // `PackContext.preludeScope` in kernel.ts for the full assembly-time-only contract. Same
+        // bind form either way (native → raw impl; rosetta → the gated run wrapper); only the
+        // TARGET scope differs. Absent `ctx.preludeScope` (a bare direct apply outside any
+        // assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
         const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
@@ -325,8 +308,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           // ── LEGACY forms — still McpEnvCapability's downstream authoring shape ──────
           const sym = isSymbolSpec(def) ? def : { fn: def };
           const bound = (sym.fn as Fn).bind(activation);
-          // Activation middleware: first touch of ANY symbol spawns ALL resources
-          // (single-flight) before the fn body runs → fns read `.live` synchronously.
+          // Same activation-spawn middleware as `ensureSpawned` above — first touch gates on it.
           const gated =
             cellList.length === 0
               ? bound

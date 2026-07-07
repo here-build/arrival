@@ -27,10 +27,9 @@ import { APair } from "../values/primitives/APair.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
-// (Former `installMacroGuard(is_macro)` injection removed: the value-layer
-// shadow-cone skip now reads the macro classes' `[CLASS]` brand directly via
-// `is_macro_value` in value-guards.ts — a downward, eval-import-free test, so no
-// runtime DI is needed. This was the last top-level bare-call side effect.)
+// The value-layer shadow-cone skip reads the macro classes' `[CLASS]` brand
+// directly via `is_macro_value` in value-guards.ts — a downward, eval-import-free
+// test, so this module needs no runtime DI for it.
 
 /**
  * The realm-cached lexical root for DEFAULT (no-env) exec — a null-rooted scratch frame
@@ -48,11 +47,10 @@ function defaultLexicalRoot(): Environment {
 /**
  * The realm-cached runtime bootstrap — the lazy base assembly, driven directly by `exec`.
  *
- * This REPLACES the old `bridge.initBridge` ceremony (a bespoke realm-flag dance in boot.ts
- * + a separate eager `void initBridge()` kick). It folds the base `assembleEnv` into a
- * realm-cached promise — exactly the `defaultLexicalRoot()` pattern above, async-flavoured:
- * the `??=` assigns the in-flight promise synchronously, so the cache IS the once-only guard
- * (a second `exec`, or a re-entrant prelude exec, sees the same settled/in-flight promise).
+ * Folds the base `assembleEnv` into a realm-cached promise — exactly the
+ * `defaultLexicalRoot()` pattern above, async-flavoured: the `??=` assigns the
+ * in-flight promise synchronously, so the cache IS the once-only guard (a second
+ * `exec`, or a re-entrant prelude exec, sees the same settled/in-flight promise).
  *
  * Two steps, order-significant:
  *   1. GLOBAL_NATIVE_PACKS (value-domain clusters + numeric + exceptions) onto global_env,
@@ -61,10 +59,9 @@ function defaultLexicalRoot(): Environment {
  *      user_env. A base-pack prelude may call a native primitive (`+`, `string-length`), which
  *      resolves user_env → global_env, so the natives in step 1 must already be live.
  *
- * The pack rosters are imported DYNAMICALLY (like the old `Environment.init`'s `import(bridge)`):
- * `BASE_PACKS`/polyglot transitively pull the evaluator (membrane), so a static import here would
- * close a module-eval cycle. The dynamic import is awaited exactly once (promise-cached), so it
- * costs nothing after warm-up.
+ * The pack rosters are imported DYNAMICALLY: `BASE_PACKS`/polyglot transitively pull the
+ * evaluator (membrane), so a static import here would close a module-eval cycle. The
+ * dynamic import is awaited exactly once (promise-cached), so it costs nothing after warm-up.
  *
  * `skipBootstrapWait: true` on the prelude evalScheme: those execs ARE this assembly, so they
  * must not re-enter the gate (which would await the very promise they are part of — deadlock).
@@ -72,13 +69,9 @@ function defaultLexicalRoot(): Environment {
 let _baseAssembled: Promise<void> | undefined;
 export function ensureBaseAssembled(): Promise<void> {
   return (_baseAssembled ??= (async () => {
-    // stdlib.ts is now a side-effect-FREE husk: its native-root `Object.assign` is gone
-    // (`undefined` was dropped as a LIPS vestige; `repr` moved to the scheme/equality pack;
-    // every other entry had already migrated to a capability pack). The native root is
-    // populated ENTIRELY by the assembled packs below (GLOBAL_NATIVE_PACKS + BASE_PACKS), so
-    // this import no longer registers anything — it is kept only as a load-order anchor and is
-    // a no-op (ES modules evaluate once). The whole module is dynamic-import-only by design
-    // (no static importer), which is what lets the package declare `sideEffects: false`.
+    // The native root is populated ENTIRELY by the assembled packs below
+    // (GLOBAL_NATIVE_PACKS + BASE_PACKS). Dynamic import only, by design — no
+    // static importer — so the package can declare `sideEffects: false`.
     const { GLOBAL_NATIVE_PACKS } = await import("../bridge.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");
     const evalScheme: EvalSchemeInto = (env, src) =>
@@ -163,10 +156,9 @@ export interface ExecOptions {
   /**
    * Execution-budget signal. When the signal aborts, the trampoline throws
    * `signal.reason ?? DOMException("aborted", "AbortError")` at the next
-   * iteration boundary. See `EvalContext.signal` in evaluator.ts for the
-   * full war story; the short version is that the 5ms event-loop yield
-   * prevents UI freeze but does NOT bound CPU, so `(define (loop) (loop))`
-   * needs an external bound for sandbox use.
+   * iteration boundary. See `EvalContext.signal` in evaluator.ts — the 5ms
+   * event-loop yield prevents UI freeze but does NOT bound CPU, so
+   * `(define (loop) (loop))` needs an external bound for sandbox use.
    */
   signal?: AbortSignal;
   /**
@@ -203,15 +195,13 @@ export interface ExecOptions {
    * tolerantly to `nil`. Default (`undefined`/`false`) is TOLERANT — today's
    * behavior, where projecting nil yields nil.
    *
-   * This is the interpreter mode that replaces fantasy-land's scattered
-   * env-overlay nil guards (the `if (x == null) return nil` pattern in
-   * fl-interop): nil-tolerance becomes a real evaluation mode threaded through
-   * `EvalContext.strict`, not an env decoration. The inference-plane `car`/`cdr` (env/fl-interop.ts)
-   * read this off `ctx.runCtx.strict` (the retired `isStrict()` holder's replacement): default ⇒ a nil/null
-   * projection yields nil, strict ⇒ the R7RS throw. A wrong-TYPE arg (car of a number/
-   * string) throws in BOTH modes — tolerance is scoped to absence. The base `user_env`
-   * car/cdr are unaffected (always R7RS-strict); `first`/`second`/… and the cxr
-   * accessors are a later parity step.
+   * Nil-tolerance is a real evaluation mode threaded through `EvalContext.strict`,
+   * not an env decoration. The inference-plane `car`/`cdr` (env/fl-interop.ts) read
+   * this off `ctx.runCtx.strict`: default ⇒ a nil/null projection yields nil, strict
+   * ⇒ the R7RS throw. A wrong-TYPE arg (car of a number/string) throws in BOTH
+   * modes — tolerance is scoped to absence. The base `user_env` car/cdr are
+   * unaffected (always R7RS-strict); `first`/`second`/… and the cxr accessors
+   * are a later parity step.
    */
   strict?: boolean;
   /**
@@ -224,26 +214,26 @@ export interface ExecOptions {
   /**
    * Internal: set by the bootstrap's own prelude evals (`ensureBaseAssembled`'s
    * `evalScheme`) to bypass the bootstrap gate below — awaiting `ensureBaseAssembled`
-   * there would deadlock (the prelude eval IS part of the realm-cached promise it would
-   * be waiting on). Formerly lived on the now-removed stdlib.ts `exec`.
+   * there would deadlock (the prelude eval IS part of the realm-cached promise it
+   * would be waiting on).
    */
   skipBootstrapWait?: boolean;
   /**
-   * SHADOW MODE (W3 slices 2–3 — provenance-static-lineage-finalization §8). When
-   * set, after each top-level form is evaluated, the static lineage `fullCone`
-   * (values/lineage.ts) is computed and ASSERTED equal to the form's UNTAPPED eager
-   * `result.provenance`. A divergence throws `ProvenanceShadowDivergence`. This is a
-   * read-only cross-check of the static classifier against the live engine — it does
-   * NOT alter evaluation; **flag-OFF (the default) is byte-identical to today**, as
-   * the skeleton build + assert are gated entirely behind this flag. Asserts
-   * `fullCone` only (never `countCone`, which diverges by design — the v0.2 minimal
-   * cone). Forms outside shadow's provable set are skipped + recorded, not asserted.
+   * SHADOW MODE (provenance-static-lineage-finalization §8). When set, after each
+   * top-level form is evaluated, the static lineage `fullCone` (values/lineage.ts)
+   * is computed and ASSERTED equal to the form's UNTAPPED eager `result.provenance`.
+   * A divergence throws `ProvenanceShadowDivergence`. Read-only cross-check of the
+   * static classifier against the live engine — does NOT alter evaluation;
+   * **flag-OFF (the default) is byte-identical**, as the skeleton build + assert are
+   * gated entirely behind this flag. Asserts `fullCone` only (never `countCone`,
+   * which diverges by design — the v0.2 minimal cone). Forms outside shadow's
+   * provable set are skipped + recorded, not asserted.
    *
    * NAME CAVEAT: the `ir`-prefix is borrowed (from the studio's `--ir-*`
    * compile-erased-superset markers) and is a MISFIT here — this flag toggles
    * shadow/dual-run VALIDATION, it does not lower an authoring superset to spec.
-   * Read it as "validate-static-lineage," not as an IR feature. (The eventual public
-   * name is `--ir-lineage`; the misfit rides along, see the v0.2 carrier doc §1.)
+   * Read it as "validate-static-lineage," not an IR feature. (Eventual public
+   * name: `--ir-lineage`.)
    */
   irLineage?: boolean;
   /**
@@ -313,17 +303,14 @@ export async function exec(
   // one exception: a base-pack prelude eval IS the bootstrap and must not await its own promise.
   if (!skipBootstrapWait) await ensureBaseAssembled();
 
-  // Parse if string, otherwise wrap single value in array
   let parsed: SchemeValue[];
   if (typeof code === "string") {
     // Thread strict into the reader so the R7RS control rejects loose-mode literals
     // (#void/#null) at parse time. Default false ⇒ loose parse, unchanged.
     parsed = await readerParse(code, undefined, strict ?? false);
   } else if (code instanceof APair) {
-    // Single expression - evaluate directly
     parsed = [code];
   } else {
-    // Atom - evaluate directly
     parsed = [code];
   }
 
@@ -347,12 +334,11 @@ export async function exec(
   // allocations don't count against the user program), spanning the WHOLE exec like the wall-clock
   // budget. Save/restore the prior meter so a nested exec on the same env can't clobber the outer
   // one. `to_array` finds it by walking the parent chain from the calling scope.
-  // Mint the per-run context (the hermetic handle; see RunContext). Today it carries
-  // strict + the heap meter as scaffolding — `exec` still installs the meter on the env
-  // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
-  // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
+  // The per-run context (the hermetic handle; see RunContext) carries strict + the heap
+  // meter; `exec` also installs the meter on the env node below (where `to_array`/
+  // fl-interop find it by parent-walk) until those readers move to `runCtx` directly.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns, signal });
-  // ── THE EXEC SEAM (P4): glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
+  // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
   // up its base-linked chain — byte-identical (zero change for arrival-chain/inhuman). `env`
   // wins over the cut refinements (capabilities/scope), which are ignored when it is set.
@@ -387,11 +373,10 @@ export async function exec(
       const expr = parsed[i];
       const remaining =
         budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      // Preserve the audit-#42 wrapOperator contract (ported from the removed
-      // stdlib.ts `exec_with_stacktrace`): run() wraps every non-ArrivalError —
-      // including the TypeError wrapOperator throws to name operator + arg types —
-      // in a ArrivalError, masking both the TypeError class and its membrane cause.
-      // Surface the original TypeError so the user-visible error shape survives.
+      // Preserve the audit-#42 wrapOperator contract: run() wraps every non-ArrivalError
+      // — including the TypeError wrapOperator throws to name operator + arg types — in
+      // an ArrivalError, masking both the TypeError class and its membrane cause. Surface
+      // the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
       try {
         // A top-level form evaluates to a value, never a bare expander — seal it.
@@ -473,8 +458,7 @@ export async function execExpr(
   // Mint a per-run handle here too (mirrors exec() above) — closes two gaps at once: a
   // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME abort
   // signal `ctx.signal` already carries here, and the handler-stack WeakMap (exceptions.ts)
-  // stops falling back to the shared CONSTANT_CTX bucket for every require'd module (the gap
-  // that file's own header comment names as "the remaining gap... outside this pack").
+  // stops falling back to the shared CONSTANT_CTX bucket for every require'd module.
   const runCtx = makeRunContext({ speculate, signal });
 
   try {

@@ -35,16 +35,15 @@ import { tf } from "./tagless-final.js";
 
 // `make-string` / `make-vector` / `make-bytevector` take an unbounded length `k`.
 // V8 throws RangeError only above its own ceiling (~2^29 chars, ~2^32 slots), but
-// that's the ENGINE's limit, not OUR policy, and the attack window is BELOW it:
-// `(make-string 1e8)` allocates 200MB of UTF-16 in ~1ms and succeeds, `(make-vector
-// 1e8)` spins >10s on 100M slots — one sandbox call drives host memory pressure. So
-// we check length O(1) BEFORE allocation.
+// that's the ENGINE's limit, not OUR policy: `(make-string 1e8)` allocates 200MB
+// of UTF-16 in ~1ms and succeeds, `(make-vector 1e8)` spins >10s on 100M slots —
+// one sandbox call drives host memory pressure. So length is checked O(1) BEFORE
+// allocation.
 //
-// Default: 2^24 (16,777,216). Large enough that no legitimate Scheme program hits
-// it (a 16M-char string / 16M-slot vector is already pathological for an in-memory
-// AST language), small enough that the worst case is ~32MB UTF-16 / one 16M-slot
-// array — recoverable, not a host-killer. Host-overridable via `setAllocationLimit`
-// so a tighter sandbox (or a looser trusted batch job) can retune without forking.
+// Default: 2^24. Large enough no legitimate program hits it, small enough the
+// worst case (~32MB UTF-16 / one 16M-slot array) is recoverable, not a
+// host-killer. Host-overridable via `setAllocationLimit` for a tighter sandbox
+// or a looser trusted batch job.
 let allocationLimit = 1 << 24; // 16,777,216
 
 /** Current per-call allocation cap for size-parameterized constructors. */
@@ -225,21 +224,19 @@ const describeOrdElement = (v: unknown): string =>
  *  term; this is the SHARED element-ordering both APair and AVector reach for.
  *
  *  • No comparator → the operand's OWN total order via `arrival/tagless-final/lte`: for a
- *    pair a,b — `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). This is
- *    correct for EVERY Ord-bearing type (numbers/strings/chars/symbols/bytevectors all carry
- *    lte), and fixes the prior JS-lexicographic default (`(sort '(2 10))` → `(10 2)`). An
- *    element lacking `lte` (a pair, with no user comparator) → a totalic "cannot order"
- *    throw — never a silent mis-order.
- *  • Comparator present → BOTH supported comparator shapes (wrong-state-impossible across
- *    the two conventions the ecosystem actually uses), ASSUMED SYNC (ES Array.sort is sync):
- *      – a JS-style NUMBER comparator (the harvested .d.ts contract: `(a b) → number`,
- *        <0 ⇒ a-before-b) — used DIRECTLY (this is what the localeCompare test fixture and
- *        every model-following-the-published-type sends); a boxed Scheme numeric is unboxed.
+ *    pair a,b — `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). Correct
+ *    for EVERY Ord-bearing type (numbers/strings/chars/symbols/bytevectors all carry lte).
+ *    An element lacking `lte` (e.g. a pair, with no user comparator) → a totalic "cannot
+ *    order" throw — never a silent mis-order.
+ *  • Comparator present → BOTH supported comparator shapes (the two conventions the
+ *    ecosystem actually uses), ASSUMED SYNC (ES Array.sort is sync):
+ *      – a JS-style NUMBER comparator (`(a b) → number`, <0 ⇒ a-before-b) — used DIRECTLY;
+ *        a boxed Scheme numeric is unboxed.
  *      – else a `less?` predicate (SRFI-95 / a Scheme `<=`-style boolean) — truthy iff a
  *        precedes b: `!is_false(cmp(a,b)) ? -1 : (!is_false(cmp(b,a)) ? 1 : 0)`.
- *    The number branch is REQUIRED: reading a number comparator's positive verdict through
- *    `!is_false` (every nonzero number is scheme-truthy) would mis-order (it did, in the
- *    first cut) — so a number is consulted as a number, not coerced to a less?-truthiness. */
+ *    The number branch is REQUIRED: reading a number comparator's verdict through
+ *    `!is_false` (every nonzero number is scheme-truthy) would mis-order — a number must
+ *    be consulted as a number, never coerced to less?-truthiness. */
 export function deriveSortCompare(
   comparator?: (a: unknown, b: unknown) => unknown,
 ): (a: unknown, b: unknown) => number {
@@ -338,35 +335,29 @@ export function isSchemeNumber(value: unknown): boolean {
 // ============================================================================
 
 /**
- * Stamp `result` with the union of `args`' provenances. Parallel to lips.ts's
- * `withInputProvenance` (same algebra): the builtins that live in the cluster
- * packs — `string-append`, `string-copy`, `list-copy`, `vector`, etc. — all
- * produce fresh AValue / array / Uint8Array results whose provenance must
+ * Stamp `result` with the union of `args`' provenances. The builtins that live in
+ * the cluster packs — `string-append`, `string-copy`, `list-copy`, `vector`, etc. —
+ * all produce fresh AValue / array / Uint8Array results whose provenance must
  * inherit from their inputs.
  *
- * Like the lips.ts twin, in provenanced mode (`prov.size > 0`) every scalar is
- * boxed — string/number/bigint/boolean — so no derived scalar drops its grounding.
- * The old bool/number/bigint exclusion (it "broke `!== false` callers") is retired
- * along with its twin: the HOFs route truthiness through `is_false`, which is blind
- * to a boxed `SchemeBool`. Non-scalars (Pair / vector / object) stay raw — they
+ * In provenanced mode (`prov.size > 0`) every scalar is boxed — string/number/
+ * bigint/boolean — so no derived scalar drops its grounding (the HOFs route
+ * truthiness through `is_false`, which is blind to a boxed `SchemeBool`, so boxing
+ * a boolean here is safe). Non-scalars (Pair / vector / object) stay raw — they
  * carry provenance structurally and `AValue.fromJs` would double-wrap them.
  *
- * RETURN-TYPE CAST — `<T>(…): T` with two `as T`, and the second (`fromJs(…) as T`)
- * is INHERENT, not laziness. This is the seam between two layers that model values
- * differently:
- *   • the provenance layer BOXES a raw scalar (`fromJs`) to carry lineage, so a
- *     `boolean`/`number` input can come back as a `SchemeBool`/`AExact` AValue;
- *   • the symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`)
- *     and the tagless ops type their result by its DECODED JS shape, BLIND to the box
- *     (a `SchemeBool` decodes back to `boolean` downstream).
- * The impl-side contract DELIBERATELY wants the unboxed type (`string=?` is `: boolean`).
- * Surfacing the box (return `T | AValue`) doesn't fix the cast — it pushes the same
- * widening into ~11 predicate/projection contracts that are intentionally boxing-blind
- * (`string=?`, `string-ci=?`, the order chains, `car`/`cdr`), each a value-model
- * decision about whether a provenanced boolean is "still a boolean." That belongs to
- * the provenance/contract design, not this leaf. So the cast stays AS the asserted
- * fact "the box is transparent to the contract"; the AValue-branch `as T` is sound
- * (`withProvenance` preserves the subtype) and rides the same signature.
+ * RETURN-TYPE CAST — the second `as T` (`fromJs(…) as T`) is INHERENT, not
+ * laziness: it's the seam between two layers that model values differently. The
+ * provenance layer BOXES a raw scalar (`fromJs`) to carry lineage, so a
+ * `boolean`/`number` input can come back as a `SchemeBool`/`AExact` AValue — but
+ * the symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`)
+ * types the result by its DECODED JS shape, BLIND to the box (a `SchemeBool`
+ * decodes back to `boolean` downstream), and the impl-side contract deliberately
+ * wants that unboxed type (`string=?` is `: boolean`). Surfacing the box instead
+ * would push the same widening into ~11 boxing-blind predicate/projection
+ * contracts — a value-model decision belonging to the provenance/contract design,
+ * not this leaf. The AValue-branch `as T` is separately sound (`withProvenance`
+ * preserves the subtype).
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   const inputs = args.filter((a): a is AValue => a instanceof AValue);

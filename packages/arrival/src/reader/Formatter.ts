@@ -27,11 +27,9 @@ export interface TokenMeta {
   line: number;
 }
 
-/** `tokenize(code, true)` is the lexer's meta mode: it always yields `{token, col, offset, line}`
- *  records (see `src/index.ts` boundary note + `Lexer.token(true)`). Its inferred return is the
- *  broad `SchemeValue[] | string[]` because the boolean `meta` flag isn't an overload, so narrow
- *  the meta-mode result back to its real `TokenMeta[]` shape through a guard rather than a blind
- *  cast. (The cleaner fix — overloading `tokenize` itself — lives in the shared `reader/tokenize.ts`.) */
+/** `tokenize(code, true)` (meta mode) always yields `{token, col, offset, line}` records, but its
+ *  inferred type is the broad `SchemeValue[] | string[]` since the boolean `meta` flag isn't an
+ *  overload. Narrow via this guard rather than a blind cast. */
 function isTokenMeta(value: unknown): value is TokenMeta {
   return (
     typeof value === "object" &&
@@ -42,8 +40,6 @@ function isTokenMeta(value: unknown): value is TokenMeta {
 }
 
 function tokenizeMeta(code: string): TokenMeta[] {
-  // `tokenize(_, true)` yields the lexer's meta records; collect them as `unknown[]` (a widening,
-  // not a cast) so each element can be honestly shape-checked into a TokenMeta below.
   const raw: readonly unknown[] = tokenize(code, true);
   return raw.map((token) => {
     invariant(isTokenMeta(token), "tokenizeMeta: lexer meta mode yielded a non-TokenMeta token");
@@ -111,12 +107,6 @@ function lineIndent(tokens: TokenMeta[]): number {
   return 0;
 }
 
-// ----------------------------------------------------------------------
-// :: Code formatter class
-// :: based on http://community.schemewiki.org/?scheme-style
-// :: and GNU Emacs scheme mode
-// :: it rely on meta data from tokenizer function
-// ----------------------------------------------------------------------
 export class Formatter {
   static [CLASS] = "formatter";
 
@@ -133,15 +123,7 @@ export class Formatter {
     },
   };
 
-  // ----------------------------------------------------------------------
-  // :: Token based pattern matching (used by formatter)
-  // ----------------------------------------------------------------------
-  /*
-    Function nested_pattern(pattern) {
-    return pattern instanceof Array ||
-    pattern instanceof Pattern;
-    }
-  */
+  // Token-based pattern matching used by the formatter.
   static Pattern = class Pattern {
     static [CLASS] = "pattern";
 
@@ -160,10 +142,7 @@ export class Formatter {
     }
   };
 
-  // ----------------------------------------------------------------------
-  // Pattern has any number of patterns that it matches using OR operator
-  // Pattern is in form of array with regular expressions
-  // ----------------------------------------------------------------------
+  // A Pattern is an array of alternatives (regex/string/symbol/nested pattern), matched via OR.
   static sexp = new Formatter.Pattern([p_o, glob, p_e], "+");
   static Ahead = class Ahead {
     static [CLASS] = "ahead";
@@ -223,23 +202,6 @@ export class Formatter {
     return inner_match(pattern, input) === input.length;
 
     function inner_match(pattern, input) {
-      /*
-            function empty_match() {
-            if (p <= 0 && i <= 0) {
-            return false;
-            }
-            var prev_pattern = pattern[p - 1];
-            if (!nested_pattern(prev_pattern)) {
-            prev_pattern = [prev_pattern];
-            }
-            var next_pattern = pattern[p + 1];
-            if (next_pattern && !nested_pattern(next_pattern)) {
-            next_pattern = [next_pattern];
-            }
-            return match(prev_pattern, [input[i - 1]]) &&
-            (!next_pattern || match(next_pattern, [input[i]]));
-            }
-          */
       function get_first_match(patterns, input) {
         for (const p of patterns) {
           const m = inner_match(p, input);
@@ -284,7 +246,7 @@ export class Formatter {
           } else if (pattern[p].flag === "?") {
             m = get_first_match(pattern[p].patterns, input.slice(i));
             if (m === -1) {
-              i -= 2; // if not found use same test on same input again
+              i -= 2; // optional ("?") didn't match: rewind and retry same input position without it
             } else {
               p++;
             }
@@ -300,9 +262,8 @@ export class Formatter {
           }
         } else if (typeof pattern[p] === "symbol") {
           if (pattern[p] === Symbol.for("*")) {
-            // ignore S-expressions inside for case when next pattern is )
+            // glob: track paren depth so nested S-expressions are skipped as a unit
             glob[p] = glob[p] || 0;
-            //var zero_match = empty_match();
             if (["(", "["].includes(input[i])) {
               glob[p]++;
             } else if ([")", "]"].includes(input[i])) {
@@ -317,7 +278,6 @@ export class Formatter {
         } else if (Array.isArray(pattern[p])) {
           const inc = inner_match(pattern[p], input.slice(i));
           if (inc === -1 || inc + i > input.length) {
-            // if no more input it's not match
             return -1;
           }
           i += inc - 1;
@@ -329,7 +289,6 @@ export class Formatter {
         p++;
       }
       if (pattern.length !== p) {
-        // if there are still patterns it's not match
         return -1;
       }
       return input.length;
@@ -402,7 +361,6 @@ export class Formatter {
     const settings = this._options(options);
     const spaces = lineIndent(tokens);
     const sexp = previousSexp(tokens);
-    // one character before S-Expression
     const before_sexpr = tokens[tokens.length - sexp.length - 1];
     const last = tokens.at(-1);
     if (last && /^"[\s\S]+[^"]$/.test(last.token)) {
@@ -417,7 +375,7 @@ export class Formatter {
       } else if (sexp.length === 1) {
         return settings.offset + sexp[0].col + 1;
       } else {
-        // search for token before S-Expression for case like #(10 or &(:x
+        // check the token right before the S-expression, e.g. `#(10` or `&(:x`
         let exception = -1;
         if (before_sexpr) {
           const shift = Formatter.exception_shift(before_sexpr.token, settings);
@@ -460,7 +418,7 @@ export class Formatter {
 
   break(): this {
     const code = this.__code__.replaceAll(/\n[ \t]*/g, "\n ").replace(/^\s+/, "");
-    // function that work when calling tokenize with meta data or not
+    // preserve string tokens verbatim; collapse whitespace runs elsewhere
     const extractToken = (t: TokenMeta): string => {
       return t.token.match(string_re) ? t.token : t.token.replace(/\s+/, " ");
     };
@@ -472,8 +430,6 @@ export class Formatter {
         }
       }
     };
-    // Tokenize is part of the parser/lexer that split code into tokens and includes
-    // meta data like number of column or line
     const tokens: string[] = tokenizeMeta(code)
       .map(extractToken)
       .filter((t: string) => t !== "\n");
@@ -486,15 +442,14 @@ export class Formatter {
       const sexp: Record<number, string[]> = {};
       for (let count of rules.map((b) => b[1] as number)) {
         count = count.valueOf();
-        // some patterns require to check what was before like
-        // if inside let binding
+        // some rules need the enclosing form checked (e.g. is this inside a let binding)
         if (count > 0 && !sexp[count]) {
           sexp[count] = previousSexp(sub, count) as string[];
         }
       }
       for (const [pattern, rawCount, ext] of rules) {
         const count = (rawCount as number).valueOf();
-        // 0 count mean ignore the previous S-Expression
+        // count 0 means ignore the previous S-expression (test against the whole prefix instead)
         const test_sexp = count > 0 ? sexp[count] : sub;
         const input = test_sexp.filter((t: string) => t.trim() && !is_special(t));
         const inc = first_token_index(test_sexp);
@@ -520,8 +475,7 @@ export class Formatter {
   }
 
   format(options?: FormatterOptions): string {
-    // prepare code with single space after newline
-    // so we have space token to align
+    // normalize each newline to a single trailing space — gives a space token to replace with indent
     const code = this.__code__.replaceAll(/[ \t]*\n[ \t]*/g, "\n ");
     const tokens = tokenizeMeta(code);
     const settings = this._options(options);

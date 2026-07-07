@@ -7,18 +7,17 @@
 //
 // Each part is a module-singleton `EnvCapability`. Assembly is order-independent
 // at pack-apply time: every form is a `define-macro`, expanded at CALL time
-// against the fully-assembled shared userEnv — so the cross-part references
+// against the fully-assembled shared userEnv — so cross-part references
 // (guard→cond/raise) resolve regardless of pack order. cond/case/when/unless are
-// NOT here — they are evaluator SPECIAL FORMS (kernel keywords; evalCond/evalCase/
-// evalWhen/evalUnless), so guard's expansion to `(cond …)` resolves to the kernel
-// handler with no pack dependency.
+// NOT here — they are evaluator SPECIAL FORMS (evalCond/evalCase/evalWhen/
+// evalUnless), so guard's expansion to `(cond …)` needs no pack dependency.
 //
-// R7RS OMISSIONS do NOT live aside in a central manifest — each is a real
+// R7RS omissions do NOT live in a central manifest — each is a real
 // `symbol.notImplemented` errors-as-door INSIDE the pack that owns that part of
 // the spec: the value-mutators with their type packs (r7rs/strings, r7rs/vectors,
 // r7rs/lists, r7rs/bytevectors); the §6.10/§4.2.5/§4.2.6 control + dynamics +
-// laziness omissions in `control.ts`; and the §6.13/§6.14 host-interface omissions
-// in `host.ts`. (The former `_unimplemented.ts` manifest is dissolved into these.)
+// laziness omissions in `control.ts`; the §6.13/§6.14 host-interface omissions
+// in `host.ts`.
 
 import syntax from "./syntax.js";
 import binding from "./binding.js";

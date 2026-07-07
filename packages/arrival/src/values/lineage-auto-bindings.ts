@@ -3,51 +3,44 @@
  * docs/package-specific/arrival-provenance/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
  * §"v02-G0 feasibility verdict + design"). ADDITIVE + flag-gated + fully reversible.
  *
- * THE PROBLEM IT SOLVES. The v02-G1 shadow (lineage-field-shadow.test.ts) proves the
- * static carrier (`classify` + `fieldResolve`) reproduces the live field-point queries
- * — but only against MANUALLY-assembled bindings (`{ infer: inferIds }`, a global
- * name→ids map). That manual map COLLAPSES the distinct invocations of one source name:
- * `(map infer xs)` over 3 elements mints 3 producer ids, yet the static tree has one
- * `infer` node, so `{ infer: [a,b,c] }` cannot say "THIS element-projection reads
- * producer `b` specifically" — exactly the distinction the dag's causal edges depend on.
+ * PROBLEM: a manually-assembled `{ infer: inferIds }` global name→ids map COLLAPSES
+ * the distinct invocations of one source name — `(map infer xs)` over 3 elements
+ * mints 3 producer ids, but the static tree has one `infer` node, so the map can't
+ * say "THIS element-projection reads producer `b` specifically" — exactly the
+ * distinction the dag's causal edges need.
  *
- * THE FIX — bind PER-VALUE / PER-INVOCATION, never per-name. Each value already carries
- * its producer id(s) in `AValue.provenance` (the eager stamp, mechanism 1: the source
- * mints its point at rosetta.ts:459, and `EvalTrace.exit` stamps it back onto the value
- * via the substitution-return at ~trace.ts:529). So the auto-binding does NOT mint a new
- * id; it CAPTURES the producer ids a runtime value carries, keyed to the CONSUMER
- * INVOCATION that read it (its scope), not to a global slot. When `reflect`'s body reads
- * `reactions` (bound to `(list (react …))`, whose element carries react's producer id),
- * the capture scoped to THAT invocation records `reactions → {react's id}` — and crucially
- * NOT reflect's own infer id, which is not reachable in the `reactions` value. The aliasing
- * dissolves because each capture is scoped to one invocation's symbol resolutions.
+ * FIX: bind PER-VALUE / PER-INVOCATION, never per-name. Each value already carries
+ * its producer id(s) in `AValue.provenance` (stamped by `EvalTrace.exit`), so the
+ * auto-binding does not mint a new id — it CAPTURES the producer ids a runtime value
+ * carries, keyed to the CONSUMER INVOCATION that read it, not to a global slot. When
+ * `reflect`'s body reads `reactions` (bound to `(list (react …))`), the capture
+ * scoped to that invocation records `reactions → {react's id}`, never reflect's own
+ * infer id (unreachable from the `reactions` value) — the aliasing dissolves because
+ * each capture is scoped to one invocation's symbol resolutions.
  *
- * This GENERALIZES the already-shipped `argProvenance → buildInputsProvenance`
- * `slot→producer-id[]` map (rosetta.ts:416-418): that builds it for `.prompt` kwargs from
- * `deepProvenance(arg)`; this builds the SAME shape for the carrier's free leaf slots from
- * `deepProvenance(symbol-value)`, scoped per invocation.
+ * Generalizes the already-shipped `argProvenance → buildInputsProvenance`
+ * `slot→producer-id[]` map (rosetta.ts:416-418) — same shape, built for the carrier's
+ * free leaf slots from `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
  *
- * HOOK + REVERSIBILITY. An `AutoBindings` instance is attached to an `EvalTrace`
- * explicitly (the flag). When present, the trace's `exit` records this invocation's
- * symbol resolutions (already in `trace.symbolValues`) into it. When ABSENT (the default)
- * the trace touches nothing — byte-identical to today. A full revert: delete this file,
- * drop the `AutoBindings` import + the `autoBindings`/`withAutoBindings` field+method and
- * the one `recordInvocation` call in trace.ts, and drop `AutoBindings`/`slotsOf` from the
- * arrival barrel (index.ts).
+ * HOOK + REVERSIBILITY. An `AutoBindings` instance attaches to an `EvalTrace`
+ * explicitly (flag-gated); when present, `exit` records the invocation's symbol
+ * resolutions into it, and when absent the trace touches nothing. Full revert:
+ * delete this file, drop the `AutoBindings` import + the `autoBindings`/
+ * `withAutoBindings` field+method + the `recordInvocation` call in trace.ts, and
+ * drop `AutoBindings`/`slotsOf` from the arrival barrel (index.ts).
  */
 import { deepProvenance } from "./deep-provenance.js";
 import type { Bindings, LineageNode } from "./lineage.js";
 
 /** The free LEAF/SOURCE slots a classified skeleton references — the slots an auto-binding
- *  must resolve. A read-only walk over the static tree (DUPLICATES lineage-shadow.ts's
- *  `collectSlots`, kept here so the spike is self-contained; M1 will later fold both into
- *  `walk`). Descends a `field`'s focused child only — siblings were pruned at classify.
+ *  must resolve. Duplicates lineage-shadow.ts's `collectSlots` (kept here so the spike is
+ *  self-contained; M1 will later fold both into `walk`). Descends a `field`'s focused child
+ *  only — siblings were pruned at classify.
  *
- *  DIVERGENCE from `collectSlots` (reconcile when folding in M1): the `fan` arm here ALSO
- *  descends `n.template` (the per-element body's free slots); `collectSlots` descends
- *  `n.source` ONLY. So this collects strictly MORE slots — any free var captured inside a
- *  `(map (lambda (e) … outer …) xs)` body. Intentional for auto-binding (those slots need
- *  per-value resolution too); the fold must pick this superset, not the narrower one. */
+ *  DIVERGES from `collectSlots`: the `fan` arm here ALSO descends `n.template` (the
+ *  per-element body's free slots), so this collects strictly MORE slots — any free var
+ *  captured inside a `(map (lambda (e) … outer …) xs)` body. Intentional (those slots need
+ *  per-value resolution too); when folded into `walk` in M1, keep this superset. */
 export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<string> {
   switch (n.kind) {
     case "literal":
@@ -84,34 +77,28 @@ export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<strin
  * carrier's `fieldResolve` needs, scoped so distinct invocations of one source name never
  * collapse.
  *
- * NOT a global `name → ids` map. The outer key is the consumer INVOCATION id; the inner
- * map is that invocation's `slot → producer-ids`. The same source name (`infer`) read in
- * two invocations lands under two distinct invocation ids with its own per-call producer
- * set — the exact structure the dag's distinct-invocation edges need.
+ * NOT a global `name → ids` map: the outer key is the consumer INVOCATION id, the inner map
+ * is that invocation's `slot → producer-ids`. The same source name (`infer`) read in two
+ * invocations lands under two distinct invocation ids with its own per-call producer set —
+ * the structure the dag's distinct-invocation edges need.
  */
 export class AutoBindings {
   /** consumer-invocation id → (free-symbol slot → the producer ids that slot's runtime
    *  value carried, at THIS invocation).
    *
-   *  RETENTION CAVEAT (flag-ON only): this map holds O(invocations-that-resolved-a-
-   *  provenanced-symbol) entries for the WHOLE run — it does NOT participate in
-   *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding (that frees child provenance
-   *  Sets + values; it never touches `symbolValues` or this sidecar). Bounded (≤ the
-   *  trace cap, since invocation ids are), so it's fine for the spike's bounded programs.
-   *  Before this rides a real LOOPING run it needs revisiting — either `#pruneChildProvenance`
-   *  should also drop the `byInvocation` entry for a pruned invocation, or the capture
-   *  should be scoped to the queries that will actually read it. */
+   *  RETENTION CAVEAT (flag-ON only): holds O(invocations-that-resolved-a-provenanced-
+   *  symbol) entries for the whole run — does NOT participate in
+   *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding. Fine for the spike's bounded
+   *  programs; before a real LOOPING run, either pruning should also drop the
+   *  `byInvocation` entry for a pruned invocation, or capture should scope to the
+   *  queries that will actually read it. */
   readonly byInvocation = new Map<number, Map<string, Set<number>>>();
 
   /**
-   * Record one invocation's symbol resolutions (the leaf-stamp). Called from the trace's
-   * `exit` with the invocation id and the `name → value` map the trace already captured in
+   * Record one invocation's symbol resolutions (the leaf-stamp), called from the trace's
+   * `exit` with the invocation id and the `name → value` map already captured in
    * `symbolValues`. For each resolved symbol carrying provenance, store its deep producer
-   * ids under this invocation. Empty-provenance symbols are skipped (they bind nothing).
-   *
-   * This is the "record slot→producer-id as a (consumed) value flows" step — the producer
-   * id rode in on `value.provenance` from the source's own exit; we capture it scoped to
-   * the reader, which is what makes the binding per-value.
+   * ids under this invocation; empty-provenance symbols are skipped.
    */
   recordInvocation(invocationId: number, symbolValues: ReadonlyMap<string, unknown> | undefined): void {
     if (!symbolValues || symbolValues.size === 0) return;
@@ -124,11 +111,10 @@ export class AutoBindings {
         this.byInvocation.set(invocationId, slots);
       }
       const existing = slots.get(name);
-      // The merge branch is DEFENSIVE: the live caller passes a `symbolValues` Map (unique
-      // keys) once per invocation, so each `name` is recorded exactly once and `existing`
-      // is undefined here in practice. It only fires if a future caller re-records a name
-      // into the same invocation. `ids` is a ReadonlySet from the shared deepProvenance, so
-      // the per-invocation map owns a MUTABLE copy for that (hypothetical) extension.
+      // DEFENSIVE merge: the live caller passes a `symbolValues` Map (unique keys) once per
+      // invocation, so `existing` is undefined in practice; fires only if a future caller
+      // re-records a name into the same invocation. `ids` is a ReadonlySet, so the
+      // per-invocation map owns a mutable copy.
       if (existing) for (const id of ids) existing.add(id);
       else slots.set(name, new Set(ids));
     }

@@ -38,10 +38,8 @@ export function is_promise(o: unknown): o is Promise<unknown> {
 
 // ----------------------------------------------------------------------
 // A procedure: a JS function (a Scheme lambda carries the LAMBDA brand; native builtins / rosettas
-// are bare functions) or a macro. There is no borrowed-JS-function wrapper anymore — the membrane
-// materializes a borrowed JS function to #void (uncallable), so the old `is_js_function_wrapper`
-// disjunct (a duck-type check for the deleted AJSFunction "js-function" tag — always false once the
-// class was removed) is gone with it.
+// are bare functions) or a macro. There is no borrowed-JS-function wrapper — the membrane
+// materializes a borrowed JS function to #void (uncallable).
 export function is_callable(o: unknown): boolean {
   return is_function(o) || is_macro(o) || is_callable_value(o);
 }

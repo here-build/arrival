@@ -1,6 +1,5 @@
-// @here.build/arrival/r7rs/syntax — R7RS §4.3 / §5.3 macro-binding forms.
-//
-// Lineage: R7RS-small §4.3.1 (let-syntax / letrec-syntax) and §5.3 (define-syntax).
+// @here.build/arrival/r7rs/syntax — R7RS §4.3.1 (let-syntax/letrec-syntax) and
+// §5.3 (define-syntax) macro-binding forms.
 //
 // In a traditional Scheme these forms exist because macros live in a SEPARATE
 // namespace resolved at expansion time, distinct from the value namespace — so
@@ -10,7 +9,7 @@
 // Arrival collapsed that split: a transformer is a first-class VALUE in the env,
 // and the evaluator dispatches on `is_macro` at the call head AFTER resolving the
 // head through the ordinary lexical chain (evaluator.ts: `ctxResolver(ctx).resolve`
-// then `is_macro`). So the three forms carry no semantics of their own here — they
+// then `is_macro`). So the three forms carry no semantics of their own — they
 // are exact aliases of the value-binding forms:
 //   • define-syntax ≡ define        (bind a transformer at top scope)
 //   • let-syntax    ≡ let           (bind it locally; non-recursive falls out of let scoping)
@@ -18,10 +17,9 @@
 // The recursive-vs-not distinction R7RS spells out is reproduced automatically by
 // let/letrec's own scoping math — wrong states become impossible rather than encoded.
 //
-// They are kept (not dropped) purely so portable R7RS macro source loads unchanged.
-// No syntaxhood guard: a non-transformer bound here simply fails at its use-site
-// through the ordinary not-callable door (the removed LIPS `typecheck` only moved
-// that door earlier).
+// Kept (not dropped) purely so portable R7RS macro source loads unchanged. No
+// syntaxhood guard: a non-transformer bound here simply fails at its use-site
+// through the ordinary not-callable door — moving that check earlier buys nothing.
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals it
 // (via initBridge's assembleEnv), so this module is the sole definition site.

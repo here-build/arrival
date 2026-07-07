@@ -1,20 +1,16 @@
 /**
- * AJSObject — the AValue term that re-presents a borrowed JS object as a thin, read-only
- * view inside the Scheme value space. It carries the run ctx + provenance and its own
- * tagless-final algebra, so it lives here in primitives/ with the rest of the term family
- * (ANil/APair/AVector). Split from its membrane sibling AJSArray (AJSArray.ts) so each
- * borrowed-value wrapper is its own file (it was lifted out of membrane.ts in Stage B).
+ * AJSObject — thin, read-only view of a borrowed JS object inside the Scheme value space.
+ * Own file (split from AJSArray) since each borrowed-value wrapper carries its own
+ * tagless-final algebra alongside the rest of the term family (ANil/APair/AVector).
  *
- * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) statically imports this class, so importing
- * it here closes a runtime import cycle — safe because `get()` calls it only at runtime (long
- * after every module loads) and a hoisted `export function` binding is never in TDZ.
- * interop-access.ts is a true LEAF, so its member-access primitives are a clean direct import.
+ * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) statically imports this class, closing a
+ * runtime import cycle — safe because `get()` calls it only at runtime, and a hoisted
+ * `export function` binding is never in TDZ. interop-access.ts is a true leaf, imported directly.
  *
- * SANDBOX BOUNDARY (`static [INTEROP_BOUNDARY] = true`): this wrapper IS the JS↔Scheme membrane —
- * every JS object crossing into the sandbox becomes one. get/set/has/delete/keys route through
- * accessMember for the WRAPPED value, but the WRAPPER's own prototype is reachable via
- * symbol-to-field auto-resolution; the boundary marker stops the prototype walk here so sandbox
- * code can't read `get`/`toString` to reach the underlying `source`.
+ * SANDBOX BOUNDARY (`static [INTEROP_BOUNDARY] = true`): this wrapper IS the JS↔Scheme membrane.
+ * get/set/has/delete/keys route through accessMember for the WRAPPED value, but the wrapper's
+ * own prototype is reachable via symbol-to-field auto-resolution; the boundary marker stops the
+ * prototype walk here so sandbox code can't read `get`/`toString` to reach `source`.
  */
 
 import { CLASS } from "../../well-known-symbols.js";
@@ -29,42 +25,30 @@ import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign 
 import { jsToScheme } from "../../rosetta.js";
 
 /**
- * Module-level entry cache keyed by wrapper identity. WeakMap rather than an
- * instance field for two reasons: (1) true encapsulation — the Map never
- * appears on the wrapper's own properties so sandbox symbol-to-field auto-
- * resolution can't reach it; (2) the tslib-helper avoidance the workspace
- * `importHelpers: true` triggers on TS6 `#`-private slots in this build.
- * GC-correct: cache entry disappears with the wrapper.
+ * Entry cache keyed by wrapper identity. WeakMap, not an instance field: keeps the cache off
+ * the wrapper's own properties (sandbox symbol-to-field resolution can't reach it) and avoids
+ * the tslib helper this workspace's `importHelpers: true` needs for TS `#`-private slots.
+ * GC-correct — cache entry disappears with the wrapper.
  */
 const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
 
 /**
- * Thin wrapper for JS objects. Lazy property access — entries box on
- * demand through `jsToScheme` (rosetta.ts), carrying the wrapper's provenance.
+ * Thin wrapper for JS objects. Property access is lazy — entries box on demand through
+ * `jsToScheme` (rosetta.ts), stamped with the wrapper's own provenance, so e.g. an entry
+ * read off an `(infer …)` result carries infer's id at the access point, not just at the
+ * container level. Identity is stable via the module-level cache: `.get("x")` twice returns
+ * the same AValue, so `(eq? (@ obj :x) (@ obj :x))` holds.
  *
- * All property access is sandboxed - see interop-access.ts for security model.
- *
- * War story (Option C — 2026-05-28): `get(key)` used to call `fromJS(result)`,
- * which passed JS primitives through unboxed and threw away any chance of
- * the entry carrying the container's provenance. With the rosetta deep-stamp
- * (jsToScheme passes provenance into every constructed AValue), the wrapper's
- * own surface needs the same discipline: entries must box through the boxer
- * registry stamped with `this.provenance`, so `(@ obj :x)` on a wrapper that
- * came from an `(infer …)` result carries infer's id at the access point,
- * not just at the container level. Identity stability is preserved via the
- * module-level cache: the same `.get("x")` twice returns the same AValue, so
- * `(eq? (@ obj :x) (@ obj :x))` holds.
+ * All property access is sandboxed — see interop-access.ts for the security model.
  */
 export class AJSObject extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
-  /** `{…}` reader dict-literal payload: the flat `key value` element sequence as read
-   *  (keys = `:keyword` symbols / strings / unquote forms, values = UNEVALUATED forms).
-   *  Present ⇒ this node is a reader-minted dict literal — the evaluator lowers it to
-   *  the equivalent `(dict …)` application in code position; under `quote` the node
-   *  itself is the datum (static entries read back as the raw forms). Absent on every
+  /** `{…}` reader dict-literal payload: keys read as `:keyword` symbols/strings/unquote forms,
+   *  values UNEVALUATED. Present ⇒ node is a reader-minted dict literal (evaluator lowers to
+   *  `(dict …)` in code position; under `quote`, the node is the datum itself). Absent on a
    *  membrane-boxed wrapper. See values/dict-literal.ts. */
   dictForms?: readonly SchemeValue[];
 
@@ -75,9 +59,6 @@ export class AJSObject extends AValue {
   ) {
     super(ctx, provenance);
   }
-
-  // Freeze the borrowed source the FIRST time Scheme reads it (parallel to AJSArray.freezeSource) —
-  // prevention by construction, replacing the dev-only purity assert. Idempotent;
 
   /** Unwrap to original JS object (TO_JS protocol). */
   ["arrival/toJS"](): Record<string, unknown> {
@@ -95,25 +76,20 @@ export class AJSObject extends AValue {
   }
 
   /**
-   * Read a property as a security-validated, provenanced, cached AValue.
-   * Single dispatch point for `dict-ref` / `@` / `:key` consumers — they
-   * route here, getting boundary checks + provenance flow + identity
-   * stability (`(eq? (@ obj :x) (@ obj :x))` returns #t because the cached
-   * AValue is reused).
+   * Read a property as a security-validated, provenanced, cached AValue. Single dispatch
+   * point for `dict-ref` / `@` / `:key` — boundary checks + provenance flow + identity
+   * stability (repeated `.get` on the same key returns the cached AValue).
    *
-   * Missing key returns `nil` (matches dict-ref's existing semantics).
-   * `accessMember` filters the boundary; `NOT_FOUND` → either blocked
-   * or absent — same `nil` from this surface either way.
+   * Missing key → nil (dict-ref semantics); `accessMember`'s NOT_FOUND (blocked or absent)
+   * collapses to the same nil.
    *
-   * Cycle protection lives in `jsToScheme`'s WeakSet: if `source` participates
-   * in a JS-side cycle that surfaces through a property access, the inner
-   * traversal terminates before re-entering this wrapper.
+   * Cycle protection is in `jsToScheme`'s WeakSet: a JS-side cycle surfacing through a
+   * property read terminates before re-entering this wrapper.
    */
   get(key: string | symbol): SchemeValue {
     this.freezeSource();
-    // Cache keyed by stringified key — symbol keys are an edge case (the
-    // sandbox boundary blocks most symbol access anyway) and skipping the
-    // cache for them keeps the Map<string, SchemeValue> shape clean.
+    // Symbol keys skip the cache (sandbox already blocks most symbol access) — keeps
+    // the Map<string, SchemeValue> shape clean.
     const cacheKey = typeof key === "string" ? key : undefined;
     let cache = cacheKey !== undefined ? entryCaches.get(this) : undefined;
     if (cacheKey !== undefined && cache !== undefined) {
@@ -125,37 +101,27 @@ export class AJSObject extends AValue {
     try {
       raw = accessMember(this.source, key);
     } catch (e) {
-      // Boundary violations (Object.prototype methods, dangerous names,
-      // boundary-marked prototypes) collapse to `nil` — same shape as
-      // "absent." Spec §5.3 says `(@ obj "key")` returns the value at key
-      // or nil; the wrapper doesn't expose error detail to the sandbox.
+      // Boundary violations collapse to nil — same shape as "absent" (spec §5.3:
+      // (@ obj "key") returns the value or nil; no error detail leaks to the sandbox).
       if (e instanceof InteropAccessError) return nil;
       throw e;
     }
     if (raw === NOT_FOUND) return nil;
 
-    // A function-valued property is a foreign method. It used to vanish to `nil` (invisible);
-    // now it falls through to jsToScheme, which materializes it to #void + a membrane warning —
-    // the violation is VISIBLE, and #void is not callable so the sandbox still cannot invoke
-    // foreign JS. (The generalized rosetta narrowing: a borrowed JS function is not a portable
-    // Scheme value. Getter/accessor reads are unaffected — `accessMember` already invoked the
-    // getter to a value above, so only an actual function RESULT lands here.)
+    // A function-valued property (foreign method) boxes through jsToScheme to #void + a
+    // membrane warning — visible rather than silently vanishing to nil, and #void isn't
+    // callable so the sandbox still can't invoke foreign JS. Getter reads are unaffected
+    // (accessMember already invoked the getter to a value above).
 
-    // Box through jsToScheme so primitives become AValue subtypes stamped with
-    // this wrapper's provenance. SchemeJSObject's instance was constructed
-    // through rosetta deep-stamping for the common case (jsToScheme reached
-    // here on the way down); direct construction with empty provenance keeps
-    // the empty-provenance fast-path everywhere.
-    // jsToScheme is typed `any` (legacy debt in rosetta.ts) but its contract is to
-    // produce a boxed Scheme value — annotate to the honest union so the cache store
-    // below type-checks without a cast. The `instanceof AValue` gate then narrows to
-    // the cacheable (class-backed) members, dropping the never-here function/orphan arms.
+    // Box through jsToScheme so primitives become AValue subtypes stamped with this
+    // wrapper's provenance. jsToScheme is typed `any` (legacy debt in rosetta.ts) but its
+    // contract is to return a boxed Scheme value; annotate to the honest union so the
+    // cache store below type-checks without a cast.
     let boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
-    // Attestation inheritance (stamp site 2, values/attestation.ts): an entry is
-    // attested iff its container is — the pluck twin of the provenance threading
-    // just above. `freshIfSingleton` first: a raw boolean field boxes to the shared
-    // #t/#f flyweight on the empty-provenance path, and the program-wide singletons
-    // never attest — the clone does, and the per-(wrapper, key) cache keeps it stable.
+    // Attestation inherits from container (values/attestation.ts stamp site 2).
+    // `freshIfSingleton` first: a raw boolean boxes to the shared #t/#f flyweight on the
+    // empty-provenance path, and singletons never attest — the clone does, and the
+    // per-(wrapper, key) cache keeps it stable.
     if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
     if (cacheKey !== undefined && boxed instanceof AValue) {
       if (cache === undefined) {
@@ -167,16 +133,9 @@ export class AJSObject extends AValue {
     return boxed;
   }
 
-  /**
-   * Set property value, unwrapping through membrane. Cache invalidation for
-   * the touched key keeps subsequent `.get(key)` consistent with the new
-   * underlying value.
-   */
+  /** Always throws — writes are banned (pure-dataflow sandbox, read-only membrane). */
   set(key: string | symbol, _value: SchemeValue): void {
-    // Writes are banned. arrival is a pure-dataflow sandbox — mutating the
-    // foreign peer is not dataflow, and the membrane exposes a read-only view
-    // by design. (Silent no-op is worse than throwing: the program would
-    // believe it wrote.)
+    // Throwing rather than a silent no-op: the program would otherwise believe it wrote.
     throw new InteropAccessError(
       "Cannot assign to a foreign object — writes are banned in the pure-dataflow sandbox",
       typeof key === "symbol" ? key : String(key),
@@ -184,21 +143,13 @@ export class AJSObject extends AValue {
     );
   }
 
-  /**
-   * Check if property exists (sandboxed - only own + safe inherited).
-   * Returns false for blocked properties and boundary-protected inherited props.
-   */
   has(key: string | symbol): boolean {
     this.freezeSource();
     return accessHas(this.source, key);
   }
 
-  /**
-   * Delete a property (sandboxed - only own properties).
-   */
+  /** Always throws — deletion is a mutation, banned for the same reason as `set`. */
   delete(key: string | symbol): boolean {
-    // Deletion is a mutation — banned for the same reason as `set` (pure
-    // dataflow, read-only membrane).
     throw new InteropAccessError(
       "Cannot delete from a foreign object — mutations are banned in the pure-dataflow sandbox",
       typeof key === "symbol" ? key : String(key),
@@ -212,42 +163,36 @@ export class AJSObject extends AValue {
     return accessKeys(this.source);
   }
 
-  // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
+  // Setoid (Fantasy Land): two wrappers are equal? iff same source (reference identity) —
+  // deep-comparing would defeat the membrane's opacity (foreign getters/cycles).
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSObject && this.source === other.source;
   }
 
-  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME source
-  // (reference identity). A SchemeJSObject is a transparent, read-only view over an
-  // OPAQUE foreign object; deep-comparing the source is the "deep semantics" the membrane
-  // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
-
-  // `@`/`dict-ref` are one protocol, two syntaxes, over the same underlying `.get`.
+  // `@`/`dict-ref`/`:key` are one protocol, several syntaxes, over the same underlying
+  // `.get`; the `:`-strip mirrors readMember's convention (membrane.ts).
   ["arrival/tagless-final/get"](key: SchemeValue): SchemeValue {
     let name = String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
     if (name.startsWith(":")) name = name.slice(1);
     return this.get(name);
   }
 
-  // Keyed read — the `:key` keyword accessor's `apply` hands its own symbol here (not a
-  // pre-folded string); the `:`-strip mirrors readMember's (membrane.ts), since this and
-
   toString(): string {
     return "#<js-object>";
   }
 
-  // path, which resolves AJSObject's static [CLASS] = "js-object" to `#<js-object>`).
+  // Delegates to toString — matches the printer's CLASS-name path
+  // (static [CLASS] = "js-object" → `#<js-object>`).
   ["arrival/print"](): string {
     return this.toString();
   }
-
-  // Print protocol — opaque foreign-object tag (matches both toString and the printer's CLASS-name
 
   valueOf(): object {
     return this.source;
   }
 
-  // `freezeRosettaReturns:false` in the run ctx opts out (host keeps it mutable).
+  // Freezes the borrowed source on first Scheme read — prevention by construction (replaces
+  // a dev-only purity assert). Idempotent. `freezeRosettaReturns: false` on the run ctx opts out.
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
       Object.freeze(this.source);

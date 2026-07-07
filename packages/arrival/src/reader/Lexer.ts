@@ -73,9 +73,8 @@ export class Lexer {
     [/\S/, null, null, null, Lexer.symbol],
     [/\S/, null, Lexer.boundary, Lexer.symbol, null],
   ];
-  // Assembled rule list is memoized ONCE. The reader-macro registry (reader/specials.ts) is a
-  // frozen literal — it can never gain or drop a syntax extension at runtime — so the built list
-  // is permanently valid and never needs invalidation (the old `valid` flag + cache-buster are gone).
+  // Memoized once: reader/specials.ts is a frozen literal (no runtime syntax extensions),
+  // so the assembled list is permanently valid — never needs invalidation.
   static _rulesCache: LexerRule[] | null = null;
   // Class-internal: the source text being lexed. Installed via Object.defineProperty
   // in the constructor. `private` is compile-time only (the defineProperty + runtime
@@ -128,7 +127,6 @@ export class Lexer {
 
   static _rules: LexerRule[] = [
     // char_re prev_re next_re from_state to_state
-    // null as to_state mean that is single char token
     // string
     [/"/, null, null, Lexer.string, null],
     [/"/, null, null, null, Lexer.string],
@@ -136,16 +134,14 @@ export class Lexer {
     [/\\/, null, null, Lexer.string, Lexer.string_escape],
     [/./s, /\\/, null, Lexer.string_escape, Lexer.string],
 
-    // hash special symbols, lexer don't need to distinguish those
-    // we only care if it's not pick up by vectors literals
+    // #b/#d/#x/#o/#e/#i: lexer doesn't distinguish which, only that it's not a vector literal (#u8(...))
     [/#/, null, /[bdxoei]/i, null, Lexer.symbol],
 
     // characters
     [/#/, null, /\\/, null, Lexer.character],
     [/\\/, /#/, /\s/, Lexer.character, Lexer.character],
-    // `,` joined the boundary class (see `boundary` above), so `#\,` needs the same
-    // escaped-delimiter continuation the bracket chars get, else the `\` would
-    // complete the token early and split the literal.
+    // `,` is in the boundary class (see `boundary` above), so `#\,` needs the same
+    // escaped-delimiter continuation as bracket chars, else `\` completes the token early.
     [/\\/, /#/, /[()[\]{},]/, Lexer.character, Lexer.character],
     [/\s/, /\\/, null, Lexer.character, null],
     [/\S/, null, Lexer.boundary, Lexer.character, null],
@@ -170,7 +166,7 @@ export class Lexer {
     [/=/, /\d/, null, Lexer.l_datum, null],
     [/#/, /\d/, null, Lexer.l_datum, null],
 
-    // for dot comma `(a .,b)
+    // dot directly followed by comma, e.g. `(a .,b)` — dot ends as its own token
     [/\./, Lexer.boundary, /,/, null, null],
 
     // block symbols
@@ -190,9 +186,8 @@ export class Lexer {
       return b.length - a.length || a.localeCompare(b);
     });
 
-    // syntax-extensions tokens that share the same first character after hash
-    // should have same symbol, but because tokens are sorted, the longer
-    // tokens are always process first.
+    // Syntax-extension tokens sharing the first char after `#` share a symbol; sorting
+    // longest-first ensures the longer token's rule is tried before the shorter one's.
     const special_rules = tokens.reduce((acc: LexerRule[], token) => {
       let sym: symbol;
       let after: RegExp | null = null;
@@ -338,8 +333,7 @@ export class Lexer {
         ++this._line;
         const newline = this._newline;
         if (this._state === null) {
-          // keep beginning of the newline to calculate col
-          // we don't want to check inside the token (e.g. strings)
+          // track newline start for col calc; only outside a token (e.g. not mid-string)
           this._newline = i + 1;
         }
         if (this._whitespace && this._state === null) {
@@ -364,11 +358,9 @@ export class Lexer {
         }
       }
       start = false;
-      // Nested block comments `#| ... #| ... |# ... |#`. The declarative rule
-      // table cannot count nesting depth, so handle the whole (possibly nested)
-      // block comment here with an explicit depth counter and return it as a
-      // single token (the same contract the rule table uses for the non-nested
-      // case). R7RS 2.2 requires block comments to nest.
+      // Nested block comments `#| ... #| ... |# ... |#` (R7RS 2.2 requires nesting).
+      // The declarative rule table can't count depth, so handle it here with an
+      // explicit counter and return the whole thing as one token.
       if (this._state === null && char === "#" && next_char === "|") {
         let depth = 1;
         let j = i + 2;
@@ -403,7 +395,6 @@ export class Lexer {
       }
       for (const rule of Lexer.rules!) {
         if (this.match_rule(rule, { prev_char, char, next_char })) {
-          // change state to null if end of the token
           const next_state = rule.at(-1) ?? null;
           this._state = next_state as symbol | null;
           if (this._state === null) {
@@ -411,20 +402,17 @@ export class Lexer {
             this._col = this._i - this._newline;
             return true;
           }
-          // token is activated
           continue loop;
         }
       }
-      // no rule for token
+      // No rule matched: fine mid-token (char just accumulates), else a real syntax error.
       invariant(
         this._state !== null,
         () => `Invalid Syntax at line ${this._line + 1}\n${this.__input__.split("\n")[this._line]}`,
       );
-      // collect char in token
       continue;
     }
-    // we need to ignore comments because they can be the last expression in code
-    // without extra newline at the end
+    // Ignore comment state here: a trailing comment can be the last thing in a file, with no newline after it.
     if (![null, Lexer.comment].includes(this._state)) {
       const line_number = this.__input__.slice(0, Math.max(0, this._newline)).match(/\n/g)?.length ?? 0;
       const line = this.__input__.slice(Math.max(0, this._newline));
@@ -437,8 +425,3 @@ export class Lexer {
     }
   }
 }
-
-// The reader-macro registry is now a frozen data literal (reader/specials.ts) — it cannot
-// gain or drop a syntax extension at runtime, so the special-rules layer is permanently
-// valid and the memoized rule list never needs invalidation. The old `specials.on([…])`
-// cache-buster (and the whole specials event system) is dissolved.

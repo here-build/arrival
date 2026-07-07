@@ -1,18 +1,11 @@
 /**
- * Char ops — the R7RS § 6.6 character cluster, carved VERBATIM out of
- * `wrappedOps` in `../bridge.ts`. These are behavior-preserving copies of the
- * interpreter's character predicates, comparisons, classification, case
- * conversion, and char/integer conversions. The only change from the bridge
- * originals is that cross-cutting helpers (`charValue`, `deriveOrd`,
- * `coerceNumeric`) are imported from `../op-helpers.js` rather than referenced
- * as bridge locals. The implementations — including inline comments — are
- * otherwise identical to the source.
+ * Char ops — the R7RS § 6.6 character cluster: predicates, comparisons,
+ * classification, case conversion, and char/integer conversions.
  *
- * MIGRATED to the `symbol.native` API: each op declares a zod contract and its impl
- * works on the contract's SCHEME face (Face split — `Impl<…,"scheme">`): predicates
- * return the schemeTrue/schemeFalse flyweights (a `z.boolean` output demands an
- * ABool), digit-value's numeric arm boxes to AExact/AInexact. The raw JS returns
- * were the LIPS-legacy leak.
+ * Each op declares a zod contract and its impl works on the contract's SCHEME
+ * face (`Impl<…,"scheme">`): predicates return the schemeTrue/schemeFalse
+ * flyweights (a `z.boolean` output demands an ABool), digit-value's numeric arm
+ * boxes to AExact/AInexact.
  */
 
 import foldCase from "fold-case";

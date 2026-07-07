@@ -131,14 +131,11 @@ export class ADict extends AValue {
     return `(dict${parts.length ? " " + parts.join(" ") : ""})`;
   }
 
-  // Setoid (Fantasy Land) — same set of fold-names, values `equal?`-recursive at each
-  // name. Compares at the fold-name level, not the key-object level: `(dict :a 1)`
-  // and `(dict "a" 1)` fold to the same slot and stay equal under this Setoid; the
-  // richer DictKey identity only matters for provenance, not for `equal?`. Fixes a
-  // second, independent bug: today `` (equal? `{:a 1} `{:a 1}) `` is `#f` (AJSObject's
-  // Setoid is reference identity) while `(equal? (dict :a 1) (dict :a 1))` is `#t` (no
-  // Setoid, generic structural fallback) — two spellings of the same dict compared
-  // differently depending on construction path.
+  // Setoid — same set of fold-names, values `equal?`-recursive at each name. Compares at the
+  // fold-name level, not the key-object level: `(dict :a 1)` and `(dict "a" 1)` fold to the
+  // same slot and stay equal; the richer DictKey identity only matters for provenance, not
+  // for `equal?`. (AJSObject's Setoid is reference identity, so a `{:a 1}` literal and a
+  // `(dict :a 1)` compared differently before this — two spellings of the same shape.)
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof ADict)) return false;
     const ownNames = this.keys();

@@ -12,18 +12,11 @@ import type { Environment } from "./Environment.js";
 import type { SchemeValue } from "./values/types.js";
 
 /**
- * Called when normal symbol lookup fails.
- * Enables extensible resolution strategies like:
- * - Keyword accessors (:key -> property accessor)
- * - Dot notation (foo.bar -> property access)
- * - Auto-imports
- * - etc.
+ * Called when normal symbol lookup fails — keyword accessors (`:key`), dot
+ * notation (`foo.bar`), auto-imports, etc.
  */
 export interface FallbackResolver {
-  /**
-   * Unique identifier for this resolver.
-   * Used to prevent duplicate registration.
-   */
+  /** Unique id; prevents duplicate registration. */
   readonly id: string;
 
   /**
@@ -43,33 +36,20 @@ export interface FallbackResolver {
  * the layer's own catch-all resolver, both beat the dependency below.
  */
 export interface EnvironmentModule {
-  /**
-   * Unique identifier for this module.
-   * Used for dependency resolution and debugging.
-   */
+  /** Unique id; used for dependency resolution and debugging. */
   readonly id: string;
 
-  /**
-   * Module IDs that must be loaded before this module.
-   */
+  /** Module IDs that must load before this one. */
   readonly dependencies?: string[];
 
-  /**
-   * Direct bindings to add to the environment.
-   * These are checked before resolvers.
-   */
+  /** Direct bindings added to the environment; checked before `resolver`. */
   readonly bindings?: Record<string, SchemeValue>;
 
-  /**
-   * Resolver for lazy/dynamic symbol lookup.
-   * Called when direct binding lookup fails.
-   * Return undefined to yield to parent module.
-   */
+  /** Lazy/dynamic symbol lookup, tried when a direct binding misses. Return
+   *  undefined to yield to the parent module. */
   readonly resolver?: FallbackResolver;
 
-  /**
-   * Scheme code to evaluate after bindings and resolver are set.
-   * Useful for defining derived functions/macros.
-   */
+  /** Scheme code evaluated after bindings and resolver are set — for derived
+   *  functions/macros. */
   readonly bootstrap?: string;
 }

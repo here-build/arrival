@@ -110,9 +110,8 @@ export class ABytevector extends AValue {
     return `#u8(${Array.from(this.__bytevector__).join(" ")})`;
   }
 
-  // Setoid (Fantasy Land) — byte-wise value equality. structuralEqual consults
-  // arrival/tagless-final/equals first, so (equal? (bytevector 1 2) (bytevector 1 2)) → #t.
-  // Non-SchemeBytevector → false.
+  // Setoid — byte-wise value equality. structuralEqual consults this first, so
+  // (equal? (bytevector 1 2) (bytevector 1 2)) → #t. Non-ABytevector → false.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
@@ -124,9 +123,8 @@ export class ABytevector extends AValue {
     return true;
   }
 
-  // Ord (Fantasy Land, extends Setoid) — lexicographic over unsigned bytes.
-  // A proper prefix is ≤ its extension; antisymmetry holds against the Setoid
-  // above (equal iff same bytes AND same length). Non-SchemeBytevector → false.
+  // Ord (extends Setoid) — lexicographic over unsigned bytes. A proper prefix is ≤ its
+  // extension; antisymmetry holds against the Setoid above. Non-ABytevector → false.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     if (!(other instanceof ABytevector)) return false;
     const a = this.__bytevector__;
@@ -146,8 +144,7 @@ export class ABytevector extends AValue {
     return this.__bytevector__[Symbol.iterator]();
   }
 
-  // Semigroup (Fantasy Land) — byte concatenation. Associative; equality via the
-  // Setoid above.
+  // Semigroup — byte concatenation. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: ABytevector): ABytevector {
     const a = this.__bytevector__;
     const b = other.__bytevector__;
@@ -157,12 +154,10 @@ export class ABytevector extends AValue {
     return new ABytevector(this.ctx, result);
   }
 
-  // Arrival's element-count — generalized `length` over a bytevector (byte length). Like
-  // AString (and UNLIKE the Pair/Vector element-union), bytes carry NO element ids, so this
-  // carries the BYTEVECTOR's OWN provenance (container prov) via `withInputProvenance([this],
-  // count)` — the count boxes with this bytevector's provenance when non-empty, else the bare
-  // `count`. NO heap-charge / NO strict-gating, so the trailing runCtx `symbol.tagless` threads
-  // is ignored.
+  // Element-count over a bytevector (byte length). Like AString (and UNLIKE the Pair/Vector
+  // element-union), bytes carry NO element ids, so this carries the BYTEVECTOR's OWN
+  // provenance via `withInputProvenance([this], count)` — boxed when non-empty, else the
+  // bare count. No heap-charge / no strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], this.__bytevector__.byteLength);
   }

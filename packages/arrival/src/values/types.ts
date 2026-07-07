@@ -26,19 +26,16 @@ import type { ADict } from "./primitives/ADict.js";
 import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
 import type { Keyword } from "./Keyword.js";
-// A caught condition that reaches a `(catch (e) …)` binding is an R7RS error
-// object — `error-object?` is exactly `obj instanceof R7RSError` (bridge.ts).
-// `import type` keeps this erased at runtime, so the type-only edge back to
-// errors.ts (which already `import type { SchemeValue }`s from here) is a pure
-// compile-time cycle TS resolves with no runtime circular dependency.
+// A caught condition reaching `(catch (e) …)` is an R7RS error object —
+// `error-object?` is exactly `obj instanceof R7RSError` (bridge.ts). `import type`
+// keeps this erased at runtime, so the mutual edge with errors.ts (which
+// `import type`s SchemeValue from here) is a pure compile-time cycle.
 import type { R7RSError } from "../errors.js";
-// A `AProcedure` is a JS function used as a Scheme procedure carrying optional
-// LIPS metadata — the metadata-bearing form of the bare callable arm below, and
-// a first-class *value* (unlike Macro/Syntax/Environment, which are env bindings
-// but never values). It has no runtime brand distinguishing it from a plain
-// procedure, so a value resolved from the env arrives typed as one and must be
-// admitted here. `import type` keeps the edge to Environment.ts (which itself
-// `import type { SchemeValue }`s from here) a pure compile-time cycle.
+// `AProcedure` is a JS function used as a Scheme procedure with optional LIPS
+// metadata — a first-class *value* (unlike Macro/Syntax/Environment, which are
+// env bindings, never values). No runtime brand distinguishes it from a plain
+// procedure, so a value resolved from the env arrives typed as one. `import
+// type` keeps the mutual edge with Environment.ts a pure compile-time cycle.
 import { CallCtx } from "../common/symbols/_bake.js";
 import type { ACallable } from "./primitives/ACallable.js";
 
@@ -95,28 +92,22 @@ export type AProcedure<Args extends [...SchemeValue[]] = [...any[]], Result exte
   __code__?: unknown;
 };
 
-// -------------------------------------------------------------------------
-// :: SchemeStringLike interface - duck-typing for SchemeString class
-// :: Placed first because other types reference it
-// -------------------------------------------------------------------------
+// Duck-typing interface for SchemeString, placed first because other types reference it.
 export interface SchemeStringLike {
   __string__: string | string[];
   valueOf(): string;
   toString(): string;
 }
 
-// SchemeString type guard - works with both interface and actual class
 export function isSchemeString(x: unknown): x is SchemeStringLike {
   return typeof x === "object" && x !== null && "__string__" in x;
 }
 
-// Combined string check
 export function isString(x: unknown): x is SchemeStringLike | string {
   return typeof x === "string" || isSchemeString(x);
 }
 
-// Forward declaration for Pair (implemented in lips.ts)
-// This allows Nil.append to return the right type without circular dependency
+// Forward declaration avoiding a circular dependency on Pair's implementation.
 export interface APairLike<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue> {
   car: Car;
   cdr: Cdr;

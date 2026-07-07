@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------
-// Function application chokepoint — extracted from lips.ts (keystone K1a).
+// Function application chokepoint — extracted from lips.ts.
 //
 // `call_function` applies a Scheme function value (a native builtin OR a
 // generator-lambda) with a fresh call frame. Crucially it does NOT touch the
@@ -12,8 +12,7 @@
 // returns the argument untouched when there are none).
 //
 // Both are self-contained (Environment frame + LambdaContext + value kernel),
-// so the stdlib (K1b) and the reader can import the applier without importing
-// lips.ts.
+// so the stdlib and the reader can import the applier without importing lips.ts.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
@@ -38,12 +37,9 @@ export function call_function(
   if (is_callable_value(fn)) {
     return resolve_promises(applyCallback(fn, args, runCtx ?? CONSTANT_CTX) as SchemeValue);
   }
-  // F1/F2 dissolved (P3 3b.3 step 6): the callers (the HOF dispatch in env/r7rs/lists.ts)
-  // always pass `{}`, so `env`/`dynamic_env` were always undefined and `env?.new_frame(...)`
-  // always short-circuited — `new_frame` was a phantom (no definition; the optional-chain
-  // never invoked it) and the call frame vestigial. A generator-lambda carries its own
-  // closure env, a native reads none, so no frame is needed here. Only `use_dynamic` rides
-  // the LambdaContext brand the membrane keys off. Seeds P5.
+  // No call frame is built: a generator-lambda carries its own closure env, a
+  // native reads none, so no frame is needed here. Only `use_dynamic` rides the
+  // LambdaContext brand the membrane keys off.
   const context = new LambdaContext({ use_dynamic });
   return resolve_promises(fn.apply(context, args));
 }

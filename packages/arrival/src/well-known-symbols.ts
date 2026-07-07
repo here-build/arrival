@@ -1,11 +1,9 @@
 // Well-known symbol registry for the Arrival interpreter.
 //
-// These brands are cross-cutting: they are set on one value/class and read
-// polymorphically from elsewhere (often by code that does not — or cannot —
-// import the defining class). A single registry of `Symbol.for(...)` keys
-// gives every reader the same identity without a shared nominal type, and
-// keeps the (formerly string-keyed) brands off the public enumerable surface
-// of the objects they tag.
+// These brands are cross-cutting: set on one value/class, read polymorphically
+// elsewhere (often by code that can't import the defining class). One registry
+// of `Symbol.for(...)` keys gives every reader the same identity without a
+// shared nominal type, and keeps brands off the object's enumerable surface.
 //
 // Naming: `Symbol.for("arrival/<name>")` namespaces our brands in the global
 // symbol registry so an unrelated `Symbol.for("data")` elsewhere can never
@@ -20,8 +18,8 @@ export const CLASS = Symbol.for("arrival/class");
 
 /**
  * Marks a JS function as a Scheme lambda (`true`). Set by the evaluator when it
- * wraps/creates lambdas; read INLINE (`typeof fn === "function" && LAMBDA in fn`) by the membrane's
- * isSchemeValue and the printer's procedure repr. Historically a string/symbol mix — now one symbol.
+ * wraps/creates lambdas; read INLINE (`typeof fn === "function" && LAMBDA in fn`)
+ * by the membrane's isSchemeValue and the printer's procedure repr.
  */
 export const LAMBDA = Symbol.for("arrival/lambda");
 

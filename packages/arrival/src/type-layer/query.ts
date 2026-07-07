@@ -15,16 +15,11 @@
 //     unresolved).
 //   • getSlotIsStringTyped    — is the slot a string subtype, not an array (null when unresolved).
 //
-// All five honor ONE invariant: SUPERSET-SAFE / DROPS-ONLY. An axis narrows ONLY when it can
-// PROVE the constraint; on ANY uncertainty it returns the unresolved value (the candidate list
-// unchanged, or null) so the gate no-ops. A wrongly-applied constraint is a defect, never a
-// tradeoff — every keep/null path below is annotated with the uncertainty it absorbs.
-//
-// ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY. The narrow may drop a candidate ONLY
-// when that candidate is PROVABLY ill-typed at the slot. On ANY uncertainty — an unresolved
-// candidate, a slot type that is `any`/`unknown`/`never`/out-of-range, no enclosing call —
-// it KEEPS the candidate. A wrongly-dropped valid candidate is a DEFECT, never a tradeoff.
-// Every keep-path below is annotated with the uncertainty it absorbs.
+// ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY. An axis narrows ONLY when it can PROVE
+// the constraint (a candidate PROVABLY ill-typed at the slot, a slot NOT `any`/`unknown`/
+// `never`/out-of-range). On ANY uncertainty it returns the unresolved value (candidate list
+// unchanged, or null) — a wrongly-dropped valid candidate is a DEFECT, never a tradeoff. Every
+// keep/null path below is annotated with the uncertainty it absorbs.
 //
 // Mechanism (ONE compile per query — the slot type is extracted once, then candidates are
 // filtered against it; never a compile-per-candidate):
@@ -35,10 +30,6 @@
 //      alias + one `declare const` per candidate; read the types off ONE TypeChecker.
 //   4. keep a candidate iff its own value-type — or, as a sub-call head, its (awaited) RETURN
 //      type — is assignable to the slot; keep on every uncertainty.
-//
-// This mirrors the proven discipline of the old lens (second-foundation/arrival-type-lens
-// service-core.ts: findCursorRole / probeTypes / getTypeValidCandidates), adapted to the NEW
-// global-fn emit (`head(a, b)` calls + the carrier globals, not `__arr.head`).
 
 import * as ts from "typescript";
 
@@ -90,13 +81,8 @@ export interface QueryLens {
    * unresolved (not a typed-call argument, unknown callee, an un-nameable / `any`/`unknown` slot).
    */
   getSlotArrayKind(scheme: string, cursorOffset: number): SlotArrayKind | null;
-  /**
-   * The slot's element-DOMAIN verdict — the closed-enum / free-form-string axis. For a
-   * list/vector/quote slot the domain is its element (`ElemOf<__E>`); otherwise the slot type
-   * itself. A PROVABLY CLOSED string-literal domain yields its members as `enum`; a free-form
-   * `string` domain yields `isStringy: true`. Both `null` on any uncertainty — the highest-value
-   * narrow, held to the same drops-only discipline (never close a domain we can't prove closed).
-   */
+  /** The slot's element-domain verdict — see `SlotElementType`. Held to the same drops-only
+   *  discipline: never close a domain we can't prove closed. */
   getSlotElementType(scheme: string, cursorOffset: number): SlotElementType;
   /**
    * Does the slot admit a BARE WORD as a string (a free-form string slot)? `true`/`false` via the
@@ -406,8 +392,8 @@ function typeAt(checker: ts.TypeChecker, sourceFile: ts.SourceFile, name: string
  *  bracket pairing (`(`→`)`, `[`→`]`, `{`→`}` — `[]`/`{}` are the vector/dict literals), so the
  *  suffix closes each open level with ITS OWN close char, innermost first. The suffix is
  *  appended at the END, so every cursor offset within the original prefix maps unchanged.
- *  (A standalone twin of the old lens's balance.ts — kept local to avoid a cross-package
- *  import.) */
+ *  Kept local (not imported from second-foundation/arrival-type-lens) to avoid a cross-package
+ *  import. */
 function balance(scheme: string): string {
   const opens: string[] = [];
   let inStr = false;

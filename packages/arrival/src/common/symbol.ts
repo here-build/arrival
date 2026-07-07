@@ -1,20 +1,16 @@
 // symbol — the stable entry for the `arrival.symbol*` EnvCapability symbol-definition API.
 //
 // This module is the package's public seam (`@here.build/arrival/symbol` subpath + the root
-// re-export). It surfaces TWO things, unchanged from when they lived in one file:
+// re-export). It surfaces TWO things:
 //
-//   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, where each tag
-//     (`native`/`rosetta`/`tagless`/…) is its own module. The shape is IDENTICAL to the former
-//     object literal: `symbol.native\`name: doc\`(…)`, `symbol.rosetta\`…\``, etc. resolve the same
-//     for every consumer (`env/r7rs/*`, `env/srfi/*`, `env/macros.ts`, the inference verbs, MCP).
-//     The split (one factory per file under `./symbols/`, barrel-re-exported) is purely so the
-//     bundler can drop the tags a consumer doesn't touch — the old literal referenced every member
-//     in one module, so `sideEffects:false` tree-shaking couldn't prune any.
+//   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, one factory
+//     module per tag (`native`/`rosetta`/`tagless`/…), barrel-re-exported so the bundler can
+//     drop the tags a consumer doesn't touch (`sideEffects:false` tree-shaking).
 //
 //   • the contract/`AEntity` TYPES — re-exported from `./symbols/_bake.js` (the shared machinery
 //     the factory files stand on). Kept on THIS path so `capability.ts` (`SymbolDeclaration`), the
 //     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`)
-//     import them from the same stable specifier they always have.
+//     import them from one stable specifier.
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
 // live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under `vitest --typecheck`

@@ -71,21 +71,9 @@ export class AString extends AValue {
     });
   }
 
-  // Setoid (Fantasy Land). REPRESENTATION-BLIND value equality: a boxed SchemeString equals BOTH
-  // another SchemeString of the same content AND the same value UNBOXED (a plain JS string). A string
-  // has no exact/inexact-style grade, so its identity is purely its characters — and the chain plane
-  // boxes inconsistently (provenance-carrying op → boxed; literal/rosetta-unwrap → plain), so equal?
-  // routinely meets a boxed string against a plain one. Comparing only `instanceof SchemeString` made
-  // `(equal? boxed "x")` ⇒ #f, silently breaking every dedup/`member?` over derived strings (the
-  // sift/closure.scm browser hang). `this.__string__ === other` lets a plain-string `other` match by
-  // content and a non-string `other` (number/object) fall through to #f. structuralEqual consults the
-
   get(n: NumberLike): string {
     return [...this.__string__][typeof n === "number" ? n : n.valueOf()];
   }
-
-  // Ord (Fantasy Land, extends Setoid). Lexicographic via JS `<=`, a total
-  // code-unit order (totality/antisymmetry/transitivity/consistency-with-equals
 
   cmp(string: StringLike): number {
     const a = this.valueOf();
@@ -99,43 +87,50 @@ export class AString extends AValue {
     }
   }
 
-  // Functor — map over the characters. Iterates by code point (spread), so astral
-  // chars map as single graphemes. `f` receives and returns a string char; the result
-  // is the joined string. SYNC (a pure char-map) and present WITHOUT reduce/filter, so
-  // the fl-interop overlay never routes a string through its async sequence dispatch —
-  // this is the borrowed-protocol rename only. (Migrated from the fantasy-land.ts
-
-  // Setoid before its valueOf check, so this is THE place string equality is decided.
+  // Setoid — REPRESENTATION-BLIND value equality: a boxed AString equals BOTH another
+  // AString of the same content AND the same value UNBOXED (a plain JS string). A string has
+  // no exact/inexact-style grade, so its identity is purely its characters — and the chain
+  // plane boxes inconsistently (provenance-carrying op → boxed; literal/rosetta-unwrap →
+  // plain), so equal? routinely meets a boxed string against a plain one. Comparing only
+  // `instanceof AString` made `(equal? boxed "x")` ⇒ #f, silently breaking every dedup/
+  // `member?` over derived strings (the sift/closure.scm browser hang). `this.__string__ ===
+  // other` lets a plain-string `other` match by content and a non-string `other` fall through
+  // to #f. structuralEqual consults the Setoid before its valueOf check, so this is THE place
+  // string equality is decided.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this.__string__ === (other instanceof AString ? other.__string__ : other);
   }
 
-  // Arrival's element-count — generalized `length` over a string (code-point count). A
-  // string's characters carry NO element ids (chars aren't separately grounded), so — UNLIKE
-  // the Pair/Vector element-union — this carries the STRING's OWN provenance (container prov),
-  // matching `string-length` (a separate `symbol.native` binding; THIS is the generalized
-  // `length` dispatching here). `withInputProvenance([this], count)` boxes the count with this
-  // string's provenance when non-empty, else the bare `count`. Code-point length (spread), so
-  // astral chars count once — identical to the `length` getter / `string-length`. NO heap-charge
-
-  // all hold against the Setoid above). Non-SchemeString → false.
+  // Ord (extends Setoid) — lexicographic via JS `<=`, a total code-unit order
+  // (totality/antisymmetry/transitivity/consistency-with-equals all hold against the Setoid
+  // above). Non-AString → false.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return other instanceof AString && this.__string__ <= other.__string__;
   }
 
-  // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
-
-  // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
+  // Functor — map over the characters. Iterates by code point (spread), so astral chars map
+  // as single graphemes. `f` receives and returns a string char; the result is the joined
+  // string. SYNC (a pure char-map) and present WITHOUT reduce/filter, so the fl-interop
+  // overlay never routes a string through its async sequence dispatch — this is the
+  // borrowed-protocol rename only.
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
     return new AString(this.ctx, [...this.__string__].map(f).join(""));
   }
 
-  // / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
+  // Element-count — generalized `length` over a string (code-point count). A string's
+  // characters carry NO element ids (chars aren't separately grounded), so — UNLIKE the
+  // Pair/Vector element-union — this carries the STRING's OWN provenance (container prov),
+  // matching `string-length` (a separate `symbol.native` binding; THIS is the generalized
+  // `length` dispatching here). `withInputProvenance([this], count)` boxes the count with
+  // this string's provenance when non-empty, else the bare `count`. Code-point length
+  // (spread), so astral chars count once — identical to the `length` getter / `string-length`.
+  // No heap-charge / no strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], [...this.__string__].length);
   }
 
-  // two underlying strings. Associative; equality via the Setoid above.
+  // Semigroup — string append. `this ⋄ other` concatenates the two underlying strings.
+  // Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AString): AString {
     return new AString(this.ctx, this.__string__ + other.valueOf());
   }
@@ -202,22 +197,18 @@ export class AString extends AValue {
 }
 
 // ============================================================================
-// INTEROP BOUNDARY
-// ============================================================================
-// War story (2026-05-28 audit): the loop above grafts EVERY method from
-// `String.prototype` onto `SchemeString.prototype` as OWN enumerable
-// properties — `.replace`, `.match`, `.split`, `.concat`, the entire surface.
-// Because they're OWN (not inherited), the fast-path in `accessMember`
-// returns them without checking any boundary. Symbol-to-field auto-resolution
-// means an inference-plane holder of a SchemeString can reach every one of these via
-// scheme property access. The methods themselves are harmless on the string
-// payload, but the surface area is unaudited — any future graft (e.g. a
-// method that returns the underlying object) becomes an exfiltration vector.
+// INTEROP BOUNDARY: the loop above grafts EVERY method from `String.prototype` onto
+// `AString.prototype` as OWN enumerable properties — `.replace`, `.match`, `.split`, the
+// entire surface. Because they're OWN (not inherited), `accessMember`'s fast path returns
+// them without checking any boundary, and symbol-to-field auto-resolution means an
+// inference-plane holder of an AString can reach every one of these via scheme property
+// access. The methods are harmless on the string payload, but the surface is unaudited —
+// any future graft (e.g. a method that returns the underlying object) becomes an
+// exfiltration vector.
 //
-// Marking the class as a boundary lets `isInteropBoundary(proto)` return true
-// when the prototype-chain walk in `accessMember` reaches the SchemeString
-// prototype, blocking the inherited surface. Own properties remain accessible
-// (the fast path is untouched) — this is correct because grafted methods are
-// own, so the boundary only blocks future inherited additions, not the
-// current intended API. Defense-in-depth via the AValue base marker.
+// Marking the class as a boundary lets `isInteropBoundary(proto)` return true when the
+// prototype-chain walk in `accessMember` reaches the AString prototype, blocking the
+// inherited surface. Own properties remain accessible (the fast path is untouched) — correct
+// because grafted methods are own, so the boundary only blocks future inherited additions,
+// not the current intended API. Defense-in-depth via the AValue base marker.
 // ============================================================================

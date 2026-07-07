@@ -11,27 +11,26 @@
  * THE PREDICATES, and how much each is genuinely env-derived:
  *  - isRosettaIn (THE load-bearing cut — `classify` keys source-vs-pure on it):
  *    a Rosetta source MINTS provenance. The env has NO registry of source names
- *    today — the pure registry (`rosettaPureOf`) records the PURE ones, and `infer` registers via a
- *    wrapper (infer-kernel) that leaves no env-queryable mint marker. So sources
- *    are passed in EXPLICITLY (the documented seam). A pure rosetta is never a
- *    source even if mis-listed (the `&& !pure` guard). The follow-up that closes
- *    this seam is an env `__rosettaSources__` populated in `defineRosetta` when a
- *    rosetta carries the provenance-point/mint marker — then `sources` is derived,
- *    not passed. Until then, explicit-and-honest beats a hidden stale list.
- *  - isOpaque: always false. It once classified a name bound to a `SchemeJSFunction`
- *    (membrane/foreign call) as an irreducible black box, but that wrapper is retired
- *    — a borrowed JS function now crosses the membrane as #void, never a callable head,
- *    so no env binding is structurally opaque. (The `opaque` lineage kind still arises
- *    from named-let recursion and from the hand-built test classifiers.)
- *  - isFan: read off the bound fn — `env.get(op).fanout`. Fan ops (map/filter/vector-map)
- *    declare `fanout: true` on their symbol-def contract; bake stamps a plain `.fanout` on the
- *    bound fn (the `SPECULATE` shape, minus the Symbol). So fan-ness FOLLOWS THE BINDING
- *    (alias-correct — an alias of `map` is still fan, a shadowing local `map` is not), not a name list.
- *  - isPure: provided for interface completeness, but NOTE `classify()` does not
- *    currently consult it — any op that is not source/opaque/fan falls through to
- *    the pure-application path (combine), so an unlisted pure op is still handled
- *    correctly. Rosetta-only: the pure registry (rosettaPureOf) IS the whole story —
- *    no curated native-builtin list to go stale (the SAFE_BUILTINS-staleness trap).
+ *    today — the pure registry (`rosettaPureOf`) records the PURE ones, and `infer`
+ *    registers via a wrapper (infer-kernel) leaving no env-queryable mint marker.
+ *    So sources are passed in EXPLICITLY (the documented seam); a pure rosetta is
+ *    never a source even if mis-listed (the `&& !pure` guard). Closing this seam
+ *    needs an env `__rosettaSources__` populated in `defineRosetta` when a rosetta
+ *    carries the mint marker — then `sources` derives instead of being passed.
+ *    Until then, explicit-and-honest beats a hidden stale list.
+ *  - isOpaque: always false — the `SchemeJSFunction` membrane/foreign-call wrapper
+ *    it once classified is retired (a borrowed JS function crosses the membrane as
+ *    #void, never a callable head), so no env binding is structurally opaque. The
+ *    `opaque` lineage kind still arises from named-let recursion and test classifiers.
+ *  - isFan: read off the bound fn — `env.get(op).fanout`. Fan ops (map/filter/
+ *    vector-map) declare `fanout: true` on their symbol-def contract; bake stamps
+ *    a plain `.fanout` on the bound fn. Fan-ness FOLLOWS THE BINDING (alias-correct
+ *    — an alias of `map` is still fan, a shadowing local `map` is not), not a name list.
+ *  - isPure: provided for interface completeness, but `classify()` does not
+ *    currently consult it — an op that is not source/opaque/fan falls through to
+ *    the pure-application path (combine) regardless. Rosetta-only: the pure
+ *    registry (rosettaPureOf) is the whole story — no curated native-builtin list
+ *    to go stale.
  */
 import { Environment } from "../Environment.js";
 import { rosettaPureOf } from "../env-registries.js";
@@ -59,10 +58,7 @@ export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>
     // contract declares `fanout: true` (map/filter/vector-map). Non-throwing lookup — the
     // classifier sees arbitrary op names, an unbound one is simply not fan.
     isFan: (op) => (env.get(op, { throwError: false }) as { fanout?: boolean } | undefined)?.fanout === true,
-    // No foreign-call membrane wrapper exists anymore (AJSFunction retired — a
-    // borrowed JS function crosses the membrane as #void, never a callable head),
-    // so nothing in the env is a structural opaque black box. The `opaque` lineage
-    // kind still arises elsewhere (named-let recursion; custom test classifiers).
+    // See the file header: no env binding is structurally opaque anymore.
     isOpaque: () => false,
   };
 }

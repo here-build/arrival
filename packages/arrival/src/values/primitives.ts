@@ -6,7 +6,7 @@ export const p_o = /^[[(]$/;
 export const p_e = /^[\])]$/;
 export const not_p = /[^()[\]]/;
 export const non_def = /^(?!.*\b(?:[()[\]]|define(?:-macro)?|let(?:\*|rec|-env|-syntax)?|lambda|syntax-rules)\b).*$/;
-export const let_re = /^(?:#:)?(let(?:\*|rec|-env|-syntax)?)$/; // ----------------------------------------------------------------------
+export const let_re = /^(?:#:)?(let(?:\*|rec|-env|-syntax)?)$/;
 export const string_re = /"(?:\\[\s\S]|[^"])*"?/g;
 export const pre_num_parse_re = /((?:#[xodbie]){0,2})(.*)/i; // TODO: float complex
 // functions generate regexes to match number rational, integer, complex, complex+rational

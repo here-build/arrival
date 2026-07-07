@@ -132,18 +132,16 @@ export class AInexact extends AValue {
     return this.real === other.real;
   }
 
-  // Setoid (Fantasy Land). Inexact ≡ inexact ONLY. Object.is (not ===) so
-  // reflexivity holds for NaN (`(eqv? +nan.0 +nan.0)` ⇒ #t) and ±0 stay
-  // distinct — matching the legacy `equal` number-branch semantics.
+  // Setoid — inexact ≡ inexact ONLY. Object.is (not ===) so reflexivity holds for NaN
+  // (`(eqv? +nan.0 +nan.0)` ⇒ #t) and ±0 stay distinct.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AInexact && Object.is(this.real, other.real);
   }
 
-  // Ord (Fantasy Land, extends Setoid). NUMERIC value comparison via schemeCompare
-  // — same numeric/NaN semantics as SchemeExact's lte (cross-type, NaN ⇒ #f). The
-  // representation Setoid above uses Object.is (so eqv? NaN is reflexive); this Ord
-  // uses schemeCompare (so `(= +nan.0 +nan.0)` is #f) — two genuine comparisons.
-  // Non-number → false (Ord convention).
+  // Ord (extends Setoid) — numeric value comparison via schemeCompare, same semantics as
+  // AExact's lte (cross-type, NaN ⇒ #f). The Setoid above uses Object.is (eqv? NaN is
+  // reflexive); this Ord uses schemeCompare (`(= +nan.0 +nan.0)` is #f) — two genuine
+  // comparisons. Non-number → false.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (other instanceof AExact || other instanceof AInexact) && schemeCompare(this, other) <= 0;
   }

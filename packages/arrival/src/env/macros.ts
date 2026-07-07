@@ -21,10 +21,9 @@ import type { MacroInvokeContext } from "../eval/Macro.js";
 import type { SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
 
-// The syntax-rules transformer-constructor, relocated VERBATIM from the stdlib husk (was the
-// `global_env.__env__` blob). Invoked as `(syntax-rules (literals) (pattern template)…)` → returns
-// a Syntax that rewrites a matching form via the engine. `this` is the define-syntax invocation
-// env; global_env supplies the hygiene identity root.
+// The syntax-rules transformer-constructor. Invoked as `(syntax-rules (literals) (pattern
+// template)…)` → returns a Syntax that rewrites a matching form via the engine. `this` is the
+// define-syntax invocation env; global_env supplies the hygiene identity root.
 
 /** scheme/macros — the macro family that carries a JS expander; today, syntax-rules. */
 export default new EnvCapability("scheme/macros", {

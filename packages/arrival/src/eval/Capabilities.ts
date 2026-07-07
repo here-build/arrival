@@ -3,16 +3,16 @@ import type { Environment, EnvironmentValue } from "../Environment.js";
 
 /**
  * The CAPABILITY base — the builtins/preludes/host-supplied resolvers a run is
- * armed with (today, everything reachable from `global_env`). In the eventual
- * (3b) split this is the shared root that a {@link LexicalScope} falls through
- * to: lexical names resolve in the frame chain, everything else (car, map,
- * `:key` accessors, the polyglot resolvers) resolves here.
+ * armed with (everything reachable from `global_env`). This is the shared root
+ * that a {@link LexicalScope} falls through to: lexical names resolve in the
+ * frame chain, everything else (car, map, `:key` accessors, the polyglot
+ * resolvers) resolves here.
  *
- * In 3b.2 the lexical chain and the capability base are still the SAME
- * `__parent__`-linked env, so this wraps it. The hygiene engine now consults
- * `globalRoot` (the unshadowed-builtin identity, kept a STABLE singleton so
- * `=== globalRoot` survives the topology swap) and `refFrame` (does the base
- * OWN this name). 3b.3 severs the link; the surface here is already the target.
+ * GLASS mode: the lexical chain and the capability base are the SAME
+ * `__parent__`-linked env, so this wraps it. ASSEMBLED mode: an explicit,
+ * decoupled base. Either way the hygiene engine consults `globalRoot` (the
+ * unshadowed-builtin identity, a STABLE singleton so `=== globalRoot` survives
+ * a topology change) and `refFrame` (does the base OWN this name).
  */
 export class Capabilities {
   static [CLASS] = "capabilities";
@@ -20,8 +20,7 @@ export class Capabilities {
   /**
    * @param env  the base leaf this wraps (glass: the scope env; assembled: the base top).
    * @param assembledBase  ASSEMBLED mode — `globalRoot`/`refFrame` use the `env` sentinel
-   *   and probe the WHOLE base chain, surviving the 3b.3 topology cut. GLASS (default) keeps
-   *   the structural `chainRoot` probe, byte-identical to 3b.2.
+   *   and probe the WHOLE base chain. GLASS (default) uses the structural `chainRoot` probe.
    */
   constructor(
     readonly env: Environment,
@@ -34,11 +33,10 @@ export class Capabilities {
    * CALLER (generator-exec, which already imports the leaf safely) rather than
    * imported here: a value import of env-roots into this module would cycle through
    * the early-loaded eval chain (`Resolver → Capabilities → env-roots → new
-   * Environment`, before `Environment` is constructed). In 3b.2 this is a glass over
-   * `base`: `lookup` walks `base → global_env`; `globalRoot` is the stable `base`
-   * sentinel (the base top), `refFrame` probes the WHOLE `base → global_env` chain —
-   * both survive the 3b.3 topology cut (when `base` is sourced from a still-base-linked
-   * `user_env`, but a name owned anywhere in the base resolves to the one sentinel).
+   * Environment`, before `Environment` is constructed). `lookup` walks
+   * `base → global_env`; `globalRoot` is the stable `base` sentinel (the base
+   * top); `refFrame` probes the WHOLE `base → global_env` chain, so a name owned
+   * anywhere in the base resolves to the one sentinel.
    */
   static assembled(base: Environment): Capabilities {
     return new Capabilities(base, true);
@@ -56,7 +54,7 @@ export class Capabilities {
    *  parent-less top of this scope's chain rather than by an env-roots import (which would
    *  cycle through the early-loaded eval modules). The hygiene literal check compares a
    *  resolved frame `=== globalRoot` to mean "an unshadowed base builtin"; the root is a
-   *  stable identity that survives the 3b.3 cut. */
+   *  stable identity across the scope's lifetime. */
   private chainRoot(): Environment {
     let e: Environment = this.env;
     while (e.__parent__) e = e.__parent__;
@@ -65,17 +63,17 @@ export class Capabilities {
 
   /** The stable "unshadowed base builtin" sentinel hygiene compares `=== globalRoot`.
    *  ASSEMBLED: the base top (`this.env`, e.g. `user_env`) — ONE identity for any
-   *  base-owned name, surviving the cut. GLASS: the structural chain root (`global_env`). */
+   *  base-owned name. GLASS: the structural chain root (`global_env`). */
   get globalRoot(): Environment {
     return this.assembledBase ? this.env : this.chainRoot();
   }
 
   /** The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED:
-   *  probe the WHOLE base chain (`this.env → … → global_env`) via `_lookupWithResolvers` — the
-   *  chain-walking lookup (own bindings → resolvers → parent) that replaced the removed
-   *  `Environment.ref` — so a native owned on the base leaf (`cons` on user_env) AND a builtin
-   *  on global_env both resolve to the one sentinel, unlike the GLASS `chainRoot.has` that only
-   *  caught the chain root. GLASS: the own-binding probe on the structural chain root. */
+   *  probe the WHOLE base chain (`this.env → … → global_env`) via `_lookupWithResolvers`
+   *  (own bindings → resolvers → parent), so a native owned on the base leaf (`cons` on
+   *  user_env) AND a builtin on global_env both resolve to the one sentinel — unlike the
+   *  GLASS `chainRoot.has`, which only catches the chain root. GLASS: the own-binding
+   *  probe on the structural chain root. */
   refFrame(name: string): Environment | undefined {
     if (this.assembledBase) {
       return this.env._lookupWithResolvers(name) !== undefined ? this.globalRoot : undefined;

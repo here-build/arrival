@@ -2,17 +2,14 @@
 // :: errors.ts — the single home for every arrival Error subclass.
 //
 // Kept a runtime LEAF: the only runtime import is the well-known-symbol brands.
-// (value-guards.js is NOT a safe leaf for errors.ts to depend on — it imports the whole
-// primitive class barrel as VALUES, so an `errors.ts → value-guards` edge eagerly
-// initializes AString/AExact/AInexact/ACharacter/APair/… at module-load. Because the
-// primitives reach errors.ts on their own init path (AString→op-helpers→errors,
-// APair→errors), that pulls the barrel in mid-init and AValue is `undefined` when a
-// subclass `extends` it. A located Pair is detected via its LOCATION symbol-brand
-// instead — same result, zero class imports.)
+// value-guards.js is NOT safe to depend on here — it imports the whole primitive
+// class barrel as VALUES, so an `errors.ts → value-guards` edge would eagerly
+// initialize AString/AExact/AInexact/ACharacter/APair/… at module-load, before
+// those classes exist (they reach errors.ts on their own init path), leaving
+// AValue `undefined` when a subclass `extends` it. A located Pair is detected via
+// its LOCATION symbol-brand instead — same result, zero class imports.
 // StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
-// these without dragging the evaluator world in. Was scattered across ArrivalError.ts /
-// purity.ts / portability.ts / interop-access.ts / bridge.ts / common/kernel.ts /
-// common/resources.ts / values/lineage-shadow.ts — collected here.
+// these without dragging the evaluator world in.
 // -------------------------------------------------------------------------
 import { CLASS, LOCATION } from "./well-known-symbols.js";
 import type { StackFrame } from "./eval/evaluator.js";
@@ -22,10 +19,7 @@ import type { SchemeValue } from "./values/types.js";
 // :: Source Location Tracking
 // -------------------------------------------------------------------------
 
-/**
- * Source location information for AST nodes and errors.
- * Tracks where in the source code a value originated.
- */
+/** Source location for AST nodes and errors. */
 export interface SourceLocation {
   /** 1-indexed line number */
   line: number;
@@ -37,22 +31,16 @@ export interface SourceLocation {
   source?: string;
 }
 
-/**
- * Format a source location for display in error messages.
- */
 export function formatLocation(loc: SourceLocation): string {
   const source = loc.source ? `${loc.source}:` : "";
   return `${source}${loc.line}:${loc.col}`;
 }
 
-/**
- * Error thrown when parsing encounters unterminated expressions
- * (unclosed strings, parentheses, etc.)
- */
+/** Thrown for unterminated expressions (unclosed strings, parentheses, etc). */
 export class Unterminated extends Error {
   location?: SourceLocation;
-  /** Stable spec-taxonomy identifier — the grammar conformance corpus
-   *  (spec/corpus/, see its README) matches error CLASSES on this, not on prose. */
+  /** Stable spec-taxonomy id — the grammar conformance corpus (spec/corpus/) matches
+   *  error CLASSES on this, not on prose. */
   readonly code = "E-UNTERMINATED";
 
   constructor(message: string, location?: SourceLocation) {
@@ -62,14 +50,11 @@ export class Unterminated extends Error {
   }
 }
 
-/**
- * Error thrown during parsing with source location context.
- */
 export class ParseError extends Error {
   location?: SourceLocation;
-  /** Stable spec-taxonomy identifier (e.g. E-DICT-DUP-KEY) — the grammar conformance
-   *  corpus (spec/corpus/, see its README) matches error CLASSES on this, not on
-   *  prose, so messages stay free to teach while the contract stays machine-checkable. */
+  /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the grammar conformance corpus
+   *  (spec/corpus/) matches error CLASSES on this, not on prose, so messages stay
+   *  free to teach while the contract stays machine-checkable. */
   code?: string;
 
   constructor(message: string, location?: SourceLocation, code?: string) {
@@ -80,9 +65,6 @@ export class ParseError extends Error {
   }
 }
 
-/**
- * Error thrown during evaluation with source location context.
- */
 export class EvalError extends Error {
   location?: SourceLocation;
   code?: unknown;
@@ -99,21 +81,18 @@ export class EvalError extends Error {
 // -------------------------------------------------------------------------
 // :: ArrivalError — the single concrete arrival / Scheme-level error (the base).
 //
-// The value terms (and the sibling error subclasses below) throw / extend it without
-// importing the evaluator — StackFrame is a TYPE-only import, so this stays cycle-free.
+// StackFrame is a TYPE-only import, so value terms throw/extend it without pulling
+// in the evaluator — stays cycle-free.
 // -------------------------------------------------------------------------
 
 /** A SchemeValue's source location off its LOCATION metadata, if any (leaf-local — the
- *  evaluator's richer `formatCode` renderer is not reachable from a leaf, so a stack frame's
- *  code prints via its own `String()` repr). The parser stamps LOCATION on located Pairs
- *  (well-known-symbols.ts:58), so only an APair can carry it — read the brand directly so
- *  errors.ts imports no value class (an `is_pair` narrow would drag in the primitive
- *  barrel via value-guards.js and re-break module init; see the header note). */
+ *  evaluator's richer `formatCode` renderer isn't reachable from a leaf, so a stack
+ *  frame's code prints via its own `String()` repr). The parser stamps LOCATION on
+ *  located Pairs (well-known-symbols.ts:58), so only an APair can carry it — read the
+ *  brand directly so errors.ts imports no value class (see file header). */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
-  // `LOCATION in code` is a discriminant: APair is the only SchemeValue member
-  // declaring `[LOCATION]?: SourceLocation`, so TS narrows `code` to APair here
-  // and `code[LOCATION]` types as `SourceLocation | undefined` with no cast
-  // (mirrors evaluator.ts's `LOCATION in code` Pair-tap narrow).
+  // APair is the only SchemeValue member declaring `[LOCATION]?: SourceLocation`, so
+  // this narrows `code` to APair and types `code[LOCATION]` with no cast.
   if (LOCATION in code) {
     return code[LOCATION];
   }
@@ -130,9 +109,8 @@ export class ArrivalError extends Error {
     public readonly cause?: Error,
   ) {
     super(message);
-    // Capture on THIS wrapper only — capturing on the cause would OVERWRITE the cause's
-    // original stack with the wrap site (`new ArrivalError` as the apparent thrower),
-    // destroying the one trace that says where the underlying error actually happened.
+    // Capture on THIS wrapper only — capturing on the cause would overwrite its
+    // original stack with the wrap site, destroying where it actually happened.
     Error.captureStackTrace?.(this);
   }
 
@@ -158,17 +136,17 @@ export class ArrivalError extends Error {
 
 // A RAW HOST-runtime error — a V8/engine throw from a native impl body that skipped its
 // contract (`Cannot read properties of undefined`, `x is not a function`, a non-iterable
-// spread), NOT an arrival-authored type error. The two are both `TypeError`s and share no
-// class or `.cause` brand (`TypeError.invariant` carries no cause; `wrapOperator` does), so
-// the only honest discriminant is the message: these phrasings are engine-authored and
-// arrival never writes them. A host bug is an INTERNAL arrival defect (an impl that bypassed
-// its zod/typecheck contract), so it must keep its scheme stack rather than surface bare.
-// Matching is intentionally conservative — a miss just falls back to today's behavior.
+// spread), NOT an arrival-authored type error. Both are `TypeError`s with no distinguishing
+// class or `.cause` brand, so the message is the only honest discriminant — these phrasings
+// are engine-authored, arrival never writes them. A host bug is an INTERNAL arrival defect
+// (an impl that bypassed its zod/typecheck contract), so it must keep its scheme stack
+// rather than surface bare. Matching is intentionally conservative — a miss just falls
+// back to today's behavior.
 const HOST_RUNTIME_BUG_RE =
   /Cannot read propert|reading '|is not a function|is not iterable|is not a constructor|Spread syntax requires|Maximum call stack|is not defined/;
-// Returns `boolean`, NOT a `e is Error` predicate: it is a refinement on the message of an
-// already-error value, not an Error-narrowing. A predicate would make a `? :`'s else-branch
-// subtract `Error` from an already-`Error` operand → `never` (evaluator.ts failAndWrap).
+// Returns `boolean`, not an `e is Error` predicate — a predicate would make a `? :`'s
+// else-branch subtract `Error` from an already-`Error` operand → `never` (evaluator.ts
+// failAndWrap).
 export function isHostRuntimeBug(e: unknown): boolean {
   return (
     (e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError) &&
@@ -179,10 +157,10 @@ export function isHostRuntimeBug(e: unknown): boolean {
 // -------------------------------------------------------------------------
 // :: PurityError — the typed error a deliberately-omitted feature carries.
 //
-// arrival is PURE DATAFLOW: value mutation (set-car!/vector-set!/…) and the dynamics
-// (call/cc/dynamic-wind/parameterize/delay/force) are omitted by design — they'd falsify
-// the lineage every value carries. Each omission is a `symbol.notImplemented` door in the
-// pack that owns that part of the spec; the door surface throws this when reached.
+// arrival is PURE DATAFLOW: mutation (set-car!/vector-set!/…) and dynamics
+// (call/cc/dynamic-wind/parameterize/delay/force) are omitted by design — they'd
+// falsify the lineage every value carries. Each omission is a `symbol.notImplemented`
+// door in the pack owning that part of the spec, which throws this when reached.
 // -------------------------------------------------------------------------
 export class PurityError extends ArrivalError {
   static [CLASS] = "purity-error";
@@ -221,9 +199,8 @@ export class PortabilityError extends ArrivalError {
   }
 }
 
-/** Loose/strict divergence gate. In strict (R7RS-portability) mode a loose tolerance throws a
- *  PortabilityError explaining the divergence; in loose mode (the default) it is a no-op and
- *  the caller proceeds. Reads `strict` structurally so it needs no RunContext import. */
+/** Loose/strict divergence gate: throws PortabilityError in strict mode, no-op in loose
+ *  (default). Reads `strict` structurally so it needs no RunContext import. */
 export function strictGate(
   runCtx: { readonly strict: boolean } | undefined,
   divergence: { op: string; rule: string; alternative?: string },
@@ -262,12 +239,10 @@ export class R7RSError extends Error {
   }
 }
 
-/** R7RS read error — errors during reading/parsing. */
 export class R7RSReadError extends R7RSError {
   readonly name = "R7RSReadError";
 }
 
-/** R7RS file error — file I/O errors. */
 export class R7RSFileError extends R7RSError {
   readonly name = "R7RSFileError";
 }

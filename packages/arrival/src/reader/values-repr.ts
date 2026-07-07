@@ -1,16 +1,11 @@
-// Value / symbol representation helpers — shared by the stdlib forms, the
-// genMacroWrapper bridge, and the macro engine (syntax-rules.ts:
-// macro_expand / extract_patterns / transform_syntax).
-//
-// Extracted from the original monolith (the since-split lips.ts) so the macro
-// engine imports them from this sibling LEAF rather than back-edging into the
-// stdlib — the cycle the module split exists to prevent. syntax-rules.ts now
-// imports directly from here.
+// Value/symbol representation helpers, shared by the stdlib forms, the
+// genMacroWrapper bridge, and the macro engine (syntax-rules.ts). Kept as a
+// sibling LEAF so the macro engine doesn't back-edge into the stdlib — the
+// cycle this split exists to prevent.
 //
 // `is_promise` comes from guards.ts (a *false leaf*: it carries a pre-existing
-// transitive path to Environment), which is type-only at the values-repr edge,
-// so no runtime cycle. Promoting is_promise into the value-guards true-leaf is
-// a separate task.
+// transitive path to Environment), type-only at this edge so no runtime cycle.
+// Promoting it into the value-guards true-leaf is a separate task.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -27,11 +22,10 @@ import { ANil } from "../values/primitives/ANil.js";
 import { BoxedSchemeValue } from "../membrane.js";
 import { APair } from "../values/primitives/APair.js";
 
-// The symbol-NAME surface these reader/macro helpers operate on. This is the
-// pre-boxing JS layer — exactly what ASymbol's own constructor accepts as a name
-// (`SchemeSymbolName`) — NOT a boxed SchemeValue. `gensym`/`is_gensym` predate the
-// SchemeValue union and thread raw names through; the union migration surfaces that
-// their inputs are names (string/symbol/number), an ASymbol wrapper, or null.
+// The symbol-NAME surface these helpers operate on: the pre-boxing JS layer —
+// exactly what ASymbol's constructor accepts as a name (`SchemeSymbolName`) — NOT
+// a boxed SchemeValue. `gensym`/`is_gensym` take a raw name (string/symbol/number),
+// an ASymbol wrapper, or null — never a boxed SchemeValue directly.
 export type SymbolName = string | symbol | number;
 
 /** Non-enumerable, non-writable Symbol-keyed slot — used for metadata that must
@@ -79,10 +73,10 @@ export const gensym = (function () {
       name = name.valueOf();
     }
     if (is_gensym(name)) {
-      // don't do double gynsyms in nested syntax-rules
+      // avoid double-gensym in nested syntax-rules
       return new ASymbol(CONSTANT_CTX, name);
     }
-    // use ES6 symbol as name for lips symbol (they are unique)
+    // ES6 symbol guarantees uniqueness as the backing name.
     if (name !== null) {
       return with_props(name, Symbol(`#:${name}`));
     }
@@ -92,21 +86,19 @@ export const gensym = (function () {
 })();
 
 // ----------------------------------------------------------------------
-// :: mark a value as quoted data so the evaluator won't re-evaluate it.
-// :: Pairs/symbols carry the __data__ flag; a still-pending datum (async
-// :: macro expansion can hand back a thenable) threads through and is quoted
-// :: on settle — hence PromiseLike is part of the honest input/output, even
-// :: though SchemeValue itself excludes promises. Overloads pin the shape: a
-// :: sync value yields a sync value, a thenable yields a thenable (so the
-// :: sync caller `patch_value` keeps a plain SchemeValue, not a union).
+// Marks a value as quoted data so the evaluator won't re-evaluate it. Pairs/symbols
+// carry the __data__ flag. A still-pending datum (async macro expansion can hand
+// back a thenable) threads through and quotes on settle — hence PromiseLike is
+// part of the signature even though SchemeValue itself excludes promises.
+// Overloads pin the shape: sync in → sync out, thenable in → thenable out, so
+// `patch_value` keeps a plain SchemeValue, not a union.
 // ----------------------------------------------------------------------
 export function quote(value: SchemeValue): SchemeValue;
 export function quote(value: PromiseLike<SchemeValue>): PromiseLike<SchemeValue>;
 export function quote(value: SchemeValue | PromiseLike<SchemeValue>): SchemeValue | PromiseLike<SchemeValue> {
-  // Narrow the DECLARED union rather than route through `is_promise`'s lossy
-  // `Promise<unknown>` guard: the only thenable this function admits is the
-  // `PromiseLike<SchemeValue>` member, so its resolved value is a SchemeValue
-  // and `.then(quote)` stays fully typed with no cast.
+  // Narrows the DECLARED union rather than routing through `is_promise`'s lossy
+  // `Promise<unknown>` guard: the only thenable this admits is `PromiseLike<SchemeValue>`,
+  // so `.then(quote)` stays fully typed with no cast.
   if (isPendingDatum(value)) {
     return value.then(quote);
   }
@@ -126,12 +118,11 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 }
 
 // ----------------------------------------------------------------------
-// :: box — lift a raw JS primitive to its Scheme value-type so member reads
-// :: return Scheme-typed values, not bare JS. Only strings/bigints/numbers
-// :: need boxing; objects/arrays are handled by the membrane at access time,
-// :: so they pass through. Relocated here (the value-representation leaf, next
-// :: to `quote`) from stdlib so `patch_value` — and Environment's member walk —
-// :: can reach it without importing the stdlib monolith (the legacy cycle).
+// Lifts a raw JS primitive to its Scheme value-type so member reads return
+// Scheme-typed values, not bare JS. Only strings/bigints/numbers need boxing;
+// objects/arrays are handled by the membrane at access time and pass through.
+// Lives here (not stdlib) so `patch_value` and Environment's member walk can
+// reach it without importing the stdlib monolith.
 // ----------------------------------------------------------------------
 export function box(object: unknown): SchemeValue {
   switch (typeof object) {
@@ -141,7 +132,6 @@ export function box(object: unknown): SchemeValue {
       return new AExact(CONSTANT_CTX, object);
     case "number":
       if (Number.isNaN(object)) return new AInexact(CONSTANT_CTX, Number.NaN);
-      // Safe integers become exact, floats become inexact.
       if (Number.isSafeInteger(object)) {
         return new AExact(CONSTANT_CTX, BigInt(object));
       }
@@ -151,11 +141,10 @@ export function box(object: unknown): SchemeValue {
 }
 
 // ----------------------------------------------------------------------
-// :: patch_value — settle a value read out of a binding/member for handing
-// :: back to Scheme: a Pair is cycle-marked then quoted (so the evaluator
-// :: treats it as data, not a call); everything else is boxed. Relocated here
-// :: from stdlib alongside `box`/`quote` so Environment.get can settle members
-// :: through this leaf instead of the deferred stdlib runtime slot.
+// Settles a value read out of a binding/member before handing back to Scheme:
+// a Pair is cycle-marked then quoted (so the evaluator treats it as data, not
+// a call); everything else is boxed. Lives here so Environment.get can reach
+// it without importing stdlib.
 // ----------------------------------------------------------------------
 export function patch_value(value: unknown): SchemeValue {
   if (value instanceof APair) {
@@ -166,11 +155,11 @@ export function patch_value(value: unknown): SchemeValue {
 }
 
 // ----------------------------------------------------------------------
-// :: an atom is any self-evaluating leaf (symbol, string, nil, char,
-// :: number, boolean) — i.e., not a compound pair/structure. Accepts
-// :: `unknown` because it classifies the raw-JS leaf surface too (a bare
-// :: `null` is the membrane's #f sibling, raw `true`/`false` are pre-L1
-// :: booleans) — none of which are members of the boxed SchemeValue union.
+// An atom is any self-evaluating leaf (symbol, string, nil, char, number,
+// boolean) — not a compound pair/structure. Accepts `unknown` because it also
+// classifies the raw-JS leaf surface (a bare `null` is the membrane's #f
+// sibling, raw `true`/`false` are pre-L1 booleans) — none of which are
+// SchemeValue members.
 // ----------------------------------------------------------------------
 export function is_atom(
   obj: unknown,

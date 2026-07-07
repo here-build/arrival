@@ -1,20 +1,18 @@
 // contract.ts — arrival's local copy of the constraint-kernel oracle boundary.
 //
-// The canonical contract is `sift/src/sampler/oracle-contract.ts`. It is NOT imported here:
-// arrival-scheme is a FOUNDATION package and sift (`@sift/membrane`) depends on IT, not the other
-// way around. Importing the sift types — even type-only — would invert the dependency arrow. So
-// arrival re-declares the interfaces locally, kept type-identical to the canonical source. The O0
-// conformance corpus is the executable proof the two stay in sync (it runs sift's reference S
-// reader and this arrival impl against one shared corpus and asserts agreement).
+// Canonical contract: `sift/src/sampler/oracle-contract.ts`. NOT imported here — arrival-scheme is
+// a FOUNDATION package that sift depends on, not the reverse; importing sift types (even type-only)
+// would invert the dependency arrow. So the interfaces are re-declared locally, kept type-identical
+// to the canonical source. The O0 conformance corpus is the executable proof the two stay in sync
+// (runs sift's reference S reader and this impl against one shared corpus, asserts agreement).
 //
-// Track A (this package): IMPLEMENTS these. Layer S (scanner.ts) supplies the structural half;
-// Σ/T degrade gracefully (validSymbols/expectedType return null, produces returns true) until the
-// later nodes land.
-// Track B (sift): CONSUMES these, compiling per-cursor verdicts into a token mask / validator /
-// repair pass — without knowing how the verdict is computed.
+// Track A (this package) IMPLEMENTS these: Layer S (scanner.ts) supplies the structural half; Σ/T
+// degrade gracefully (validSymbols/expectedType → null, produces → true) until later nodes land.
+// Track B (sift) CONSUMES these, compiling per-cursor verdicts into a token mask / validator /
+// repair pass, without knowing how the verdict is computed.
 //
-// DESIGN INVARIANT: every method is a pure function of the ACCEPTED PREFIX. No lookahead, no
-// backtracking — the constraint aligns with autoregressive generation.
+// DESIGN INVARIANT: every method is a pure function of the ACCEPTED PREFIX — no lookahead, no
+// backtracking — so the constraint aligns with autoregressive generation.
 
 /** A type tag from arrival's entity algebra plus the structural kinds. `null` = unknown/any. */
 export type TypeTag = string;

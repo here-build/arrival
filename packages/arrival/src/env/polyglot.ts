@@ -41,15 +41,6 @@ import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js"
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { type SchemeValue } from "../values/types.js";
 
-/** The polyglot idiom pack — the full member-access surface plus the threading family:
- *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. `symbol.native` bindings
- *     (raw env.set, no codec — the typed equivalent of the old `{ value }`): they are
- *     membrane PRIMITIVES and must not be routed through the membrane they implement.
- *   • `:key` — the keyword accessor. Self-evaluating (`ASymbol` carries `apply` —
- *     keyword-tagless-apply.md), not a resolver contributed by this pack.
- *   • `-> / ->> / compose / pipe / …` — threading & composition (prelude).
- *  Module-singleton capability; `@`/`:key` bottom out in the same per-class `get`
- *  protocol (`arrival/tagless-final/get`) that `readMember` (membrane.ts) also uses. */
 // IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator) that
 // can be MID-INITIALIZATION when this capability's spec object is evaluated — the
 // assembly path imports it via `base-packs → polyglot → membrane → evaluator → …`, a
@@ -375,21 +366,18 @@ export default new EnvCapability("scheme/polyglot", {
     (define (assoc-ref d key . default)
       (apply dict-ref (cons d (cons key default))))
 `,
-  // The former `:key` keyword-accessor resolver lived here. `:`-prefixed symbols are now
-  // self-evaluating (keyword-tagless-apply.md) — `ASymbol` itself carries `apply`, so this
-  // pack contributes no resolvers at all anymore.
+  // `:`-prefixed symbols are self-evaluating (keyword-tagless-apply.md) — `ASymbol` itself
+  // carries `apply` — so this pack contributes no resolvers, only symbols.
   symbols: () => ({
     // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
     // `readMember`/`hasMember`/`memberKeys` dispatch on `instanceof AJSObject` / `Array.isArray`
     // / plain-prototype checks, and are called directly with raw (non-scheme) JS values from
-    // outside the evaluator too (see clone-identity.test.ts). The OUTPUT sides below were the
-    // imprecise part — each op has a single, unconditional real return type; `z.value`
-    // there was discarding it, not describing a genuinely-blind slot.
+    // outside the evaluator too (see clone-identity.test.ts). Each op below has a single,
+    // unconditional real OUTPUT type, so the output sides are typed precisely, not left blind.
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       // `readMember` always returns a real scheme value (nil / a boxed read / an AJSArray-
-      // wrapped array) — never something OUTSIDE SchemeValue. `z.value` (the identity term for
-      // "a polymorphic accessor's operand", scheme-zod.ts's own worked example) replaces the
-      // `z.value` that was discarding this.
+      // wrapped array) — never something OUTSIDE SchemeValue. `z.value` is the identity term
+      // for "a polymorphic accessor's operand" (scheme-zod.ts's own worked example).
       { input: [z.value, z.value], output: [z.value] },
       readMember,
     ),

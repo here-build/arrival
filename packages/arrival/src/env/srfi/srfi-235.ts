@@ -40,14 +40,13 @@ export default new EnvCapability("scheme/srfi-235", {
     // `curry` — arrival's arity-aware partial application (the shared utils/functional
     // curry: it auto-applies once \`fn.length\` args have arrived). Combinator kin to the
     // prelude above, but kept NATIVE because the arity detection can't be expressed in
-    // pure scheme. Relocated VERBATIM from arrival-extensions (husk dissolution).
+    // pure scheme.
     //
     // `fn` is the fixed HEAD; the leading args being partially applied are the variadic
     // TAIL (`inputRest`) — mirrors apply's head/rest split. The head is the established
     // callable-schema convention (z.custom<(...args) => T>(), matching vector-map/
-    // vector-for-each/apply's own callable slots), and the rest is `z.value` (these are
-    // real scheme terms flowing through a native call, not representation-blind
-    // `z.value` — the old contract's shape before this fix).
+    // vector-for-each/apply's own callable slots), and the rest is `z.value` — real scheme
+    // terms flowing through a native call, not representation-blind.
     curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
       {
         input: [z.lambda],

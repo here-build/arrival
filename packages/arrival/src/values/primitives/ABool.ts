@@ -52,11 +52,7 @@ export const schemeTrue = new ABool(CONSTANT_CTX, true);
 export const schemeFalse = new ABool(CONSTANT_CTX, false);
 
 // ============================================================================
-// INTEROP BOUNDARY
-// ============================================================================
-// War story (2026-05-28 audit): SchemeBool's prototype is narrow today but
-// the boundary marker still matters — the singletons `schemeTrue` and
-// `schemeFalse` are heavily reused, so any future helper grafted onto
-// SchemeBool.prototype reaches every Boolean-valued response from the
-// inference plane. Mark now so the surface stays empty by default.
+// INTEROP BOUNDARY: ABool's prototype is narrow today, but `schemeTrue`/`schemeFalse` are
+// heavily reused singletons — any future helper grafted onto the prototype would reach every
+// Boolean-valued response from the inference plane. Marked now so the surface stays empty.
 // ============================================================================

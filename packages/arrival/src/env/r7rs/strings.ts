@@ -1,20 +1,12 @@
 /**
- * String ops — the R7RS § 6.7 string cluster, carved VERBATIM out of
- * `wrappedOps` in `../bridge.ts`. These are behavior-preserving copies of the
- * interpreter's string constructors, accessors, comparisons (case-sensitive and
- * case-insensitive), append, list conversions, copy/slice, case conversion, and
- * the higher-order `string-map` / `string-for-each`. The only change from the
- * bridge originals is that cross-cutting helpers (`assertAllocatable`,
- * `charValue`, `coerceNumeric`, `deriveOrd`, `stringValue`, `toIndex`,
- * `withInputProvenance`, and the provenance collapse pair `collapseProvenance` /
- * `taintString`) are imported rather than referenced as bridge locals. The
- * implementations — including inline comments — are otherwise identical to the
- * source. (`number->string` deliberately stays in the bridge.)
+ * String ops — the R7RS § 6.7 string cluster: constructors, accessors,
+ * comparisons (case-sensitive and case-insensitive), append, list conversions,
+ * copy/slice, case conversion, and the higher-order `string-map` /
+ * `string-for-each`. (`number->string` lives in numeric.ts, not here.)
  *
- * MIGRATED to the `symbol.native` API: each op declares a SCHEME-IDENTITY zod
- * contract (no codec, no validation — "zod for TYPES purely") and an impl bound
- * raw, exactly as the old `{ value }` form was. Native means the schema choice
- * cannot change runtime behavior; the bodies are reproduced byte-for-byte.
+ * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
+ * validation — "zod for TYPES purely") and an impl bound raw. Native means the
+ * schema choice cannot change runtime behavior.
  */
 
 import foldCase from "fold-case";
@@ -60,20 +52,16 @@ import {
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
 import type { SchemeValue } from "../../values/types.js";
 
-// Pack-local copies of the list<->array bridge helpers `join`/`split` need. The
-// stdlib originals (`listToArray`/`arrayToList`/`to_array`) stay in stdlib.ts for
-// its remaining consumers; these reproduce the same non-deep logic byte-for-byte
-// (incl. the per-run heap-meter charge `to_array` levies at the collection choke)
-// so the relocated `join`/`split` stay behavior-identical. (lists.ts carries its
-// own copy — pack isolation forbids a cross-pack import.)
+// Pack-local copy of the list->array helper `join` needs (lists.ts carries its
+// own copy — pack isolation forbids a cross-pack import), including the per-run
+// heap-meter charge levied at the collection choke.
 function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
   return function recur(list: SchemeValue): SchemeValue[] {
     if (list instanceof ANil) {
       return [];
     }
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    // Heap meter off the operand's ctx — the designed operand-ctx read (RunContext.ts),
-    // replacing the retired `currentRunEnv()` env back-channel.
+    // Heap meter off the operand's ctx (RunContext.ts).
     const meter = ctxOf(list).heapMeter;
     const result: SchemeValue[] = [];
     let node = list;
@@ -402,14 +390,9 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     // ---------------------------------------------------------------------
-    // LIPS-era string builtins relocated from stdlib.ts global_env (stdlib
-    // elimination). `concat`/`join`/`split` are LIPS-era names; `substring`
-    // and `string->number` are R7RS but lived only in the legacy global_env
-    // literal (no pack/wrappedOps duplicate). Bodies reproduced byte-for-byte;
-    // runtime `typecheck` guards preserved. `native` means the (identity) zod
-    // contract never runs — the impls receive Scheme values exactly as the old
-    // `doc({ value })` form did. (`join`'s former `this: Environment` param is
-    // dropped: its body reads the module-local `listToArray`, never `this`.)
+    // `concat`/`join`/`split` are LIPS-era names, kept as extensions; `substring`
+    // and `string->number` are genuine R7RS. `native` means the (identity) zod
+    // contract never runs — the impls receive Scheme values directly.
     // ---------------------------------------------------------------------
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },

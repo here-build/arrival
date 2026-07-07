@@ -3,19 +3,18 @@ import type { BindingName, Environment, EnvironmentValue } from "../Environment.
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
- * program introduces. In the eventual (3b) split this is the part of a scope
- * that is CUT from the capability base: a closure captures its lexical chain,
- * and resolution falls through to {@link Capabilities} only when the lexical
- * chain misses.
+ * program introduces. This is the part of a scope that is CUT from the
+ * capability base: a closure captures its lexical chain, and resolution falls
+ * through to {@link Capabilities} only when the lexical chain misses.
  *
- * In 3b.2 this is STILL a glass over the base-linked {@link Environment} — the
- * lexical frames and the capability base are one `__parent__`-linked chain — but
- * it now carries the real method surface the hygiene engine (syntax-rules.ts)
+ * Currently a glass over the base-linked {@link Environment} — the lexical
+ * frames and the capability base are one `__parent__`-linked chain — but it
+ * carries the real method surface the hygiene engine (syntax-rules.ts)
  * consults: `refFrame` (which frame OWNS a name, stopping below `global_env`),
  * plus the merge-frame plumbing (`kind`/`ownSymbolEntries`/`parent`/`define`).
- * Each is a byte-identical pass-through over the env today; 3b.3 swaps the
- * IMPLEMENTATION (own `#bindings`, root parent `null`) without re-touching the
- * engine. The genuine decoupling is 3b.3; this type names the target.
+ * Each is a byte-identical pass-through over the env today; a future cut swaps
+ * the IMPLEMENTATION (own `#bindings`, root parent `null`) without re-touching
+ * the engine.
  */
 const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (registered symbol)
 
@@ -24,7 +23,7 @@ const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (re
  * hygiene literal check compares `refFrame(name) === defResolver.scope` by IDENTITY,
  * so the wrapper a `refFrame` walk returns for a frame must be the SAME object the
  * `.scope` getter hands back for that same frame. WeakMap so a frame's wrapper is
- * GC'd with the frame. (3b.2-only bridge: 3b.3 constructs LexicalScopes directly.)
+ * GC'd with the frame.
  */
 const wrappers = new WeakMap<Environment, LexicalScope>();
 
@@ -64,9 +63,8 @@ export class LexicalScope {
    * chain root (the capability base / `global_env`, identified structurally as the
    * parent-less root rather than by an env-roots import, which would cycle through
    * this early-loaded module). `undefined` on a lexical miss (the Resolver then
-   * consults {@link Capabilities}; it does NOT fall through here — the 3b.3 contract,
-   * byte-identical today because the hygiene chain always roots at global_env). Own
-   * bindings only (no resolvers / no synth), exactly like `Environment.ref`.
+   * consults {@link Capabilities}; it does NOT fall through here). Own bindings
+   * only (no resolvers / no synth), exactly like `Environment.ref`.
    */
   refFrame(name: string): LexicalScope | undefined {
     for (let e: Environment | null = this.env; e && e.__parent__; e = e.__parent__) {
@@ -78,9 +76,8 @@ export class LexicalScope {
   /**
    * The raw LEXICAL bindings walk (`undefined` on a miss, no synth) — the lexical
    * half of the Resolver's composed `scope.lookup(name) ?? capabilities.lookup(name)`.
-   * Null-rooted post-cut → lexical-only. In 3b.2 the env is still base-linked, so this
-   * walks through to the base too; the Resolver's `?? capabilities.lookup` is then never
-   * reached on a hit, keeping the glass path byte-identical to `env._lookupWithResolvers`.
+   * Currently the env is still base-linked, so this walks through to the base too;
+   * the Resolver's `?? capabilities.lookup` is then never reached on a hit.
    */
   lookup(name: string | symbol): EnvironmentValue | undefined {
     return this.env._lookupWithResolvers(name);

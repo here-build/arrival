@@ -1,36 +1,35 @@
 // sigma.ts — Track O, Layer Σ: bound-symbol masking.
 //
-// Layer S (scanner.ts) reports the STRUCTURAL parse state at the end of an accepted prefix. Layer Σ
-// refines the `atom` token class into the SET OF BOUND IDENTIFIERS legal at the cursor — the spec's
+// Layer S (scanner.ts) reports the STRUCTURAL parse state at the end of an accepted prefix. Σ
+// refines the `atom` class into the SET OF BOUND IDENTIFIERS legal at the cursor — the contract's
 // "validSymbols, position-filtered" (sift/src/sampler/oracle-contract.ts OracleState.validSymbols).
 //
-// Σ = boundSymbols() ∪ scope-locals, then position-filtered:
+// Σ = boundSymbols() ∪ scope-locals, position-filtered:
 //   - operator position ⇒ CALLABLES only (a non-callable head is a guaranteed apply-error);
-//   - argument position ⇒ ANY bound symbol;
+//   - argument position ⇒ any bound symbol;
 //   - top / quote ⇒ no constraint (null) — a top-level datum or quoted data may be any symbol.
 //
 // Two symbol sources, unioned:
-//   1. boundSymbols() — the LIVE discovery env, injected as an OracleEnv backed by the real
-//      Environment (enumerate __env__ up the parent chain via _lookup). This is the grant boundary:
-//      Σ enforces the sandbox's binding set for free (spec §A2).
-//   2. scope-locals — the LEXICAL binders the prefix itself introduced: `let`/`let*`/`letrec`/
-//      `letrec*` bindings, `lambda` parameters, and `define`'d names. These are a PURE FUNCTION of
-//      the accepted prefix (the reader already tracks depth/position; Σ threads a scope stack
-//      alongside). A binder is in scope inside its body region and absent outside.
+//   1. boundSymbols() — the live discovery env, an OracleEnv over the real Environment (enumerates
+//      __env__ up the parent chain). This is the grant boundary: Σ enforces the sandbox's binding
+//      set for free (spec §A2).
+//   2. scope-locals — the LEXICAL binders the prefix itself introduces: let/let*/letrec/letrec*
+//      bindings, lambda parameters, define'd names. A pure function of the accepted prefix (a scope
+//      stack threaded alongside the reader's own depth/position tracking); a binder is in scope for
+//      its body region and absent outside it.
 //
-// GRACEFUL DEGRADATION: with no env injected, boundSymbols() contributes nothing AND the position
-// filter cannot tell callable from non-callable, so Σ returns null (Layer-S behaviour preserved —
-// "Σ not modelled, do not constrain symbols", per the contract). Σ is LIVE only when given an env.
+// GRACEFUL DEGRADATION: no env ⇒ boundSymbols() is empty and callable-vs-not is undecidable, so Σ
+// returns null (Layer-S behaviour preserved — "Σ not modelled, do not constrain symbols"). Σ is
+// live only when given an env.
 //
-// DESIGN INVARIANT (inherited from S): the scope stack is a pure function of the prefix. No
+// DESIGN INVARIANT (inherited from S): the scope stack is a pure function of the prefix — no
 // lookahead, no backtracking.
 
 import type { CursorPosition, FormKind, OracleEnv } from "./contract.js";
 
-/** The internal env surface Σ consumes: the contract's {@link OracleEnv} plus a callable predicate
- *  (operator-position filtering needs to know which bound names are applicable). The contract's
- *  public `OracleEnv` carries `signatureOf`, but a callable need not have a known signature (that is
- *  T/O3); `isCallable` is the cheap structural "could this name legally be a form head" check. */
+/** The internal env surface Σ consumes: {@link OracleEnv} plus a callable predicate (operator-position
+ *  filtering needs to know which bound names are applicable). A callable need not have a known
+ *  signature (that's T/O3) — `isCallable` is the cheap structural "could this be a form head" check. */
 export interface OracleEnvΣ extends OracleEnv {
   /** True iff the bound value of `id` is applicable (a function / macro / syntax). Drives the
    *  operator-position filter. Unknown names (not bound) ⇒ false. */
@@ -85,10 +84,10 @@ export interface ScopeState {
  * Walk the accepted prefix and compute the names lexically bound at its end. Pure, single pass,
  * string/comment/quote-aware (a binder keyword inside a string or a quoted datum is not a binder).
  *
- * Visibility rule per binder: a name is added to its OWNING frame's `locals` the instant its atom
- * completes, and that frame's `locals` is in scope for the rest of the frame (a conservative,
- * decoder-sound over-approximation — Σ never drops a legal symbol). Closed sibling `define`s remain
- * visible to following forms at the same or shallower depth.
+ * Visibility rule per binder: a name joins its OWNING frame's `locals` the instant its atom
+ * completes, staying in scope for the rest of the frame — a conservative, decoder-sound
+ * over-approximation (Σ never drops a legal symbol). Closed sibling `define`s stay visible to
+ * following forms at the same or shallower depth.
  */
 export function scanScope(src: string): ScopeState {
   const stack: ScopeFrame[] = [];

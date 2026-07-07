@@ -60,11 +60,8 @@ export function balanced(code: string | TokenMeta[]): boolean {
     } else if (open_tokens.includes(token)) {
       stack.push(token);
     } else {
-      // closing bracket without opening
       invariant(!stack.is_empty(), `Syntax error: not matched closing ${token}`);
-      // closing token
       const last = stack.top()!;
-      // last on stack need to match
       const closing_token = maching_pairs[last];
       invariant(token === closing_token, `Syntax error: missing closing ${closing_token}`);
       stack.pop();

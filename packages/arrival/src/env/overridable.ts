@@ -19,19 +19,15 @@
 // hand-rolled lowerings — one type language, one lowering. A
 // `define/overridable` type tag is lowered through the SAME `tagToJsonSchema` recursion
 // (`../common/schema-tag.js`) every other schema consumer (the OpenAI/Anthropic wire schema,
-// arrival-chain's HTTP validator) lowers through, via zod's own `z.fromJSONSchema`. The
-// hand-rolled scalar subset this file used to carry (`"string"`/`"number"`/`"boolean"`/a bare
-// `("enum" …)` list, its own `tagHead`/`lowerTag`) is GONE — it was a second, narrower type
-// language that could silently drift from what the wire schema and the HTTP validator actually
-// accept. This capability `deps` on `arrival/schema` (`./schema.js`) so the s/* constructors
-// (`s/object`, `s/enum`, …) are bound wherever `arrival/overridable` is applied: a
-// `define/overridable` type tag may now be ANY s/* expression — `(s/enum "a" "b")`, a nested
-// `(s/object …)`, `(s/optional …)` — not just the old scalar subset.
+// arrival-chain's HTTP validator) lowers through, via zod's own `z.fromJSONSchema`. This
+// capability `deps` on `arrival/schema` (`./schema.js`) so the s/* constructors (`s/object`,
+// `s/enum`, …) are bound wherever `arrival/overridable` is applied: a `define/overridable`
+// type tag may be ANY s/* expression — `(s/enum "a" "b")`, a nested `(s/object …)`,
+// `(s/optional …)`.
 //
 // THE SHAPE — a single runtime verb, no assembly-time materialization dance. `overridable/resolve`
-// is an ORDINARY RUNTIME rosetta (the three-piece prelude design `pipeline-input` used —
-// preludeOnly fetch + `%pipeline-params` + pure-scheme `%params-ref` — is gone; there is nothing
-// assembly-time-only left to bridge). The macro is pure ergonomics over it:
+// is an ORDINARY RUNTIME rosetta; nothing assembly-time-only needs bridging. The macro is pure
+// ergonomics over it:
 //
 //     (define/overridable city (s/string) "Berlin")
 //       ⇒ (define city (overridable/resolve 'city (s/string) "Berlin"))

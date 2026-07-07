@@ -13,13 +13,10 @@
 // cannot be rooted. They are omitted BY DESIGN. Each door (errors-as-doors) names
 // the omission, argues the why, and routes to the supported alternative.
 //
-// ─── HOME DECISION (flagged for review) ──────────────────────────────────────────
-// §6.10 control + §4.2.5/§4.2.6 dynamics have NO value-TYPE pack to own them (unlike
-// the string/vector/list mutators, which co-locate with their type's pack). They
-// share ONE rationale — identity tied to control-extent, not construction-site — so
-// they get ONE dedicated section pack here, the parallel of "vectors own the vector
-// mutators". This dissolves the relevant half of the deleted core.ts purity-door
-// manifesto (commit 6c93a4c3b8) INTO a co-located, live, teaching capability.
+// No value-TYPE pack owns §6.10/§4.2.5/§4.2.6 (unlike the string/vector/list
+// mutators, which co-locate with their type's pack) — they share one rationale
+// (identity tied to control-extent, not construction-site), so they get one
+// dedicated section pack here, the parallel of "vectors own the vector mutators".
 //
 // SINGLE SOURCE: `r7rs/index.ts` adds this to `allR7rs`, so `base-packs.ts`
 // assembles it into the base env — the doors are live in every assembled env.

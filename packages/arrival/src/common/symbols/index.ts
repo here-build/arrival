@@ -1,13 +1,12 @@
 // symbols — the `symbol` namespace, one tagged-template factory per file.
 //
-// `../symbol.js` does `export * as symbol from "./symbols/index.js"`, so this barrel's
-// named exports ARE the `symbol.<tag>` surface: `symbol.native\`…\``, `symbol.rosetta\`…\``,
-// etc. resolve to the matching factory file. Splitting one-per-file + barrel-re-export lets
-// the bundler include only the accessed tag's module (ESM + `sideEffects:false`), where the
-// old single object literal referenced every member and pinned them all in.
+// `../symbol.js` does `export * as symbol from "./symbols/index.js"`, so this barrel's named
+// exports ARE the `symbol.<tag>` surface. One-file-per-tag + barrel-re-export lets the bundler
+// include only the accessed tag's module (ESM + `sideEffects:false`); a single object literal
+// would reference every member and pin them all in.
 //
-// The shared machinery (the `bake*` fns + contract types) lives in `./_bake.js`; each factory
-// imports what it needs from there. The cut is acyclic — nothing here imports `../symbol.js`.
+// Shared machinery (`bake*` fns + contract types) lives in `./_bake.js`; each factory imports
+// what it needs from there. The cut is acyclic — nothing here imports `../symbol.js`.
 
 export { native } from "./native.js";
 export { rosetta } from "./rosetta.js";

@@ -1,4 +1,4 @@
-// scheme-env — the SCHEME-AWARE layer over the pure C3 kernel (index.ts).
+// scheme-env — the SCHEME-AWARE layer over the pure C3 kernel (kernel.ts).
 //
 // The kernel is env-agnostic: a pack's `apply(env)` may do anything, but the kernel
 // itself never touches `env` or knows what scheme is. This module adds the two

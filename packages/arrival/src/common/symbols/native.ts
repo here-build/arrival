@@ -1,6 +1,5 @@
-// symbol.native — a native host fn over SCHEME VALUES. One of the per-tag factory
-// files re-assembled into the `symbol` namespace by `./index.ts`; the shared types +
-// helpers live in `./_bake.js`.
+// symbol.native — per-tag factory file assembled into `symbol` by ./index.ts; shared
+// types live in ./_bake.js.
 //
 // The tagged template carries `name: human description`; it returns a GENERIC fn so
 // TS infers the contract first, then checks the impl against the DECODED types. A
@@ -18,13 +17,11 @@ import {
 } from "./_bake.js";
 
 /** Native host fn over SCHEME VALUES (no ctx, no validation, no codec crossing). The impl
- *  projects the contract's SCHEME face (`Impl<…, "scheme">` = each schema's `z.input` — the
- *  value-algebra side; a rosetta projects `z.output`, the membrane side). For the pre-codec
- *  identity schemas the faces coincide, so this is byte-identical for every existing
- *  declaration; a codec-vocabulary schema (e.g. `z.string` = AString⇄string) now correctly
- *  types the native impl's arg as the SCHEME value (AString), not the JS image. `Rest`
- *  (inferred from `contract.inputRest`, defaulting to `undefined`) is the fixed-prefix-
- *  plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
+ *  projects the contract's SCHEME face (`Impl<…, "scheme">` = each schema's `z.input`, the
+ *  value-algebra side; a rosetta projects `z.output`, the membrane side) — so a codec-vocabulary
+ *  schema (e.g. `z.string` = AString⇄string) types the native impl's arg as the SCHEME value
+ *  (AString), never the JS image. `Rest` (from `contract.inputRest`, default `undefined`) is
+ *  the fixed-prefix-plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
 export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(

@@ -1,25 +1,17 @@
 /**
- * Scheme Numeric Tower Implementation
+ * Scheme Numeric Tower Implementation (R7RS-small §6.2: integer ⊂ rational ⊂ real,
+ * exact/inexact). Two classes based on exactness, both always present:
+ * - AExact: arbitrary precision (bigint num/denom) — represents integers AND
+ *   rationals (denom=1 is the integer case).
+ * - AInexact: IEEE 754 binary64 real, boxed.
+ * Tower predicates check VALUES, not types.
  *
- * ARCHITECTURAL INVARIANTS:
- * 1. ExactNumber class always exists - minimum capability is integers (denom=1)
- * 2. InexactNumber class always exists - it is a boxed IEEE-754 real
- * 3. Tower predicates check values, not types: integer ⊂ rational ⊂ real
- *
- * Two fundamental classes based on exactness:
- * - ExactNumber: arbitrary precision (bigint num/denom), represents integers AND rationals
- * - InexactNumber: floating point (number real), represents reals
- *
- * COMPLEX SUBSETTING (R7RS § 6.2.3 explicitly permits omitting complex): arrival is
- * reals-only. The inexact tower carries NO imaginary axis. sqrt of a negative,
- * make-rectangular / make-polar, and a "3+4i" literal are DOORED (recognized and
- * rejected with a teaching message via complexDoor), never silently misparsed.
- * real-part / imag-part / magnitude / angle are likewise doored. complex? still
- * answers #t for every real (real ⊂ complex by spec — the predicate stays total;
- * only the imaginary axis is gone).
- *
- * Lineage: R7RS-small §6.2 numeric tower (integer ⊂ rational ⊂ real, exact/inexact);
- * inexacts are IEEE 754 binary64; integer sqrt is Newton–Raphson.
+ * COMPLEX SUBSETTING (R7RS § 6.2.3 permits omitting complex): arrival is reals-only,
+ * no imaginary axis. sqrt of a negative, make-rectangular/make-polar, a "3+4i"
+ * literal, and real-part/imag-part/magnitude/angle are all DOORED (recognized,
+ * rejected with a teaching message via complexDoor) rather than silently
+ * misparsed. complex? still answers #t for every real (real ⊂ complex by spec —
+ * the predicate stays total; only the imaginary axis is gone).
  */
 import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
@@ -110,9 +102,6 @@ export function schemeCompare(a: ANumeric, b: ANumeric): number {
   return Number.NaN; // a NaN operand → incomparable; all chained tests fail
 }
 
-/**
- * Parse a number from string representation
- */
 export function parseNumber(str: string): ANumeric {
   str = str.trim();
 
@@ -199,16 +188,11 @@ export function parseNumber(str: string): ANumeric {
   return exact;
 }
 
-/**
- * Type guard to check if a value is a SchemeNumeric (SchemeExact or SchemeInexact)
- */
 export function isSchemeNumeric(value: unknown): value is ANumeric {
   return value instanceof AExact || value instanceof AInexact;
 }
 
-/**
- * Check if a value is a numeric type (SchemeNumeric or JS primitive)
- */
+/** Unlike `isSchemeNumeric`, also admits a raw (unboxed) JS number/bigint. */
 export function isNumeric(value: unknown): value is ANumeric | number | bigint {
   return isSchemeNumeric(value) || typeof value === "number" || typeof value === "bigint";
 }
@@ -217,12 +201,10 @@ export function isNumeric(value: unknown): value is ANumeric | number | bigint {
 // Type Checking Functions
 // ============================================================================
 
-/** Check if value is a native JS number or bigint */
 export function isNativeNumber(n: unknown): n is number | bigint {
   return typeof n === "number" || typeof n === "bigint";
 }
 
-/** Check if value is a float (inexact real) */
 export function isFloat(n: unknown): n is AInexact | number {
   if (n instanceof AInexact) {
     return true;
@@ -242,19 +224,18 @@ export function isComplex(_n: unknown): boolean {
   return false;
 }
 
-/** Check if value is a rational (exact with denom != 1) */
+/** Rational: exact with denom != 1. */
 export function isRational(n: unknown): n is AExact | { num: unknown; denom: unknown } {
   if (n instanceof AExact) {
     return n.denom !== 1n;
   }
-  // Duck typing for legacy {num, denom} objects
+  // Duck typing for legacy {num, denom} objects.
   if (n && typeof n === "object" && "num" in n && "denom" in n) {
     return true;
   }
   return false;
 }
 
-/** Check if value is an integer */
 export function isInteger(n: unknown): n is AExact | bigint | number {
   if (n instanceof AExact) {
     return n.denom === 1n;
@@ -271,7 +252,7 @@ export function isInteger(n: unknown): n is AExact | bigint | number {
   return false;
 }
 
-/** Check if value is a big integer (exact integer) */
+/** Big integer = exact integer (denom 1n), or a raw bigint. */
 export function isBigInteger(n: unknown): n is AExact | bigint {
   if (n instanceof AExact) {
     return n.denom === 1n;
@@ -281,15 +262,13 @@ export function isBigInteger(n: unknown): n is AExact | bigint {
 // ============================================================================
 // INTEROP BOUNDARIES
 // ============================================================================
-// War story (2026-05-28 audit): SchemeExact and SchemeInexact carry the
-// numeric-tower behavior surface (isInteger/isRational/isReal getters plus
-// the full arithmetic protocol on their prototypes). Numeric values are the
-// densest object population in any inference computation — every arithmetic
-// step creates a fresh instance. Symbol-to-field auto-resolution means each
-// number is a potential probe point into the host numeric tower.
-// Boundary-marking restricts interop member-access to own properties (num/denom for
-// exact, real for inexact) which are the intended data surface; the
-// methods (which expose tower internals and host-side bigint helpers) become
-// blocked. The arithmetic ops scheme code actually uses (`+`, `*`, `floor`,
-// …) live in the env bindings, not on these prototypes.
+// AExact/AInexact carry the full numeric-tower behavior surface (isInteger/
+// isRational/isReal getters + arithmetic protocol) on their prototypes. Numeric
+// values are the densest object population in any inference computation, and
+// symbol-to-field auto-resolution makes each number a potential probe point
+// into the host numeric tower. Boundary-marking restricts interop member-access
+// to own properties (num/denom for exact, real for inexact) — the intended
+// data surface — blocking the tower-internals methods. The arithmetic ops
+// scheme code actually uses (`+`, `*`, `floor`, …) live in env bindings, not
+// on these prototypes.
 // ============================================================================

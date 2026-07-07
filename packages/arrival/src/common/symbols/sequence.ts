@@ -1,6 +1,5 @@
-// symbol.sequence — a ctx-aware op whose impl gets (schemeArgs, runCtx). One of the
-// per-tag factory files re-assembled into the `symbol` namespace by `./index.ts`; the
-// shared types + helpers live in `./_bake.js`.
+// symbol.sequence — per-tag factory file assembled into `symbol` by ./index.ts; shared
+// types live in ./_bake.js.
 
 import {
   CallCtx,
@@ -15,24 +14,23 @@ import {
   type VectorSpec,
 } from "./_bake.js";
 
-/** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
+/** Ctx-aware host op — impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. `impl`'s args/return are
- *  checked against the contract via `SequenceImpl<I,O>` (was raw `unknown[]`/`unknown` — the
- *  same erasure gap `inputRest` closed for native/rosetta). */
+ *  checked against the contract via `SequenceImpl<I,O>`, the same erasure boundary `inputRest`
+ *  closes for native/rosetta. */
 export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec>(
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
   ): SequenceSymbolDef => {
-    // `run` dispatches at runtime against a raw sliced-args array, which TS can't statically
-    // match to `impl`'s own `DecodedArgs<I>` tuple — erase here, once, the same boundary
-    // `rosetta.ts`'s `run` crosses. By construction (the contract), the array always matches.
+    // Erase here: TS can't statically match a raw sliced-args array to `impl`'s own
+    // `DecodedArgs<I>` tuple. By construction (the contract), it always matches.
     const run = function (this: CallCtx, ...args: DecodedArgs<I, "scheme">) {
       return impl(args, this.runCtx);
     };
-    // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
-    // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
+    // Stamp fanout on the bound fn: cell-less packs bind `def.run` raw, so the lineage
+    // classifier reads `.fanout` off `env.get(op)` directly (the SPECULATE shape, minus the Symbol).
     if (contract.fanout) (run as { fanout?: boolean }).fanout = true;
     return {
       kind: "sequence",
@@ -40,10 +38,9 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       doc,
       in: normalizeVector(contract.input),
       out: normalizeVector(contract.output),
-      // Erased to the def's stored shape (SequenceSymbolDef.run is a discriminated-union
-      // member — deliberately non-generic, the same runtime-erasure boundary rosetta.ts's
-      // `run` crosses — `rawImpl`). By construction (the contract), the sliced args array
-      // always matches `DecodedArgs<I,"scheme">`.
+      // Erased to the def's stored shape — SequenceSymbolDef.run is deliberately non-generic
+      // (the same erasure boundary rosetta.ts's `rawImpl` crosses). By construction, the sliced
+      // args array always matches `DecodedArgs<I,"scheme">`.
       run: Object.assign(
         function (this: CallCtx, ...args: unknown[]) {
           return impl(args as DecodedArgs<I, "scheme">, this.runCtx);

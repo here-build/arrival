@@ -1,10 +1,8 @@
-// env-registries — the INVOCATION-CONTEXT metadata that used to live as fields on
-// the scope-node (`Environment`). V's reframe: `Environment` conflated the HEAD
-// context (lexical scope: bindings + `__parent__` + lookup) with run-scoped /
-// metadata trackers that external tools harvest. These three are NOT scope — they
-// are side-tables ABOUT the rosettas/docs registered on an env. Holding them here,
-// keyed by the env they were registered on, keeps the scope-node minimal while
-// preserving the exact per-env locality the consumers depend on.
+// env-registries — side-tables ABOUT the rosettas/docs registered on an env, kept
+// OUT of the scope-node (`Environment`): these aren't lexical scope (bindings +
+// `__parent__` + lookup), they're run-scoped metadata external tools harvest.
+// Holding them here, keyed by the env they were registered on, keeps the
+// scope-node minimal while preserving the per-env locality consumers depend on.
 //
 // WHY env-KEYED (WeakMap<Environment, …>), not one flat global:
 //   • docs + rosetta-types are read PER-ENV — the type-lens harvester spreads ONE
@@ -16,20 +14,18 @@
 //     that exactly; a flat global would also (accidentally) answer for unrelated envs.
 //   • WeakMap ⇒ a side-table entry GCs with its env — no lifetime coupling, no leak.
 //
-// The accessors get-or-create the per-env container, so a writer
+// Accessors get-or-create the per-env container, so a writer
 // (`defineRosetta`/`set`-with-doc) and a membership-only reader share one path; an
 // empty container created by a read is inert (membership = false) and GC-eligible.
 
 import type { Environment } from "./Environment.js";
 
-// (The global docstring registry `docsByEnv` / `docsOf` + `Environment.doc()` is GONE — it was a
-// write-only legacy layer, superseded by hermetic symbols that carry their own doc, e.g. Macro's
-// `__doc__`. Nothing ever read it; the only write was one internal-env docstring.)
+// (No global docstring registry: each hermetic symbol carries its own doc, e.g. Macro's `__doc__`.)
 
 // -------------------------------------------------------------------------
-// :: Rosetta type signatures — the type-lens HARVEST surface. Was
-// :: `Environment.__rosettaTypes__`; populated on each `defineRosetta` carrying a
-// :: `type`, read per-env by arrival-type-lens's `assembleHostPrelude([...registry])`.
+// :: Rosetta type signatures — the type-lens HARVEST surface. Populated on each
+// :: `defineRosetta` carrying a `type`, read per-env by arrival-type-lens's
+// :: `assembleHostPrelude([...registry])`.
 // -------------------------------------------------------------------------
 const rosettaTypesByEnv = new WeakMap<Environment, Map<string, string>>();
 
@@ -46,9 +42,9 @@ export function rosettaTypesOf(env: Environment): Map<string, string> {
 }
 
 // -------------------------------------------------------------------------
-// :: Rosetta purity roles — the lineage-classifier HARVEST surface. Was
-// :: `Environment.__rosettaPure__`; the set of rosetta names registered `pure: true`
-// :: (provenance PIPES, not sources). Read CHAINED by the classifier's parent-walk.
+// :: Rosetta purity roles — the lineage-classifier HARVEST surface. The set of
+// :: rosetta names registered `pure: true` (provenance PIPES, not sources). Read
+// :: CHAINED by the classifier's parent-walk.
 // -------------------------------------------------------------------------
 const rosettaPureByEnv = new WeakMap<Environment, Set<string>>();
 

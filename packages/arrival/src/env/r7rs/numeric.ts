@@ -24,11 +24,9 @@
 
 import * as z from "../../common/scheme-zod.js";
 import invariant from "tiny-invariant";
-// `TypeError.invariant` (used below, e.g. `marshalCall`) is a global augmentation this
-// module never triggered itself — it type-checked and ran only because SOME other module
-// in the load graph (env/r7rs/lists.ts) happened to import it first as a side effect. Same
-// "roster-order accident" class the exceptions.ts header calls out; import it explicitly
-// here so this file's correctness doesn't depend on load order.
+// `TypeError.invariant` (used below, e.g. `marshalCall`) is a global augmentation —
+// import it explicitly so this file's correctness doesn't depend on some OTHER module
+// in the load graph happening to import it first.
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";

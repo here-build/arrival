@@ -1,13 +1,7 @@
-// -------------------------------------------------------------------------
-// :: Promise utilities for handling async values in the interpreter
-// -------------------------------------------------------------------------
+// Promise utilities for handling async values in the interpreter.
 import { is_plain_object, is_promise } from "../eval/guards.js";
 
-// ----------------------------------------------------------------------
-// Promise.all over a value array (non-arrays pass through). The old
-// escape/unescape dance existed only to keep `Promise.all` from forcing a
-// QuotedPromise; with that class dissolved, this is a plain `Promise.all`.
-// ----------------------------------------------------------------------
+// Promise.all over a value array; non-arrays pass through unchanged.
 export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
   if (Array.isArray(arg)) {
     return Promise.all(arg);
@@ -15,7 +9,6 @@ export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
   return arg;
 }
 
-// ----------------------------------------------------------------------
 export function unpromise(
   value: unknown,
   fn: (x: unknown) => unknown = (x) => x,
@@ -34,7 +27,6 @@ export function unpromise(
   return fn(value);
 }
 
-// ----------------------------------------------------------------------
 function unpromise_array(
   array: unknown[],
   fn: (x: unknown) => unknown,
@@ -54,7 +46,6 @@ function unpromise_array(
     : fn(array);
 }
 
-// ----------------------------------------------------------------------
 function unpromise_object(
   object: Record<string, unknown>,
   fn: (x: unknown) => unknown,

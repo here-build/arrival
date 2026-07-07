@@ -2,8 +2,7 @@
 // representation (a JS function / `undefined` / a unique symbol) crosses the membrane
 // and materializes to #void. A LEAF (no deps): the value layer (boxing.ts's `function`
 // boxer) and the membrane (rosetta.ts / membrane.ts) share the one flag without dragging
-// the evaluator into the value-primitive import graph. Extracted from rosetta.ts when the
-// boxer registry dissolved into a direct `fromJs` switch.
+// the evaluator into the value-primitive import graph.
 
 let membraneWarningsEnabled = true;
 

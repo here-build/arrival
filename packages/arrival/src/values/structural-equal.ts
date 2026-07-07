@@ -8,40 +8,30 @@ import { tf } from "./tagless-final.js";
 
 /**
  * Cycle-safe structural deep-equality for Scheme values — the ONE `equal?`
- * implementation. Routed to by every surface: bridge.ts's `equal?`/`member`/
- * `assoc`, sandbox-env.ts's `equal?`, and ramda-functions.ts's `equals`.
+ * implementation (R7RS-small §6.1). Routed to by every surface: bridge.ts's
+ * `equal?`/`member`/`assoc`, sandbox-env.ts's `equal?`, and ramda-functions.ts's
+ * `equals` — a single walker so all three agree on cycles, SchemeCharacter, and
+ * Scheme numeric/provenance types (previously three divergent, partially-broken
+ * implementations: a `JSON.stringify` fallback that threw on cyclic input, a
+ * separate `deepEqual` with no cycle guard and no character case, and `R.equals`
+ * with no Scheme-type awareness).
  *
- * War story (2026-05-30 sandbox-escape audit): the old `JSON.stringify(a) ===
- * JSON.stringify(b)` fallback in `equal?` threw a NATIVE `TypeError: Converting
- * circular structure to JSON` on cyclic input — a host-implementation leak that
- * sandbox code couldn't `guard`. bridge.ts had a SEPARATE `deepEqual` that had
- * NO cycle guard at all (`(equal? l l)` on a cyclic `l` infinite-looped) and no
- * SchemeCharacter case (`(equal? #\a #\a)` → #f). ramda-functions bound `equals`
- * to `R.equals`, which knows nothing about Scheme numeric/provenance types.
- * Unifying onto this single walker fixes all three.
+ * Walks the two values in lock-step, tracking visited `(a, b)` reference pairs
+ * so cycles terminate co-inductively (a node already being compared against its
+ * partner is assumed equal — the standard occurs-check). Never throws a native
+ * serialization error; always returns a boolean.
  *
- * This walks the two values in lock-step and tracks visited `(a, b)` reference
- * pairs so cycles terminate co-inductively (a node already being compared
- * against its partner is assumed equal — the standard R7RS-style occurs-check).
- * Returns a boolean for every input pair; never throws a native serialization
- * error.
- *
- * `seen` maps each visited `a`-reference to the SET of `b`-partners it has been
- * compared against on the current path. Two structures are equal iff the walk
- * never finds a mismatch; a re-encountered `(a, b)` pair short-circuits to true.
- *
- * Lineage: R7RS-small §6.1 three-tier eq?/eqv?/equal?; the visited-pair walk is
- * a co-inductive bisimulation (the standard occurs-check); equality dispatches
- * through each value's Fantasy Land Setoid (`arrival/tagless-final/equals`).
+ * Equality dispatches through each value's Fantasy Land Setoid
+ * (`arrival/tagless-final/equals`).
  */
 /**
  * The co-induction visited set threaded through a single `equal?` walk. Maps each
  * visited `a`-reference to the SET of `b`-partners it has been compared against on
- * the current path; a re-encountered `(a, b)` short-circuits to true (the standard
- * occurs-check). Shared by the harness AND by each term's `arrival/tagless-final/equals`
- * (Pair/Vector recurse through `structuralEqual` threading this map), so mutually-
- * cyclic structures terminate. Exported so AValue's abstract Setoid can type its
- * optional `seen` parameter identically.
+ * the current path; a re-encountered `(a, b)` short-circuits to true. Shared by the
+ * harness AND by each term's `arrival/tagless-final/equals` (Pair/Vector recurse
+ * through `structuralEqual` threading this map), so mutually-cyclic structures
+ * terminate. Exported so AValue's abstract Setoid can type its optional `seen`
+ * parameter identically.
  */
 export type SeenMap = Map<object, Set<object>>;
 
@@ -53,13 +43,12 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   if (a == null || b == null) return a === b;
 
   // Co-induction bookkeeping — record the (a, b) partner pair BEFORE descending,
-  // GENERICALLY for any object pair (no longer Vector-specific). A re-encountered
-  // (a, b) short-circuits to true, so cyclic structures (Pair/Vector/array/plain
-  // object) terminate co-inductively. Recording here, before the Setoid dispatch,
-  // is what lets each term's `arrival/tagless-final/equals` recurse through `structuralEqual`
-  // with a shared `seen` and never re-record — so a mutually-cyclic vector pair
-  // can no longer blow the stack (the war story / the moved-inline-Vector case).
-  // Primitives can't carry cycles; they fall straight through to the leaf fallbacks.
+  // generically for any object pair. A re-encountered (a, b) short-circuits to
+  // true, so cyclic structures (Pair/Vector/array/plain object) terminate.
+  // Recording here, before the Setoid dispatch, lets each term's
+  // `arrival/tagless-final/equals` recurse through `structuralEqual` with a
+  // shared `seen` and never re-record. Primitives can't carry cycles; they fall
+  // straight through to the leaf fallbacks.
   if (typeof a === "object" && typeof b === "object") {
     const partners = seen.get(a);
     if (partners?.has(b)) return true;
@@ -113,11 +102,12 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // grades live in one equality leaf — and so the future Setoid (arrival/tagless-final/
 // equals) consolidation has a single home (see plan-2026-06-10-algebras-in-entities.md).
 //
-// War story: `eq?` and `eqv?` were both aliased to a single structural-ish
-// `equal` helper whose string branch (`x.valueOf() === y.valueOf()`) collapsed
-// distinct heap SchemeString instances to #t — flattening the three-tier R7RS
-// hierarchy and breaking `memq`/`assv`/`case` dispatch and the atom-grade
-// contract that `(eqv? (string-copy "a") (string-copy "a"))` MUST be #f.
+// Must stay three distinct functions, not two-plus-an-alias: a single
+// structural-ish `equal` helper aliased to both `eq?`/`eqv?` collapses distinct
+// heap SchemeString instances to #t via a `.valueOf() === .valueOf()` branch —
+// flattening the three-tier hierarchy and breaking `memq`/`assv`/`case` dispatch
+// and the atom-grade contract that `(eqv? (string-copy "a") (string-copy "a"))`
+// MUST be #f.
 //
 // Why three functions, not two-plus-an-alias:
 //   - `eq?` — pointer-grade. R7RS lets implementations make immediates (numbers,

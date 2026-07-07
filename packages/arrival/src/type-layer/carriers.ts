@@ -113,10 +113,9 @@ export declare const s: {
 // At a List slot after `(`, admit a head iff its return COULD be a list — mask only
 // PROVABLY non-list. The `[unknown] extends [R]` arm is the nuke-guard: a generic / `if`
 // / union return resolves to `unknown` and ADMITS, so we never block `(if …)`/`car`/etc.
-
-// Operates on a RESOLVED return type. Head-level admissibility before args (and the
-// overload-aware / call-site-contextual resolution of an in-progress `(head …)`) is the
-// gate's Phase-4 job — it types the actual call in context rather than this abstraction.
+// Operates on a RESOLVED return type — head-level admissibility before args (the
+// overload-aware, call-site-contextual resolution of an in-progress `(head …)`) is the
+// gate's Phase-4 job, typing the actual call in context rather than this abstraction.
 export type CouldBeList<R> =
   [unknown] extends [R] ? true
   : [Extract<R, Cons<unknown> | null>] extends [never] ? false

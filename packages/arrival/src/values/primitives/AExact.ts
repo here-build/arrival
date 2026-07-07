@@ -127,19 +127,17 @@ export class AExact extends AValue {
     return this.num === other.num && this.denom === other.denom;
   }
 
-  // Setoid (Fantasy Land). Exact ≡ exact ONLY — never equal to an inexact
-  // (R7RS eqv?). structuralEqual / equal? consult this BEFORE their valueOf
-  // fast-path, so this is what makes `(equal? 1 1.0)` correctly #f.
-  // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
+  // Setoid — exact ≡ exact ONLY, never equal to inexact (R7RS eqv?). structuralEqual/equal?
+  // consult this BEFORE the valueOf fast-path, which is what makes `(equal? 1 1.0)` #f.
+  // (plan-2026-06-10-algebras-in-entities.md)
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AExact && this.equals(other);
   }
 
-  // Ord (Fantasy Land, extends Setoid). NUMERIC value comparison via schemeCompare
-  // — `(<= 1 1.0)` is #t (cross-type via toReal), unlike the representation Setoid
-  // above where exact ≠ inexact. NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is #f,
-  // so every relation derived from this collapses to #f on a NaN operand, exactly
-  // like the numeric `<=` Operator. Non-number → false (Ord convention).
+  // Ord (extends Setoid) — numeric value comparison via schemeCompare: `(<= 1 1.0)` is #t
+  // (cross-type via toReal), unlike the representation Setoid above where exact ≠ inexact.
+  // NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is #f, so every derived relation collapses
+  // to #f on a NaN operand, matching the numeric `<=` operator. Non-number → false.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (other instanceof AExact || other instanceof AInexact) && schemeCompare(this, other) <= 0;
   }

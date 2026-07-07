@@ -1,14 +1,13 @@
 /**
- * Boxes a raw JS array into the AValue kernel so it carries provenance and
- * hosts Fantasy Land algebra instances. Modeled on SchemeString / SchemeBytevector.
- * Vectors are MUTABLE (vector-set!/fill!/copy!) — the payload stays writable.
+ * Boxes a raw JS array into the AValue kernel so it carries provenance and hosts Fantasy Land
+ * algebra instances. Modeled on AString/ABytevector. Vectors are MUTABLE (vector-set!/fill!/
+ * copy!) — the payload stays writable.
  *
- * THE DISAMBIGUATION (boxing plan §1): a raw JS `Array` is heavily overloaded
- * here — the evaluateArgs args carrier, Values, HalfBaked, syntax-rules ellipsis
- * machinery, and JS-array-as-list at the membrane are ALL raw arrays and are NOT
- * vectors. Only vector literals / make-vector / vector builtins mint SchemeVector.
- * Being its own class leaves the `Array.isArray` sites unaffected — NEVER widen
- * them to accept it.
+ * DISAMBIGUATION (boxing plan §1): a raw JS `Array` is heavily overloaded — evaluateArgs' args
+ * carrier, Values, HalfBaked, syntax-rules ellipsis machinery, and JS-array-as-list at the
+ * membrane are ALL raw arrays and are NOT vectors. Only vector literals / make-vector / vector
+ * builtins mint AVector. Being its own class leaves `Array.isArray` sites unaffected — never
+ * widen them to accept it.
  *
  * Boxing track: docs/plan-2026-06-10-boxing-track.md (S5).
  *
@@ -25,23 +24,20 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { ANil, nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
-// The membrane's JS→Scheme boxing fn — used by the cross-out Functor `map` to re-present
-// the stripped-raw results array as a lazy auto-wrapping AJSArray (raw `.source` inside,
-// each element boxed ON ACCESS). A hoisted `export function` declaration, so importing it
-// here closes a BENIGN runtime cycle (AVector → rosetta → AVector): rosetta touches AVector
-// only in function bodies (`new AVector`), so the binding need not exist at this module's
-// eval. (A direct `import { AJSArray }` would NOT be safe — AJSArray `extends AVector`, so
-// that edge bites at module-eval as `Class extends value undefined`; routing through this
-// hoisted fn is the same cycle-avoidance AJSArray itself uses for `jsToScheme`.)
+// The membrane's JS→Scheme boxing fn — used by the cross-out Functor `map` to re-present the
+// stripped-raw results as a lazy auto-wrapping AJSArray (raw `.source` inside, each element
+// boxed on access). Imported via this hoisted `export function` (not `import { AJSArray }`
+// directly) to avoid a cycle: AJSArray extends AVector, so a direct import would hit `Class
+// extends value undefined` at this module's eval — same cycle-avoidance AJSArray itself uses
+// for `jsToScheme`.
 import { jsToScheme } from "../../rosetta.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
-// deriveSortCompare lives on the op-helpers Ord leaf (alongside isOrd/ORD_REL). op-helpers
-// imports AVector back, but both directions are referenced ONLY inside function bodies
-// (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
+// op-helpers imports AVector back, but both directions are referenced only inside function
+// bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare } from "../op-helpers.js";
 
 export class AVector extends AValue {
@@ -110,13 +106,10 @@ export class AVector extends AValue {
     return v;
   }
 
-  // Setoid (Fantasy Land) — structural element-wise equality, threading the harness's
-  // shared `seen`. structuralEqual records (this, other) BEFORE dispatching here, so a
-  // MUTUALLY-CYCLIC vector pair (a↔b vs c↔d) re-encounters the pair in the harness and
-  // short-circuits instead of recursing forever — fixing the fresh-seen-per-call
-  // stack-blow this method used to risk once the harness's inline-Vector special-case
-  // was removed (B2). Elements recurse through structuralEqual threading the SAME map
-  // (handles nested AValues/Pairs/vectors). Non-SchemeVector → false.
+  // Setoid — structural element-wise equality, threading the harness's shared `seen`.
+  // structuralEqual records (this, other) BEFORE dispatching, so a mutually-cyclic vector pair
+  // re-encounters itself in the harness and short-circuits (fixes a fresh-seen-per-call stack
+  // blow once the harness's inline-Vector special-case was removed, B2). Non-AVector → false.
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof AVector)) return false;
     const a = this.__vector__;
@@ -128,17 +121,16 @@ export class AVector extends AValue {
     return true;
   }
 
-  // Semigroup (Fantasy Land) — element concatenation. Associative; equality via
-  // the Setoid above.
+  // Semigroup — element concatenation. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AVector): AVector {
     return new AVector(this.ctx, [...this.__vector__, ...other.__vector__]);
   }
 
-  // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. LOOSE mode reads
-  // a vector list-like (car → the element at index 0; cdr → the rest, AS A VECTOR slice), so
-  // `(car borrowed-array)` keeps working and cXr composes (`(cadr v)` = `(car (cdr v))` = the
-  // element at index 1). STRICT flags it non-portable and points at vector-ref / slicing — the
-  // same tolerant-loose / faithful-strict split as map/filter. Mirrors ANil's nil-tolerance.
+  // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. LOOSE mode treats
+  // a vector list-like (car → element 0; cdr → the rest AS A VECTOR slice), so
+  // `(car borrowed-array)` keeps working and cXr composes. STRICT flags it non-portable,
+  // pointing at vector-ref/slicing — same tolerant-loose/faithful-strict split as map/filter.
+  // Mirrors ANil's nil-tolerance.
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
     strictGate(runCtx, {
       op: "car",
@@ -165,24 +157,19 @@ export class AVector extends AValue {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
-  // Arrival's async-aware Functor — `map` over the elements, crossing OUT to a foreign
-  // Functor. Each mapped element is STRIPPED to its raw JS value (a SchemeString/SchemeExact/
-  // ASymbol/ANil → string/number/string/null) — the DR4 box-strip. But the stripped array is
-  // re-presented as an AJSArray (the "impersonator"): the raw values live in `.source` (still
-  // reachable for a genuinely-foreign Functor via `.source`/`[TO_JS]`), while Scheme-level
-  // access boxes each element BACK ON DEMAND (AJSArray's `vec()`/`vector-ref` run `jsToScheme`
-  // per element). That dual nature is what reconciles the cross-out with the Functor identity
-  // law `map(id) ≡ id`: the raw is exposed for interop, yet `(vector-ref (map id v) i)` yields
-  // the element's box again, so the mapped structure is element-wise equal to the source. This
-  // is DELIBERATELY softer than APair's box-PRESERVING map (a Pair stays an arrival list, never
-  // crossing out): a vector crosses out, but to an auto-rewrapping view rather than to dead raw.
-  // `fn` is awaited per element (live LIPS lambdas return Promises). (The N-ary vector-map
-  // builtin is a separate, non-Functor observation — it carries arity the bare Functor underfits.)
+  // Functor `map` crosses OUT to a foreign Functor: each mapped element is stripped to its raw
+  // JS value (DR4 strip — AString/AExact/ASymbol/ANil → string/number/string/null), then the
+  // stripped array is re-presented as an AJSArray "impersonator": raw values live in `.source`
+  // (reachable for a genuinely-foreign Functor), while Scheme-level access re-boxes each element
+  // ON DEMAND (AJSArray's vector-ref runs jsToScheme per element). That dual nature reconciles
+  // the cross-out with the Functor identity law `map(id) ≡ id` — `(vector-ref (map id v) i)`
+  // yields the element's box again. Deliberately softer than APair's box-PRESERVING map (a Pair
+  // never crosses out). `fn` is awaited per element. (vector-map, the N-ary builtin, is a
+  // separate non-Functor op.)
   //
-  // The result is the membrane's AJSArray, NOT an AVector — so the honest return type is the
-  // `SchemeValue` union (the method "crosses OUT to a foreign Functor"), matching AValue's base
-  // declaration. `jsToScheme` boxes a raw JS array into an AJSArray (typed `any` — rosetta legacy
-  // debt — so the result is annotated to the honest union, the same shape as AJSArray.vector-ref).
+  // Return type is the honest `SchemeValue` union (crosses OUT, not an AVector) — jsToScheme
+  // boxes the raw array into an AJSArray; typed `any` (rosetta legacy debt), annotated to the
+  // honest union.
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
@@ -213,12 +200,10 @@ export class AVector extends AValue {
     return boxed;
   }
 
-  // Arrival's async-aware Filterable — keep elements satisfying the predicate, into a
-  // fresh vector. PRESERVES every kept element's box (no unwrap — coercion-soundness's
-  // "SchemeVector · filter preserves every element's box"). A RegExp arg is adapted the
-  // way the eager builtin's matcher does (regex → `String(x).match`); the canonical
-  // keep-rule is the scheme `filter` rule — Scheme-truthy (`!is_false`) AND nil dropped
-  // (`!is_nil`), IDENTICAL to APair's TF filter. `pred` is awaited per element.
+  // Filterable — keeps elements satisfying the predicate into a fresh vector, PRESERVING every
+  // kept element's box (coercion-soundness: "AVector · filter preserves every element's box").
+  // RegExp arg adapts via String(x).match; keep-rule matches APair's TF filter (Scheme-truthy
+  // AND nil dropped). `pred` awaited per element.
   async ["arrival/tagless-final/filter"](
     arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
@@ -239,11 +224,10 @@ export class AVector extends AValue {
     return new AVector(this.ctx, out);
   }
 
-  // Arrival's canonical async-aware reduce — the scheme/SRFI fold convention
-  // `fn(element, acc)` (accumulator LAST), left fold, head-to-tail. Threads the
-  // accumulator with `await` (live LIPS lambdas return Promises). Reproduces the eager
-  // scheme `reduce` over a vector exactly — `(reduce - 100 (vector 1 2 3 4 5))` = -97,
-  // NOT the FL acc-first 85. IDENTICAL convention to APair's TF reduce.
+  // Canonical async-aware reduce, SRFI fold convention `fn(element, acc)` (acc last), left
+  // fold, head-to-tail. Threads the accumulator with `await`. Reproduces eager `reduce` over a
+  // vector exactly — `(reduce - 100 (vector 1 2 3 4 5))` = -97, NOT the FL acc-first 85. Same
+  // convention as APair's TF reduce.
   async ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
@@ -261,14 +245,12 @@ export class AVector extends AValue {
     return acc;
   }
 
-  // Arrival's structure-preserving `sort` — a fresh sorted VECTOR (a vector sorts to a
-  // vector; the container-preserving return is structural — the term returns its own shape).
-  // Sorts a COPY of the payload with the shared `deriveSortCompare` (no comparator ⇒ the
-  // elements' own `arrival/tagless-final/lte` total order; a comparator ⇒ a SRFI-95 `less?`
-  // predicate), into a new AVector. Element boxes are PRESERVED (only reordered, NO
-  // unwrapForeign — this is NOT the cross-out map; mirrors the box-PRESERVING filter). The
-  // source payload is untouched (slice copy), so a frozen literal is safe. ES Array.sort is
-  // sync + STABLE; the runCtx symbol.sequence threads charges runCtx.heapMeter before materializing (Option A).
+  // Structure-preserving sort — a vector sorts to a fresh vector (container-preserving
+  // return). Sorts a COPY with the shared `deriveSortCompare` (no comparator ⇒ elements' own
+  // `lte` total order; comparator ⇒ SRFI-95 `less?`). Element boxes are PRESERVED (only
+  // reordered — this is NOT the cross-out map; mirrors the box-preserving filter). Source
+  // payload untouched (slice copy), so a frozen literal is safe. ES Array.sort is stable;
+  // charges heap before materializing.
   ["arrival/tagless-final/sort"](
     comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
     runCtx?: RunContext,
@@ -279,13 +261,9 @@ export class AVector extends AValue {
     return new AVector(this.ctx, out);
   }
 
-  // Arrival's element-count — `length` carrying the ELEMENTS' unioned provenance, NOT the
-  // container box (DISSOLVED from fl-interop's `length` overlay onto the term; the base stdlib
-  // `length` keeps the CONTAINER-provenance discipline). count = the payload length; the cone
-  // carries every grounded element's id (the same element-union APair gives — a count carries
-  // the grounding of what it counted; the container box is outside a count's cone, so it drops).
-  // `fromJs(count, unioned-prov)` when any element is grounded, else the bare `count`. NO
-  // heap-charge / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
+  // Element-count — `length` carrying the ELEMENTS' unioned provenance, not the container box
+  // (a count is grounded by every element it touched). `fromJs(count, unioned-prov)` when any
+  // element is grounded, else the bare count. No heap-charge / no strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     const count = this.__vector__.length;
     // `__vector__` is `SchemeValue[]`; `Extract<…, AValue>` keeps exactly the
@@ -299,9 +277,9 @@ export class AVector extends AValue {
     return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
 
-  // Vector type-predicate — `(vector? x)` (a `symbol.taglessGuard`) asks the receiver itself
-  // instead of the builtin reaching around the box with `instanceof AVector`. A SchemeVector
-  // answers #t; a value lacking this method answers #f (the guard's graceful default).
+  // Type predicate — the receiver answers directly (`symbol.taglessGuard`) instead of the
+  // builtin reaching around the box with `instanceof AVector`. #t for a vector; a value
+  // lacking this method defaults to #f (the guard's graceful default).
   ["arrival/tagless-final/vector?"](): boolean {
     return true;
   }
@@ -311,21 +289,19 @@ export class AVector extends AValue {
     return this.__vector__[k];
   }
 
-  // A boxed vector is iterable from JS — spread / for-of / Array.from yield its
-  // elements, exactly like a Pair. Delegates to the raw payload's iterator. The
-  // membrane never exposes this (Symbol.iterator is a BLOCKED_WELL_KNOWN_SYMBOL),
-  // so iterability is a host-JS-interop affordance, not a sandbox surface.
+  // A boxed vector is iterable from JS — spread / for-of / Array.from yield its elements,
+  // exactly like a Pair. Delegates to the raw payload's iterator. The membrane never exposes
+  // this (Symbol.iterator is a BLOCKED_WELL_KNOWN_SYMBOL), so iterability is a host-JS-interop
+  // affordance, not a sandbox surface.
   [Symbol.iterator](): Iterator<SchemeValue> {
     return this.__vector__[Symbol.iterator]();
   }
 }
 
-// Box-strip for a vector crossing OUT to a foreign Functor (the DR4 strip). Unwraps a
-// LIPS internal box to its raw JS value so the foreign Functor stores JS-natives, not
-// arrival internals; a non-box passes through unchanged. Was fl-interop's
-// `unwrapLipsValue`; relocated here as AVector is the sole owner of this strip after the
-// fantasy-land/* sequence-op dissolution. Constructor-name dispatch (not `instanceof`)
-// keeps this off the value-class import graph, like `[TO_JS]` above.
+// Box-strip for a vector crossing OUT to a foreign Functor (the DR4 strip): unwraps an internal
+// box to its raw JS value so the foreign Functor stores JS-natives, not arrival internals. A
+// non-box passes through unchanged. Constructor-name dispatch (not `instanceof`) keeps this off
+// the value-class import graph, like `[TO_JS]` above.
 function unwrapForeign(v: unknown): unknown {
   if (v == null || typeof v !== "object") return v;
   const box = v as { constructor?: { name?: string }; valueOf(): unknown; __string__?: unknown; __name__?: unknown };
@@ -337,12 +313,11 @@ function unwrapForeign(v: unknown): unknown {
   return v;
 }
 
-// NOTE: producer-minted (#(...) literal / make-vector / vector / vector-copy /
-// list->vector / ...), NOT boxed from JS — fromJs's "object" arm maps a JS array to a
-// borrowed AJSArray, not an AVector. Boxing is producer-driven.
+// Producer-minted (#(...) literal / make-vector / vector / vector-copy / list->vector / ...),
+// NOT boxed from JS — fromJs's "object" arm maps a JS array to a borrowed AJSArray, not an
+// AVector. Boxing is producer-driven.
 
 // ============================================================================
-// INTEROP BOUNDARY
+// INTEROP BOUNDARY: same rationale as AString/ABytevector — blocks inherited-method exposure
+// when interop symbol-to-field resolution walks the prototype chain.
 // ============================================================================
-// Same rationale as SchemeString/SchemeBytevector: block inherited-method
-// exposure when interop symbol-to-field resolution walks the prototype chain.

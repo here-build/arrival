@@ -1,16 +1,15 @@
-// env-pack.ts — capability-DAG assembly for arrival environments (P0: the pure core).
+// kernel.ts — capability-DAG assembly for arrival environments. Env-agnostic core: closure +
+// cycle detection, identity dedup, C3 linearization, and the apply loop with LIFO disposal +
+// per-pack apply timeout.
 //
-// A pack is a named, dependency-carrying, async capability contribution to an env. Environments are
-// assembled by C3-linearizing the pack DAG and applying each pack once. The dep edge IS the
+// A pack is a named, dependency-carrying, async capability contribution to an env. Environments
+// are assembled by C3-linearizing the pack DAG and applying each pack once. The dep edge IS the
 // capability grant; the DAG is the authoring form, the assembled env is the flat runtime form.
 //
-// Design: docs/working-proposals/env-pack-capability-dag-2026-06-13.md
+// C3 linearization = Python MRO (Barrett, Cassels, Haahr et al., "A Monotonic Superclass
+// Linearization for Dylan", OOPSLA 1996; cited not invented).
 //
-// P0 scope: the env-agnostic core — closure + cycle detection, identity dedup, C3 linearization
-// (Python MRO — Barrett, Cassels, Haahr et al., "A Monotonic Superclass Linearization
-// for Dylan", OOPSLA 1996; cited not invented), and the apply loop with LIFO disposal
-// + per-pack apply timeout.
-// No consumer wires it yet (that is P1: buildArrivalEnv-as-one-pack).
+// Design: docs/working-proposals/env-pack-capability-dag-2026-06-13.md
 
 /** A capability contribution to an env. Identity = (name, config). `deps` are the DAG edges. */
 export interface EnvPack<E = unknown> {
@@ -39,12 +38,10 @@ export interface PackContext<E = unknown> {
   readonly order: readonly string[];
   /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env.
    *
-   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own Map-backed shim. A binding
-   *  written here is answered by a phase-gated resolver the kernel registers on the base env
-   *  (structurally, iff the base has `registerResolver`), so it is resolvable from any scope
-   *  chaining through the base WHILE the assembly's prelude phase is open, and genuinely gone
-   *  once `assembleEnv`'s C3 loop ends — including for closures a prelude defined (a closure
-   *  walks the live chain at call time; the resolver answers nothing post-assembly). That IS
+   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own phase-gated Map shim (see the
+   *  block comment above `assembleEnv`). Resolvable only while the assembly's prelude phase is
+   *  open; gone the moment the C3 loop ends — including for closures a prelude defined (a closure
+   *  walks the live chain at call time, and the resolver answers nothing post-assembly). That IS
    *  the `preludeOnly` contract: assembly-time-only, not run-within-prelude-scope.
    *
    *  MID-RUN (`RuntimeAssembler.require`, §1.4): caller-supplied — a discarded child `C'` of
@@ -71,9 +68,8 @@ export interface AssembledEnv<E = unknown> {
   dispose(): Promise<void>;
 }
 
-// ── Errors (teaching, errors-as-doors) — Assemble{Cycle,ConfigConflict,Linearization,Pack,PackTimeout}Error
-//    relocated to errors.ts (the single error home); imported here for the throws below and
-//    re-exported so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
+// Errors (teaching, errors-as-doors) live in errors.ts (the single error home); re-exported here
+// so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
 import {
   AssembleConfigConflictError,
   AssembleCycleError,
@@ -202,14 +198,8 @@ function withTimeout<T>(p: Promise<T> | T, ms: number, name: string): Promise<T>
   return Promise.race([Promise.resolve(p), timeout]).finally(() => clearTimeout(timer));
 }
 
-/**
- * Assemble `base` into a capability-scoped env by resolving the pack DAG. Async by construction
- * (a pack may await import / spin up a resource). Applies each pack once in C3 order
- * (least-precedence first ⇒ last-write-wins matches C3). On any apply failure, runs the disposers
- * collected so far (LIFO) and rejects — no half-built env escapes.
- */
-/** Shared sync core: closure + cycle-detect + dedup + C3 linearization. Returns the apply order
- *  (highest precedence first) and the deduped packs by name. */
+/** Shared core for both assemblers: closure + cycle-detect + dedup + C3 linearization. Returns
+ *  the apply order (highest precedence first) and the deduped packs by name. */
 function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: Map<string, EnvPack<E>> } {
   const byName = closure(roots);
   const order = c3Linearize(roots, byName);
@@ -241,9 +231,7 @@ function makeCtx<E>(
 
 // ── The kernel-internal, phase-gated prelude scope (bootstrap assembly) ─────────────────────
 //
-// `preludeOnly` symbols used to ride a CALLER-built overlay env (sandboxBase ← overlay ← R,
-// re-parented for the duration of assembly). That model made every assembling consumer wire the
-// same trick by hand. The kernel now owns the mechanism, per-assembly, with no re-parenting:
+// The kernel owns `preludeOnly` binding + resolution per-assembly, with no env re-parenting:
 //
 //   • bindings land in a per-assembly `Map` behind `ctx.preludeScope` (a `.set`-only shim —
 //     capability.ts's bindTarget only writes);
@@ -326,14 +314,6 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
   return { env: base, order, dispose: runDisposers };
 }
 
-/**
- * Synchronous assembly — for envs whose packs are all sync (e.g. the legacy core that only
- * registers rosettas). Shares the same linearize core. Throws AssemblePackError if any pack's
- * apply returns a thenable (use the async `assembleEnv` for async packs). This is the sync seam
- * that keeps `buildArrivalEnv` callable from a sync constructor until chain construction itself
- * is moved into an async `init()` (the point at which async packs — e.g. the progress server —
- * become expressible and the sync path retires).
- */
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path. Where
  *  `assembleEnv` builds a fresh env once at construction, this applies registered packs onto an
  *  ALREADY-LIVE env mid-run, idempotently and single-flight (a second require of the same pack — or a

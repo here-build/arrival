@@ -1,20 +1,14 @@
-// @here.build/arrival/r7rs/exceptions — R7RS §6.11 exception handling.
+// @here.build/arrival/r7rs/exceptions — R7RS-small §6.11 exception handling:
+// *current-exception-handlers*, raise, raise-continuable, with-exception-handler,
+// error, and the guard derived syntax.
 //
-// Lineage: R7RS-small (Shinn, Cowan & Gleckler, eds., 2013) §6.11 — the
-// exception system: *current-exception-handlers*, raise, raise-continuable,
-// with-exception-handler, error, and the guard derived syntax.
-//
-// These are the OPPOSITE face of the purity doors (now co-located in the packs that
-// own them — r7rs/control for dynamics, the type packs for mutators): those doors
-// name what R7RS arrival omits for provenance soundness;
-// this pack supplies the exception forms it keeps. Built on the host try/catch/
-// finally special forms + the `%raise`/`%current-handlers`/`%set-handlers!`/
-// `make-error-object` machinery below — OWNED here (moved from bridge.ts's
-// `scheme/exceptions` pack, whose prelude this WAS calling straight into with no
-// explicit `deps` ever declaring that link — a roster-order accident, not a real
-// dependency declaration). `scheme/exceptions` (bridge.ts) is now JUST the genuine
-// R7RS predicate surface (error-object?/error-object-message/etc.); the exception
-// FORMS and everything they need to run are self-contained in this ONE capability.
+// The OPPOSITE face of the purity doors (r7rs/control for dynamics, the type
+// packs for mutators): those doors name what arrival omits for provenance
+// soundness; this pack supplies the exception forms it keeps. Built on the host
+// try/catch/finally special forms + the `%raise`/`%current-handlers`/
+// `%set-handlers!`/`make-error-object` machinery below, all owned here —
+// `scheme/exceptions` (bridge.ts) is now just the R7RS predicate surface
+// (error-object?/error-object-message/etc).
 //
 // SINGLE SOURCE: this module is the sole definition site for both the machinery
 // and the derived forms — no cross-capability ordering dependency remains.
@@ -28,40 +22,24 @@ import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContex
 import type { SchemeValue } from "../../values/types.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Per-run isolation — the fix for the cross-request handler-stack leak.
-// ─────────────────────────────────────────────────────────────────────────────
+// Per-run isolation. The handler stack must be fresh per top-level `exec()` call
+// but shared across every nested scope/lambda/let WITHIN that call. A module-level
+// global leaks across every env in the process (base stdlib packs lower ONCE onto
+// the singleton `user_env`); keying by the env object doesn't help either (a bare
+// `exec(src)` with no capabilities/env option evaluates against that same shared
+// singleton, so concurrent bare calls share the identical env object too).
 //
-// This USED to be `let currentHandlers: unknown = nil;`, a single module-level mutable
-// shared by EVERY env in the process. That is a real bug, not just an isolation nicety:
-// this capability (like the rest of the base scheme stdlib — core/r7rs/srfi) is lowered
-// EXACTLY ONCE per process, onto the singleton `user_env` (`eval/generator-exec.ts`'s
-// `ensureBaseAssembled()`, gated by a cached `_baseAssembled` promise) — so a plain
-// builder-form closure (`symbols: (activation) => ({...})`) would NOT have fixed this:
-// the builder only runs once too, at that one shared `.lower()`. Nor does keying by the
-// ENV OBJECT help in general: a bare `exec(src)` call with no `capabilities`/`env` option
-// evaluates directly against that same shared `user_env` singleton with no per-call child
-// scope, so two concurrent bare `exec()` calls share the identical env object as well.
+// `RunContext` (`makeRunContext()`, minted once per `exec()`, threaded by reference
+// through every nested frame) is the one thing that's both fresh per call and
+// stable within it — so a side `WeakMap<RunContext, stack>` gives exactly the
+// isolation R7RS's dynamic-extent handler stack needs. The stack can't live ON the
+// RunContext itself (its fields are constant-per-run; the stack varies by call
+// depth) — the WeakMap is the correct split, not a workaround.
 //
-// The one thing that IS both (a) fresh per top-level `exec()` call and (b) stable across
-// every nested scope/lambda/let WITHIN that one call is `EvalContext.runCtx` — the
-// `RunContext` `makeRunContext()` mints once per `exec()` (`values/primitives/RunContext.ts`),
-// threaded by REFERENCE through every nested `{ ...ctx }` a frame builds. Keying a side
-// WeakMap by that instance gives exactly the isolation R7RS's dynamic-extent handler stack
-// needs: distinct across concurrent runs, shared across every scope inside one run (the
-// `env.inherit()` case the original design called out). `RunContext.ts`'s own header notes
-// the handler stack can't be stored ON a RunContext (it "VARIES by call depth", while
-// RunContext's fields are `readonly`/constant-per-run) — a side WeakMap keyed BY the
-// constant-per-run handle, holding the call-depth-varying stack, is the correct split, not
-// a workaround. `ctx.runCtx` was scaffolded exactly for this migration (see its doc comment
-// in eval/evaluator.ts: "ops read run-state off the holders today and migrate to ctx.runCtx
-// ... at N2") — this is that migration landing, for this one holder.
-//
-// FALLBACK: only a genuinely direct, non-evaluator invocation (no ctx at all — e.g. a raw
-// unit-test call) falls through to the shared `CONSTANT_CTX` bucket now. `execExpr`
-// (`execGeneratorExpr`, `require`'s nested `.scm` module evaluation) mints its own `runCtx`
-// (see `eval/generator-exec.ts`), closing what used to be a real gap here — required modules
-// get the same per-run handler-stack isolation as top-level `exec()` calls.
+// FALLBACK: a genuinely direct, non-evaluator invocation (no ctx at all — e.g. a
+// raw unit test) falls through to the shared `CONSTANT_CTX` bucket. `execExpr`
+// (required `.scm` module evaluation) mints its own `runCtx`, so required modules
+// get the same per-run isolation as top-level `exec()` calls.
 const handlerStacks = new WeakMap<RunContext, unknown>();
 
 const runKeyOf = (ctx: CallCtx | undefined): RunContext => ctx?.runCtx ?? CONSTANT_CTX;
@@ -80,14 +58,13 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
         throw obj;
       },
     ),
-    // Read / replace the handler stack (machinery; the R7RS forms push/pop through these
-    // instead of mutating a scheme binding with `set!`). from SCHEME's perspective these are still ordinary
-    // zero/one-arg calls; the ctx channel is invisible to the calling scheme code.
+    // Read/replace the handler stack (machinery; the R7RS forms push/pop through these
+    // instead of mutating a scheme binding with `set!`). From scheme's perspective these
+    // are ordinary zero/one-arg calls; the ctx channel is invisible to calling code.
     "%current-handlers": symbol.native`%current-handlers: read the exception-handler stack (machinery)`(
       // The stack is a proper scheme list (nil, or a pair of a handler procedure + the rest
       // of the stack) — scheme-zod has no dedicated "list of procedures" vocabulary item, so
-      // `z.value` (the representation-blind scheme-value identity) is the richest honest
-      // ceiling here, tighter than the old `z.value` (host-blind).
+      // `z.value` (representation-blind scheme-value identity) is the honest ceiling here.
       { input: [], output: [z.value] },
       function (): SchemeValue {
         // Opaque storage (native ops run no validation) — the boundary cast states what
