@@ -1,5 +1,5 @@
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { chargeHeap } from "../../heap-budget.js";
@@ -51,7 +51,8 @@ function isKeywordName(name: SchemeSymbolName): name is string {
 export class ASymbol extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "symbol";
-  readonly kind = "symbol" as const;
+  // via the no-double-gensym path carries no slot — hence `?` + `string | number`.
+  static readonly literal: unique symbol = Symbol.for("__literal__");
   // Interning is per run context — see `internTables` / `internTableFor` above.
   // Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for`
   // registry value is unchanged) so the gensym literal slot can be a DECLARED
@@ -59,9 +60,8 @@ export class ASymbol extends AValue {
   // signature that esbuild rejects. The slot is written by `gensym`'s
   // `hidden_prop(symbol, "__literal__", name)` (reader/values-repr.ts); `name`
   // is a string (named gensym) or number (anonymous `#:gN`), and a gensym minted
-  // via the no-double-gensym path carries no slot — hence `?` + `string | number`.
-  static readonly literal: unique symbol = Symbol.for("__literal__");
   static readonly object = Symbol.for("__object__");
+  readonly kind = "symbol" as const;
   declare __name__: SchemeSymbolName;
   declare [ASymbol.literal]?: string | number;
 
@@ -177,12 +177,11 @@ export class ASymbol extends AValue {
     return true;
   }
 
-
   is_gensym(): boolean {
     return is_gensym(this.__name__);
   }
 
-  toJs(): string {
+  ["arrival/toJS"](): string {
     // Apostrophe-prefix indicates "this is a scheme symbol, not a string."
     return `'${isString(this.__name__) ? this.__name__ : symbol_to_string(this.__name__ as symbol)}`;
   }

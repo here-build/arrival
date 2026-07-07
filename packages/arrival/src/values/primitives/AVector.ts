@@ -16,10 +16,10 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
-import { is_nil, is_promise } from "../../eval/guards.js";
+import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
@@ -37,17 +37,12 @@ import { jsToScheme } from "../../rosetta.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
-import { structuralEqual, type SeenMap } from "../structural-equal.js";
+import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
 // deriveSortCompare lives on the op-helpers Ord leaf (alongside isOrd/ORD_REL). op-helpers
 // imports AVector back, but both directions are referenced ONLY inside function bodies
 // (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare } from "../op-helpers.js";
-
-// The membrane's TO_JS protocol key, resolved from the global symbol registry
-// (same rationale as SchemeBytevector.ts — avoids a membrane→SchemeVector class-def-time
-// cycle since [TO_JS]() is a computed key).
-const TO_JS = Symbol.for("scheme.toJS");
 
 export class AVector extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -74,17 +69,17 @@ export class AVector extends AValue {
     this.__vector__ = items;
   }
 
-  /** Mark immutable (a literal). Idempotent. */
-  freeze(): void {
-    this.frozen = true;
+  get length(): number {
+    return this.__vector__.length;
   }
 
   static isVector(x: unknown): x is AVector {
     return x instanceof AVector;
   }
 
-  get length(): number {
-    return this.__vector__.length;
+  /** Mark immutable (a literal). Idempotent. */
+  freeze(): void {
+    this.frozen = true;
   }
 
   ref(i: number): SchemeValue {
@@ -97,11 +92,7 @@ export class AVector extends AValue {
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
   // array (elements convert lazily, as with AJSArray).
-  [TO_JS](): SchemeValue[] {
-    return this.__vector__;
-  }
-
-  toJs(): SchemeValue[] {
+  ["arrival/toJS"](): SchemeValue[] {
     return this.__vector__;
   }
 
@@ -208,11 +199,17 @@ export class AVector extends AValue {
     const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then((resolved): SchemeValue => {
-        const boxed: SchemeValue = jsToScheme(this.ctx, resolved.map((v) => unwrapForeign(v)));
+        const boxed: SchemeValue = jsToScheme(
+          this.ctx,
+          resolved.map((v) => unwrapForeign(v)),
+        );
         return boxed;
       });
     }
-    const boxed: SchemeValue = jsToScheme(this.ctx, results.map((v) => unwrapForeign(v)));
+    const boxed: SchemeValue = jsToScheme(
+      this.ctx,
+      results.map((v) => unwrapForeign(v)),
+    );
     return boxed;
   }
 

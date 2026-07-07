@@ -24,7 +24,7 @@ const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s,
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // Literal-string args carry no provenance, so the result comes back raw (a JS boolean
 // or a bare SchemeExact); a provenanced input boxes it. Unwrap either shape.
-const js = (x: unknown) => (x instanceof AValue ? x.toJs() : x);
+const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 describe("string-contains? — boolean predicate", () => {
   it("true when present, false when absent", async () => {

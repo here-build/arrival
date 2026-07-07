@@ -95,12 +95,11 @@ export { InteropAccessError as SandboxViolationError } from "./errors.js";
 // WRAPPER LAYER: General JS↔Scheme Value Crossing
 // ============================================================================
 
-/**
- * Symbol used by wrapper classes to implement unwrapping.
- * Any object with this symbol can be unwrapped via toJS().
- * Following PyO3's trait pattern - each class implements its own unwrap.
- */
-export const TO_JS = Symbol.for("scheme.toJS");
+// Protocol key used by wrapper classes to implement unwrapping: `"arrival/toJS"`,
+// a global convention (like `arrival/tagless-final/*`/`arrival/print`) — written
+// as a literal at each use site, not declared, same as those. Any object with
+// this key can be unwrapped via toJS(). Following PyO3's trait pattern - each
+// class implements its own unwrap.
 
 /**
  * The closed union `isSchemeValue` PROVES — every wrapper class, native scheme type, special-form
@@ -300,8 +299,8 @@ export function fromJS(value: unknown): FromJSResult {
  */
 export function toJS(value: unknown): unknown {
   // Check for wrapper protocol first
-  if (value && typeof value === "object" && TO_JS in value) {
-    return (value as Record<symbol, () => unknown>)[TO_JS]!();
+  if (value && typeof value === "object" && "arrival/toJS" in value) {
+    return (value as Record<string, () => unknown>)["arrival/toJS"]!();
   }
 
   // nil → null

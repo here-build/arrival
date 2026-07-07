@@ -34,7 +34,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
     const out = await def.run(new AString(CONSTANT_CTX, "h"));
-    expect((out as AString).toJs()).toBe("h:0:");
+    expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
   it("decodes a FIXED head + a 2-element variadic tail, each element through inputRest's OWN codec", async () => {
@@ -47,7 +47,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       new AInexact(CONSTANT_CTX, 1),
       new AInexact(CONSTANT_CTX, 2),
     );
-    expect((out as AString).toJs()).toBe("h:2:1,2");
+    expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 
   it("a DIFFERENT arity again (3-element tail) — proves the split is genuinely variadic, not a fixed 2-slot", async () => {
@@ -61,7 +61,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       new AInexact(CONSTANT_CTX, 2),
       new AInexact(CONSTANT_CTX, 3),
     );
-    expect((out as AString).toJs()).toBe("h:3:1,2,3");
+    expect((out as AString)["arrival/toJS"]()).toBe("h:3:1,2,3");
   });
 });
 
@@ -78,12 +78,12 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
 
   it('(headtail "h") — 0-length tail through a real exec', async () => {
     const [out] = await exec(`(headtail "h")`, { env });
-    expect((out as AString).toJs()).toBe("h:0:");
+    expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
   it('(headtail "h" 1 2) — 2-element tail through a real exec', async () => {
     const [out] = await exec(`(headtail "h" 1 2)`, { env });
-    expect((out as AString).toJs()).toBe("h:2:1,2");
+    expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 });
 

@@ -28,12 +28,7 @@ import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): a hoisted `export function` declaration,
 // called only inside wrapper methods at runtime.
 import { jsToScheme } from "../../rosetta.js";
-
-// The membrane's TO_JS protocol key, resolved from the global symbol registry
-// (same rationale as AVector.ts / ABytevector.ts — a module-local const resolving
-// the same `Symbol.for("scheme.toJS")` keeps the membrane's `export const TO_JS`
-// off this value-class import graph, since `[TO_JS]()` is a computed key).
-const TO_JS = Symbol.for("scheme.toJS");
+import { tf } from "../tagless-final.js";
 
 /**
  * A borrowed JS array, re-presented as a vector. It is an `AValue` (a sibling of
@@ -79,6 +74,127 @@ export class AJSArray extends AValue {
   // Freeze the borrowed source the FIRST time Scheme reads it, so the host can't mutate this
   // borrowed/returned value afterward — prevention by construction, replacing the dev-only purity
   // assert. Idempotent (Object.freeze no-ops when already frozen); `freezeRosettaReturns:false` in
+
+  // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
+  get length(): number {
+    this.freezeSource();
+    return this.source.length;
+  }
+
+  // Box the borrowed source into an owned AVector through the membrane, once. The vector
+  // algebra below DELEGATES here — AJSArray implements the contract without inheriting it.
+  // `new AVector` runs only at call time, so AVector need not be defined when THIS module
+
+  // Materialized element array — the vector surface the printer (and asVector) read.
+  get __vector__(): SchemeValue[] {
+    return this.vec().__vector__;
+  }
+
+  // the lazy unwrap rosetta's schemeToJs reads off `.source`.
+  ["arrival/toJS"](): readonly unknown[] {
+    return this.source;
+  }
+
+  valueOf(): readonly unknown[] {
+    return this.source;
+  }
+
+  // Crosses back OUT to JS as the RAW borrowed source (not the boxed materialization) —
+
+  withProvenance(p: ReadonlySet<number>): AJSArray {
+    return new AJSArray(this.ctx, this.source, p);
+  }
+
+  // (mirrors AVector's own `map` return; the container-preserving ops below still return AVector).
+  ["arrival/tagless-final/map"](
+    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
+    runCtx?: RunContext,
+  ): SchemeValue | Promise<SchemeValue> {
+    return this.vec()[tf("map")](fn, runCtx);
+  }
+
+  ["arrival/tagless-final/filter"](
+    pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
+    runCtx?: RunContext,
+  ): Promise<AVector> {
+    return this.vec()[tf("filter")](pred, runCtx);
+  }
+
+  // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
+  // Return types MIRROR AVector's concrete returns (a borrowed array materializes to a
+  // vector, so the algebra IS the vector's): honest + precise, never the abstract `AValue`
+  // (which is not assignable to the `SchemeValue` union the base now declares).
+  // Delegates to the materialized vector's cross-out Functor, which crosses OUT to an AJSArray
+  // (raw inside, boxes on access) — so the honest return is the `SchemeValue` union, not AVector
+
+  ["arrival/tagless-final/reduce"]<Acc>(
+    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
+    initial: Acc,
+    runCtx?: RunContext,
+  ): Acc | Promise<Acc> {
+    return this.vec()[tf("reduce")](fn, initial, runCtx);
+  }
+
+  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AVector {
+    return this.vec()[tf("sort")](comparator, runCtx);
+  }
+
+  // vector's gate); delegated so `(car borrowed-array)` works again in non-strict mode.
+  ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
+    return this.vec()[tf("car")](runCtx);
+  }
+
+  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
+    return this.vec()[tf("cdr")](runCtx);
+  }
+
+  // car/cdr — loose-mode list-like reading of the borrowed array (strict throws via the
+
+  // borrowed source); matches the printer's get_instances AJSArray entry at quote=false.
+  ["arrival/print"](): string {
+    return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
+  }
+
+  // its source is the deep semantics the membrane exists to avoid.
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
+    return other instanceof AJSArray && other.source === this.source;
+  }
+
+  // Print protocol — the same #(...) vector repr as AVector (the __vector__ getter materializes the
+
+  // live (post-box they'd be empty-provenance JS-natives).
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    this.freezeSource();
+    const count = this.source.length;
+    const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
+    if (inputs.length === 0) return count;
+    const prov = unionProvenance(inputs);
+    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
+  }
+
+  // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling
+  // AJSObject. A borrowed foreign array is a read-only view; deep-comparing
+
+  // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).
+  ["arrival/tagless-final/vector?"](): boolean {
+    return true;
+  }
+
+  // Element-count carrying the borrowed elements' provenance, read straight off `source`
+  // (no materialize) — over the raw source where provenance-bearing AValue elements still
+
+  // carriers — the value-only `vector-ref` contract wants the faithful value path here.)
+  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+    this.freezeSource();
+    let boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
+    // Attestation inheritance (stamp site 2): the plucked element box is attested iff
+    // this borrowed container is — same discipline as the provenance threading above
+    // (`freshIfSingleton`: a raw boolean element surfaces as an attested clone, never
+    // the shared flyweight).
+    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
+    return boxed;
+  }
+
   // the run ctx opts out (host keeps it mutable).
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
@@ -86,9 +202,15 @@ export class AJSArray extends AValue {
     }
   }
 
-  // Box the borrowed source into an owned AVector through the membrane, once. The vector
-  // algebra below DELEGATES here — AJSArray implements the contract without inheriting it.
-  // `new AVector` runs only at call time, so AVector need not be defined when THIS module
+  // Indexed access — boxes JUST element k (no full materialize), the same lazy crossing
+  // as `vec()` above and the AJSObject.get sibling: `jsToScheme` carrying THIS container's
+  // provenance, so `(vector-ref borrowed k)` stamps the element identically to
+  // `(vector->list borrowed)` (the Option-C discipline — a raw element inherits the
+  // container's lineage, an already-AValue element keeps its own). `jsToScheme` is typed
+  // `any` (rosetta legacy debt) but its contract is a boxed Scheme value → annotate to the
+  // honest union so the `SchemeValue` return type-checks without a cast. (`fromJS` would
+  // drop provenance via CONSTANT_CTX/EMPTY_PROVENANCE and could surface the wider boundary
+
   // evaluates (the cycle-avoidance the "implements, not extends" shape buys).
   private vec(): AVector {
     this.freezeSource();
@@ -112,127 +234,5 @@ export class AJSArray extends AValue {
       if (inherit) attestDeep(this.boxedVec);
     }
     return this.boxedVec;
-  }
-
-  // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
-  get length(): number {
-    this.freezeSource();
-    return this.source.length;
-  }
-
-  // Materialized element array — the vector surface the printer (and asVector) read.
-  get __vector__(): SchemeValue[] {
-    return this.vec().__vector__;
-  }
-
-  // Crosses back OUT to JS as the RAW borrowed source (not the boxed materialization) —
-  // the lazy unwrap rosetta's schemeToJs reads off `.source`.
-  [TO_JS](): readonly unknown[] {
-    return this.source;
-  }
-
-  toJs(): readonly unknown[] {
-    return this.source;
-  }
-
-  valueOf(): readonly unknown[] {
-    return this.source;
-  }
-
-  withProvenance(p: ReadonlySet<number>): AJSArray {
-    return new AJSArray(this.ctx, this.source, p);
-  }
-
-  // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
-  // Return types MIRROR AVector's concrete returns (a borrowed array materializes to a
-  // vector, so the algebra IS the vector's): honest + precise, never the abstract `AValue`
-  // (which is not assignable to the `SchemeValue` union the base now declares).
-  // Delegates to the materialized vector's cross-out Functor, which crosses OUT to an AJSArray
-  // (raw inside, boxes on access) — so the honest return is the `SchemeValue` union, not AVector
-  // (mirrors AVector's own `map` return; the container-preserving ops below still return AVector).
-  ["arrival/tagless-final/map"](
-    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-    runCtx?: RunContext,
-  ): SchemeValue | Promise<SchemeValue> {
-    return this.vec()["arrival/tagless-final/map"](fn, runCtx);
-  }
-
-  ["arrival/tagless-final/filter"](
-    pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-    runCtx?: RunContext,
-  ): Promise<AVector> {
-    return this.vec()["arrival/tagless-final/filter"](pred, runCtx);
-  }
-
-  ["arrival/tagless-final/reduce"]<Acc>(
-    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
-    initial: Acc,
-    runCtx?: RunContext,
-  ): Acc | Promise<Acc> {
-    return this.vec()["arrival/tagless-final/reduce"](fn, initial, runCtx);
-  }
-
-  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AVector {
-    return this.vec()["arrival/tagless-final/sort"](comparator, runCtx);
-  }
-
-  // car/cdr — loose-mode list-like reading of the borrowed array (strict throws via the
-  // vector's gate); delegated so `(car borrowed-array)` works again in non-strict mode.
-  ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
-    return this.vec()["arrival/tagless-final/car"](runCtx);
-  }
-
-  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
-    return this.vec()["arrival/tagless-final/cdr"](runCtx);
-  }
-
-  // Print protocol — the same #(...) vector repr as AVector (the __vector__ getter materializes the
-  // borrowed source); matches the printer's get_instances AJSArray entry at quote=false.
-  ["arrival/print"](): string {
-    return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
-  }
-
-  // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling
-  // AJSObject. A borrowed foreign array is a read-only view; deep-comparing
-  // its source is the deep semantics the membrane exists to avoid.
-  ["arrival/tagless-final/equals"](other: unknown): boolean {
-    return other instanceof AJSArray && other.source === this.source;
-  }
-
-  // Element-count carrying the borrowed elements' provenance, read straight off `source`
-  // (no materialize) — over the raw source where provenance-bearing AValue elements still
-  // live (post-box they'd be empty-provenance JS-natives).
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    this.freezeSource();
-    const count = this.source.length;
-    const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
-    if (inputs.length === 0) return count;
-    const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
-  }
-
-  // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).
-  ["arrival/tagless-final/vector?"](): boolean {
-    return true;
-  }
-
-  // Indexed access — boxes JUST element k (no full materialize), the same lazy crossing
-  // as `vec()` above and the AJSObject.get sibling: `jsToScheme` carrying THIS container's
-  // provenance, so `(vector-ref borrowed k)` stamps the element identically to
-  // `(vector->list borrowed)` (the Option-C discipline — a raw element inherits the
-  // container's lineage, an already-AValue element keeps its own). `jsToScheme` is typed
-  // `any` (rosetta legacy debt) but its contract is a boxed Scheme value → annotate to the
-  // honest union so the `SchemeValue` return type-checks without a cast. (`fromJS` would
-  // drop provenance via CONSTANT_CTX/EMPTY_PROVENANCE and could surface the wider boundary
-  // carriers — the value-only `vector-ref` contract wants the faithful value path here.)
-  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
-    this.freezeSource();
-    let boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
-    // Attestation inheritance (stamp site 2): the plucked element box is attested iff
-    // this borrowed container is — same discipline as the provenance threading above
-    // (`freshIfSingleton`: a raw boolean element surfaces as an attested clone, never
-    // the shared flyweight).
-    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
-    return boxed;
   }
 }

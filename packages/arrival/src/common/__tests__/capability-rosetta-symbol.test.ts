@@ -145,7 +145,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     // An input string carrying a known origin; no ctx → resultProvenance falls back to the input union.
     const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
     const out = (await invoke(verb, undefined, tagged)) as AString;
-    expect(out.toJs()).toBe("x");
+    expect(out["arrival/toJS"]()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
 
@@ -167,12 +167,12 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const ac = new AbortController();
     const ctx = { env: {}, signal: ac.signal };
     const out = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "x"))) as AString;
-    expect(out.toJs()).toBe("x:live"); // signal present, not aborted
+    expect(out["arrival/toJS"]()).toBe("x:live"); // signal present, not aborted
 
     // After abort, the SAME getter reads the now-aborted signal (lazy — read on access).
     ac.abort();
     const out2 = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "y"))) as AString;
-    expect(out2.toJs()).toBe("y:aborted");
+    expect(out2["arrival/toJS"]()).toBe("y:aborted");
   });
 
   it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
@@ -206,7 +206,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const { ctx, marked } = ctxWithInvocation(42);
     const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
     const out = (await invoke(verb, ctx, tagged)) as AString;
-    expect(out.toJs()).toBe("x");
+    expect(out["arrival/toJS"]()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
     expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point
     expect(ctx.currentInvocation.isProvenancePoint).toBe(false);

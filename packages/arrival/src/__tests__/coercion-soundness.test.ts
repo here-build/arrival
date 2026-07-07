@@ -41,6 +41,7 @@ import { svector } from "../common/scheme-zod.js";
 import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
+import { tf } from "../values/tagless-final.js";
 
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
@@ -100,19 +101,19 @@ const mkArr = () => new AJSArray(CONSTANT_CTX, [el("a", 100), el("b", 101)]);
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — element provenance survives map/filter/sort", () => {
   it("Pair · map preserves every element's box", async () => {
-    expect(elemProvs(await force(mkPair()["arrival/tagless-final/map"](idSync)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("map")](idSync)))).toEqual([[100], [101]]);
   });
   it("Pair · filter preserves every kept element's box", async () => {
-    expect(elemProvs(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("filter")](keepAll)))).toEqual([[100], [101]]);
   });
   it("Pair · sort preserves every element's box (only reorders)", async () => {
     // sort dissolved onto the term: call it directly (the fl-interop sort is now a
     // symbol.sequence dispatcher with no .impl). The term takes the optional comparator.
-    expect(elemProvs(await force(mkPair()["arrival/tagless-final/sort"](cmp)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("sort")](cmp)))).toEqual([[100], [101]]);
   });
 
   it("SchemeVector · filter preserves every element's box", async () => {
-    expect(elemProvs(await force(mkVec()["arrival/tagless-final/filter"](keepAll)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkVec()[tf("filter")](keepAll)))).toEqual([[100], [101]]);
   });
 });
 
@@ -160,12 +161,12 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     // APair's arrival/tagless-final/sort re-cons the spine via `Pair.fromArray(_, false)`
     // (the shared spine-rebuild drop) and makes NO collapseProvenance call. Element boxes
     // survive (stratum 1); the container box does not — identical to map/filter.
-    expect(provOf(await force(mkPair()["arrival/tagless-final/sort"](cmp)))).toEqual([]);
+    expect(provOf(await force(mkPair()[tf("sort")](cmp)))).toEqual([]);
   });
 
   it("Pair · map / filter drop the container box (spine rebuilt; element boxes survive)", async () => {
-    expect(provOf(await force(mkPair()["arrival/tagless-final/map"](idSync)))).toEqual([]);
-    expect(provOf(await force(mkPair()["arrival/tagless-final/filter"](keepAll)))).toEqual([]);
+    expect(provOf(await force(mkPair()[tf("map")](idSync)))).toEqual([]);
+    expect(provOf(await force(mkPair()[tf("filter")](keepAll)))).toEqual([]);
   });
 
   it("SchemeVector · map crosses out to the AUTO-WRAPPING AJSArray (raw inside, boxes on access) [RESOLVED: DR4]", async () => {
@@ -177,7 +178,7 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     // This reconciles the DR4 cross-out with the Functor identity law (`map(id) ≡ id`): the raw
     // is exposed for interop, yet `(vector-ref (map id v) i)` yields a box again, so the mapped
     // structure is element-wise equal to the source (scheme-vector-algebra.test.ts pins the law).
-    const r = await force(mkVec()["arrival/tagless-final/map"](idSync));
+    const r = await force(mkVec()[tf("map")](idSync));
 
     // (a) it crossed out to the membrane's AJSArray, NOT a fresh AVector — the impersonator.
     expect(r).toBeInstanceOf(AJSArray);
@@ -190,7 +191,7 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     expect(elemProvs(r)).toEqual([[], []]); // raw layer carries no provenance — the cross-out
 
     // (c) the raw-for-foreign egress still holds: `toJs`/`[TO_JS]` cross back out as the raw array.
-    expect(arr.toJs()).toEqual(["a", "b"]);
+    expect(arr["arrival/toJS"]()).toEqual(["a", "b"]);
 
     // (d) the Functor side: Scheme-level access (`__vector__`, dispatched by vector-ref/->list)
     // BOXES each element back — a raw "a" re-boxes to an AString, so the mapped structure answers
@@ -208,13 +209,13 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // element's box (no unwrapForeign — this is the box-preserving reorder, not the cross-out
   // map). Container-preserving (vector→vector) by the term returning its own shape.
   it("sort(vector) returns a sorted VECTOR (boxes preserved, container preserved)", async () => {
-    const r = await force(mkVec()["arrival/tagless-final/sort"](cmp));
+    const r = await force(mkVec()[tf("sort")](cmp));
     expect(r).toBeInstanceOf(AVector);
     expect(elemProvs(r)).toEqual([[100], [101]]); // element boxes survive the reorder
   });
   it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
     const reversed = new AVector(CONSTANT_CTX, [el("b", 101), el("a", 100)], new Set([7]));
-    const r = (await force(reversed["arrival/tagless-final/sort"](cmp))) as AVector;
+    const r = (await force(reversed[tf("sort")](cmp))) as AVector;
     expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
   });
@@ -226,8 +227,8 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // delegated `map` is the cross-out Functor, so the result is the AUTO-WRAPPING AJSArray
   // (raw inside, boxes on access) — identical to `map` over a native vector above.
   it("map(AJSArray) delegates to the cross-out Functor — a borrowed array answers map [RESOLVED]", async () => {
-    expect("arrival/tagless-final/map" in mkArr()).toBe(true);
-    const r = await force(mkArr()["arrival/tagless-final/map"](idSync, CONSTANT_CTX));
+    expect(tf("map") in mkArr()).toBe(true);
+    const r = await force(mkArr()[tf("map")](idSync, CONSTANT_CTX));
     expect(r).toBeInstanceOf(AJSArray); // the cross-out impersonator (raw inside, boxes on access)
     expect((r as AJSArray).length).toBe(2);
     // Scheme-level access boxes the stripped elements back (the Functor half).
@@ -246,20 +247,20 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // car/cdr project ONE element — its box must survive (this IS §5.3 element
   // provenance; the golden-prov-arithmetic car/cons goldens depend on it).
   it("car(Pair) projects the head element WITH its box", async () => {
-    expect(provOf(await force(mkPair()["arrival/tagless-final/car"]()))).toEqual([100]);
+    expect(provOf(await force(mkPair()[tf("car")]()))).toEqual([100]);
   });
   it("car(AJSArray): loose projects index 0 WITH its box; strict throws (a vector is not a pair)", async () => {
-    expect("arrival/tagless-final/car" in mkArr()).toBe(true);
-    expect(provOf(await force(mkArr()["arrival/tagless-final/car"](CONSTANT_CTX)))).toEqual([100]);
-    expect(() => mkArr()["arrival/tagless-final/car"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(tf("car") in mkArr()).toBe(true);
+    expect(provOf(await force(mkArr()[tf("car")](CONSTANT_CTX)))).toEqual([100]);
+    expect(() => mkArr()[tf("car")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
-    expect(elemProvs(await force(mkPair()["arrival/tagless-final/cdr"]()))).toEqual([[101]]);
+    expect(elemProvs(await force(mkPair()[tf("cdr")]()))).toEqual([[101]]);
   });
   it("cdr(AJSArray): loose returns the rest as a vector (boxes preserved); strict throws", async () => {
-    expect("arrival/tagless-final/cdr" in mkArr()).toBe(true);
-    expect(elemProvs(await force(mkArr()["arrival/tagless-final/cdr"](CONSTANT_CTX)))).toEqual([[101]]);
-    expect(() => mkArr()["arrival/tagless-final/cdr"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(tf("cdr") in mkArr()).toBe(true);
+    expect(elemProvs(await force(mkArr()[tf("cdr")](CONSTANT_CTX)))).toEqual([[101]]);
+    expect(() => mkArr()[tf("cdr")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
@@ -272,14 +273,14 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // reading (car → index 0 WITH its box, cdr → a vector slice). In STRICT mode the gate fires
   // (a vector is not a pair → vector-ref) — the DR4 errors-as-doors surface, now mode-gated.
   it("car(SchemeVector): loose projects index 0 WITH its box; strict throws [DR4 — not a pair]", () => {
-    expect("arrival/tagless-final/car" in mkVec()).toBe(true);
-    expect(provOf(mkVec()["arrival/tagless-final/car"](CONSTANT_CTX))).toEqual([100]);
-    expect(() => mkVec()["arrival/tagless-final/car"](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(tf("car") in mkVec()).toBe(true);
+    expect(provOf(mkVec()[tf("car")](CONSTANT_CTX))).toEqual([100]);
+    expect(() => mkVec()[tf("car")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
-    expect("arrival/tagless-final/reduce" in mkArr()).toBe(true);
-    const n = await force(mkArr()["arrival/tagless-final/reduce"]((_e, acc: number) => acc + 1, 0, CONSTANT_CTX));
+    expect(tf("reduce") in mkArr()).toBe(true);
+    const n = await force(mkArr()[tf("reduce")]((_e, acc: number) => acc + 1, 0, CONSTANT_CTX));
     expect(n).toBe(2);
   });
 });
@@ -336,21 +337,21 @@ describe("strict mode gates generic list-ops on a vector (loose tolerates, stric
   it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
     // loose tolerates: the cross-out Functor returns the auto-wrapping AJSArray (raw inside,
     // boxes on access) — getting a value back at all is the "loose works" signal.
-    expect(await force(mkVec()["arrival/tagless-final/map"](idSync, CONSTANT_CTX))).toBeInstanceOf(AJSArray);
+    expect(await force(mkVec()[tf("map")](idSync, CONSTANT_CTX))).toBeInstanceOf(AJSArray);
     // map is sync up to the gate → it throws synchronously, not a rejected promise
-    expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(PortabilityError);
-    expect(() => mkVec()["arrival/tagless-final/map"](idSync, strict)).toThrow(/vector-map/);
+    expect(() => mkVec()[tf("map")](idSync, strict)).toThrow(PortabilityError);
+    expect(() => mkVec()[tf("map")](idSync, strict)).toThrow(/vector-map/);
   });
   it("filter/reduce(vector): strict rejects them (SRFI-1 list-ops)", async () => {
-    await expect(mkVec()["arrival/tagless-final/filter"](keepAll, strict)).rejects.toThrow(PortabilityError);
-    await expect(mkVec()["arrival/tagless-final/reduce"]((_e: unknown, a: number) => a, 0, strict)).rejects.toThrow(
+    await expect(mkVec()[tf("filter")](keepAll, strict)).rejects.toThrow(PortabilityError);
+    await expect(mkVec()[tf("reduce")]((_e: unknown, a: number) => a, 0, strict)).rejects.toThrow(
       PortabilityError,
     );
   });
   it("sort(vector) is NOT gated — SRFI-132 accepts vectors", () => {
-    expect(mkVec()["arrival/tagless-final/sort"](cmp, strict)).toBeInstanceOf(AVector);
+    expect(mkVec()[tf("sort")](cmp, strict)).toBeInstanceOf(AVector);
   });
   it("a borrowed AJSArray inherits the gate via delegation (strict map throws)", () => {
-    expect(() => mkArr()["arrival/tagless-final/map"](idSync, strict)).toThrow(PortabilityError);
+    expect(() => mkArr()[tf("map")](idSync, strict)).toThrow(PortabilityError);
   });
 });

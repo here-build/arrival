@@ -28,7 +28,7 @@ export class Keyword extends AValue {
     super(CONSTANT_CTX);
   }
 
-  toJs(): unknown {
+  ["arrival/toJS"](): unknown {
     return `#<keyword:${this.name}>`;
   }
 

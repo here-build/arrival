@@ -21,7 +21,7 @@
 
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
-import type { SchemeValue, SchemeBounceMarker } from "../types.js";
+import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
@@ -33,7 +33,7 @@ export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
  * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
  * instanceof narrowing — never a cast — so it stays sound when the input is raw.
  */
-export function ctxOf(x: unknown): RunContext {
+export function ctxOf(x: SchemeValue): RunContext {
   return x instanceof AValue ? x.ctx : CONSTANT_CTX;
 }
 
@@ -70,8 +70,10 @@ export abstract class AValue {
     this.provenance = provenance;
   }
 
-  /** Plain-JS representation for serialization (cache / log / HTTP). */
-  abstract toJs(): unknown;
+  /** Plain-JS representation for serialization (cache / log / HTTP). A global
+   *  protocol key (like `arrival/tagless-final/*`/`arrival/print`), written as a
+   *  literal at each use site rather than declared as a named constant. */
+  abstract ["arrival/toJS"](): unknown;
 
   /** AValues are immutable — provenance updates mint a new instance. Returns the
    *  `SchemeValue` union (each concrete subclass overrides with its OWN narrower type, which

@@ -98,7 +98,7 @@ describe("ASSUMPTION — a pure-map length over-attributes through the live buil
 // are provenance-stamped (id 0) so the path exercises real AValue arithmetic, not a bare-JS shortcut.
 describe("CAPABILITY — eager map/filter/reduce pipelines yield the documented values", () => {
   const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
-  const jsVal = (r: unknown): unknown => (r instanceof AValue ? r.toJs() : r);
+  const jsVal = (r: unknown): unknown => (r instanceof AValue ? r["arrival/toJS"]() : r);
   const eval1 = async (chain: string): Promise<unknown> => jsVal(await runRaw(chain, { xs: nums() }));
 
   it("map → reduce: (reduce + 0 (map (* x 2) xs)) = 30", async () => {

@@ -43,7 +43,7 @@ export class AVoid extends AValue {
   }
 
   /** Outbound translation: void → JS `undefined` (inverse of the `undefined` boxer). */
-  toJs(): undefined {
+  ["arrival/toJS"](): undefined {
     return undefined;
   }
 
@@ -61,4 +61,3 @@ export class AVoid extends AValue {
 /** The one unspecified value — identity-compared; returned for every "no useful
  *  value" site. Carries CONSTANT_CTX, exactly as `nil`/`eof` do. */
 export const theVoid = new AVoid(CONSTANT_CTX);
-

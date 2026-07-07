@@ -32,13 +32,13 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { is_nil } from "../eval/guards.js";
 import { hasMember, isSchemeValue, readMember, toJS } from "../membrane.js";
 import { schemeToJs } from "../rosetta.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
 import { APair } from "../values/primitives/APair.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
+import { tf } from "../values/tagless-final.js";
 
 // A nil clone carrying non-empty provenance — exactly what
 // `restrictControlFlowProvenance` (evaluator.ts:627) hands back when an `if`
@@ -78,7 +78,7 @@ describe("nil-clone witness sanity (NOT a bug — guards the test fixture)", () 
     expect([...cloneNil(7).provenance]).toEqual([7]);
   });
   it("clone serializes the same as nil", () => {
-    expect(cloneNil().toJs()).toBe(null);
+    expect(cloneNil()["arrival/toJS"]()).toBe(null);
     expect(cloneNil().toString()).toBe("()");
   });
 });
@@ -216,7 +216,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     const calls: unknown[] = [];
     const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (p as any)["arrival/tagless-final/map"]((x: unknown) => {
+    const result = await p[tf("map")]((x) => {
       calls.push(x);
       return x;
     });
@@ -231,7 +231,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   it("filterPair(_, Pair(1, nil-clone)) — predicate called once (fantasy-land-lips.ts:94)", async () => {    let predCalls = 0;
     const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (p as any)["arrival/tagless-final/filter"](() => {
+    await p[tf("filter")](() => {
       predCalls++;
       return true;
     });
@@ -248,7 +248,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
-    await (p as any)["arrival/tagless-final/reduce"]((v: unknown, acc: unknown[]) => {
+    await p[tf("reduce")]((v: unknown, acc: unknown[]) => {
       collected.push(v);
       return [...(acc as unknown[]), v];
     }, [] as unknown[]);
@@ -273,7 +273,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     };
     const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["arrival/tagless-final/traverse"](of, (x: unknown) => x);
+    p[tf("traverse")](of, (x: unknown) => x);
     expect(ofCalls.length).toBe(1);
     expect(ofCalls[0] instanceof ANil).toBe(true);
   });
@@ -284,7 +284,7 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
   it("chainPair(f, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:120)", () => {    const calls: unknown[] = [];
     const p = new APair(CONSTANT_CTX, 1, cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any)["arrival/tagless-final/chain"]((x: unknown) => {
+    p[tf("chain")]((x: unknown) => {
       calls.push(x);
       return new APair(CONSTANT_CTX, x, nil);
     });

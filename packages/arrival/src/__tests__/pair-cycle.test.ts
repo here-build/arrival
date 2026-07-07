@@ -39,7 +39,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     // metadata. Without it, the top-level invariant doesn't trip — instead
     // the per-traversal Set-watchdog (Pair.ts:588) fires. Both produce the
     // same /cycle/i invariant message.
-    expect(() => p.toJs()).toThrow(/cycle/i);
+    expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
   it("throws on a mutual cycle (two cells pointing at each other)", () => {
@@ -50,7 +50,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     (a as any).cdr = b;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (b as any).cdr = a;
-    expect(() => a.toJs()).toThrow(/cycle/i);
+    expect(() => a["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
   it("throws on a mark_cycles-annotated cycle (fast-path invariant)", () => {
@@ -63,19 +63,19 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     (p as any).cdr = p;
     p.mark_cycles();
     expect(p.have_cycles()).toBe(true);
-    expect(() => p.toJs()).toThrow(/cycle/i);
+    expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
   it("returns an array for a proper list", () => {
     // (1 2 3) → [1, 2, 3]; cdr-chain terminates at nil.
     const p = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
-    expect(p.toJs()).toEqual([1, 2, 3]);
+    expect(p["arrival/toJS"]()).toEqual([1, 2, 3]);
   });
 
   it("returns { __dotted__, list, tail } for a dotted (improper) pair", () => {
     // (1 . 2) — cdr is a non-nil non-pair, the improper-list branch.
     const p = new APair(CONSTANT_CTX, 1, 2);
-    const result = p.toJs() as { __dotted__: boolean; list: unknown[]; tail: unknown };
+    const result = p["arrival/toJS"]() as { __dotted__: boolean; list: unknown[]; tail: unknown };
     expect(result.__dotted__).toBe(true);
     expect(result.list).toEqual([1]);
     expect(result.tail).toBe(2);
@@ -88,7 +88,7 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
     // (We avoid asserting on the singleton `nil` itself because Nil.toJs
     // returns `null` — different codepath, tested separately.)
     const p = new APair(CONSTANT_CTX, 1, nil);
-    expect(p.toJs()).toEqual([1]);
+    expect(p["arrival/toJS"]()).toEqual([1]);
   });
 });
 

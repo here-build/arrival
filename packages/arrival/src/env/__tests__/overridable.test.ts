@@ -25,7 +25,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       capabilities,
       config: { params: { city: "Paris" } },
     });
-    expect((result.at(-1) as AString).toJs()).toBe("Paris");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 
   it("default fallback: absent params ⇒ the in-form default fires (and validates)", async () => {
@@ -33,7 +33,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       capabilities,
       config: { params: {} },
     });
-    expect((result.at(-1) as AString).toJs()).toBe("Berlin");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Berlin");
   });
 
   it("config-less lower succeeds (`params` defaults to {}) — every in-form default fires", async () => {
@@ -41,7 +41,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       capabilities,
       // no config at all — the shared-bag posture: lower({ config: undefined }) parses to {}.
     });
-    expect((result.at(-1) as AString).toJs()).toBe("Berlin");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Berlin");
   });
 
   it("multiple inputs in one program resolve independently (override + default mixed)", async () => {
@@ -52,7 +52,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       { capabilities, config: { params: { city: "Paris" } } },
     );
     const list = result.at(-1) as APair;
-    expect(list.to_array().map((v) => (v as AString).toJs())).toEqual(["Paris", "France"]);
+    expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "France"]);
   });
 
   it("a bad OVERRIDE throws legibly, naming the binding, the declared type, and the source", async () => {
@@ -116,7 +116,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       capabilities,
       config: { params: {} },
     });
-    expect((result.at(-1) as AExact).toJs()).toBe(10);
+    expect((result.at(-1) as AExact)["arrival/toJS"]()).toBe(10);
   });
 
   it("`overridable/resolve` is a real RUNTIME verb — callable directly by user code, no sealing", async () => {
@@ -124,7 +124,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
       capabilities,
       config: { params: { city: "Paris" } },
     });
-    expect((result.at(-1) as AString).toJs()).toBe("Paris");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 });
 
@@ -140,7 +140,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
       `(define/overridable tier (s/enum "free" "pro") "free") tier`,
       { capabilities, config: { params: { tier: "pro" } } },
     );
-    expect((result.at(-1) as AString).toJs()).toBe("pro");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("pro");
   });
 
   it("(s/enum ...) rejects a value outside the declared set — legible, names the binding", async () => {
@@ -163,7 +163,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
         config: { params: { profile: { name: "Maya", age: 30 } } },
       },
     );
-    expect((result.at(-1) as AString).toJs()).toBe("Maya");
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Maya");
   });
 
   it("(s/object ...) rejects an override missing a required field", async () => {
@@ -186,7 +186,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
        (@ profile "bio")`,
       { capabilities, config: { params: { profile: { name: "Maya", bio: "hi" } } } },
     );
-    expect((withBio.at(-1) as AString).toJs()).toBe("hi");
+    expect((withBio.at(-1) as AString)["arrival/toJS"]()).toBe("hi");
 
     // Omitting the /optional field still validates — the object schema doesn't require it.
     const withoutBio = await exec(
@@ -196,7 +196,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
        (@ profile "name")`,
       { capabilities, config: { params: { profile: { name: "Maya" } } } },
     );
-    expect((withoutBio.at(-1) as AString).toJs()).toBe("Maya");
+    expect((withoutBio.at(-1) as AString)["arrival/toJS"]()).toBe("Maya");
   });
 
   it("scalar error cases stay legible: unrecognized tag, bad override, bad default", async () => {

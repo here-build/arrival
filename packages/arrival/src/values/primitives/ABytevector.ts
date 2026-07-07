@@ -13,18 +13,11 @@
  * Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { withInputProvenance } from "../op-helpers.js";
 
-// The membrane's TO_JS protocol key, resolved from the global symbol registry
-// rather than imported from membrane.js. `Symbol.for` returns the SAME symbol as
-// membrane's `export const TO_JS = Symbol.for("scheme.toJS")`, so the protocol is
-// identical — but importing it would make membrane.js → SchemeBytevector.ts (added in
-// S3 so the membrane recognizes boxed bytevectors) a cycle, and `[TO_JS]()` is a
-// class-definition-time computed key (TDZ hazard). Local resolution breaks the edge.
-const TO_JS = Symbol.for("scheme.toJS");
 
 /**
  * Anything that can seed a bytevector. Coerced to a Uint8Array payload in the
@@ -74,17 +67,17 @@ export class ABytevector extends AValue {
     this.__bytevector__ = toUint8(source);
   }
 
-  /** Mark immutable (a literal). Idempotent. */
-  freeze(): void {
-    this.frozen = true;
+  get length(): number {
+    return this.__bytevector__.byteLength;
   }
 
   static isBytevector(x: unknown): x is ABytevector {
     return x instanceof ABytevector;
   }
 
-  get length(): number {
-    return this.__bytevector__.byteLength;
+  /** Mark immutable (a literal). Idempotent. */
+  freeze(): void {
+    this.frozen = true;
   }
 
   ref(i: number): number {
@@ -97,11 +90,7 @@ export class ABytevector extends AValue {
 
   // Membrane unwrap (membrane.ts toJS, TO_JS protocol): a boxed bytevector
   // crosses to JS as its raw Uint8Array, never as an opaque Scheme object.
-  [TO_JS](): Uint8Array {
-    return this.__bytevector__;
-  }
-
-  toJs(): Uint8Array {
+  ["arrival/toJS"](): Uint8Array {
     return this.__bytevector__;
   }
 

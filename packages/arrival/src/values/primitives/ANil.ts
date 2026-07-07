@@ -12,7 +12,6 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
-import { tf } from "../tagless-final.js";
 
 export class ANil extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -21,6 +20,11 @@ export class ANil extends AValue {
 
   constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
+  }
+
+  // Monoid empty — the identity is Nil itself (the canonical singleton).
+  static ["arrival/tagless-final/empty"](): ANil {
+    return nil;
   }
 
   toString(): string {
@@ -47,32 +51,29 @@ export class ANil extends AValue {
     return new APair(CONSTANT_CTX, x, nil);
   }
 
-  to_array(): [] {
+  to_array(): never[] {
     return [];
   }
 
-  toJs(): null {
+  ["arrival/toJS"](): null {
     return null;
-  }
-
-  withProvenance(p: ReadonlySet<number>): ANil {
-    return new ANil(this.ctx, p);
   }
 
   // Setoid (Fantasy Land). Every Nil — including provenance clones — is equal,
   // matching eq's instanceof check. structuralEqual / equal? consult this first.
-  // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
-  ["arrival/tagless-final/equals"](other: unknown): boolean {
-    return other instanceof ANil;
+
+  withProvenance(p: ReadonlySet<number>): ANil {
+    return new ANil(this.ctx, p);
   }
 
   // Semigroup/Monoid (Fantasy Land) — Nil is the EMPTY LIST, the identity of
   // the list monoid. `nil ⋄ other = other`. Co-declared with Pair's list-append
   // Semigroup so the algebra is total over all lists (wave 2,
   // plan-2026-06-10-algebras-in-entities.md). Returns `other` as-is — the
-  // identity does not allocate.
-  ["arrival/tagless-final/concat"]<T extends SchemeValue>(other: T): T {
-    return other;
+
+  // (algebras-in-entities migration — plan-2026-06-10-algebras-in-entities.md.)
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
+    return other instanceof ANil;
   }
 
   // Head/tail projection of the EMPTY list — the nil-tolerance algebra (dissolved from
@@ -80,19 +81,26 @@ export class ANil extends AValue {
   // so the run's mode rides the THREADED runCtx (RunContext.ts's corrected plan: car-of-nil's
   // strict is read from the active run, never nil.ctx): strict ⇒ the R7RS "() is not a pair"
   // throw; tolerant ⇒ nil, so a multi-leaf proof grounds its OTHER leaves rather than crashing
+
+  // identity does not allocate.
+  ["arrival/tagless-final/concat"]<T extends SchemeValue>(other: T): T {
+    return other;
+  }
+
   // on one absent read.
   ["arrival/tagless-final/car"](runCtx: RunContext): ANil {
     if (runCtx.strict) throw new TypeError("car: () is not a pair");
     return nil;
   }
 
+  // Sequence ops over the EMPTY list — the identity cases (the fl-interop dissolution:
+  // the empty case lives ON the term, not a dispatch branch). map/filter of nothing is
+
   ["arrival/tagless-final/cdr"](runCtx: RunContext): ANil {
     if (runCtx.strict) throw new TypeError("cdr: () is not a pair");
     return nil;
   }
 
-  // Sequence ops over the EMPTY list — the identity cases (the fl-interop dissolution:
-  // the empty case lives ON the term, not a dispatch branch). map/filter of nothing is
   // nothing (nil); reduce of nothing is the seed, fn never called.
   ["arrival/tagless-final/map"](_fn: unknown): ANil {
     return nil;
@@ -102,27 +110,24 @@ export class ANil extends AValue {
     return nil;
   }
 
+  // sort of the EMPTY list is the empty list — the identity case (mirrors map/filter
+
   ["arrival/tagless-final/reduce"]<A>(_fn: unknown, initial: A): A {
     return initial;
-  }
-
-  // sort of the EMPTY list is the empty list — the identity case (mirrors map/filter
-  // above). The comparator is never consulted; nil is the canonical empty singleton.
-  ["arrival/tagless-final/sort"](_comparator?: unknown, _runCtx?: unknown): ANil {
-    return nil;
   }
 
   // length of the EMPTY list is 0 — the authoritative empty-count (mirrors the map/filter/
   // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO the
   // term). No elements ⇒ no provenance to carry: a bare `0`. NO heap-charge / NO strict-gating,
+
+  // above). The comparator is never consulted; nil is the canonical empty singleton.
+  ["arrival/tagless-final/sort"](_comparator?: unknown, _runCtx?: unknown): ANil {
+    return nil;
+  }
+
   // so the trailing runCtx `symbol.tagless` threads is ignored.
   ["arrival/tagless-final/length"](_runCtx?: unknown): number {
     return 0;
-  }
-
-  // Monoid empty — the identity is Nil itself (the canonical singleton).
-  static ["arrival/tagless-final/empty"](): ANil {
-    return nil;
   }
 }
 

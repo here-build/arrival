@@ -110,6 +110,7 @@
     "@here.build/arrival-env": "workspace:^",
     "@here.build/arrival-sweet": "workspace:^",
     "@here.build/error-invariant": "workspace:^",
+    "@here.build/collections": "workspace:^",
     "fantasy-land": "5.0.1",
     "fold-case": "1.0.0",
     "tiny-invariant": "1.3.3",

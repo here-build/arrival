@@ -32,7 +32,7 @@ export class ABool extends AValue {
   valueOf(): boolean {
     return this.value;
   }
-  toJs(): boolean {
+  ["arrival/toJS"](): boolean {
     return this.value;
   }
   withProvenance(p: ReadonlySet<number>): ABool {

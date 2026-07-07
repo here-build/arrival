@@ -22,7 +22,8 @@
 
 import { AValue } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import type { SchemeValue, SchemeBounceMarker } from "../types.js";
+import type { SchemeBounceMarker, SchemeValue } from "../types.js";
+import { tf } from "../tagless-final.js";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
  *  promise (JS-host entry). Non-value returns are narrowed out at the call boundary. */
@@ -39,11 +40,6 @@ export interface Arity {
  *  in, a CallResult out, the run's `runCtx` threaded explicitly (never via `this`). Typed here
  *  as the destination; stage 1 adapts `_bake.ts` to emit it. */
 export type CallableImpl = (args: SchemeValue[], runCtx: RunContext) => CallResult;
-
-/** The tagless-final invocation key. Callability IS declaring this term (AValue.ts); the call
- *  is `callable[APPLY](args, runCtx, canBounce?)`, dispatched the same `resolveMethod` way as
- *  `map`/`car`. Spelled once here so the classes and the call sites share one literal. */
-export const APPLY = "arrival/tagless-final/apply" as const;
 
 // Shared leaf behavior, as free functions the concrete classes delegate to (no abstract
 // parent). A procedure's identity is load-bearing (`(eq? car car)`), so provenance stamping
@@ -81,16 +77,17 @@ export class ALambda extends AValue {
     this.#runner = opts.runner;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext, canBounce = false): CallResult {
-    return this.#runner(args, runCtx, canBounce);
-  }
-
-  toJs(): unknown {
+  ["arrival/toJS"](): unknown {
     return `#<lambda ${String(this.name)}>`;
   }
   withProvenance(): SchemeValue {
     return this;
   }
+
+  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext, canBounce = false): CallResult {
+    return this.#runner(args, runCtx, canBounce);
+  }
+
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);
   }
@@ -116,16 +113,18 @@ export class ANativeProcedure extends AValue {
     this.#impl = opts.impl;
   }
 
+  ["arrival/toJS"](): unknown {
+    return `#<procedure ${String(this.name)}>`;
+  }
+
+  withProvenance(): SchemeValue {
+    return this;
+  }
+
   ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext): CallResult {
     return this.#impl(args, runCtx);
   }
 
-  toJs(): unknown {
-    return `#<procedure ${String(this.name)}>`;
-  }
-  withProvenance(): SchemeValue {
-    return this;
-  }
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);
   }
@@ -161,15 +160,15 @@ export class ARosettaProcedure extends AValue {
     this.#impl = opts.impl;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext): CallResult {
-    return this.#impl(args, runCtx);
-  }
-
-  toJs(): unknown {
+  ["arrival/toJS"](): unknown {
     return `#<procedure ${String(this.name)}>`;
   }
   withProvenance(): SchemeValue {
     return this;
+  }
+
+  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext): CallResult {
+    return this.#impl(args, runCtx);
   }
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);
@@ -195,8 +194,12 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure;
 // elements as `unknown` (the spine-walk convention — narrowed at consumption, never asserted at
 // the slot), so the seam accepts that and casts ONCE here, at the boundary between the
 // unknown-typed algebra and the typed callable surface (the elements ARE scheme values).
-export function applyCallback(fn: unknown, args: readonly unknown[], runCtx: RunContext = CONSTANT_CTX): CallResult {
-  const term = (fn as Record<string, unknown> | null | undefined)?.[APPLY];
+export function applyCallback(
+  fn: ANativeProcedure | ARosettaProcedure | ALambda | ((...args: unknown[]) => unknown),
+  args: readonly unknown[],
+  runCtx: RunContext = CONSTANT_CTX,
+): CallResult {
+  const term = fn?.[tf("apply")];
   if (typeof term === "function") {
     return (term as (args: SchemeValue[], runCtx: RunContext, canBounce?: boolean) => CallResult).call(
       fn,
@@ -208,5 +211,7 @@ export function applyCallback(fn: unknown, args: readonly unknown[], runCtx: Run
   if (typeof fn === "function") {
     return Reflect.apply(fn, { ctx: { runCtx } }, args as unknown[]) as CallResult;
   }
-  throw new TypeError(`not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`);
+  throw new TypeError(
+    `not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`,
+  );
 }

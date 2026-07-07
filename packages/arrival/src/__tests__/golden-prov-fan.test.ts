@@ -50,7 +50,7 @@ async function prov(src: string, binds: Record<string, unknown> = {}): Promise<n
 // the runtime value, unwrapped to plain JS (to pin the COUNT alongside its cone)
 async function value(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
   const r = await runRaw(src, binds);
-  return r instanceof AValue ? r.toJs() : r;
+  return r instanceof AValue ? r["arrival/toJS"]() : r;
 }
 
 // a Pair-backed source of three provenance-stamped strings, ids 100/101/102.

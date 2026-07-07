@@ -91,12 +91,8 @@ export class AInexact extends AValue {
     return this.real;
   }
 
-  toJS(): number {
-    return this.real;
-  }
-
-  /** AValue contract; mirrors the `schemeToJs` rosetta path (reals-only). */
-  toJs(): number {
+  /** Mirrors the `schemeToJs` rosetta path (reals-only). */
+  ["arrival/toJS"](): number {
     return this.real;
   }
 
@@ -149,10 +145,7 @@ export class AInexact extends AValue {
   // uses schemeCompare (so `(= +nan.0 +nan.0)` is #f) — two genuine comparisons.
   // Non-number → false (Ord convention).
   ["arrival/tagless-final/lte"](other: unknown): boolean {
-    return (
-      (other instanceof AExact || other instanceof AInexact) &&
-      schemeCompare(this, other) <= 0
-    );
+    return (other instanceof AExact || other instanceof AInexact) && schemeCompare(this, other) <= 0;
   }
 
   // Same-type arithmetic (reals-only)

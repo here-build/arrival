@@ -29,7 +29,7 @@ const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s,
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // A literal-only result comes back as a raw JS string; a provenanced input boxes it to
 // an AString. Unwrap either shape to the plain JS value.
-const js = (x: unknown) => (x instanceof AValue ? x.toJs() : x);
+const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {

@@ -44,7 +44,7 @@ describe("symbol.native — scheme-identity, no validation", () => {
     // native.impl is the binding itself — it receives the scheme value directly.
     const out = def.impl(arg);
     expect(out).toBeInstanceOf(AString);
-    expect((out as AString).toJs()).toBe("hello");
+    expect((out as AString)["arrival/toJS"]()).toBe("hello");
   });
 
   it("does NOT reject a value the identity schema wouldn't accept (no runtime validation)", () => {
@@ -96,7 +96,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
     );
     const out = await def.run(new AString(CONSTANT_CTX, "x"));
     expect(out).toBeInstanceOf(AString);
-    expect((out as AString).toJs()).toBe("x");
+    expect((out as AString)["arrival/toJS"]()).toBe("x");
   });
 
   it("awaits an async impl", async () => {
@@ -108,7 +108,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       },
     );
     const out = await def.run(new AString(CONSTANT_CTX, "hi"));
-    expect((out as AString).toJs()).toBe("HI");
+    expect((out as AString)["arrival/toJS"]()).toBe("HI");
   });
 });
 
@@ -195,7 +195,7 @@ describe("variadic + multiple values", () => {
     expect(Array.isArray(out)).toBe(true);
     const vec = out as AString[];
     expect(vec).toHaveLength(2);
-    expect(vec[0].toJs()).toBe("a");
+    expect(vec[0]["arrival/toJS"]()).toBe("a");
   });
 });
 

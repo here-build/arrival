@@ -48,9 +48,9 @@ describe("deferred egress — the carrier captures its PRODUCING run (ctx can't 
 });
 
 describe("deferred egress — un-forced escape is structurally detectable", () => {
-  it("AHalfBaked.toJs() is the interval, never the collapsed value", () => {
+  it('AHalfBaked["arrival/toJS"]() is the interval, never the collapsed value', () => {
     const hb = AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([new AExact(CONSTANT_CTX, 1n)])], () => [1, 1]);
-    expect(hb.toJs()).toMatchObject({ __halfBaked__: "collection" });
+    expect(hb["arrival/toJS"]()).toMatchObject({ __halfBaked__: "collection" });
   });
 });
 

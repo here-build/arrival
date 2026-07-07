@@ -3,7 +3,7 @@
  * Carries the `characters` named-character table it is backed by.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
@@ -59,7 +59,6 @@ export { characters };
 export class ACharacter extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "character";
-  readonly kind = "character" as const;
   // Named character mappings
   static readonly __names__: Record<string, string> = characters;
   static readonly __rev_names__: Record<string, string> = (() => {
@@ -78,6 +77,7 @@ export class ACharacter extends AValue {
     }
     return rev;
   })();
+  readonly kind = "character" as const;
   readonly __char__: string;
   readonly __name__?: string;
 
@@ -129,7 +129,7 @@ export class ACharacter extends AValue {
     return this.__char__;
   }
 
-  toJs(): string {
+  ["arrival/toJS"](): string {
     return this.__char__;
   }
 

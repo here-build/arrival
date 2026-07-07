@@ -35,6 +35,16 @@ export class AString extends AValue {
     return x instanceof AString || typeof x === "string";
   }
 
+  // Monoid (Fantasy Land) — the empty string is the identity for append.
+  static ["arrival/tagless-final/empty"](): AString {
+    return new AString(CONSTANT_CTX, "");
+  }
+
+  // Applicative (Fantasy Land) — lift a value into a SchemeString.
+  static ["arrival/tagless-final/of"](value: unknown): AString {
+    return new AString(CONSTANT_CTX, String(value));
+  }
+
   *[Symbol.iterator]() {
     const chars = [...this.__string__];
     for (const char of chars) {
@@ -61,9 +71,21 @@ export class AString extends AValue {
     });
   }
 
+  // Setoid (Fantasy Land). REPRESENTATION-BLIND value equality: a boxed SchemeString equals BOTH
+  // another SchemeString of the same content AND the same value UNBOXED (a plain JS string). A string
+  // has no exact/inexact-style grade, so its identity is purely its characters — and the chain plane
+  // boxes inconsistently (provenance-carrying op → boxed; literal/rosetta-unwrap → plain), so equal?
+  // routinely meets a boxed string against a plain one. Comparing only `instanceof SchemeString` made
+  // `(equal? boxed "x")` ⇒ #f, silently breaking every dedup/`member?` over derived strings (the
+  // sift/closure.scm browser hang). `this.__string__ === other` lets a plain-string `other` match by
+  // content and a non-string `other` (number/object) fall through to #f. structuralEqual consults the
+
   get(n: NumberLike): string {
     return [...this.__string__][typeof n === "number" ? n : n.valueOf()];
   }
+
+  // Ord (Fantasy Land, extends Setoid). Lexicographic via JS `<=`, a total
+  // code-unit order (totality/antisymmetry/transitivity/consistency-with-equals
 
   cmp(string: StringLike): number {
     const a = this.valueOf();
@@ -77,34 +99,15 @@ export class AString extends AValue {
     }
   }
 
-  // Setoid (Fantasy Land). REPRESENTATION-BLIND value equality: a boxed SchemeString equals BOTH
-  // another SchemeString of the same content AND the same value UNBOXED (a plain JS string). A string
-  // has no exact/inexact-style grade, so its identity is purely its characters — and the chain plane
-  // boxes inconsistently (provenance-carrying op → boxed; literal/rosetta-unwrap → plain), so equal?
-  // routinely meets a boxed string against a plain one. Comparing only `instanceof SchemeString` made
-  // `(equal? boxed "x")` ⇒ #f, silently breaking every dedup/`member?` over derived strings (the
-  // sift/closure.scm browser hang). `this.__string__ === other` lets a plain-string `other` match by
-  // content and a non-string `other` (number/object) fall through to #f. structuralEqual consults the
-  // Setoid before its valueOf check, so this is THE place string equality is decided.
-  ["arrival/tagless-final/equals"](other: unknown): boolean {
-    return this.__string__ === (other instanceof AString ? other.__string__ : other);
-  }
-
-  // Ord (Fantasy Land, extends Setoid). Lexicographic via JS `<=`, a total
-  // code-unit order (totality/antisymmetry/transitivity/consistency-with-equals
-  // all hold against the Setoid above). Non-SchemeString → false.
-  ["arrival/tagless-final/lte"](other: unknown): boolean {
-    return other instanceof AString && this.__string__ <= other.__string__;
-  }
-
   // Functor — map over the characters. Iterates by code point (spread), so astral
   // chars map as single graphemes. `f` receives and returns a string char; the result
   // is the joined string. SYNC (a pure char-map) and present WITHOUT reduce/filter, so
   // the fl-interop overlay never routes a string through its async sequence dispatch —
   // this is the borrowed-protocol rename only. (Migrated from the fantasy-land.ts
-  // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
-  ["arrival/tagless-final/map"](f: (char: string) => string): AString {
-    return new AString(this.ctx, [...this.__string__].map(f).join(""));
+
+  // Setoid before its valueOf check, so this is THE place string equality is decided.
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
+    return this.__string__ === (other instanceof AString ? other.__string__ : other);
   }
 
   // Arrival's element-count — generalized `length` over a string (code-point count). A
@@ -114,25 +117,27 @@ export class AString extends AValue {
   // `length` dispatching here). `withInputProvenance([this], count)` boxes the count with this
   // string's provenance when non-empty, else the bare `count`. Code-point length (spread), so
   // astral chars count once — identical to the `length` getter / `string-length`. NO heap-charge
+
+  // all hold against the Setoid above). Non-SchemeString → false.
+  ["arrival/tagless-final/lte"](other: unknown): boolean {
+    return other instanceof AString && this.__string__ <= other.__string__;
+  }
+
+  // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
+
+  // monkey-patch — plan-2026-06-10-algebras-in-entities.md wave 2 → fl-dissolution.)
+  ["arrival/tagless-final/map"](f: (char: string) => string): AString {
+    return new AString(this.ctx, [...this.__string__].map(f).join(""));
+  }
+
   // / NO strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], [...this.__string__].length);
   }
 
-  // Semigroup (Fantasy Land) — string append. `this ⋄ other` concatenates the
   // two underlying strings. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AString): AString {
     return new AString(this.ctx, this.__string__ + other.valueOf());
-  }
-
-  // Monoid (Fantasy Land) — the empty string is the identity for append.
-  static ["arrival/tagless-final/empty"](): AString {
-    return new AString(CONSTANT_CTX, "");
-  }
-
-  // Applicative (Fantasy Land) — lift a value into a SchemeString.
-  static ["arrival/tagless-final/of"](value: unknown): AString {
-    return new AString(CONSTANT_CTX, String(value));
   }
 
   lower(): AString {
@@ -160,7 +165,7 @@ export class AString extends AValue {
     return this.toString();
   }
 
-  toJs(): string {
+  ["arrival/toJS"](): string {
     return this.__string__;
   }
 

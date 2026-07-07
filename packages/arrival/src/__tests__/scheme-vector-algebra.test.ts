@@ -23,10 +23,8 @@ import { AExact } from "../values/primitives/AExact.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import type { SchemeValue } from "../values/types.js";
 import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
+import { tf } from "../values/tagless-final.js";
 
-const FL = "arrival/tagless-final/equals";
-const CONCAT = "arrival/tagless-final/concat";
-const MAP = "arrival/tagless-final/map";
 
 // A vector element is a boxed exact integer (the interpreter is monadic-boxed:
 // `(vector 1 2 3)` mints AExact slots). The reader domain is small ints, so an
@@ -74,27 +72,27 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
   it("structural value equality over distinct heap payloads", () => {
     const a = vec([1, 2, 3]);
     const b = vec([1, 2, 3]);
-    expect(a[FL](b)).toBe(true);
+    expect(a[tf("equals")](b)).toBe(true);
   });
 
   it("nested-vector equality recurses through structuralEqual", () => {
     const a = new AVector(CONSTANT_CTX, [vec([1, 2]), box(3)]);
     const b = new AVector(CONSTANT_CTX, [vec([1, 2]), box(3)]);
-    expect(a[FL](b)).toBe(true);
+    expect(a[tf("equals")](b)).toBe(true);
     const c = new AVector(CONSTANT_CTX, [vec([1, 9]), box(3)]);
-    expect(a[FL](c)).toBe(false);
+    expect(a[tf("equals")](c)).toBe(false);
   });
 
   it("non-SchemeVector other → false (a raw array is NOT a SchemeVector)", () => {
     const a = vec([1, 2]);
-    expect(a[FL]([1, 2])).toBe(false);
-    expect(a[FL](42)).toBe(false);
+    expect(a[tf("equals")]([1, 2])).toBe(false);
+    expect(a[tf("equals")](42)).toBe(false);
   });
 
   it("concat appends elements, length-additive", () => {
     const a = vec([1, 2]);
     const b = vec([3]);
-    const c = a[CONCAT](b);
+    const c = a[tf("concat")](b);
     expect(c.__vector__.map(numOf)).toEqual([1, 2, 3]);
   });
 
@@ -103,11 +101,11 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
     // The transform returns a boxed element — `map`'s `fn` is honestly typed `SchemeValue →
     // SchemeValue` (a Scheme transform yields a Scheme value). `map` then crosses that box OUT to
     // the impersonator AJSArray (raw `.source`), and Scheme-level access boxes each element back.
-    const mapped = (await a[MAP]((x: SchemeValue) => box(numOf(x) * 10))) as AJSArray;
+    const mapped = (await a[tf("map")]((x: SchemeValue) => box(numOf(x) * 10))) as AJSArray;
     expect(mapped).toBeInstanceOf(AJSArray);
     // DR4 cross-out: the raw source holds bare numbers, reachable for a foreign Functor.
     expect(mapped.source).toEqual([10, 20, 30]);
-    expect(mapped.toJs()).toEqual([10, 20, 30]);
+    expect(mapped["arrival/toJS"]()).toEqual([10, 20, 30]);
     // Functor half: Scheme-level access re-boxes each element to an AExact.
     expect(mapped.__vector__.every((e) => e instanceof AExact)).toBe(true);
     expect(mapped.__vector__.map(numOf)).toEqual([10, 20, 30]);
@@ -117,7 +115,7 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
 
   it("toJs / TO_JS unwrap to the raw array", () => {
     const a = vec([1, 2, 3]);
-    expect(a.toJs().map(numOf)).toEqual([1, 2, 3]);
-    expect(Array.isArray(a.toJs())).toBe(true);
+    expect(a["arrival/toJS"]().map(numOf)).toEqual([1, 2, 3]);
+    expect(Array.isArray(a["arrival/toJS"]())).toBe(true);
   });
 });

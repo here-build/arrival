@@ -21,26 +21,12 @@ import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { nil } from "./ANil.js";
-import {
-  accessHas,
-  accessKeys,
-  accessMember,
-  INTEROP_BOUNDARY,
-  NOT_FOUND,
-} from "../../interop-access.js";
+import { accessHas, accessKeys, accessMember, INTEROP_BOUNDARY, NOT_FOUND, } from "../../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
-import { type SchemeValue } from "../types.js";
-// Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
+import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
 import { jsToScheme } from "../../rosetta.js";
-import { tf } from "../tagless-final.js";
-
-// The membrane's TO_JS protocol key, resolved from the global symbol registry
-// (same rationale as AVector.ts / ABytevector.ts — a module-local const resolving
-// the same `Symbol.for("scheme.toJS")` keeps the membrane's `export const TO_JS`
-// off this value-class import graph, since `[TO_JS]()` is a computed key).
-const TO_JS = Symbol.for("scheme.toJS");
 
 /**
  * Module-level entry cache keyed by wrapper identity. WeakMap rather than an
@@ -92,19 +78,9 @@ export class AJSObject extends AValue {
 
   // Freeze the borrowed source the FIRST time Scheme reads it (parallel to AJSArray.freezeSource) —
   // prevention by construction, replacing the dev-only purity assert. Idempotent;
-  // `freezeRosettaReturns:false` in the run ctx opts out (host keeps it mutable).
-  private freezeSource(): void {
-    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
-      Object.freeze(this.source);
-    }
-  }
 
   /** Unwrap to original JS object (TO_JS protocol). */
-  [TO_JS](): object {
-    return this.source;
-  }
-
-  toJs(): Record<string, unknown> {
+  ["arrival/toJS"](): Record<string, unknown> {
     return this.source as Record<string, unknown>;
   }
 
@@ -236,17 +212,16 @@ export class AJSObject extends AValue {
     return accessKeys(this.source);
   }
 
-  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME source
-  // (reference identity). A SchemeJSObject is a transparent, read-only view over an
-  // OPAQUE foreign object; deep-comparing the source is the "deep semantics" the membrane
-  // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
   // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSObject && this.source === other.source;
   }
 
-  // Keyed read — the `:key` keyword accessor's `apply` hands its own symbol here (not a
-  // pre-folded string); the `:`-strip mirrors readMember's (membrane.ts), since this and
+  // Setoid (Fantasy Land) — two wrappers are `equal?` iff they wrap the SAME source
+  // (reference identity). A SchemeJSObject is a transparent, read-only view over an
+  // OPAQUE foreign object; deep-comparing the source is the "deep semantics" the membrane
+  // exists to avoid (foreign getters/cycles). The abstract AValue Setoid forces this; the
+
   // `@`/`dict-ref` are one protocol, two syntaxes, over the same underlying `.get`.
   ["arrival/tagless-final/get"](key: SchemeValue): SchemeValue {
     let name = String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
@@ -254,17 +229,28 @@ export class AJSObject extends AValue {
     return this.get(name);
   }
 
+  // Keyed read — the `:key` keyword accessor's `apply` hands its own symbol here (not a
+  // pre-folded string); the `:`-strip mirrors readMember's (membrane.ts), since this and
+
   toString(): string {
     return "#<js-object>";
   }
 
-  // Print protocol — opaque foreign-object tag (matches both toString and the printer's CLASS-name
   // path, which resolves AJSObject's static [CLASS] = "js-object" to `#<js-object>`).
   ["arrival/print"](): string {
     return this.toString();
   }
 
+  // Print protocol — opaque foreign-object tag (matches both toString and the printer's CLASS-name
+
   valueOf(): object {
     return this.source;
+  }
+
+  // `freezeRosettaReturns:false` in the run ctx opts out (host keeps it mutable).
+  private freezeSource(): void {
+    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
+      Object.freeze(this.source);
+    }
   }
 }

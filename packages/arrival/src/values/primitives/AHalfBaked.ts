@@ -42,7 +42,7 @@
  */
 
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
 import { AExact } from "./AExact.js";
@@ -102,10 +102,6 @@ export class AHalfBaked extends AValue {
 
   // Print protocol — a speculative carrier with no [CLASS] tag and no own toString, so the printer's
   // generic branch renders it "#<instance>" (behavior-preserving). Rarely printed: a HalfBaked is
-  // forced before egress, so this is mostly a completeness entry.
-  ["arrival/print"](): string {
-    return "#<instance>";
-  }
 
   private constructor(
     ctx: RunContext,
@@ -121,6 +117,11 @@ export class AHalfBaked extends AValue {
     this.records = records;
     this.source = source ?? this;
     this.listeners = source ? source.listeners : new Set();
+  }
+
+  /** True once every slot has settled — the interval has collapsed to a point. */
+  get isFullySettled(): boolean {
+    return this.source.records.every((r) => r.settled);
   }
 
   /**
@@ -154,15 +155,9 @@ export class AHalfBaked extends AValue {
     return hb;
   }
 
-  private markSettled(index: number, items: SchemeValue[]): void {
-    const rec = this.records[index];
-    if (rec.settled) return;
-    rec.settled = true;
-    rec.items = items;
-    rec.cardLo = items.length;
-    rec.cardHi = items.length;
-    // Notify on the SOURCE's listener set (number-domain views share it).
-    for (const l of this.listeners) l();
+  // forced before egress, so this is mostly a completeness entry.
+  ["arrival/print"](): string {
+    return "#<instance>";
   }
 
   /** The cardinality interval right now. lo = Σ cardLo, hi = Σ cardHi. */
@@ -179,11 +174,6 @@ export class AHalfBaked extends AValue {
   /** R1b read for the `number` domain (and identical for collection cardinality). */
   interval(): Interval {
     return this.cardinalityInterval();
-  }
-
-  /** True once every slot has settled — the interval has collapsed to a point. */
-  get isFullySettled(): boolean {
-    return this.source.records.every((r) => r.settled);
   }
 
   /**
@@ -263,7 +253,7 @@ export class AHalfBaked extends AValue {
     return this.force();
   }
 
-  toJs(): unknown {
+  ["arrival/toJS"](): unknown {
     // A HalfBaked must never reach serialization un-forced; if it does, the
     // honest representation is its interval (host-debug only — never sent to a
     // Scheme program, which only ever sees the collapsed value).
@@ -271,20 +261,31 @@ export class AHalfBaked extends AValue {
     return { __halfBaked__: this.domain, lo, hi };
   }
 
-  // Setoid (Fantasy Land) — IDENTITY. A HalfBaked is a still-resolving computation
-  // (a fan of promise-slots / a narrowing interval), not a settled value; two distinct
-  // HalfBakeds are never `equal?` even with the same interval. The abstract AValue
-  // Setoid forces this method; identity is the faithful minimal choice. (`seen` unused
   // — identity never recurses.)
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this === other;
   }
 
+  // Setoid (Fantasy Land) — IDENTITY. A HalfBaked is a still-resolving computation
+  // (a fan of promise-slots / a narrowing interval), not a settled value; two distinct
+  // HalfBakeds are never `equal?` even with the same interval. The abstract AValue
+  // Setoid forces this method; identity is the faithful minimal choice. (`seen` unused
+
   withProvenance(p: Provenance): AHalfBaked {
     return new AHalfBaked(this.ctx, this.domain, this.slots, this.records, this.source, p);
   }
-}
 
+  private markSettled(index: number, items: SchemeValue[]): void {
+    const rec = this.records[index];
+    if (rec.settled) return;
+    rec.settled = true;
+    rec.items = items;
+    rec.cardLo = items.length;
+    rec.cardHi = items.length;
+    // Notify on the SOURCE's listener set (number-domain views share it).
+    for (const l of this.listeners) l();
+  }
+}
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

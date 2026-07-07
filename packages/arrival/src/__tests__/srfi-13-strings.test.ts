@@ -25,7 +25,7 @@ const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s,
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // Literal-string args carry no provenance, so results come back raw (JS boolean/string
 // or a bare SchemeExact); a provenanced input boxes it. Unwrap either shape.
-const js = (x: unknown) => (x instanceof AValue ? x.toJs() : x);
+const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {

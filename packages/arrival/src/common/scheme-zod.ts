@@ -186,7 +186,7 @@ export const procedure = z.codec(
 );
 
 export const string = z.codec(z.instanceof(AString), z.string(), {
-  decode: (s) => s.toJs(),
+  decode: (s) => s["arrival/toJS"](),
   encode: (s) => new AString(CONSTANT_CTX, s),
 });
 

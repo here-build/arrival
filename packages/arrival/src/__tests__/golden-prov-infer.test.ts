@@ -80,7 +80,7 @@ async function prov(src: string, binds: Record<string, unknown> = {}): Promise<n
 // that changes the VALUE — not just the provenance — is also caught).
 async function value(src: string, binds: Record<string, unknown> = {}): Promise<unknown> {
   const r = await runRaw(src, binds, inferSources);
-  return r instanceof AValue ? r.toJs() : r;
+  return r instanceof AValue ? r["arrival/toJS"]() : r;
 }
 
 // ============================================================================

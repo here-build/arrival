@@ -7,7 +7,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { type RunContext } from "./RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
-import { schemeCompare, toReal } from "../numbers.js";
+import { schemeCompare } from "../numbers.js";
 import { AInexact } from "./AInexact.js";
 
 export class AExact extends AValue {
@@ -88,7 +88,7 @@ export class AExact extends AValue {
     return Number(this.num) / Number(this.denom);
   }
 
-  toJS(): number | bigint {
+  ["arrival/toJS"](): number | bigint {
     if (this.denom === 1n) {
       // Return bigint for integers if safe, otherwise number
       if (this.num >= BigInt(Number.MIN_SAFE_INTEGER) && this.num <= BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -97,11 +97,6 @@ export class AExact extends AValue {
       return this.num;
     }
     return this.valueOf();
-  }
-
-  /** AValue contract; aliases existing `toJS` (lowercase). */
-  toJs(): number | bigint {
-    return this.toJS();
   }
 
   withProvenance(p: ReadonlySet<number>): AExact {
@@ -146,10 +141,7 @@ export class AExact extends AValue {
   // so every relation derived from this collapses to #f on a NaN operand, exactly
   // like the numeric `<=` Operator. Non-number → false (Ord convention).
   ["arrival/tagless-final/lte"](other: unknown): boolean {
-    return (
-      (other instanceof AExact || other instanceof AInexact) &&
-      schemeCompare(this, other) <= 0
-    );
+    return (other instanceof AExact || other instanceof AInexact) && schemeCompare(this, other) <= 0;
   }
 
   // Same-type arithmetic
@@ -242,7 +234,8 @@ export class AExact extends AValue {
 
   gcd(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "gcd requires integers");
-    return new AExact(this.ctx, 
+    return new AExact(
+      this.ctx,
       AExact.gcd(this.num < 0n ? -this.num : this.num, other.num < 0n ? -other.num : other.num),
     );
   }

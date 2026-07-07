@@ -23,12 +23,7 @@ import { ACharacter } from "./ACharacter.js";
 import { AString } from "./AString.js";
 import { nil } from "./ANil.js";
 import { type SchemeValue } from "../types.js";
-import { structuralEqual, type SeenMap } from "../structural-equal.js";
-
-// Same local-resolution trick ABytevector/AJSObject use to avoid a static import
-// cycle back to membrane.ts: `Symbol.for` returns the identical symbol membrane.ts's
-// `export const TO_JS = Symbol.for("scheme.toJS")` does, without importing it.
-const TO_JS = Symbol.for("scheme.toJS");
+import { type SeenMap, structuralEqual } from "../structural-equal.js";
 
 export type DictKey = ASymbol | AString | ACharacter;
 
@@ -119,17 +114,14 @@ export class ADict extends AValue {
     return new ADict(this.ctx, [...this.byKey.entries()], p);
   }
 
-  /** Shallow, folded to plain string keys — mirrors AJSObject.toJs()'s contract
-   *  exactly. The recursive Scheme→JS primitive conversion belongs to schemeToJs
-   *  (rosetta.ts), which already owns that recursion for every other boxed type. */
-  [TO_JS](): Record<string, SchemeValue> {
+  /** Shallow, folded to plain string keys — mirrors AJSObject's `["arrival/toJS"]`
+   *  contract exactly. The recursive Scheme→JS primitive conversion belongs to
+   *  schemeToJs (rosetta.ts), which already owns that recursion for every other
+   *  boxed type. */
+  ["arrival/toJS"](): Record<string, SchemeValue> {
     const out: Record<string, SchemeValue> = {};
     for (const name of this.keys()) out[name] = this.get(name);
     return out;
-  }
-
-  toJs(): Record<string, SchemeValue> {
-    return this[TO_JS]();
   }
 
   // Print protocol — a real `(dict :k v ...)` repr; neither prior dict representation

@@ -16,7 +16,6 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import {
   // Wrapper layer
-  TO_JS,
   fromJS,
   toJS,
   isSchemeValue,
@@ -212,10 +211,10 @@ describe("Wrapper Layer", () => {
   });
 
   describe("SchemeJSObject", () => {
-    it("has TO_JS symbol", () => {
+    it("has the arrival/toJS protocol key", () => {
       const obj = new AJSObject(CONSTANT_CTX, {});
-      expect(TO_JS in obj).toBe(true);
-      expect(obj[TO_JS]()).toEqual({});
+      expect("arrival/toJS" in obj).toBe(true);
+      expect(obj["arrival/toJS"]()).toEqual({});
     });
 
     it("gets properties with lazy wrapping", () => {

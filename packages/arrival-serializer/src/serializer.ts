@@ -312,17 +312,19 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
   }
 
   // AValue with empty provenance carries no lineage to show — serialize its
-  // plain value (`toJs()`), not the internal {provenance, kind, source}
-  // envelope. (A non-empty provenance keeps the envelope, by design.)
+  // plain value (`["arrival/toJS"]()`, the arrival protocol key — same convention
+  // as `arrival/tagless-final/*`/`arrival/print`), not the internal
+  // {provenance, kind, source} envelope. (A non-empty provenance keeps the
+  // envelope, by design.)
   if (
     typeof obj === "object" &&
     obj !== null &&
     obj.provenance instanceof Set &&
     obj.provenance.size === 0 &&
-    typeof obj.toJs === "function" &&
+    typeof obj["arrival/toJS"] === "function" &&
     typeof obj.kind === "string"
   ) {
-    return toSExpr(obj.toJs(), visited);
+    return toSExpr(obj["arrival/toJS"](), visited);
   }
 
   // Plain object → dict literal `(dict :k v …)`

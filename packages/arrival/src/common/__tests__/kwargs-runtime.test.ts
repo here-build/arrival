@@ -44,7 +44,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       (args) => `${args.a}:${args.b}`,
     );
     const out = await def.run(pluck("a"), new AString(CONSTANT_CTX, "Ada"), pluck("b"), new AExact(CONSTANT_CTX, 5n));
-    expect((out as AString).toJs()).toBe("Ada:5");
+    expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
   it("keyword ORDER is independent of the shape's declared order", async () => {
@@ -55,7 +55,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
     const out = await def.run(pluck("b"), new AExact(CONSTANT_CTX, 5n), pluck("a"), new AString(CONSTANT_CTX, "Ada"));
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.
-    expect((out as AString).toJs()).toBe("Ada:5");
+    expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 });
 
@@ -72,17 +72,17 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
 
   it("(tool :a v :b v2) invokes the impl with the constructed {a,b} object", async () => {
     const [out] = await exec(`(kw-greet :a "Ada" :b 5)`, { env });
-    expect((out as AString).toJs()).toBe("Ada:5");
+    expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
   it("keyword ORDER at the call site is independent of the shape's declared order", async () => {
     const [out] = await exec(`(kw-greet :b 5 :a "Ada")`, { env });
-    expect((out as AString).toJs()).toBe("Ada:5");
+    expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
   it("an optional kwarg omitted leaves it undefined, no decode failure", async () => {
     const [out] = await exec(`(kw-greet :a "Ada")`, { env });
-    expect((out as AString).toJs()).toBe("Ada:undefined");
+    expect((out as AString)["arrival/toJS"]()).toBe("Ada:undefined");
   });
 
   it("a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. \"a\"), not the " +
