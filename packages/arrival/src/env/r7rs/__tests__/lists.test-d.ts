@@ -68,7 +68,7 @@ describe("lists Contract precision — make-list: fill is z.value.optional(), ou
     // A runtime-value union (TS infers the type args) doesn't have this problem.
     const makeListOutput = z.union([z.pair, z.nil]);
     expectTypeOf<DecodedReturn<[typeof makeListOutput]>>().toEqualTypeOf<
-      APair<SchemeValue, SchemeValue> | null
+      [SchemeValue, SchemeValue] | null
     >();
   });
 });
@@ -84,7 +84,7 @@ describe("lists Contract precision — list-set!: obj (3rd, stored arg) is z.val
   test("NEW 3-tuple shape decodes [APair|null, AExact|AInexact, SchemeValue] — matches list-set!'s real migrated contract (nil's JS face is null, not ANil — AList is the scheme face)", () => {
     const listSchema = z.union([z.pair, z.nil]);
     expectTypeOf<DecodedArgs<[typeof listSchema, typeof z.schemeNumber, typeof z.value]>>().toEqualTypeOf<
-      [APair<SchemeValue, SchemeValue> | null, z.output<typeof z.schemeNumber>, SchemeValue]
+      [[SchemeValue, SchemeValue] | null, z.output<typeof z.schemeNumber>, SchemeValue]
     >();
   });
 });
@@ -115,7 +115,7 @@ describe("lists Contract precision — member/assoc: obj is z.value (not z.custo
     const listSchema = z.union([z.pair, z.nil]);
     const compare = z.custom<(a: unknown, b: unknown) => unknown>().optional();
     expectTypeOf<DecodedArgs<[typeof z.value, typeof listSchema, typeof compare]>>().toEqualTypeOf<
-      [SchemeValue, APair<SchemeValue, SchemeValue> | null, ((a: unknown, b: unknown) => unknown) | undefined]
+      [SchemeValue, [SchemeValue, SchemeValue] | null, ((a: unknown, b: unknown) => unknown) | undefined]
     >();
   });
 });
@@ -138,7 +138,7 @@ describe("lists Contract precision — list->array: output is z.array(z.value) (
 describe("lists Contract precision — flatten: output is z.union([z.pair, z.nil, z.array(z.custom<unknown>())]) — matches `.flatten()`'s own declared TS return type (APair | ANil | unknown[]) exactly, tighter than a bare z.custom<unknown>()", () => {
   test("the union decodes to APair | null | unknown[] (nil's JS face is null now, and this really is the full 3-member union — the prior AList-migration note here was itself wrong: AList is 2-member and this union has 3)", () => {
     const flattenOutput = z.union([z.pair, z.nil, z.array(z.custom<unknown>())]);
-    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<APair<SchemeValue, SchemeValue> | null | unknown[]>();
+    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null | unknown[]>();
   });
 });
 

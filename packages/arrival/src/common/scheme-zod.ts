@@ -364,8 +364,6 @@ export const bytevector = named(
   }),
 );
 
-export const pair = named("pair", z.instanceof(APair));
-
 /** Raw predicate for a plain JS function — the "lambda" half of the `procedure` scheme side. */
 export const lambda = named(
   "lambda",
@@ -451,6 +449,15 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
   COLLECTION_ELEMENT.set(schema, [carE, cdrE]);
   return schema;
 }
+
+// `pair` is `cons(value, value)`, not a hand-rolled bare instanceof — every OTHER primitive in
+// this vocabulary is a real codec; a bare `z.instanceof(APair)` never decodes, so a rosetta
+// contract typed `z.pair` would still hand its impl a raw APair (the exact "impl touches
+// interpreter internals" failure the whole codec vocabulary exists to prevent). The scheme
+// face (z.input) is byte-identical to the old bare form (still z.instanceof(APair)), so every
+// current native/sequence consumer (25 sites, all scheme-face, verified) is unaffected; only a
+// future rosetta contract's decoded shape changes, from raw APair to a real [car, cdr] tuple.
+export const pair = cons(value, value);
 
 // `vector` — representation-blind `AVector | AJSArray` union codec; encode canonically produces
 // AVector (the first union branch).
