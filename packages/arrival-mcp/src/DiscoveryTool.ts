@@ -178,6 +178,27 @@ export interface DiscoveryToolOptions {
   description: string;
   /** Wall-clock eval budget (the interpreter TICK-checks it). Defaults to {@link DEFAULT_BUDGET_MS}. */
   budgetMs?: number;
+
+  /**
+   * Host-supplied configuration values for the capability's `configuration` schema.
+   * These are merged (host wins) with values extracted from the actor-provided `args` when
+   * lowering the capability for execution. Use for injecting host services (functions,
+   * per-request resources, etc.) that are declared in the capability configuration but are
+   * not supplied by the actor and should not appear in the exposed tool schema.
+   *
+   * Can be a static partial or a function receiving the actor args for this invocation.
+   */
+  hostConfig?: Record<string, unknown> | ((actorArgs: DiscoveryArgs) => Record<string, unknown> | Promise<Record<string, unknown>>);
+
+  /**
+   * Which keys from the capability's `configuration` should be treated as exposable to the
+   * actor: they will be included in the generated input schema for the tool and will be
+   * pulled from the incoming call `args`.
+   *
+   * If omitted, *all* declared configuration keys are exposed.
+   * Specify a subset to hide host-only configuration (e.g. `getGateway`) from the client.
+   */
+  exposableConfiguration?: readonly string[];
 }
 
 type DiscoveryArgs = { expr: string; intent?: string } & Record<string, unknown>;
@@ -263,22 +284,45 @@ export class DiscoveryTool {
 
   // ── env assembly: config from the actor args, resources armed by the capability ──
 
-  private environment(args: DiscoveryArgs): Promise<SchemeEnv> {
+  private async environment(args: DiscoveryArgs): Promise<SchemeEnv> {
     // The base is the constant safe floor (SAFE_BUILTINS) — vocabulary is added ONLY by the
     // capability's deps (the audited grant), never by swapping the base out from under it.
     const base = sandboxedEnv.inherit(this.name, {});
+    const cfg = await this.config(args);
     return assembleEnv(base, [
       this.capability.lower({
-        config: this.config(args),
+        config: cfg,
         evalScheme: (e, src) => execSerialized(src, { env: e }),
       }),
     ]).then(({ env }) => env as SchemeEnv);
   }
 
-  /** The capability's `configuration` fields, picked out of the call args (validated by `lower`). */
-  private config(args: DiscoveryArgs): Record<string, unknown> {
-    const schema = (this.capability.spec as McpCapabilitySpec<Record<string, z.ZodType>, never>).configuration ?? {};
-    return Object.fromEntries(Object.keys(schema).map((k) => [k, args[k]]));
+  /** The capability's `configuration` fields. Actor values come from call args for the
+   *  exposable keys; host values (from `hostConfig` option) are merged in. */
+  private async config(args: DiscoveryArgs): Promise<Record<string, unknown>> {
+    const spec = this.capability.spec as McpCapabilitySpec<Record<string, z.ZodType>, never>;
+    const configSchema = spec.configuration ?? {};
+    const allKeys = Object.keys(configSchema);
+    const exposable = this.options.exposableConfiguration ?? allKeys;
+
+    // Pull exposable fields from actor args (the tool call payload)
+    const fromActor: Record<string, unknown> = {};
+    for (const k of exposable) {
+      if (k in args) fromActor[k] = args[k];
+    }
+
+    // Host-provided (may be functions, per-request services, etc.)
+    let fromHost: Record<string, unknown> = {};
+    if (this.options.hostConfig) {
+      fromHost = typeof this.options.hostConfig === 'function'
+        ? await this.options.hostConfig(args)
+        : this.options.hostConfig;
+    }
+
+    const merged = { ...fromActor, ...fromHost };
+
+    const schema = z.object(configSchema as z.ZodRawShape);
+    return schema.parse(merged);
   }
 
   // ── catalog + input schema: both derived from the capability ──
@@ -289,17 +333,22 @@ export class DiscoveryTool {
     const aiName = clientInfo?.name === "claude-ai" ? "Claude" : "";
 
     // ONE zod object is the source — the capability's `configuration` (transforms and all) merged
-    // with expr/intent. `toJSONSchema` derives the wire shape; nothing hand-assembled, and the
-    // required config args land in `required` (the hand-built version wrongly required only `expr`).
+    // with expr/intent. Only *exposable* configuration keys are included in the schema presented
+    // to the actor (host-only config such as functions is supplied via hostConfig and omitted here).
     const configShape =
       (this.capability.spec as McpCapabilitySpec<Record<string, z.ZodType>, never>).configuration ?? {};
+    const allConfigKeys = Object.keys(configShape);
+    const exposableKeys = this.options.exposableConfiguration ?? allConfigKeys;
+    const exposedConfig = Object.fromEntries(
+      exposableKeys.map((k) => [k, (configShape as any)[k]]),
+    );
     const input = z.object({
       intent: z
         .string()
         .describe("What you're exploring and why. Shown to collaborating users in the studio UI.")
         .optional(),
       expr: z.string().describe(this.exprDescription(verbs, dynamic, aiName)),
-      ...(configShape as z.ZodRawShape),
+      ...(exposedConfig as z.ZodRawShape),
     });
     const { $schema: _drop, ...jsonSchema } = z.toJSONSchema(input);
     return jsonSchema as Tool["inputSchema"];

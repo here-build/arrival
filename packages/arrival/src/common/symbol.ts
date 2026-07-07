@@ -57,3 +57,6 @@ export type {
   InvocationContext,
   ImplInvocationCtx,
 } from "./symbols/_bake.js";
+
+// Re-export the generic form for convenience when using metadata.
+export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";

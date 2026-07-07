@@ -145,26 +145,53 @@ function liftInlineAnnotations(
   const keySet = new Set(annotationKeys);
   const cleanSymbols: Record<string, any> = {};
   const annotations: Record<string, McpAnnotation> = { ...explicit };
+
   for (const [name, def] of Object.entries(symbols)) {
     if (typeof def !== "object" || def === null) {
       cleanSymbols[name] = def; // bare fn — no inline fields to lift
       continue;
     }
+
+    // Support metadata on baked RosettaSymbolDef (generic M)
+    const meta = (def as any).metadata;
+    const hasMeta = meta && typeof meta === "object";
+
     const clean: any = {};
     const ann: any = {};
     let hasInline = false;
+
+    // First, copy any direct annotation keys (legacy object form)
     for (const key of Object.keys(def)) {
-      const desc = Object.getOwnPropertyDescriptor(def, key)!;
       if (keySet.has(key)) {
-        Object.defineProperty(ann, key, desc); // descriptor copy preserves an inputSchema getter
+        const desc = Object.getOwnPropertyDescriptor(def, key)!;
+        Object.defineProperty(ann, key, desc);
         hasInline = true;
-      } else {
+      } else if (key !== "metadata") {
+        const desc = Object.getOwnPropertyDescriptor(def, key)!;
         Object.defineProperty(clean, key, desc);
       }
     }
-    cleanSymbols[name] = clean;
-    if (hasInline) annotations[name] = ann; // inline wins over an explicit entry
+
+    // Then, pull from metadata (new generic way for rosetta + tool``)
+    if (hasMeta) {
+      for (const key of Object.keys(meta)) {
+        if (keySet.has(key)) {
+          ann[key] = meta[key];
+          hasInline = true;
+        }
+      }
+    }
+
+    // For baked defs we want to keep the original (including metadata) in clean
+    if ((def as any).kind) {
+      cleanSymbols[name] = def; // keep the full baked def (rosetta etc.)
+    } else {
+      cleanSymbols[name] = clean;
+    }
+
+    if (hasInline) annotations[name] = { ...(annotations[name] || {}), ...ann };
   }
+
   return { symbols: cleanSymbols, annotations };
 }
 

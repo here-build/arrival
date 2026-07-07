@@ -132,7 +132,12 @@ export type DecodedArgsWithRest<
   : DecodedArgs<I, F>;
 
 /** A symbol's input/output contract. */
-export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
+export interface Contract<
+  I extends VectorSpec,
+  O extends VectorSpec,
+  Rest extends RestSpec = undefined,
+  Metadata extends Record<string, any> | undefined,
+> {
   input: I;
   /** The variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first
    *  arg is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
@@ -175,6 +180,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  runtime by capturing the call's RESULT in an ordinary define, never the verb itself. See
    *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
   readonly preludeOnly?: boolean;
+  readonly metadata?: Metadata;
 }
 
 export type ImplInvocationCtx = { ctx: HandlerCallCtx };
@@ -217,13 +223,23 @@ export interface NativeSymbolDef {
 }
 
 /** A rosetta symbol: impl in JS-land. `in`/`out` are the (codec) schemas; `run` is the
- *  decode→validate→impl→encode wrapper produced by bake. */
-export interface RosettaSymbolDef {
+ *  decode→validate→impl→encode wrapper produced by bake.
+ *
+ *  `M` is optional metadata (e.g. for MCP annotations like description, inputSchema,
+ *  dynamicDescription, etc.). Stored under `.metadata` so higher layers (arrival-mcp)
+ *  can carry tool-specific data without polluting the core schema.
+ */
+export interface RosettaSymbolDef<
+  const I extends z.ZodTypeAny = z.ZodTypeAny,
+  const O extends z.ZodTypeAny = z.ZodTypeAny,
+  const Rest extends RestSpec = undefined,
+  const M extends Record<string, any> = Record<string, any>,
+> {
   readonly kind: "rosetta";
   readonly name: string;
   readonly doc?: string;
-  readonly in: z.ZodTypeAny;
-  readonly out: z.ZodTypeAny;
+  readonly in: I;
+  readonly out: O;
   /** The raw JS-land impl (decoded args → result). Kept for the harvest / inspection. */
   readonly impl: AnyFn;
   /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
@@ -237,6 +253,8 @@ export interface RosettaSymbolDef {
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
+  /** Extra data carried by this symbol (MCP tool annotations, etc.). */
+  readonly metadata?: M;
 }
 
 /** A tagless symbol: NO impl — the bypass to the operand's own `arrival/tagless-final/<name>`
@@ -470,6 +488,10 @@ export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
 export interface BakeRuntimeOpts {
   /** Run zod validation on decoded args + encoded output. Default true. */
   validate?: boolean;
+  /** Arbitrary metadata to attach to the symbol (e.g. MCP tool annotations).
+   *  Stored in `.metadata` on the resulting RosettaSymbolDef.
+   *  Use the generic `RosettaSymbolDef<M>` to type it. */
+  metadata?: Record<string, any>;
 }
 
 /** The structural slice of EvalContext the symbol wrappers read. Duck-typed (the full

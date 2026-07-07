@@ -27,3 +27,4 @@ export * from "./dispatch.js";
 export * from "./resources/index.js";
 export * from "./store.js";
 export { InMemorySessionStore as InMemoryArrivalSessionStore } from "./InMemorySessionStore.js";
+export { tool } from "./tool.js";

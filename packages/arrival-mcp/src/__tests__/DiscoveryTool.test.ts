@@ -45,7 +45,7 @@ describe("DiscoveryTool (value-shaped, capability-derived)", () => {
 
   it("call(): config comes from the args, the resource spawns from it, the verb reads both", async () => {
     const tool = new DiscoveryTool("demo", demoCapability(), { description: "demo tool" });
-    expect(await tool.call({ expr: "(greet)", who: "ada" })).toEqual(["'hi ada'"]);
+    expect(await tool.call({ expr: "(greet)", who: "ada" })).toEqual([`"hi ada"`]);
   });
 
   it("threads the abort signal into the eval — a pre-aborted call fast-fails", async () => {
