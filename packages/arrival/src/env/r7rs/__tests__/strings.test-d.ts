@@ -19,7 +19,8 @@
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/symbol.js";
-import type { AList } from "../../../values/types.js";
+import type { AList, SchemeValue } from "../../../values/types.js";
+import type { APair } from "../../../values/primitives/APair.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
@@ -44,17 +45,20 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
     expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
   });
 
-  test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | ANil, not unknown (string->list / split)", () => {
-    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<AList>();
+  test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list / split) — nil's JS face is null, not ANil; AList is the scheme face", () => {
+    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<APair<SchemeValue, SchemeValue> | null>();
   });
 
-  test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | ANil], not [unknown] (list->string)", () => {
-    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[AList]>();
+  test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | null], not [unknown] (list->string)", () => {
+    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[APair<SchemeValue, SchemeValue> | null]>();
   });
 
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
+    // Explicit AList<SchemeValue, SchemeValue>, not bare AList — bare AList relies on its
+    // default type params, which toEqualTypeOf can't reconcile against a computed type here
+    // (a real expect-type limitation with defaulted generics, verified directly).
     expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<
-      [AString, AList]
+      [AString, AList<SchemeValue, SchemeValue>]
     >();
   });
 });

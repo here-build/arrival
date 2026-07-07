@@ -179,8 +179,12 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
     // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
+    // nil's JS face is null now, not ANil — AList (APair|ANil) is the scheme face, this is the JS one.
+    // Head return is `unknown`, not `SchemeValue` — forEachHead is z.lambda, whose declared
+    // return type is (...args: unknown[]) => unknown (matches the sibling string-map/
+    // string-for-each test below, same z.lambda). Pre-existing mismatch here, unrelated to nil.
     expectTypeOf<DecodedArgsWithRest<[typeof forEachHead], typeof listRest>>().toEqualTypeOf<
-      [(...args: unknown[]) => SchemeValue, ...AList[]]
+      [(...args: unknown[]) => unknown, ...(APair<SchemeValue, SchemeValue> | null)[]]
     >();
   });
 
@@ -220,14 +224,15 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
   const listOrNil = z.union([z.pair, z.nil]);
 
   test("OLD shape: predicate slot z.unknown() decodes to a bare unknown, not a callable", () => {
+    // nil's JS face is null now, not ANil — AList (APair|ANil) is the scheme face, this is the JS one.
     expectTypeOf<DecodedArgs<[ReturnType<typeof z.unknown>, typeof listOrNil]>>().toEqualTypeOf<
-      [unknown, AList]
+      [unknown, APair<SchemeValue, SchemeValue> | null]
     >();
   });
 
   test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
     expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, AList]
+      [(...args: unknown[]) => unknown, APair<SchemeValue, SchemeValue> | null]
     >();
   });
 
