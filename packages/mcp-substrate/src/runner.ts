@@ -1,35 +1,12 @@
-// runner — the doors-steering runner's ONE stateful orchestrator: `createDoorsRunner(options)`
-// builds a `DoorsRunner` whose `run(input)` is a behavior-preserving port of arrival-manifold's
-// `manifold-tool.ts` `call()` method (commit history: the errors-as-doors envelope, competence v2,
-// futility doors, session-history/scope-confusion tracking, type-hints delivery, attachments).
-// This file is Phase 2 of docs/working-proposals/arrival-manifold-package-split-2026-07-05.md — the
-// integration step wiring Track A (session-state) + Track B (door-generation), both already copied
-// verbatim into this package's sibling modules in Phase 1.
+// runner — the central stateful orchestrator for the doors teaching system.
 //
-// FROZEN-INTERFACE EXTENSIONS (found necessary during this port, not silently papered over — see
-// the migration's own commit/PR notes for the full account):
-//   • `DoorsRunnerOptions.rendering` — manifold's `"braces" | "sexpr"` observation-rendering
-//     switch (config.ts/bin.ts, live and tested) has no other home: the CHOICE of renderer is
-//     runner-owned (it renders every statement's result inside the statement loop), but neither
-//     `CalibrationOptions` (numeric-only, by its own doc) nor the original 6-field
-//     `DoorsRunnerOptions` had a slot for it.
-//   • `DoorsRunnerOptions.typeHints` — the whole type-hints delivery subsystem (Ring 1-3:
-//     context-ring, spine-lens, deliverTypeHints) is exercised entirely inside `call()`'s
-//     statement-loop tail in the original, but the frozen interface set had no field carrying a
-//     `{mode, lens}` pair into the runner at all.
-//   • `DoorsRunnerOptions.session` / `.tracker` — server.ts constructs ONE `DoorSession` /
-//     `FutilityTracker` per SERVER PROCESS specifically so verbosity-gate state and futility rings
-//     SURVIVE a tools/listChanged world rebuild (its own header comment says so explicitly). Since
-//     a rebuild in the new architecture reconstructs a fresh `DoorsRunner` (manifold-tool.ts's
-//     wrapper builds one per `createManifoldTool` call, mirroring today's per-world
-//     `createManifoldTool` call), an un-injectable internal `DoorSession`/`FutilityTracker` would
-//     silently reset that state on every rebuild — a real behavior regression the original design
-//     explicitly guards against. Both are optional, additive, and structurally mirror the existing
-//     `attachmentSink` injection (already a required field) — omitting them reproduces a fresh,
-//     private instance exactly as `manifold-tool.ts`'s own `options.session ?? new DoorSession()`
-//     did.
-// All four are additive optional fields; every existing typed consumer of the narrower
-// `DoorsRunnerOptions` shape (the Phase-0 frozen-interface skeleton tests) still type-checks.
+// `createDoorsRunner(options)` returns a `DoorsRunner` with a `run(input)` method that executes
+// Scheme expressions against a live `SchemeEnv`, enriches errors with structured teaching doors,
+// tracks session history, applies futility detection, and (optionally) delivers type hints.
+//
+// The runner owns cross-call state (via injected `session` and `tracker`) so that per-process
+// teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
+// and model-agnostic.
 
 import { APair, exec, parse, theVoid, tokenize, type SchemeEnv, type SchemeValue } from "@here.build/arrival";
 import { toSExprString } from "@here.build/arrival-serializer";
@@ -64,17 +41,12 @@ import { createContextRing, type SerializableContextRing } from "./type-hints/co
 import { deliverTypeHints } from "./type-hints/deliver.js";
 import type { TypeHintLens, TypeHintsMode } from "./type-hints/types.js";
 
-/** `exec`'s `env` option is typed against arrival's concrete (intentionally UNEXPORTED)
- *  `Environment` class; `SchemeEnv` is the public structural contract `Environment` implements.
- *  Every `SchemeEnv` this module receives IS a full `Environment` at runtime — this package just
- *  can't name that type from outside arrival's package boundary (ported verbatim from
- *  manifold-tool.ts). */
+/** `exec`'s `env` option is typed against arrival's concrete (intentionally unexported)
+ * `Environment` class. `SchemeEnv` is the public structural contract it implements. */
 type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
 
-/** Extra wall-clock grace the OUTER race allows past the in-band `budgetMs` deadline — see
- *  `run()` below: the outer race exists only for evals PARKED inside a host await (a stuck
- *  upstream tool), where arrival's trampoline can't reach its own budget check. Ported verbatim
- *  from manifold-tool.ts's `PARKED_GRACE_MS`. */
+/** Extra grace period for the outer timeout race. Used only when evaluation is parked inside
+ * a host await (e.g. a stuck upstream tool) that the in-band budget check cannot reach. */
 const PARKED_GRACE_MS = 250;
 
 const UNBOUND_VARIABLE = /Unbound variable [`']?([^`'\s]+)/;
@@ -84,8 +56,7 @@ const timeoutMessage = (timeoutMs: number): string =>
   `Likely an infinite loop/recursion, or a stuck tool call. The environment is still usable: ` +
   `fix the runaway expression and try again, splitting the work into smaller exprs if needed.`;
 
-// ─── REPL statement splitting (ported verbatim from manifold-tool.ts, itself ported from
-// arrival-mcp's DiscoveryTool) ───
+// ─── REPL statement splitting ───
 const isOpen = (tok: string): boolean =>
   tok === "(" || tok === "[" || tok === "{" || (tok.startsWith("#") && !tok.startsWith("#\\") && tok.endsWith("("));
 const CLOSE = new Set([")", "]", "}"]);
@@ -115,30 +86,17 @@ function splitTopLevel(source: string): string[] {
   return starts.map((s, i) => source.slice(s, starts[i + 1] ?? source.length).trim()).filter(Boolean);
 }
 
-// ─── FORM DISPLAY TEXT (2026-07-06 migration off the retired sweet-expression spike parser) ───
+// ─── Form display text ───
 //
-// `run()`'s statement loop now iterates over `forms: SchemeValue[]` — arrival's real, ALREADY-
-// PARSED reader output (the syntax gate's own `parse(expr)` call, kept instead of discarded) —
-// and BOTH executes (`exec(form, …)`) AND analyzes (`analyzeStatement(form)`) directly from it.
-// `splitTopLevel` (the real lexer's own top-level TEXT split) is kept for exactly one remaining
-// purpose: a human-readable / replayable TEXT string per executed form, for history/context-ring/
-// signature-echo/type-hints display — never for execution or fact derivation, both of which read
-// `forms` exclusively (see the call site).
+// The execution/analysis loop works directly on `forms` (the real parsed `SchemeValue[]` from
+// arrival's reader). `splitTopLevel` is retained only to produce human-readable text for
+// session history, context rings, signature echoes, and type hints.
 //
-// THE ALIGNMENT PROBLEM: `forms.length` can legitimately differ from `splitTopLevel`'s statement
-// count — a `#;` datum comment makes the real `parse()` drop a form that `splitTopLevel` still
-// lists as a text statement (verified: `(a) #;(b) (c)` → 2 forms, 3 text statements). Blindly
-// zipping `forms[i]` with `statements[i]` by index would silently misattribute text once a `#;`
-// appears anywhere in the call. The call site therefore only uses `statements[i]` directly when
-// `statements.length === forms.length` — an explicit, CHECKED precondition (not a blind
-// assumption): both scans walk the identical token stream splitting at the same top-level
-// boundaries, so equal counts mean no form was dropped, and `statements[i]` is `forms[i]`'s exact
-// original text, preserving today's byte-for-byte display behavior in the overwhelmingly common
-// (no-`#;`) case. When the counts diverge, `displayTextFor` below computes an independent,
-// forms-only text array instead — location-anchored slicing into `expr`, falling back to
-// `toSExprString` for a form with no location metadata (only `APair` carries `[LOCATION]`, so a
-// bare top-level atom/vector has none). Either path is PURELY a display/history string; it can
-// never influence what is executed or analyzed.
+// Alignment: `forms.length` may differ from the text split count because `#;` datum comments
+// are dropped by the real parser but still appear in the lexer split. The call site checks
+// `statements.length === forms.length` before trusting index alignment; otherwise it falls back
+// to location-anchored slicing or `toSExprString`. Display text is never used for execution or
+// semantic analysis.
 
 /** The next form (from `fromIndex` onward) that carries `[LOCATION]` metadata, or `undefined` if
  *  none of the remaining forms have one. Looking ahead past location-less forms (rather than only
@@ -170,7 +128,7 @@ function displayTextFor(form: SchemeValue, index: number, forms: readonly Scheme
   return toSExprString(form);
 }
 
-/** THE SCOPE-CONFUSION CASCADE DETECTION SITE — ported verbatim from manifold-tool.ts. */
+/** Find the statement number of an earlier top-level `(define name ...)` for the given name. */
 function topLevelDefineStatementNumber(
   name: string,
   facts: readonly StatementFacts[],
@@ -182,7 +140,7 @@ function topLevelDefineStatementNumber(
   return undefined;
 }
 
-/** THE SCOPE-CONFUSION LIBRARY-SYMBOL EXCLUSION — ported verbatim from manifold-tool.ts. */
+/** True if the error is the bare "Unbound variable" form for a library symbol (not a tool). */
 function isLibraryEnriched(raw: string, name: string): boolean {
   const bareWall = `Unbound variable \`${name}'`;
   return raw.startsWith(bareWall) && raw.length > bareWall.length;
@@ -224,43 +182,26 @@ export interface DoorsRunnerOptions {
   calibration?: Partial<CalibrationOptions>;
   sessionStore?: AsyncSessionStore;
   sessionId?: string;
-  /** Observation rendering: "braces" (default) prints dict/list results as `{:k v ...}` /
-   *  `[a b ...]`; "sexpr" is the constructor-call escape hatch `(dict :k v ...)` / `(list a b
-   *  ...)`. See this file's header for why this field is a necessary, additive extension of the
-   *  Phase-0 frozen interface. */
+  /** Observation rendering mode. "braces" (default) uses `{:k v ...}` / `[a b ...]`.
+   *  "sexpr" uses the constructor form `(dict :k v ...)` / `(list a b ...)`. */
   rendering?: "braces" | "sexpr";
-  /** TYPE HINTS (docs/working-proposals/manifold-type-hints.md): the type-layer as an
-   *  error-reporting surface, gated + wired exactly as `ManifoldToolOptions.typeHints` was.
-   *  Absent ⇒ the feature is entirely inert. See this file's header for why this field is a
-   *  necessary, additive extension of the Phase-0 frozen interface. */
+  /** Optional type-hints delivery configuration. When present and not "off", type diagnostics
+   *  are delivered as trailing content after statement results. */
   typeHints?: { mode: TypeHintsMode; lens: TypeHintLens };
-  /** The caller's door session (verbosity gate + follow telemetry) — inject to SURVIVE a world
-   *  rebuild that reconstructs the `DoorsRunner` itself (mirrors server.ts's one-per-process
-   *  `DoorSession`). Absent ⇒ a private one is created (matches `ManifoldToolOptions.session`).
-   *  See this file's header for why this field is a necessary, additive extension. */
+  /** Optional shared `DoorSession` (controls per-shape verbosity and follow telemetry).
+   *  Injected by the host so teaching state survives `DoorsRunner` reconstruction on world
+   *  rebuilds. If omitted, a private instance is used. */
   session?: DoorSession;
-  /** The caller's futility tracker — same survive-a-rebuild rationale as `session` above.
-   *  Absent ⇒ futility detection is off (matches the original tool option's absence behavior)
-   *  — NOT defaulted to a private instance, since an un-injected tracker is indistinguishable
-   *  from "this deployment doesn't want futility doors" versus "this deployment forgot to
-   *  thread its process-lifetime tracker", and the original made the same choice (no
-   *  fallback instance when the option was omitted). */
+  /** Optional shared `FutilityTracker`. If omitted, futility doors are disabled for this runner. */
   tracker?: FutilityTracker;
 }
 
-/** The FULL teaching-state bundle {@link DoorsRunner.exportSession} serializes — history,
- *  futility rings, DoorSession dedup, context-ring, local-binding tracker, all plain data (V's
- *  2026-07-05 "map but async" decision, docs/working-proposals/
- *  arrival-manifold-package-split-2026-07-05.md). `cache` is reserved for the Phase-4 replay-cache
- *  fix (a tool-valued define's wire-safe VALUE, so a restore doesn't drop it) — deliberately NOT
- *  populated by Phase 2 (no such mechanism exists in the ported `session-history.ts` replay yet;
- *  populating this field ahead of that fix would be indistinguishable from a real cache with none
- *  of its behavior), kept in the blob schema now so Phase 4 is a value-population change, not a
- *  schema migration. `competence` (COMPETENCE v2's rolling-window remedy-gradient state) was
- *  removed 2026-07-06 alongside the truncation banner it fed — a measured null effect on task
- *  pass-rate made the banner (and the gradient that tuned its remedy clause) dead weight. A blob
- *  from before that date may still carry a `competence` key; `restoreSession` below ignores it
- *  rather than choking on an unknown field (never re-serialized going forward). */
+/** The serializable teaching state for a `DoorsRunner`.
+ *
+ *  - `history`, `futility`, `localBindings`, `doorSession`, `contextRing` are the live teaching
+ *    state.
+ *  - `cache` is reserved for future replay-cache support for tool-valued defines.
+ *  - Older blobs may contain a `competence` key (removed); it is ignored on restore. */
 interface SessionBlob {
   v: 1;
   history: readonly SessionHistoryEntry[];
@@ -291,14 +232,10 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
   let callCounter = 0;
   let generation = 0;
 
-  // SESSION HISTORY + CONTEXT RING both need the bound-tool roster at CONSTRUCTION (their
-  // tool-valued-define detection bakes a regex over `knownToolNames` once). The runner is
-  // env/tool-lifecycle-agnostic (RunInput.tools arrives fresh per call, not at
-  // createDoorsRunner time) — so both are lazily constructed from the FIRST call's roster and
-  // reused thereafter, mirroring manifold-tool.ts's real usage (one DoorsRunner per world; the
-  // roster is stable across every call in that world's lifetime) while degrading gracefully
-  // (roster frozen to whatever the first call offered) for a caller whose roster genuinely
-  // varies per call.
+  // Session history and context ring need the tool roster at construction time for
+  // tool-valued-define detection. Since the runner is env-lifecycle-agnostic (tools arrive
+  // fresh per call), both are seeded lazily from the first call's roster and reused. If the
+  // roster varies per call, it is frozen to whatever was seen first.
   let sessionHistory: SessionHistory | undefined;
   let contextRing: SerializableContextRing | undefined;
   let rosterSeeded = false;

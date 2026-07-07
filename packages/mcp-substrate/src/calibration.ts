@@ -1,22 +1,20 @@
-/** Every numeric constant that today lives hardcoded in futility.ts/doors.ts/manifold-tool.ts/
- *  render-observation.ts/type-hints — injected so a re-tune for a new model/harness is a config
- *  change, never a code fork (the model/harness-agnosticism constraint, audited: only these
- *  numbers carry any overfitting risk — every mechanism itself keys on Scheme-syntax/
- *  arrival-symbol level, never on model/harness identity). */
+/** Tunable numeric constants for the teaching apparatus.
+ *
+ *  These are the only values with model/harness-specific risk. All mechanisms are driven by
+ *  Scheme syntax and arrival-level rules. */
 export interface CalibrationOptions {
-  /** futility.ts — ring-buffer size for the futile-retry shape detector. */
+  /** Ring buffer size for futility detection. */
   futilityRingSize: number;
-  /** doors.ts — top-N candidates considered by the did-you-mean distance gate. */
+  /** Top-N candidates for did-you-mean in unbound tool resolution. */
   doorsTier3Top: number;
-  /** manifold-tool.ts — clamp floor for the per-call `response-size` override. */
+  /** Clamp bounds for per-call response size. */
   responseSizeMinChars: number;
-  /** manifold-tool.ts — clamp ceiling for the per-call `response-size` override. */
   responseSizeMaxChars: number;
-  /** manifold-tool.ts — whole-call wall-clock deadline. */
+  /** Whole-call evaluation timeout. */
   defaultEvalTimeoutMs: number;
-  /** render-observation.ts — total budget for one rendered result value. */
+  /** Character budget for a single rendered observation. */
   observationMaxTotalChars: number;
-  /** type-hints/deliver.ts — race budget for one lens run before it's dropped from this call. */
+  /** Time budget for a type-hint lens run. */
   hintRaceBudgetMs: number;
 }
 

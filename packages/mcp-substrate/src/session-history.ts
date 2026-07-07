@@ -1,75 +1,28 @@
-// session-history — SESSION DECLARATION PERSISTENCE, the REPLAY model (V's design,
-// 2026-07-04). CORRECTNESS of cross-call `(define ...)` persistence needs no code here:
-// manifold-tool.ts's `call()` closes over ONE live `SchemeEnv` instance for the tool's
-// whole lifetime, and server.ts constructs exactly one ManifoldTool per "world", reused
-// across every CallTool until a tools/listChanged rebuild swaps in a fresh world (see
-// server.ts's design note + src/__tests__/list-changed.test.ts, and the direct proof in
-// src/__tests__/session-declaration-persistence.test.ts). Mechanism (a), already in place.
+// session-history — replayable record of successful top-level `(define ...)` statements.
 //
-// This module exists for RESUMABILITY instead: V's requirement is that session state be
-// RECONSTRUCTABLE from a replay of only the top-level `(define ...)` SOURCE statements
-// that evaluated successfully — not by requiring the full live env to stay resident. A
-// history serializes to a few KB of scheme source and can be handed to a fresh env (a new
-// process, a migrated session, a persisted-and-resumed conversation); a live `Environment`
-// instance cannot be serialized at all.
+// The live `SchemeEnv` provides cross-call persistence for a single world. This module
+// exists for resumability: a history of source text can be replayed into a fresh environment
+// (new process, resumed session, etc.).
 //
-// SIBLING, NOT A DUPLICATE, of type-hints/context-ring.ts: that ring tracks the identical
-// "successful top-level define" event, but for a different consumer (feeding a TS-checker
-// context region) and with different storage semantics — it DEGRADES a tool-valued define
-// to `declare const x: unknown` AT INSERTION, which is the right shape for type inference
-// but is not valid Scheme and could never be replayed. This module keeps the ORIGINAL
-// source and defers the tool-valued decision to replay time (see below). The two rings are
-// deliberately separate stores: `ContextRing` (type-hints/types.ts) is a frozen contract
-// this feature has no license to bend, and the two consumers genuinely want different data
-// projected from the same event.
+// Tool-valued defines are skipped on replay (to avoid re-invoking side-effecting tools).
+// Callers are expected to advise the user when a reconstruction may be incomplete because
+// of skipped tool-valued statements.
 //
-// TOOL-VALUED DEFINES (`(define x (some/tool ...))`) — replaying the statement verbatim
-// would RE-INVOKE the tool. Chosen handling: SKIP-AND-NOTE, matching V's compactness goal:
-//   • no snapshotted value bloats the history (a tool result is frequently unserializable —
-//     an opaque host resource, a closure, a handle tied to this process);
-//   • re-invoking on every reconstruction would silently repeat a side effect the original
-//     call may not be safe (or cheap, or idempotent) to repeat, and the invoked tool might
-//     not even be reachable from the reconstructing world.
-// Tradeoff: a statement that reads a skipped tool-valued name resolves as an ordinary
-// unbound-variable error in the reconstructed env — exactly as if the caller never
-// (re)defined it there. `replaySessionHistory`'s `skipped` list is exactly the set a caller
-// should advise about before trusting a reconstruction is complete.
+// This module is a sibling to the type-hints context ring. They observe the same events
+// but project different data (original source here vs. degraded `declare const ...` there).
 
 import { exec, type SchemeEnv } from "@here.build/arrival";
 
-/** `exec`'s `env` option is typed against arrival's concrete (unexported) `Environment`
- *  class; `SchemeEnv` is the public structural contract it implements. Same widen-then-
- *  narrow cast as manifold-tool.ts / bind.test.ts. */
+/** `exec`'s `env` option uses arrival's internal `Environment`; `SchemeEnv` is the public view. */
 type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
 
-/** A `/`-qualified tool symbol anywhere in the form — the same textual detection rule as
- *  type-hints/context-ring.ts's `TOOL_SYMBOL` (kept as a sibling constant rather than a
- *  shared import: this module intentionally does not reach into that frozen contract's
- *  implementation file).
+/** Detects a qualified tool name (`server/tool`) anywhere in a form.
  *
- *  Detects the manifold's own `/`-joined qualified-name shape (bind.ts). A `/` is never legal
- *  inside an ordinary scheme identifier (this dialect's OWN library/SRFI symbols are
- *  consistently kebab-case — see catalog.ts's preamble), so this is deliberately NOT trying to
- *  precisely recognize "a real bound tool call" (that would need the live toolset, which this
- *  module never has); it recognizes "looks like it MIGHT be one". Over-flagging is the safe
- *  direction — worst case a plain define that merely CONTAINS a `foo/bar`-shaped literal is
- *  skipped from replay, never the reverse.
+ *  Used to decide whether a top-level define is "tool-valued" and should be skipped on replay.
+ *  Over-flagging (skipping a define that merely mentions a tool-shaped literal) is safe.
  *
- *  ★ BLIND SPOT (found + closed 2026-07-05, still applies): this assumes EVERY qualified tool
- *  name contains `/` — false for a SLUGLESS single-server binding (bind.ts: `qualifiedName =
- *  server.slug === "" ? tool.name : ...`, "the natural single-server shape"), whose bare tool
- *  name carries no separator at all (a real tool literally named `price`, `click`, `search`,
- *  ...). `(define p (price ...))` then matches nothing here, so `toolValued` came out `false`
- *  — the OPPOSITE of "over-flagging is the safe direction": replay actually RE-INVOKES the
- *  tool, verified directly (a fresh env's replay bumped a probe tool's invocation counter from
- *  1 to 2), the exact side-effect repetition this module exists to prevent.
- *  `createSessionHistory`'s optional `knownToolNames` closes this — see `knownToolPattern`
- *  below, which needs no shape assumption at all because it matches the REAL roster, not a
- *  shape guess. Omitted (or empty — e.g. a hand-rolled test env with no roster to offer) ⇒
- *  this regex alone, unchanged from before. */
-// Flagged by sonarjs/slow-regex: bounded input (one statement's source text, never
-// attacker-scaled beyond what the manifold call itself already caps); over-flagging (never
-// re-invoking a tool) is the accepted tradeoff this file's header documents at length.
+ *  Limitation: does not match slugless single-server tool names (no `/`). Callers that supply
+ *  `knownToolNames` get a more precise check via `knownToolPattern`. */
 // eslint-disable-next-line sonarjs/slow-regex
 const TOOL_SYMBOL = /[A-Z][\w.-]*\/[\w.-]+/i;
 

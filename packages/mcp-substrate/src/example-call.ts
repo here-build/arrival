@@ -1,23 +1,10 @@
-// example-call — synthesizes a complete, syntactically valid Scheme call string straight off a
-// tool's JSON Schema, e.g. `(filesystem_read_text_file :path "string value")`. V's design
-// (2026-07-05): this REPLACES name-only "did you mean X" teaching with a FULL WORKING CALL
-// EXAMPLE — the model can copy it verbatim and only needs to fill in real values, instead of
-// re-deriving the call shape from a bare symbol name or a one-line signature.
+// example-call — synthesize a working Scheme call from a tool's JSON Schema.
 //
-// This is the SCHEMA-driven half of "teach with a working call": doors.ts's renderRetryExpr/
-// renderJsonLiteral already render a call from ARGS the caller actually supplied; this file
-// produces the args when none were given (or none were usable), by stubbing a minimal value for
-// every REQUIRED param straight off the tool's declared shape. Two consumers, both in this
-// package: the unbound-in-expr door (doors.ts, a resolved-tool teaching upgrade) and the
-// tool-misuse/signature-echo error transform (manifold-tool.ts). Lives alongside
-// tool-signature.ts — the ONE shared `JsonSchemaProperty`/`ToolJsonSchema` representation both
-// the catalog and this file read; see that file for the required-first-then-optional ordering
-// rule (`orderedFields`) and the one-level object-nesting bound (`arrayToken`) this mirrors.
+// Produces e.g. `(fs/read_file :path "value")` for a resolved tool when we want to teach
+// the call shape rather than just the name.
 //
-// RENDERING NOTE: the final call text uses the SAME kwargs literal grammar as doors.ts's
-// `renderRetryExpr`/`renderJsonLiteral` (`:key value` pairs, `{...}` dict / `[...]` list
-// literals, quoted/escaped strings, `nil` for null/undefined — see render-observation.ts for the
-// same brace/bracket convention on the OBSERVATION side of this round-trip). It is MIRRORED here
+// Stubs minimal values for required parameters. Uses the same literal grammar as the
+// retry-expr renderer (keyword pairs, braces, nil, etc.).
 // rather than imported: doors.ts calls `synthesizeExampleCall` (the unbound-in-expr door
 // upgrade), so importing the renderer back FROM doors.ts would cycle. The two renderers must
 // stay byte-identical — a future change to either literal grammar must be applied to both.

@@ -1,7 +1,7 @@
 {
   "name": "@here.build/mcp-substrate",
   "version": "0.1.0",
-  "description": "The doors-steering runner: session-scoped teaching apparatus (doors, competence, futility, session-history replay, scope-confusion, type-hints, statement-facts, example-call synthesis) shared by any MCP scheme-REPL surface — env-lifecycle-agnostic, model/harness-agnostic.",
+  "description": "Doors teaching system for MCP Scheme REPLs: error enrichment, session history replay, futility detection, and optional type hints. Env- and model-agnostic.",
   "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",

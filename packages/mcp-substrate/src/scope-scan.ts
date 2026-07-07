@@ -1,20 +1,10 @@
-// scope-scan — the LOCAL-BINDING scanner for the SCOPE-CONFUSION door
-// (docs/working-proposals/manifold-scope-confusion-door.md, doors.ts's `scopeConfusionDoor`,
-// session-history.ts's `LocalBindingTracker`). Finds every identifier bound in a NON-top-level
-// lexical scope inside a submitted program's source: a let/let*/letrec/letrec* binding (incl. a
-// named-let's own loop name), a lambda parameter (incl. the single-symbol variadic form), or a
-// nested `(define X ...)` — one whose enclosing depth is greater than the program's own
-// top-level form. A top-level `(define X ...)` is NOT a local binding (that's the OTHER
-// tracker, session-history.ts's `SessionHistory`, keyed on real evaluation success).
+// scope-scan — find non-top-level lexical bindings (let, lambda params, nested define).
 //
-// v1 TOKENIZER WALK, not a full reader/AST (the spec explicitly allows a "source-regex fallback
-// … acceptable for v1" — this is a lighter-weight structural step up from that: it reuses the
-// SAME tokenizer manifold-tool.ts's own `splitTopLevel` already runs, walking depth the same way,
-// rather than a blind regex over raw text). OVER-COLLECTION is the safe direction (same
-// precedent as session-history.ts's `TOOL_SYMBOL`): a name flagged "local" that turns out to be
-// something else with the same spelling costs nothing (the door's classifier only ever reads
-// this as "have I seen X locally before", never as a hard guarantee) — under-collection would
-// silently drop a real teaching opportunity instead.
+// Used by session history to feed the scope-confusion door.
+//
+// Implemented as a tokenizer walk (same conventions as the REPL splitter) rather than a
+// full reader. Over-collection is safe: a spurious "local" flag only affects teaching
+// opportunities, never correctness.
 
 import { tokenize } from "@here.build/arrival";
 
@@ -23,11 +13,8 @@ interface Tok {
   offset: number;
 }
 
-// Same opener/closer/skip conventions as manifold-tool.ts's `splitTopLevel` (isOpen/CLOSE/
-// isSkippable) — kept as independent, small, private copies rather than shared exports: this
-// module has no other reason to depend on manifold-tool.ts, and the rules are stable lexer
-// facts (a vector/bytevector opener is a single hash-prefixed token; `#\(` is a char literal
-// leaf, not an opener), not something the two files need to renegotiate together.
+// Same opener/closer/skip rules as the REPL statement splitter. Kept private to avoid
+// cross-module coupling; these are stable lexer facts.
 const isOpenTok = (tok: string): boolean =>
   tok === "(" || tok === "[" || tok === "{" || (tok.startsWith("#") && !tok.startsWith("#\\") && tok.endsWith("("));
 const CLOSE = new Set([")", "]", "}"]);
@@ -87,11 +74,9 @@ function collectBindingPairs(tokens: readonly Tok[], at: number, names: Set<stri
   }
 }
 
-/** Scans `source` for every identifier bound in a NON-top-level lexical scope: a let, let*,
- *  letrec, or letrec* binding (including a named-let's own loop name), a lambda parameter, or a
- *  nested `(define X ...)`. Returns a de-duplicated list, order unspecified — the caller
- *  (manifold-tool.ts, feeding session-history.ts's `LocalBindingTracker`) only ever needs
- *  set membership. */
+/** Scan for identifiers bound in non-top-level scopes.
+ *
+ *  Returns de-duplicated names (order unspecified). The caller only needs membership. */
 export function scanLocalBindings(source: string): string[] {
   const tokens = (tokenize(source, true) as Tok[]).filter((t) => !isSkip(t.token));
   const names = new Set<string>();

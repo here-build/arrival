@@ -30,10 +30,7 @@ export interface DoorStrategies {
   renderRetryExpr: RenderRetryExprStrategy;
 }
 
-/** The kwargs world's default strategies — today's arrival-manifold behavior, unchanged. Every
- *  existing binder-side consumer (manifold-tool.ts's wrapper) passes this straight through to
- *  `createDoorsRunner({ strategies: KWARGS_STRATEGIES, ... })`; a positional-tuple consumer
- *  (arrival-mcp) supplies its own three functions instead. */
+/** Default strategies for the conventional keyword-argument tool calling shape. */
 export const KWARGS_STRATEGIES: DoorStrategies = {
   isMisuseError: isToolMisuseError,
   synthesizeExample: synthesizeExampleCall,

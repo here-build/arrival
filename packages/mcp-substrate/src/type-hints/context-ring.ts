@@ -1,17 +1,9 @@
-// context-ring — Ring 1 (doc §2/G3/G13, docs/working-proposals/manifold-type-hints.md rev 3).
-// The per-rebuild-world ring of successful top-level `(define …)` source, re-lowered into a
-// LoweredUnit's context region so session-state inference survives across manifold calls.
+// context-ring — recent successful top-level `(define …)` for type-hint context.
 //
-// Two invariants beyond plain FIFO storage:
-//   • Tool-valued defines degrade at INSERTION (G13.1): a define whose source references any
-//     `/`-qualified tool symbol anywhere in the form is stored as `declare const <name>:
-//     unknown`, NEVER re-lowered from source — a mis-typed tool binding would poison the
-//     current program's diagnostics; `unknown` yields only off-whitelist codes (no false hint).
-//   • ~8k-char FIFO cap (G13.3): the cap bounds re-lowering latency (the ring re-lowers on
-//     every errored call). Oldest evicted first; the newest push always survives.
+// Tool-valued defines (those referencing `/`-qualified tool symbols) are stored as
+// `declare const name: unknown` at insertion so bad tool types cannot poison diagnostics.
 //
-// The ring never parses for the define NAME — the drain site (manifold-tool.ts, which walks
-// the statements) extracts it and passes it in. push() is name + source only.
+// The ring is size-bounded to keep re-lowering cheap.
 
 import type { ContextRing } from "./types.js";
 
@@ -30,23 +22,12 @@ export interface SerializableContextRing extends ContextRing {
 /** ~8k-char total cap (G13.3). "~8k" — the eviction target; entries() stays at/under it. */
 const MAX_TOTAL_CHARS = 8000;
 
-/** A `/`-qualified tool symbol anywhere in the form (a slug head with non-empty name tail,
- *  e.g. `shop/list-orders`). The bare `/` division operator and pure-numeric ratios never
- *  match — the slug must begin with a letter. Detection is textual, matching the doc's
- *  "references any tool symbol … a `/`-qualified head anywhere in the form"; over-degrading
- *  is the SAFE direction (a degraded entry produces no hint, never a false one).
+/** Detects `/`-qualified tool symbols for tool-valued define degradation.
  *
- *  ★ BLIND SPOT found 2026-07-05 (full account: session-history.ts's sibling `TOOL_SYMBOL`
- *  doc): this assumes every qualified name contains `/`, which is false for a SLUGLESS
- *  single-server binding (bind.ts: `qualifiedName = server.slug === "" ? tool.name : ...`)
- *  bound to a tool whose own bare name has no separator either (e.g. `price`, `click`). Such
- *  a define was NOT degraded — verified directly, its raw tool-invoking source stayed in the
- *  ring — which is the dangerous direction here (a mis-typed tool binding poisoning this
- *  program's diagnostics, the exact failure G13.1 exists to prevent), the mirror image of
- *  session-history.ts's re-invocation risk from the same gap. `createContextRing`'s optional
- *  `knownToolNames` closes it — see `knownToolPattern` below. */
-// Flagged by sonarjs/slow-regex: bounded input (one statement's source text); same accepted
-// tradeoff as session-history.ts's identical sibling constant.
+ *  Over-degrading (treating a define that merely contains a tool-shaped literal as tool-valued)
+ *  is safe — it produces no hint rather than a wrong one.
+ *
+ *  Limitation for slugless single-server bindings is closed when `knownToolNames` is supplied. */
 // eslint-disable-next-line sonarjs/slow-regex
 const TOOL_SYMBOL = /[A-Z][\w.-]*\/[\w.-]+/i;
 

@@ -1,14 +1,7 @@
-// type-hints contracts — the FROZEN seam for the manifold type-hints feature
-// (docs/working-proposals/manifold-type-hints.md, rev 3, two-loop-audited).
+// type-hints contracts — the public seam for optional type-hint delivery.
 //
-// This file is the executable spec the red suite (src/__red__/type-hints/) is written
-// against, BEFORE the implementation exists. Module layout (pinned — the red suite
-// imports these exact names): select.js exports `selectHints: SelectHints`; render.js
-// exports `renderHint: RenderHint`; context-ring.js exports `createContextRing():
-// ContextRing`; spine-lens.js exports `createSpineLens(env): TypeHintLens`. Everything here is spine-independent: the
-// lens arrives through the `TypeHintLens` interface, implemented by a stub in tests and
-// by the type-layer spine adapter (rework §8.1 consumer #2) once S2 lands. Implementers
-// change this file only by amending the design doc first.
+// This file defines the stable interfaces (modes, whitelists, lens, selection, rendering).
+// Changes here should be accompanied by updates to the design documentation.
 
 /** Whole-feature gate (doc §6/G9): config-level kill switch, default "telemetry".
  *  No per-code granularity by design (G14) — the whitelist is a static constant. */

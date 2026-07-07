@@ -1,16 +1,11 @@
-// futility — the FUTILITY DOOR's engine (the door itself is in doors.ts). Measured problem:
-// a model retries a degraded upstream tool many times (a search tool returning the identical
-// "no results / bot detection" body under varied queries), burning the whole turn budget and
-// ending with no answer. Nothing tells it to stop digging. This tracker does — shape-based,
-// semantics-free, per manifold-server session.
+// futility — detects repeated non-progress tool calls and queues advisory notes.
 //
-// It watches, per QUALIFIED TOOL SYMBOL, a small ring buffer of {argsHash, resultHash} for that
-// tool's upstream calls (recorded at the membrane, bind.ts, where name+args+result are all
-// visible). resultHash is over the NORMALIZED result text (normalizeResultText below) so
-// "retry in 3 minutes" and "retry in 5 minutes" collapse to one hash. Two triggers queue a door;
-// manifold-tool.ts drains the queue at the end of a call and appends each as an advisory `Note:`
-// block. The tracker NEVER touches the tool's actual result value — that already flowed into
-// scheme dataflow untouched; the door is pure advice.
+// Watches per-qualified-tool a small ring of (argsHash, normalized-resultHash). When the same
+// (or shape-identical) result comes back repeatedly, a "futile retry" or "duplicate call" door
+// is queued.
+//
+// The actual tool result always flows through untouched; the note is appended afterwards by
+// the caller.
 
 import { duplicateCallDoor, type Door, futileRetryDoor } from "./doors.js";
 
@@ -120,9 +115,8 @@ export interface PendingDoor {
   door: Door;
 }
 
-/** One tracker per manifold-server process (server.ts builds it once and threads it into BOTH the
- *  membrane env — bind.ts, the record site — and the tool options — manifold-tool.ts, the drain
- *  site). It survives tools/listChanged rebuilds, like DoorSession. */
+/** Per-process tracker. Injected into both the binding membrane (recording site) and the
+ * runner (drain site) so state survives world rebuilds. */
 export class FutilityTracker {
   private readonly byTool = new Map<string, ToolState>();
   private readonly pending: PendingDoor[] = [];

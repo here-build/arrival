@@ -1,84 +1,37 @@
-// doors — the ENVELOPE error surface (errors-as-doors, .claude/skills/errors-as-doors):
-// every boundary rejection around the manifold's single-tool envelope is a DOOR — a
-// structured {code, tier, fact, reason, script} payload built AT the rejection point,
-// rendered to prose at the output layer. Codes are internal routing/telemetry keys
-// (Rule 3) — they are logged and gate per-session verbosity, but the rendered text a
-// model reads never shows one raw. Four codes, all owned by the envelope (the MCP
-// call-shape boundary in front of the scheme surface — everything past it is arrival's
-// own error contract, manifold-tool.ts):
-//   envelope/bare-tool-call — the caller invoked a BOUND tool name as a standalone MCP
-//                             tool; the door renders the exact retry expr FROM THE
-//                             CALLER'S OWN ARGS (tier "translatable": lossless, but v1
-//                             teaches instead of auto-applying — follow-rate data earns
-//                             the flip, Rule 1).
-//   envelope/unknown-tool   — the name is bound nowhere; did-you-mean over the catalog
-//                             (tier "suggest-menu": choices offered, never picked).
-//   envelope/empty-expr     — a manifold call with a whitespace-only expr.
-//   envelope/invalid-args   — a manifold call with a missing/non-string expr.
+// doors — the envelope error surface (errors-as-doors).
 //
-// Verbosity is by per-session FIRST OCCURRENCE (Rule 4): the first time a lesson SHAPE fires
-// in a server process's lifetime the door is verbose (concept intro); afterwards a terse
-// one-liner. The gate keys on `door.verbosityKey ?? door.code` — the code alone for a code a
-// single shape owns, a finer per-shape key for the codes that several DISTINCT shapes share
-// (unbound-in-expr's tiers, scope-confusion's cases, the bypass global-collision note), so a
-// model's genuine first encounter with one shape's lesson always teaches fully even when a
-// SIBLING shape under the same code already fired. The Set lives in DoorSession — the OUTPUT
-// layer — never here in the generators: a door builder always emits the same structured payload.
+// Every boundary rejection at the single-tool MCP envelope is turned into a structured `Door`
+// (code, tier, fact, reason, script, terse). Doors are built at the rejection site and rendered
+// to prose by the output layer.
 //
-// Telemetry (Rule 5, minimal): every rendered door logs one structured stderr line
-// {"door": code, "seq": n, "tool": name}; after a bare-tool-call/unknown-tool door for
-// tool X, the next successful manifold call whose expr contains X logs
-// {"door-followed": code, "tool": X}. Benches parse stderr; no config.
+// Codes are internal (routing + telemetry + per-shape verbosity gating). The text a model sees
+// never contains the raw code.
+//
+// Verbosity model: per-shape first occurrence in a server process lifetime is verbose
+// (teaching); subsequent occurrences are terse. The `DoorSession` (output layer) tracks this.
+// Door generators are pure and stateless.
+//
+// Core principle: never phrase a guess as a fact. Explicit matches use "the symbol you want
+// is X"; ambiguous cases offer menus.
 
 import type { BoundTool, ToolNaming } from "./bound-tool.js";
 import { synthesizeExampleCall } from "./example-call.js";
 import type { ToolJsonSchema } from "./tool-schema.js";
 import type { TypeHintTelemetry } from "./type-hints/types.js";
 
-/** Internal telemetry/log keys — never surfaced raw in door prose (Rule 3). */
+/** Internal codes for routing, telemetry, and per-shape verbosity gating.
+ * Never appear in prose shown to models. */
 export type DoorCode =
   | "envelope/bare-tool-call"
   | "envelope/unknown-tool"
   | "envelope/empty-expr"
   | "envelope/invalid-args"
   | "envelope/unbound-in-expr"
-  // THE SCOPE-CONFUSION DOOR (docs/working-proposals/manifold-scope-confusion-door.md, V-
-  // specified 2026-07-04) — the LAST branch of the unbound-in-expr classifier, on the DISJOINT
-  // class of names the MODEL ITSELF defined: a same-program cascade (an earlier statement
-  // failed so a later top-level define never bound), a cross-scope reference (X was only ever
-  // let/lambda-bound, never at top level), or the ≥2-local "don't force an implementation"
-  // case. See doors.ts's `scopeConfusionDoor` section for the full design.
   | "envelope/scope-confusion"
-  // THE IMPORT-FORM DOOR (forensic finding, 2026-07-06): a benchmark model trained on real R7RS
-  // repeatedly prepended a module-system form — `(import (scheme base))`, or a bare
-  // `(scheme base)` when only the outer form got stripped — to every program, assuming this REPL
-  // has a module system. It doesn't: `import` was deliberately deleted from the language (the
-  // standard library is pre-bound; `require` is the loader for SOURCE FILES only — see
-  // reference-import-deleted-require-is-the-loader.md). SIBLING of unbound-in-expr/scope-confusion:
-  // fires on the two unbound heads that malformed form produces (`import`, `scheme`), which are
-  // neither a tool name nor a data literal nor a name the model itself defined/locally bound, so
-  // it runs between unboundInExprDoor (tool-name/literal classes) and scopeConfusionDoor
-  // (self-defined-name classes) — see doors.ts's `importDoor` for the full design.
   | "envelope/import-form"
-  // The SIGNATURE-ECHO hint (manifold-tool.ts) — the only in-expr enrichment that is NOT a
-  // did-you-mean: when a statement's error is a tool-MISUSE shape (wrong kwarg / dangling
-  // keyword / wrong arg type or shape / upstream argument rejection) and exactly one bound tool
-  // is implicated, the tool's one-line catalog signature is echoed below the preserved error —
-  // "this is how this symbol works". Telemetry only (no Door payload); the render lives inline.
   | "envelope/signature-echo"
-  // The FUTILITY DOORS (the "futility door", futility.ts) — the only doors on a SUCCESSFUL call:
-  // a tool whose repeated invocations are not moving the model forward. Rendered as advisory
-  // `Note:` blocks (renderNote), never `Error:` — the tool's result is valid and flows untouched;
-  // the note only tells the model to stop digging.
   | "envelope/futile-retry"
   | "envelope/duplicate-call"
-  // THE BYPASS AUTO-EXEC MARKER (bind.ts's env-side BypassResolution, server.ts's CallTool
-  // boundary): a direct (bypass) tool call that resolved to exactly ONE qualified tool was
-  // translated and EXECUTED instead of taught. Telemetry only (no Door payload; the call's
-  // own result — success or failure — travels untouched, prefixed with one advisory line) —
-  // mirrors envelope/signature-echo's "logging without a rejection" shape. Kept DISTINCT from
-  // envelope/bare-tool-call so a consumer counting "bypass attempts" (that code, unchanged)
-  // can also see how many of those attempts were auto-executed rather than merely taught.
   | "envelope/bypass-autoexec";
 
 /** The Applicability tier as TYPED METADATA on the rejection (Rule 1) — not prose. */
@@ -356,52 +309,20 @@ export function unknownToolDoor(
   };
 }
 
-// ─── envelope/unbound-in-expr — THREE-TIER tool-resolution hint for an in-expr symbol wall ───
-// The dominant self-inflicted failure inside a scheme expr is "Unbound variable `X'". X is
-// almost always a bound TOOL called with the wrong shape (missing/garbled server prefix, wrong
-// separator, a naming-convention mismatch), or a data literal that needed quoting (unchanged,
-// orthogonal — see classifyLiteral/quotingHint below). A near-typo of a bound LIBRARY symbol
-// (SRFI/R7RS builtin) is arrival's OWN job now — the `polyglot-rich-errors` capability enriches
-// "Unbound variable" at the interpreter level against its curated well-known-symbol table, riding
-// inside the SAME frozen first line this door's caller preserves (manifold-tool.ts never touches
-// or duplicates arrival's message). This door only ever ENRICHES that wall with the indented
-// suffix below it (never replaces — the frozen `Error: Unbound variable `X'` first line is
-// preserved by the caller, manifold-tool.ts, which appends only the indented suffix this door
-// carries).
+// ─── envelope/unbound-in-expr — three-tier tool resolution for "Unbound variable `X'" ───
 //
-// ─── THE CENTRAL DESIGN PRINCIPLE: never phrase a guess as a fact, never phrase a fact as a
-// guess ─── An EXPLICIT hint (`the symbol you want is \`X\`.`) is a CLAIM we are certain of — an
-// exact canonical-form match, or a bare-name edit distance of 1 (a single-character typo). A
-// FUZZY LIST (`nearest tools: a, b, c.`) is a set of GUESSES — offered only when no single
-// candidate clears the certainty bar. The model should never have to pick from a menu when we
-// already know the exact token; it should never be TOLD a fact when we are only guessing.
+// The dominant error inside expressions is an unbound symbol. Most cases are tool names with
+// wrong shape (prefix, separator, naming convention) or unquoted data literals.
 //
-// Only the ENUMERABLE tool bindings the caller holds participate here — manifold-tool.ts threads
-// `signatureByName`'s keys (the exact qualified `server/tool` inventory bound into the env, one
-// entry per tool, never a library builtin or an `s/*` validator — bind.ts populates it ONLY
-// inside the per-tool loop). There is no library-name fallback set here by design — a typo of a
-// well-known lisp-dialect symbol is arrival's curated concern, not "any bound non-tool name" (a
-// far broader, uncurated set the manifold has no business guessing over).
+// Design principle: never phrase a guess as a fact. Exact matches state the token directly;
+// ambiguous cases offer menus.
 //
-// Steps run IN ORDER, first hit wins:
-//   1. NORMALIZED BARE-NAME MATCH — `attempted` (or its bare part, after stripping a real `/`
-//      prefix) canonicalizes (normalizeSymbolName) to the SAME form as some bound tool's bare
-//      name: `searchNodes` / `search-nodes` both → `search_nodes`. An EXACT canonical-form
-//      equality, not a fuzzy score — a naming-CONVENTION difference, not a typo. Exactly ONE
-//      match is certain → the EXPLICIT fact door; several (the same bare name bound on multiple
-//      servers) is a genuine tie, not a certainty → the did-you-mean list stands.
-//   2. RIGHT SERVER, WRONG TOOL — `attempted` carries a recognizable `server<sep>tool` shape
-//      whose head names a REAL bound server, using the correct `/` (just a garbled tool part) or
-//      a WRONG separator (`.`, `:`, `_`). If the tool part THEN canonical-matches exactly one
-//      real tool on that server, it's really a step-1 hit reached via the split (explicit fact);
-//      several matching ties the same way step 1 does; otherwise every tool bound on that server
-//      is listed, so the model sees the whole menu instead of guessing again blind.
-//   3. FUZZY FALLBACK (tool names only) — nothing normalizes or splits cleanly: the existing
-//      edit-distance/prefix `nearestBoundNames`, widened to ~10 candidates, still gated by
-//      `isCloseName` so genuinely-far junk yields nothing rather than a wrong suggestion. Within
-//      that gated set, a candidate clearing the TIGHT bar (exact, or edit distance ≤ 1) and being
-//      the ONLY such candidate is still a certainty — promoted to the explicit fact door; a
-//      genuinely ambiguous or loose-only (prefix/distance-2) set renders as the guess list.
+// Resolution order:
+// 1. Normalized bare-name match (exact canonical form after stripping server prefix).
+// 2. Recognizable server<sep>tool split where the server head is real.
+// 3. Fuzzy edit-distance / prefix over tool names (closeness-gated).
+//
+// Library symbols are left to arrival's own rich errors.
 
 /** Bare name of a qualified `server/tool` symbol (`filesystem/search_files` → `search_files`).
  *  A "/" is a namespace separator ONLY with a non-empty part on BOTH sides — a name that
@@ -556,12 +477,8 @@ function isNamespaced(qualifiedName: string, tools: ReadonlyMap<string, BoundToo
   return (tools.get(qualifiedName)?.slug ?? "") !== "";
 }
 
-/** THE EXAMPLE-CALL TEACHING (V's design, 2026-07-05): a resolved tool doesn't just get NAMED
- *  any more — it gets a FULL WORKING CALL EXAMPLE, synthesized straight off its declared JSON
- *  Schema (example-call.ts), so the model can copy it verbatim and fill in real values instead
- *  of re-deriving the call shape from a bare symbol. A name absent from `toolSchemas` (no schema
- *  known — the default empty map every caller not threading one gets) degrades gracefully to a
- *  bare `(qualifiedName)` example, never a crash. */
+/** Synthesize a full working example call for a resolved tool from its JSON Schema.
+ * Falls back to a bare `(name)` when no schema is available. */
 function renderExampleCall(
   qualifiedName: string,
   toolSchemas: ReadonlyMap<string, ToolJsonSchema | undefined>,
@@ -774,33 +691,17 @@ export function unboundInExprDoor(
   };
 }
 
-// ─── envelope/import-form — the "this REPL has a module system" misfire ───
-// Forensic finding (2026-07-06): a benchmark model prepended `(import (scheme base))` (malformed
-// R7RS — real R7RS spells it `(import (scheme base))` too, but this REPL binds no `import` special
-// form at all) to EVERY program in an 11-call run; the runner never redirected it, so the model
-// hit "Unbound variable `import'" (or, once it tried stripping just the outer form, "Unbound
-// variable `scheme'" from the bare `(scheme base)` left behind) again and again with no lesson
-// attached. Neither head is a tool name or a data literal (unboundInExprDoor's two classes) or a
-// name the model itself top-level-defined/locally-bound (scopeConfusionDoor's three classes), so
-// both upstream doors legitimately return undefined and the bare wall would otherwise go untaught
-// forever. This door is a narrow, exact-match SIBLING check consulted between them (runner.ts):
-// after unboundInExprDoor (a tool literally named `import`/`scheme` is implausible, but a tool
-// door still takes precedence by design) and before scopeConfusionDoor (an import/scheme unbound
-// is never something the model defined or locally bound, so that classifier would fall through to
-// undefined anyway — this door catches it first with the actually-relevant, targeted lesson).
+// ─── envelope/import-form — module system misfire ───
+//
+// Some models assume a R7RS-style module system and emit `(import (scheme base))` (or the bare
+// `(scheme base)` after stripping). Neither symbol is bound here.
+//
+// This is a narrow exact-match sibling to the other unbound classifiers. It runs after tool
+// resolution and before scope confusion.
 
-/** The two unbound heads a malformed `(import (scheme base))` produces: the form's own head
- *  symbol, and — once a caller strips only the outer form — the bare `scheme` head left behind
- *  by `(scheme base)`. An EXACT match only (never fuzzy/prefix) — this is a single, precisely
- *  known misfire shape, not a general did-you-mean surface. */
+/** Heads produced by the common malformed import form. */
 const IMPORT_FORM_HEADS = new Set(["import", "scheme"]);
 
-/** Build the import-form door, or `undefined` when `attempted` is neither unbound head this
- *  misfire produces. Returns a `Door` (never a bare string) so the caller renders it through
- *  `DoorSession.enrichInline` exactly like every other unbound-in-expr/scope-confusion
- *  enrichment — the SAME per-session verbosity gate (Rule 4) applies, so an 11-call run that
- *  repeats this same mistake teaches the full lesson ONCE, then collapses to `terse` — never 11
- *  verbose repeats. */
 export function importDoor(attempted: string): Door | undefined {
   if (!IMPORT_FORM_HEADS.has(attempted)) return undefined;
   const fact =
@@ -820,70 +721,17 @@ export function importDoor(attempted: string): Door | undefined {
   };
 }
 
-// ─── envelope/scope-confusion — same-program cascade / cross-scope / repeated-local-binding
-// enrichment for a self-defined-then-unbound name ───
-// docs/working-proposals/manifold-scope-confusion-door.md (V-specified 2026-07-04). SIBLING of
-// unboundInExprDoor, on the DISJOINT class of names the MODEL ITSELF defined: a tool-name miss
-// or a data-literal-shaped token is never this door's concern (unboundInExprDoor owns those and
-// runs FIRST — this door only ever fires when it returned undefined, manifold-tool.ts). Three
-// cases:
-//   (a) SAME-PROGRAM CASCADE — X has a top-level `(define X ...)` earlier in THIS program, but
-//       (necessarily, since X is now unbound) that define's own evaluation never bound X because
-//       an earlier statement in the SAME program failed first (REPL-continue lets siblings run,
-//       but a statement whose OWN evaluation depends on an unbound name from an earlier failure
-//       fails too — a real dependency chain, not a metaphor). Point at the FIRST failing
-//       statement, not the symptom — "delete a reasoning turn" (the module header's central
-//       design principle, applied to a different axis: don't make the model re-derive what it
-//       can be told directly).
-//   (b) CROSS-SCOPE — X was only ever bound inside a local scope (a let/let*/letrec/letrec*
-//       binding, a lambda parameter, or a nested define) — NEVER at top level, in this call or
-//       an earlier one. A local binding's lifetime is its enclosing form; referencing it later
-//       (a different statement, let alone a different call) is not a persistence bug — it never
-//       had persistence to begin with.
-//   (c) THE ≥2-LOCAL SPECIAL CASE (V's flag, spec header) — X was locally bound this way TWICE
-//       or more across the session: the model has a consistent local-binding STYLE, not a
-//       one-off mistake. Forcing it toward top-level `(define)` here would fight a working style
-//       instead of the actual confusion — acknowledge both paths, prescribe neither.
-// (d) is the absence of all three — a name never defined anywhere, top-level or local — and is
-// NOT a Door this module builds at all: `scopeConfusionDoor` returns undefined and the caller
-// (manifold-tool.ts) leaves the bare "Unbound variable" wall untouched.
+// ─── envelope/scope-confusion — names the model itself defined but are now unbound ───
 //
-// Detection facts are precomputed by the CALLER (Rule 4: door generators hold no session state
-// and do no scanning themselves — same discipline as every other generator in this file):
-//   • `topLevelDefineStatementNumber` — manifold-tool.ts scans THIS PROGRAM's own `statements`
-//     (already split by splitTopLevel) for an earlier `(define X ...)`, via `topLevelDefineName`.
-//     Undefined ⇒ X was never top-level-defined IN THIS PROGRAM (the only signal case (a) needs
-//     — a define attempted in a PRIOR call and never in this one falls to (b)/(c)/(d) instead,
-//     out of this door's same-program scope by design, per the spec's own title).
-//   • `firstErrorStatementNumber` — always available once this function is even reached (the
-//     CURRENT statement just errored, so the caller's `erroredStatementIndexes` is never empty)
-//     — the 1-based index of the earliest failing statement in this program so far. Only USED
-//     when `topLevelDefineStatementNumber` is set (the cascade case).
-//   • `localBindingCallIndexes` — session-history.ts's `LocalBindingTracker.occurrences(name)`:
-//     every call index (this session, oldest→newest) at which X appeared as a let/lambda/
-//     nested-define bound name (scope-scan.ts's `scanLocalBindings` feeds the tracker). `[]` ⇒
-//     never locally bound either ⇒ case (d).
-//   • `currentCallIndex` — the SAME per-tool call counter the tracker's occurrences are indexed
-//     by, so a single prior occurrence can report "N message(s) ago" (0 ⇒ "this message").
-
-/** The facts `scopeConfusionDoor` classifies on — precomputed by the caller (manifold-tool.ts),
- *  never derived here (Rule 4: door generators hold no session state and do no scanning). */
-export interface ScopeConfusionInput {
-  /** The unbound name. */
-  name: string;
-  /** 1-based statement number of X's top-level `(define X ...)` EARLIER in THIS program, or
-   *  undefined when no such define exists among this program's own statements. */
-  topLevelDefineStatementNumber?: number;
-  /** 1-based statement number of the FIRST statement that failed in this program so far —
-   *  always defined by the time this is called (the current statement's own failure already
-   *  counts). Only USED when `topLevelDefineStatementNumber` is set (the cascade case). */
-  firstErrorStatementNumber: number;
-  /** Every call index (this session, oldest→newest) at which `name` was recorded as a LOCAL
-   *  (let/lambda/nested-define) binding — session-history.ts's `LocalBindingTracker`. */
-  localBindingCallIndexes: readonly number[];
-  /** The CURRENT call's index (the same counter `localBindingCallIndexes` are recorded under). */
-  currentCallIndex: number;
-}
+// Three disjoint cases (checked in priority order):
+// - Cascade: the name had a top-level define earlier in *this* program, but an earlier
+//   statement failed so the define never ran.
+// - Repeated local: the name has been bound locally (let/lambda/...) two or more times in the
+//   session — the model has a consistent local-binding style.
+// - Cross-scope: the name was bound locally exactly once (in a previous message or earlier
+//   in this one) and is now referenced outside that scope.
+//
+// Facts are supplied by the caller; this function only classifies.
 
 /** Build the scope-confusion door's CASCADE case: X has a top-level define attempt earlier in
  *  this SAME program, but it never bound because an earlier statement failed first. Points at
@@ -953,6 +801,19 @@ function repeatedLocalScopeDoor(name: string): Door {
  *  have local-binding history is still, first and foremost, explained by the failure in front of
  *  the model right now); ≥2 local occurrences win over exactly one (the "don't force a style"
  *  case is strictly more specific); zero of either ⇒ undefined (case (d), not this door's job). */
+export interface ScopeConfusionInput {
+  /** The unbound name. */
+  name: string;
+  /** 1-based index of an earlier top-level `(define name ...)` in *this* program, if any. */
+  topLevelDefineStatementNumber?: number;
+  /** 1-based index of the first errored statement in this program. */
+  firstErrorStatementNumber: number;
+  /** Call indices (oldest to newest) where this name was seen as a local binding. */
+  localBindingCallIndexes: readonly number[];
+  /** The current call index. */
+  currentCallIndex: number;
+}
+
 export function scopeConfusionDoor(input: ScopeConfusionInput): Door | undefined {
   if (input.topLevelDefineStatementNumber !== undefined) {
     return cascadeScopeDoor(input.name, input.firstErrorStatementNumber);
@@ -966,34 +827,15 @@ export function scopeConfusionDoor(input: ScopeConfusionInput): Door | undefined
   return undefined;
 }
 
-// ─── envelope/signature-echo — echo the implicated tool's contract under a misuse error ───
-// Measured problem: ~15% of eval errors are tool MISUSE (wrong kwarg name, dangling keyword,
-// wrong arg type/shape) — the model gets the error but not the CONTRACT, so it guesses again.
-// The manifold already holds every tool's one-line signature (ToolSignature.signatureText, the
-// same lines the catalog renders); echoing the relevant one below the error teaches directly.
-// This is a SIBLING of the unbound did-you-mean enrichment, gated to a DISJOINT error family:
-// unbound-variable walls belong to that door; upstream EXECUTION errors (the tool ran, its args
-// were fine) get nothing — echoing only ever fires on argument/validation/kwarg/arity failures
-// that prevented or rejected the call.
+// ─── envelope/signature-echo — echo tool contract on misuse errors ───
+//
+// When an error indicates argument shape / keyword / type misuse for a tool (and exactly one
+// tool is implicated), echo the tool's one-line signature below the error.
+//
+// This only fires for call-shape problems, not domain execution errors or unbound names.
 
-/** Error-message shapes that mean "the CALL's arguments were wrong" — as opposed to a tool that
- *  ran and failed on domain grounds. Keyed on the OBSERVED families (probe against the real
- *  interpreter + a validating upstream): arrival's kwargs runtime, the `s/*` type-assertions, and
- *  an upstream JSON-Schema/zod argument rejection (MCP -32602, its plumbing frame already stripped
- *  by server.ts). Deliberately NOT matched — each owns its OWN teaching: the unbound-variable wall
- *  (the did-you-mean door), the attestation-required door, and any domain/execution prose.
- *
- *  The `Input validation error` entry is a downstream MCP SERVER's own tool-input rejection
- *  (the TS MCP SDK's `McpServer` helper throws exactly `Input validation error: Invalid
- *  arguments for tool <name>: <zod issues>` — verified against @modelcontextprotocol/sdk's
- *  `validateToolInput`); `\binvalid arguments\b` already matches that exact wording, so this
- *  entry is a deliberately WIDER, wording-independent net keyed on the SDK's own wrapper prefix
- *  alone — it still classifies correctly if a future SDK release rephrases the "invalid
- *  arguments" clause but keeps its "Input validation error:" preamble. Confirmed via the
- *  downstream-JSON-schema-rejection benchmark case (54% unrecovered before the Example: line
- *  landed, signature-echo.test.ts's "downstream -32602" cases) that this shape reaches
- *  `signatureEchoFor` with the SDK's `MCP error <code>: ` frame already stripped by
- *  server.ts's `stripJsonRpcFrame` (both stripped and unstripped forms match either way). */
+/** Regexes that indicate a *call shape* problem (wrong args/keywords/types) rather than
+ * a successful tool execution that then failed on domain grounds. */
 const TOOL_MISUSE_SHAPES: readonly RegExp[] = [
   /kwargs call has /, // dangling keyword / arity at the kwargs boundary
   /^s\/(?:number|integer|string|boolean|object|array): expected /, // s/* type-assertion failure

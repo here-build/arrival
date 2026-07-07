@@ -1,71 +1,14 @@
-// statement-facts — ONE real parse per top-level scheme statement, replacing three
-// independent bespoke regex/text scans that each re-derive a fact from the SAME statement
-// source: manifold-tool.ts's `topLevelDefineName` (a `^(define ...` regex), scope-scan.ts's
-// `scanLocalBindings` (a hand-rolled tokenizer walk), and competence.ts's `scanSuccess` (two
-// boundary-anchored regexes). See docs/working-proposals/arrival-manifold-decomposition-
-// 2026-07-05.md §5.1 (finding #2) for the audit this extraction answers.
+// statement-facts — extract key facts from a top-level Scheme form using the real parser.
 //
-// PARSER CHOICE, REWORKED (2026-07-06): this module used to call a sibling package's sweet-
-// expression s-expr reader — a self-described "EXPERIMENT (spike)" parser built for that
-// package's own rendering needs (comment-preserving plain trees), reused opportunistically here.
-// Its own file header listed "no vectors / #\char" as a known v0 limitation, and a live
-// MCP-Atlas benchmark run
-// crashed on ordinary R7RS code (`(char=? #\" (car chars))`) because of exactly that gap — see
-// docs/working-proposals/arrival-manifold-decomposition-2026-07-05.md and the commit history
-// around 2026-07-06 for the incident. `analyzeStatement` now takes an ALREADY-PARSED
-// `SchemeValue` — the exact form arrival's real `Lexer`/`Parser`/`parse()` produced (the same
-// parser that actually executes model code), never a second, less-faithful grammar. There is no
-// parsing left in this module at all: `runner.ts`'s syntax-gate `parse(expr)` call is the ONE
-// real parse, and its results are both executed AND analyzed here.
+// Replaces several previous regex + custom tokenizer passes over statement source text with
+// a single analysis over the already-parsed `SchemeValue` produced by arrival's reader.
 //
-// NO RunContext: this module only READS fields off an already-minted `SchemeValue` (`.car`/
-// `.cdr`/`.__vector__`/`.__name__`/`.dictForms`) — it never constructs an `AValue`, interns a
-// symbol, or calls a heap-charging (allocation-metering) method. It is provably side-effect-free
-// against the real execution's own per-run context (which `exec` mints separately).
+// Benefits:
+// - Correct handling of vectors, characters, datum comments, etc.
+// - Comments are naturally ignored (trivia).
+// - Cycle-safe walking for R7RS datum labels.
 //
-// THE REAL AVector/APair DISTINCTION: unlike the old spike parser (which flattened `[...]` to an
-// ordinary list, identical to `(...)`), the real reader mints a genuine `AVector` for a `[...]`
-// literal, with its own `evalElements`/bracket-binding semantics (docs/reference/bracket-
-// bindings.md). `localBindings` still only needs the SHAPE of the bindings-slot's FIRST
-// element — atomish (a symbol/string/number/etc.) means whole-list (Clojure `[a 1 b 2]`),
-// structural (a nested pair/vector) means per-element (Racket `([a 1] [b 2])`, or classic
-// `((a 1) (b 2))`) — never the literal bracket character, and never the shape of any VALUE. A
-// binding NAME is by grammar always a bare symbol (R2a: a symbol at every even/name position),
-// so it alone discriminates the surface; a compound value (`[a 1 b (+ 1 2)]`) is harmless. See
-// `collectLetBindingNames` below, and the bracket-binding tests in this module's test file for
-// both surfaces exercised directly.
-//
-// A GENUINE, INTENTIONAL BEHAVIOR IMPROVEMENT over the old spike-parser behavior (named here,
-// not silently introduced): a bracket-headed form like `[let ((a 1)) a]` is now correctly
-// recognized as an `AVector` (DATA), never dispatched as a `let` special form — the old spike
-// parser flattened `[...]` → list and would have mis-read this as a real `let`. No existing test
-// exercised the old (wrong) behavior; this is a pure correctness gain from using the real reader.
-//
-// DELIBERATE SEMANTIC IMPROVEMENT (ported verbatim from the prior version of this module): the
-// OLD `competence.ts scanSuccess` explicitly does NOT exclude a trigger word appearing inside a
-// `;;` comment ("a deliberate non-goal... over-flagging is the safe direction" — see
-// competence.ts's file header). A real parse excludes it for free (comments are trivia, never
-// materialized as a `SchemeValue` at all) — `usesCollectionOps`/`usesStringOps` are therefore
-// STRICTER than the old regex for exactly the two named false-positive classes (a trigger word
-// inside a STRING LITERAL, or inside a COMMENT). Every OTHER textual-match behavior is preserved
-// verbatim, including matching a trigger symbol used purely as DATA inside a `quote`d form (the
-// old regex has no notion of quoting either).
-//
-// SCOPE NOTE: `localBindings` covers exactly scope-scan.ts's current `LET_FORMS` set
-// (let/let*/letrec/letrec*) plus lambda parameters and a nested `(define ...)` — NOT `do`
-// (scope-scan.ts's `scanLocalBindings` does not scan `do`'s bindings today either; this is a
-// like-for-like extraction, not an expansion of coverage). It also does not fold in the
-// `TOOL_SYMBOL` duplication between session-history.ts/context-ring.ts (NEW-3 in the
-// decomposition doc) — that is a separate finding, not one of the three functions this file
-// was asked to replace.
-//
-// CYCLE SAFETY (a risk this migration introduces that the old spike parser never had): the real
-// reader can produce genuinely CIRCULAR structure via R7RS datum labels (`#n=`/`#n#` —
-// arrival's `Parser.ts`). `walk`'s own recursive descent guards against this with a `Set<object>`
-// shared across one `analyzeStatement` call: a structural node already visited by `walk` itself
-// is never re-descended into. This is scoped to `walk`'s OWN recursion only (never shared with
-// `spineItems`' local per-call guard below) — see that function's doc for why conflating the two
-// would break ordinary, non-circular processing.
+// This module only *reads* the value tree; it never allocates in the execution heap.
 
 // `AJSObject` (the `{...}` dict-literal wrapper) is exported from arrival's barrel under the
 // alias `AObject` (`export { AJSObject as AObject } from "./values/primitives/AJSObject.js"` —
@@ -86,7 +29,7 @@ export interface StatementFacts {
   readonly definedName: string | undefined;
   /** True iff a `map`/`filter`/`reduce`/`fold`/`fold-left`/`fold-right`/`filterv`/`mapv`
    *  SYMBOL (never a string literal, never inside a comment) appears anywhere in this
-   *  statement — the map/filter/reduce family named in competence.ts, ported verbatim. */
+   *  statement (map/filter/reduce family). */
   readonly usesCollectionOps: boolean;
   /** True iff a `string-*` or `substring` SYMBOL (same string/comment exclusions) appears
    *  anywhere in this statement. */
@@ -378,11 +321,10 @@ function walk(node: SchemeValue | undefined, depth: number, acc: WalkAccumulator
   for (const child of rest) walk(child, depth + 1, acc, seen);
 }
 
-/** The top-level form's `(define ...)` shape. Mirrors manifold-tool.ts's `topLevelDefineName`
- *  regex exactly: the variable form's name, or the function form's `f` from `(f a b)` — never
- *  the parameter list. Unlike the regex (a single "name, or undefined" return), this separates
- *  "is this shaped like a define at all" from "did a name come out of it" — see
- *  {@link StatementFacts.isDefine}. */
+/** Extract the shape of a top-level `(define ...)` form.
+ *
+ *  Returns whether it looks like a define at all, and if so the defined name (variable form
+ *  or function head). This is separate from "isDefine" flag vs name extraction. */
 function defineShapeOf(root: SchemeValue): { isDefine: boolean; definedName: string | undefined } {
   if (!(root instanceof APair)) return { isDefine: false, definedName: undefined };
   const headName = symbolName(root.car as SchemeValue | undefined);

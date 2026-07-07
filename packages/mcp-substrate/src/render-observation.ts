@@ -1,24 +1,13 @@
-// render-observation — brace-style observation rendering: dict/list heads print as
-// `{:k v ...}` / `[a b ...]` instead of the constructor-call form `(dict :k v ...)` /
-// `(list a b ...)`. Closes the round-trip: the arrival reader already ACCEPTS this
-// notation as a first-class literal grammar (docs/working-proposals/
-// arrival-curly-vector-literals.md), so a model now reads results back in exactly the
-// notation it writes them in. MEASURED: ~9.3% token saving on 1,597 real tau-bench
-// observations (tiktoken o200k_base) — the `(dict `/`(list ` heads cost 2-3 tokens per
-// collection vs 1 for `{`/`[`.
+// render-observation — render dict/list results using brace syntax `{:k v}` / `[a b]`
 //
-// Implementation: a FORMATTER over arrival-serializer's `toSExpr(obj)` intermediate
-// tree (exported — already normalizes every arrival/LIPS value shape: AExact/AInexact,
-// AString quoting, APair→list, Values, Map/Set, cycle detection, truncation markers).
-// This module owns exactly two head renderings ("dict" → braces, "list" → brackets);
-// every OTHER head (map/set/values/a custom Symbol.toSExpr tag) keeps its existing
-// `(head ...)` shape — ported from formatSExpr's own generic-application logic
-// (serializer.ts) so those heads still recurse through THIS module's brace rendering
-// for any nested dict/list children (formatSExpr's own version instead recurses into
-// itself, i.e. stays parens all the way down — see e.g. `(values (list ..) (list ..))`,
-// which must come back `(values [..] [..])`, not fully un-braced). Leaf/primitive
-// values (strings, numbers, quoted/tagged/truncation markers) delegate to formatSExpr
-// wholesale — it already implements those exactly; no reason to fork them.
+// The arrival reader accepts this notation as first-class literals, so models see
+// results in the same surface syntax they write. This also saves tokens vs the
+// `(dict ...)` / `(list ...)` constructor form.
+//
+// Implemented as a thin formatter over arrival-serializer's `toSExpr` tree. Only the
+// "dict" and "list" heads are rewritten to braces; other heads (map, set, values, etc.)
+// keep their `(head ...)` form but their children are still processed for nested
+// collections. Primitives delegate to the serializer.
 
 import { formatSExpr, type SerializeOpts, toSExprString, type SExpr } from "@here.build/arrival-serializer";
 
@@ -263,11 +252,9 @@ type SerializeOptsPending = SerializeOpts & {
   format?: (sexpr: SExpr) => string;
 };
 
-/** The observation-budget cap set, shared by BOTH rendering modes (manifold-tool.ts's
- *  "sexpr" escape hatch passes these to `toSExprString` directly): total budget + seeds
- *  sized to only ever bite once the budget is actually exceeded — never the serializer's
- *  tighter general-purpose defaults (100 items would truncate a 150-element list that
- *  fits the budget fine). */
+/** Observation budget + truncation seeds for the serializer.
+ *
+ *  Seeds are sized so they only trigger after the total char budget is the real limiter. */
 export function observationCaps(maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS): SerializeOptsPending {
   return {
     maxTotalChars,
