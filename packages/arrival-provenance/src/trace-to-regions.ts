@@ -44,7 +44,7 @@
  * re-deriving them, so the two paths cannot drift.
  */
 import { APair, deepProvenance, schemeToJs } from "@here.build/arrival";
-import { schemeToSweet } from "@here.build/arrival-sweet";
+import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import { userCallSite } from "./scope-id.js";
@@ -289,12 +289,12 @@ const NEG_INFIX: Readonly<Record<string, string>> = {
 };
 
 /** Render a test OPERAND. A compound operand (`(car prop)`, `(proposal-batch-score …)`)
- *  goes through the sweet lens — `prop[0]`, curly subscripts — so the pill reads as the
+ *  goes through the sugarcoat lens — `prop[0]`, curly subscripts — so the pill reads as the
  *  authored expression would. A bare atom keeps its inline runtime-value annotation. */
 const renderOperand = (operand: unknown, ann: Annotate): string => {
   if (asPair(operand)) {
     try {
-      return schemeToSweet(sexpr(operand, NO_ANNOTATE)).trim();
+      return schemeToSugarcoat(sexpr(operand, NO_ANNOTATE)).trim();
     } catch {
       return sexpr(operand, ann);
     }
@@ -308,7 +308,7 @@ const renderOperand = (operand: unknown, ann: Annotate): string => {
  * own negation (`a > b` → `a ≤ b`, `is empty` → `is not empty`, `not X` flips back to
  * `X`). So the pill states the fact that actually held, not the predicate plus an
  * outcome label. Operand symbols carry inline runtime values via `ann`; compound
- * operands pass through the sweet lens.
+ * operands pass through the sugarcoat lens.
  */
 function readablePolar(test: unknown, taken: boolean, ann: Annotate = NO_ANNOTATE): string {
   const p = asPair(test);

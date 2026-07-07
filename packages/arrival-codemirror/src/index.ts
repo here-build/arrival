@@ -1,11 +1,11 @@
-// @here.build/arrival-codemirror — CodeMirror 6 for arrival Scheme (classic + sweet).
+// @here.build/arrival-codemirror — CodeMirror 6 for arrival Scheme (classic + sugarcoat).
 //
-// Exports the language (schemeSweet), param hints, structural editing, ghost,
+// Exports the language (schemeSugarcoat), param hints, structural editing, ghost,
 // and IDE surface (linter/hover/completion/goto/sem-highlight) over a
 // `SchemeIdeBackend` seam. The backend may be sync or async; arrival-type-lens
 // (browser or worker) fits directly. All coordinates are classic Scheme.
 
-export { schemeSweet } from "./scheme-sweet.js";
+export { schemeSugarcoat } from "./scheme-sugarcoat.js";
 export { paramHintsExtension } from "./param-hints.js";
 export {
   schemeStructural,
@@ -21,7 +21,7 @@ export {
   type SchemeStructuralOptions,
 } from "./structural.js";
 export { schemeGhost, pickGhost, lineTailIsSafe, type SchemeGhostOptions } from "./ghost.js";
-export { sweetIdeBackend } from "./sweet-ide.js";
+export { sugarcoatIdeBackend } from "./sugarcoat-ide.js";
 export {
   schemeIde,
   schemeLinter,

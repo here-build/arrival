@@ -1,8 +1,8 @@
-// at-expression syntax highlighting (scheme-sweet StreamLanguage).
+// at-expression syntax highlighting (scheme-sugarcoat StreamLanguage).
 import { describe, expect, it } from "vitest";
 import { StringStream } from "@codemirror/language";
 
-import { parser } from "../scheme-sweet.js";
+import { parser } from "../scheme-sugarcoat.js";
 
 /** Drive the StreamParser over multi-line source → [text, tag] pairs (tag "" = null). */
 function tokens(src: string): Array<[string, string]> {
@@ -27,35 +27,35 @@ describe("at-expression highlighting", () => {
   it("single-line @{…}: opener keyword, prose string, interp variableName", () => {
     const toks = tokens("@{Pitch @product now}");
     expect(toks).toEqual([
-      ["@{", "sweetAtOpen"],
+      ["@{", "sugarcoatAtOpen"],
       ["Pitch ", "string"],
-      ["@product", "sweetInterp"],
+      ["@product", "sugarcoatInterp"],
       [" now", "string"],
-      ["}", "sweetCurly"],
+      ["}", "sugarcoatCurly"],
     ]);
   });
 
   it("@dedent head + @(graft) + quotes-as-literal", () => {
     const toks = tokens('@dedent{Say "@x" or @(f y)}');
     expect(toks).toEqual([
-      ["@dedent{", "sweetAtOpen"],
+      ["@dedent{", "sugarcoatAtOpen"],
       ['Say "', "string"],
-      ["@x", "sweetInterp"],
+      ["@x", "sugarcoatInterp"],
       ['" or ', "string"],
-      ["@(f y)", "sweetInterp"],
-      ["}", "sweetCurly"],
+      ["@(f y)", "sugarcoatInterp"],
+      ["}", "sugarcoatCurly"],
     ]);
   });
 
   it("multi-line body carries the text mode across lines", () => {
     const toks = tokens("@dedent{first @a\n  second @b}");
     // spot-check: interps on both lines pop, close brace ends it
-    expect(toks.filter(([, tag]) => tag === "sweetInterp").map(([txt]) => txt)).toEqual(["@a", "@b"]);
-    expect(toks.at(-1)).toEqual(["}", "sweetCurly"]);
+    expect(toks.filter(([, tag]) => tag === "sugarcoatInterp").map(([txt]) => txt)).toEqual(["@a", "@b"]);
+    expect(toks.at(-1)).toEqual(["}", "sugarcoatCurly"]);
   });
 
   it("bare @foo (no brace) stays a symbol, not an at-opener", () => {
     const toks = tokens("(@ obj key)");
-    expect(toks.some(([, tag]) => tag === "sweetAtOpen")).toBe(false);
+    expect(toks.some(([, tag]) => tag === "sugarcoatAtOpen")).toBe(false);
   });
 });

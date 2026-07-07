@@ -1,7 +1,7 @@
 // lower — the scheme → TypeScript LOWERING for the type-layer.
 //
 // "Scheme is a TS subset except lists and pairs." This walks the s-expr forest
-// (`parseSexprs` from @here.build/arrival-sweet) and emits a TS *string* that the
+// (`parseSexprs` from @here.build/arrival-sugarcoat) and emits a TS *string* that the
 // lens compiles against the harvested prelude (carriers.ts + a `declare const` per
 // tool). The emitted TS NEVER RUNS — it exists only so the type-checker can narrow a
 // lowered call against its tool signature (the Σ∩T narrow). So fidelity is about
@@ -29,7 +29,7 @@
 // scheme span (statement-coincidence); nothing reads sub-expression offsets. `{ ts }` is
 // preserved verbatim — every current caller destructures `.ts` only.
 
-import { parseSexprs, type Node } from "@here.build/arrival-sweet";
+import { parseSexprs, type Node } from "@here.build/arrival-sugarcoat";
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 
@@ -40,7 +40,7 @@ const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 /** A rational literal `p/q` — lowered to a division so its TS type is `number`. */
 const RATIONAL = /^([+-]?\d+)\/(\d+)$/;
 
-// arrival-sweet's `Node` is `{ atom; str? } | { list }` (+ inert lead/trail/span). The
+// arrival-sugarcoat's `Node` is `{ atom; str? } | { list }` (+ inert lead/trail/span). The
 // package keeps `isAtom`/`isKeyword` private, so we re-declare the few guards we need —
 // anchored on the same structural shape, never a cast.
 type AtomNode = { atom: string; str?: boolean };

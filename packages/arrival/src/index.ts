@@ -62,7 +62,7 @@ export { AString } from "./values/primitives/AString.js";
 export { APair } from "./values/primitives/APair.js";
 // `AVector` — legitimate, additive public API: a cross-package consumer that walks a real
 // parsed AST (mcp-substrate's statement-facts.ts, replacing its former reliance on the
-// arrival-sweet spike parser) needs `instanceof AVector` to distinguish a `[...]` literal
+// arrival-sugarcoat spike parser) needs `instanceof AVector` to distinguish a `[...]` literal
 // from an ordinary cons list, the same way `APair`/`ANil`/`AString`/`ASymbol` are already
 // exported for that purpose.
 export { AVector } from "./values/primitives/AVector.js";

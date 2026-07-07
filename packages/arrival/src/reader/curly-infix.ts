@@ -9,7 +9,7 @@
 // `($nfx$ …)` for mixed operators and leaves precedence to the app, we resolve the *arithmetic*
 // operators here, at read-time, in plain TS (no `$nfx$` symbol is ever emitted, no Scheme macro is
 // involved). Precedence is granted only where it is overlearned (PEMDAS); every other operator mix
-// is an errors-as-door `ParseError`. See docs/package-specific/arrival-sweet/arrival-sweet-extension-design-ideation-2026-06-15.md §5.2.
+// is an errors-as-door `ParseError`. See docs/package-specific/arrival-sugarcoat/arrival-sugarcoat-extension-design-ideation-2026-06-15.md §5.2.
 
 import type { SourceLocation } from "../errors.js";
 import { ParseError } from "../errors.js";

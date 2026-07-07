@@ -1,11 +1,11 @@
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
-import { paramHints, paramHintsSweet, type ParamHint } from "@here.build/arrival-sweet";
+import { paramHints, paramHintsSugarcoat, type ParamHint } from "@here.build/arrival-sugarcoat";
 
 /**
  * Parameter inlay hints (view-only widgets, no doc range).
- * `param:foo` before args of local defines. Pure analysis (arrival-sweet).
- * Per-lens: "scheme" (classic) or "sweet". Never in buffer text.
+ * `param:foo` before args of local defines. Pure analysis (arrival-sugarcoat).
+ * Per-lens: "scheme" (classic) or "sugarcoat". Never in buffer text.
  */
 
 class HintWidget extends WidgetType {
@@ -60,9 +60,9 @@ const hintTheme = EditorView.theme({
 
 /** The CodeMirror extension: a ViewPlugin that recomputes the hint widgets when the
  *  document changes, plus their styling. `lens` selects the resolver — `"scheme"`
- *  reads the classic buffer, `"sweet"` the sweet buffer. */
-export function paramHintsExtension(lens: "scheme" | "sweet" = "scheme"): Extension {
-  const resolve = lens === "sweet" ? paramHintsSweet : paramHints;
+ *  reads the classic buffer, `"sugarcoat"` the sugarcoat buffer. */
+export function paramHintsExtension(lens: "scheme" | "sugarcoat" = "scheme"): Extension {
+  const resolve = lens === "sugarcoat" ? paramHintsSugarcoat : paramHints;
   return [
     ViewPlugin.fromClass(
       class {

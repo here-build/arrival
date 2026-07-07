@@ -6,7 +6,7 @@
 // op is a no-op. Corruption is structurally impossible.
 //
 // Protection self-suspends on unbalanced buffers (you can always hand-repair);
-// resumes when balanced. Classic lens only — sweet indentation is semantic.
+// resumes when balanced. Classic lens only — sugarcoat indentation is semantic.
 //
 // v1 set = community core (Calva/Cursive/etc). No wrap command (closeBrackets).
 
@@ -23,7 +23,7 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 import { keymap, type KeyBinding } from "@codemirror/view";
-import { parseSexprs, type Node } from "@here.build/arrival-sweet";
+import { parseSexprs, type Node } from "@here.build/arrival-sugarcoat";
 
 // ── structure kernel ────────────────────────────────────────────────────────
 

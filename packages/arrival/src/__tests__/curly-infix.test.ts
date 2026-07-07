@@ -145,7 +145,7 @@ describe("curly-infix — any single operator folds (SRFI-105, flag on)", () => 
 
 describe("curly-infix — errors-as-door for MIXED operators (never emits $nfx$, flag on)", () => {
   // NOTE: `||` is R7RS pipe-symbol syntax (`|sym|`), so we use `&&`/`and`/`<` here.
-  // The `||`→`or` (and `&&`→`and`, `==`→`equal?`) glyph map is a separate, deferred sweet feature.
+  // The `||`→`or` (and `&&`→`and`, `==`→`equal?`) glyph map is a separate, deferred arrival-sugarcoat feature.
   it("doors on mixed boolean/comparison operators", async () => {
     await expect(readOne("{a && b and c}")).rejects.toThrow("ambiguous operator mix");
     await expect(readOne("{a < b && c}")).rejects.toThrow("ambiguous operator mix");

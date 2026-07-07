@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@here.build/arrival-chain": "workspace:^",
-    "@here.build/arrival-sweet": "workspace:^",
+    "@here.build/arrival-sugarcoat": "workspace:^",
     "@inhuman-tools/mercury": "workspace:^",
     "typescript": "6.0.2"
   },

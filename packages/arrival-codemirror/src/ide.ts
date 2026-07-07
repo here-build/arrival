@@ -2,9 +2,9 @@
 //
 // Each extension is wired to exactly one backend method. The seam is structural
 // (sync or Promise) so in-process and worker backends are interchangeable.
-// Coordinates are always CLASSIC scheme; sweet buffers must go through
-// sweetIdeBackend for translation. No sweet↔classic mapping yet → do not mount
-// full IDE on sweet without it.
+// Coordinates are always CLASSIC scheme; sugarcoat buffers must go through
+// sugarcoatIdeBackend for translation. No sugarcoat↔classic mapping yet → do not mount
+// full IDE on sugarcoat without it.
 
 import {
   autocompletion,
@@ -27,7 +27,7 @@ import {
 } from "@codemirror/view";
 
 import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
-import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sweet.js";
+import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sugarcoat.js";
 
 // ── the backend seam ───────────────────────────────────────────────────────
 // Structural twins of arrival-type-lens's Scheme* types (a devDep typecheck in
@@ -223,8 +223,8 @@ const quickInfoTheme = EditorView.baseTheme({
   ".cm-scheme-quickinfo-docs": { whiteSpace: "pre-wrap", marginTop: "4px", opacity: "0.8" },
 });
 
-// A scheme symbol run before the cursor — the same atom-char class the sweet
-// reader uses (scheme-sweet.ts SYMBOL_BODY), so `string-upcase`, `+`, `list->vec`
+// A scheme symbol run before the cursor — the same atom-char class the sugarcoat
+// reader uses (scheme-sugarcoat.ts SYMBOL_BODY), so `string-upcase`, `+`, `list->vec`
 // complete as ONE token. A single character class under `*` cannot backtrack —
 // the slow-regex flag is a false positive on the `$` anchor.
 // eslint-disable-next-line sonarjs/slow-regex
@@ -377,7 +377,7 @@ export function schemeCompletion(backend: SchemeIdeBackend, options?: SchemeComp
 }
 
 // ── semantic highlighting — the checker's knowledge over the lexical layer ──
-// The grammar keeps painting keywords/strings/parens (scheme-sweet tags); this
+// The grammar keeps painting keywords/strings/parens (scheme-sugarcoat tags); this
 // layer adds what only the type lens knows: THIS atom is a parameter, THAT one
 // a local, THAT one a function. Marks carry classes, not colors — the base
 // theme italicizes parameters (typographic, theme-agnostic); themes may color

@@ -1,5 +1,5 @@
 // runner.test — end-to-end regression coverage for the 2026-07-06 migration off the retired
-// sweet-expression spike parser (statement-facts.ts's module header has the full account). Two
+// arrival-sugarcoat spike parser (statement-facts.ts's module header has the full account). Two
 // things this file exists to prove, neither provable at the `statement-facts.ts`
 // unit level alone, because both require the REAL `createDoorsRunner(...).run(...)` loop
 // (runner.ts) — the syntax gate, the forms/statements alignment logic, and real `exec()`:

@@ -4,7 +4,7 @@
  * car/cdr are no longer bound symbols and there is no "aside" resolver: the KERNEL synthesizes
  * the WHOLE family (`env_get` → `cxrUnfold`) by composing each receiver's OWN tagless-final
  * car/cdr algebra — car/cdr are the 1-step base case, `cadr`…`caddddr` the deeper compositions.
- * So any accessor word the sweet lens fuses (`caddddr`, `caddadar`, …) evaluates, and the whole
+ * So any accessor word the sugarcoat lens fuses (`caddddr`, `caddadar`, …) evaluates, and the whole
  * family inherits the atoms' nil-tolerance (ANil reads the run's strict), provenance, and the
  * totalic "primitive does not support car" throw — no hand-maintained word list, no duplicated
  * field-access/typecheck.
