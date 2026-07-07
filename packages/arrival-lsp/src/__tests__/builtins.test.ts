@@ -27,12 +27,16 @@ const casesConfig = path.join(pkgRoot, "tsconfig.cases.json");
 
 /** Parse tsconfig.cases.json and compile its file set into one program. */
 function compileCasesProgram(): ts.Diagnostic[] {
-  const parsed = ts.getParsedCommandLineOfConfigFile(casesConfig, {}, {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: (d) => {
-      throw new Error(ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+  const parsed = ts.getParsedCommandLineOfConfigFile(
+    casesConfig,
+    {},
+    {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: (d) => {
+        throw new Error(ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+      },
     },
-  });
+  );
   if (!parsed) throw new Error(`could not parse ${casesConfig}`);
   const program = ts.createProgram(parsed.fileNames, parsed.options);
   return [...ts.getPreEmitDiagnostics(program)];

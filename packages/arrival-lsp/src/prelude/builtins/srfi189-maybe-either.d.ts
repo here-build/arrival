@@ -101,9 +101,7 @@ interface ArrShape {
   // either-ref/default: Right value, else default D.
   "either-ref/default"<L, R, D>(e: readonly ["left", L] | readonly ["right", R], dflt: D): R | D;
   // either-swap: (left x) ⇄ (right x) — sides flip, payload types swap roles.
-  "either-swap"<L, R>(
-    e: readonly ["left", L] | readonly ["right", R],
-  ): readonly ["right", L] | readonly ["left", R];
+  "either-swap"<L, R>(e: readonly ["left", L] | readonly ["right", R]): readonly ["right", L] | readonly ["left", R];
   // either->list: Right x → (x); Left → ().
   "either->list"<L, R>(e: readonly ["left", L] | readonly ["right", R]): List<R>;
 }

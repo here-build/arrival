@@ -1,31 +1,17 @@
-// service-core — "Scheme LSP with the TS LSP API", environment-agnostic.
+// service-core is the environment-agnostic "Scheme LSP over TS LSP".
 //
-// A language service that MIRRORS `ts.LanguageService` but operates on Scheme
-// source and Scheme positions. Internally it:
-//   1. emits type-faithful virtual TS from the Scheme (`emitTypes`),
-//   2. type-checks that TS against the shared PRE prelude + builtin leaves through
-//      a single in-memory `ts.LanguageService`,
-//   3. maps coordinates across the span lens (`Mapper`) — diagnostics OUT to
-//      Scheme, cursor positions IN to TS.
+// It emits Scheme → virtual TS (`emitTypes`), runs it through one `ts.LanguageService`
+// against the PRE + leaves, then maps results back to Scheme coordinates via `Mapper`.
 //
-// The method SHAPES mirror what `@codemirror/lint`, `hoverTooltip`, and
-// `autocompletion` consume, so a CodeMirror extension wires straight onto them
-// (see `language-service.test.ts` for the 5-line `@codemirror/lint` adapter).
+// The public surface is shaped for direct use by CodeMirror adapters.
 //
-// This module is the ENVIRONMENT-AGNOSTIC core: it touches neither `node:fs`
-// nor `ts.sys`, so it bundles for the browser. Where the prelude and the TS
-// default lib come from is the `ServiceEnvironment` parameter — the Node entry
-// (`language-service.ts`) reads them from disk; the browser entry (`browser.ts`)
-// uses the build-time-generated bundles.
-//
-// v1 recreates the compilation per source (the program text changes every call,
-// the prelude is constant). The prelude file map is built ONCE and reused; only
-// the `__program.ts` snapshot + its version bump per source. An incremental host
-// that diffs the program file is a later optimization (noted inline).
+// It never touches fs or `ts.sys` — `ServiceEnvironment` supplies the files
+// (disk in Node, glob in browser). The prelude map is built once; only the
+// program snapshot changes per call.
 
 // The runtime-free reader (spans on every node) — the require scanner's truth.
-import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 import { parseSexprs, type Node } from "@here.build/arrival-sweet";
+import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 // The deep subpath (not the package index): the index re-exports `formatJs`,
 // whose `eslint` import would drag the whole linter into any browser bundle of
 // this service. `types-emit`'s closure is the pure front-end only.
@@ -35,70 +21,41 @@ import { balancePrefix, stringLiteralType } from "./balance.js";
 import { Mapper } from "./span-map.js";
 import { PROGRAM_FILE } from "./virtual-files.js";
 
-// balancePrefix moved to balance.ts (the tsgo browser worker imports it
-// without dragging `typescript` into its chunk); re-exported for consumers.
+// balancePrefix moved to balance.ts (alternative backends like arrival-type-lens-tsgo
+// import it without dragging `typescript` into their chunk); re-exported for consumers.
 export { balancePrefix } from "./balance.js";
 
-/** Completion-cursor sentinel for the type-mask probe. Plain letters only: `emitTypes`'
- *  `cleanName` strips leading/trailing `_`, so an underscore-wrapped marker would not survive to
- *  be found in the emitted TS. Unlikely to collide with a real scheme symbol. */
-const SENTINEL = "qzcursorzq";
+const SENTINEL = "qzcursorzq"; // plain letters only (emitTypes cleanName)
 
-/** A diagnostic in SCHEME coordinates (the lift-out result). Shape mirrors the
- *  fields `@codemirror/lint`'s `Diagnostic` and LSP's `Diagnostic` both need. */
 export interface SchemeDiagnostic {
-  /** Offset into the Scheme source where the diagnostic starts. */
   start: number;
-  /** Length of the Scheme span the diagnostic covers. */
   length: number;
-  /** 0-based line of `start` in the Scheme source. */
   line: number;
-  /** 0-based column of `start` in the Scheme source. */
   character: number;
-  /** `"error" | "warning" | "suggestion" | "message"` — LSP/CodeMirror severities. */
   severity: "error" | "warning" | "suggestion" | "message";
-  /** The tsc diagnostic code (e.g. 2345), carried through for telemetry/explainers. */
   code: number;
-  /** The flattened diagnostic message. */
   messageText: string;
 }
 
-/** Hover info in Scheme coordinates. */
 export interface SchemeQuickInfo {
-  /** The rendered type/signature string (the hover body). */
   displayText: string;
-  /** The documentation/JSDoc string, if any. */
   documentation: string;
-  /** The Scheme span the hover applies to (lifted from the TS textSpan). */
   span: { start: number; length: number } | null;
 }
 
-/** One completion entry (name + kind), mirroring `ts.CompletionEntry`'s essentials. */
 export interface SchemeCompletionEntry {
   name: string;
-  /** The `ts.ScriptElementKind` string (`"method"`, `"function"`, `"property"`…). */
   kind: string;
-  /** The sort key tsc assigned (preserves the service's ranking). */
   sortText: string;
   insertText?: string;
 }
 
-/** One rich completion entry — `SchemeCompletionEntry` plus what the type
- *  system knows about the candidate AT THIS CURSOR. */
 export interface SchemeRichCompletion extends SchemeCompletionEntry {
-  /** The candidate's type signature one-liner (`(xs: List<T>) => T`), when the
-   *  checker can name it. Builtins always have one; locals usually do. */
   detail?: string;
-  /** Slot verdict at an argument position — the sampler's Σ∩T mask, surfaced:
-   *  `true` = proven to fit the parameter, `false` = proven NOT to fit,
-   *  `undefined` = unknown / not at an argument slot. */
   fits?: boolean;
-  /** True iff the candidate is callable (a function-typed value) — drives
-   *  operator-position ranking (Σ's "callables only at the head" filter). */
   callable?: boolean;
 }
 
-/** The full completion answer for a cursor: entries + where the cursor IS. */
 export interface SchemeCompletionContext {
   /** Σ-style cursor position: head of a form / argument of a call / top level. */
   position: "operator" | "argument" | "top";
@@ -108,8 +65,6 @@ export interface SchemeCompletionContext {
   entries: SchemeRichCompletion[];
 }
 
-/** A semantically-classified token span in Scheme coordinates — what an
- *  identifier IS (its role per the type checker), for semantic highlighting. */
 export interface SchemeClassifiedSpan {
   start: number;
   length: number;
@@ -118,7 +73,6 @@ export interface SchemeClassifiedSpan {
   kind: string;
 }
 
-/** A go-to-definition result in Scheme coordinates. */
 export interface SchemeDefinition {
   /** The defined symbol's name. */
   name: string;
@@ -226,19 +180,13 @@ const TOKEN_TYPES = [
   "member",
 ] as const;
 
-// A single scheme atom (one symbol token) — the lift-faithfulness gate for
-// semantic classifications. Same character class as the sweet reader's atoms.
 const SCHEME_ATOM = /^[\w\-!$%&*+./<=>?@^~:]+$/;
 
-/** One `(require "path")` occurrence: the path + the form's span (the anchor
- *  for per-file summary diagnostics). */
 export interface RequireRef {
   path: string;
   span: { start: number; length: number };
 }
 
-/** Scan a source's top-level forms for `(require "…")` — via the real reader
- *  (string/comment-safe), spans included. Unparseable source → []. */
 export function scanRequires(scheme: string): RequireRef[] {
   let forest: Node[];
   try {
@@ -293,6 +241,16 @@ export function scanAllRequirePaths(scheme: string): string[] {
  *  `(define x 1) (define x 2)` in one file AND a program define shadowing a
  *  required one — but the flat `const` emit makes tsc cry 2451/2300. */
 const SCHEME_LEGAL_TS_CODES = new Set([2451 /* Cannot redeclare */, 2300 /* Duplicate identifier */]);
+
+/** "Cannot find name" siblings tsc tacks an ambient-lib install suggestion onto
+ *  ("Do you need to install type definitions for node? Try `npm i --save-dev
+ *  @types/node`...") — noise in a scheme file, never actionable. Folded into
+ *  the same 2304/2552 SUGGESTION branch below so the tail never reaches the user. */
+const NOISY_SUGGESTION_TS_CODES = new Set([
+  2580 /* node */, 2591 /* require/module/exports, node */, 2581 /* jQuery */, 2592 /* jQuery */,
+  2582 /* test runner */, 2593 /* test runner */, 2583 /* target library */, 2584 /* target library */, 2867 /* Bun */,
+  2868 /* Bun */,
+]);
 
 /** Collect the rendered types a parameter's USE SITES expect inside `body`
  *  (checker.getContextualType per occurrence). Inner arrows re-binding the
@@ -803,7 +761,7 @@ export function createSchemeLanguageServiceCore(
         // the lens's sight (no resolveModule → any required file; with it →
         // an unresolvable path / runtime-injected binding) → SUGGESTION, named
         // by the SCHEME atom (the TS message carries the cleanName'd twin).
-        if (d.code === 2304 || d.code === 2552) {
+        if (d.code === 2304 || d.code === 2552 || NOISY_SUGGESTION_TS_CODES.has(d.code)) {
           const atom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
           severity = "suggestion";
           messageText =

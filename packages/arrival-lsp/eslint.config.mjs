@@ -30,6 +30,7 @@ export default [
   {
     // .tsgo/ + src/tsgo/runtime/ hold VENDORED Go wasm_exec runtimes — foreign
     // code eslint must not parse (the sonarjs rule set crashes on it).
-    ignores: ["node_modules/*", "dist/*", "**/*.config.*", "src/*.generated.ts", "scripts/*", ".tsgo/*", "src/tsgo/runtime/*"],
+    // dist-cases/ are type-test fixtures (not real source).
+    ignores: ["node_modules/*", "dist/*", "dist-cases/*", "**/*.config.*", "src/*.generated.ts", "scripts/*", ".tsgo/*", "src/tsgo/runtime/*"],
   },
 ];

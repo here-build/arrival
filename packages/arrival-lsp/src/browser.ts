@@ -1,22 +1,34 @@
-// browser — the browser entry of the Scheme language service.
+// Browser entry: same API as the Node one, but everything comes from Vite globs
+// (no fs, no `ts.sys`). This keeps the "empty barrel" (no JS globals) contract
+// identical to Node while staying self-contained for workers.
 //
-// Same service as `language-service.ts` (Node), but every virtual file the
-// compilation needs is baked in at build time (`scripts/generate-bundles.mjs`):
-// the prelude bundle and the `lib.es2022.d.ts` reference chain of the pinned
-// `typescript`. Self-contained on purpose — no CDN fetch, no `node:fs`, no
-// `ts.sys` — so type checks work in an offline (CLI-served) studio and the lib
-// version can never drift from the `typescript` the service runs on.
-//
-// `skipLibCheck` defaults to TRUE here (the Node default is false): re-verifying
-// the stock TS libs inside an editor keystroke loop buys nothing.
+// skipLibCheck is on by default — re-checking the stock libs on every keystroke
+// buys nothing.
 
-import { PRELUDE_BUNDLE } from "./prelude-bundle.generated.js";
 import {
   createSchemeLanguageServiceCore,
   type SchemeLanguageService,
   type SchemeLanguageServiceOptions,
 } from "./service-core.js";
-import { TS_DEFAULT_LIB, TS_LIB_FILES } from "./ts-libs.generated.js";
+import { stripLibFiles } from "./ts-lib-strip.js";
+import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "./ts-libs.generated.js";
+import { PRELUDE_FILE } from "./virtual-files.js";
+
+// Load via glob so both Node and browser see the identical stripped set.
+const rawModules = import.meta.glob("typescript/lib/lib.*.d.ts", { eager: true, query: "?raw" }) as Record<
+  string,
+  string
+>;
+
+function getRawForLib(name: string): string {
+  const directKey = `typescript/lib/${name}?raw`;
+  if (rawModules[directKey]) return rawModules[directKey];
+  const match = Object.entries(rawModules).find(([k]) => k.includes(name));
+  if (match) return match[1];
+  throw new Error(`[arrival-type-lens] missing Vite ?raw for ${name}`);
+}
+
+const TS_LIB_FILES = stripLibFiles(TS_LIB_FILE_NAMES, getRawForLib);
 
 export type {
   SchemeDiagnostic,
@@ -30,12 +42,37 @@ export type {
   SchemeLanguageServiceOptions,
 } from "./service-core.js";
 
-/** The bundled prelude (PRE + builtin leaves) as a fresh mutable map — the
- *  browser twin of `getPreludeFiles()`. */
-export const getBundledPreludeFiles = () => new Map<string, string>(PRELUDE_BUNDLE);
+// Load prelude via glob (same sources as disk path).
+const preludeModules = import.meta.glob("./prelude/**/*.d.ts", { eager: true, query: "?raw" }) as Record<
+  string,
+  string
+>;
 
-/** Create a Scheme language service that runs entirely in the browser (or any
- *  fs-less runtime): bundled prelude + bundled TS default libs, no `ts.sys`. */
+export const getBundledPreludeFiles = () => {
+  const map = new Map<string, string>();
+
+  // Main PRE (use the exported constant for the key)
+  const preKey = Object.keys(preludeModules).find((k) => k.includes("prelude/types.d.ts"));
+  if (preKey && preludeModules[preKey]) {
+    map.set(PRELUDE_FILE, preludeModules[preKey]);
+  }
+
+  // Builtin leaves — mirror the logic from getPreludeFiles
+  for (const [key, content] of Object.entries(preludeModules)) {
+    if (key.includes("/builtins/") && key.endsWith(".d.ts?raw")) {
+      const match = /builtins\/([^/]+)\.d\.ts\?raw$/.exec(key);
+      if (match) {
+        const f = match[1];
+        if (!f.startsWith("_")) {
+          map.set(`__leaf_${f}.d.ts`, content);
+        }
+      }
+    }
+  }
+
+  return map;
+};
+
 export const createBrowserSchemeLanguageService = (opts?: SchemeLanguageServiceOptions): SchemeLanguageService =>
   createSchemeLanguageServiceCore(
     {
@@ -52,3 +89,5 @@ export const createBrowserSchemeLanguageService = (opts?: SchemeLanguageServiceO
   );
 
 export { scanRequires, type RequireRef } from "./service-core.js";
+
+export { TS_LIB_FILES }; // for the coherence test

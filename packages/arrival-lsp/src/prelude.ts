@@ -1,24 +1,10 @@
-// prelude — assemble the virtual `.d.ts` file map the type-lens compilation needs.
-//
-// The lens type-checks emitted virtual TS against the SHARED PRE prelude
-// (`prelude/types.d.ts`) plus every builtin leaf (`prelude/builtins/<slug>.d.ts`),
-// declaration-merged into the single `interface ArrShape`. The `__tests__/`
-// harnesses (builtins.test.ts / prelude.test.ts) already loaded these in-memory;
-// this promotes that load into ONE reusable function so the language service, an
-// MCP typecheck path, and a Volar plugin all build the same virtual file map.
-
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The virtual file-name constants moved to `virtual-files.ts` (node-free) so the
-// service core / browser entry can import them; re-exported here for back-compat.
 import { PRELUDE_FILE } from "./virtual-files.js";
 
-// Resolve the on-disk prelude under the shipped `src/` tree (tsc does not copy
-// hand-written `.d.ts` into `dist/`). From `dist/prelude.js` that is `../src/
-// prelude`; from `src/prelude.ts` (vitest/tsx) it is `./prelude`. Mirrors the
-// path logic in `index.ts`.
+// Resolve under shipped src/ (same logic as index.ts).
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isDist = here.endsWith("dist") || here.includes(`dist${path.sep}`);
 const srcRoot = isDist ? path.join(here, "..", "src") : here;

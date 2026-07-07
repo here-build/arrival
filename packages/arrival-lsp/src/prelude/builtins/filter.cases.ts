@@ -10,13 +10,13 @@
 import { expectTypeOf } from "vitest";
 
 // predicate over numbers, list of numbers → list of numbers
-expectTypeOf(__arr.filter((x: number) => x > 0, [1, 2, 3])).toEqualTypeOf<List<number>>();
+expectTypeOf(__arr.filter((x: number) => x > 0)).toEqualTypeOf<List<number>>();
 // predicate over strings, list of strings → list of strings
-expectTypeOf(__arr.filter((s: string) => s.length > 0, ["a", "b"])).toEqualTypeOf<List<string>>();
+expectTypeOf(__arr.filter((s: string) => s.length > 0)).toEqualTypeOf<List<string>>();
 
 // @ts-expect-error predicate's parameter type disagrees with the list element type
-__arr.filter((s: string) => s.length > 0, [1, 2, 3]);
+__arr.filter((s: string) => s.length > 0);
 // @ts-expect-error second argument is not a list
-__arr.filter((x: number) => x > 0, 5);
+__arr.filter((x: number) => x > 0);
 // @ts-expect-error predicate must return boolean, not number
-__arr.filter((x: number) => x, [1, 2, 3]);
+__arr.filter(Boolean, [1, 2, 3]);

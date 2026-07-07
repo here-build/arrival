@@ -12,13 +12,29 @@
 import { expectTypeOf } from "vitest";
 
 // precise inference: keyword entries → precise object shape (literals extend brands)
-expectTypeOf(__arr.dict([["name", "alice"], ["age", 30]] as const)).toExtend<{ name: string; age: number }>();
-expectTypeOf(__arr.dict([["name", "alice"], ["age", 30]] as const)).not.toBeAny();
+expectTypeOf(
+  __arr.dict([
+    ["name", "alice"],
+    ["age", 30],
+  ] as const),
+).toExtend<{ name: string; age: number }>();
+expectTypeOf(
+  __arr.dict([
+    ["name", "alice"],
+    ["age", 30],
+  ] as const),
+).not.toBeAny();
 // single-entry dict
 expectTypeOf(__arr.dict([["ok", true]] as const)).toExtend<{ ok: boolean }>();
 expectTypeOf(__arr.dict([["ok", true]] as const)).not.toBeAny();
 
 // @ts-expect-error wrong value type for a known key — age is number, not string
-const row: { name: string; age: string } = __arr.dict([["name", "alice"], ["age", 30]] as const);
+const row: { name: string; age: string } = __arr.dict([
+  ["name", "alice"],
+  ["age", 30],
+] as const);
 // @ts-expect-error claiming a key the dict does not have (missing property)
-const row2: { name: string; age: number; extra: boolean } = __arr.dict([["name", "alice"], ["age", 30]] as const);
+const row2: { name: string; age: number; extra: boolean } = __arr.dict([
+  ["name", "alice"],
+  ["age", 30],
+] as const);

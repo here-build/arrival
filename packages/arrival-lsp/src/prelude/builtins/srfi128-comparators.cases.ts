@@ -69,6 +69,10 @@ const w: boolean = __arr["default-comparator"]();
 // @ts-expect-error =? requires a comparator first; a bare number is not a comparator tuple
 __arr["=?"](5, 1, 1);
 // @ts-expect-error make-comparator's type-test must be a 1-arg predicate, not a number
-__arr["make-comparator"](5, (a: unknown, b: unknown): boolean => true, (a: unknown, b: unknown): boolean => true);
+__arr["make-comparator"](
+  5,
+  (a: unknown, b: unknown): boolean => true,
+  (a: unknown, b: unknown): boolean => true,
+);
 // @ts-expect-error comparator-equality-predicate requires a comparator, not a list
 __arr["comparator-equality-predicate"]([1, 2, 3]);

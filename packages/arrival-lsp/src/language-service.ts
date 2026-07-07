@@ -1,13 +1,9 @@
-// language-service — the Node entry of the Scheme language service.
-//
-// The implementation lives in `service-core.ts` (environment-agnostic — no
-// `node:fs`, no `ts.sys`). This wrapper supplies the Node environment: the
-// prelude read from disk + the SAME generated, value-stripped TS lib bundle the
-// browser entry uses (`browser.ts`). One world on purpose: scheme has no JS
-// environment, so the compilation's globals are types-only ("the env is an
-// empty barrel" — `(parseInt "3")` is a Cannot-find-name bite, not a silently
-// well-typed call), and Node/browser answers can never diverge on lib version
-// or content. No `ts.sys` fallback — the compilation is hermetic.
+// Node entry. Supplies disk prelude + direct `typescript` package libs
+// (fs + strip). Keeps the exact same "empty barrel" world as the browser path.
+
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 import { getPreludeFiles } from "./prelude.js";
 import {
@@ -15,7 +11,8 @@ import {
   type SchemeLanguageService,
   type SchemeLanguageServiceOptions,
 } from "./service-core.js";
-import { TS_DEFAULT_LIB, TS_LIB_FILES } from "./ts-libs.generated.js";
+import { stripLibFiles } from "./ts-lib-strip.js";
+import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "./ts-libs.generated.js";
 
 export type {
   SchemeDiagnostic,
@@ -31,8 +28,15 @@ export type {
 } from "./service-core.js";
 export { createSchemeLanguageServiceCore } from "./service-core.js";
 
-/** Create a Scheme language service with the Node environment: disk prelude,
- *  bundled value-stripped TS libs (identical to the browser entry's world). */
+// Direct from installed `typescript` (fs + strip) to match browser exactly.
+function loadNodeTsLibFiles(): readonly (readonly [string, string])[] {
+  const require = createRequire(import.meta.url);
+  const tsLibDir = path.dirname(require.resolve("typescript"));
+  return stripLibFiles(TS_LIB_FILE_NAMES, (name) => readFileSync(path.join(tsLibDir, name), "utf8"));
+}
+
+const TS_LIB_FILES = loadNodeTsLibFiles();
+
 export function createSchemeLanguageService(opts?: SchemeLanguageServiceOptions): SchemeLanguageService {
   return createSchemeLanguageServiceCore(
     {

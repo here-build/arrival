@@ -27,18 +27,14 @@ describe("scheme stdlib preamble in scope", () => {
   it("a preamble-defined helper resolves — no unknown-name suggestion", () => {
     const scheme = `(define obj (list 1 2))\n(define x (field obj 0))`;
     const diags = ls.getSemanticDiagnostics(scheme);
-    const unresolved = diags.filter(
-      (d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("field"),
-    );
+    const unresolved = diags.filter((d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("field"));
     expect(unresolved).toHaveLength(0);
   });
 
   it("a second preamble helper resolves too", () => {
     const scheme = `(define n (count-if odd? (list 1 2 3)))`;
     const diags = ls.getSemanticDiagnostics(scheme);
-    const unresolved = diags.filter(
-      (d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("count-if"),
-    );
+    const unresolved = diags.filter((d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("count-if"));
     expect(unresolved).toHaveLength(0);
   });
 
@@ -46,9 +42,7 @@ describe("scheme stdlib preamble in scope", () => {
     const bare = createSchemeLanguageService({ compilerOptions: { noImplicitAny: false } });
     const scheme = `(define x (field obj "k"))`;
     const diags = bare.getSemanticDiagnostics(scheme);
-    const unresolved = diags.filter(
-      (d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("field"),
-    );
+    const unresolved = diags.filter((d) => (d.code === 2304 || d.code === 2552) && d.messageText.includes("field"));
     expect(unresolved.length).toBeGreaterThan(0);
   });
 });

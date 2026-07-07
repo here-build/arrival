@@ -55,12 +55,13 @@ expectTypeOf(__arr["maybe->either"](__arr.just(1), "no")).not.toBeAny();
 expectTypeOf(__arr["maybe->list"](__arr.just(1))).toExtend<List<number>>();
 expectTypeOf(__arr["maybe->list"](__arr.just(1))).not.toBeAny();
 // list->maybe wraps the element type (widened list → exact brand)
-expectTypeOf(__arr["list->maybe"]([1, 2, 3])).toEqualTypeOf<
-  readonly ["just", number] | readonly ["nothing"]
->();
+expectTypeOf(__arr["list->maybe"]([1, 2, 3])).toEqualTypeOf<readonly ["just", number] | readonly ["nothing"]>();
 // either-map threads the Right payload through (R → B), Left preserved → exact brand
 expectTypeOf(
-  __arr["either-map"]((x: number): boolean => x > 0, __arr.right(1) as readonly ["left", string] | readonly ["right", number]),
+  __arr["either-map"](
+    (x: number): boolean => x > 0,
+    __arr.right(1) as readonly ["left", string] | readonly ["right", number],
+  ),
 ).toEqualTypeOf<readonly ["left", string] | readonly ["right", boolean]>();
 // either-ref unwraps the Right value type (literal through R)
 expectTypeOf(__arr["either-ref"](__arr.right(5))).toExtend<number>();

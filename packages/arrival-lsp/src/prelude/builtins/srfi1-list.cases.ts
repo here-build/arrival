@@ -15,10 +15,15 @@ expectTypeOf(__arr.take(2, [1, 2, 3, 4])).toEqualTypeOf<List<number>>();
 expectTypeOf(__arr.drop(1, ["a", "b", "c"])).toEqualTypeOf<List<string>>();
 
 // concat — string concat, variadic strings → string
-expectTypeOf(__arr.concat("a", "b", "c")).toEqualTypeOf<string>();
+expectTypeOf([...__arr, "a", "b", "c"]).toEqualTypeOf<string>();
 
 // flatten — argument is a list; element type is unknown
-expectTypeOf(__arr.flatten([[1, 2], [3, [4]]])).toEqualTypeOf<List<unknown>>();
+expectTypeOf(
+  __arr.flatten([
+    [1, 2],
+    [3, [4]],
+  ]),
+).toEqualTypeOf<List<unknown>>();
 
 // fold — accumulator type B threads from seed through callback to result
 expectTypeOf(__arr.fold((acc: number, x: number): number => acc + x, 0, [1, 2, 3])).toEqualTypeOf<number>();
@@ -28,7 +33,14 @@ expectTypeOf(__arr.fold((a: List<number>, x: number): List<number> => a, [], [1,
 expectTypeOf(__arr.nth(1, [10, 20, 30])).toEqualTypeOf<number | undefined>();
 
 // for-each — void return; callback param bound to element type
-expectTypeOf(__arr["for-each"]((x: number): void => { x; }, [1, 2, 3])).toEqualTypeOf<void>();
+expectTypeOf(
+  __arr["for-each"](
+    (x: number): void => {
+      x;
+    },
+    [1, 2, 3],
+  ),
+).toEqualTypeOf<void>();
 
 // count — number result; pred param bound to element type
 expectTypeOf(__arr.count((x: number): boolean => x > 1, [1, 2, 3])).toEqualTypeOf<number>();
@@ -41,7 +53,7 @@ __arr.take([1, 2, 3], 2);
 // @ts-expect-error drop — wrong-typing the threaded result (string list cannot be number list)
 const x: List<number> = __arr.drop(1, ["a", "b"]);
 // @ts-expect-error concat — list arg where a string is required (STRING concat, not append)
-__arr.concat([1, 2], [3, 4]);
+[...__arr, 1, 2, 3, 4];
 // @ts-expect-error flatten — argument is not a list
 __arr.flatten(5);
 // @ts-expect-error fold — callback acc type disagrees with the seed type (string acc vs number seed)
@@ -53,6 +65,11 @@ __arr.nth([10, 20], 1);
 // @ts-expect-error nth — wrong element type threaded out
 const n: string | undefined = __arr.nth(1, [10, 20, 30]);
 // @ts-expect-error for-each — callback param type mismatches the element type
-__arr["for-each"]((x: string): void => { x; }, [1, 2, 3]);
+__arr["for-each"](
+  (x: string): void => {
+    x;
+  },
+  [1, 2, 3],
+);
 // @ts-expect-error count — pred param type mismatches the element type
 __arr.count((x: string): boolean => x.length > 0, [1, 2, 3]);

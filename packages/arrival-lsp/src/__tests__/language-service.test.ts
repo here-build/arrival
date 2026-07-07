@@ -272,7 +272,7 @@ describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)
     expect(byName.get("config/audience")!.detail).toBe("List<string>");
   });
 
-  it("the backport survives on the VERY FIRST completion request of a fresh service (regression: jsGlobalBaseline's one-time loadSource(\"\") probe used to clobber programDeclaredNames before it was ever read)", () => {
+  it('the backport survives on the VERY FIRST completion request of a fresh service (regression: jsGlobalBaseline\'s one-time loadSource("") probe used to clobber programDeclaredNames before it was ever read)', () => {
     const fresh = createSchemeLanguageService();
     const doc = `(define config/audience (list "ada" "grace"))\nconfi`;
     const names = fresh.getCompletionsAtPosition(doc, doc.length).map((e) => e.name);

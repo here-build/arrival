@@ -2,19 +2,20 @@
 //
 // `createBrowserSchemeLanguageService` must answer the same queries as the Node
 // service while touching NEITHER `node:fs` NOR `ts.sys`: prelude + TS default
-// libs come from the build-time-generated bundles. Running it under vitest (Node)
-// is exactly the point — the service itself cannot tell; the environment object
-// is the only difference. Plus the drift guard: the generated prelude bundle must
-// stay byte-identical to what `getPreludeFiles()` reads off disk.
+// libs come from direct Vite glob loads (at bundle time). Running it under vitest
+// (Node) is exactly the point — the service itself cannot tell; the environment
+// object is the only difference. The drift guard verifies that glob-loaded
+// content matches what `getPreludeFiles()` reads off disk.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { createBrowserSchemeLanguageService, getBundledPreludeFiles } from "../browser.js";
+import { createBrowserSchemeLanguageService, getBundledPreludeFiles, TS_LIB_FILES } from "../browser.js";
 import { getPreludeFiles, PROGRAM_FILE } from "../prelude.js";
-import { TS_DEFAULT_LIB, TS_LIB_FILES } from "../ts-libs.generated.js";
+import { stripGlobalValues } from "../ts-lib-strip.js";
+import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "../ts-libs.generated.js";
 
 describe("prelude bundle — drift guard", () => {
   it("matches the on-disk prelude byte-for-byte (fix: pnpm generate:bundles)", () => {
@@ -94,5 +95,35 @@ describe("browser language service — same answers, no fs", () => {
     const scheme = `(define xs (list 1 2 3))\n(car xs)`;
     const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.lastIndexOf("car") + 1).map((e) => e.name));
     expect(names.has("xs")).toBe(true);
+  });
+});
+
+describe("direct-from-ts lib loading (new path)", () => {
+  it("manifest contains the expected root and a reasonable number of transitive libs", () => {
+    expect(TS_DEFAULT_LIB).toBe("lib.es2022.d.ts");
+    expect(TS_LIB_FILE_NAMES).toContain("lib.es2022.d.ts");
+    expect(TS_LIB_FILE_NAMES).toContain("lib.es5.d.ts");
+    expect(TS_LIB_FILE_NAMES.length).toBeGreaterThan(40);
+  });
+
+  it("browser path produces a stripped map with the same names as the manifest", () => {
+    const loadedNames = TS_LIB_FILES.map(([n]) => n);
+    expect(loadedNames).toEqual([...TS_LIB_FILE_NAMES]);
+  });
+
+  it("stripGlobalValues removes top level var/function decls (except Symbol)", () => {
+    const sample = `
+interface X {}
+declare var console: any;
+declare function parseInt(s: string): number;
+declare const Symbol: any;
+var hidden = 1;
+`;
+    const stripped = stripGlobalValues("test.d.ts", sample);
+    expect(stripped).not.toContain("declare var console");
+    expect(stripped).not.toContain("declare function parseInt");
+    expect(stripped).not.toContain("var hidden");
+    expect(stripped).toContain("interface X");
+    expect(stripped).toContain("Symbol");
   });
 });

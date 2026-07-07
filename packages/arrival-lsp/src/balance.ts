@@ -1,18 +1,9 @@
-// balance — close an INCOMPLETE scheme prefix so it parses. Split out of
-// service-core so the tsgo backend's browser worker can import it WITHOUT
-// dragging `typescript` into its chunk (service-core re-exports it, every
-// existing import path still works).
+// Split out so tsgo (and other backends) can import it without pulling `typescript`.
 
 /**
- * Balance an INCOMPLETE scheme prefix so it parses — for the cursor-position queries
- * (completion / quick-info), which by nature run on a mid-edit, usually-unbalanced prefix.
- * `emitTypes` requires a complete, parseable program (`parseSexprs` throws on an unclosed
- * paren → the whole emit degrades to an empty module → no span at the cursor → no completions).
- * Appending the missing close delimiters makes the prefix parse; the suffix is added at the END,
- * so every cursor offset within the original prefix maps unchanged. String / line-comment /
- * block-comment / char-literal aware, matching arrival's lexer (brackets `()[]` are
- * interchangeable on close, so a single `)` per open level suffices). The diagnostics path does
- * NOT balance — a genuinely malformed complete program should report its errors, not be repaired.
+ * Makes an incomplete Scheme prefix parseable by appending the missing closers
+ * at the end. Cursor offsets inside the original prefix are preserved.
+ * Only used for cursor queries (completions/hover). Diagnostics never balance.
  */
 export function balancePrefix(scheme: string): string {
   let depth = 0;

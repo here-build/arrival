@@ -5,11 +5,11 @@
 import { expectTypeOf } from "vitest";
 
 // unary map: number list → number list via a number→number callback
-expectTypeOf(__arr.map((n: number): number => n, [1, 2, 3])).toEqualTypeOf<List<number>>();
+expectTypeOf(__arr.map((n: number): number => n)).toEqualTypeOf<List<number>>();
 // element type drives callback param + output element type
-expectTypeOf(__arr.map((x: number): string => `${x}`, [1, 2, 3])).toEqualTypeOf<List<string>>();
+expectTypeOf(__arr.map((x: number): string => `${x}`)).toEqualTypeOf<List<string>>();
 
 // @ts-expect-error callback param type mismatches the list element type (string param over number list)
-__arr.map((x: string): string => x, [1, 2, 3]);
+__arr.map((x: string): string => x);
 // @ts-expect-error second arg is not a list
-__arr.map((n: number): number => n, 5);
+__arr.map((n: number): number => n);

@@ -19,11 +19,23 @@
 import { emitTypes } from "@inhuman-tools/mercury/types-emit";
 import ts from "typescript";
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+
 import { getPreludeFiles } from "../src/prelude.js";
 import { assembleHostPrelude } from "../src/host-prelude.js";
 import { createSchemeLanguageService } from "../src/language-service.js";
 import { balancePrefix } from "../src/balance.js";
-import { TS_DEFAULT_LIB, TS_LIB_FILES } from "../src/ts-libs.generated.js";
+import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "../src/ts-libs.generated.js";
+import { stripGlobalValues } from "../src/ts-lib-strip.js";
+
+function loadTsLibFilesForSpike() {
+  const require = createRequire(import.meta.url);
+  const tsLibDir = path.dirname(require.resolve("typescript"));
+  return TS_LIB_FILE_NAMES.map((name) => [name, stripGlobalValues(name, readFileSync(path.join(tsLibDir, name), "utf8"))] as const);
+}
+const TS_LIB_FILES = loadTsLibFilesForSpike();
 
 // ── the kwargs tool, as the BFCL find_restaurants shape ──────────────────────
 // required: location, cuisine, max_results ; optional: dietary_requirements, operating_hours

@@ -18,9 +18,8 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { beforeAll, describe, expect, it } from "vitest";
-
 import { buildArrivalEnv, loaderFromResolver, resolveRequireType, rosettaTypesOf } from "@here.build/arrival-chain";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";

@@ -126,29 +126,27 @@ export function connectSchemeLs(
     const rpc = <M extends keyof SchemeLanguageService>(method: M): AsyncSchemeLanguageService[M] =>
       ((...args: unknown[]) => call({ kind: "call", method, args })) as AsyncSchemeLanguageService[M];
 
-    const client: AsyncSchemeLanguageService = {
-      getSemanticDiagnostics: rpc("getSemanticDiagnostics"),
-      getQuickInfoAtPosition: rpc("getQuickInfoAtPosition"),
-      getCompletionsAtPosition: rpc("getCompletionsAtPosition"),
-      getCompletionContext: rpc("getCompletionContext"),
-      getDefinitionAtPosition: rpc("getDefinitionAtPosition"),
-      getSemanticClassifications: rpc("getSemanticClassifications"),
-      getTypeValidCandidates: rpc("getTypeValidCandidates"),
-      getSlotIsArray: rpc("getSlotIsArray"),
-      getSlotAcceptsBareWord: rpc("getSlotAcceptsBareWord"),
-      getSlotElementType: rpc("getSlotElementType"),
-      getHeadReturnsArray: rpc("getHeadReturnsArray"),
-      getSlotIsStringTyped: rpc("getSlotIsStringTyped"),
-      setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
-      setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
-    };
-
     const timer = setTimeout(() => reject(new Error("scheme-ls: worker init timed out")), timeoutMs);
     void (async () => {
       try {
         await call({ kind: "init", options });
         clearTimeout(timer);
-        resolve(client);
+        resolve({
+          getSemanticDiagnostics: rpc("getSemanticDiagnostics"),
+          getQuickInfoAtPosition: rpc("getQuickInfoAtPosition"),
+          getCompletionsAtPosition: rpc("getCompletionsAtPosition"),
+          getCompletionContext: rpc("getCompletionContext"),
+          getDefinitionAtPosition: rpc("getDefinitionAtPosition"),
+          getSemanticClassifications: rpc("getSemanticClassifications"),
+          getTypeValidCandidates: rpc("getTypeValidCandidates"),
+          getSlotIsArray: rpc("getSlotIsArray"),
+          getSlotAcceptsBareWord: rpc("getSlotAcceptsBareWord"),
+          getSlotElementType: rpc("getSlotElementType"),
+          getHeadReturnsArray: rpc("getHeadReturnsArray"),
+          getSlotIsStringTyped: rpc("getSlotIsStringTyped"),
+          setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
+          setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
+        });
       } catch (error) {
         clearTimeout(timer);
         reject(error instanceof Error ? error : new Error(String(error)));

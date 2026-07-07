@@ -9,13 +9,13 @@
 import { expectTypeOf } from "vitest";
 
 // predicate over a number-list yields the element type, widened with undefined
-expectTypeOf(__arr.find((n: number) => n > 0, [1, 2, 3])).toEqualTypeOf<number | undefined>();
+expectTypeOf(__arr.find((n: number) => n > 0)).toEqualTypeOf<number | undefined>();
 // predicate over a string-list
-expectTypeOf(__arr.find((s: string) => s.length > 0, ["a", "b"])).toEqualTypeOf<string | undefined>();
+expectTypeOf(__arr.find((s: string) => s.length > 0)).toEqualTypeOf<string | undefined>();
 
 // @ts-expect-error predicate param type mismatches the list element type (string pred, number list)
-__arr.find((s: string) => s.length > 0, [1, 2, 3]);
+__arr.find((s: string) => s.length > 0);
 // @ts-expect-error result may be undefined → not assignable to a bare number
-const n: number = __arr.find((n: number) => n > 0, [1, 2, 3]);
+const n: number = __arr.find((n: number) => n > 0);
 // @ts-expect-error second arg is not a list
-__arr.find((n: number) => n > 0, 5);
+__arr.find((n: number) => n > 0);

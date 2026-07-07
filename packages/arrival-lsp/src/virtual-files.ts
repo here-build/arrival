@@ -1,8 +1,4 @@
-// virtual-files — the file-name constants of the lens compilation's virtual fs.
-//
-// Split out of `prelude.ts` so the environment-agnostic service core (and the
-// browser entry) can name the program/prelude files without pulling `node:fs`
-// into their module graph. `prelude.ts` re-exports both for back-compat.
+// File name constants split out so service-core and browser don't pull node:fs.
 
 /** The virtual file name of the shared PRE prelude inside the lens file map. */
 export const PRELUDE_FILE = "__pre.d.ts";
