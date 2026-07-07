@@ -46,6 +46,12 @@
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod.js";
+// TRANSITIONAL: the named-generic `list`/`cons` registry lives in v2. Main vocabulary `z`
+// stays v1 until the atomic swap (migration step 14/15) repoints it — at which point these
+// two folds back into `z` and this import is deleted. Sourced from v2 now so step-11b's
+// `List<T>`/`Pair<Car,Cdr>` printing is exercisable against v2 schemas before the swap; on a
+// v1 schema both return undefined (its schemas aren't in v2's registry), so nothing changes.
+import { lookupName as lookupCollectionName, lookupCollectionElement } from "../common/scheme-zod-v2.js";
 import { tagToJsonSchema } from "../common/schema-tag.js";
 import type { AEntity } from "../common/symbol.js";
 
@@ -127,6 +133,24 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
  *  "Cons<unknown> | null" and `z.schemeNumber` (a union of two customs) prints as
  *  "bigint | number", never short-circuited to "unknown". */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
+  // Named-generic pre-check — MUST fire before the leaf guard below: `list`/`cons` are CODECS
+  // (`_zod.def.type === "pipe"`), so that guard would early-return them to zod-to-ts, which
+  // decomposes structurally (`list` → `Cons<T> | null`, `cons` → `[A, B]`) and loses the name.
+  // Scoped to EXACTLY the two registered collection names via COLLECTION_ELEMENT — a homogeneous
+  // `list`/`cons` registers an element, nothing else does, so this fires for nothing but these
+  // two (a `schemeNumber`-style union of custom leaves has no element registration → skips this,
+  // reaching the per-member composition path below untouched).
+  const element = lookupCollectionElement(schema);
+  if (element !== undefined) {
+    const name = lookupCollectionName(schema);
+    if (name === "list" && !Array.isArray(element)) {
+      return typescript.factory.createTypeReferenceNode("List", [harvestNode(element as z.ZodTypeAny)]);
+    }
+    if (name === "cons" && Array.isArray(element)) {
+      const [carE, cdrE] = element as readonly [z.ZodTypeAny, z.ZodTypeAny];
+      return typescript.factory.createTypeReferenceNode("Pair", [harvestNode(carE), harvestNode(cdrE)]);
+    }
+  }
   const s = schema as { _zod?: { def?: { type?: string } } };
   if (s?._zod?.def?.type !== "custom") return undefined; // a compound (union/array/tuple/…) → recurse via zod-to-ts
   const name = z.lookupName(schema);
@@ -165,14 +189,21 @@ function flatten(printed: string): string {
  * class name via the override (z.pair → "Pair"). Compounds compose
  * (z.object → "{ k: T; … }", z.array → "T[]", z.tuple → "[A, B]", z.union → "A | B").
  */
-export function printType(schema: z.ZodTypeAny): string {
+// The raw zod-to-ts TypeNode for one schema (before flatten/print). Split out so the
+// named-generic pre-check can nest an element's node as a type argument (`List<…>`) — a string
+// can't be a TypeReferenceNode's type arg, so `printType(element)` won't do; we need the node.
+function harvestNode(schema: z.ZodTypeAny): import("typescript").TypeNode {
   const { node } = zodToTs(schema as never, {
     auxiliaryTypeStore: createAuxiliaryTypeStore(),
     overrideFunction: instanceofOverride,
     io: "output",
     unrepresentable: "throw",
   });
-  return flatten(printNode(node));
+  return node as import("typescript").TypeNode;
+}
+
+export function printType(schema: z.ZodTypeAny): string {
+  return flatten(printNode(harvestNode(schema)));
 }
 
 /**

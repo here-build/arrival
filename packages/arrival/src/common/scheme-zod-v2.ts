@@ -82,6 +82,13 @@ export type { input, output, infer, ZodType, ZodTypeAny, ZodObject, ZodCustom, Z
 
 const NAMES = new WeakMap<z.ZodType, string>();
 
+// Element schema(s) for a NAMED, PARAMETERIZED collection — one schema for a homogeneous
+// `list`, `[car, cdr]` for a `cons` — so the type-lens can print `List<T>`/`Pair<Car,Cdr>` by
+// NAME instead of decomposing the codec structurally. Keyed on the SAME core object NAMES is
+// (resolved through the same unwrap walk). ONLY `list`/`cons` register here — nothing else
+// needs named-generic printing (vector/dict already print adequately via structural output).
+const COLLECTION_ELEMENT = new WeakMap<z.ZodType, z.ZodTypeAny | readonly [z.ZodTypeAny, z.ZodTypeAny]>();
+
 /** Register `schema` under `name` and return it, for inline use at the definition site.
  *  Keyed by object identity — a fresh function-built schema (`list(char)`) registers each
  *  instance it mints. */
@@ -90,18 +97,19 @@ function named<S extends z.ZodType>(name: string, schema: S): S {
   return schema;
 }
 
-// Check the registry at EACH hop (a registered codec IS a pipe and carries its own `def.in` —
-// unwrapping unconditionally would walk PAST it into its input schema and lose the name). At
-// each level: registered? done. Else `_zod.parent` is set ONLY by `.refine()`/`.check()` (they
-// go through `core.clone(inst, def, {parent:true})`, back-linking the pre-refine instance), NOT
-// by `.extend()` (clones with no parent — a confirmed dead end, no registered schema is
-// `.extend()`ed today) — walk it. Else unwrap `.optional()`/`.default()` (`def.innerType`) or an
-// unregistered wrapper's `def.in`. Verified against zod 4.3.6 source.
-export function lookupName(schema: unknown): string | undefined {
+// Walk to the registered core. Check the registry at EACH hop (a registered codec IS a pipe and
+// carries its own `def.in` — unwrapping unconditionally would walk PAST it into its input schema
+// and lose the registration). At each level: registered? that IS the core. Else `_zod.parent` is
+// set ONLY by `.refine()`/`.check()` (they go through `core.clone(inst, def, {parent:true})`,
+// back-linking the pre-refine instance), NOT by `.extend()` (clones with no parent — a confirmed
+// dead end, no registered schema is `.extend()`ed today) — walk it. Else unwrap
+// `.optional()`/`.default()` (`def.innerType`) or an unregistered wrapper's `def.in`. Verified
+// against zod 4.3.6 source. Shared by `lookupName` + `lookupCollectionElement` so both resolve to
+// the identical core key.
+function resolveCore(schema: unknown): z.ZodType | undefined {
   let s = schema as { _zod?: { parent?: unknown; def?: { innerType?: unknown; in?: unknown } } } | undefined;
   while (s) {
-    const hit = NAMES.get(s as z.ZodType);
-    if (hit !== undefined) return hit;
+    if (NAMES.has(s as z.ZodType)) return s as z.ZodType;
     if (s._zod?.parent) {
       s = s._zod.parent as typeof s;
       continue;
@@ -114,6 +122,22 @@ export function lookupName(schema: unknown): string | undefined {
     break;
   }
   return undefined;
+}
+
+export function lookupName(schema: unknown): string | undefined {
+  const core = resolveCore(schema);
+  return core ? NAMES.get(core) : undefined;
+}
+
+/** The element schema(s) a `list`/`cons` was built with, for named-generic printing — a single
+ *  schema for `list`, `[car, cdr]` for `cons`, `undefined` for anything else (incl. a
+ *  fixed-heads `list([A,B])`, which has no single element and prints structurally). Resolves
+ *  through the same core walk `lookupName` uses. */
+export function lookupCollectionElement(
+  schema: unknown,
+): z.ZodTypeAny | readonly [z.ZodTypeAny, z.ZodTypeAny] | undefined {
+  const core = resolveCore(schema);
+  return core ? COLLECTION_ELEMENT.get(core) : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -395,13 +419,18 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
       : effectiveTail
         ? z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]], effectiveTail)
         : z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
-  return named(
+  const schema = named(
     "list",
     z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
       decode: (l) => spineToArray(l) as never,
       encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as unknown[], false) as AList,
     }),
-  ) as z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
+  );
+  // Homogeneous form only carries a single element schema → prints `List<E>`. A fixed-heads
+  // `list([A,B])` has NO single element, so it registers nothing here and falls through to the
+  // structural tuple print — honest for a heterogeneous fixed-length list.
+  if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? value);
+  return schema as z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
 }
 
 // `cons` stays its OWN function, not subsumed by `list`'s tuple form: exactly one pair, car
@@ -409,7 +438,7 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
 // `cons(char, nil)` accepts a 1-char list only, never 2+ — the second cdr would itself be a
 // Pair, not ANil. Prints as `Pair<Car, Cdr>`, a dotted pair, not a 2-tuple.
 export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cdrE: D) {
-  return named(
+  const schema = named(
     "cons",
     z.codec(z.instanceof(APair), z.tuple([carE, cdrE]), {
       // `as never`: zod's tuple input type is a variadic conditional it can't reconcile with
@@ -418,6 +447,9 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
       encode: ([c, d]) => new APair(CONSTANT_CTX, c as SchemeValue, d as SchemeValue),
     }),
   );
+  // Two element schemas → prints `Pair<Car, Cdr>` (a dotted pair), NOT the structural `[A, B]`.
+  COLLECTION_ELEMENT.set(schema, [carE, cdrE]);
+  return schema;
 }
 
 // `vector` — representation-blind `AVector | AJSArray` union codec; encode canonically produces
