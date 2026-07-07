@@ -20,6 +20,7 @@ import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { theVoid } from "../values/primitives/AVoid.js";
+import { tf } from "../values/tagless-final.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
  *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk. */
@@ -91,7 +92,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
     const tags = out.get("tags");
     expect(tags).toBeInstanceOf(AJSArray);
     expect(isAttested(tags)).toBe(true);
-    expect(isAttested((tags as AJSArray)["arrival/tagless-final/vector-ref"](0))).toBe(true);
+    expect(isAttested((tags as AJSArray)[tf("vector-ref")](0))).toBe(true);
   });
 
   it("a missing key plucks the SHARED nil — never attested", async () => {

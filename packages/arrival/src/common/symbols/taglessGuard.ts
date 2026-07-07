@@ -16,7 +16,7 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): Tagl
   // A `function`, NOT an arrow — same fix as `tagless.ts`: the evaluator hands ctx via
   // `this` for bare-fn dispatch; an arrow body can never read it.
   const run = async function (this: { ctx?: { runCtx?: RunContext } }, ...args: unknown[]): Promise<unknown> {
-    const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+    const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);

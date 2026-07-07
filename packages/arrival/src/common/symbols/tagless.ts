@@ -23,7 +23,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSy
   // supplies). This was the actual bug: no trailing ctx ARG has been appended for a long
   // while — every other factory (rosetta/sequence) already reads `this.ctx`.
   const run = async function (this: { ctx?: { runCtx?: RunContext } }, ...args: unknown[]): Promise<unknown> {
-    const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+    const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);

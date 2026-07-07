@@ -51,6 +51,7 @@ function cxrUnfold(name: string): SchemeValue | undefined {
     // `this?.` (not just `this.ctx?.`): a native HOF (`map`/`vector-map`) invokes this
     // synthesized accessor as a plain callback with `this === undefined`, so reading
     // `this.ctx` would throw before the `?.` on `.ctx` could guard it.
+    // todo this should be fixed - binding is clearly broken
     const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
     let v: unknown = arg;
     for (const t of steps) {
