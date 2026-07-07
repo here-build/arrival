@@ -23,7 +23,7 @@ export default [
     // @codemirror/legacy-modes/mode/scheme — complexity is theirs to keep. And
     // `stream.match(re)` is the CONSUMING StreamParser API — the prefer-regexp-test
     // autofix rewrites it into a non-consuming (and ill-typed) `re.test(stream)`.
-    files: ["src/scheme-sweet.ts"],
+    files: ["src/scheme-sugarcoat.ts"],
     rules: {
       "sonarjs/regex-complexity": "off",
       "sonarjs/slow-regex": "off",
