@@ -2,7 +2,7 @@ import { LanguageSupport, StreamLanguage, type StreamParser, type StringStream }
 import { tags as t } from "@lezer/highlight";
 
 /**
- * StreamLanguage for classic Scheme + sweet superset (readable lens).
+ * StreamLanguage for classic Scheme + sugarcoat superset (readable lens).
  *
  * Covers s-exprs + curly-infix, `k:` / `:key`, `=>`, `== && ||`.
  * Radix/string/comment handling lifted from legacy scheme mode.
@@ -15,7 +15,7 @@ import { tags as t } from "@lezer/highlight";
 // Definition forms get t.definitionKeyword; control forms get t.controlKeyword.
 // Everything else that is a known builtin stays a plain variableName (we do not
 // over-paint the standard library — only the structural special forms read as
-// keywords, matching how the sweet lens treats `define`/`lambda`/`if`).
+// keywords, matching how the sugarcoat lens treats `define`/`lambda`/`if`).
 const set = (str: string): Set<string> => new Set(str.split(/\s+/).filter(Boolean));
 
 export const DEFINITION_KEYWORDS = set(`
@@ -45,24 +45,24 @@ const hexMatcher =
 const decimalMatcher =
   /^(?:[-+]i|[-+](?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*)i|[-+]?(?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*)@[-+]?(?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*)|[-+]?(?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*)[-+](?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*)?i|(?:(?:(?:\d+#+\.?#*|\d+\.\d*#*|\.\d+#*|\d+)(?:[esfdl][-+]?\d+)?)|\d+#*\/\d+#*))(?=[()\s;"]|$)/i;
 
-// A symbol body — same character class the sweet reader treats as atom chars,
+// A symbol body — same character class the sugarcoat reader treats as atom chars,
 // minus the colon (colon is handled separately so `k:` / `:key` can tokenize).
 const SYMBOL_BODY = /[\w\-!$%&*+./<=>?@^~]/;
 
-interface SchemeSweetState {
+interface SchemeSugarcoatState {
   mode: false | "string" | "comment" | "attext";
   afterDefineHead: boolean; // next atom after `(define ...` → DEFNAME
   atDepth: number;          // literal {} depth inside @head{...} (0 closes)
 }
 
-// @head{ opener (mirrors arrival-sweet AT_HEAD) + balanced literal {} inside body.
+// @head{ opener (mirrors arrival-sugarcoat AT_HEAD) + balanced literal {} inside body.
 const AT_OPENER = /^[^\s{}()[\]"@]*\{/;
 const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
 
 /** @text body tokenizer. atDepth tracks literal braces (close only at 0).
  *  Returns null at EOL for multi-line @dedent bodies. Bare @ (no {) falls
  *  through to symbols. */
-function tokenizeAtText(stream: StringStream, state: SchemeSweetState): string | null {
+function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): string | null {
   const c = stream.peek();
   if (c == null) return null; // end of line — stay in attext (multi-line body)
   if (c === "}") {
@@ -106,17 +106,17 @@ function tokenizeAtText(stream: StringStream, state: SchemeSweetState): string |
 }
 
 // Custom token names → resolved through tokenTable below.
-const KEY = "sweetKey"; // :key / k: colon-pairs → propertyName
-const ARROW = "sweetArrow"; // => → controlOperator
-const COMPARE = "sweetCompare"; // == → compareOperator
-const LOGIC = "sweetLogic"; // && || → logicOperator
-const CURLY = "sweetCurly"; // { } infix braces → brace
-const DEFNAME = "sweetDefName"; // defined name → definition(variableName)
-const ATOPEN = "sweetAtOpen"; // @head{ opener → keyword (the tagged-template head)
-const INTERP = "sweetInterp"; // @id / @(…) / @|…| inside a text body → variableName pop
+const KEY = "sugarcoatKey"; // :key / k: colon-pairs → propertyName
+const ARROW = "sugarcoatArrow"; // => → controlOperator
+const COMPARE = "sugarcoatCompare"; // == → compareOperator
+const LOGIC = "sugarcoatLogic"; // && || → logicOperator
+const CURLY = "sugarcoatCurly"; // { } infix braces → brace
+const DEFNAME = "sugarcoatDefName"; // defined name → definition(variableName)
+const ATOPEN = "sugarcoatAtOpen"; // @head{ opener → keyword (the tagged-template head)
+const INTERP = "sugarcoatInterp"; // @id / @(…) / @|…| inside a text body → variableName pop
 
-export const parser: StreamParser<SchemeSweetState> = {
-  name: "scheme-sweet",
+export const parser: StreamParser<SchemeSugarcoatState> = {
+  name: "scheme-sugarcoat",
   startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0 }),
 
   token(stream, state): string | null {
@@ -204,7 +204,7 @@ export const parser: StreamParser<SchemeSweetState> = {
       return "lineComment";
     }
 
-    // ── sweet curly-infix braces ──
+    // ── sugarcoat curly-infix braces ──
     if (ch === "{" || ch === "}") return CURLY;
 
     // ── round/square brackets ──
@@ -227,7 +227,7 @@ export const parser: StreamParser<SchemeSweetState> = {
       return KEY;
     }
 
-    // ── sweet glyph operators (only when they are standalone tokens) ──
+    // ── sugarcoat glyph operators (only when they are standalone tokens) ──
     if (ch === "=" && stream.peek() === ">") {
       stream.next();
       return ARROW; // =>
@@ -302,7 +302,7 @@ export const parser: StreamParser<SchemeSweetState> = {
   },
 };
 
-/** `LanguageSupport` for `.scm` (classic + sweet). Tags only — no theme. */
-export function schemeSweet(): LanguageSupport {
+/** `LanguageSupport` for `.scm` (classic + sugarcoat). Tags only — no theme. */
+export function schemeSugarcoat(): LanguageSupport {
   return new LanguageSupport(StreamLanguage.define(parser));
 }
