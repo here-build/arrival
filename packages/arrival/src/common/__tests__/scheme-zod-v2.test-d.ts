@@ -45,13 +45,13 @@ describe("scheme-zod-v2 collection faces (interpreter vs JS)", () => {
     type J = JSFace<typeof charList>;
     expectTypeOf<J>().toExtend<string[]>();
 
-    // Via the contract helpers (what actual symbol.* defs see)
-    expectTypeOf<DecodedArgs<[typeof charList]>>().toExtend<[APair<any, any> | ANil]>();
+    // Via the contract helpers (what actual symbol.native defs see — the SCHEME face)
+    expectTypeOf<DecodedArgs<[typeof charList], "scheme">>().toExtend<[APair<any, any> | ANil]>();
     expectTypeOf<SpecInfer<typeof charList>>().toExtend<string[]>();
   });
 
-  test("z.list(car, cdr) — the 2-arg cons form", () => {
-    const consShape = z.list(z.char, z.union([z.nil, z.boolean])) as any; // construction typing is loose in v2 draft
+  test("z.cons(car, cdr) — the dotted-pair form", () => {
+    const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
     type S = SchemeFace<typeof consShape>;
     expectTypeOf<S>().toExtend<APair<any, any>>(); // the container
@@ -69,10 +69,12 @@ describe("scheme-zod-v2 collection faces (interpreter vs JS)", () => {
     expectTypeOf<VS>().toExtend<AVector | AJSArray>();
     expectTypeOf<VJ>().toEqualTypeOf<boolean[]>();
 
+    // z.array is now zod's own plain array (NOT a scheme list/vector union): a plain array of
+    // the AString codec — scheme face is AString[], JS face is string[].
     const strArr = z.array(z.string);
     type AS = SchemeFace<typeof strArr>;
     type AJ = JSFace<typeof strArr>;
-    expectTypeOf<AS>().toExtend<APair<any, any> | ANil | AVector | AJSArray>();
+    expectTypeOf<AS>().toExtend<AString[]>();
     expectTypeOf<AJ>().toExtend<string[]>();
   });
 
@@ -94,10 +96,11 @@ describe("scheme-zod-v2 collection faces (interpreter vs JS)", () => {
       output: [z.vector(z.value)],
     } as const;
 
-    type In = DecodedArgs<typeof listInVecOut.input>;
+    // Native impls receive the SCHEME face (raw containers); rosetta impls the JS face.
+    type In = DecodedArgs<typeof listInVecOut.input, "scheme">;
     type Out = DecodedArgs<typeof listInVecOut.output>;
 
-    expectTypeOf<In>().toExtend<[[APair<any, any> | ANil]]>();
+    expectTypeOf<In>().toExtend<[APair<any, any> | ANil]>();
     // NOT `any[]` — that's vacuous (any[] accepts almost anything, so this would pass
     // even if the decode type were wrong). z.vector(z.value)'s JS face is SchemeValue[].
     expectTypeOf<Out>().toExtend<[SchemeValue[]]>();

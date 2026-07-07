@@ -53,8 +53,8 @@ describe("scheme-zod-v2 collection functions (Zod style)", () => {
     expect(back).toEqual(["x", "y"]);
   });
 
-  it("z.list supports the 2-arg cons form (car, cdrSchema) — e.g. z.list(z.char, z.union([z.nil, z.boolean]))", () => {
-    const consShape = z.list(z.char, z.union([z.nil, z.boolean]));
+  it("z.cons(car, cdrSchema) — dotted pair — e.g. z.cons(z.char, z.union([z.nil, z.boolean]))", () => {
+    const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
     const good1 = new APair(CONSTANT_CTX, makeChar("a"), nil);
     const good2 = new APair(CONSTANT_CTX, makeChar("a"), makeBool(true));
@@ -72,12 +72,12 @@ describe("scheme-zod-v2 collection functions (Zod style)", () => {
     expect(() => consShape.parse(bad)).toThrow();
   });
 
-  it("2-arg cons form is exactly one cons cell, NOT a recursive list-with-typed-tail", () => {
-    // z.list(car, cdr) reads like "a list of car-typed elements, ending in cdr" — it
-    // is not. It's `cons`: the SECOND element's schema is matched against the cdr
-    // DIRECTLY, so a 2+ element list (whose cdr is itself a Pair, not the tail type)
-    // is rejected. Pins the boundary makeTypedCons's doc comment describes.
-    const oneCharThenNil = z.list(z.char, z.nil);
+  it("cons is exactly one cons cell, NOT a recursive list-with-typed-tail", () => {
+    // z.cons(car, cdr) reads like "a list of car-typed elements, ending in cdr" — it
+    // is not. The SECOND element's schema is matched against the cdr DIRECTLY, so a 2+
+    // element list (whose cdr is itself a Pair, not the tail type) is rejected. Pins the
+    // boundary cons's doc comment describes.
+    const oneCharThenNil = z.cons(z.char, z.nil);
 
     const single = new APair(CONSTANT_CTX, makeChar("a"), nil);
     expect(oneCharThenNil.parse(single)).toEqual(["a", null]);
@@ -102,14 +102,12 @@ describe("scheme-zod-v2 collection functions (Zod style)", () => {
     expect((out as AVector).__vector__.map((v) => (v as AString)["arrival/toJS"]())).toEqual(["q"]);
   });
 
-  it("z.array(element) is the union of list+vector for the element", () => {
+  it("z.array is zod's own plain array re-export (NOT a scheme list/vector union)", () => {
+    // array is now the variadic arg-vector spec (zod's own). A scheme list/vector cast to an
+    // array uses z.list/z.vector directly. z.array(z.string) is a plain array of the AString
+    // codec: it decodes a JS array of AStrings to a JS array of strings.
     const strArr = z.array(z.string);
-
-    const asList = APair.fromArray(CONSTANT_CTX, [makeString("hi")], false);
-    expect(strArr.parse(asList)).toEqual(["hi"]);
-
-    const asVec = new AVector(CONSTANT_CTX, [makeString("ho")] as any);
-    expect(strArr.parse(asVec)).toEqual(["ho"]);
+    expect(strArr.parse([makeString("hi"), makeString("ho")])).toEqual(["hi", "ho"]);
   });
 
   it("element codecs are applied (string codec turns AString <-> string)", () => {
