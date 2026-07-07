@@ -4,14 +4,14 @@ interface User {
 }
 
 class UserService {
-  private readonly users: User[] = [];
-
+  private users: User[] = [];
+  
   addUser(user: User): void {
     this.users.push(user);
   }
-
+  
   findUser(id: number): User | undefined {
-    return this.users.find((u) => u.id === id);
+    return this.users.find(u => u.id === id);
   }
 }
 
