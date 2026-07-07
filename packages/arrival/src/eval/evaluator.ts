@@ -25,11 +25,11 @@ import invariant from "tiny-invariant";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
-import { Environment, type EnvironmentValue, KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
+import { Environment, type EnvironmentValue } from "../Environment.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "../errors.js";
-import { is_callable, is_false, is_function, is_macro, is_plain_object, is_promise } from "./guards.js";
-import { is_callable_value, is_lambda } from "../values/value-guards.js";
+import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
+import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
@@ -52,7 +52,9 @@ import { AString } from "../values/primitives/AString.js";
 // AJSObject here is the `{…}` dict-literal NODE face (values/dict-literal.ts) — the
 // import is cycle-safe (AJSObject leans only on value leaves + the hoisted jsToScheme).
 import { AJSObject } from "../values/primitives/AJSObject.js";
+import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 import { type DictLiteralNode, isDictLiteralNode, makeDictLiteralNode } from "../values/dict-literal.js";
+import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
 // Error Handling with Stack Traces
@@ -406,7 +408,7 @@ function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALam
       const saved = _dynamicCallSite;
       _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
       try {
-        return lambda["arrival/tagless-final/apply"](values, runCtx, canBounce);
+        return lambda[tf("apply")](values, runCtx, canBounce);
       } finally {
         _dynamicCallSite = saved;
       }
@@ -1294,18 +1296,25 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     if (level > 1) {
       return makeDictLiteralNode(processed);
     }
-    const record: Record<string, SchemeValue> = Object.create(null);
+    const seen = new Set<string>();
+    const pairs: [DictKey, SchemeValue][] = [];
     for (let i = 0; i + 1 < processed.length; i += 2) {
-      const key = foldSubstitutedDictKey(processed[i]);
-      if (key in record) {
+      const keyForm = processed[i];
+      const name = foldSubstitutedDictKey(keyForm);
+      if (seen.has(name)) {
         throw Object.assign(
-          new Error(`duplicate dict literal key :${key} after quasiquote substitution — each key may appear once`),
+          new Error(`duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`),
           { code: "E-DICT-DUP-KEY" },
         );
       }
-      record[key] = processed[i + 1];
+      seen.add(name);
+      // foldSubstitutedDictKey only accepts AString/ASymbol/plain-string (else throws
+      // E-DICT-BAD-KEY above) — a bare string form is wrapped so the stored key is
+      // always a real DictKey object, keeping whatever provenance it already has.
+      const key: DictKey = keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(CONSTANT_CTX, name);
+      pairs.push([key, processed[i + 1]]);
     }
-    return new AJSObject(CONSTANT_CTX, record);
+    return new ADict(CONSTANT_CTX, pairs);
   }
 
   // Vector template: a boxed SchemeVector (a `#(...) literal) or, defensively, a
@@ -2202,7 +2211,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     _dynamicCallSite = dynSite;
     let r: CallResult;
     try {
-      r = proc["arrival/tagless-final/apply"](wrapLambdaArgs([arg], dynSite), ctx.runCtx ?? CONSTANT_CTX, is_lambda(proc));
+      r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), ctx.runCtx ?? CONSTANT_CTX, is_lambda(proc));
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
     }
@@ -2889,21 +2898,13 @@ function loweredCollectionLiteral(node: AVector | DictLiteralNode): APair<Scheme
  * Post-substitution key fold for a quasiquote-instantiated `{…}` template
  * (`` `{,k v} `` — the reader admits unquote forms in key position, validated HERE
  * once the substituted value exists). Admits what `dict`'s own key fold admits:
- * `:keyword` symbols / keyword-accessor plucks (the value `,:a` evaluates to),
- * strings, and bare symbols — everything folds to the same string key. Anything
- * else (numbers, composites) is doored: these literals feed JSON-shaped tool args,
- * keys ARE strings.
+ * `:keyword` symbols (self-evaluating — keyword-tagless-apply.md), strings, and
+ * bare symbols — everything folds to the same string key. Anything else (numbers,
+ * composites) is doored: these literals feed JSON-shaped tool args, keys ARE strings.
  */
 function foldSubstitutedDictKey(v: SchemeValue): string {
-  if (v instanceof AString) return v.toString();
+  if (v instanceof AString || v instanceof ASymbol) return foldKeyName(v);
   if (typeof v === "string") return v;
-  if (v instanceof ASymbol) {
-    const name = typeof v.__name__ === "string" ? v.__name__ : String(v.valueOf());
-    return name.replace(/^:/, "");
-  }
-  if ((typeof v === "function" || (typeof v === "object" && v !== null)) && KEYWORD_ACCESSOR_FIELD in v) {
-    return String((v as { [KEYWORD_ACCESSOR_FIELD]: unknown })[KEYWORD_ACCESSOR_FIELD]);
-  }
   throw Object.assign(
     new Error(`dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`),
     { code: "E-DICT-BAD-KEY" },
@@ -3050,7 +3051,8 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerato
  * route to a non-function value reaching call-head position.
  */
 function notCallableError(value: unknown): Error {
-  const typeName = value instanceof AJSObject || is_plain_object(value) ? "dict" : type(value);
+  const looksDictShaped = value instanceof AJSObject && isDictShaped(value.source);
+  const typeName = value instanceof ADict || looksDictShaped ? "dict" : type(value);
   return new Error(
     `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
       ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
@@ -3161,7 +3163,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // bounce plumbing, and only the invocation primitive below branches (its apply term vs
   // Reflect.apply). The SPECULATE / LAMBDA markers are copied onto the value so the force-skip
   // and _canBounce checks read them uniformly.
-  if ((is_function(fn) || is_callable_value(fn)) && !is_macro(fn)) {
+  if ((is_function(fn) || is_callable_value(fn) || is_applyable(fn)) && !is_macro(fn)) {
     // Regular function - evaluate args then call
     // FLAT: yield { call } instead of yield*
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
@@ -3226,9 +3228,13 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // ALambda in tail position hands back a Bounce for the trampoline — TCO; an ANativeProcedure
       // ignores canBounce). NOT `applyCallback`, which forces canBounce=false (the HOF-callback
       // contract). A bare fn keeps the legacy `this = { ctx }` apply.
-      result = is_callable_value(fn)
-        ? (fn["arrival/tagless-final/apply"](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, _canBounce) as SchemeValue)
-        : Reflect.apply(fn, { ctx }, wrappedArgs);
+      result =
+        is_callable_value(fn) || is_applyable(fn)
+          ? (fn[tf("apply")](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, _canBounce) as SchemeValue)
+          : // The outer gate (is_function || is_callable_value || is_applyable) already
+            // guarantees one of the three; the ternary above excludes the latter two, so
+            // only the plain-JS-function case remains here.
+            (Reflect.apply(fn as (...args: unknown[]) => unknown, { ctx }, wrappedArgs) as SchemeValue);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;

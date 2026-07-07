@@ -22,6 +22,7 @@ import type { AVoid } from "./primitives/AVoid.js";
 import type { AHalfBaked } from "./primitives/AHalfBaked.js";
 import type { AJSArray } from "./primitives/AJSArray.js";
 import type { AJSObject } from "./primitives/AJSObject.js";
+import type { ADict } from "./primitives/ADict.js";
 import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
 import type { Keyword } from "./Keyword.js";
@@ -68,6 +69,7 @@ export type SchemeValue =
   | AHalfBaked
   | AJSArray
   | AJSObject
+  | ADict
   | Keyword
   | EOF
   | Values

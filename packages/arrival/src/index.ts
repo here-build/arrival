@@ -87,9 +87,7 @@ export type { SchemeValue } from "./values/types.js";
 // Classes that may be needed for type checking or extension
 export { EOF as EOF } from "./values/primitives/EOF.js";
 // Environment is INTERNAL-ONLY — the concrete scope-node is not part of the public
-// surface (consumers type against the structural `SchemeEnv` below). `KEYWORD_ACCESSOR_FIELD`
-// stays exported: arrival-chain's `dict` (project.ts) reads the same registered symbol.
-export { KEYWORD_ACCESSOR_FIELD } from "./Environment.js";
+// surface (consumers type against the structural `SchemeEnv` below).
 
 // Invocation-context metadata registries (the docs / rosetta-type / rosetta-purity
 // side-tables that used to be fields on the concrete `Environment`, now held OFF the

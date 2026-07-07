@@ -31,6 +31,7 @@ import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { ImplInvocationCtx } from "../common/symbols/_bake.js";
+import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
 // Environment lookup without lips runtime dependency
@@ -53,7 +54,7 @@ function cxrUnfold(name: string): SchemeValue | undefined {
     const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
     let v: unknown = arg;
     for (const t of steps) {
-      const m = v?.[`arrival/tagless-final/${t === "a" ? "car" : "cdr"}`];
+      const m = v?.[tf(t === "a" ? "car" : "cdr")];
       TypeError.invariant(
         typeof m === "function",
         () =>
@@ -102,16 +103,18 @@ function resolveSynth(
 /**
  * Look up a symbol in the environment without requiring lips runtime.
  * This uses _lookupWithResolvers directly to avoid patch_value.
- * For keyword symbols (:name), delegates to env.get() which creates accessor functions.
+ * For keyword symbols (:name), self-evaluates — see keyword-tagless-apply.md.
  * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
 export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | undefined {
   const name = sym.__name__;
 
-  // Handle keyword symbols (e.g., :name, :projects) — delegate to env.get()
-  // which creates Clojure-style property accessor functions
+  // A keyword (`:name`) is self-evaluating — it carries its own `apply` (ASymbol.ts),
+  // so it needs no environment lookup or synthesized accessor at all. Never bindable
+  // (this branch always wins over any binding attempt), formalizing what was already
+  // true de facto.
   if (typeof name === "string" && name.startsWith(":")) {
-    return env.get(sym);
+    return sym;
   }
 
   const value = env._lookupWithResolvers(name);
@@ -182,12 +185,12 @@ export class Resolver {
    */
   resolve(sym: ASymbol): EnvironmentValue | undefined {
     const name = sym.__name__;
-    // `:key` keyword accessors are synthesized by a resolver in the capability BASE
-    // (membrane), not the lexical chain — consult scope THEN capabilities so the cut's
-    // null-rooted lexical root still reaches it. Glass: scope.env === base, left hits,
-    // byte-identical to `env.get(sym)` (same patch_value).
+    // A keyword (`:name`) is self-evaluating — see keyword-tagless-apply.md. No lexical
+    // or capability lookup at all; this is the one call site every symbol-position
+    // evaluation funnels through (plain-symbol AND call-head fast path both call
+    // `resolve()`), so this single branch covers both.
     if (typeof name === "string" && name.startsWith(":")) {
-      return this.scope.env.get(sym, { throwError: false }) ?? this.capabilities.env.get(sym);
+      return sym;
     }
     const lookup = (n: string | symbol): EnvironmentValue | undefined =>
       this.scope.lookup(n) ?? this.capabilities.lookup(n);

@@ -33,6 +33,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -205,22 +206,20 @@ export default new EnvCapability("scheme/equality", {
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
     // it — a genuine gap, not a design omission (see `env/polyglot-rich-errors/stubs.ts`'s
-    // header for that distinction). Mirrors the EXACT record-vs-class-instance
-    // disambiguation `readMember` (membrane.ts) already uses: a dict value is either the
-    // raw plain-object record `dict` constructs, or the `{…}` reader literal's
-    // `AJSObject` wrapper around one (`Object.create(null)`, see values/dict-literal.ts) —
-    // proto is `Object.prototype` or `null` either way. An array, a scalar, or a foreign
-    // class instance (any other prototype — including every other AValue subclass, whose
-    // own class prototype never equals `Object.prototype`) is not a dict.
+    // header for that distinction). A native dict is an `ADict` instance
+    // (native-dict-provenance.md); the fallback below still recognizes a genuinely
+    // foreign, dict-SHAPED `AJSObject` (or a bare plain-proto object) — same
+    // `readMember` (membrane.ts) disambiguation, kept so a dict-shaped value from a
+    // tool result still answers `dict?` without being an `ADict`. An array, a scalar,
+    // or any other foreign class instance is not a dict.
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         { input: [z.value], output: [z.boolean] },
         (obj: unknown): ABool => {
+          if (obj instanceof ADict) return schemeTrue;
           if (obj == null) return schemeFalse;
           const source = obj instanceof AJSObject ? obj.source : obj;
-          if (typeof source !== "object" || source === null || Array.isArray(source)) return schemeFalse;
-          const proto = Object.getPrototypeOf(source);
-          return bool(proto === Object.prototype || proto === null);
+          return bool(isDictShaped(source));
         },
       ),
 

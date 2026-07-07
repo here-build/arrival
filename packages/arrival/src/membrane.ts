@@ -66,6 +66,7 @@ import { Keyword } from "./values/Keyword.js";
 // hoisted function declarations) — see AJSArray.ts / AJSObject.ts.
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
+import { ADict } from "./values/primitives/ADict.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 
 // Re-export the interop-access primitives for consumers.
@@ -114,6 +115,7 @@ export type BoxedSchemeValue =
   | ANil
   | AJSObject
   | AJSArray
+  | ADict
   | APair
   | ASymbol
   | AString
@@ -170,8 +172,12 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     // Wrapper classes first — AJSArray (a borrowed array re-presented as a vector) sits
     // beside AJSObject; omitting it mis-routes a borrowed array back through fromJS into an
     // AJSObject wrap (the "any subtype not listed mis-routes" hazard the symmetry test pins).
+    // ADict hit exactly this hazard: omitted here, a native dict crossing a lambda-call
+    // argument bind (which routes through fromJS) got re-boxed into an AJSObject wrapping
+    // the ADict instance instead of passing through untouched.
     case value instanceof AJSObject:
     case value instanceof AJSArray:
+    case value instanceof ADict:
 
     // Native Scheme types
     case value instanceof APair:
@@ -354,6 +360,9 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
   // membrane-exposed foreign value (lazy proxy) → provenance-cached read.
   if (obj instanceof AJSObject) return obj.get(keyStr);
+  // native dict — entries are already real SchemeValues with their own provenance,
+  // so (unlike AJSObject.get above) there is nothing to box through jsToScheme.
+  if (obj instanceof ADict) return obj.get(keyStr);
   try {
     const source = obj instanceof AJSArray ? obj.source : obj;
     // Only a native dict (a plain record) or an array exposes members. A scheme
@@ -393,6 +402,7 @@ export function hasMember(obj: unknown, key: unknown): boolean {
   if (rawKey == null || rawKey instanceof ANil) return false;
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
+  if (obj instanceof ADict) return obj.has(keyStr);
   const source = obj instanceof AJSObject ? obj.source : obj;
   return accessHas(source, keyStr);
 }
@@ -400,10 +410,7 @@ export function hasMember(obj: unknown, key: unknown): boolean {
 /** `memberKeys(obj)` — the polyglot value's own member names. */
 export function memberKeys(obj: unknown): string[] {
   if (obj == null) return [];
+  if (obj instanceof ADict) return obj.keys();
   const source = obj instanceof AJSObject ? obj.source : obj;
   return accessKeys(source);
 }
-
-// `keywordAccessorResolver` (the `:key` catchall accessor) MOVED to its owner, the
-// scheme/polyglot capability (env/polyglot.ts). It was already wired there via
-// `resolvers`; the redundant direct global_env / inference-env registrations are gone.

@@ -6,41 +6,35 @@
 // representation is honest, not guessed):
 //   • the READER does NOT special-case `:` at all — `:a` lexes as a plain SYMBOL atom via
 //     Lexer.ts's generic `_symbol_rules` (no keyword token class exists).
-//   • the REPRESENTATION is minted at RESOLVE time, not read time: `Resolver.resolve` /
-//     `env_get` (eval/Resolver.ts) special-case a `:`-prefixed name and delegate to
-//     `env.get(sym)`, which — via the "keyword-accessor" resolver registered in
-//     env/polyglot.ts — answers with a "pluck" closure:
-//       `Object.assign((obj) => (obj == null ? pluck : readMember(obj, key)), { valueOf, [KEYWORD_ACCESSOR_FIELD]: key })`
+//   • a `:`-prefixed symbol is SELF-EVALUATING (keyword-tagless-apply.md): `Resolver.resolve`/
+//     `env_get` (eval/Resolver.ts) return the `ASymbol` itself, no synthesized accessor.
 //   • so by the time a call's ARGS reach a rosetta `run` wrapper, `(tool :a "x" :b 5)` has
-//     ALREADY evaluated to `[pluckA, AString("x"), pluckB, AExact(5)]` — the EXACT interleaved
-//     shape the existing `dict` native op already folds into `{a:…, b:…}` (env/polyglot.ts).
-//     A kwargs rosetta reuses that SAME fold, just landing on a validated+decoded object
-//     instead of a raw dict.
+//     ALREADY evaluated to `[:a, AString("x"), :b, AExact(5)]` (real `ASymbol`s) — the EXACT
+//     interleaved shape the existing `dict` native op already folds into `{a:…, b:…}`
+//     (env/polyglot.ts). A kwargs rosetta reuses that SAME fold, just landing on a
+//     validated+decoded object instead of a raw dict.
 //
 // Two planes, mirroring symbol.test.ts / capability-rosetta-symbol.test.ts's convention:
 //   • UNIT (direct `def.run(...)`) — proves the decode membrane in isolation, manually
-//     constructing the pluck closures (no evaluator needed).
+//     constructing the keyword symbols (no evaluator needed).
 //   • INTEGRATION (`exec` over a real capability-assembled env) — proves the SCHEME-LEVEL
 //     call `(tool :a v :b v2)` reaches the impl as one decoded object, end to end.
 
 import { describe, expect, it, beforeAll } from "vitest";
 import type { Environment } from "../../Environment.js";
-import { KEYWORD_ACCESSOR_FIELD } from "../../Environment.js";
 import { exec } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 
-/** Build a "pluck" closure exactly as env/polyglot.ts's keyword-accessor resolver does,
- *  for the UNIT plane (no evaluator round trip). */
+/** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
+ *  keyword-tagless-apply.md), for the UNIT plane (no evaluator round trip). */
 function pluck(key: string): unknown {
-  return Object.assign((obj: unknown) => obj, {
-    valueOf: () => `:${key}`,
-    [KEYWORD_ACCESSOR_FIELD]: key,
-  });
+  return new ASymbol(CONSTANT_CTX, `:${key}`);
 }
 
 describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)", () => {

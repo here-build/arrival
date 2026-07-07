@@ -23,6 +23,7 @@ import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./primitives/ACallable.js";
 import { CLASS } from "../well-known-symbols.js";
+import { tf } from "./tagless-final.js";
 // Type-only — narrows the brand result to the evaluator's macro/syntax types so
 // `is_macro_value` stays signature-compatible with eval/guards' `is_macro`. An
 // `import type` erases at compile, so it adds NO value→eval runtime edge (it is
@@ -137,6 +138,15 @@ export function is_procedure(o: unknown): o is ANativeProcedure | ARosettaProced
 /** Any callable value — a lambda or a host-JS primitive. */
 export function is_callable_value(o: unknown): o is ACallable {
   return o instanceof ALambda || o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
+}
+
+/** Structural, not nominal — unlike `is_callable_value`'s closed `ACallable` union, this
+ *  admits ANY value answering `arrival/tagless-final/apply` (e.g. a self-applying keyword
+ *  `ASymbol`). Used only at the evaluator's call-dispatch gates that must recognize such a
+ *  value as invocable; `is_callable_value`'s other consumers (which rely on the narrowed
+ *  `ACallable` type carrying `.arity`) are intentionally left alone. */
+export function is_applyable(o: unknown): boolean {
+  return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
 }
 
 // ----------------------------------------------------------------------

@@ -28,7 +28,7 @@ import {
  *  `Rest` (inferred from `contract.inputRest`, defaulting to `undefined`) is the FIXED-prefix-
  *  plus-rest split — see `Contract`/`Impl` in `_bake.ts`. Absent `inputRest` ⇒ `Rest` stays
  *  `undefined` and `impl`'s signature is byte-identical to before `inputRest` existed. */
-export function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
+export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
@@ -86,7 +86,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // generic `VectorSchema`-typed handle `normalizeVector` hands back unchanged for it, see
       // that fn's note) can't decode the RAW interleaved `:key value` pairs array directly
       // against an object schema. Fold the pairs into the plain object `dict` would build
-      // (`collectKwargsObject` — the same KEYWORD_ACCESSOR_FIELD read), THEN decode that object
+      // (`collectKwargsObject` — the same key-name fold), THEN decode that object
       // against the (narrowed, honest) kwargs schema, and wrap the one decoded value as the
       // 1-element args array `DecodedArgs` already gives a non-tuple, non-array-output contract
       // member. `isKwargs` narrows `contract.input` from `VectorSpec` to the branded

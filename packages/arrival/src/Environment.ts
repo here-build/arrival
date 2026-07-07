@@ -17,15 +17,6 @@ import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
 import { HeapMeter } from "./heap-budget.js";
 
-/**
- * Brand on a keyword-accessor pluck function carrying its bare field name
- * (`:tagline` → "tagline"). Lets consumers detect a keyword key EXPLICITLY via
- * this symbol instead of sniffing valueOf/string shape. Registered (Symbol.for)
- * so it matches across the package boundary — arrival-chain's `dict` reads the
- * same key (project.ts).
- */
-export const KEYWORD_ACCESSOR_FIELD = Symbol.for("@here.build/arrival/keyword-accessor-field");
-
 // -------------------------------------------------------------------------
 // :: Type definitions for Environment bindings
 // -------------------------------------------------------------------------

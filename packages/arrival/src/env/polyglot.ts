@@ -16,9 +16,10 @@
 // value, and an array all read the same way (arrival is a polyglot runtime, not a
 // host with a fenced guest). They thread with the idioms here: (->> p :versions
 // last :state). The reads are NOT in this prelude because they are native
-// member-access primitives — `@` is a base binding, a `:`-prefixed symbol resolves
-// to a pluck closure in `Environment.get` — but both bottom out in the same
-// membrane core. This pack is their conceptual home; the definition is lifted onto
+// member-access primitives — `@` is a base binding, a `:`-prefixed symbol is
+// self-evaluating and carries its own `apply` (`ASymbol.ts`) — but both bottom out
+// in the same `arrival/tagless-final/get` protocol. This pack is their conceptual
+// home; the definition is lifted onto
 // the capability via `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so the
 // membrane primitive is not routed through the membrane it implements.
 //
@@ -34,26 +35,27 @@ import * as z from "../common/scheme-zod.js";
 import { hasMember, memberKeys, readMember } from "../membrane.js";
 import { schemeBool } from "../values/op-helpers.js";
 import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
+import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { type SchemeValue } from "../values/types.js";
-import { KEYWORD_ACCESSOR_FIELD } from "../Environment.js";
-import type { ResolverSpec } from "../common/scheme-env.js";
 
 /** The polyglot idiom pack — the full member-access surface plus the threading family:
  *   • `@` / `@?` / `@keys` — the explicit member read/has/keys. `symbol.native` bindings
  *     (raw env.set, no codec — the typed equivalent of the old `{ value }`): they are
  *     membrane PRIMITIVES and must not be routed through the membrane they implement.
- *   • `:key` — the keyword accessor, the `@`-alias, contributed as a catchall `resolver`.
+ *   • `:key` — the keyword accessor. Self-evaluating (`ASymbol` carries `apply` —
+ *     keyword-tagless-apply.md), not a resolver contributed by this pack.
  *   • `-> / ->> / compose / pipe / …` — threading & composition (prelude).
- *  Module-singleton capability; `@`/`:key` bottom out in one `readMember` (membrane.ts). */
+ *  Module-singleton capability; `@`/`:key` bottom out in the same per-class `get`
+ *  protocol (`arrival/tagless-final/get`) that `readMember` (membrane.ts) also uses. */
 // IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator) that
 // can be MID-INITIALIZATION when this capability's spec object is evaluated — the
 // assembly path imports it via `base-packs → polyglot → membrane → evaluator → …`, a
 // cycle. Reading `readMember` at module-eval time would freeze the TDZ `undefined`
 // into the spec. So defer every membrane read to APPLY time (when `initBridge`
-// assembles, all modules are loaded): `symbols` uses the builder form, and the
-// keyword-accessor resolver below only calls `readMember` inside its `resolve` body
-// (never at eval).
+// assembles, all modules are loaded): `symbols` uses the builder form.
 
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
@@ -150,8 +152,8 @@ export default new EnvCapability("scheme/polyglot", {
     ;; assoc-in needs to create missing intermediate maps on demand. \`@keys\` returns
     ;; a raw JS array (not a scheme list — filter/map need the term protocol), so
     ;; \`array->list\` (r7rs/lists.ts, LIPS extension) lifts it first.
-    ;; k v are placed LAST (not first): \`dict\`'s own key resolution (KEYWORD_ACCESSOR_FIELD
-    ;; else strip a leading \`:\`) normalizes a keyword pluck / symbol / string key to the
+    ;; k v are placed LAST (not first): \`dict\`'s own key resolution (stringify, strip a
+    ;; leading \`:\`) normalizes a keyword / symbol / string key to the
     ;; SAME underlying JS-object key as an already-stored string key — a plain \`equal?\`
     ;; comparison can't see that (a pluck closure is never \`equal?\` to a string), but
     ;; sequential \`obj[key] = value\` assignment naturally dedupes on the LAST write. So
@@ -372,25 +374,9 @@ export default new EnvCapability("scheme/polyglot", {
     (define (assoc-ref d key . default)
       (apply dict-ref (cons d (cons key default))))
 `,
-  resolvers: [
-    // The `:key` keyword accessor — OWNED here (was in membrane.ts): a `:`-prefixed symbol
-    // resolves to its `@`-alias pluck (the SAME polyglot read as `@`/`readMember`, but
-    // applied to nothing it returns itself, so it composes — `(compose :a :b)`). The pluck
-    // carries `KEYWORD_ACCESSOR_FIELD` so `dict` can use a keyword as a literal key. A
-    // catchall resolver, sibling to the `c[ad]+r` family; listed in `resolvers` below.
-    {
-      id: "keyword-accessor",
-      resolve(name: string) {
-        if (!name.startsWith(":")) return undefined;
-        const key = name.slice(1);
-        const pluck = Object.assign((obj: unknown) => (obj == null ? pluck : readMember(obj, key)), {
-          valueOf: () => name,
-          [KEYWORD_ACCESSOR_FIELD]: key,
-        });
-        return pluck;
-      },
-    },
-  ],
+  // The former `:key` keyword-accessor resolver lived here. `:`-prefixed symbols are now
+  // self-evaluating (keyword-tagless-apply.md) — `ASymbol` itself carries `apply`, so this
+  // pack contributes no resolvers at all anymore.
   symbols: () => ({
     // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
     // `readMember`/`hasMember`/`memberKeys` dispatch on `instanceof AJSObject` / `Array.isArray`
@@ -420,35 +406,37 @@ export default new EnvCapability("scheme/polyglot", {
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
     // build an open-key map from interleaved `:key value` pairs. A keyword in arg
-    // position evaluates to its pluck closure carrying the bare key on
-    // KEYWORD_ACCESSOR_FIELD; dict reads that (else strips a leading `:`) to key the
-    // plain object. Relocated VERBATIM from stdlib.ts global_env (husk dissolution);
-    // the serializer prints it back as `(dict …)` and arrival-chain-view transpiles
-    // it to a JS/Python object literal. (Plain `symbol.native`: dict reads no membrane
-    // primitive, only KEYWORD_ACCESSOR_FIELD at call-time, so it needs no deferral.)
+    // position self-evaluates to itself (a real ASymbol — keyword-tagless-apply.md),
+    // so its key is read the same way a bare quoted symbol's would be: stringify and
+    // strip a leading `:` if present. Relocated VERBATIM from stdlib.ts global_env
+    // (husk dissolution); the serializer prints it back as `(dict …)` and
+    // arrival-chain-view transpiles it to a JS/Python object literal. (Plain
+    // `symbol.native`: dict reads no membrane primitive, so it needs no deferral.)
     dict: symbol.native`dict: an open-key map built from interleaved :key value pairs`(
       // Input stays flat `z.value` — each interleaved position is genuinely either a
-      // keyword-pluck object (read for its key) or an arbitrary stored value; there's no
-      // well-typed way to express the alternation over a flat variadic without a shape that
-      // no longer matches the real call form. The OUTPUT, though, is unconditional: this impl
-      // always builds (and only ever builds) a plain string-keyed record — `z.record(z.string,
-      // z.value)` (keys are real JS strings; values are genuinely open) states that,
-      // replacing the `z.value` that was discarding it.
-      { input: z.array(z.value), output: [z.record(z.string, z.value)] },
-      // A deliberately-RAW open-key record constructor (the dict IS the plain record; glass
-      // via the dict protocol). The record's runtime shape is exactly the contract's image —
-      // assert across the record key-face gap.
-      ((...args: unknown[]): Record<string, unknown> => {
-        const obj: Record<string, unknown> = {};
+      // key (a self-evaluating keyword symbol, a bare symbol, or a string) or an
+      // arbitrary stored value; there's no well-typed way to express the alternation
+      // over a flat variadic without a shape that no longer matches the real call
+      // form. The OUTPUT is unconditional: this impl always builds (and only ever
+      // builds) an ADict.
+      { input: z.array(z.value), output: [z.dict] },
+      // Duplicate keys are last-write-wins: a Map re-set on an existing fold-name
+      // updates the value but keeps the FIRST occurrence's iteration position —
+      // the same behavior the old plain-object `obj[key] = value` loop had. ADict's
+      // own constructor requires unique fold-names up front (throws otherwise), so
+      // resolving duplicates down to one pair per name is this call site's job.
+      ((...args: unknown[]): ADict => {
+        const byName = new Map<string, [DictKey, SchemeValue]>();
         for (let i = 0; i + 1 < args.length; i += 2) {
-          const k = args[i] as { [KEYWORD_ACCESSOR_FIELD]?: string } | null;
-          const key =
-            (k != null && (typeof k === "function" || typeof k === "object") && k[KEYWORD_ACCESSOR_FIELD]) ||
-            String(args[i]).replace(/^:/, "");
-          obj[key] = args[i + 1];
+          const raw = args[i];
+          const key: DictKey =
+            raw instanceof ASymbol || raw instanceof AString || raw instanceof ACharacter
+              ? raw
+              : new AString(CONSTANT_CTX, String(raw).replace(/^:/, ""));
+          byName.set(foldKeyName(key), [key, args[i + 1] as SchemeValue]);
         }
-        return obj;
-      }) as unknown as (...args: SchemeValue[]) => Record<string, SchemeValue>,
+        return new ADict(CONSTANT_CTX, [...byName.values()]);
+      }) as unknown as (...args: SchemeValue[]) => ADict,
     ),
   }),
 });

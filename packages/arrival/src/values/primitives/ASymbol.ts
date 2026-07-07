@@ -3,8 +3,10 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { chargeHeap } from "../../heap-budget.js";
-import type { SchemeStringLike } from "../types.js";
+import type { SchemeStringLike, SchemeValue } from "../types.js";
 import { isSchemeString, isString } from "../types.js";
+import { nil } from "./ANil.js";
+import type { CallResult } from "./ACallable.js";
 
 type SchemeSymbolName = string | symbol;
 
@@ -40,6 +42,12 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
   return table;
 }
 
+/** A real keyword name: `:`-prefixed, length > 1 (a bare `:` is not one) — matches
+ *  `values/lineage.ts`'s `memberRead`/`type-layer/lower.ts`'s `isKeyword`. */
+function isKeywordName(name: SchemeSymbolName): name is string {
+  return typeof name === "string" && name.length > 1 && name.startsWith(":");
+}
+
 export class ASymbol extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "symbol";
@@ -66,6 +74,16 @@ export class ASymbol extends AValue {
     super(ctx, provenance);
     // Unwrap SchemeStringLike to plain string
     const unwrapped: SchemeSymbolName = isSchemeString(name) ? name.valueOf() : name;
+
+    // A keyword redirects to AKeywordSymbol — a real subclass with a statically-declared
+    // `apply` method, not a per-instance patch. `new.target` distinguishes "someone called
+    // `new ASymbol(':a')` directly" (redirect) from "AKeywordSymbol's own super() call"
+    // (already the right class — proceed as normal below). The redirect happens before
+    // interning so the CACHED instance (whichever branch mints or hits it) is always the
+    // correctly-typed one.
+    if (new.target === ASymbol && isKeywordName(unwrapped)) {
+      return new AKeywordSymbol(ctx, unwrapped, provenance, intern);
+    }
 
     if (intern !== UNINTERNED && typeof unwrapped === "string") {
       const table = internTableFor(ctx);
@@ -159,6 +177,7 @@ export class ASymbol extends AValue {
     return true;
   }
 
+
   is_gensym(): boolean {
     return is_gensym(this.__name__);
   }
@@ -171,6 +190,27 @@ export class ASymbol extends AValue {
   /** See UNINTERNED sentinel doc. */
   withProvenance(p: ReadonlySet<number>): ASymbol {
     return new ASymbol(this.ctx, this.__name__, p, UNINTERNED);
+  }
+}
+
+/**
+ * A `:`-prefixed keyword — the ONLY difference from `ASymbol` is this statically-declared
+ * `apply`, so `(:key obj)` dispatches through the ordinary `is_applyable`/`fn[tf("apply")]`
+ * call-dispatch path (evaluator.ts) like any other callable, no special-cased resolver.
+ * `ASymbol`'s own constructor redirects here for every keyword-shaped name — never
+ * constructed directly by call sites, so `instanceof ASymbol` still holds everywhere a
+ * keyword is used as a plain symbol.
+ *
+ * Applied to nothing, a keyword returns itself (point-free/composition use — `(compose :a
+ * :b)`). Applied to one value, it hands ITSELF to that value's own `get` (not a folded
+ * string) so the target decides how to fold/match it — no centralized accessor call here.
+ */
+export class AKeywordSymbol extends ASymbol {
+  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext, _canBounce = false): CallResult {
+    if (args.length === 0) return this;
+    const target = args[0] as unknown as Record<string, unknown> | null | undefined;
+    const getter = target?.["arrival/tagless-final/get"];
+    return typeof getter === "function" ? (getter.call(target, this, runCtx) as CallResult) : nil;
   }
 }
 

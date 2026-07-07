@@ -19,6 +19,7 @@ import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
+import { ADict } from "./values/primitives/ADict.js";
 import { AExact } from "./values/primitives/AExact.js";
 import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
@@ -35,6 +36,7 @@ import { is_lambda } from "./values/value-guards.js";
 // and `warnMembrane` makes that interop edge VISIBLE (a silent #void would hide a portability bug).
 import { warnMembrane } from "./membrane-warn.js";
 import { ImplInvocationCtx } from "./common/symbols/_bake.js";
+import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
   forceBigInt?: boolean;
@@ -177,6 +179,15 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
     return schemeToJs(value.source, options);
   }
 
+  // Unwrap ADict to a plain object — recurse per-entry (ADict's own [TO_JS]/toJs
+  // stay shallow; this is the one place that owns the recursive JS-primitive
+  // projection for every boxed type, ADict included).
+  if (value instanceof ADict) {
+    const out: Record<string, unknown> = {};
+    for (const k of value.keys()) out[k] = schemeToJs(value.get(k), options);
+    return out;
+  }
+
   // Unwrap AJSArray to JS array
   if (value instanceof AJSArray) {
     return value.source.map((el: any) => schemeToJs(el, options));
@@ -221,11 +232,7 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
     }
     // Check for arrival sequence-op terms BEFORE converting to plain objects — a value
     // carrying its own map/filter/reduce is a structure to preserve, not deep-unwrap.
-    if (
-      value["arrival/tagless-final/map"] !== undefined ||
-      value["arrival/tagless-final/filter"] !== undefined ||
-      value["arrival/tagless-final/reduce"] !== undefined
-    ) {
+    if (value[tf("map")] !== undefined || value[tf("filter")] !== undefined || value[tf("reduce")] !== undefined) {
       // Preserve sequence-op terms as-is
       return value;
     }
@@ -295,7 +302,8 @@ export function jsToScheme(
   if (value instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === value.provenance) return value;
     if (value instanceof APair) {
-      return new APair(ctx,
+      return new APair(
+        ctx,
         jsToScheme(ctx, value.car, options, provenance, seen),
         jsToScheme(ctx, value.cdr, options, provenance, seen),
         provenance,
@@ -304,7 +312,8 @@ export function jsToScheme(
     if (value instanceof AVector) {
       // Deep-stamp elements (parallel to Pair), keep it a vector. The container
       // also carries the provenance via the constructor arg.
-      return new AVector(ctx,
+      return new AVector(
+        ctx,
         value.__vector__.map((el) => jsToScheme(ctx, el, options, provenance, seen)),
         provenance,
       );
@@ -338,7 +347,7 @@ export function jsToScheme(
   // A UNIQUE symbol (`Symbol('x')`) has no portable identity → #void + warn (like a function).
   if (tag === "symbol") {
     const key = Symbol.keyFor(value as symbol);
-    if (key !== undefined) return new ASymbol(ctx, ":" + key, provenance);
+    if (key !== undefined) return new ASymbol(ctx, `:${key}`, provenance);
     warnMembrane("a unique JS symbol");
     return theVoid;
   }
@@ -388,9 +397,7 @@ export function jsToScheme(
  * `env` probe), so the `resolver` probe suffices; the others are kept as a
  * belt-and-braces OR for any future ctx shape.
  */
-export const looksLikeEvalContext = (
-  x: unknown,
-): x is Record<string, unknown> & Partial<CtxWithInvocation> =>
+export const looksLikeEvalContext = (x: unknown): x is Record<string, unknown> & Partial<CtxWithInvocation> =>
   x != null &&
   typeof x === "object" &&
   !(x instanceof AValue) &&

@@ -34,6 +34,7 @@ import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
 import { jsToScheme } from "../../rosetta.js";
+import { tf } from "../tagless-final.js";
 
 // The membrane's TO_JS protocol key, resolved from the global symbol registry
 // (same rationale as AVector.ts / ABytevector.ts — a module-local const resolving
@@ -242,6 +243,15 @@ export class AJSObject extends AValue {
   // reference compare is the faithful minimal choice and preserves pre-B2 equal? behavior.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSObject && this.source === other.source;
+  }
+
+  // Keyed read — the `:key` keyword accessor's `apply` hands its own symbol here (not a
+  // pre-folded string); the `:`-strip mirrors readMember's (membrane.ts), since this and
+  // `@`/`dict-ref` are one protocol, two syntaxes, over the same underlying `.get`.
+  ["arrival/tagless-final/get"](key: SchemeValue): SchemeValue {
+    let name = String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
+    if (name.startsWith(":")) name = name.slice(1);
+    return this.get(name);
   }
 
   toString(): string {

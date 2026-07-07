@@ -27,6 +27,8 @@
 import { describe, expect, it } from "vitest";
 import polyglot from "../polyglot.js";
 import type { AEntity } from "../../common/symbol.js";
+import { ADict } from "../../values/primitives/ADict.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 // `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
@@ -60,19 +62,16 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeEncode([["a", 2]]).success).toBe(false);
   });
 
-  it("dict: output is now a plain string-keyed record schema — accepts an object, rejects a non-object", () => {
+  it("dict: output is an ADict-instance schema (native-dict-provenance.md) — accepts an ADict, rejects a plain object", () => {
     const def = nativeDef("dict");
-    // `.safeEncode` (JS-land → scheme), not `.safeParse` — the record's key schema is the
-    // `z.string` CODEC (`AString` ↔ `string`), so a bare `.safeParse` validates keys against
-    // the codec's SOURCE side (expects an `AString` instance) and would reject even a
-    // genuinely-valid plain-JS-string-keyed object. `.out` is a JS-land value (dict's real
-    // return type), so `.safeEncode` is the matching direction — same convention
-    // `numeric-contract-precision.test.ts` documents for codec outputs, and the same
-    // direction already used for `@?`/`@keys` above.
-    expect(def.out.safeEncode([{ a: 1, b: "two" }]).success).toBe(true);
-    expect(def.out.safeEncode([{}]).success).toBe(true);
-    expect(def.out.safeEncode([["not", "a", "record"]]).success).toBe(false);
-    expect(def.out.safeEncode(["just a string"]).success).toBe(false);
-    expect(def.out.safeEncode([42]).success).toBe(false);
+    // `z.dict` is `z.instanceof(ADict)` — a non-codec schema (both faces are ADict itself,
+    // matching `pair = z.instanceof(APair)`), so `.safeParse`/`.safeEncode` behave
+    // identically here; `.safeParse` is the simpler read.
+    expect(def.out.safeParse([new ADict(CONSTANT_CTX, [])]).success).toBe(true);
+    expect(def.out.safeParse([{ a: 1, b: "two" }]).success).toBe(false);
+    expect(def.out.safeParse([{}]).success).toBe(false);
+    expect(def.out.safeParse([["not", "a", "dict"]]).success).toBe(false);
+    expect(def.out.safeParse(["just a string"]).success).toBe(false);
+    expect(def.out.safeParse([42]).success).toBe(false);
   });
 });

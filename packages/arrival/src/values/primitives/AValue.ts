@@ -53,7 +53,8 @@ export type AKind =
   | "bytevector"
   | "halfbaked"
   | "void"
-  | "keyword";
+  | "keyword"
+  | "dict";
 
 export abstract class AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -135,6 +136,11 @@ export abstract class AValue {
     runCtx: RunContext,
     canBounce?: boolean,
   ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
+  /** Keyed read — a dict-shaped term (`AJSObject`, `ADict`) answers a `:key`-style keyword
+   *  accessor's `apply` by implementing this instead. The key travels as the caller's own
+   *  SchemeValue (usually the keyword symbol itself), not a pre-folded string, so the
+   *  receiver decides how to fold/match it. */
+  ["arrival/tagless-final/get"]?(key: SchemeValue, runCtx?: RunContext): SchemeValue;
   /** Projection — the head of a pair-shaped term (APair computes on the term; ANil's is
    *  strict-gated: tolerant ⇒ nil, strict ⇒ the R7RS throw; AJSArray answers via its view). */
   ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
