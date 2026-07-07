@@ -1,17 +1,10 @@
-// ide — IDE-grade CodeMirror extensions for arrival scheme, over a backend seam.
+// ide — IDE extensions (lint/hover/completion/goto/sem) over a SchemeIdeBackend seam.
 //
-// Four capabilities, each wired onto ONE method of a `SchemeIdeBackend`:
-//   • schemeLinter        → getSemanticDiagnostics   (@codemirror/lint)
-//   • schemeHover         → getQuickInfoAtPosition   (hoverTooltip)
-//   • schemeCompletion    → getCompletionsAtPosition (@codemirror/autocomplete)
-//   • schemeGotoDefinition→ getDefinitionAtPosition  (Cmd/Ctrl-click)
-//
-// The backend is STRUCTURAL and may answer sync or async — arrival-type-lens's
-// `SchemeLanguageService` is assignable as-is (the in-process service), and a
-// worker-hosted backend fits the same seam without touching the extensions.
-// All coordinates are CLASSIC scheme offsets — the backend's own coordinate
-// space (the type lens lifts TS spans there). Sweet-lens buffers should not
-// mount these until a sweet↔classic span mapping exists.
+// Each extension is wired to exactly one backend method. The seam is structural
+// (sync or Promise) so in-process and worker backends are interchangeable.
+// Coordinates are always CLASSIC scheme; sweet buffers must go through
+// sweetIdeBackend for translation. No sweet↔classic mapping yet → do not mount
+// full IDE on sweet without it.
 
 import {
   autocompletion,
@@ -246,31 +239,24 @@ const SECTION_SCOPE = { name: "in scope", rank: 2 };
 const SECTION_BUILTINS = { name: "builtins", rank: 3 };
 const SECTION_FORMS = { name: "forms", rank: 4 };
 
-// NB the section is load-bearing for ORDER, not just the header: CM sorts
-// UNSECTIONED options before all sections — without it, ~40 keywords pile up
-// ABOVE "likely here"/"fits this slot" (caught by the AutocompleteDebug
-// visual states, 2026-06-10). Forms rank LAST by design.
+// Section is load-bearing for ORDER: CM puts unsectioned items first.
+// Without it keywords pile above "fits"/scope (observed 2026-06-10).
+// Forms deliberately last.
 const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWORDS].map((name) => ({
   label: name,
   type: "keyword",
   section: SECTION_FORMS,
 }));
 
-// ── the rich (Σ∩T-ranked) completion pipeline ───────────────────────────────
-// Research-grounded craft rules (2026-06-10 sweep — see commit message):
-//   • TIERED BOOST, never filtering: type-valid candidates rise, proven-unfit
-//     DEMOTE but stay visible (IntelliJ's hidden "smart completion" keystroke
-//     is the documented anti-pattern; demotion is the discoverable version).
-//   • Fixed-rank SECTIONS make the invisible smartness visible: "fits" /
-//     "in scope" / "builtins" / "forms". Stable order is a hard constraint —
-//     ranking churn between keystrokes is the most-hated completion behavior.
-//   • Locals above globals (the universal locality ladder).
-//   • Signature in the info panel (the most-praised lisp completion behavior).
-//   • Commit on space / `)` — scheme's natural commit keys.
-
-/** Boost tiers (CM range −99..99; boost only orders EQUAL-quality matches, so
- *  fuzzy match quality still wins — which is correct). Proof tier decides the
- *  band; fuzzy quality orders within it. */
+// ── Σ∩T-ranked completion (research notes 2026-06-10) ────────────────────────
+// Craft rules (anti-patterns called out):
+//   • TIERED BOOST never filter: fits rise, unfit demote but stay visible.
+//     (Hidden "smart complete" is undiscoverable; demotion is not.)
+//   • Fixed-rank SECTIONS ("fits" / scope / builtins / forms) — stable order
+//     is a hard constraint; churn is the #1 hated behavior.
+//   • Locals > globals. Signature as detail. Commit on space/).
+//
+// Boosts only break ties; fuzzy quality still dominates within band.
 function boostOf(e: SchemeIdeRichCompletion, isLocal: boolean): number {
   if (e.fits === true) return isLocal ? 80 : 60;
   if (e.fits === false) return -40;
@@ -289,10 +275,8 @@ function toRichCmCompletion(e: SchemeIdeRichCompletion): Completion {
     section,
     boost: boostOf(e, isLocal),
     ...(e.detail === undefined ? {} : { detail: e.detail }),
-    // The info SIDE PANEL only when it says something the row doesn't: the
-    // signature is already INLINE as `detail`, so a signature-only panel is a
-    // duplicate tooltip (V, 2026-06-10). Demoted entries keep it for the
-    // unfit note.
+    // Info panel only when row doesn't say it (signature already in `detail`).
+    // Demoted entries get the "does not fit" note.
     ...(e.fits === false ? { info: () => infoDom(e) } : {}),
     ...(e.insertText === undefined ? {} : { apply: e.insertText }),
   };

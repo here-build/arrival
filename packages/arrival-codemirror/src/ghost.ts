@@ -1,26 +1,11 @@
-// ghost — inline preview of the Σ∩T-best candidate, accepted by Tab.
+// ghost — inline Σ∩T preview (Tab accepts one symbol at a time).
 //
-// The "discussion with the compiler", zero-popup edition: when the cursor sits
-// somewhere an insertion is PROVABLY SAFE — end of line, or only closers/
-// whitespace after it — the top-ranked candidate from the same Σ∩T context
-// that powers the completion popup renders as dimmed inline text after the
-// cursor. Tab accepts it: ONE SYMBOL PER PRESS (never a multi-token paste —
-// each Tab inserts exactly the ghost symbol's remainder, then the next ghost
-// recomputes from the new state). Escape dismisses until the next edit.
+// Shows the best candidate as dim italic after cursor when insertion is
+// provably safe (end-of-line or only closers/whitespace). Tab ladder:
+// snippet > popup > ghost > default. Ghost hides while popup is open.
 //
-// Tab's precedence ladder (CM facets resolve it):
-//   snippet field nav (snippet keymap, highest prec — untouched)
-//   > popup accept (completionStatus active → acceptCompletion)
-//   > ghost accept
-//   > whatever Tab means downstream (indentation etc.)
-// The ghost HIDES while the popup is open — two previews of the same answer
-// is noise; the popup carries strictly more information.
-//
-// Candidate choice mirrors the popup's tiers: fitting > local > builtin,
-// prefix-extending only (a ghost equal to what's typed is no ghost at all).
-// Unprompted (empty-prefix) ghosts appear ONLY where the unprompted popup
-// would: an argument slot the mask narrowed — and never at a form head, where
-// ghosting one arbitrary callable would be guessing, not proving.
+// pickGhost: fits > local > builtin; prefix-extend only. Empty prefix only at
+// narrowed argument slots (never heads — that would be guessing).
 
 import { acceptCompletion, completionStatus } from "@codemirror/autocomplete";
 import { EditorState, Prec, StateEffect, StateField, type Extension } from "@codemirror/state";
@@ -42,10 +27,9 @@ export function lineTailIsSafe(state: EditorState, pos: number): boolean {
   return /^[\s)\]]*$/.test(state.doc.sliceString(pos, line.to));
 }
 
-/** Pick the ghost: the best candidate that EXTENDS the typed prefix (exported
- *  for tests). Empty prefix → only slot-fitting candidates qualify (the same
- *  gate as the unprompted popup). Tiers mirror the popup's boosts; codepoint
- *  tie-break keeps the choice deterministic. */
+/** Best prefix-extending candidate (exported for tests).
+ *  Empty prefix: only fits + argument slot (same gate as unprompted popup).
+ *  Score: fits(4) + local(1) + callable-op(2). Codepoint tiebreak. */
 export function pickGhost(
   entries: readonly SchemeIdeRichCompletion[],
   prefix: string,
@@ -60,16 +44,10 @@ export function pickGhost(
     (e.fits === true ? 4 : 0) +
     (e.kind === "method" ? 0 : 1) +
     (position === "operator" && e.callable === true ? 2 : 0);
-  let best: SchemeIdeRichCompletion | null = null;
-  for (const e of pool) {
-    if (best === null) {
-      best = e;
-      continue;
-    }
-    const d = score(e) - score(best);
-    if (d > 0 || (d === 0 && e.name < best.name)) best = e;
-  }
-  return best?.name ?? null;
+  return pool.reduce<SchemeIdeRichCompletion | null>(
+    (best, e) => (!best || score(e) > score(best) || (score(e) === score(best) && e.name < best.name) ? e : best),
+    null,
+  )?.name ?? null;
 }
 
 class GhostWidget extends WidgetType {
@@ -125,7 +103,7 @@ const ghostTheme = EditorView.baseTheme({
   },
 });
 
-/** Accept the ghost: insert the remainder, cursor lands after the symbol. */
+/** Accept ghost: insert remainder only (one symbol). */
 const acceptGhost = (view: EditorView): boolean => {
   const ghost = view.state.field(ghostField, false);
   if (ghost === null || ghost === undefined) return false;

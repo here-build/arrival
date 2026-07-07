@@ -2,17 +2,13 @@ import { LanguageSupport, StreamLanguage, type StreamParser, type StringStream }
 import { tags as t } from "@lezer/highlight";
 
 /**
- * `scheme-sweet` — a StreamLanguage covering BOTH canonical Scheme s-expressions
- * AND our "sweet expression" superset (the readable lens from
- * `@here.build/arrival-sweet`). Forked from the structure of
- * `@codemirror/legacy-modes/mode/scheme` (the radix-number matchers and the
- * string/symbol/block-comment sub-modes are lifted faithfully) and extended with
- * the sweet-only surface: curly-infix `{a + b}`, colon keyword-pairs (`k:` /
- * `:key`), arrow lambdas `=>`, and the glyph operators `== && ||`.
+ * StreamLanguage for classic Scheme + sweet superset (readable lens).
  *
- * It emits ONLY `@lezer/highlight` semantic tags — no colors. Sweet-only token
- * kinds go through the `tokenTable` (the mapping MUST live on the spec passed to
- * `StreamLanguage.define`, or those tokens highlight as nothing).
+ * Covers s-exprs + curly-infix, `k:` / `:key`, `=>`, `== && ||`.
+ * Radix/string/comment handling lifted from legacy scheme mode.
+ *
+ * Emits ONLY tags (bring your own theme). Every custom token in tokenTable
+ * or it renders as nothing — this is the contract with StreamLanguage.
  */
 
 // ── keyword classification ────────────────────────────────────────────────
@@ -55,24 +51,17 @@ const SYMBOL_BODY = /[\w\-!$%&*+./<=>?@^~]/;
 
 interface SchemeSweetState {
   mode: false | "string" | "comment" | "attext";
-  // Are we the head (first datum) of a freshly-opened list? Used so that the
-  // defined name in `(define foo ...)` can read as t.definition(variableName).
-  afterDefineHead: boolean;
-  // Balanced LITERAL brace depth inside an `@…{…}` text body (mode === "attext").
-  // The body closes on a `}` at depth 0; inner balanced `{}` are literal prose.
-  atDepth: number;
+  afterDefineHead: boolean; // next atom after `(define ...` → DEFNAME
+  atDepth: number;          // literal {} depth inside @head{...} (0 closes)
 }
 
-// at-expression opener `@head{` / `@{` — head is any non-delimiter run (mirrors the
-// arrival-sweet reader's AT_HEAD), immediately followed by `{`.
+// @head{ opener (mirrors arrival-sweet AT_HEAD) + balanced literal {} inside body.
 const AT_OPENER = /^[^\s{}()[\]"@]*\{/;
-// interpolation id chars inside a text body (bare `@id`), mirrors the reader.
 const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
 
-/** Tokenize one step INSIDE an `@…{…}` text body (mode === "attext"). Prose runs
- *  highlight as `string`; `@`-escapes (`@id` / `@|id|` / `@(graft)`) pop as an
- *  interpolation; `{`/`}` track balanced literal braces; the depth-0 `}` closes the
- *  body. Returns null at EOL so the body carries across lines (multi-line @dedent). */
+/** @text body tokenizer. atDepth tracks literal braces (close only at 0).
+ *  Returns null at EOL for multi-line @dedent bodies. Bare @ (no {) falls
+ *  through to symbols. */
 function tokenizeAtText(stream: StringStream, state: SchemeSweetState): string | null {
   const c = stream.peek();
   if (c == null) return null; // end of line — stay in attext (multi-line body)
@@ -299,9 +288,8 @@ export const parser: StreamParser<SchemeSweetState> = {
     commentTokens: { line: ";", block: { open: "#|", close: "|#" } },
   },
 
-  // CRITICAL: every custom token name returned above must resolve here, or it
-  // highlights as nothing. The non-custom names ("string", "number", "paren",
-  // "variableName", …) resolve through CodeMirror's built-in legacy-mode tag map.
+  // CRITICAL: custom tokens (KEY/ARROW/...) must map here or they are invisible.
+  // Non-customs go through CM's legacy tag map.
   tokenTable: {
     [KEY]: t.propertyName,
     [ARROW]: t.controlOperator,

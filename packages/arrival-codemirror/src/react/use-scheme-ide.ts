@@ -4,37 +4,23 @@ import type { LsPort } from "@here.build/arrival-type-lens/ls-client";
 import type { SchemeIdeBackend } from "../index.js";
 
 /**
- * The scheme language service for the editor — worker-hosted, shared, lazy.
+ * Shared/lazy scheme LS (worker > main).
  *
- * The ladder, best first:
- *   1. SharedWorker — the service runs OFF the main thread and is shared
- *      across every editor AND every tab (one prelude compilation, one warm
- *      cache for the whole browser profile);
- *   2. dedicated Worker — same off-thread benefits, per-tab (browsers without
- *      module SharedWorkers — Firefox at the time of writing);
- *   3. in-thread service — the original path, still fully functional;
- *   4. null — the editor stays a plain (highlighted, hinted) editor.
+ * Ladder (best first):
+ * 1. SharedWorker — off-thread, shared across tabs/editors (one prelude).
+ * 2. Worker — per-tab off-thread.
+ * 3. In-thread.
+ * 4. null (plain editor).
  *
- * Each rung is bounded: connect rejects on worker error or init timeout, so a
- * broken rung degrades to the next instead of hanging. The service itself is
- * self-contained (bundled prelude + TS libs — no CDN, works offline); the
- * heavy typescript chunk loads inside the worker on rungs 1-2 and the main
- * thread only ever loads the featherweight ls-client.
- *
- * noImplicitAny OFF: at the lens's current maturity a `(define (f x) …)`
- * parameter is untyped, and strict mode would squiggle every such define —
- * false alarms on correct code. The editor surfaces only PROVEN bites.
+ * Every rung is bounded (rejects on error/timeout) → graceful degrade.
+ * Self-contained (bundled prelude + libs). noImplicitAny:false — only proven
+ * errors; untyped params are expected at current maturity.
  */
 const LS_OPTIONS = { compilerOptions: { noImplicitAny: false } };
 
-// ── env-derived name roster: host rosettas + scheme stdlib preamble ─────────
-// The lens otherwise knows only its hand-written builtin leaves, so every
-// arrival env binding (`infer`, `require`, `http/*`) and every scheme-prelude
-// helper (`field`, `values-of`, `take`) reads as an unresolved name. Both
-// rosters are DERIVED from the env's single source of truth — `host` from
-// `assembleHostPrelude([...rosettaTypesOf(env)])`, `schemePrelude` is the
-// `BUILTIN_PREAMBLE` source string — and threaded in here. Plain data, so they
-// cross the worker boundary in the init options as-is.
+// ── env name roster (host rosettas + scheme preamble) ────────────────────────
+// Lens only knows hand-written builtins. Host + prelude names come from the
+// single source of truth in the env; plain data crosses worker boundary.
 let hostConfig: { host?: { prelude: string; members: readonly string[] }; schemePrelude?: string } = {};
 
 /** Supply the env-derived name roster (host rosettas + scheme stdlib preamble)
@@ -51,10 +37,8 @@ let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   const { connectSchemeLs } = await import("@here.build/arrival-type-lens/ls-client");
   const connectOptions = { ...LS_OPTIONS, ...hostConfig };
-  // All constructions are written out INLINE on purpose: bundlers' worker
-  // transforms (vite/rollup) only recognize the syntactic pattern
-  // `new (Shared)Worker(new URL("…", import.meta.url), { type: "module" })` —
-  // hoisting the URL into a variable silently skips bundling the worker.
+  // Inline new URL(...) — bundlers only recognize this exact pattern for
+  // worker bundling. Hoisting the URL breaks it.
   const target = shared
     ? new SharedWorker(new URL("scheme-ls.worker.js", import.meta.url), {
         type: "module",
@@ -66,8 +50,8 @@ async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
       });
   const port = (shared ? (target as SharedWorker).port : target) as unknown as LsPort;
   return await new Promise<SchemeIdeBackend>((resolve, reject) => {
-    // A worker whose module fails to load never answers — its error event is
-    // the early exit (the connect timeout is the backstop).
+    // Worker load failure never answers; error event is the early exit
+    // (connect timeout is the backstop).
     (target as Worker).addEventListener("error", (e) => {
       reject(new Error(`scheme-ls worker error: ${(e as ErrorEvent).message ?? "load failed"}`));
     });
@@ -75,11 +59,9 @@ async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   });
 }
 
-// ── `(require …)` resolution plumbing ───────────────────────────────────────
-// The lens is filesystem-blind; the HOST pushes the project's files. One
-// module-level table feeds whichever rung won the ladder: worker rungs get a
-// `setProjectFiles` push (a callback can't cross postMessage), the in-thread
-// rung resolves through the live table directly.
+// ── `(require …)` plumbing ───────────────────────────────────────────────────
+// Lens is FS-blind. Host pushes files + require types. Worker rungs get push
+// callbacks; in-thread reads the table directly.
 let projectFiles: Record<string, string> = {};
 let pushFiles: ((files: Record<string, string>) => void) | null = null;
 

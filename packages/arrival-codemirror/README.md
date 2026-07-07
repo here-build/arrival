@@ -1,39 +1,45 @@
 # @here.build/arrival-codemirror
 
-CodeMirror 6 support for arrival scheme (classic + sweet), ejected from
-`@here.build/inhuman-react` so any here.build surface (and anyone else) can mount
-an IDE-grade `.scm` editor.
+CodeMirror 6 for arrival Scheme (classic + sweet).
 
-## What's inside
+Ejected from inhuman-react so any surface can mount an IDE-grade `.scm` editor.
 
-- **`schemeSweet()`** — a `LanguageSupport` covering canonical Scheme s-expressions
-  AND the sweet-expression superset (curly-infix `{a + b}`, colon kwargs, `=>`
-  lambdas, glyph operators). Emits semantic highlight tags only — bring your theme.
-- **`paramHintsExtension(lens)`** — parameter inlay hints for calls to local
-  `(define (f …))`s, per lens (`"scheme"` / `"sweet"`). Pure analysis, runtime-free.
-- **`schemeIde(backend)`** — the IDE bundle: type-checked diagnostics
-  (`@codemirror/lint`), hover signatures+docs, completion, Cmd/Ctrl-click
-  go-to-definition. Individual pieces exported too (`schemeLinter`, `schemeHover`,
-  `schemeCompletion`, `schemeGotoDefinition`).
+## Exports
 
-## The backend seam
+- `schemeSweet()` — StreamLanguage for s-exprs + sweet (curly-infix, `k:`, `=>`, `== && ||`). Tags only.
+- `paramHintsExtension("scheme" | "sweet")` — view-only inlay hints for local define args. Pure.
+- Structural: `schemeStructural`, `expandSelection`, `slurpForward` etc. + keymap. Verify-reparse net (no corruption).
+- `schemeGhost(backend)` — inline Σ∩T preview (Tab accepts one symbol).
+- `schemeIde(backend, opts?)` — full IDE bundle (or individuals: linter, hover, completion, goto, semanticHighlight).
+- `sweetIdeBackend(backend)` — wrap a classic backend for sweet buffers.
 
-IDE extensions are wired onto a **`SchemeIdeBackend`** — a structural interface
-whose methods may answer sync or with a `Promise` (so an in-process service and a
-worker-hosted one both fit). `@here.build/arrival-type-lens`'s
-`SchemeLanguageService` is assignable as-is:
+Also re-exports decision fns for tests (`pickGhost`, `lineTailIsSafe`, `toCmDiagnostics`...).
+
+## Backend seam
+
+`SchemeIdeBackend` is structural (methods may be sync or Promise). Worker and in-process backends are interchangeable. Coordinates are always classic Scheme.
 
 ```ts
-import { createBrowserSchemeLanguageService } from "@here.build/arrival-type-lens/browser";
 import { schemeSweet, paramHintsExtension, schemeIde } from "@here.build/arrival-codemirror";
+import { createBrowserSchemeLanguageService } from "@here.build/arrival-type-lens/browser";
 
-const extensions = [
+const exts = [
   schemeSweet(),
   paramHintsExtension("scheme"),
   schemeIde(createBrowserSchemeLanguageService()),
 ];
 ```
 
-The IDE features operate in CLASSIC scheme coordinates. In a sweet-lens buffer,
-use the language + `paramHintsExtension("sweet")` only — the sweet↔classic span
-mapping needed to lift diagnostics into sweet coordinates is future work.
+## Lenses
+
+- Classic (`.scm`): full power (structural, ghost, hints, IDE).
+- Sweet: language + `paramHintsExtension("sweet")` + `schemeIde(sweetIdeBackend(backend))`.
+- No bidirectional sync. Sweet edits forward to canonical scheme via `sweetToScheme`. Unparseable sweet holds last good classic.
+
+## Limitations
+
+- Full IDE on sweet requires sweet↔classic span mapping (future).
+- Structural ops and some decorations are classic-only (sweet indent is semantic).
+- Cross-file goto requires host `openFile` callback.
+
+See source for `SchemeIdeBackend`, `SchemeGhostOptions`, `SchemeStructuralOptions`.

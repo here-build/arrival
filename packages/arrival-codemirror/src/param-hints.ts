@@ -3,14 +3,9 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { paramHints, paramHintsSweet, type ParamHint } from "@here.build/arrival-sweet";
 
 /**
- * Parameter inlay hints for `.scm`: a subtle, non-interactive `param:` void widget
- * before each positional arg of a call to a local `(define (f …))` — the IDE
- * inlay-hint idea. The hint is a VIEW decoration that occupies no document range, so
- * it's inherently non-selectable and the caret slips straight past it to the arg;
- * the buffer text never contains it. Resolution is the pure hint analysis
- * (arrival-chain `/sweet`, runtime-free), per lens: `paramHints` over the classic
- * parse, `paramHintsSweet` over a span-bearing sweet parse — both in the coordinate
- * space of the text the editor shows.
+ * Parameter inlay hints (view-only widgets, no doc range).
+ * `param:foo` before args of local defines. Pure analysis (arrival-sweet).
+ * Per-lens: "scheme" (classic) or "sweet". Never in buffer text.
  */
 
 class HintWidget extends WidgetType {

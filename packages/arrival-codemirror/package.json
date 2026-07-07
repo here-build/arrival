@@ -1,7 +1,7 @@
 {
   "name": "@here.build/arrival-codemirror",
   "version": "0.1.0",
-  "description": "CodeMirror 6 support for arrival scheme (classic + sweet): the scheme-sweet language, parameter inlay hints, and IDE extensions (diagnostics / hover / completion / go-to-definition) over any SchemeIdeBackend — e.g. @here.build/arrival-type-lens's language service.",
+  "description": "CodeMirror 6 for arrival Scheme (classic + sweet). Language, structural editing, ghost, param hints, and full IDE surface (lint/hover/completion/goto) over a SchemeIdeBackend seam.",
   "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",

@@ -1,16 +1,11 @@
-// sweet-ide — the sweet-lens IDE backend: a SchemeIdeBackend → SchemeIdeBackend
-// coordinate compositor. The wrapped backend keeps answering in CLASSIC scheme
-// coordinates over a classic text; this wrapper derives that classic from the
-// sweet buffer itself (readSweet → printScheme, via alignSweetClassic) and
-// translates every position/span through the sweet↔classic span pairing. Three
-// lenses compose end-to-end: sweet ↔ classic ↔ virtual TS ↔ tsc.
+// sweetIdeBackend — SchemeIdeBackend wrapper for sweet buffers.
 //
-// Degradation contract (mirrors the save-back path's): a sweet buffer that
-// doesn't parse mid-edit aligns to null → every query answers empty, and the
-// editor keeps its last good diagnostics. A query position on sweet sugar
-// (infix glyphs, elided parens) has no classic token → empty, never a wrong
-// token's answer. Diagnostics whose classic span falls inside sugar lift to
-// the innermost enclosing paired node — visible, just wider.
+// Derives classic via alignSweetClassic, translates all positions/spans.
+// Same seam in/out. Three lenses end-to-end: sweet → classic → TS.
+//
+// Degradation: unparseable sweet → null alignment → all answers empty
+// (editor keeps last good). Sugar positions have no classic token → empty.
+// Diagnostics inside sugar lift to enclosing paired node.
 
 import { alignSweetClassic, type SweetAlignment } from "@here.build/arrival-sweet";
 
@@ -23,8 +18,7 @@ import type {
   SchemeIdeQuickInfo,
 } from "./ide.js";
 
-/** Memoized per-buffer alignment — lint/hover/completion all query the same
- *  doc text between keystrokes, so the parse+reprint+walk runs once per edit. */
+/** Per-buffer memo (all queries see same doc between edits). */
 function makeAligner(): (sweet: string) => SweetAlignment | null {
   let lastText: string | null = null;
   let lastAlignment: SweetAlignment | null = null;
@@ -37,12 +31,9 @@ function makeAligner(): (sweet: string) => SweetAlignment | null {
   };
 }
 
-/** Map a cursor for COMPLETION: direct exact-token mapping first (typing a
- *  prefix — the common case), else anchor after the preceding token — the
- *  `(f |` argument position. The wrapper OWNS the derived classic, so for the
- *  after-token case it injects the whitespace seam the backend's sentinel
- *  needs (the canonical print may have `)` right after the token); completion
- *  answers carry no spans, so the patched text never skews a mapping. */
+/** Completion anchor: prefer exact token map. Else inject ws after prior
+ *  token so `(f |` works (canonical print may glue `)`). Completion has no
+ *  spans so patch is invisible to mapping. */
 function completionAnchor(a: SweetAlignment, sweet: string, pos: number): { classic: string; pos: number } | null {
   const direct = a.toClassic(pos);
   if (direct !== null) return { classic: a.classic, pos: direct };

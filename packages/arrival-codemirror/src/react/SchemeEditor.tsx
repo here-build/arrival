@@ -5,7 +5,14 @@ import { schemeToSweet, sweetToScheme } from "@here.build/arrival-sweet";
 import { darcula, FONT_WRITING, overlayTheme } from "@here.build/editor-theme";
 import CodeMirror from "@uiw/react-codemirror";
 
-import { paramHintsExtension, schemeIde, schemeStructural, schemeSweet, sweetIdeBackend } from "../index.js";
+import {
+  paramHintsExtension,
+  schemeIde,
+  schemeStructural,
+  schemeSweet,
+  sweetIdeBackend,
+  type SchemeStructuralOptions,
+} from "../index.js";
 import { useSchemeIde } from "./use-scheme-ide.js";
 
 // JetBrains Mono — the WRITING font (the reading fonts live in the popup; see
@@ -43,22 +50,31 @@ export interface SchemeEditorProps {
   /** The classic lens's EditorView, for hosts that dispatch into it (cost-bar
    *  decoration refresh). Called with the view on mount, null on unmount. */
   onCreateEditor?: (view: EditorView | null) => void;
+  /** Paredit-style structural editing on the CLASSIC lens (expand/contract
+   *  selection, slurp/barf, splice, kill-sexp, strict delete protection,
+   *  structural indent) — OFF by default. It reassigns several muscle-memory
+   *  chords (Alt-↑/↓ shadows Move Line, Mod-Shift-K shadows Delete Line) and
+   *  refuses any Backspace/Delete that would unbalance the buffer (Alt-Backspace
+   *  / mac Ctrl-Backspace force-deletes past it). Pass `true` for the defaults,
+   *  or an options object to disable individual pieces. */
+  structuralEditing?: boolean | SchemeStructuralOptions;
 }
 
 /**
- * The arrival scheme editor — classic + sweet lens over a canonical `.scm` body.
+ * Classic + sweet lenses over canonical `.scm`.
  *
- * The lens (`scheme`/`sweet`) is CONTROLLED from the studio's unified
- * `[scheme][sweet][graph]` switch via the `view` prop. Sweet is the readable
- * lens over the canonical scheme (curly-infix, `=>` lambdas, colon kwargs); the
- * stored body is ALWAYS canonical scheme. The bifunctor is stable by
- * construction: sweet is derived from the classic exactly once, on entering the
- * sweet view, and from then on it is the truth while you're in it — every sweet
- * edit folds FORWARD to canonical scheme (`sweetToScheme`, per-form splice with a
- * canonical-reprint fallback) and propagates through `onChange`, but the sweet
- * buffer is never reflowed back from the classic, so your formatting is never
- * clobbered. A mid-edit sweet that doesn't parse holds the last good classic
- * (the body isn't corrupted) and shows an "unsaved" marker until it parses again.
+ * Controlled `view` prop. Sweet = readable surface; canonical scheme is
+ * always the persisted truth.
+ *
+ * Lens contract (one-directional, stable bifunctor):
+ * - Enter sweet: derive once via schemeToSweet (user formatting preserved).
+ * - While in sweet: sweet buffer is authoritative; edits forward via
+ *   sweetToScheme (per-form splice + canonical reprint fallback).
+ * - Never reflow sweet from classic (would clobber formatting).
+ * - Unparseable sweet: hold last good classic, surface error.
+ * - External value change (not our echo) re-seeds.
+ *
+ * Structural/parens hints only on classic. IDE uses sweetIdeBackend on sweet.
  */
 export function SchemeEditor({
   value,
@@ -69,6 +85,7 @@ export function SchemeEditor({
   onNavigate,
   classicExtensions,
   onCreateEditor,
+  structuralEditing = false,
 }: SchemeEditorProps): React.ReactElement {
   // The classic scheme is canonical truth (mirrors File.body).
   const [text, setText] = useState(value);
@@ -77,10 +94,8 @@ export function SchemeEditor({
   const [sweet, setSweet] = useState("");
   const [sweetErr, setSweetErr] = useState<string | null>(null);
 
-  // Seed the sweet buffer from the canonical classic each time the lens switches
-  // INTO sweet (deps: [view] only — a `text` change while in sweet comes FROM a
-  // sweet edit, so reseeding on it would clobber the user's formatting). This is
-  // the old `enterSweet`, now driven by the controlled `view` prop.
+  // Seed sweet only on entering sweet (view dep). A text change while sweet
+  // is active came from sweet itself — reseeding would destroy formatting.
   useEffect(() => {
     if (view !== "sweet") return;
     try {
@@ -93,11 +108,8 @@ export function SchemeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  // Re-seed from an EXTERNAL change to the open file: the body changed underneath
-  // us (lazily loaded on open, or edited on disk / by another client). A no-op when
-  // `value` merely echoes our own edit — the studio updates `File.body`
-  // optimistically + synchronously, so `value === text` for our own keystrokes and
-  // this never clobbers active typing. Only a genuine outside change differs.
+  // External file change (not our optimistic echo) re-seeds text.
+  // value === text for our own edits (studio is optimistic).
   useEffect(() => {
     if (value !== text) setText(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,16 +134,15 @@ export function SchemeEditor({
   };
 
   const onSweetChange = (v: string): void => {
-    setSweet(v); // keep the buffer exactly as typed — never reflow it
+    setSweet(v); // never reflow user's sweet formatting
     try {
-      // Splice against the current canonical: unchanged top-level forms keep
-      // their exact bytes (comments + hand-formatting), only edited forms reprint.
+      // Forward: unchanged top forms keep exact bytes; edited ones reprint.
       const classic = sweetToScheme(v, text);
       setText(classic);
-      onChange?.(classic); // the body stays canonical scheme
+      onChange?.(classic);
       setSweetErr(null);
     } catch (error) {
-      setSweetErr(errMsg(error)); // hold the last good classic; surface "unsaved"
+      setSweetErr(errMsg(error)); // hold last good classic
     }
   };
 
@@ -151,7 +162,9 @@ export function SchemeEditor({
       editorTheme,
       ...(classicExtensions ?? []),
       paramHintsExtension("scheme"),
-      schemeStructural(),
+      ...(structuralEditing === false
+        ? []
+        : [schemeStructural(structuralEditing === true ? undefined : structuralEditing)]),
       overlayTheme,
       ...(ide === null
         ? []
@@ -162,7 +175,7 @@ export function SchemeEditor({
           ]),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ide, onNavigate],
+    [ide, onNavigate, structuralEditing],
   );
   // The sweet lens always shows a .scm, so it always gets the (sweet) hints —
   // plus the full IDE through the sweet↔classic aligner. (Structural ops stay

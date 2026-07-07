@@ -1,29 +1,14 @@
-// structural — paredit-style structural editing for arrival scheme.
+// structural — paredit ops for classic Scheme (expand/contract, slurp/barf,
+// splice, kill-sexp, strict delete, depth indent).
 //
-// The buffer's TRUE tree comes from `parseSexprs` (the same reader the whole
-// pipeline trusts — spans on every node, delimiters included), never from the
-// StreamLanguage's flat tokens. Every op locates spans in the tree, computes a
-// plain text edit, and runs it through a VERIFY-REPARSE NET: if the result
-// wouldn't parse, the op is a no-op — corruption is structurally impossible,
-// edge cases degrade to "nothing happened".
+// TRUE structure comes from `parseSexprs` (spans on every node), not the
+// StreamLanguage. Every edit goes through VERIFY-REPARSE: if it wouldn't parse,
+// op is a no-op. Corruption is structurally impossible.
 //
-// The v1 vocabulary is the community-revealed core (what Calva/Cursive/
-// nextjournal all shipped first), nothing esoteric:
-//   • expand/contract structural selection   Alt-↑ / Alt-↓
-//   • slurp / barf forward                   Mod-Shift-K / Mod-Shift-J
-//   • splice (dissolve enclosing parens)     Alt-S
-//   • kill sexp                              Mod-Shift-Backspace
-//   • strict delete protection (ON) + force-delete escape
-//                                            Alt-Backspace (win/linux), Ctrl-Backspace (mac)
-//   • structural auto-indent on Enter        (passive, via indentService)
-// Wrap-selection-in-parens needs no command: closeBrackets already wraps a
-// non-empty selection when you type `(`.
+// Protection self-suspends on unbalanced buffers (you can always hand-repair);
+// resumes when balanced. Classic lens only — sweet indentation is semantic.
 //
-// PROTECTION SELF-SUSPENDS on an unparseable buffer (mid-edit, pasted
-// unbalanced text): you can always repair by hand, and protection resumes the
-// moment the buffer balances — the least-hated answer to the paste problem.
-// All of this mounts on the CLASSIC lens only; the sweet lens's indentation is
-// semantic and structural ops there would be wrong, not just unmapped.
+// v1 set = community core (Calva/Cursive/etc). No wrap command (closeBrackets).
 
 import { indentService } from "@codemirror/language";
 import {
@@ -167,11 +152,8 @@ function listsInPath(forest: readonly Node[], path: readonly Node[]): { node: No
   return out;
 }
 
-// `'x` parses as a SUGAR WRAPPER list `{list: [quote, x]}` whose synthesized
-// head atom is spanless — the discriminator. Ops that remove a node must treat
-// the wrapper as part of it (deleting `(1 2)` out of `'(1 2)` would strand a
-// dangling `'` — unbalanced, so the net would no-op; dissolving the wrapper is
-// the intended edit).
+// `'x` is a sugar wrapper (spanless head atom). Removing the inner without
+// the wrapper strands the `' and fails the reparse net. Ops must include it.
 const SUGAR_HEADS = new Set(["quote", "quasiquote", "unquote", "unquote-splicing"]);
 function isSugarWrapperOf(parent: Node | undefined, child: Node): boolean {
   if (parent === undefined || !("list" in parent) || parent.span === undefined) return false;

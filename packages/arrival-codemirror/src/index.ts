@@ -1,10 +1,9 @@
-// @here.build/arrival-codemirror — CodeMirror 6 support for arrival scheme.
+// @here.build/arrival-codemirror — CodeMirror 6 for arrival Scheme (classic + sweet).
 //
-// The language (classic + sweet superset, semantic tags only), the parameter
-// inlay hints, and the IDE extensions (diagnostics / hover / completion /
-// go-to-definition) over the `SchemeIdeBackend` seam — arrival-type-lens's
-// language service plugs in as-is (`@here.build/arrival-type-lens/browser` in
-// an SPA), or any structurally-equal backend (e.g. worker-hosted).
+// Exports the language (schemeSweet), param hints, structural editing, ghost,
+// and IDE surface (linter/hover/completion/goto/sem-highlight) over a
+// `SchemeIdeBackend` seam. The backend may be sync or async; arrival-type-lens
+// (browser or worker) fits directly. All coordinates are classic Scheme.
 
 export { schemeSweet } from "./scheme-sweet.js";
 export { paramHintsExtension } from "./param-hints.js";
