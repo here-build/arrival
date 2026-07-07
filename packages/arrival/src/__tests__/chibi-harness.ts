@@ -134,7 +134,7 @@ export function createChibiHarness(): ChibiHarness {
 
       "error-object-message": symbol.native`error-object-message: the error's message, from a JS Error/string/other`(
         { input: [z.value], output: [z.string] },
-        (err: unknown): AString => {
+        (err): AString => {
           if (err instanceof Error) return new AString(CONSTANT_CTX, err.message);
           if (typeof err === "string") return new AString(CONSTANT_CTX, err);
           return new AString(CONSTANT_CTX, String(err));
@@ -143,7 +143,7 @@ export function createChibiHarness(): ChibiHarness {
 
       "error-object?": symbol.native`error-object?: #t iff obj is a JS Error or an error-shaped object`(
         { input: [z.value], output: [z.boolean] },
-        (obj: unknown): ABool =>
+        (obj): ABool =>
           schemeBool(obj instanceof Error || (typeof obj === "object" && obj !== null && "message" in obj)),
       ),
 
@@ -152,7 +152,7 @@ export function createChibiHarness(): ChibiHarness {
       // JS (await) is the SAME path the old `env.set("js-run-test", …)` used.
       "js-run-test": symbol.native`js-run-test: run thunk, compare its result to expected, record the outcome`(
         { input: [z.value, z.value, z.lambda], output: [z.undefinedResult] },
-        async (name: unknown, expected: unknown, thunk: unknown): Promise<AVoid> => {
+        async (name, expected, thunk): Promise<AVoid> => {
           const testName = typeof name === "string" ? name : String(name);
           try {
             // `thunk` is a scheme closure — a callable VALUE (ALambda), not a bare fn — so invoke
@@ -175,7 +175,7 @@ export function createChibiHarness(): ChibiHarness {
       // ── The JS-side group stack (replaces the scheme `set!` bookkeeping) ───────────
       "js-test-begin": symbol.native`js-test-begin: push the current group, enter a new one named 'name'`(
         { input: [z.value], output: [z.undefinedResult] },
-        (name: unknown): AVoid => {
+        (name): AVoid => {
           groupStack.push(currentGroup);
           currentGroup = String(name);
           return theVoid;
@@ -192,21 +192,21 @@ export function createChibiHarness(): ChibiHarness {
       // Callbacks the `test-error` macro fires (raw bindings, as before).
       "*test-pass-callback*": symbol.native`*test-pass-callback*: record a passing outcome`(
         { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, expected: unknown, actual: unknown): AVoid => {
+        (name, expected, actual): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: true, expected, actual });
           return theVoid;
         },
       ),
       "*test-fail-callback*": symbol.native`*test-fail-callback*: record a failing outcome`(
         { input: [z.value, z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, expected: unknown, actual: unknown): AVoid => {
+        (name, expected, actual): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: false, expected, actual });
           return theVoid;
         },
       ),
       "*test-error-callback*": symbol.native`*test-error-callback*: record a thrown-error outcome`(
         { input: [z.value, z.value], output: [z.undefinedResult] },
-        (name: unknown, error: unknown): AVoid => {
+        (name, error): AVoid => {
           results.push({ name: String(name), group: currentGroup, passed: false, error: String(error) });
           return theVoid;
         },

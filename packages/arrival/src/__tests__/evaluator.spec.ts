@@ -22,6 +22,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
 import { list, num, sym } from "./helpers.js";
+import { tf } from "../values/tagless-final.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   let env: Environment;
@@ -328,7 +329,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const fn = await exec(code, { env });
         // A lambda is an ALambda value declaring the apply term (its callability).
         expect(fn).toBeInstanceOf(ALambda);
-        expect(typeof (fn as Record<string, unknown>)["arrival/tagless-final/apply"]).toBe("function");
+        expect(typeof fn[tf("apply")]).toBe("function");
       });
 
       it("should execute lambda with arguments", async () => {

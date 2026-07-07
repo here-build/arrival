@@ -4,7 +4,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { AString } from "./AString.js";
 import { AExact } from "../primitives/AExact.js";
 import { AInexact } from "../primitives/AInexact.js";
-import { ABool, schemeTrue, schemeFalse } from "./ABool.js";
+import { ABool, schemeFalse, schemeTrue } from "./ABool.js";
 import { ANil } from "./ANil.js";
 import { AVoid, theVoid } from "./AVoid.js";
 import { AJSArray } from "./AJSArray.js";
@@ -54,7 +54,11 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
       return new AExact(ctx, v as bigint, 1n, provenance);
     case "boolean":
       // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
-      return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v as boolean, provenance);
+      return provenance === EMPTY_PROVENANCE
+        ? v
+          ? schemeTrue
+          : schemeFalse
+        : new ABool(ctx, v as boolean, provenance);
     case "null":
       // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
       // the two distinct Scheme absences rather than collapsing to one.

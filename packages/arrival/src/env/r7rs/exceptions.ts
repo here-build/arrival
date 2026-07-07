@@ -85,7 +85,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
       // the impl's own declared return type is `never` — it always throws.
       { input: [z.value], output: [z.undefinedResult] },
-      (obj: unknown): never => {
+      (obj) => {
         throw obj;
       },
     ),

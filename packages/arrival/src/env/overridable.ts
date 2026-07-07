@@ -134,8 +134,8 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   deps: [schemaCapability],
   symbols: ({ configuration }) => ({
     "overridable/resolve":
-      symbol.rosetta`overridable/resolve: (name: symbol, type: string|list, default: any): any — a host override wins over the in-form default; both are validated against \`type\``(
-        { input: [sz.symbol, sz.value, sz.value], output: [sz.value] },
+      symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
+        { input: [sz.symbol, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
         (nameSym, typeTag, defaultVal) => {
           const bindingName = nameSym.toString();
           const jsTag = schemeToJs(typeTag);

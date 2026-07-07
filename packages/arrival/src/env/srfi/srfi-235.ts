@@ -75,7 +75,7 @@ export default new EnvCapability("scheme/srfi-235", {
       // (a bare JS host fn falls back to `.length`). `this.ctx.runCtx` per the native convention
       // (capability.ts's native bind: `hostImpl.apply({ ctx: { runCtx } }, args)`).
       function curry(this: { ctx?: { runCtx?: RunContext } }, fn: unknown, ...args: unknown[]): unknown {
-        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
         const needed = is_callable_value(fn) ? fn.arity.min : (fn as (...a: unknown[]) => unknown).length;
         return needed > args.length
           ? (...curriedArgs: unknown[]) => curry.call({ ctx: { runCtx } }, fn, ...args, ...curriedArgs)

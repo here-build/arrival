@@ -10,11 +10,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
-
-const MAP = "arrival/tagless-final/map";
-const CONCAT = "arrival/tagless-final/concat";
-const EMPTY = "arrival/tagless-final/empty";
-const OF = "arrival/tagless-final/of";
+import { tf } from "../values/tagless-final.js";
 
 type FL = Record<string, any>;
 
@@ -43,25 +39,25 @@ monoidLaws("SchemeString", arb, () => new AString(CONSTANT_CTX, ""));
 
 describe("SchemeString — structure-algebra behavior", () => {
   it("concat appends underlying strings", () => {
-    const r = (new AString(CONSTANT_CTX, "foo") as FL)[CONCAT](new AString(CONSTANT_CTX, "bar"));
+    const r = (new AString(CONSTANT_CTX, "foo") as FL)[tf("concat")](new AString(CONSTANT_CTX, "bar"));
     expect((r as AString).valueOf()).toBe("foobar");
   });
   it("empty() is the empty string", () => {
-    const e = (AString as FL)[EMPTY]() as AString;
+    const e = (AString as FL)[tf("empty")]() as AString;
     expect(e.valueOf()).toBe("");
   });
   it("of(value) stringifies into a SchemeString", () => {
-    const s = (AString as FL)[OF](42) as AString;
+    const s = (AString as FL)[tf("of")](42) as AString;
     expect(s).toBeInstanceOf(AString);
     expect(s.valueOf()).toBe("42");
   });
   it("map transforms each character", () => {
-    const r = (new AString(CONSTANT_CTX, "abc") as FL)[MAP]((c: string) => c.toUpperCase());
+    const r = (new AString(CONSTANT_CTX, "abc") as FL)[tf("map")]((c: string) => c.toUpperCase());
     expect((r as AString).valueOf()).toBe("ABC");
   });
   it("map iterates by code point (astral chars map as single graphemes)", () => {
     const seen: string[] = [];
-    (new AString(CONSTANT_CTX, "a🦄b") as FL)[MAP]((c: string) => {
+    (new AString(CONSTANT_CTX, "a🦄b") as FL)[tf("map")]((c: string) => {
       seen.push(c);
       return c;
     });
@@ -70,7 +66,7 @@ describe("SchemeString — structure-algebra behavior", () => {
   it("concat is pure (operands untouched)", () => {
     const a = new AString(CONSTANT_CTX, "x");
     const b = new AString(CONSTANT_CTX, "y");
-    (a as FL)[CONCAT](b);
+    (a as FL)[tf("concat")](b);
     expect(a.valueOf()).toBe("x");
     expect(b.valueOf()).toBe("y");
   });

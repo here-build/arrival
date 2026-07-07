@@ -36,6 +36,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { exec as gexec } from "../eval/generator-exec.js";
+import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -329,7 +330,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // end): distinct instances, still eq? by name.
     const other = new ASymbol(makeRunContext({}), "same-name");
     expect(other).not.toBe(a);
-    expect(other["arrival/tagless-final/equals"](a)).toBe(true);
+    expect(other[tf("equals")](a)).toBe(true);
   });
 
   /**

@@ -76,7 +76,7 @@ const writeOf = (arg: unknown): string => {
 export default new EnvCapability("scheme/srfi-28", {
   symbols: {
     format:
-      symbol.native`format: (format fmt arg ...) or (format #f fmt arg ...) → the fmt string with ~a (display) ~s (write) ~d (decimal) ~F/~w,dF (fixed-point, e.g. ~,2f) ~% (newline) ~~ (tilde) directives filled from the args; string-only (a #t/port destination is a teaching door — no IO here) (SRFI-28/48)`(
+      symbol.native`format: fills a format string using ~ directives and returns the resulting string (SRFI-28/48); supports (format fmt arg ...) and (format #f fmt ...)`(
         // A single homogeneous VARIADIC vector, not `[fmt, ...rest]` — the impl (below) is a
         // real `(...args: unknown[])`, and args[0]'s true type is decided AT RUNTIME (a format
         // string per SRFI-28, or `#f` per the SRFI-48/CL destination form, or anything else,

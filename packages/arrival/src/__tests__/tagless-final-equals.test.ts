@@ -18,6 +18,7 @@ import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
 import listsCap from "../env/r7rs/lists.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { SchemeValue } from "../values/types.js";
+import { tf } from "../values/tagless-final.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.
@@ -41,7 +42,6 @@ import type { SchemeValue } from "../values/types.js";
 //   G5 — green: eq/eqv stay identity/scalar; this group is the landmine guard.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const EQ = "arrival/tagless-final/equals";
 
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
@@ -94,7 +94,7 @@ function representativeValues(): { name: string; value: AValue }[] {
 describe("G1 totality — every AValue subtype defines arrival/tagless-final/equals", () => {
   for (const { name, value } of representativeValues()) {
     it(name + " has a callable arrival/tagless-final/equals", () => {
-      expect(typeof (value as unknown as Record<string, unknown>)[EQ]).toBe("function");
+      expect(typeof (value as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
     });
   }
 });
@@ -106,7 +106,7 @@ describe("G2 Pair Setoid", () => {
   // Invoke EQ as a METHOD on the receiver so `this` is bound (the protocol is a
   // method on the term). Pre-impl, Pair has no EQ → "not a function" (a clean RED).
   const pairEq = (p: APair, other: unknown, seen?: Map<object, Set<object>>): boolean =>
-    (p as unknown as { ["arrival/tagless-final/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
+    p[tf("equals")](other, seen);
 
   it("equal proper lists compare equal through the Pair Setoid", () => {
     const a = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)) as APair;
@@ -180,7 +180,7 @@ describe("G2 Pair Setoid", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G3 Vector Setoid — cyclic vectors terminate", () => {
   const vecEq = (v: AVector, other: unknown, seen?: Map<object, Set<object>>): boolean =>
-    (v as unknown as { ["arrival/tagless-final/equals"](o: unknown, s?: Map<object, Set<object>>): boolean })[EQ](other, seen);
+    v[tf("equals")](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
     const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
@@ -234,8 +234,8 @@ describe("G4 equal? regression — structuralEqual", () => {
   });
 
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
-    expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil) as unknown as Record<string, unknown>)[EQ]).toBe("function");
-    expect(typeof (new AVector(CONSTANT_CTX, []) as unknown as Record<string, unknown>)[EQ]).toBe("function");
+    expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil) as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
+    expect(typeof (new AVector(CONSTANT_CTX, []) as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
   });
 });
 
@@ -307,7 +307,7 @@ describe("G6 equality-suite cleanup", () => {
 
   describe("eq()/eqv() scalar result == the term's own Setoid", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
-      (x as unknown as { ["arrival/tagless-final/equals"](o: unknown): boolean })[EQ](y);
+      x[tf("equals")](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
       { name: "exact==exact", x: new AExact(CONSTANT_CTX, 1n), y: new AExact(CONSTANT_CTX, 1n) },
       { name: "exact!=exact", x: new AExact(CONSTANT_CTX, 1n), y: new AExact(CONSTANT_CTX, 2n) },
@@ -391,7 +391,7 @@ describe("G6 equality-suite cleanup", () => {
       expect(eqv(new ABool(CONSTANT_CTX, true), true as unknown as never)).toBe(false);
       // but the Setoid itself IS representation-blind (documents the divergence):
       expect(
-        (new ABool(CONSTANT_CTX, true) as unknown as { ["arrival/tagless-final/equals"](o: unknown): boolean })[EQ](true),
+        (new ABool(CONSTANT_CTX, true) as unknown as { ["arrival/tagless-final/equals"](o: unknown): boolean })[tf("equals")](true),
       ).toBe(true);
     });
   });

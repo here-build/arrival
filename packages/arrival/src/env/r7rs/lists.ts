@@ -414,7 +414,7 @@ export default new EnvCapability("scheme/lists", {
         // Seam-routed: `fn` is a callable VALUE (ANativeProcedure/lambda) now, not a bare fn.
         // applyCallback pins canBounce=false, so a Bounce never reaches here — the CallResult
         // narrows to value-or-promise.
-        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this?.ctx?.runCtx ?? CONSTANT_CTX) as
+        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this.ctx?.runCtx ?? CONSTANT_CTX) as
           | SchemeValue
           | Promise<SchemeValue>;
       },

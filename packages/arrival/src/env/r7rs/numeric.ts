@@ -51,6 +51,7 @@ import {
   type AOrd,
 } from "../../values/op-helpers.js";
 import { type } from "../../utils/typecheck.js";
+import { tf } from "../../values/tagless-final.js";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Codecs — carved from membrane.ts (the `Codec` family) + operators/numeric.ts
@@ -794,7 +795,7 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // strict, so the run ctx (not the operands) is the only honest source.
 const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
-const flLteNum = (a, b) => a["arrival/tagless-final/lte"](b);
+const flLteNum = (a, b) => a[tf("lte")](b);
 const LOOSE_NUM_PAIR = {
   "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
   "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
@@ -816,8 +817,8 @@ function loosePairOrder(sym, a, b) {
   if (isNumberOperand(a) && isNumberOperand(b)) return LOOSE_NUM_PAIR[sym](a, b);
   if (!isOrd(a) || !isOrd(b))
     throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — no shared order.`);
-  const le_ab = Boolean(a["arrival/tagless-final/lte"](b));
-  const le_ba = Boolean(b["arrival/tagless-final/lte"](a));
+  const le_ab = Boolean(a[tf("lte")](b));
+  const le_ba = Boolean(b[tf("lte")](a));
   if (!le_ab && !le_ba)
     throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
   return ORD_FROM_LE[sym](le_ab, le_ba);
@@ -839,7 +840,7 @@ function looseCompare(sym, core) {
   // path (call-head bare-fn, applyCallback fallback, ANativeProcedure impl). Replaces the
   // retired ambient `isStrict()` holder.
   const fn = function (this: { ctx?: { runCtx?: { strict?: boolean } } }, ...args) {
-    if (this?.ctx?.runCtx?.strict === true) {
+    if (this.ctx?.runCtx?.strict === true) {
       if (!args.every(isNumberOperand))
         throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core(...args);

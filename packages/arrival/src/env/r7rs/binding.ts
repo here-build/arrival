@@ -65,16 +65,12 @@ export default new EnvCapability("scheme/r7rs/binding", {
         output: [z.value],
         type: "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
       },
-      function (
-        this: { ctx?: { runCtx?: RunContext } },
-        producer: unknown,
-        consumer: unknown,
-      ): SchemeValue | Promise<SchemeValue> {
+      function (producer, consumer): SchemeValue | Promise<SchemeValue> {
         // Seam-routed: producer/consumer are callable VALUES now, not bare fns. The producer is
         // usually a lambda, so its invocation may return a Promise — unwrap it BEFORE the
         // `instanceof Values` check, else a multi-value producer leaks the Promise as a single
         // arg (wrong arity).
-        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
         // unpromise is a generic (unknown-typed) sync/async unwrap utility — assert at this
         // one boundary that its result is what the callback below actually produces.
         return unpromise(applyCallback(producer, [], runCtx), (maybe) => {

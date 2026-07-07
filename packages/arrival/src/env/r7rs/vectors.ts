@@ -49,6 +49,7 @@ import {
 } from "../../values/op-helpers.js";
 
 import { EnvCapability } from "../../common/capability.js";
+import { tf } from "../../values/tagless-final.js";
 
 export default new EnvCapability("scheme/vectors", {
   symbols: {
@@ -121,7 +122,7 @@ export default new EnvCapability("scheme/vectors", {
       // runtime domain (see scheme-zod.ts's own note on svector). A non-vector declares no such
       // method → a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
       (vec: unknown, k: unknown): SchemeValue => {
-        const m = (vec as Record<string, unknown> | null | undefined)?.["arrival/tagless-final/vector-ref"];
+        const m = (vec as Record<string, unknown> | null | undefined)?.[tf("vector-ref")];
         if (typeof m !== "function") {
           throw new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`);
         }
@@ -224,7 +225,7 @@ export default new EnvCapability("scheme/vectors", {
       },
       function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
-        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const result: SchemeValue[] = [];
@@ -257,7 +258,7 @@ export default new EnvCapability("scheme/vectors", {
       },
       function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
-        const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const pending: unknown[] = [];

@@ -4,6 +4,7 @@ import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
+import { tf } from "./tagless-final.js";
 
 /**
  * Cycle-safe structural deep-equality for Scheme values — the ONE `equal?`
@@ -73,8 +74,8 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   // also own it; an entity compared to a non-entity (a bare literal) returns false.
   // Symmetric. The `seen` is forwarded so a Setoid's element recursion co-inducts
   // through the SAME visited set this harness just recorded into.
-  if (typeof a["arrival/tagless-final/equals"] === "function") return Boolean(a["arrival/tagless-final/equals"](b, seen));
-  if (typeof b["arrival/tagless-final/equals"] === "function") return Boolean(b["arrival/tagless-final/equals"](a, seen));
+  if (typeof a[tf("equals")] === "function") return Boolean(a[tf("equals")](b, seen));
+  if (typeof b[tf("equals")] === "function") return Boolean(b[tf("equals")](a, seen));
 
   const av = a?.valueOf?.();
   const bv = b?.valueOf?.();
@@ -158,9 +159,9 @@ export function eq(x: unknown, y: unknown): boolean {
     x instanceof AExact ||
     x instanceof AInexact
   ) {
-    return x["arrival/tagless-final/equals"](y);
+    return x[tf("equals")](y);
   }
-  if (x instanceof ABool) return y instanceof ABool && x["arrival/tagless-final/equals"](y);
+  if (x instanceof ABool) return y instanceof ABool && x[tf("equals")](y);
   // Everything else (Pair, vector/Array, SchemeString, plain objects) keeps
   // strict pointer-grade — distinct heap instances answer #f (the === above is
   // the only true case).

@@ -27,6 +27,7 @@ import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
+import { tf } from "./tagless-final.js";
 
 // ============================================================================
 // Allocation cap — DoS defense for size-parameterized constructors
@@ -71,14 +72,8 @@ export function setAllocationLimit(limit: number): void {
  * message shape and one policy.
  */
 export function assertAllocatable(len: number, fnName: string): void {
-  invariant(
-    Number.isFinite(len) && len >= 0,
-    `${fnName}: length must be a non-negative integer, got ${len}`,
-  );
-  invariant(
-    len <= allocationLimit,
-    `${fnName}: requested length ${len} exceeds allocation limit ${allocationLimit}`,
-  );
+  invariant(Number.isFinite(len) && len >= 0, `${fnName}: length must be a non-negative integer, got ${len}`);
+  invariant(len <= allocationLimit, `${fnName}: requested length ${len} exceeds allocation limit ${allocationLimit}`);
 }
 
 // ============================================================================
@@ -109,11 +104,9 @@ interface VectorLike {
   __vector__: SchemeValue[];
   frozen?: boolean;
 }
+// todo smell, eliminate
 function isVectorLike(obj: unknown): obj is VectorLike {
-  return (
-    obj != null &&
-    typeof (obj as Record<string, unknown>)["arrival/tagless-final/vector?"] === "function"
-  );
+  return obj != null && typeof (obj as Record<string, unknown>)["arrival/tagless-final/vector?"] === "function";
 }
 
 /**
@@ -180,9 +173,8 @@ export function asBytevector(obj: unknown, fnName: string, forMutation = false):
 export interface AOrd {
   "arrival/tagless-final/lte"(other: unknown): boolean;
 }
-export const isOrd = (x: unknown): x is AOrd =>
-  x != null && typeof (x as Partial<AOrd>)["arrival/tagless-final/lte"] === "function";
-const lte = (a: AOrd, b: unknown): boolean => Boolean(a["arrival/tagless-final/lte"](b));
+export const isOrd = (x: unknown): x is AOrd => x != null && typeof (x as Partial<AOrd>)[tf("lte")] === "function";
+const lte = (a: AOrd, b: unknown): boolean => Boolean(a[tf("lte")](b));
 // Nil is the BOTTOM of the universal order (V's F2: nil-as-bottom, matching SRFI-128's
 // "the empty list is ordered before all pairs" and Clojure's `compare`). Detected
 // structurally (null / undefined / ANil — by constructor name, so no value-class import
@@ -248,7 +240,9 @@ const describeOrdElement = (v: unknown): string =>
  *    The number branch is REQUIRED: reading a number comparator's positive verdict through
  *    `!is_false` (every nonzero number is scheme-truthy) would mis-order (it did, in the
  *    first cut) — so a number is consulted as a number, not coerced to a less?-truthiness. */
-export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unknown): (a: unknown, b: unknown) => number {
+export function deriveSortCompare(
+  comparator?: (a: unknown, b: unknown) => unknown,
+): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {
     // The comparator is a callable VALUE now (ANativeProcedure) — invoke through the seam, not
     // as a bare fn. Sort is synchronous; a native comparator returns a settled value (a lambda
@@ -259,14 +253,20 @@ export function deriveSortCompare(comparator?: (a: unknown, b: unknown) => unkno
       if (typeof v === "number") return v;
       if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
       // `less?` predicate: a truthy verdict means a precedes b.
-      return !is_false(v) ? -1 : !is_false(call(b, a)) ? 1 : 0;
+      return is_false(v) ? (is_false(call(b, a)) ? 0 : 1) : -1;
     };
   }
   return (a, b) => {
     const nilCmp = nilOrderCompare(a, b);
     if (nilCmp !== undefined) return nilCmp; // nil is the order's bottom (shared with the comparison ops)
-    if (!isOrd(a)) throw new TypeError(`sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
-    if (!isOrd(b)) throw new TypeError(`sort: cannot order a ${describeOrdElement(b)} (it declares no arrival/tagless-final/lte; supply a comparator).`);
+    if (!isOrd(a))
+      throw new TypeError(
+        `sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`,
+      );
+    if (!isOrd(b))
+      throw new TypeError(
+        `sort: cannot order a ${describeOrdElement(b)} (it declares no arrival/tagless-final/lte; supply a comparator).`,
+      );
     const aLE = lte(a, b);
     const bLE = lte(b, a);
     return aLE ? (bLE ? 0 : -1) : bLE ? 1 : 0;
@@ -301,7 +301,7 @@ export function coerceNumeric(value: unknown): ANumeric {
       break;
     }
     default:
-      throw new TypeError( `Cannot convert to SchemeNumeric: ${value}`);
+      throw new TypeError(`Cannot convert to SchemeNumeric: ${value}`);
   }
 }
 

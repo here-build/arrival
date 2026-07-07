@@ -45,6 +45,7 @@ import { schemeBool as bool, stringValue, withInputProvenance } from "../../valu
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { printValue } from "../../values/print.js";
+import { SchemeValue } from "../../values/types.js";
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -57,21 +58,21 @@ export default new EnvCapability("scheme/equality", {
       // projection — using it here would silently reject the raw-JS-boolean half the impl
       // genuinely accepts. Output stays z.boolean: the RETURN is always a real ABool (the
       // schemeBool flyweight), never representation-blind.
-      { input: [z.value, z.value], inputRest: z.value, output: [z.boolean] },
-      (...bools) => {
+      { input: [], inputRest: z.value, output: [z.boolean] },
+      function (...bools) {
         if (bools.length < 2) return schemeTrue;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
         // the type-guard one line up would already have rejected the schemeTrue
         // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-        const unwrap = (b: unknown): boolean | undefined => {
-          if (typeof b === "boolean") return b;
-          if (b instanceof ABool) return b.value;
-          return undefined;
-        };
+        const unwrap = (b: SchemeValue): boolean | undefined => (b instanceof ABool ? b.value : undefined);
         const first = unwrap(bools[0]);
         if (first === undefined) return schemeFalse;
-        return bool(bools.every((b) => unwrap(b) === first));
+        // todo use actual context instead of CONSTANT_CTX
+        return new ABool(
+          CONSTANT_CTX,
+          bools.every((b) => unwrap(b) === first),
+        );
       },
     ),
 
@@ -84,12 +85,16 @@ export default new EnvCapability("scheme/equality", {
     // domain, not `z.value` — this is a precision fix, not a blindness removal.
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
-      (...syms) => {
+      function (...syms) {
         if (syms.length < 2) return schemeTrue;
         const first = syms[0];
         if (!(first instanceof ASymbol)) return schemeFalse;
         const firstName = first.__name__;
-        return bool(syms.every((s) => s instanceof ASymbol && s.__name__ === firstName));
+        // todo use actual context instead of CONSTANT_CTX
+        return new ABool(
+          CONSTANT_CTX,
+          syms.every((s) => s instanceof ASymbol && s.__name__ === firstName),
+        );
       },
     ),
 
@@ -99,7 +104,7 @@ export default new EnvCapability("scheme/equality", {
     // Provenance PLUMBING: forward the input's provenance via withInputProvenance, never mint.
     "symbol->string": symbol.native`symbol->string: the symbol's name as a string`(
       { input: [z.symbol], output: [z.string] },
-      (s) => {
+      function (s) {
         const name = s.__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
         return withInputProvenance([s], new AString(CONSTANT_CTX, str));
@@ -107,7 +112,7 @@ export default new EnvCapability("scheme/equality", {
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
       { input: [z.string], output: [z.symbol] },
-      (s) => {
+      function (s) {
         // Mint with the INPUT's ctx (value-carries-ctx), not CONSTANT_CTX: a runtime
         // symbol then interns in its run's per-run table (heap-charged, GC'd at run end)
         // rather than the permanent global one — closing the `(string->symbol unique)` DoS.
@@ -119,9 +124,7 @@ export default new EnvCapability("scheme/equality", {
       { input: [z.lambda], output: [z.boolean] },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
-      (obj: unknown): ABool => {
-        return bool(is_callable(obj) && !is_macro(obj));
-      },
+      (obj) => new ABool(ctxOf(obj), is_callable(obj) && !is_macro(obj)),
     ),
 
     // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
@@ -136,7 +139,7 @@ export default new EnvCapability("scheme/equality", {
     // write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.value], output: [z.string] },
-      (obj): AString => new AString(CONSTANT_CTX, printValue(obj)),
+      (obj) => new AString(ctxOf(obj), printValue(obj)),
     ),
 
     "equal?": symbol.native`equal?: representation-blind structural equality`(
@@ -176,9 +179,8 @@ export default new EnvCapability("scheme/equality", {
     // Reproduced byte-for-byte from the legacy global_env defs. Representation-blind
     // like the equivalence predicates above: each accepts a boxed AValue OR a raw JS
     // value that crossed the rosetta membrane.
-    "string?": symbol.native`string?: boxed-or-raw string test`(
-      { input: [z.value], output: [z.boolean] },
-      (obj) => bool(obj instanceof AString),
+    "string?": symbol.native`string?: boxed-or-raw string test`({ input: [z.value], output: [z.boolean] }, (obj) =>
+      bool(obj instanceof AString),
     ),
 
     // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
@@ -215,12 +217,7 @@ export default new EnvCapability("scheme/equality", {
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         { input: [z.value], output: [z.boolean] },
-        (obj: unknown): ABool => {
-          if (obj instanceof ADict) return schemeTrue;
-          if (obj == null) return schemeFalse;
-          const source = obj instanceof AJSObject ? obj.source : obj;
-          return bool(isDictShaped(source));
-        },
+        (obj): ABool => new ABool(obj.ctx, obj instanceof AJSObject || obj instanceof ADict),
       ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(

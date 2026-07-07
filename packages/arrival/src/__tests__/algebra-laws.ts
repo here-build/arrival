@@ -11,15 +11,11 @@
 // so we use them directly rather than via an indirection.
 import fc from "fast-check";
 import { describe, it } from "vitest";
-
-const EQ = "arrival/tagless-final/equals";
-const LTE = "arrival/tagless-final/lte";
-const CONCAT = "arrival/tagless-final/concat";
-const MAP = "arrival/tagless-final/map";
+import { tf } from "../values/tagless-final.js";
 
 type FL = Record<string, any>;
-const equals = (a: FL, b: FL): boolean => Boolean(a[EQ](b));
-const lte = (a: FL, b: FL): boolean => Boolean(a[LTE](b));
+const equals = (a: FL, b: FL): boolean => Boolean(a[tf("equals")](b));
+const lte = (a: FL, b: FL): boolean => Boolean(a[tf("lte")](b));
 
 // ----------------------------------------------------------------------
 // Setoid — reflexive, symmetric, transitive. The `equalClone` exercises the
@@ -93,7 +89,7 @@ export function ordLaws<T>(name: string, arb: fc.Arbitrary<T>): void {
 // Semigroup — associativity. Equality of results via the type's own `equals`.
 // ----------------------------------------------------------------------
 export function semigroupLaws<T>(name: string, arb: fc.Arbitrary<T>): void {
-  const concat = (a: FL, b: FL): FL => a[CONCAT](b);
+  const concat = (a: FL, b: FL): FL => a[tf("concat")](b);
   describe(`${name} — Semigroup`, () => {
     it("associativity: (a⋄b)⋄c ≡ a⋄(b⋄c)", () => {
       fc.assert(
@@ -109,7 +105,7 @@ export function semigroupLaws<T>(name: string, arb: fc.Arbitrary<T>): void {
 // Monoid (extends Semigroup) — left/right identity against `empty`.
 // ----------------------------------------------------------------------
 export function monoidLaws<T>(name: string, arb: fc.Arbitrary<T>, empty: () => T): void {
-  const concat = (a: FL, b: FL): FL => a[CONCAT](b);
+  const concat = (a: FL, b: FL): FL => a[tf("concat")](b);
   describe(`${name} — Monoid`, () => {
     it("left identity: empty ⋄ a ≡ a", () => {
       fc.assert(fc.property(arb, (a) => equals(concat(empty() as FL, a as FL), a as FL)));
@@ -136,7 +132,7 @@ export interface FunctorArbs<T, A> {
 export function functorLaws<T, A>(name: string, { arb, f, g, eq }: FunctorArbs<T, A>): void {
   // map may be async (APair/AVector await the user fn) or sync (AString char-map); await
   // covers both. eqF stays sync — it compares the already-materialized structures.
-  const map = async (x: FL, fn: (a: A) => A): Promise<FL> => await x[MAP](fn);
+  const map = async (x: FL, fn: (a: A) => A): Promise<FL> => await x[tf("map")](fn);
   const eqF = eq ?? ((a: T, b: T) => equals(a as FL, b as FL));
   describe(`${name} — Functor`, () => {
     it("identity: map(id) ≡ id", async () => {
