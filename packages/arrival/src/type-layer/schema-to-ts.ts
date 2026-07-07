@@ -130,8 +130,9 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
   const s = schema as { _zod?: { def?: { type?: string } } };
   if (s?._zod?.def?.type !== "custom") return undefined; // a compound (union/array/tuple/…) → recurse via zod-to-ts
   const name = z.lookupName(schema);
-  if (name === undefined) return undefined; // not a scheme-zod vocabulary item → zod-to-ts handles it
-  const builder = IMAGE_BY_NAME.get(name);
+  // "custom" is always a leaf (z.codec(...) compiles to "pipe", never reaches here) — no
+  // real case needs zod-to-ts's throw, so an unregistered name degrades to unknown too.
+  const builder = name !== undefined ? IMAGE_BY_NAME.get(name) : undefined;
   return builder ? builder(typescript) : unknownNode(typescript); // robust default — never throw
 };
 

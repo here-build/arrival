@@ -40,6 +40,20 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   });
 });
 
+describe("printType — unregistered custom leaf hardens to unknown, never throws", () => {
+  // Not in scheme-zod.ts's NAMES map → lookupName(schema) is undefined. Before the
+  // hardening fix this deferred to zod-to-ts's unrepresentable:"throw" and blew up.
+  const unregisteredLeaf = z.custom<{ notAVocabItem: true }>((v) => typeof v === "object");
+
+  it("degrades a bare unregistered custom leaf to 'unknown'", () => {
+    expect(printType(unregisteredLeaf)).toBe("unknown");
+  });
+
+  it("degrades only the unregistered member inside a union, sibling members unaffected", () => {
+    expect(printType(z.union([z.string, unregisteredLeaf]))).toBe("string | unknown");
+  });
+});
+
 describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
   it("prints the string codec as 'string'", () => {
     expect(printType(z.string)).toBe("string");
