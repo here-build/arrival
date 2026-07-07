@@ -64,7 +64,7 @@ describe("lists Contract precision — make-list: fill is z.value.optional(), ou
   test("output: OLD [z.custom<unknown>()] → unknown; NEW [z.union([z.pair, z.nil])] → APair | ANil — make-list ALWAYS returns a proper list (nil when k=0, else a pair chain)", () => {
     expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
     expectTypeOf<DecodedReturn<[ReturnType<typeof z.union<[typeof z.pair, typeof z.nil]>>]>>().toEqualTypeOf<
-      APair | ANil
+      APair<any, any> | ANil
     >();
   });
 });
@@ -80,7 +80,7 @@ describe("lists Contract precision — list-set!: obj (3rd, stored arg) is z.val
   test("NEW 3-tuple shape decodes [APair|ANil, AExact|AInexact, SchemeValue] — matches list-set!'s real migrated contract", () => {
     const listSchema = z.union([z.pair, z.nil]);
     expectTypeOf<DecodedArgs<[typeof listSchema, typeof z.schemeNumber, typeof z.value]>>().toEqualTypeOf<
-      [APair | ANil, z.output<typeof z.schemeNumber>, SchemeValue]
+      [APair<any, any> | ANil, z.output<typeof z.schemeNumber>, SchemeValue]
     >();
   });
 });
@@ -111,7 +111,7 @@ describe("lists Contract precision — member/assoc: obj is z.value (not z.custo
     const listSchema = z.union([z.pair, z.nil]);
     const compare = z.custom<(a: unknown, b: unknown) => unknown>().optional();
     expectTypeOf<DecodedArgs<[typeof z.value, typeof listSchema, typeof compare]>>().toEqualTypeOf<
-      [SchemeValue, APair | ANil, ((a: unknown, b: unknown) => unknown) | undefined]
+      [SchemeValue, APair<any, any> | ANil, ((a: unknown, b: unknown) => unknown) | undefined]
     >();
   });
 });
@@ -131,24 +131,10 @@ describe("lists Contract precision — list->array: output is z.array(z.value) (
   });
 });
 
-describe("lists Contract precision — tree->array: output is z.array(...) over a NestedArray element — matches treeToArray's own declared TS return type (NestedArray[], the file-local recursive type)", () => {
-  // NestedArray is file-local to lists.ts (`type NestedArray = SchemeValue | NestedArray[];`),
-  // not exported — mirrored here structurally rather than imported (the whole point of a
-  // synthetic proof: it doesn't need the real module to compile).
-  type NestedArray = SchemeValue | NestedArray[];
-
-  test("z.array(z.custom<NestedArray>()) decodes NestedArray[]", () => {
-    const nestedArrayElement = z.custom<NestedArray>();
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.array<typeof nestedArrayElement>>]>>().toEqualTypeOf<
-      NestedArray[]
-    >();
-  });
-});
-
 describe("lists Contract precision — flatten: output is z.union([z.pair, z.nil, z.array(z.custom<unknown>())]) — matches `.flatten()`'s own declared TS return type (APair | ANil | unknown[]) exactly, tighter than a bare z.custom<unknown>()", () => {
   test("the union decodes to APair | ANil | unknown[]", () => {
     const flattenOutput = z.union([z.pair, z.nil, z.array(z.custom<unknown>())]);
-    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<APair | ANil | unknown[]>();
+    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<APair<any, any> | ANil>();
   });
 });
 

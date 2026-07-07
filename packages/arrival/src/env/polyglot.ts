@@ -151,7 +151,8 @@ export default new EnvCapability("scheme/polyglot", {
     ;; it builds a fresh single-key dict (@keys nil = '()), which is exactly what
     ;; assoc-in needs to create missing intermediate maps on demand. \`@keys\` returns
     ;; a raw JS array (not a scheme list — filter/map need the term protocol), so
-    ;; \`array->list\` (r7rs/lists.ts, LIPS extension) lifts it first.
+    ;; \`vector->list\` (R7RS §6.8 — a raw JS array is representation-blind as a
+    ;; vector here, per z.svector) lifts it first.
     ;; k v are placed LAST (not first): \`dict\`'s own key resolution (stringify, strip a
     ;; leading \`:\`) normalizes a keyword / symbol / string key to the
     ;; SAME underlying JS-object key as an already-stored string key — a plain \`equal?\`
@@ -159,7 +160,7 @@ export default new EnvCapability("scheme/polyglot", {
     ;; sequential \`obj[key] = value\` assignment naturally dedupes on the LAST write. So
     ;; no explicit exclusion is needed: k v simply overwrite whatever ks/vs already wrote.
     (define (%dict-set d k v)
-      (let* ((ks (array->list (@keys d)))
+      (let* ((ks (vector->list (@keys d)))
              (vs (map (lambda (key) (@ d key)) ks)))
         (apply dict (append (%interleave ks vs) (list k v)))))
 
@@ -320,11 +321,11 @@ export default new EnvCapability("scheme/polyglot", {
 
     ;; dict-keys — Racket: d's own keys as a proper scheme list. \`@keys\` alone
     ;; returns a raw JS array — composes with length, but not map/filter (see
-    ;; %dict-set's comment above) — so this lifts it via array->list once, the same
+    ;; %dict-set's comment above) — so this lifts it via vector->list once, the same
     ;; move %dict-set already makes.
     (define (dict-keys d)
       (%dict-guard "dict-keys" d)
-      (array->list (@keys d)))
+      (vector->list (@keys d)))
 
     ;; dict-values — Racket: the value at each of d's keys, in dict-keys order.
     (define (dict-values d)

@@ -124,10 +124,9 @@ describe("@here.build/arrival/polyglot — cross-dialect stdlib completion (Buck
     expect(await truthy("(empty? (dict :a 1))")).toBe("no");
   });
 
-  it("first / comp / flatten / curry are ALREADY bound elsewhere — not redefined here", async () => {
+  it("first / comp / curry are ALREADY bound elsewhere — not redefined here", async () => {
     expect(await str("(first (list 1 2 3))")).toBe("1"); // SRFI-1, srfi-1.ts
     expect(await str("((comp (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)")).toBe("12"); // alias of compose, polyglot.ts
-    expect(await str("(flatten '(1 (2 (3))))")).toBe("(1 2 3)"); // r7rs/lists.ts, LIPS extension
     expect(await str("((curry (lambda (a b) (+ a b)) 1) 2)")).toBe("3"); // srfi-235.ts
   });
 });

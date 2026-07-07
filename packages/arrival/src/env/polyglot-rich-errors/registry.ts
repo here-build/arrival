@@ -85,7 +85,6 @@ const POLYGLOT_BOUND: readonly WellKnownSymbolEntry[] = [
   { name: "@?", dialects: ["arrival-native"], status: "bound" },
   { name: "@keys", dialects: ["arrival-native"], status: "bound" },
   { name: "first", dialects: ["SRFI-1", "Clojure"], status: "bound" },
-  { name: "flatten", dialects: ["LIPS"], status: "bound" },
   { name: "curry", dialects: ["SRFI-235-adjacent"], status: "bound" },
 ];
 

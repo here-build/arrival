@@ -21,9 +21,8 @@
 // still-permissive runtime behavior where relevant. This file's assertions focus on the
 // SUBSET of fixes that gained a genuine zod REFINEMENT (instanceof / Array.isArray /
 // fixed-arity) and therefore reject a wrongly-shaped value the old `z.unknown()` accepted:
-// make-list's output (now z.pair|z.nil), nth's index (now z.schemeNumber), list->array's
-// output (now z.array(z.value) — Array.isArray refinement), tree->array's output (now
-// z.array(...) too), and flatten's output (now a z.pair|z.nil|z.array(z.unknown()) union).
+// make-list's output (now z.pair|z.nil), nth's index (now z.schemeNumber), and list->array's
+// output (now z.array(z.value) — Array.isArray refinement).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
@@ -90,25 +89,6 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(false); // a Pair is not an array, was true before
   });
 
-  it("tree->array: output is now z.array(...) (NestedArray element schema) — a non-array used to slip through the old z.unknown()", () => {
-    const def = nativeDef("tree->array");
-    // The contract's z.array(z.array(z.value)) is a 2-LEVEL approximation of the recursive
-    // NestedArray truth (the impl's own doc comment: "known gap") — every OUTER element must
-    // itself be an array, so a mixed scalar+array outer level (the real shape `tree->array`
-    // can actually produce for `(1 (2 3))`) falls outside what this approximation accepts;
-    // probe with a shape the approximation itself covers.
-    expect(def.out.safeParse([[[exact(1)], [exact(2), exact(3)]]]).success).toBe(true);
-    expect(def.out.safeParse(["not-an-array"]).success).toBe(false); // was true before the fix
-  });
-
-  it("flatten: output is now z.union([z.pair, z.nil, z.array(z.unknown())]) — a bare scalar used to slip through the old z.unknown()", () => {
-    const def = nativeDef("flatten");
-    expect(def.out.safeParse([properList(1, 2, 3)]).success).toBe(true);
-    expect(def.out.safeParse([nil]).success).toBe(true);
-    expect(def.out.safeParse([[exact(1), exact(2)]]).success).toBe(true); // `.flatten()`'s unknown[] arm
-    expect(def.out.safeParse(["not-a-list-or-array"]).success).toBe(false); // was true before the fix
-    expect(def.out.safeParse([42]).success).toBe(false); // was true before the fix
-  });
 });
 
 describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries no refinement; documented, not runtime-provable — see lists.test-d.ts for the real proof)", () => {
@@ -197,16 +177,16 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
     expect(def.out.safeParse([exact(2)]).success).toBe(true);
   });
 
-  it("append/reverse/array->list: untouched — already at their honest precision ceiling (append/list are legitimately fully-variadic-over-SchemeValue; nth's array branch and array->list's borrowed-array input are genuinely representation-blind LIPS polymorphism; reverse's own impl has NO array branch — pair|nil only)", () => {
+  it("append/reverse: untouched — already at their honest precision ceiling (append/list are legitimately fully-variadic-over-SchemeValue; reverse's own impl has NO array branch — pair|nil only)", () => {
     // NOTE: no bound scheme symbol named `clone` exists in this pack — `.clone()` is an
     // internal APair JS method, not an exported op (`list-copy`, tested separately above, is
     // the exported R7RS freshness-copy operation this describe block's title once conflated it with).
     expect(nativeDef("append").in.safeParse([properList(1), properList(2)]).success).toBe(true);
     // reverse's impl only handles ANil/APair (a final `else` throws) — a raw array is genuinely
-    // rejected, unlike nth/array->list's real LIPS array-or-pair polymorphism below.
+    // rejected (array->list, the LIPS array-or-pair polymorphism this once contrasted with, is
+    // dissolved — no longer bound in this pack).
     expect(nativeDef("reverse").in.safeParse([[1, 2, 3]]).success).toBe(false);
     expect(nativeDef("reverse").in.safeParse([properList(1, 2, 3)]).success).toBe(true);
-    expect(nativeDef("array->list").in.safeParse([[1, 2, 3]]).success).toBe(true); // borrowed raw array
   });
 
   it("apply / for-each: already migrated to inputRest this session — untouched, glanced at only as the migration's own reference examples", () => {
@@ -256,8 +236,8 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
     expect(stragglers.sort()).toEqual(["append", "list"]);
   });
 
-  it("sanity: the pack exports exactly 27 symbols (the scope this review must cover)", () => {
-    expect(Object.keys(symbols)).toHaveLength(27);
+  it("sanity: the pack exports exactly 23 symbols (the scope this review must cover)", () => {
+    expect(Object.keys(symbols)).toHaveLength(23);
   });
 });
 
@@ -298,13 +278,13 @@ describe("scheme/lists Contract precision — behavior spot-checks: is_pair-shad
 });
 
 describe("scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type \"custom\" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)", () => {
-  // These five ops carry a z.custom<callable>() in their contract (map/for-each's fn head,
-  // member/assoc's optional compare, tree->array's NestedArray output). The printer degrades
-  // each to the bare `(...args: unknown[]) => unknown`, throwing away the fn-first structure,
-  // the list receiver type, the void/`unknown | false` return, and (tree->array) the array
-  // output + arity. `Contract.type` author-asserts the real shape — same trust model + same
-  // this-session convention as the sibling srfi-1 `find` / srfi-95 `sort` overrides (a callable
-  // renders as `(...args: unknown[]) => unknown`; a representation-AGNOSTIC receiver stays
+  // These ops carry a z.custom<callable>() in their contract (map/for-each's fn head,
+  // member/assoc's optional compare). The printer degrades each to the bare
+  // `(...args: unknown[]) => unknown`, throwing away the fn-first structure, the list
+  // receiver type, and the void/`unknown | false` return. `Contract.type` author-asserts
+  // the real shape — same trust model + same this-session convention as the sibling
+  // srfi-1 `find` / srfi-95 `sort` overrides (a callable renders as
+  // `(...args: unknown[]) => unknown`; a representation-AGNOSTIC receiver stays
   // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
   // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
   // null`, the same image the file's own non-degraded list ops harvest as).
@@ -325,8 +305,5 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
     expect(signatureOf(nativeDef("assoc"))).toBe(
       "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
     );
-  });
-  it("tree->array: single tree arg → a nested JS array (the z.array(z.custom<NestedArray>()) output was unrepresentable, degrading arity + output)", () => {
-    expect(signatureOf(nativeDef("tree->array"))).toBe("(tree: unknown) => unknown[]");
   });
 });
