@@ -115,7 +115,7 @@ describe("getTypeValidCandidates — kebab/operator-named callees narrow", () =>
 // object. Every existing axis (candidates / arrayKind / elementType) then narrows the value for free.
 describe("kwargs / object-value slots narrow to the property type", () => {
   const userTool = symbol.rosetta`create_user: make a user`(
-    { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+    { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
     () => "",
   );
   const kw = createQueryLens(assembleHarvestedPrelude([["create_user", userTool], ["sum_readings", sumReadings]]));

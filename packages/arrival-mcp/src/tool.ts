@@ -24,7 +24,8 @@ export const tool = (tpl: TemplateStringsArray, ...sub: (string | number)[]) => 
 
     return symbol.rosetta`${name}: ${doc}`(
       {
-        input: hasArgs ? sz.kwargs(shape) : sz.kwargs({}),
+        input: [],
+        inputRest: hasArgs ? shape : {},
         output: [sz.value],
       },
       (argsObj: any) => impl(argsObj),

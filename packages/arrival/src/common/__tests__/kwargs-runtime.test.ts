@@ -40,7 +40,7 @@ function pluck(key: string): unknown {
 describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)", () => {
   it("decodes interleaved :key/value pairs into ONE constructed object arg", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
-      { input: z.kwargs({ a: z.string, b: z.number.optional() }), output: [z.string] },
+      { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
     const out = await def.run(pluck("a"), new AString(CONSTANT_CTX, "Ada"), pluck("b"), new AExact(CONSTANT_CTX, 5n));
@@ -49,7 +49,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
 
   it("keyword ORDER is independent of the shape's declared order", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
-      { input: z.kwargs({ a: z.string, b: z.number.optional() }), output: [z.string] },
+      { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
     const out = await def.run(pluck("b"), new AExact(CONSTANT_CTX, 5n), pluck("a"), new AString(CONSTANT_CTX, "Ada"));
@@ -64,7 +64,7 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
   beforeAll(async () => {
     env = await freshEnv();
     const greet = symbol.rosetta`greet: kwargs greeting`(
-      { input: z.kwargs({ a: z.string, b: z.number.optional() }), output: [z.string] },
+      { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
     env.set("kw-greet", greet.run);

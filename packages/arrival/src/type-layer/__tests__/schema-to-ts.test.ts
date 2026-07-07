@@ -190,7 +190,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
 
   it("composes a kwargs (object) input as a plain object param (the model fills it as :key value)", () => {
     const def = symbol.rosetta`create_user: make a user`(
-      { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+      { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
       () => "",
     );
     expect(signatureOf(def)).toBe(

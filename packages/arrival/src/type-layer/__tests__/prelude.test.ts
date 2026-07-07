@@ -68,7 +68,7 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
   it("a kwargs tool: a valid `:key value` call type-checks; a bad value / missing required prop bites", () => {
     // create_user takes a kwargs object: required name:string + optional mode:"fast"|"scenic".
     const createUser = symbol.rosetta`create_user: make a user`(
-      { input: z.kwargs({ name: z.string, mode: z.enum(["fast", "scenic"]).optional() }), output: [z.string] },
+      { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
       () => "",
     );
     const { prelude } = assembleHarvestedPrelude([["create_user", createUser]]);
