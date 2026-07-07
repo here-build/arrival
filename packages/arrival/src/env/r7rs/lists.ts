@@ -1,28 +1,16 @@
 /**
- * List ops — the R7RS § 6.4 pairs-and-lists cluster (the list constructors,
- * accessors, mutators, copy, and the search functions: memq/memv/assq/assv/
- * member/assoc), carved
- * VERBATIM out of \`wrappedOps\` in \`../bridge.ts\`. These are behavior-preserving
- * copies of the interpreter's hot-path list builtins; the implementations —
- * including their inline comments — are otherwise identical to the source. The
- * only change from the bridge originals is that cross-cutting helpers come
- * from their own leaf modules rather than being referenced as bridge locals:
- * \`withInputProvenance\` from \`../op-helpers.js\`; \`eqv\` (the canonical R7RS
- * \`eqv?\`, shared by \`eq?\`) and \`structuralEqual\` from \`../structural-equal.js\`;
- * the value-type classes (\`Pair\`/\`isCircularList\`, \`Nil\`/\`nil\`) from their own
- * leaf modules; and \`is_false\` from \`../guards.js\`. \`TypeError\`
- * carries its \`.invariant\` assertion via the side-effect import below. The
- * c[ad]+r accessor family is intentionally NOT declared here — those are served
- * by a resolver, not by \`wrappedOps\`.
+ * List ops — the R7RS § 6.4 pairs-and-lists cluster: constructors, accessors,
+ * mutators (doored), copy, and the search functions (memq/memv/assq/assv/
+ * member/assoc). The c[ad]+r accessor family is intentionally NOT declared here
+ * — those are served by a resolver, not this pack.
  *
- * MIGRATED to the \`symbol.native\` API: each op declares a SCHEME-IDENTITY zod
- * contract (no codec, no validation — "zod for types purely") and an impl bound
- * raw exactly as the old \`{ value }\` form. List args are typed \`Pair | Nil\` (the
- * proper-list domain; the defensive improper-list passthrough is robustness, not
- * the declared domain), indices are the \`schemeNumber\` tower, the searched object
- * and copied/returned cells are representation-blind (\`z.value\`), and the
- * optional user comparator is the types-only \`z.custom\` binary predicate. Bodies
- * are reproduced byte-for-byte.
+ * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
+ * validation — "zod for types purely") and an impl bound raw. List args are
+ * typed `Pair | Nil` (the proper-list domain; the defensive improper-list
+ * passthrough is robustness, not the declared domain), indices are the
+ * `schemeNumber` tower, the searched object and copied/returned cells are
+ * representation-blind (`z.value`), and the optional user comparator is the
+ * types-only `z.custom` binary predicate.
  */
 
 // Installs the global \`TypeError.invariant\` assertion helper used by the
@@ -72,10 +60,8 @@ function to_array(name: string): (list: APair<any, any> | ANil) => SchemeValue[]
       return [];
     }
     invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    // Heap meter off the OPERAND's ctx (the run-built list carries the run's RunContext;
-    // a quoted-literal carries CONSTANT_CTX → no meter, and is parse-bounded anyway). The
-    // designed operand-ctx read (RunContext.ts §what-lives-here), replacing the retired
-    // `currentRunEnv()` env back-channel.
+    // Heap meter off the OPERAND's ctx: a run-built list carries the run's RunContext;
+    // a quoted literal carries CONSTANT_CTX → no meter (and is parse-bounded anyway).
     const meter = ctxOf(list).heapMeter;
     const result: SchemeValue[] = [];
     let node: unknown = list;
@@ -119,25 +105,21 @@ function isProperList(obj: SchemeValue): boolean {
 
 // `length` carries the Tier-2 speculation marker: the evaluator's dispatch choke
 // leaves a still-filling collection's HalfBaked UNFORCED for ops whose impl has
-// [SPECULATE]=true, so length reads the lazy cardinality interval itself instead of a
-// settled value (see evaluator.ts dispatch). Relocated VERBATIM from stdlib.ts
-// global_env, where the `speculative()` helper set the same symbol on the bound fn.
+// [SPECULATE]=true, so length reads the lazy cardinality interval itself instead
+// of a settled value (see evaluator.ts dispatch).
 const lengthImpl = (obj: unknown): SchemeValue => {
-  // R7RS length is an exact integer. The relocated body returned raw JS numbers (the
-  // membrane boxed them downstream); box to AExact here so the value IS a SchemeValue,
-  // matching the string-length sibling (`new AExact(ctx, BigInt(...))`).
+  // R7RS length is an exact integer — box to AExact, matching string-length.
   if (obj == null) return new AExact(CONSTANT_CTX, 0n);
-  // Tier 2 speculation: length of a still-filling collection is its narrowing cardinality INTERVAL,
-  // surfaced as a number-domain HalfBaked the comparison ops read for early collapse (reached only
-  // when speculation is on — the choke leaves a HalfBaked unforced solely for this marked op).
+  // Tier 2 speculation: length of a still-filling collection is its narrowing
+  // cardinality INTERVAL, surfaced as a number-domain HalfBaked the comparison ops
+  // read for early collapse (reached only when speculation is on).
   if (is_half_baked(obj)) {
     return obj.toCardinalityNumber();
   }
-  // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count carrying
-  // the ELEMENTS' unioned provenance (the element-union DISSOLVED from fl-interop's length overlay
-  // onto each term; the term also levies the circular-list check). TOTALIC: a receiver with no
-  // length algebra is a type error, never a silent 0. A non-term carrier with a bare `.length`
-  // (a membrane-wrapped JS array) falls back to that property.
+  // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count
+  // carries the ELEMENTS' unioned provenance and levies the circular-list check. TOTALIC:
+  // a receiver with no length algebra is a type error, never a silent 0. A non-term
+  // carrier with a bare `.length` (a membrane-wrapped JS array) falls back to that property.
   const m = (obj as Record<string, unknown>)[tf("length")];
   if (typeof m === "function") {
     return (m as () => SchemeValue).call(obj);
@@ -150,11 +132,10 @@ const lengthImpl = (obj: unknown): SchemeValue => {
 };
 (lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
 
-// Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements across the lists,
-// truncating to the shortest. PACK-LOCAL — uses lists.ts's own listToArray + call_function, so §6.10
-// map carries NO global_env capture (the lazy builtinMap grab fl-interop needed is gone). Speculation
-// rides here too (cardBounds [1,1], the count is exact up front), carrying early-collapse through a
-// multi-list map.
+// Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements
+// across the lists, truncating to the shortest. Speculation rides here too
+// (cardBounds [1,1], the count is exact up front), carrying early-collapse through
+// a multi-list map.
 function multiListMap(
   fn: AProcedure,
   lists: readonly (APair<any, any> | ANil)[],
@@ -186,12 +167,10 @@ function multiListMap(
 }
 
 // `mapImpl` — the parallel zip-map that `for-each` runs for its side effects (it
-// discards the result list). Relocated VERBATIM from stdlib.ts (husk dissolution),
-// over this pack's own listToArray/isProperList. It overlaps `multiListMap` above
-// but is kept separate to preserve byte-identical behavior: mapImpl's per-arg
-// `isProperList` cycle-check raises "map: argument N is not a list", whereas
-// multiListMap lets listToArray raise its own circular-list error. Unifying the
-// two is a deferred behavior-preserving cleanup.
+// discards the result list). Overlaps `multiListMap` above but is kept separate:
+// mapImpl's per-arg `isProperList` cycle-check raises "map: argument N is not a
+// list", whereas multiListMap lets listToArray raise its own circular-list error.
+// Unifying the two is a deferred behavior-preserving cleanup.
 function mapImpl(fn: SchemeValue, ...lists: Array<APair<any, any> | ANil>): SchemeValue | Promise<SchemeValue> {
   // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
   // as a type-level assertion so `call_function` sees the JS-callable it needs.
@@ -240,26 +219,20 @@ export default new EnvCapability("scheme/lists", {
     // map (Pair preserves boxes + speculates [1,1]; Vector strips boxes, eager) — the term owns the
     // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
     map: symbol.sequence`map: fn over one list (its own term map — box discipline + speculation) or a zip over several`(
-      // fn is the fixed HEAD, the further lists/vectors are the variadic TAIL — `symbol.sequence`'s
-      // own factory type is `Contract<I, O>` (no `Rest` generic — see sequence.ts/_bake.ts's
-      // SequenceInput), so a hand-authored `z.tuple(fixed, rest)` is the only available shape
-      // (matches this exact file's own doc precedent, and srfi-1.ts's filter). The head uses the
-      // established callable-schema convention (z.custom<(...args) => SchemeValue>(), matching
-      // vector-map's OWN choice for a data-producing HOF — its mapped result becomes output
-      // elements, unlike a truthiness-only predicate like filter's, which uses `=> unknown`). The
-      // rest is z.value, not z.union([z.pair, z.nil]): a further "list" argument here is actually
-      // ANY sequence answering arrival/tagless-final/map (Pair, Nil, OR Vector — see the impl's own
-      // single-list dispatch), so z.union([pair,nil]) would wrongly exclude the vector case; z.value
-      // is the honest ceiling (matches vector-map's own choice of NOT over-narrowing its rest either).
-      // Output is z.value: both dispatch paths (the tf("map") protocol member, and multiListMap)
-      // declare SchemeValue | Promise<SchemeValue> — never a raw-primitive leak (unlike length's
-      // arrival/tagless-final/length, which honestly admits `AValue | number`).
+      // fn is the fixed HEAD; the further lists/vectors are the variadic TAIL —
+      // `symbol.sequence`'s factory type has no Rest generic, so a hand-authored
+      // z.tuple(fixed, rest) is the only available shape (matches srfi-1.ts's filter).
+      // The rest is z.value, NOT z.union([z.pair, z.nil]): a further "list" argument here
+      // is any sequence answering arrival/tagless-final/map (Pair, Nil, OR Vector — see
+      // the impl's single-list dispatch below), so a pair|nil union would wrongly exclude
+      // the vector case. Output is z.value: both dispatch paths (the tf("map") protocol
+      // member, and multiListMap) declare SchemeValue | Promise<SchemeValue>, never a
+      // raw-primitive leak.
       // The z.custom callable head is UNREPRESENTABLE to the harvest printer, collapsing
-      // signatureOf to the catch-all `(...args: unknown[]) => unknown`. `type` author-asserts
-      // the real shape: fn-first, then a REPRESENTATION-AGNOSTIC sequence rest. Like srfi-95
-      // `sort` (and unlike list-only `find`/`for-each`), map dispatches to Pair/Nil/Vector
-      // terms — so the receiver + return stay `unknown`; narrowing to a List would be FALSE
-      // (it would exclude the vector case, exactly the z.value-not-z.union reasoning above).
+      // signatureOf to the catch-all `(...args: unknown[]) => unknown`. `type` author-
+      // asserts the real shape: fn-first over a REPRESENTATION-AGNOSTIC sequence rest —
+      // map dispatches to Pair/Nil/Vector terms, so narrowing the rest to a List would be
+      // false (it would exclude the vector case).
       {
         input: z.tuple([z.lambda], z.value),
         output: [z.value],
@@ -288,42 +261,21 @@ export default new EnvCapability("scheme/lists", {
     // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
     "for-each": symbol.native`for-each: apply fn to corresponding elements of one or more lists, for side effects`(
       // fn is the fixed HEAD (`input`); the spread lists are the variadic TAIL (`inputRest`) —
-      // mirrors apply's own head/rest split. The head uses the callable-schema convention
-      // established by vector-map/vector-for-each/curry/call-with-values/member's compare
-      // (z.custom<(...args) => T>()), not apply's plain z.value — apply's own doc comment
-      // frames that as illustrating the split mechanism, not a "callables are z.value" rule.
-      // Each rest element is genuinely a proper list (typecheck'd below as "pair"|"nil"), so
-      // inputRest is z.union([z.pair, z.nil]) — the same "this is a list" schema this file
-      // already uses elsewhere (list-tail/list-ref/memq/…), not the representation-blind
-      // z.value. Output is UNSPECIFIED (R7RS §6.4), not a returned value — z.undefinedResult, matching
-      // the convention string-for-each/vector-for-each already use.
+      // mirrors apply's own head/rest split, using the callable-schema convention
+      // (z.custom<(...args) => T>()) established by vector-map/vector-for-each/curry. Each
+      // rest element is genuinely a proper list (typecheck'd below), so inputRest is
+      // z.union([z.pair, z.nil]) — NOT map's agnostic z.value, since for-each is list-only.
+      // Output is UNSPECIFIED (R7RS §6.4) — z.undefinedResult, matching string-for-each/
+      // vector-for-each.
       {
         input: [z.lambda],
         inputRest: z.union([z.pair, z.nil]),
         output: [z.undefinedResult],
-        // The z.custom callable head collapses signatureOf to the catch-all `(...args:
-        // unknown[]) => unknown`. `type` author-asserts fn-first over a LIST-ONLY rest (its
-        // schema IS z.union([pair,nil]), unlike map's agnostic z.value → so `Cons<unknown> |
-        // null`, the image this file's own non-degraded list ops harvest as) → `void` (R7RS
-        // unspecified; bare `void` as in env/core/core.ts's own hand-written type).
+        // The z.custom callable head collapses signatureOf to the catch-all. `type`
+        // author-asserts fn-first over a list-only rest (`Cons<unknown> | null`) → `void`.
         type: "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
       },
-      // Relocated from stdlib.ts global_env (husk dissolution): runs mapImpl for its
-      // side effects and discards the result list. The legacy `.call(this)` was a
-      // babel-weakBind workaround — this pack is tsc/ES2022, so a direct call is
-      // behavior-identical (mapImpl never reads `this`).
-      //
-      // Return: `void | Promise<void>`, matching the now-precise `z.undefinedResult` output (fixed
-      // alongside the head/rest input above). Previously this impl explicitly constructed
-      // `theVoid` (an AVoid instance) because the OLD contract declared `output: [z.value]`
-      // (a SchemeValue return demanded an actual scheme value). `z.undefinedResult`'s decoded type is
-      // the bare TS `void` — which only a literal `undefined` satisfies — so the impl now
-      // returns bare `undefined` instead, exactly mirroring vector-for-each/string-for-each's
-      // OWN established idiom (both already fall through to implicit `undefined` on the
-      // sync path and `.then(() => undefined)` on the async path). This is NOT an
-      // observable behavior change: the interpreter's dispatch already boxes a native impl's
-      // raw `undefined` return into the scheme `theVoid` value for the caller (this is the
-      // SAME boxing vector-for-each's sync path already relies on today, unmodified).
+      // Runs mapImpl for its side effects and discards the result list.
       (fn, ...lists) => {
         const ret = mapImpl(fn, ...lists);
         // R7RS "unspecified" is theVoid on the scheme face (Face split; the bare JS
@@ -336,20 +288,17 @@ export default new EnvCapability("scheme/lists", {
     ),
     // R7RS 6.4 Pairs and lists
     cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
-      // car/cdr are any scheme value — the whole point of cons is to hold arbitrary scheme
-      // values, so z.value (SchemeValue identity) replaces the old z.value; zero runtime
-      // difference (native ops run no validation; z.value carries no refinement either), a
-      // purely static precision improvement for the .d.ts harvest surface.
+      // car/cdr are any scheme value — the whole point of cons is to hold arbitrary
+      // scheme values, so z.value (SchemeValue identity) is the honest domain.
       { input: [z.value, z.value], output: [z.pair] },
-      // Byte-identical to the stdlib global_env body it relocates: a constructor,
-      // so it unions both inputs' provenance over the produced cell (parallel to
-      // make-list / list, which stamp only the produced Pair).
+      // A constructor: unions both inputs' provenance over the produced cell
+      // (parallel to make-list / list, which stamp only the produced Pair).
       (car, cdr) => withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car as SchemeValue, cdr as SchemeValue)),
     ),
 
-    // R7RS 6.4 — `list` builds a proper list of its arguments. Relocated VERBATIM
-    // from stdlib.ts global_env (husk dissolution): a constructor, so — like cons
-    // and make-list — it unions the inputs' provenance over the produced head only.
+    // R7RS 6.4 — `list` builds a proper list of its arguments. A constructor, so —
+    // like cons and make-list — it unions the inputs' provenance over the produced
+    // head only.
     list: symbol.native`list: a proper list of its arguments`(
       { input: z.array(z.value), output: [z.value] },
       (...args: SchemeValue[]): SchemeValue => {
@@ -361,10 +310,7 @@ export default new EnvCapability("scheme/lists", {
     // ── PURITY DOORS — pair/list mutators OMITTED by design (R7RS §6.4) ──────────
     // arrival values are frozen: a writing method would falsify the construction-site
     // provenance every value carries. These doors (errors-as-doors) teach the why and
-    // route to the fresh-allocation alternative — dissolved here from the deleted
-    // core.ts purity-door manifesto, co-located with the pairs-and-lists pack that owns
-    // the type. (`list-set!` joined the doored set 2026-07-07 — the review this comment
-    // used to flag resolved in favor of the invariant.)
+    // route to the fresh-allocation alternative.
     "set-car!": symbol.notImplemented`set-car!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "set-cdr!": symbol.notImplemented`set-cdr!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "append!": symbol.notImplemented`append!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (append, which builds a fresh list)`,
@@ -401,15 +347,12 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "make-list": symbol.native`make-list: build a list of k copies of fill (default #f)`(
-      // fill is any scheme value (z.value, not z.value) — matches cons's car/cdr reasoning.
-      // Output is now z.union([z.pair, z.nil]) rather than a bare z.value/z.value: make-list
-      // is a CONSTRUCTOR that ALWAYS produces a well-formed proper list (nil when k=0, else a
-      // pair chain) — unlike list-tail/list-copy (which can inherit an improper tail from their
-      // INPUT) or list-ref (which extracts a single element), there is no way for make-list to
-      // return anything outside {pair, nil}. This is also the file's own established "this is a
-      // list" vocabulary (list-tail/list-ref/list-set!/list-copy's inputs already use this exact
-      // union) — and, unlike z.value, z.pair/z.nil carry a REAL instanceof refinement, so this is
-      // genuinely runtime-testable (see lists-contract-precision.test.ts).
+      // fill is any scheme value (z.value) — matches cons's car/cdr reasoning. Output is
+      // z.union([z.pair, z.nil]), not the wider z.value: make-list is a CONSTRUCTOR that
+      // ALWAYS produces a well-formed proper list (nil when k=0, else a pair chain) —
+      // unlike list-tail/list-copy (which can inherit an improper tail from their INPUT) or
+      // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
+      // testable ceiling (see lists-contract-precision.test.ts).
       { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
       (k: unknown, fill?: unknown): APair<any, any> | ANil => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
@@ -427,19 +370,14 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "list-tail": symbol.native`list-tail: the sublist obtained by dropping the first k elements`(
-      // Output is z.value (SchemeValue), not z.value — but NOT narrowed further to
-      // z.union([z.pair, z.nil]): the walked-to position can be an IMPROPER list's dangling
-      // tail (e.g. (list-tail '(1 2 . 3) 2) => 3, a bare number), so z.value is the honest
-      // ceiling, matching list-ref/list-copy's own reasoning below.
+      // Output is z.value, NOT narrowed to z.union([z.pair, z.nil]): the walked-to position
+      // can be an IMPROPER list's dangling tail (e.g. (list-tail '(1 2 . 3) 2) => 3, a bare
+      // number), so z.value is the honest ceiling (matches list-ref/list-copy below).
       { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
       function (list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
-          // `is_pair` (the file-local SchemeValue-narrowing shadow, line ~60) replaces the raw
-          // `current instanceof APair` here — byte-identical runtime check (is_pair_raw IS
-          // `instanceof APair`), but narrows `.cdr` to SchemeValue instead of APair<unknown,
-          // unknown>'s default `unknown`, which the tightened `SchemeValue` return type needs.
           TypeError.invariant(current instanceof APair, `list-tail: list too short`);
           current = current.cdr;
         }
@@ -448,15 +386,13 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     "list-ref": symbol.native`list-ref: the element at index k`(
-      // Output is z.value, not z.value — the element at an index is any scheme value
-      // (e.g. (list-ref '(1 2 3) 0) => 1, a bare number, not a list), so z.value is the
-      // honest ceiling (not a pair|nil union).
+      // Output is z.value: the element at an index is any scheme value (e.g.
+      // (list-ref '(1 2 3) 0) => 1, a bare number, not a list), not a pair|nil union.
       { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
       (list, k) => {
         const count = k.valueOf();
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
-          // is_pair swap — see list-tail's identical note just above.
           TypeError.invariant(current instanceof APair, `list-ref: list too short`);
           current = current.cdr;
         }
@@ -465,35 +401,26 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    // list-set! DOORED (2026-07-07, V's call): it was the last surviving in-place spine
-    // mutator — set!/set-car!/set-cdr!/vector-set!/string-fill! are all doored by the same
-    // purity invariant, and its survival was a LIPS-relocation oversight, not a design
-    // decision. An in-place write falsifies the construction-site provenance the spine carries.
+    // list-set! is doored: the last surviving in-place spine mutator (set!/set-car!/
+    // set-cdr!/vector-set!/string-fill! are all doored by the same purity invariant) —
+    // an in-place write falsifies the construction-site provenance the spine carries.
     "list-set!": symbol.notImplemented`list-set!: every value is frozen by design — mutating a list in place would falsify the provenance lineage its spine carries; build the updated list instead (e.g. (append (list-head lst k) (list obj) (list-tail lst (+ k 1))))`,
 
     "list-copy": symbol.native`list-copy: a fresh copy of the list spine (R7RS freshness)`(
-      // Output is z.value, not z.value — like list-tail, list-copy explicitly tolerates an
-      // IMPROPER list (the !(lst instanceof APair) branch below returns the dangling tail
-      // as-is), so the result can be any scheme value, not just a pair|nil.
+      // Output is z.value: like list-tail, list-copy explicitly tolerates an IMPROPER
+      // list (the !(lst instanceof APair) branch below returns the dangling tail as-is).
       { input: [z.union([z.pair, z.nil])], output: [z.value] },
       (list) => {
-        // === nil would miss Nil clones (singletons minted via withProvenance by
-        // the evaluator's control-flow provenance pass). A clone bypassed the
-        // guard, fell to the !(instanceof Pair) improper-list branch on the next
-        // line, and aliased the input by reference — violating R7RS list-copy's
-        // fresh-allocation contract. instanceof Nil keeps the freshness story
-        // intact for both the singleton and any clones.
+        // === nil would miss Nil CLONES (singletons minted via withProvenance by the
+        // evaluator's control-flow provenance pass): a clone would bypass this guard,
+        // fall to the improper-list branch below, and alias the input by reference —
+        // violating list-copy's fresh-allocation contract. instanceof ANil catches both
+        // the singleton and any clones.
         if (list instanceof ANil) return nil;
         if (!(list instanceof APair)) return list;
         TypeError.invariant(!isCircularList(list), "list-copy: circular list");
-        // Deep copy the spine of the list. is_nil/is_pair (the file-local SchemeValue-
-        // narrowing shadow) replace the raw instanceof checks here ONLY (byte-identical
-        // runtime check — is_nil/is_pair ARE instanceof ANil/APair) so .car/.cdr narrow to
-        // SchemeValue instead of APair<unknown,unknown>'s default unknown, letting the
-        // recursive call and the tightened SchemeValue return type both typecheck.
         const copy = (lst: SchemeValue): SchemeValue => {
-          // Same clone-aware check at the recursion base: a Nil clone in the cdr
-          // would otherwise be preserved as an improper-list tail.
+          // Same clone-aware check at the recursion base — see the top-level guard above.
           if (lst instanceof ANil) return nil;
           if (!(lst instanceof APair)) return lst; // improper list tail
           return new APair(CONSTANT_CTX, lst.car, copy(lst.cdr));
@@ -503,22 +430,17 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    // R7RS 6.4 List searching functions
+    // R7RS 6.4 List searching functions.
     //
-    // memq/memv/assq/assv/member/assoc's output — all six — is z.union([z.value, z.booleanFalse]),
-    // not a bare z.value: every one of them returns EITHER a matched sublist/entry (a real
-    // scheme value) OR a raw, unboxed JS `false` sentinel on no-match (relying on the
-    // interpreter's downstream boxing — the SAME established "return false;"/"the membrane
-    // boxes it downstream" pattern used pervasively across this codebase: chars.ts, equality.ts,
-    // numeric.ts, strings.ts, and this file's own isProperList/length). z.value alone would be
-    // DISHONEST here (it would silently exclude the real, intentional false return path);
-    // z.value would be needlessly loose. Neither the z.value arm nor z.booleanFalse block
-    // any REAL call (native ops skip validation regardless) — this is a static/.d.ts-harvest
-    // precision fix documenting the actual two-shape domain.
+    // memq/memv/assq/assv/member/assoc's output — all six — is z.union([z.value,
+    // z.booleanFalse]), not a bare z.value: each returns EITHER a matched sublist/entry
+    // OR a raw, unboxed JS `false` sentinel on no-match (the interpreter boxes it
+    // downstream — the same pattern used pervasively across this codebase). z.value
+    // alone would silently exclude the real false-return path.
     memq: symbol.native`memq: first sublist whose car is eq? to obj, else #f`(
-      // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the CANONICAL
-      // genuinely-representation-blind case scheme-zod.ts's own doc comment names ("a predicate
-      // that classifies host JS too — eq?, bytevector?") — not imprecision to fix.
+      // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the canonical
+      // representation-blind case (scheme-zod.ts's own doc comment: "a predicate that
+      // classifies host JS too — eq?, bytevector?") — not imprecision to fix.
       { input: [z.value], inputRest: z.pair, output: [z.union([z.pair, z.booleanFalse])] },
       (obj, list) => {
         let current: unknown = list;
@@ -577,14 +499,11 @@ export default new EnvCapability("scheme/lists", {
       },
     ),
 
-    // member uses equal? (deep structural equality). obj is z.value (not z.value) —
-    // structuralEqual is a genuine scheme-value compare (matches memv/assv's own obj, unlike
-    // memq/assq's raw === identity, which stays z.value). compare's return type is now
-    // `unknown`, not `boolean`: the body's own is_false guard right below proves the return
-    // is NOT always a raw JS boolean (a user-supplied Scheme predicate returns a boxed
-    // SchemeBool post-L1, a truthy JS object) — `boolean` was an honest-looking but incorrect
-    // annotation; `unknown` matches srfi-1.ts's filter predicate (the established convention
-    // for a scheme-callable whose result is truthiness-tested via is_false, not used as data).
+    // member uses equal? (deep structural equality) — obj is z.value, matching memv/assv
+    // (unlike memq/assq's raw === identity). compare's declared return is `unknown`, not
+    // `boolean`: a user-supplied Scheme predicate returns a boxed SchemeBool post-L1 (a
+    // truthy JS object), so the body routes it through is_false rather than trusting it
+    // as a raw JS boolean.
     member: symbol.native`member: first sublist whose car is equal? to obj (or per compare), else #f`(
       {
         input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
@@ -633,12 +552,10 @@ export default new EnvCapability("scheme/lists", {
     append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
       { input: z.array(z.value), output: [z.value] },
       (...items: SchemeValue[]): SchemeValue => {
-        // `append` builds a FRESH list (pure). It clones every segment first, then
-        // splices the CLONES together via Pair.append. Because every cell touched
-        // is a clone, no caller-visible value is mutated — the result is the only
-        // new thing. (The destructive `append!` builtin this used to delegate to is
-        // OMITTED by the purity invariant — doored above. Its splice
-        // logic is inlined here, operating on clones, so it stays pure.)
+        // `append` builds a FRESH list (pure): it clones every segment first, then splices
+        // the CLONES together. Because every cell touched is a clone, no caller-visible
+        // value is mutated — the result is the only new thing (`append!`, the destructive
+        // sibling, is doored above; this inlines its splice logic over clones instead).
         const is_list = isProperList;
         const cloned = items.map((item) => (item instanceof APair ? item.clone() : item));
         return cloned.reduce((acc, item, idx) => {

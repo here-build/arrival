@@ -1,26 +1,20 @@
 /**
- * Membrane - Typed boundary crossing for Scheme ↔ JS interop
+ * Membrane — typed boundary crossing for Scheme ↔ JS interop.
  *
- * This module provides:
+ * - fromJS/toJS: general JS↔Scheme value crossing. Thin wrappers (cljs-bean style)
+ *   for objects/functions; WeakMap identity cache (Miller/Van Cutsem); primitives
+ *   pass through unwrapped.
+ * - readMember/hasMember/memberKeys: the interop read protocol backing `@`/`@?`/
+ *   `@keys` and the `:key` accessor.
  *
- * 1. WRAPPER LAYER (fromJS/toJS): General JS↔Scheme value crossing
- *    - Thin wrappers (cljs-bean style) for objects/functions
- *    - WeakMap identity cache (Miller/Van Cutsem pattern)
- *    - Primitives pass through without wrapping
- *
- * 2. POLYGLOT MEMBER ACCESS (readMember/hasMember/memberKeys): the interop read
- *    protocol backing `@`/`@?`/`@keys` and the `:key` accessor.
- *
- * (The former CODEC LAYER — the `Codec` family + `Operator`/`OperatorRegistry` FFI
- * marshalling — has been dissolved: the numeric core it served is carved into the
- * `scheme/numeric` pack, bound via `symbol.native`.)
+ * (The former Codec/Operator FFI layer is dissolved; numeric marshalling now lives
+ * in the `scheme/numeric` pack via `symbol.native`.)
  *
  * See docs/membrane-design.md for full design rationale.
  *
- * Lineage: object-capability membranes (Miller, "Robust Composition", 2006; Van
- * Cutsem & Miller, "Trustworthy Proxies — Membranes", 2013). The member-read protocol
- * mirrors GraalVM Truffle's InteropLibrary (Würthinger et al. 2013/2017) — see
- * interop-access.ts.
+ * Lineage: object-capability membranes (Miller 2006; Van Cutsem & Miller 2013).
+ * The member-read protocol mirrors GraalVM Truffle's InteropLibrary (Würthinger
+ * et al. 2013/2017) — see interop-access.ts.
  */
 
 import { CLASS } from "./well-known-symbols.js";
@@ -41,11 +35,8 @@ import { AExact } from "./values/primitives/AExact.js";
 import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
 import { LAMBDA } from "./well-known-symbols.js";
-// `jsToScheme` import is intentionally a runtime cycle with rosetta.ts —
-// rosetta.ts statically imports `SchemeJSObject` from this file. ES module
-// resolution lets the cycle close at definition time (both functions are
-// declared before any call site fires); the lazy `.get` body below only
-// reads `jsToScheme` when actually invoked.
+// Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
+// here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme } from "./rosetta.js";
 import {
   accessHas,
@@ -60,16 +51,14 @@ import { type SchemeValue } from "./values/types.js";
 import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./values/primitives/ACallable.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
-// The JS membrane value-wrappers (AJSObject for borrowed objects, AJSArray for
-// borrowed arrays-as-vectors) live in primitives/ with the rest of the term
-// family. They import fromJS/jsToScheme directly (a benign runtime cycle, both
-// hoisted function declarations) — see AJSArray.ts / AJSObject.ts.
+// AJSObject/AJSArray live in primitives/ with the rest of the term family; they
+// import fromJS/jsToScheme directly (benign cycle, hoisted fn decls) — see
+// AJSArray.ts / AJSObject.ts.
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
 import { ADict } from "./values/primitives/ADict.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 
-// Re-export the interop-access primitives for consumers.
 export {
   INTEROP_BOUNDARY,
   accessMember,
@@ -79,8 +68,8 @@ export {
   markInteropBoundary,
 } from "./interop-access.js";
 export { InteropAccessError } from "./errors.js";
-// Deprecated pre-rename aliases — kept so existing importers (stdlib) keep working
-// through the sandbox→interop migration window; removed once they codemod over.
+// Deprecated pre-rename aliases, kept until stdlib importers codemod off the
+// sandbox→interop naming.
 export {
   accessMember as sandboxedAccess,
   accessHas as sandboxedHas,
@@ -95,27 +84,26 @@ export { InteropAccessError as SandboxViolationError } from "./errors.js";
 // WRAPPER LAYER: General JS↔Scheme Value Crossing
 // ============================================================================
 
-// Protocol key used by wrapper classes to implement unwrapping: `"arrival/toJS"`,
-// a global convention (like `arrival/tagless-final/*`/`arrival/print`) — written
-// as a literal at each use site, not declared, same as those. Any object with
-// this key can be unwrapped via toJS(). Following PyO3's trait pattern - each
-// class implements its own unwrap.
+// Wrapper unwrap protocol key: `"arrival/toJS"`, a global convention (like
+// `arrival/tagless-final/*`/`arrival/print`) written as a literal at each use
+// site, not declared. PyO3-style: each class implements its own unwrap.
 
 /**
- * The closed union `isSchemeValue` PROVES — every wrapper class, native scheme type, special-form
- * head (Macro/Syntax/Keyword), env, promise, and a branded scheme lambda (a `Function` carrying the
- * LAMBDA brand). This is the "already-scheme, don't re-wrap" set: a SUPERSET of the value-intent
- * `SchemeValue` union, because the JS→Scheme boundary legitimately admits CONTROL forms that are
- * never values — Macro/Syntax/LambdaContext/SchemeEnvironment (env bindings, not value-intent) and
- * a bare branded `Function`. Those are why `BoxedSchemeValue` is not assignable to `SchemeValue`,
- * and why the membrane keeps its own boundary type instead of widening the pure value union.
+ * The closed union of "already scheme, don't re-wrap" types: every wrapper class,
+ * native scheme type, special-form head (Macro/Syntax/Keyword), env, promise, and
+ * a branded scheme lambda (a `Function` carrying the LAMBDA brand). A SUPERSET of
+ * the value-intent `SchemeValue` union — the JS→Scheme boundary legitimately
+ * admits CONTROL forms that are never values (Macro/Syntax/LambdaContext/
+ * SchemeEnvironment, a bare branded `Function`). That's why `BoxedSchemeValue`
+ * isn't assignable to `SchemeValue`, and why the membrane keeps its own boundary
+ * type instead of widening the value union.
  */
 export type BoxedSchemeValue =
   | ANil
   | AJSObject
   | AJSArray
   | ADict
-  | APair
+  | APair<any, any>
   | ASymbol
   | AString
   | ABytevector
@@ -134,31 +122,26 @@ export type BoxedSchemeValue =
   | Function;
 
 /**
- * The honest return of `fromJS` — the JS→Scheme boundary. A NAMED, bounded superset of
- * `SchemeValue`: the membrane returns MORE than value-intent at the boundary because some
- * crossings stay as materialization/plumbing rather than boxing into a value —
- *   • `BoxedSchemeValue`        — an already-scheme input passes through un-rewrapped (incl.
- *                                 the control forms / branded Function above);
- *   • `Uint8Array`/`ArrayBuffer`/`DataView` — raw FFI binary stays raw (identity-preserving;
- *                                 membrane.spec "preserves Uint8Array identity"), working with
- *                                 the polymorphic bytevector ops rather than copying into an
- *                                 owned `ABytevector`;
- *   • `Promise<unknown>`        — a raw JS promise stays raw for the evaluator trampoline to await.
- * These carriers are NOT value-intent, so they stay OUT of `SchemeValue` (values/types.ts) — this
- * boundary type is the seam that holds them, exactly the superset principle: `SchemeValue` pure,
- * the boundary wider and named.
+ * The honest return of `fromJS` — a NAMED, bounded superset of `SchemeValue`: the
+ * boundary returns more than value-intent because some crossings stay as
+ * materialization/plumbing rather than boxing into a value:
+ *   • `BoxedSchemeValue` — an already-scheme input passes through un-rewrapped
+ *     (incl. the control forms / branded Function above);
+ *   • `Uint8Array`/`ArrayBuffer`/`DataView` — raw FFI binary stays raw (identity-
+ *     preserving; membrane.spec pins "preserves Uint8Array identity"), for the
+ *     polymorphic bytevector ops rather than an owned `ABytevector` copy;
+ *   • `Promise<unknown>` — stays raw for the evaluator trampoline to await.
+ * These carriers are NOT value-intent, so they stay out of `SchemeValue`
+ * (values/types.ts) — this boundary type is the seam that holds them.
  */
 export type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
 
 /**
  * Check if a value is already a Scheme value (prevents double-wrapping).
  *
- * `instanceof Nil` not `=== nil`: after the AValue refactor, `nil.withProvenance(p)`
- * mints fresh Nil clones (types.ts:87) — reference-equality misses them, and the
- * boundary would then double-wrap a provenance-bearing list-terminator since
- * downstream checks (SchemeString / SchemeJSObject / Pair) won't catch a Nil
- * subclass either. This was the bug flagged in the Tier-1 cross-package audit
- * and the canonical example for guards.ts:is_nil (fix in 5f7f9e46a).
+ * `instanceof ANil`, not `=== nil`: `nil.withProvenance(p)` mints fresh Nil clones,
+ * so reference-equality misses provenance-bearing list terminators and would
+ * double-wrap them.
  */
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
@@ -168,12 +151,9 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     case typeof value !== "object" && typeof value !== "function":
       return false;
 
-    // Wrapper classes first — AJSArray (a borrowed array re-presented as a vector) sits
-    // beside AJSObject; omitting it mis-routes a borrowed array back through fromJS into an
-    // AJSObject wrap (the "any subtype not listed mis-routes" hazard the symmetry test pins).
-    // ADict hit exactly this hazard: omitted here, a native dict crossing a lambda-call
-    // argument bind (which routes through fromJS) got re-boxed into an AJSObject wrapping
-    // the ADict instance instead of passing through untouched.
+    // Every wrapper subtype must be listed here — an omitted one mis-routes back
+    // through fromJS and gets re-boxed as a plain AJSObject instead of passing
+    // through untouched (the hazard the symmetry test pins).
     case value instanceof AJSObject:
     case value instanceof AJSArray:
     case value instanceof ADict:
@@ -201,10 +181,9 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
     case typeof value === "function" && LAMBDA in value:
 
-    // Callable-as-value primitives — ALambda / ANativeProcedure / ARosettaProcedure. They are
-    // AValues, not foreign objects: pass through `set` untouched (without this they'd hit the
-    // `else` fromJS branch and be materialized to an AJSObject dict — the "not callable, a dict
-    // sits in call-head" regression when a native was flipped to ANativeProcedure).
+    // Callable-as-value primitives — ALambda/ANativeProcedure/ARosettaProcedure are
+    // AValues, not foreign objects: pass through untouched, else they'd fall to the
+    // fromJS `else` branch and materialize as an uncallable AJSObject dict.
     case value instanceof ALambda:
     case value instanceof ANativeProcedure:
     case value instanceof ARosettaProcedure:
@@ -232,44 +211,34 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
 }
 
 /**
- * WeakMap cache ensuring same JS object always produces same wrapper. Holds exactly the two
- * borrowed-value wrappers the boundary mints (a JS array → AJSArray, a plain object → AJSObject) —
- * typed to that pair so the cached read returns a `FromJSResult` member honestly, no cast.
+ * WeakMap cache: same JS object always → same wrapper (AJSArray for arrays,
+ * AJSObject for plain objects). Typed to that pair so the cached read returns a
+ * `FromJSResult` member honestly, no cast.
  */
 const jsToWrapper = new WeakMap<object, AJSArray | AJSObject>();
 
 // ============================================================================
 // SANDBOX BOUNDARIES — SchemeJSObject, SchemeJSFunction
 // ============================================================================
-// War story (2026-05-28 audit): these two wrappers are explicitly the
-// JS↔Scheme membrane — every JS value crossing into the sandbox becomes one
-// of them. Their own `get/set/has/delete/keys` already route through
-// `accessMember` for the WRAPPED value, but the WRAPPER's prototype
-// itself is reachable via symbol-to-field auto-resolution. Without a boundary
-// marker, sandbox code could read the wrapper's `apply`, `call`, or
-// `toString` to reach the underlying `source` Function or Object. (`apply`
-// taking the wrapped source and running it with sandbox-controlled args is
-// the canonical escape shape.) Marking the wrapper classes ensures the
-// prototype chain stops here — only own sandbox-safe properties on the
-// wrapped value flow through.
+// Every JS value crossing into the sandbox becomes one of these wrappers. Their
+// own get/set/has/delete/keys route through accessMember for the WRAPPED value,
+// but the WRAPPER's own prototype is still reachable via symbol-to-field
+// auto-resolution — without a boundary marker, sandbox code could read the
+// wrapper's `apply`/`call`/`toString` to reach the underlying `source` Function
+// or Object (running the source with sandbox-controlled args via `apply` is the
+// escape shape). Marking the wrapper classes stops the prototype walk here —
+// only own sandbox-safe properties on the wrapped value flow through.
 // ============================================================================
-/**
- * Convert a JavaScript value to a Scheme value.
- * Entry point for JS → Scheme boundary crossing.
- */
+/** Entry point for JS → Scheme boundary crossing. */
 export function fromJS(value: unknown): FromJSResult {
-  // Already a Scheme value? Pass through (prevents double-wrapping).
+  // Already scheme — no wrap.
   if (isSchemeValue(value)) return value;
 
-  // CONTAINERS keep their membrane-specific handling. An array becomes a borrowed AJSArray vector
-  // (the Array.isArray branch below — a JS array IS an R7RS vector); binary stays raw (FFI identity
-  // — membrane.spec.ts pins "preserves Uint8Array identity"); Promises stay raw (the evaluator
-  // trampoline awaits them); a plain object becomes a lazy AJSObject whose fields materialize
-  // faithfully on access.
+  // Containers get membrane-specific handling: array → borrowed AJSArray vector (JS array IS an
+  // R7RS vector); binary stays raw (FFI identity, membrane.spec pins it); Promise stays raw (the
+  // evaluator trampoline awaits it); plain object → lazy AJSObject materializing fields on access.
   if (Array.isArray(value)) {
-    // A JS array IS an R7RS vector → a borrowed AJSArray (lazy view; keeps `.source` so the
-    // round-trip back out preserves identity). Cached so the same JS array → the same wrapper
-    // (`eq?` stability), matching the AJSObject path below.
+    // Cached so the same JS array → same wrapper (`eq?` stability).
     const cached = jsToWrapper.get(value);
     if (cached) return cached;
     const wrapper: AJSArray = new AJSArray(CONSTANT_CTX, value);
@@ -286,68 +255,50 @@ export function fromJS(value: unknown): FromJSResult {
     return wrapper;
   }
 
-  // LEAVES — null/undefined/boolean/number/string/bigint/symbol/function — go through the SINGLE
-  // faithful materialization (jsToScheme): primitives box (no raw leak), null→nil, undefined/
-  // function/unique-symbol→#void+warn, Symbol.for→:keyword. Generalized rosetta behavior — a
-  // borrowed JS function is no longer a callable AJSFunction (it is not portable; it is #void).
+  // Leaves go through jsToScheme: primitives box, null→nil, undefined/function/unique-symbol→
+  // #void+warn, Symbol.for→:keyword. A borrowed JS function is #void, not callable — not portable.
   return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE);
 }
 
-/**
- * Convert a Scheme value to a JavaScript value.
- * Exit point for Scheme → JS boundary crossing.
- */
+/** Exit point for Scheme → JS boundary crossing. */
 export function toJS(value: unknown): unknown {
-  // Check for wrapper protocol first
   if (value && typeof value === "object" && "arrival/toJS" in value) {
     return (value as Record<string, () => unknown>)["arrival/toJS"]!();
   }
 
-  // nil → null
-  // `instanceof Nil`: see isSchemeValue above — provenance-bearing Nil clones must
-  // also project to JS null at the boundary, otherwise they leak into the JS caller
-  // as opaque Scheme objects.
+  // nil → null. `instanceof ANil` (see isSchemeValue above) — provenance-bearing
+  // Nil clones must project to JS null too, or they'd leak as opaque objects.
   if (value instanceof ANil) return null;
 
-  // Native Scheme types with valueOf
+  // Native Scheme types unwrap via valueOf().
   if (value instanceof AString) return value.valueOf();
   if (value instanceof ACharacter) return value.valueOf();
   if (value instanceof AExact) return value.valueOf();
   if (value instanceof AInexact) return value.valueOf();
 
-  // SchemeSymbol stays as-is (JS can call .toString() if needed)
-  // Pair stays as-is (JS can work with car/cdr)
-
-  // Everything else passes through
+  // ASymbol/APair pass through as-is (JS can call .toString() / work with car-cdr).
   return value;
 }
 
-// (The "object" boxer — array→AJSArray / plain-object→AJSObject — and the "function" boxer
-// — function→#void+warn — moved into fromJs's direct switch when the boxer registry dissolved.)
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Polyglot member access — the interop read protocol (Graal `InteropLibrary`).
+// Polyglot member access — the interop read protocol (Graal InteropLibrary).
 //
 // arrival is a polyglot runtime, not a host with a fenced guest: a value is a
-// value whichever language minted it. `readMember`/`hasMember`/`memberKeys` are
-// the uniform `readMember`/`hasMember`/`getMembers` over any polyglot value —
-// a native dict (a plain record of members), a membrane-exposed foreign value
-// (`SchemeJSObject`, carrying provenance), or an array. Origin-agnostic by
-// design: the rules below define what counts as a *readable member*, not a host
-// defense. These back the `@`/`@?`/`@keys` surface (polyglot pack) and the
-// `:key` keyword accessor — one protocol, two syntaxes.
+// value whichever language minted it. readMember/hasMember/memberKeys are
+// origin-agnostic — they define what counts as a *readable member*, not a host
+// defense. Back the `@`/`@?`/`@keys` surface and the `:key` accessor — one
+// protocol, two syntaxes.
 //
-//   • meta-members (`constructor`/`__proto__`/`prototype`, blocked inside
-//     `accessMember`) and anything marked `@arrival.private` are not members of
-//     the interop value — reading them yields nil, same as Graal hides a value's
-//     meta-object from a peer language. (Privacy is `@arrival.private`'s job; there
-//     is no `_`-prefix convention — a leading underscore is an ordinary member.)
-//   • ONLY two kinds expose members: a foreign value (lazy proxy) routes through its
-//     `SchemeJSObject.get` (provenance-cached), and a native dict (a plain record)
-//     reads structurally. A scheme LEAF value (string / number / symbol / nil / pair),
-//     a primitive, or a function is not a record — it has no members, so reading one
-//     yields nil (never the AValue's internal `provenance`/`kind`). The dispatch
-//     differs by value kind; the access logic is one.
+//   • meta-members (constructor/__proto__/prototype, blocked in accessMember)
+//     and anything marked `@arrival.private` are not members — reading yields
+//     nil, same as Graal hides a value's meta-object from a peer language.
+//     (Privacy is `@arrival.private`'s job; a leading `_` is an ordinary
+//     member, no convention.)
+//   • only two kinds expose members: a foreign value routes through its
+//     `SchemeJSObject.get` (provenance-cached); a native dict reads
+//     structurally. A scheme LEAF value (string/number/symbol/nil/pair), a
+//     primitive, or a function has no members — reading one yields nil, never
+//     the AValue's internal provenance/kind.
 
 /** `readMember(obj, key)` — read a member off any polyglot value. Missing/blocked → nil. */
 export function readMember(obj: unknown, key: unknown): SchemeValue {
@@ -364,28 +315,26 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
   if (obj instanceof ADict) return obj.get(keyStr);
   try {
     const source = obj instanceof AJSArray ? obj.source : obj;
-    // Only a native dict (a plain record) or an array exposes members. A scheme
-    // leaf value (string / number / symbol / nil / pair — a class instance), a
-    // primitive, or a function is NOT a record: it has no members, and reading
-    // one would expose interpreter internals (an AValue's `provenance`/`kind` are
-    // OWN fields, which the boundary's prototype-walk guard does not stop). nil.
+    // Only a dict or array exposes members; a scheme leaf/primitive/function has
+    // none — reading one would leak an AValue's own `provenance`/`kind` fields
+    // (the boundary's prototype-walk guard doesn't stop own-field reads).
     if (!Array.isArray(source)) {
       const proto = typeof source === "object" && source !== null ? Object.getPrototypeOf(source) : false;
       if (proto !== Object.prototype && proto !== null) return nil;
     }
     const result = accessMember(source, keyStr);
     if (result === NOT_FOUND) return nil;
-    // ctx-threading rough edge (readMember is ctx-free): derive the run ctx from the
-    // container being read; a non-AValue container (a native dict) falls back to CONSTANT_CTX.
+    // readMember is ctx-free; derive ctx from the container (native dict falls
+    // back to CONSTANT_CTX).
     const ctx = obj instanceof AValue ? obj.ctx : CONSTANT_CTX;
     // re-present a JS array as a polyglot array so car/cdr work on the result.
     if (Array.isArray(result)) {
       return new AJSArray(ctx, result);
     }
-    // A member read is a VALUE read (contract: SchemeValue, like the delegated AJSObject.get
-    // above) — box through the faithful `jsToScheme` value path, not `fromJS` (whose wider
-    // boundary return carries raw FFI/control plumbing). `jsToScheme` is typed `any` (rosetta
-    // legacy debt); annotate to the honest union so the `SchemeValue` return needs no cast.
+    // A member read is a VALUE read — box via jsToScheme (faithful value path), not
+    // fromJS (whose wider boundary return carries raw FFI/control plumbing).
+    // jsToScheme is typed `any` (rosetta debt); annotate to the honest union so
+    // this needs no cast.
     const boxed: SchemeValue = jsToScheme(ctx, result, {}, EMPTY_PROVENANCE);
     return boxed;
   } catch (e) {

@@ -22,33 +22,25 @@ import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
-// `filter` is re-kinded tagless→sequence so it can carry the `fanout` contract option. The
-// sequence impl dispatches to the receiver's own `arrival/tagless-final/filter` term method —
-// the SAME forward the `symbol.tagless` binder did, now written manually so the def has a
-// contract slot (mirrors lists.ts's MAP_METHOD single-list branch; the term still charges heap).
-
-
-// reduce — SRFI-1's higher-order list fold, RELOCATED from stdlib.ts global_env (stdlib
-// elimination) as a pure `symbol.tagless` dispatcher. NO impl: it forwards to the receiver's
-// own `arrival/tagless-final/reduce` term method (APair/AVector declare the left-fold;
+// reduce — SRFI-1's higher-order list fold, a pure `symbol.tagless` dispatcher: no impl,
+// forwards to the receiver's own `arrival/tagless-final/reduce` term (APair/AVector left-fold;
 // ANil returns the seed), threading the run ctx. Scheme places the collection LAST —
 // `(reduce f ridentity xs)` — so the dispatcher's last-arg-is-receiver convention lands the
 // list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
 // convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
-// `find` — SRFI-1 first-match search: the matcher is a PROCEDURE. A JS `symbol.native` (not a scheme
-// prelude define like `find-tail`) because it recurses over the predicate and unwraps an async
-// generator-lambda result. Relocated from arrival-extensions; the host-RegExp matcher it once also
-// accepted was a LIPS-era host leak (a raw JS RegExp, non-R7RS) and has been dissolved — procedure only.
+//
+// find — SRFI-1 first-match search: a JS `symbol.native` (not a scheme prelude define like
+// `find-tail`) because it recurses over the predicate and unwraps an async generator-lambda
+// result. Procedure-only matcher (no host RegExp).
 //
 // Precision-typed to match its own Contract (below): `arg` is the callable-schema convention
-// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each/curry), not the bare
-// `unknown` the old declaration decoded to (and the old `const fn = arg as …` cast papered over).
-// `list`'s car/cdr decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the
-// SAME shared identity primitive lists.ts's list ops use) — every recursive/return site that hands
-// a car/cdr back through this SchemeValue-returning fn casts it, mirroring lists.ts's own established
+// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each/curry). `list`'s car/cdr
+// decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the SAME shared
+// identity primitive lists.ts's list ops use) — every recursive/return site that hands a car/cdr
+// back through this SchemeValue-returning fn casts it, mirroring lists.ts's established
 // "typecheck is not a TS guard; re-state it" idiom: `typecheck` above already re-validates
 // pair-or-nil on every recursive call, so the cast states a runtime-enforced invariant, not a blind one.
-function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): SchemeValue {
+function findImpl(arg: (...args: unknown[]) => unknown, list: APair<any, any> | ANil): SchemeValue {
   if (list instanceof ANil) {
     return nil;
   }
@@ -57,7 +49,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: APair | ANil): Sch
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr as APair | ANil);
+    return findImpl(arg, list.cdr as APair<any, any> | ANil);
   }) as SchemeValue;
 }
 
@@ -76,9 +68,7 @@ export default new EnvCapability("scheme/srfi-1", {
         // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
         // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
         // `seq` operand implements and returns a value in THAT SAME representation, so there is
-        // no single richer scheme-zod collection type honest for every call site. `z.value` is
-        // still strictly tighter than the old `z.value`: it excludes a raw non-scheme host
-        // value, which `unknown()` would wrongly admit.
+        // no single richer scheme-zod collection type honest for every call site.
         { input: [z.lambda, z.value], output: [z.value], fanout: true },
         (args, runCtx) => {
           const [pred, seq] = args;
@@ -232,14 +222,12 @@ export default new EnvCapability("scheme/srfi-1", {
 
 ;; remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
 ;; delete). The base sandbox carries no external collection library, so this is the sole
-;; remove binding — it once shadowed a curried Ramda remove that returned null for this
-;; call shape; Ramda is gone, leaving this plain SRFI-1 definition. Relocated from
-;; arrival-extensions (husk dissolution); the inference plane copies it by name (bridge.ts).
+;; remove binding; the inference plane copies it by name (bridge.ts).
 (define (remove pred xs)
   (filter (lambda (x) (not (pred x))) xs))
 
 ;; first? / first-or — safe list-head accessors: the head, or a falsy / default sentinel
-;; on empty. Relocated from the dissolved arrival-extensions pack (its FINALE).
+;; on empty.
 ;;
 ;; NOT redundant with loose \`car\`, though both dodge the (car '()) crash: loose car on an
 ;; empty list projects to nil — an ANil OBJECT, which is Scheme-TRUTHY — so a guard like
@@ -276,9 +264,8 @@ export default new EnvCapability("scheme/srfi-1", {
       (if (>= i count) (reverse acc)
           (loop (+ i 1) (cons (+ start (* i step)) acc))))))
 
-;; range — arrival's [0, stop) integer list: exactly (iota stop). Relocated from the
-;; dissolved arrival-extensions pack (its FINALE) to sit beside iota, its sole basis. The
-;; single-arg form is the only one used in practice (every spec site calls (range n)).
+;; range — arrival's [0, stop) integer list: exactly (iota stop). The single-arg form is
+;; the only one used in practice (every spec site calls (range n)).
 (define (range stop) (iota stop))
 
 ;; delete-duplicates — order-preserving dedup by equal?. Retires the O(n²) hand-rolled

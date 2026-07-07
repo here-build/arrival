@@ -1,11 +1,10 @@
 // ----------------------------------------------------------------------
 // The macro engine — syntax-rules pattern matching + template expansion, and
-// the `macroexpand` traversal. Extracted from lips.ts (keystone K3): this is
-// evaluate-free (it rewrites code, it does not run it) and carries no
-// module-level global_env edge — lambda/define resolve from the runtime env,
-// and the global-env identity check is threaded through extract_patterns'
-// `scope` argument by the syntax-rules caller. The 5 exported functions are
-// consumed by the `syntax-rules` / `macroexpand` builtins in lips.ts.
+// the `macroexpand` traversal. Evaluate-free (it rewrites code, it does not run
+// it) and carries no module-level global_env edge — lambda/define resolve from
+// the runtime env, and the global-env identity check is threaded through
+// extract_patterns' `scope` argument by the syntax-rules caller. The 5 exported
+// functions are consumed by the `syntax-rules` / `macroexpand` builtins in lips.ts.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
 //
@@ -49,11 +48,8 @@ function same_atom(a, b) {
     return b instanceof AString && a.valueOf() === b.valueOf();
   }
   // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, which lives
-  // entirely in the value kernel (instanceof + .equals/__char__/.value). This
-  // replaces the old `equal()` helper whose is_function branch dragged `unbind`
-  // — the macro engine's last tendril into lips's structural-equality switch.
-  // (The algebras-in-entities migration will fold this into each type's own
-  // arrival/tagless-final/equals — see plan-2026-06-10-algebras-in-entities.md.)
+  // entirely in the value kernel (instanceof + .equals/__char__/.value).
+  // See plan-2026-06-10-algebras-in-entities.md.
   return eqv(a, b);
 }
 
@@ -70,7 +66,7 @@ export function macro_expand(): SchemeFunction {
     let bindings: (string | symbol)[] = [];
     const let_macros = new Set(["let", "let*", "letrec"]);
     // lambda/define resolved from the runtime env (whose root is global_env) so
-    // the engine carries no module-level global_env edge — see K3 extraction.
+    // the engine carries no module-level global_env edge.
     const lambda = env.get("lambda");
     const define = env.get("define");
 
@@ -79,7 +75,7 @@ export function macro_expand(): SchemeFunction {
       return typeof name === "string" && let_macros.has(name);
     }
 
-    function is_procedure(value: unknown, node: APair) {
+    function is_procedure(value: unknown, node: APair<any, any>) {
       return value === define && node.cdr instanceof APair && node.cdr.car instanceof APair;
     }
 
@@ -239,7 +235,7 @@ export function macro_expand(): SchemeFunction {
 // The hygiene-identity handles injected by the syntax-rules caller (the engine
 // references no module-level env): `useResolver` over the USE site, the captured
 // `defResolver`, and its `capabilities` (whose `globalRoot` is the unshadowed-base
-// identity). See K3 + P3 3b.2. These are plain JS resolver handles, NOT SchemeValues.
+// identity). Plain JS resolver handles, NOT SchemeValues.
 // ----------------------------------------------------------------------
 interface HygieneScope {
   useResolver: Resolver;
@@ -271,10 +267,7 @@ interface MatchState {
   pattern_names?: (string | symbol)[];
 }
 
-// ----------------------------------------------------------------------
-// :: for usage in syntax-rule when pattern match it will return
-// :: list of bindings from code that match the pattern
-// :: TODO detect cycles
+// TODO detect cycles
 // ----------------------------------------------------------------------
 export function extract_patterns(
   pattern: unknown,
@@ -310,9 +303,9 @@ export function extract_patterns(
         }
         // refFrame walks USE-site scope frames THEN capabilities, returning the owning frame
         // (a LexicalScope for a lexical owner, the globalRoot env for an unshadowed builtin).
-        // unbound (!ref) and unshadowed-base (=== globalRoot) match as before; `=== defResolver.scope`
-        // compares the captured def frame. A literal shadowed by an intervening user `let` returns
-        // that user frame (≠ both) → no match, as today. (P3 3b.2.)
+        // unbound (!ref) and unshadowed-base (=== globalRoot) match; `=== defResolver.scope`
+        // compares the captured def frame. A literal shadowed by an intervening user `let`
+        // returns that user frame (≠ both) → no match.
         const ref = useResolver.refFrame(literal);
         return !ref || ref === defResolver.scope || ref === capabilities.globalRoot;
       }
@@ -389,7 +382,7 @@ export function extract_patterns(
         let list = code;
         const trailing = improper_list ? 1 : 1;
         while (code_len - trailing > list_len) {
-          list = list.cdr as APair;
+          list = list.cdr as APair<any, any>;
           code_len--;
         }
         const rest = list.cdr;
@@ -399,11 +392,11 @@ export function extract_patterns(
         // contract surfaced). Build the head segment as a fresh spine instead: elements SHARED
         // (provenance preserved), spine fresh, the input form untouched.
         const prefixEls: SchemeValue[] = [];
-        for (let n: APair = code; ; n = n.cdr as APair) {
+        for (let n: APair<any, any> = code; ; n = n.cdr as APair<any, any>) {
           prefixEls.push(n.car);
           if (n === list) break;
         }
-        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as APair;
+        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as APair<any, any>;
         const new_sate = { ...state, trailing: improper_list };
         if (!traverse(pattern.cdr.cdr, rest, new_sate)) {
           return false;
@@ -604,19 +597,17 @@ export function extract_patterns(
 }
 
 // ----------------------------------------------------------------------
-// :: This function is called after syntax-rules macro is evaluated
-// :: Restore hygiene-renamed gensyms to their literal symbols, but ONLY in DATA
-// :: positions — under quote / quasiquote, EXCLUDING unquote(-splicing) holes (which
-// :: are code). A template identifier under quote is DATA, not a reference, so hygiene
-// :: must not rename it (standard expander behaviour). The renamer over-renames every
-// :: identifier; this single pass un-renames the data positions of the transcribed
-// :: FORM, so quote yields the literal symbol with NO post-eval fixup.
-// ::
-// :: Why on the form, not the result: the old clear_gensyms ran on the evaluated RESULT.
-// :: Under the form-returning / tail-proper evaluator a result-side fixup must ride as an
-// :: onResolve, which the trampoline COMPOSES through a tail chain -> O(depth) for a deep
-// :: macro tail loop. Restoring the form once per expansion is O(form) and never composes,
-// :: so a macro in tail position keeps O(1) TCO.
+// Restore hygiene-renamed gensyms to their literal symbols, but ONLY in DATA
+// positions — under quote/quasiquote, EXCLUDING unquote(-splicing) holes (which
+// are code). A template identifier under quote is DATA, not a reference, so hygiene
+// must not rename it (standard expander behaviour). The renamer over-renames every
+// identifier; this single pass un-renames the data positions of the transcribed
+// FORM, so quote yields the literal symbol with no post-eval fixup.
+//
+// Runs on the FORM, not the evaluated result: a result-side fixup would have to
+// ride the trampoline as an onResolve, which composes through a tail chain ->
+// O(depth) for a deep macro tail loop. Restoring the form once per expansion is
+// O(form) and never composes, so a macro in tail position keeps O(1) TCO.
 // ----------------------------------------------------------------------
 export function restore_data_gensyms(node, gensyms) {
   if (gensyms.length === 0) return node;
@@ -671,8 +662,8 @@ export function transform_syntax({
   names,
   ellipsis: ellipsis_symbol,
 }: TransformOptions) {
-  // `scope` is now the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
-  // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set (P3 3b.2).
+  // `scope` is the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
+  // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set.
   const gensyms: Record<string | symbol, ASymbol> = {};
 
   function transform(symbol: SchemeValue): SchemeValue {

@@ -130,14 +130,13 @@ export interface EvalTap {
 /** Evaluation context passed through the evaluator */
 export interface EvalContext {
   /**
-   * The name-resolution + scope-construction facade (ejection P3 3a, P5). The
-   * SINGLE binding/resolution channel: the lexical {@link LexicalScope} chain
-   * plus the {@link Capabilities} base it falls through to, with `resolver.env`
-   * the underlying lexical frame ({@link Environment} storage). Both exec entries
-   * (generator-exec.ts) and every frame the evaluator builds set it; the macro
-   * seam stages it through {@link MacroInvokeContext}. P5 removed the coexisting
-   * `env` field — the frame env is now reached ONLY as `resolver.env`. Optional
-   * because an external caller could still hand a bare `EvalContext`; the
+   * The name-resolution + scope-construction facade — the SINGLE binding/resolution
+   * channel: the lexical {@link LexicalScope} chain plus the {@link Capabilities} base
+   * it falls through to, with `resolver.env` the underlying lexical frame
+   * ({@link Environment} storage). Both exec entries and every frame the evaluator
+   * builds set it; the macro seam stages it through {@link MacroInvokeContext}. There
+   * is no coexisting `env` field — the frame env is reached ONLY as `resolver.env`.
+   * Optional because an external caller could still hand a bare `EvalContext`; the
    * evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
@@ -212,10 +211,11 @@ export interface EvalContext {
   strict?: boolean;
   /**
    * The per-run context (minted by `exec()`; see `values/primitives/RunContext`).
-   * Carries hermetic run-state — strict mode, speculation, the heap meter — as DATA threaded
-   * through evaluation. Now the LIVE channel (stage 4): the run-constant holders
-   * (`_currentStrict`/`_speculate`) are retired and their readers consult `ctx.runCtx` /
-   * the operand ctx. Propagated structurally like `strict` (the `{ ...ctx }` spreads).
+   * Carries hermetic run-state — strict mode, speculation, the heap meter — as DATA
+   * threaded through evaluation; this is the sole live channel for that state (the
+   * old `_currentStrict`/`_speculate` module holders are retired, readers consult
+   * `ctx.runCtx` / the operand ctx instead). Propagated structurally like `strict`
+   * (the `{ ...ctx }` spreads).
    */
   runCtx?: RunContext;
 }
@@ -296,28 +296,25 @@ let _dynamicCallSite: Invocation | undefined = undefined;
  */
 let _canBounce = false;
 
-// The `_speculate`/`isSpeculating` holder is RETIRED (stage 4): speculation is run-CONSTANT
-// (RunContext.speculate) — its one external reader (lists.ts mapImpl) now reads it off the
-// operand's ctx, and the value-path consumers read `ctx.speculate` / `runCtx.speculate` directly.
-// The `_currentStrict`/`isStrict` holder is likewise retired: numeric's loose comparators read
-// `this.ctx.runCtx.strict` (the run ctx reconstructed by the native-value adapter). Both were
-// pure duplicates of RunContext. `_currentRunEnv` STAYS — it is not run-constant duplication but
-// the rosetta MEMBRANE's env back-channel (arrival-scheme-env-infer/prompt.ts evaluates an `s/…`
-// schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx carries no env).
+// `_speculate`/`_currentStrict` module holders are retired — speculation/strict are
+// run-CONSTANT (RunContext), so readers consult `ctx.speculate`/`ctx.runCtx.strict`
+// directly; both were pure RunContext duplicates. `_currentRunEnv` STAYS: it is the
+// rosetta MEMBRANE's env back-channel (llm-plane-arrival-env/prompt.ts evaluates an
+// `s/…` schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx
+// carries no env).
 
 /**
- * Run-scoped CURRENT ENV, set to the resolver's lexical frame (`resolver.env`,
- * formerly `ctx.env`) at the apply boundary alongside `_canBounce`/`_dynamicCallSite`
- * (saved + restored in the surrounding finally). Sole remaining purpose (stage 4): the
- * rosetta MEMBRANE's env back-channel — a rosetta impl running under a ctx-less `apply`
- * (arrival-scheme-env-infer/prompt.ts) reads it to evaluate an `s/…` schema DSL and reach
- * the infer capability. `runCtx` cannot supply this — it carries run-CONSTANT data, not an
- * env. The heap-meter that once also rode this holder moved to the operand's ctx
- * (`operand.ctx.heapMeter`, the designed read — see the three `to_array` copies).
+ * Run-scoped CURRENT ENV, set to the resolver's lexical frame (`resolver.env`) at the
+ * apply boundary alongside `_canBounce`/`_dynamicCallSite` (saved + restored in the
+ * surrounding finally). Sole purpose: the rosetta MEMBRANE's env back-channel — a
+ * rosetta impl running under a ctx-less `apply` (llm-plane-arrival-env/prompt.ts) reads
+ * it to evaluate an `s/…` schema DSL and reach the infer capability. `runCtx` cannot
+ * supply this — it carries run-CONSTANT data, not an env. The heap-meter that once also
+ * rode this holder moved to the operand's ctx (`operand.ctx.heapMeter` — see the three
+ * `to_array` copies).
  *
- * Why module-level: the meter
- * readers are variadic / HOF builtins (`filter`/`join`/`reverse`/`apply`,
- * and `to_array` reached through them) whose arity a trailing `ctx` would
+ * Why module-level: readers are variadic / HOF builtins (`filter`/`join`/`reverse`/
+ * `apply`, and `to_array` reached through them) whose arity a trailing `ctx` would
  * corrupt. Single-threaded JS makes the holder safe; nesting is handled by the
  * save/restore. The meter is found by walking `__parent__` from this env, so a
  * child-frame env still resolves the run's installed meter.
@@ -369,20 +366,15 @@ function isStrictDescendant(a: Invocation | undefined, b: Invocation | undefined
 function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): LambdaFunction {
   const wrapped: LambdaFunction = function (this: unknown, ...values: SchemeValue[]) {
     const saved = _dynamicCallSite;
-    // Prefer the DEEPER of the two candidate dynamic parents. `dynSite` is the
-    // HOF boundary — where the lambda was passed in (e.g. `index-map`'s call
-    // site). `saved` is whatever the immediate caller set: for a genuine
-    // Scheme-to-Scheme call `(f i x)`, the inner evaluatePair has already
-    // stamped it with THAT call's invocation — a descendant of `dynSite`,
-    // sitting inside the loop iteration that actually invoked the lambda.
-    //
-    // Keeping `saved` when it's a descendant places the body under its real
-    // call site (so a loop's per-iteration work nests under the iteration,
-    // not at the outer pass-in frame — without this a TCO loop that calls a
-    // passed-in lambda scatters its work to the driver). The native-HOF escape
-    // (map/filter/reduce iterating from JS with no Scheme call Pair) leaves
-    // `saved` equal to `dynSite` or absent, so it falls through to `dynSite`
-    // unchanged. See the bug write-up: arrival-chain index-map fan-out.
+    // Prefer the DEEPER of the two candidate dynamic parents. `dynSite` is the HOF
+    // boundary (e.g. `index-map`'s call site); `saved` is whatever the immediate
+    // caller set — for a genuine Scheme-to-Scheme call `(f i x)`, a descendant of
+    // `dynSite` sitting inside the loop iteration that invoked the lambda. Keeping
+    // `saved` when it's a descendant nests a loop's per-iteration work under the
+    // iteration instead of scattering it to the outer driver (needed for TCO loops
+    // calling a passed-in lambda). The native-HOF escape (map/filter/reduce
+    // iterating from JS with no Scheme call Pair) leaves `saved` equal to `dynSite`
+    // or absent, falling through unchanged. See: arrival-chain index-map fan-out.
     _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
     try {
       return lambda.apply(this, values);
@@ -522,22 +514,20 @@ interface Call {
   /**
    * Tail-position marker (R7RS §3.5). True when the YIELDING generator does
    * nothing but return this sub-call's result (a local pass-through —
-   * `return yield { call }`, modulo `onResolve`). The trampoline uses this
-   * to COLLAPSE the chain when a tail call bubbles up: it pops all
-   * consecutive `tail: true` slots down to the first slot that will do real
-   * work after its child returns (an argument collector, a predicate eval,
-   * a binding RHS — none of those are marked tail). The popped slots'
-   * `onResolve`/`onReject` hooks compose onto the replacement slot so taps
-   * stay enter/exit balanced and provenance transforms still fire when the
-   * tail chain eventually returns.
+   * `return yield { call }`, modulo `onResolve`). The trampoline COLLAPSES
+   * the chain when a tail call bubbles up: it pops all consecutive
+   * `tail: true` slots down to the first slot that does real work after its
+   * child returns (an argument collector, a predicate eval, a binding RHS —
+   * none of those are marked tail). The popped slots' `onResolve`/`onReject`
+   * hooks compose onto the replacement slot so taps stay enter/exit balanced
+   * and provenance transforms still fire when the tail chain returns.
    *
-   * Why this matters for O(1) space: a lambda body that tail-calls itself
-   * sits under a fixed-depth tower of pass-through slots (begin → if →
-   * evaluate → evaluatePair). Without collapse, each recursion would stack
-   * a fresh tower and `stack[]` would grow O(depth) — which is exactly the
-   * accumulation that made the first naive tailCall implementation return
-   * `undefined` and OOM at ~100 levels. Collapsing the tower per iteration
-   * keeps `stack[]` bounded.
+   * Required for O(1) space: a lambda body that tail-calls itself sits under
+   * a fixed-depth tower of pass-through slots (begin → if → evaluate →
+   * evaluatePair). Without collapse, each recursion stacks a fresh tower and
+   * `stack[]` grows O(depth) — replacing only the innermost slot per
+   * recursion OOMs at shallow depth. Collapsing the whole tower per
+   * iteration keeps `stack[]` bounded.
    */
   tail?: boolean;
 }
@@ -549,31 +539,22 @@ function is_call(o: unknown): o is Call {
 /**
  * Marker for tail calls — yielded by evaluatePair when a Scheme-to-Scheme
  * call lands in tail position (R7RS §3.5). The trampoline REPLACES the
- * current slot with the callee generator instead of stacking it: the tail
- * call doesn't return THROUGH the caller, it returns IN PLACE OF the caller.
+ * current slot with the callee generator instead of stacking it: a tail
+ * call returns IN PLACE OF the caller, not through it — this is what keeps
+ * the stack budget flat across recursion.
  *
- * War story on the semantics: a tail call is identity-of-result, not nest-
- * and-return. The slot we pop is the one that was about to compute the call
- * and then immediately return its result; replacing it preserves both the
- * "stack budget stays flat" guarantee (no growth per recursion level) AND
- * the data-flow invariant that the eventual return value flows up through
- * the ORIGINAL consumer. To keep the data flow correct we move the popped
- * slot's `onResolve` to the new slot — that way when the tail body finally
- * returns, the caller's caller (the original consumer of the tail-position
- * expression's value) sees the value via the same hook that would have
- * fired if the call had been a normal sub-call. Without this transfer, the
- * tap-substitution chain breaks at every tail-recursive step and provenance
- * stamping disappears for any value flowing through a tight loop.
+ * Data flow: the popped slot's `onResolve`/`onReject` move to the new slot,
+ * so when the tail body eventually returns/throws, the ORIGINAL consumer
+ * (the caller's caller) still sees the value/error via the same hook a
+ * normal sub-call would have fired. Without this transfer the tap-
+ * substitution chain breaks every tail-recursive step and provenance
+ * stamping disappears for values flowing through a tight loop.
  *
- * onReject moves the same way: an exception in the tail body should be
- * delivered to the surviving consumer, not to the popped (now-gone) slot.
- *
- * Frame stack: the popped slot's frame goes away (we're no longer "inside"
- * the popped function — it's done by definition once it tail-calls), and
- * the new frame represents the calling Pair (e.g. `(loop n)`) so the stack
- * trace still describes who initiated the tail dispatch. EvalTap.exit fires
- * on that popped frame BEFORE we push the new one (lineage stays intact via
- * the popped slot's invocation stamp).
+ * Frame stack: the popped slot's frame goes away (it's done, by definition,
+ * once it tail-calls); the new frame represents the calling Pair (e.g.
+ * `(loop n)`) so the stack trace still names who initiated the dispatch.
+ * `EvalTap.exit` fires on the popped frame BEFORE the new one is pushed —
+ * lineage stays intact via the popped slot's invocation stamp.
  */
 interface TailCall {
   tailCall: {
@@ -724,18 +705,18 @@ function symbol_name(sym: ASymbol): string {
 // Environment lookup without lips runtime dependency
 // ============================================================================
 //
-// `env_get` (the throwing, synth-aware lookup) + its `c[ad]+r` unfold moved to
-// eval/Resolver.ts (ejection P3 3a) — name-resolution is the Resolver's job. Every
-// evaluator lookup now goes through `ctxResolver(ctx).resolve`/`.lookup` (3a.2),
-// which bottoms out in the moved `env_get` over the wrapped, base-linked env.
+// Name-resolution is the Resolver's job (eval/Resolver.ts owns the throwing,
+// synth-aware `env_get` lookup + its `c[ad]+r` unfold). Every evaluator lookup
+// goes through `ctxResolver(ctx).resolve`/`.lookup`, which bottoms out in
+// `env_get` over the wrapped, base-linked env.
 
 /**
  * The ctx's resolver — the evaluator's sole name-resolution + frame-construction
- * channel (P5: `EvalContext.env` is gone, so the resolver IS the env, reached as
- * `resolver.env`). Both exec entries and every frame the evaluator builds set it,
- * so it is present at every evaluation boundary; the invariant catches a malformed
- * bare `EvalContext` from an external caller LOUD rather than NPEing on a later
- * `.scope`/`.env` read.
+ * channel (there is no coexisting `EvalContext.env`; the resolver IS the env,
+ * reached as `resolver.env`). Both exec entries and every frame the evaluator
+ * builds set it, so it is present at every evaluation boundary; the invariant
+ * catches a malformed bare `EvalContext` from an external caller LOUD rather
+ * than NPEing on a later `.scope`/`.env` read.
  */
 function ctxResolver(ctx: EvalContext): Resolver {
   invariant(ctx.resolver, "EvalContext.resolver is required (set by exec / every frame site)");
@@ -762,16 +743,15 @@ function ctxResolver(ctx: EvalContext): Resolver {
  * to the trampoline, which then throws the abort reason and unwinds the run. Cancelling the
  * upstream connection/request must be wired at the operation itself (e.g. `fetch(url, {
  * signal })`, or the MCP SDK's `client.callTool(params, schema, { signal })`) — arrival-
- * manifold's server boundary NOW forwards this exact signal there (bind.ts's `rosettaDef`
- * reads it off the per-call invocation-`this` and hands it to `RemoteTool.invoke`; server.ts's
- * `toBoundServer` threads it into `client.callTool`, 2026-07-05), so an aborted eval actually
- * tells a real upstream MCP server to stop, not merely abandons the local await. A host
- * operation that does NOT accept a signal (or a direct-JS caller with no ctx at all) still only
- * gets abandoned — this mechanism can't force an uncooperative operation to stop. The
- * abandoned promise's eventual settlement is SWALLOWED so it never surfaces as an unhandled
- * rejection — the `.then(resolve, reject)` below keeps a rejection handler attached to it for
- * exactly that reason (mirroring manifold-tool.ts's own `running.catch(() => {})` on its
- * parked path).
+ * manifold's server boundary forwards this exact signal there (bind.ts's `rosettaDef` reads
+ * it off the per-call invocation-`this` and hands it to `RemoteTool.invoke`; server.ts's
+ * `toBoundServer` threads it into `client.callTool`), so an aborted eval actually tells a
+ * real upstream MCP server to stop, not merely abandons the local await. A host operation
+ * that does NOT accept a signal (or a direct-JS caller with no ctx at all) still only gets
+ * abandoned — this mechanism can't force an uncooperative operation to stop. The abandoned
+ * promise's eventual settlement is SWALLOWED so it never surfaces as an unhandled rejection —
+ * the `.then(resolve, reject)` below keeps a rejection handler attached to it for exactly
+ * that reason (mirroring manifold-tool.ts's own `running.catch(() => {})` on its parked path).
  */
 export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise<T> {
   // Already aborted: an `addEventListener("abort", …)` would never fire (the event
@@ -915,7 +895,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       // Check for sub-generator call (flat trampoline)
       if (is_call(value)) {
         stack.push(value.call);
-        frameStack.push(value.frame); // Track frame
+        frameStack.push(value.frame);
         callStack.push(value);
         continue;
       }
@@ -925,37 +905,23 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       // whole tail-position chain, so rather than stack the callee and return
       // through every intermediate frame, we COLLAPSE the chain.
       //
-      // War story — why collapse, not single-slot replace: the first naive
-      // version popped ONLY the slot that yielded the tailCall and pushed the
-      // callee in its place. But that slot sits at the BOTTOM of a fixed tower
-      // of pass-through frames built every iteration: the lambda body's
-      // `begin`, the `if` whose tail arm is the recursive call, the `evaluate`
-      // wrappers. Replacing only the innermost slot left the tower standing,
-      // so `stack[]` grew O(depth) per recursion — the loop returned
-      // `undefined` (value lost in the orphaned tower) and OOM'd at ~100
-      // levels. Real TCO must unwind the ENTIRE tail tower down to the first
-      // frame that still has work to do after its child returns.
-      //
-      // Mechanism: every pass-through `{ call }` is tagged `tail: true` (the
-      // yielding code does nothing but `return yield { call }`). We pop the
-      // current slot plus all consecutive `tail: true` slots beneath it,
-      // stopping at the first NON-tail slot — an argument collector, a
-      // predicate eval, a binding RHS, or the root — which genuinely consumes
-      // the value. The callee is pushed ON TOP of that consumer, so its
-      // return flows to the right place.
+      // Must unwind the ENTIRE tail tower, not just the yielding slot: every
+      // pass-through `{ call }` is tagged `tail: true` (the yielding code does
+      // nothing but `return yield { call }`, e.g. begin/if/evaluate wrappers
+      // around a recursive call). Replacing only the innermost slot leaves the
+      // tower standing and `stack[]` grows O(depth) per recursion. So we pop
+      // the current slot plus all consecutive `tail: true` slots beneath it,
+      // stopping at the first NON-tail slot (argument collector, predicate
+      // eval, binding RHS, or the root) that genuinely consumes the value —
+      // the callee is pushed ON TOP of that consumer.
       //
       // Hooks: each popped slot may carry an `onResolve` (tap.exit /
       // provenance stamp) and `onReject`. We COMPOSE them (innermost first)
       // onto the replacement slot so they fire when the tail chain finally
       // returns — keeping tap enter/exit balanced and provenance transforms
       // intact. In the common no-tap case every popped slot's hooks are
-      // undefined, so the composition is empty and this stays O(1) per
-      // iteration (the whole point — no per-level closure retention).
-      //
-      // EvalTap note: taps still see every regular call boundary. For tail
-      // sites the popped frames' exits are deferred to the composed hook
-      // rather than fired eagerly — lineage stays intact because each
-      // popped slot's invocation stamp was already recorded at enter time.
+      // undefined, so composition is empty and this stays O(1) per iteration
+      // (no per-level closure retention).
       if (is_tailCall(value)) {
         // Collect pass-through hooks while unwinding the tail tower.
         const resolvers: Array<(value: unknown) => unknown | undefined> = [];
@@ -1037,29 +1003,20 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       }
 
       if (value === TICK) {
-        // Explicit tick - check if we should yield to event loop
         iterations++;
-        // Yield every 1000 iterations or 5ms, whichever comes first.
-        //
-        // WHY check the abort signal HERE rather than per-step: TICK fires at
-        // every loop-step / tail-call boundary in long-running Scheme code,
-        // which is exactly the granularity an infinite-loop body would hit.
-        // Per-step (every `current.next()` call) the check would burn ~1-2%
-        // CPU on signal.aborted reads that 99.999% of the time are false;
-        // at TICK boundaries it costs nothing and still bounds (let loop
-        // () (loop)) within one budget unit. The same logic applies for the
-        // event-loop yield itself — the 1000-iter / 5ms cadence IS the
-        // natural abort-check cadence.
+        // Yield every 1000 iterations or 5ms, whichever comes first. Check the
+        // abort/budget signals at THIS cadence (not per-step): TICK fires at every
+        // loop-step / tail-call boundary, exactly the granularity an infinite-loop
+        // body hits, so checking per-`current.next()` call would burn ~1-2% CPU on
+        // reads that are false 99.999% of the time — at TICK boundaries it costs
+        // nothing and still bounds `(let loop () (loop))` within one budget unit.
         if (iterations > 1000 || performance.now() - lastYield > 5) {
           if (signal?.aborted) {
             throw signal.reason ?? new DOMException("aborted", "AbortError");
           }
-          // Budget check rides the SAME cadence as the abort check — see the
-          // WHY-HERE note above. `now` is reused for the yield-timer reset so
-          // we read the clock once. A ArrivalError (not DOMException) because a
-          // budget overrun is OUR policy, not a Web-standard cancellation, and
-          // its `/budget/` message is what `exec(code, { budgetMs })` callers
-          // (and the sandbox-escape suite) match on.
+          // ArrivalError (not DOMException): a budget overrun is OUR policy, not a
+          // Web-standard cancellation; its `/budget/` message is what
+          // `exec(code, { budgetMs })` callers (and the sandbox-escape suite) match on.
           const now = performance.now();
           if (deadline !== undefined && now > deadline) {
             throw new ArrivalError(
@@ -1077,13 +1034,11 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         continue;
       }
 
-      // Regular value - send it back to the generator
       valueToSend = value;
     }
 
     return valueToSend as T;
   } catch (error) {
-    // Final catch - ensure all errors have stack traces
     if (error instanceof ArrivalError) {
       throw error;
     }
@@ -1352,31 +1307,27 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     return new AVector(CONSTANT_CTX, out);
   }
 
-  // Atoms are returned as-is
   if (!(expr instanceof APair)) {
     return expr;
   }
 
-  // At this point TypeScript knows expr is Pair
   const first = expr.car;
 
-  // Check for unquote
   if (first instanceof ASymbol && symbol_name(first) === "unquote") {
     if (level === 1) {
-      // Evaluate the unquoted expression
       invariant(expr.cdr instanceof APair, "unquote: missing argument");
       return yield { call: evaluate(expr.cdr.car, ctx) };
     } else {
-      // Nested quasiquote - decrease level and recurse
+      // Nested quasiquote: decrease level and keep the unquote wrapper (stays
+      // quoted data until its own depth is reached).
       invariant(expr.cdr instanceof APair, "unquote: missing argument");
       const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
       return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "unquote"), new APair(CONSTANT_CTX, processed, nil));
     }
   }
 
-  // Check for unquote-splicing at top level of list
   if (first instanceof ASymbol && symbol_name(first) === "unquote-splicing") {
-    // This shouldn't happen at top level - splicing needs context
+    // Splicing needs list context — a bare top-level `,@x` (level 1) is invalid.
     invariant(level > 1, "unquote-splicing: invalid context");
     invariant(expr.cdr instanceof APair, "unquote-splicing: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
@@ -1387,14 +1338,12 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     );
   }
 
-  // Check for nested quasiquote
   if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
     invariant(expr.cdr instanceof APair, "quasiquote: missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level + 1) };
     return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "quasiquote"), new APair(CONSTANT_CTX, processed, nil));
   }
 
-  // Process list elements, handling unquote-splicing
   const results: SchemeValue[] = [];
   let node: SchemeValue = expr;
   // Improper-tail unquote: the reader represents `(a . ,x)` as the proper list
@@ -1425,20 +1374,17 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       break;
     }
 
-    // Check for unquote-splicing in list
     if (
       item instanceof APair &&
       item.car instanceof ASymbol &&
       symbol_name(item.car) === "unquote-splicing" &&
       level === 1
     ) {
-      // Evaluate and splice
       invariant(item.cdr instanceof APair, "unquote-splicing: missing argument");
       let spliced = yield { call: evaluate(item.cdr.car, ctx) };
       if (is_promise(spliced)) {
         spliced = yield spliced;
       }
-      // Splice the list into results
       if (spliced instanceof APair) {
         let splicedNode: SchemeValue = spliced;
         while (splicedNode instanceof APair) {
@@ -1452,7 +1398,6 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       continue;
     }
 
-    // Regular element - recurse
     const processed = yield { call: processQuasiquote(item, ctx, level) };
     results.push(processed);
     node = node.cdr;
@@ -1484,16 +1429,13 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   // Function definition shorthand: (define (f x) body) -> (define f (lambda (x) body))
   if (first instanceof APair) {
-    // Get function name and args from the pair
     const name = first.car;
     const args = first.cdr;
 
     invariant(name instanceof ASymbol, "define: expected symbol for function name");
 
-    // Create lambda expression
     const value = yield { call: evalLambda(new APair(CONSTANT_CTX, args, valueRest), ctx) };
 
-    // Set the function's name
     if (is_lambda_function(value)) {
       value.__name__ = symbol_name(name);
     }
@@ -1610,12 +1552,8 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Capture the resolver (lexical scope) at definition time.
   const defResolver = ctxResolver(ctx);
 
-  // Create a macro function - receives unevaluated code. The body returns
-  // `run(...)` — a `Promise<SchemeValue>` of the expansion FORM; the expansion
-  // consumer (`fn.invoke` site) already `yield`s it via `is_promise`. The prior
-  // `: SchemeValue` annotation under-described that real (async) return.
-
-  // Create and register the macro
+  // The macro body returns `run(...)` — a `Promise<SchemeValue>` of the expansion
+  // FORM; the consumer (`fn.invoke` site) `yield`s it via `is_promise`.
   const macro = new Macro(symbol_name(name), function (
     this: Environment,
     code: SchemeValue,
@@ -1623,7 +1561,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   ): Promise<SchemeValue> {
     const macroResolver = defResolver.child("macro", "macro");
 
-    // Bind macro parameters to unevaluated arguments
+    // Fexpr semantics: parameters bind to unevaluated argument forms, not values.
     let argNode: SchemeValue = args;
     let codeNode: SchemeValue = code;
     let i = 0;
@@ -1641,12 +1579,10 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       }
     }
 
-    // Handle rest arg
     if (argNode instanceof ASymbol) {
       macroResolver.define(argNode, codeNode);
     }
 
-    // Evaluate macro body to get expansion.
     // Forward signal so macro expansion is also budget-bounded.
     return run(evalBegin(body, { ...evalArgs, resolver: macroResolver }), {
       signal: evalArgs.signal,
@@ -1884,12 +1820,10 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // shape everything below already understands (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, letForm, true, 2, 2);
 
-  // Create new environment
   const letResolver = ctxResolver(ctx).child("let", "let");
 
   // For named let, we need to create a recursive function
   if (name) {
-    // Collect parameter names
     const params: ASymbol[] = [];
     let bindNode: SchemeValue = normalizedBindings;
     while (bindNode instanceof APair) {
@@ -1900,33 +1834,17 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       bindNode = bindNode.cdr;
     }
 
-    // Create the loop function
-    //
-    // WAR STORY (task #46, R7RS §3.5 TCO): until 2026-05-28 each recursive
-    // `(loop ...)` call landed here, allocated a fresh loopEnv, and called
-    // `run(...)` again. The inner `run()` returned a Promise the outer
-    // trampoline awaited at the `is_promise(value)` branch — every recursion
-    // added one pending await to the JS promise-resolution chain, and after
-    // ~10k cycles V8's call-stack limit fired from inside PromiseRejectCallback.
-    // The abort budget couldn't rescue it: the overflow happened INSIDE the
-    // await machinery before the next TICK check could run. Concretely
-    // `(let loop () (loop))` with a 50ms abort tainted the worker with an
-    // unhandled RangeError; `(let loop ((i 0)) (loop (+ i 1)))` failed
-    // outright in ~17ms because the call-stack limit beat the timer.
-    //
-    // Fix: same Bounce protocol as evalLambda. When evaluatePair (the only
-    // Scheme-to-Scheme call boundary) sets `_canBounce = true` before
-    // invoking us, we hand back the body generator wrapped as a Bounce
-    // token. The outer trampoline drives the loop body directly, the host
-    // stack stays flat across all recursions, and the existing TICK abort
-    // cadence covers both bounded and infinite shapes. When `_canBounce` is
-    // false (the loop function escaped into a JS HOF — e.g. `(map loop xs)`
-    // somewhere), we fall back to the original `run(...)` path so HOF
-    // callers still see a Promise.
-    //
-    // We forward `signal` in the non-bounce path so that any *bounded*
-    // named-let loop honors the same abort budget as the outer `run()` call;
-    // in the bounce path the body inherits the outer ctx's signal directly.
+    // Recursive `(loop ...)` calls must NOT each call `run(...)` again — every
+    // recursion would add a pending await to the JS promise chain and blow V8's
+    // call-stack limit from inside PromiseRejectCallback (the abort budget can't
+    // rescue it, since the overflow happens inside await machinery before the
+    // next TICK check runs). Fix: same Bounce protocol as evalLambda — when
+    // evaluatePair sets `_canBounce = true` before invoking us, hand back the
+    // body generator as a Bounce token so the outer trampoline drives it flat.
+    // Falls back to `run(...)` when the loop function escaped into a JS HOF
+    // (`_canBounce` false, e.g. `(map loop xs)`), so HOF callers still see a
+    // Promise. `signal` is forwarded on that fallback path for the same reason;
+    // the bounce path inherits the outer ctx's signal directly.
     const loopFn: LambdaFunction = function (...values: SchemeValue[]) {
       const loopResolver = letResolver.child("named-let", "named-let");
 
@@ -1959,9 +1877,8 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     letResolver.define(name, loopFn);
   }
 
-  // Evaluate all bindings (in parallel for regular let).
-  // Binding RHS expressions are non-tail (their values feed into the
-  // let frame; only the body is tail w.r.t. the let's parent).
+  // Binding RHS expressions are non-tail (their values feed into the let
+  // frame; only the body is tail w.r.t. the let's parent).
   const values: SchemeValue[] = [];
   const names: ASymbol[] = [];
   const bindingCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
@@ -1980,7 +1897,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(bindingCdr instanceof APair, "let: missing value in binding");
     const valExpr = bindingCdr.car;
 
-    // Evaluate in original environment (parallel semantics)
+    // Parallel semantics: evaluated in the original (pre-let) environment.
     let value = yield { call: evaluate(valExpr, bindingCtx) };
     if (is_promise(value)) {
       value = yield value;
@@ -1990,7 +1907,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     bindNode = bindNode.cdr;
   }
 
-  // Bind all values
   for (const [i, varName] of names.entries()) {
     letResolver.define(varName, values[i]);
   }
@@ -2013,7 +1929,6 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // R2/R3: consume both bracket surfaces (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, "let*", true, 2, 2);
 
-  // Create new environment
   const letStarResolver = ctxResolver(ctx).child("let*", "let*");
 
   // Evaluate bindings sequentially. Bindings are non-tail; only body is.
@@ -2029,7 +1944,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     invariant(bindingCdr instanceof APair, "let*: missing value in binding");
     const valExpr = bindingCdr.car;
 
-    // Evaluate in current environment (sequential semantics)
+    // Sequential semantics: evaluated in the growing let* environment.
     let value = yield { call: evaluate(valExpr, { ...ctx, resolver: letStarResolver, tail: false }) };
     if (is_promise(value)) {
       value = yield value;
@@ -2058,10 +1973,9 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // function (R7RS: letrec* evaluates left-to-right, same as our letrec).
   const normalizedBindings = normalizeBindings(bindings, "letrec", true, 2, 2);
 
-  // Create new environment
   const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
 
-  // First pass: bind all names to undefined
+  // First pass: bind all names to unassigned.
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
@@ -2182,14 +2096,13 @@ function* evalOr(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * for a normal application.
  *
  * This is the `=>` arm of `cond`/`case`: R7RS §3.5 places the `(proc test-value)`
- * application in tail position when the enclosing form is in tail position. The
- * previous implementation applied `proc` via a direct synchronous JS call, which
- * routed a Scheme lambda body through the legacy `run(...)`-per-call path —
- * growing the host stack and overflowing on a self-recursive `=>` loop (the
- * "outside the TCO surface" war story). Mirroring `evaluatePair`'s bounce
- * protocol here brings `=>` onto the TCO surface: a Scheme lambda hands back a
- * Bounce, which collapses the tail tower (tail) or threads through a
- * pass-through `{ call, tail:true }` (non-tail). Non-lambda callables (builtins,
+ * application in tail position when the enclosing form is in tail position. A
+ * direct synchronous JS call would route a Scheme lambda body through the
+ * legacy `run(...)`-per-call path, growing the host stack and overflowing on a
+ * self-recursive `=>` loop. Mirroring `evaluatePair`'s bounce protocol here
+ * brings `=>` onto the TCO surface: a Scheme lambda hands back a Bounce, which
+ * collapses the tail tower (tail) or threads through a pass-through
+ * `{ call, tail:true }` (non-tail). Non-lambda callables (builtins,
  * `SchemeJSFunction`) can't tail-recurse into Scheme, so they keep the direct
  * apply.
  *
@@ -2597,7 +2510,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const test = testClause.car;
   const resultExprs = testClause.cdr;
 
-  // Create environment and collect bindings
   const doResolver = ctxResolver(ctx).child("do", "do");
   const vars: Array<{ name: ASymbol; step: SchemeValue | null }> = [];
 
@@ -2633,7 +2545,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       }
     }
 
-    // Evaluate initial value
     let initValue = yield { call: evaluate(initExpr, ctx.tail ? { ...ctx, tail: false } : ctx) };
     if (is_promise(initValue)) {
       initValue = yield initValue;
@@ -2645,7 +2556,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     bindNode = bindNode.cdr;
   }
 
-  // Main loop
   while (true) {
     // Test condition (non-tail — predicate for loop dispatch).
     let testResult = yield { call: evaluate(test, doNonTail) };
@@ -2667,7 +2577,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       yield { call: evalBegin(body, doNonTail) };
     }
 
-    // Update variables
     const newValues: SchemeValue[] = [];
     for (const { step } of vars) {
       if (step === null) {
@@ -2684,7 +2593,6 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       }
     }
 
-    // Apply updates
     for (const [i, { name, step }] of vars.entries()) {
       if (step !== null) {
         doResolver.define(name, newValues[i]);
@@ -2740,7 +2648,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let catchClause: SchemeValue | null = null;
   let finallyClause: SchemeValue | null = null;
 
-  // Parse clauses
   let clauseNode = rest.cdr;
   while (clauseNode instanceof APair) {
     const clause = clauseNode.car;
@@ -2760,16 +2667,12 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   invariant(catchClause || finallyClause, "try: requires catch or finally clause");
 
-  // Create a promise to handle the try/catch/finally logic
-  // This is necessary because errors can come from yielded promises
-  //
-  // Each clause runs in its OWN fresh `run()` (nested trampoline) so the
-  // outer try/catch can intercept thrown errors. That fresh-trampoline
-  // boundary already isolates the host stack — but we strip `tail` so the
-  // body/handlers are treated as top-of-trampoline (not tail w.r.t. the
-  // surrounding form), keeping the bounce protocol from reaching across
-  // the `run()` boundary in a confusing way. A tail loop INSIDE the body
-  // still gets full TCO within its own trampoline.
+  // Each clause runs in its OWN fresh `run()` (nested trampoline) so the outer
+  // try/catch can intercept thrown errors. That boundary already isolates the
+  // host stack — `tail` is stripped so body/handlers are top-of-trampoline
+  // (not tail w.r.t. the surrounding form), keeping the bounce protocol from
+  // reaching across the `run()` boundary. A tail loop INSIDE the body still
+  // gets full TCO within its own trampoline.
   const bodyCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
   const resultPromise = (async () => {
     let result: SchemeValue;
@@ -2782,9 +2685,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       caughtError = error instanceof Error ? error : new Error(String(error));
     }
 
-    // Handle catch clause if there was an error
     if (caughtError && catchClause) {
-      // (catch (var) handler...)
       const catchCdr = (catchClause as APair<any, any>).cdr;
       invariant(catchCdr instanceof APair, "try: invalid catch syntax");
 
@@ -2796,7 +2697,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
       const handlers = catchCdr.cdr;
 
-      // Create catch environment with error bound
       const catchResolver = ctxResolver(ctx).child("catch", "catch");
 
       // Bind the error. Unwrap an ArrivalError to the original raised value;
@@ -2804,23 +2704,16 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // value arrives wrapped, and `ArrivalError.cause` is typed `Error`), so
       // `caught` is an `Error`.
       const caught: Error = caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
-      // X3 (conformance + security): a value that reaches here as a RAW host
-      // `Error` (a JS TypeError from a primitive, the wrapping ArrivalError, etc.)
-      // would (a) make `error-object?` return #f — non-conformant per §6.11 — and
-      // (b) leak host file paths, since `.stack`/`.fileName` are OWN properties on
-      // V8 Errors and the membrane's own-property fast path hands them across.
-      // Re-present such errors as an R7RS error object carrying only the message
-      // (no `.stack`/`.cause`/`.fileName`). An already-conformant `R7RSError`
-      // passes through. Either way the bound value is an `R7RSError` — the one
-      // Error subtype the SchemeValue union admits as a value (`error-object?`).
+      // Conformance + security: a raw host `Error` here would make `error-object?`
+      // return #f (non-conformant per §6.11) and leak host file paths (`.stack`/
+      // `.fileName` are OWN properties the membrane's fast path hands across). Every
+      // path re-presents to an `R7RSError` carrying only the message — the one Error
+      // subtype the SchemeValue union admits as a value.
       //
-      // `R7RSError` is loaded LAZILY (dynamic import) rather than at the top of
-      // this module: a static `import ... from "../bridge.js"` pulls bridge's
-      // eager `set_interaction_env` into evaluator init and breaks the
-      // SchemePromise circular-init ordering (bridge.ts documents that it must
-      // not be imported during stdlib bootstrap init). By the time a `try` body has
-      // actually thrown, every module is fully initialized, so the dynamic
-      // import resolves synchronously from the registry.
+      // `R7RSError` is loaded LAZILY: a static top-of-module import would pull
+      // bridge's eager `set_interaction_env` into evaluator init and break the
+      // SchemePromise circular-init ordering. By the time a `try` body has thrown,
+      // every module is initialized, so the dynamic import resolves synchronously.
       const { R7RSError } = await import("../errors.js");
       const errorValue: SchemeValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
       // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
@@ -2839,19 +2732,16 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         result = await run(evalBegin(handlers, { ...ctx, resolver: catchResolver, tail: false }), {
           signal: ctx.signal,
         });
-        caughtError = null; // Error was handled
+        caughtError = null; // handled
       } catch (error) {
-        // Error in catch handler - propagate
         caughtError = error instanceof Error ? error : new Error(String(error));
       }
     }
 
-    // Handle finally clause. Forward signal — finally is allowed to be
-    // bounded too; aborts in finally propagate per JS semantics where any
-    // exception would (this catch swallows them, matching the old behavior).
+    // Forward signal — finally is allowed to be bounded too; aborts in finally
+    // propagate per JS semantics (this catch swallows them, matching the old
+    // behavior).
     if (finallyClause) {
-      // `(finally body...)` — narrow to a pair so `.cdr` is a typed SchemeValue
-      // (the evaluator `is_pair` shadow), replacing the prior `as APair` cast.
       invariant(finallyClause instanceof APair, "try: invalid finally clause");
       const finallyCdr = finallyClause.cdr;
       try {
@@ -2861,7 +2751,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       }
     }
 
-    // If error wasn't handled, re-throw
     if (caughtError) {
       throw caughtError;
     }
@@ -2869,7 +2758,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     return result!;
   })();
 
-  // Yield the promise for the trampoline to await
   return yield resultPromise;
 }
 
@@ -3143,9 +3031,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // be a value, since macros are not first-class.
   let fn: SchemeValue | Macro | Syntax;
   if (first instanceof APair) {
-    // FLAT: yield { call } instead of yield*
     fn = yield { call: evaluate(first, nonTailCtx), frame };
-    // If fn is a promise (from JS), yield it
     if (is_promise(fn)) {
       fn = yield fn;
     }
@@ -3171,10 +3057,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // Reflect.apply). The SPECULATE / LAMBDA markers are copied onto the value so the force-skip
   // and _canBounce checks read them uniformly.
   if ((is_function(fn) || is_callable_value(fn) || is_applyable(fn)) && !is_macro(fn)) {
-    // Regular function - evaluate args then call
-    // FLAT: yield { call } instead of yield*
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
-    // evaluateArgs returns SchemeValue[], narrow with Array.isArray
+    // evaluateArgs's generator return type is `unknown` at this yield site; narrow.
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");
     const args = argsResult;
 
@@ -3196,7 +3080,6 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       }
     }
 
-    // is_function narrowed fn to Function, so we can call apply directly.
     // Thread the dynamic call site so user lambdas invoked synchronously
     // from native JS (e.g. map/filter) pick up THIS Pair's invocation as
     // their parent rather than the lexical one captured at lambda creation.
@@ -3221,7 +3104,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const __savedCanBounce = _canBounce;
     _canBounce = (fn as LambdaFunction)[LAMBDA] === true || is_lambda(fn);
     const __savedRunEnv = _currentRunEnv;
-    // The rosetta membrane's env back-channel (arrival-scheme-env-infer/prompt.ts reads
+    // The rosetta membrane's env back-channel (llm-plane-arrival-env/prompt.ts reads
     // `currentRunEnv()` under a ctx-less `apply`). The meter/strict/speculate run-state that
     // once also rode holders here now travels on `ctx.runCtx` / the operand ctx.
     _currentRunEnv = ctxResolver(ctx).env;
@@ -3272,77 +3155,52 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       return yield { call: result.generator, frame, tail: true };
     }
 
-    // If result is a promise, yield it for the runner to await
     if (is_promise(result)) {
       return yield result;
     }
     return result;
   }
 
-  // Handle Macro - invoke it and evaluate the expansion
   if (is_macro(fn)) {
     const useResolver = ctxResolver(ctx);
     const evalArgs = {
       // The macro's `this` is the use-site LEXICAL frame (a define-macro fexpr body
-      // runs with `env` as `this`; see Macro.invoke). Sourced FROM the resolver
-      // (`resolver.env`) so the `env`/`resolver` pair is structurally synced, not
-      // coincidentally equal — byte-identical to the removed `ctx.env`.
+      // runs with `env` as `this`; see Macro.invoke). Sourced FROM the resolver so
+      // `env`/`resolver` stay structurally synced, not coincidentally equal.
       env: useResolver.env,
-      // The use-site resolver. Staged through the macro seam (P3 3a.4) so 3b can drive
-      // hygiene from a Resolver; the def-time Resolver a `Syntax` captures is what
-      // hygiene actually consults, this is the call-site one.
+      // The use-site resolver — the def-time Resolver a `Syntax` captures is what
+      // hygiene actually consults; this is the call-site one.
       resolver: useResolver,
       dynamic_env: ctx.dynamic_env,
       use_dynamic: ctx.use_dynamic,
       error: ctx.error,
-      // The per-run context, so the syntax-rules expander reads its `debug` option from ctx.
+      // So the syntax-rules expander reads its `debug` option from ctx.
       runCtx: ctx.runCtx,
     };
 
-    // Invoke the macro with unevaluated code.
     // is_macro narrowed fn to Macro | Syntax; the is_syntax branch below splits them
     // by their HONEST return shapes: Syntax.expand -> { expr, scope } (a form +
     // hygiene scope), Macro.invoke -> SchemeValue (a form). No flag toggles the shape.
     //
-    // THE MATCHER OFF-BY-ONE FIX (`is_syntax(fn) ? code : rest`), landed 2026-06-11.
-    // syntax-rules patterns carry a keyword slot as their FIRST element, so the
-    // matcher (extract_patterns) needs the FULL form (`code`). define-macro fexprs
-    // want the keyword-stripped `rest`. Passing `rest` to BOTH made the keyword
-    // consume the first ARG — an off-by-one that broke fixed-arity matching, arity
-    // discrimination, and ellipsis (dropped element 0). Discriminating on
-    // `is_syntax(fn)` gives each the form it expects. Root-cause + the now-green
-    // arity cases: src/__tests__/syntax-rules-arity-offbyone.test.ts (first block).
+    // `is_syntax(fn) ? code : rest`: syntax-rules patterns carry a keyword slot as
+    // their FIRST element, so the matcher (extract_patterns) needs the FULL form
+    // (`code`); define-macro fexprs want the keyword-stripped `rest`. Passing `rest`
+    // to both makes the keyword consume the first arg — an off-by-one that breaks
+    // fixed-arity matching, arity discrimination, and ellipsis (dropped element 0).
+    // See src/__tests__/syntax-rules-arity-offbyone.test.ts.
     //
-    // Why it could land now (it was held through three prior sessions):
-    //   1. The cycle-safe list walker (Pair.isCircularList) shipped — un-masking no
-    //      longer wedges on cyclic data (chibi 6.4 terminates).
-    //   2. The PURITY PASS removed set-cdr!/vector-set!/etc — runtime cycles are
-    //      unconstructable, and the chibi mutation sections this un-masks now hit a
-    //      teaching purity DOOR (→ chibi EXPECTED_FAILURES, intentional).
-    //   3. The map async-leak the fix also exposed is fixed (bridge.ts).
-    // The 34 un-masked chibi failures were triaged: 33 = writing-method purity
-    // doors + 1 = numeric-= IEEE edge, all moved to EXPECTED_FAILURES.
+    // STILL OPEN (tracked as the vector-pattern `it.fails` block): syntax-rules
+    // VECTOR patterns need a SchemeVector unwrap in matcher/expander; dotted-tail-
+    // after-ellipsis template, `_`-wildcard binding, let-syntax recursive hygiene.
     //
-    // STILL OPEN (separate, tracked as the vector-pattern `it.fails` block):
-    // syntax-rules VECTOR patterns need a SchemeVector unwrap in matcher/expander
-    // (boxing-track S9); dotted-tail-after-ellipsis template, `_`-wildcard binding,
-    // let-syntax recursive hygiene — the L1 expander rework.
-    // ── syntax-rules (Syntax): FORM-RETURNING, evaluated in THIS trampoline ──────────
-    // Invoke in macro-expand mode -> { expr, scope }: the transcribed FORM + its hygiene
-    // scope, with NO nested evaluation. Yield the form into the SAME flat trampoline in
-    // TAIL position. The old path (fn.invoke(code, evalArgs, false)) evaluated the expansion
-    // inside a NESTED genRun (stdlib.ts) and returned the VALUE — and a fresh genRun is a
-    // fresh host-stack run() frame, so a syntax-rules macro in a tail loop nested one run()
-    // per iteration and overflowed the host stack. Form-returning keeps everything flat: the
-    // expansion (and any tail call inside it) collapses on the existing trampoline, so a macro
-    // in tail position gets the SAME O(1) TCO as a special form. (A transformer is Exp->Exp;
-    // it must never evaluate inside itself.)
+    // syntax-rules (Syntax) is FORM-RETURNING: `expand` returns `{ expr, scope }`
+    // (the transcribed form + hygiene scope) with NO nested evaluation; the form is
+    // yielded into THIS flat trampoline in tail position. Evaluating the expansion
+    // in a NESTED `run()` instead would mean a tail-looping macro nests one host-
+    // stack frame per iteration and overflows. Form-returning keeps everything flat,
+    // so a syntax-rules macro in tail position gets the SAME O(1) TCO as a special
+    // form (a transformer is Exp->Exp; it must never evaluate inside itself).
     if (fn instanceof Syntax) {
-      // FORM-RETURNING: macro-expand mode -> { expr, scope } (the transcribed FORM + its
-      // hygiene scope, with data-position gensyms already restored by the transformer), then
-      // evaluate it in THIS flat trampoline in TAIL position. No nested run, no onResolve
-      // fixup, so a syntax-rules macro in tail position has the SAME O(1) TCO as a special
-      // form. (A transformer is Exp->Exp; it must never evaluate inside itself.)
       const expanded = fn.expand(code, evalArgs);
       // The expansion evaluates in its hygiene scope (`expanded.scope`) but resolves
       // builtins through the run's capability base — thread evalArgs.resolver's
@@ -3360,13 +3218,11 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──
     let expansion = fn.invoke(rest, evalArgs, false);
 
-    // If macro returns a promise, yield it
     if (is_promise(expansion)) {
       expansion = yield expansion;
     }
 
-    // Regular macro - evaluate the expansion
-    // Check if result is marked as data (no further evaluation needed)
+    // Data-marked expansion needs no further evaluation.
     if (is_data_marked(expansion)) {
       return expansion;
     }

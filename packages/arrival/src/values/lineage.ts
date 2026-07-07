@@ -2,55 +2,49 @@
  * CARRIER CORE — the lineage data model + STATIC chunk classifier. Build-step 1 of
  * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5.
  *
- * Proves the centerpiece: provenance is a static lineage TREE — pipe / merge /
- * fan / mux nodes — *minted only at Rosetta crossings*, with the SHAPE derivable
- * from the parsed AST BEFORE execution (operand-arity over non-literal operands).
- * Runtime only stamps Rosetta leaf-ids into the skeleton's slots. One tree then
- * answers BOTH the teleological full-cone (seal: walk to every leaf) and the
- * minimal demand-cone (e.g. a count, which prunes a length-preserving fan).
+ * Provenance is a static lineage TREE (pipe / merge / fan / mux), minted only at
+ * Rosetta crossings, with the SHAPE derivable from the parsed AST BEFORE execution
+ * (operand-arity over non-literal operands). Runtime only stamps Rosetta leaf-ids
+ * into the skeleton's slots. One tree answers both the teleological full-cone
+ * (seal: walk to every leaf) and the minimal demand-cone (e.g. a count, which
+ * prunes a length-preserving fan).
  *
- * SHADOW-VALIDATED PUBLIC API. `classify`/`fullCone`/`countCone`/`fieldCone`/
- * `fieldResolve`/`stepKey`/`PathStep`/`LineageNode`/… are exported from the package
- * barrel (arrival/src/index.ts) and consumed cross-package by the arrival-chain
- * field-point shadows (lineage-field-shadow{,-autobound}.test.ts), which assert the
- * static carrier reproduces the live runtime field-points before that mint is
- * retired; lineage-shadow.ts wires the full-cone shadow in-package. It operates on
- * real AST nodes (Pair / SchemeSymbol from the reader); classify() runs no
- * evaluation. We claim none of the prior art; see the design note §11/§12
- * (how-provenance, Galois slicing, SSA def-use, why/how/where).
+ * `classify`/`fullCone`/`countCone`/`fieldCone`/`fieldResolve`/`stepKey`/`PathStep`/
+ * `LineageNode` are exported from the package barrel and consumed cross-package by
+ * the arrival-chain field-point shadows (lineage-field-shadow{,-autobound}.test.ts),
+ * which assert the static carrier reproduces the live runtime field-points;
+ * lineage-shadow.ts wires the full-cone shadow in-package. Operates on real AST
+ * nodes (Pair / SchemeSymbol from the reader); classify() runs no evaluation.
  *
- * SPECIAL FORMS. This engine dispatches `if`/`cond`/`let`/`let*`/`letrec`/`begin`/
- * `and`/`or`/`lambda` DIRECTLY from `SPECIAL_FORMS` (eval/evaluator.ts) — they are
- * never macro-expanded to applications — so classify() handles the surface Pairs:
+ * SPECIAL FORMS. `if`/`cond`/`let`/`let*`/`letrec`/`begin`/`and`/`or`/`lambda` are
+ * dispatched DIRECTLY from `SPECIAL_FORMS` (eval/evaluator.ts) — never macro-
+ * expanded — so classify() handles the surface Pairs:
  *   - `if`   → mux(selector=test, arms=[then, else?])
  *   - `cond` → mux over clauses (else is an arm; a `=>` clause threads the test
  *     cone into its arm)
  *   - `let` / `let*` / `letrec` → TRANSPARENT: the body is classified with each
- *     bound symbol's leaf-slot SUBSTITUTED by classify(its RHS). The result equals
- *     the inlined form (golden-prov-special-forms.test.ts:121-163). `let*`/`letrec`
- *     thread substitutions left-to-right; a named let is recursive and stays opaque.
+ *     bound symbol's leaf-slot SUBSTITUTED by classify(its RHS) — equals the
+ *     inlined form. `let*`/`letrec` thread substitutions left-to-right; a named
+ *     let is recursive and stays opaque.
  *   - `begin` → pass-through of the LAST expression
  *   - `and` / `or` → selector-free value-select: cone = union of operand cones,
- *     with NO predicate-taint (a static over-approximation of the short-circuit;
- *     DR7: the runtime stays sequential short-circuit, never parallel-or)
+ *     NO predicate-taint (a static over-approximation of the short-circuit; the
+ *     runtime stays sequential short-circuit, never parallel-or)
  *   - `lambda` literal → contributes NO provenance at its definition site
  *
- * Per DR3 of the finalization plan the `mux` is FORWARD-COMPAT ONLY in v0.1: the
- * static cone is the conservative selector ∪ arms (it cannot know the taken arm),
- * and the byte-identical control-flow "why" (predicate-taint, failed-clause
- * non-leak) stays eager-sourced via the evaluator's control-flow wrappers. We owe
- * the *shape*, not a runtime taken-arm protocol.
+ * The `mux` cone is FORWARD-COMPAT ONLY in v0.1: it is the conservative selector ∪
+ * arms (the taken arm is unknowable statically); the byte-identical control-flow
+ * "why" (predicate-taint, failed-clause non-leak) stays eager-sourced via the
+ * evaluator's control-flow wrappers — we owe the *shape*, not a runtime taken-arm
+ * protocol.
  *
- * On the Const-applicative option (research update / Build-Systems-à-la-Carte):
- * rebuilding classify() as a second Fantasy-Land interpretation (Applicative =
- * static structure, Monad = runtime) is the right frame for the v0.2 per-op
- * ADJOINT rule table, where ops already live in the fl-interop tagless algebra.
- * But classify() runs on SURFACE reader Pairs whose special forms never enter
- * that algebra; a Const reinterpretation would first need a full surface→tagless
- * compiler duplicating the evaluator's own special-form dispatch — strictly more
- * code than matching the Pairs directly. So v0.1 does the direct AST handling; the
- * Const-applicative cut is filed as the v0.2 follow-up (our `walk()` is already
- * the backward pass — v0.2 is "populate the adjoint table," not "flip a mode").
+ * classify() runs on SURFACE reader Pairs whose special forms never enter the
+ * fl-interop tagless algebra, so a Const-applicative reinterpretation (Applicative
+ * = static structure, Monad = runtime, Build-Systems-à-la-Carte style) would first
+ * need a full surface→tagless compiler duplicating the evaluator's special-form
+ * dispatch — strictly more code than matching Pairs directly. Filed as the v0.2
+ * follow-up, once per-op ADJOINT rules exist in that algebra (`walk()` is already
+ * the backward pass; v0.2 is "populate the adjoint table," not "flip a mode").
  */
 import { is_pair } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
@@ -70,16 +64,15 @@ export function assertNever(x: never): never {
 /** A CANONICAL member-read step — the *where* of where-provenance. The field node
  *  is normalized to ONE of these regardless of the surface accessor syntax
  *  (`(:foo x)` / `(@ x :foo)` / `(car x)` / `(vector-ref x i)`), so a lineage
- *  chunk's `uneval` targets minimal scheme with no polyglot sugar; re-sugaring
- *  (`(@ obj :foo)` → `obj.foo`) is an optional later display layer, not the
- *  carrier's concern. The carrier is now the SOLE home of the dropped key (the
- *  runtime field-point that once recorded `{origin,key}` is retired — `(:field x)`
- *  forwards the producer's point; v0.2 §"The carrier"). */
-// The keyword/positional CONFLATION here is INTENTIONAL: `field` carries the named-key
-// case and `index`/`car` the positional cases as a flat union — the distinction that
-// MATTERS (keyword wins a chain, positionals are transparent) does not live in this
-// type. It lives in the `step`, resolved at classify time by D-v02-1 ABSORPTION
-// (keyword-priority, lineage.ts ~:350) and surfaced by `stepKey`.
+ *  chunk's `uneval` targets minimal scheme with no polyglot sugar; re-sugaring is
+ *  an optional later display layer, not the carrier's concern. The carrier is the
+ *  SOLE home of the dropped key (the retired runtime field-point once recorded
+ *  `{origin,key}`; `(:field x)` now forwards the producer's point instead).
+ *
+ *  The keyword/positional CONFLATION into one flat union is intentional: the
+ *  distinction that MATTERS (keyword wins a chain, positionals are transparent)
+ *  is resolved at classify time by D-v02-1 ABSORPTION (keyword-priority) and
+ *  surfaced by `stepKey`, not carried in this type. */
 export type PathStep =
   | { readonly field: string } // a named key — (:foo x) / (@ x :foo): step = {field:"foo"}
   | { readonly car: true } // the head of a pair — (car x)
@@ -137,18 +130,16 @@ function opName(x: unknown): string {
 /**
  * A curated SUBSET of the evaluator's special forms — exactly the forms `classify()`
  * models BY SHAPE (the switch in classifyWith below). These resolve to `Macro`
- * instances in the live env — the evaluator dispatches them from SPECIAL_FORMS, not
- * by macro expansion — so a consumer that skips "macro heads" (e.g. the shadow
- * assert) must EXCLUDE these: classify handles them, they are in scope, not opaque
- * macros. `quote`/`lambda` produce a literal but are still "handled".
+ * instances in the live env — dispatched from SPECIAL_FORMS, not macro expansion —
+ * so a consumer that skips "macro heads" (e.g. the shadow assert) must EXCLUDE
+ * these: classify handles them, they are in scope, not opaque macros. `quote`/
+ * `lambda` produce a literal but are still "handled".
  *
- * NOT exhaustive over SPECIAL_FORMS. Forms classify does NOT model
- * (case / do / while / quasiquote / …) are absent here and fall through to the
- * application path, where they are mis-modeled by shape; this is safe only because
- * the shadow skips them as macro-heads (they resolve to `Macro` in the env). Keep
- * THIS set and the switch in step with EACH OTHER (a head here without a switch arm
- * over-asserts; a switch arm without an entry here over-skips) — but do not treat
- * either as a mirror of the evaluator's full special-form table. */
+ * NOT exhaustive over SPECIAL_FORMS: forms classify does not model (case / do /
+ * while / quasiquote / …) fall through to the application path and are mis-modeled
+ * by shape — safe only because the shadow skips them as macro-heads. Keep this set
+ * and the switch in classifyWith in lock-step (a head here without a switch arm
+ * over-asserts; a switch arm without an entry here over-skips). */
 export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "if",
   "cond",
@@ -173,14 +164,11 @@ function isLiteral(x: unknown): boolean {
   return !(x instanceof ASymbol) && !(x instanceof APair);
 }
 
-// A reader AST datum is `unknown` at an arbitrary car/cdr slot: `APair`'s
-// car/cdr are typed `unknown` (the cons cell is structurally heterogeneous —
-// APair<Car = unknown, Cdr = unknown>), so the spine-walk carries `unknown` and
-// each node is narrowed by guard (`is_pair` / `instanceof ASymbol` / `opName`)
-// before use. Annotating these slots `SchemeValue` would over-claim a union
-// membership the reader never promises at the slot; `unknown` is the honest
-// type, narrowed at the point of dispatch in `classifyWith`.
-function operands(app: APair): unknown[] {
+// APair's car/cdr are typed `unknown` (structurally heterogeneous), so the
+// spine-walk carries `unknown` and each node is narrowed by guard before use.
+// `SchemeValue` would over-claim a union membership the reader never promises
+// at the slot.
+function operands(app: APair<any, any>): unknown[] {
   const out: unknown[] = [];
   let n: unknown = app.cdr;
   while (n instanceof APair) {
@@ -287,17 +275,15 @@ function classifyFanTemplate(fn: unknown, c: Classifier, subst: Subst): LineageN
 
 /** The pipe-vs-merge arity cut, shared by pure ops and synthetic combinations
  *  (cond's selector, a `=>` arm). Drop empties, FORWARD a singleton (pipe), UNION ≥2
- *  (merge). `op` tags the synthetic node honestly (the form/op that combines the
- *  children).
+ *  (merge). `op` tags the synthetic node with the form/op that combines the children.
  *
- *  Like `unionProvenance` (AValue.ts:104-120) in spirit, but the cuts differ: this
- *  one counts NODES (static, pre-binding), `unionProvenance` cuts on distinct SET
- *  identity at runtime. So two operands that will resolve to the SAME provenance set
- *  still count as 2 here → `merge`, where the runtime would singleton-forward (one
- *  distinct set → pipe). `fullCone` is unaffected — the union of two equal sets is
- *  that set — but the spurious `merge` makes `fieldCone` hit the M2 demand-barrier
- *  (walk() merge/opaque case) CONSERVATIVELY at a point the runtime forwards through.
- *  Sound: the barrier over-approximates the cone, never under-approximates it. */
+ *  Differs from `unionProvenance` (AValue.ts:104-120): this counts NODES (static,
+ *  pre-binding), that cuts on distinct SET identity at runtime. Two operands that
+ *  resolve to the SAME provenance set still count as 2 here → `merge`, where the
+ *  runtime would singleton-forward → pipe. `fullCone` is unaffected (union of equal
+ *  sets is that set), but the spurious `merge` makes `fieldCone` hit the M2
+ *  demand-barrier (walk()'s merge/opaque case) CONSERVATIVELY where the runtime
+ *  forwards through — sound, since the barrier over-approximates, never under. */
 function combine(op: string, nodes: readonly LineageNode[]): LineageNode {
   const bearing = nodes.filter(isProvBearing);
   if (bearing.length === 0) return { kind: "literal" };
@@ -329,12 +315,12 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     return subst.get(slot) ?? { kind: "leaf", slot };
   }
 
-  const head = (ast as APair).car;
+  const head = (ast as APair<any, any>).car;
 
   // ── Special forms (dispatched directly by the evaluator; surface Pairs) ──
   if (head instanceof ASymbol) {
     const form = opName(head);
-    const rest = (ast as APair).cdr;
+    const rest = (ast as APair<any, any>).cdr;
     switch (form) {
       case "if":
         return classifyIf(rest, c, subst);
@@ -356,7 +342,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
         // the operands (or #t/#f), so the cone is the union of operand cones.
         return combine(
           form,
-          operands(ast as APair).map((a) => classifyWith(a, c, subst)),
+          operands(ast as APair<any, any>).map((a) => classifyWith(a, c, subst)),
         );
       case "lambda":
         // A lambda literal is a value that carries no provenance at its
@@ -372,7 +358,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   // application: (op . args). A computed operator `((f a) b)` stringifies via
   // opName — a step-2+ HOF hole (tracked in lineage-assumptions A21).
   const op = opName(head);
-  const args = operands(ast as APair);
+  const args = operands(ast as APair<any, any>);
 
   // ── WHERE-PROVENANCE: a member-read, NORMALIZED to a canonical field node ──
   // Recognized across all its surface syntaxes (keyword/`@`/`car`/`vector-ref`);
@@ -605,37 +591,32 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       return;
     case "merge":
     case "opaque":
-      // M2 (the soundness fix): both are DEMAND BARRIERS — walk each child with the
-      // demand DROPPED (full cone), keeping countOnly — but for DISTINCT reasons, so do
-      // not collapse the rationale:
+      // Both are DEMAND BARRIERS — walk each child with the demand DROPPED (full
+      // cone), keeping countOnly — for DISTINCT reasons:
       //   - merge: a fan-in to a FRESH value (`(+ a b)`, a constructed dict). A field
-      //     demand reaching it CANNOT be statically attributed to one child (no genesis
-      //     labels yet — that is v02-G6); the children are not the field, the merge IS
-      //     the producer. (Re-projecting `:foo` into each child would ask "which inputs
-      //     feed child.:foo" — wrong. The old walkField distributed the demand into
-      //     children; that was the M2 bug.)
-      //   - opaque: barrier'd for CONSERVATISM, not genesis — we cannot see inside a
-      //     membrane/foreign call to know whether or how the demanded field survives it,
-      //     so we conservatively take every child's full cone. Do NOT "optimize" this by
-      //     re-distributing the demand into an opaque's children: there is no visible
-      //     structure to justify the narrowing, so it would be unsound.
+      //     demand CANNOT be statically attributed to one child (no genesis labels
+      //     yet); the merge itself IS the producer, not its children. Re-projecting
+      //     `:foo` into each child would wrongly ask "which inputs feed child.:foo".
+      //   - opaque: barrier'd for CONSERVATISM, not genesis — a membrane/foreign call
+      //     is opaque to whether/how the demanded field survives it, so every child's
+      //     full cone is taken. Do not narrow this: there is no visible structure to
+      //     justify it, so it would be unsound.
       for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":
       // Static over-approximation: the value is the selector-gated choice of one arm,
-      // so the cone is selector ∪ every arm (the taken arm is a runtime fact the static
-      // tree cannot know — DR3). Both knobs survive: a field demand crosses a conditional
-      // into BOTH arms (a correct over-approximation, NOT a barrier — unlike a merge, an
-      // arm IS the value, not an input to a fresh genesis).
+      // so the cone is selector ∪ every arm (the taken arm is unknowable statically).
+      // Both knobs survive: a field demand crosses a conditional into BOTH arms — a
+      // correct over-approximation, NOT a barrier (unlike a merge, an arm IS the
+      // value, not an input to a fresh genesis).
       walk(n.selector, b, out, opts);
       n.arms.forEach((arm) => walk(arm, b, out, opts));
       return;
     case "fan":
       // The value depends on the per-element transform; for a LENGTH-PRESERVING fan
-      // (map) the COUNT does not, so a count-query prunes it — the same tree, two
-      // answers. A FILTER is length-CHANGING (count depends on the predicate), so it is
-      // NOT pruned. In demand mode countOnly is false, so the prune never fires —
-      // reproducing the old walkField fan behavior exactly (thread to source + mint).
+      // (map) the COUNT does not, so a count-query prunes it — same tree, two
+      // answers. A FILTER is length-CHANGING (count depends on the predicate), so
+      // it is NOT pruned. In demand mode countOnly is false, so the prune never fires.
       walk(n.source, b, out, opts);
       if (opts.countOnly && n.lengthPreserving) return; // map: prune the per-element transform
       if (n.introduces) (b[n.op] ?? []).forEach((x) => out.add(x));
@@ -671,15 +652,14 @@ export function sameStep(a: PathStep, z: PathStep): boolean {
 
 /**
  * DEMAND-AS-PROJECTION (D-v02-2): the cone needed when only ONE field of the value
- * is demanded — the per-node hole-lattice element pushed backward. A field node is
- * followed IFF its step matches the demand; a NON-matching field node is a pruned
- * SIBLING (contributes nothing — the lens complement as set-difference). Every
- * other node propagates the same field demand to where the value is produced.
+ * is demanded. A field node is followed IFF its step matches the demand; a
+ * NON-matching field node is a pruned SIBLING (contributes nothing — the lens
+ * complement as set-difference). Every other node propagates the same field
+ * demand toward where the value is produced.
  *
- * This is the projection-parameterized `walk`: the explicit-optic machinery
- * (profunctor lenses / StyleLens) collapses to this single parameter because
- * arrival has ONE interpreter (`walk`) — the multi-interpreter uniformity a
- * profunctor buys is not needed (v0.2 §"Test demand-as-projection FIRST").
+ * This is `walk` parameterized by projection: explicit-optic machinery
+ * (profunctor lenses) collapses to this single parameter because arrival has
+ * ONE interpreter — the multi-interpreter uniformity a profunctor buys isn't needed.
  */
 export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[] {
   const out = new Set<number>();
@@ -688,39 +668,31 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
 }
 
 /** The CARRIER's canonical plucked key of a `PathStep` — the NAMED location only.
- *  A named member → its bare name string (`(:verdict x)` / `(@ x :verdict)` / `(@ x "verdict")`
- *  → `"verdict"`), the keyword form the runtime accessor (`accessorField`) recognizes — though
- *  the carrier is now the SOLE place that key is pinned (the runtime forwards the producer's point).
- *  POSITIONAL access FORWARDS (no key): `car` AND `index` both → `null`. Per D-v02-4
- *  (named-pin / positional-forward), the carrier tracks normalized provenance (producer +
- *  *named* location), NOT the specific access type or the exact position — the index is the
- *  z-stack / fan axis (the `{index}` node stays in the tree for the viz/z-stack, read via
- *  `.step`), never a `:fields` key. So no numeric key ever reaches a consumer (E4 dissolved);
- *  index edges then *agree* with the live mint, which also pins nothing positional. */
+ *  A named member (`(:verdict x)` / `(@ x :verdict)` / `(@ x "verdict")`) → its bare
+ *  name string, the form the runtime accessor (`accessorField`) recognizes — the
+ *  carrier is the SOLE place that key is pinned. POSITIONAL access FORWARDS (no
+ *  key): `car` AND `index` both → `null`. Per D-v02-4 (named-pin / positional-
+ *  forward) the carrier tracks producer + *named* location, not the specific
+ *  access type or exact position — the index stays in the tree (z-stack/fan axis,
+ *  read via `.step`) but never becomes a `:fields` key. */
 export function stepKey(step: PathStep): string | null {
   if ("field" in step) return step.field;
   return null; // positional (car / index) — forwarded, no plucked key (D-v02-4)
 }
 
-/** What a field-projection chain bottoms out at, in the SHAPE the two JOIN consumers
- *  read today (v0.2 §"The consumer-equivalence contract"):
- *   - `base`  — the source-leaf ids the value derives from (the producer points). This
- *     is the carrier's static analogue of the sift seal's `resolveReadIds`
- *     (slice.ts:169-181): walk to the BASE producer, **key discarded**. Computed as the
- *     `fullCone` of the field node's focused CHILD (the source the projection reads).
- *   - `key`   — the INNERMOST projected step (D-v02-1 ABSORPTION), surfaced on the dag's
- *     point-edge as `FlowGraphEdge.fields`. The field node's `step` is ALREADY the
- *     innermost: `classify` returns the inner field unchanged for a field-under-field
- *     (the absorption above), so a nested `(:a (:b x))` keeps just `:b` — keep base +
- *     ONE innermost key, no composed path.
+/** What a field-projection chain bottoms out at, in the shape the two JOIN consumers
+ *  read (v0.2 §"The consumer-equivalence contract"):
+ *   - `base` — the source-leaf ids the value derives from (the producer points). The
+ *     carrier's static analogue of the sift seal's `resolveReadIds` (slice.ts:169-181):
+ *     walk to the BASE producer, key discarded. Computed as `fullCone` of the field
+ *     node's focused CHILD (the source the projection reads).
+ *   - `key` — the INNERMOST projected step (D-v02-1 ABSORPTION), surfaced on the dag's
+ *     point-edge as `FlowGraphEdge.fields`. `classify` already returns the inner field
+ *     unchanged for a field-under-field, so a nested `(:a (:b x))` keeps just `:b` —
+ *     base + ONE innermost key, no composed path.
  *
- *  For a NON-field node (a plain source / pipe / merge — the value was not produced by
- *  a member-read) there is no projected key: `key = null`, `base = fullCone(node)` (the
- *  producer's own point flows unprojected), so `base` = the producer set, no pin.
- *
- *  This is the SOLE source of the dropped key — the runtime field-point mint it was
- *  shadow-proven against (before that mint was retired) is gone, so `(:field x)` now
- *  forwards the producer's point and the dag reads its `:fields` from here. */
+ *  For a NON-field node (plain source/pipe/merge — not a member-read) there is no
+ *  projected key: `key = null`, `base = fullCone(node)` (the producer set, no pin). */
 export interface FieldResolution {
   readonly base: number[];
   readonly key: string | null; // named field-name or forwarded; never a positional index (D-v02-4)

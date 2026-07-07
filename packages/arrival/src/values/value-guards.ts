@@ -1,19 +1,15 @@
 // Leaf value-kernel predicates.
 //
-// These four type guards depend ONLY on the value kernel (Pair, Nil, the
-// native scalar wrappers) — never on Environment / Macro / Syntax. They were carved out of guards.ts so that Pair.ts can import the
-// predicates it needs without transitively dragging the entire evaluator
-// world into the value kernel (guards.ts is a *false leaf*: it imports
-// Environment, Macro, …).
+// These type guards depend ONLY on the value kernel (Pair, Nil, the native
+// scalar wrappers) — never on Environment / Macro / Syntax. Carved out of
+// guards.ts (a *false leaf* that imports Environment, Macro, …) so Pair.ts can
+// import the predicates it needs without dragging the evaluator world into
+// the value kernel. guards.ts re-exports them for backward compatibility.
 //
-// guards.ts re-exports all four for backward compatibility — every existing
-// call site that imports them from "../eval/guards.js" keeps working unchanged.
-//
-// The residual Pair <-> value-guards 2-cycle is intentional and harmless:
-// both live inside the future @arrival/values package, so the *cross-package*
-// dependency graph stays acyclic. ESM resolves it because instanceof is
+// The residual Pair <-> value-guards 2-cycle is intentional and harmless: both
+// live inside the future @arrival/values package, so the cross-package
+// dependency graph stays acyclic — ESM resolves it because instanceof is
 // evaluated at call time, never at module-init.
-// ----------------------------------------------------------------------
 import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
@@ -31,12 +27,10 @@ import { tf } from "./tagless-final.js";
 import type { Macro } from "../eval/Macro.js";
 import type { Syntax } from "../eval/Syntax.js";
 
-// ----------------------------------------------------------------------
 export function is_plain_object(object: unknown): object is Record<string, unknown> {
   return object !== null && typeof object === "object" && object.constructor === Object;
 }
 
-// ----------------------------------------------------------------------
 /**
  * `nil` is the module-load singleton with empty provenance. Once `Nil` extends
  * AValue, `nil.withProvenance(p)` mints a FRESH Nil so the singleton's empty
@@ -53,12 +47,10 @@ export function is_nil(value: unknown): value is ANil {
   return value instanceof ANil;
 }
 
-// ----------------------------------------------------------------------
-export function is_pair(o: unknown): o is APair {
+export function is_pair(o: unknown): o is APair<any, any> {
   return o instanceof APair;
 }
 
-// ----------------------------------------------------------------------
 /**
  * Scheme falsiness — the ONLY scheme-falsy value is `#f` (R7RS §6.3): a raw JS
  * `false`, a JS `null` (the membrane's #f sibling), or a boxed `ABool(false)`
@@ -74,14 +66,12 @@ export function is_false(o: unknown): o is false | null | ABool {
   return o === false || o === null || (o instanceof ABool && o.value === false);
 }
 
-// ----------------------------------------------------------------------
 export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | AInexact =>
   obj instanceof AString ||
   obj instanceof ACharacter ||
   obj instanceof AExact ||
   obj instanceof AInexact;
 
-// ----------------------------------------------------------------------
 /**
  * `is_macro` WITHOUT an import edge into the evaluator. A Macro / Syntax /
  * Syntax.Parameter each carry a stable `static [CLASS]` brand ("macro" /
@@ -107,21 +97,17 @@ export function is_macro_value(o: unknown): o is Macro | Syntax {
   return typeof brand === "string" && MACRO_CLASS_BRANDS.has(brand);
 }
 
-// ----------------------------------------------------------------------
 // Pure structural predicates (no value-kernel deps at all). They live here
 // rather than in guards.ts so leaf utilities (e.g. utils/typecheck.ts) can
 // import them without reaching guards.ts and, through it, Environment/Macro.
-// ----------------------------------------------------------------------
 export function is_function(o: unknown): o is Function {
   return typeof o === "function" && "bind" in o && typeof o.bind === "function";
 }
 
-// ----------------------------------------------------------------------
 // Callable-as-value guards (stage 0 of the callable-as-value rework; see
 // docs/working-proposals/callable-as-value-run-ctx.md). `instanceof` is evaluated at call
 // time, so importing these value classes into this leaf adds no init-time cycle. The legacy
 // bare-fn `is_callable`/`is_macro` (eval/guards.js) coexist until the migration retires them.
-// ----------------------------------------------------------------------
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;
 }
@@ -149,7 +135,6 @@ export function is_applyable(o: unknown): boolean {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
 }
 
-// ----------------------------------------------------------------------
 export function is_instance(obj: unknown): boolean {
   if (!obj) {
     return false;
@@ -166,11 +151,9 @@ export function is_instance(obj: unknown): boolean {
   return false;
 }
 
-// ----------------------------------------------------------------------
 export const has_own_symbol = (obj: unknown, symbol: symbol): boolean =>
   obj !== null && typeof obj === "object" ? Object.hasOwn(obj, symbol) : false;
 
-// ----------------------------------------------------------------------
 export function is_iterator(obj: unknown, symbol: symbol): boolean {
   if (obj === null || typeof obj !== "object") return false;
   if (has_own_symbol(obj, symbol) || has_own_symbol(Object.getPrototypeOf(obj), symbol)) {

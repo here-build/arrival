@@ -314,7 +314,7 @@ export default new EnvCapability("scheme/srfi-13", {
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        (str: unknown, criterion?: unknown): APair | ANil | Promise<APair | ANil> => {
+        (str: unknown, criterion?: unknown): APair<any, any> | ANil | Promise<APair<any, any> | ANil> => {
           const chars = [...stringValue(str)];
           const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
           return afterFlags(flags, (f) => {

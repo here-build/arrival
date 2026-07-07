@@ -46,15 +46,17 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | ANil, not unknown (string->list / split)", () => {
-    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<APair | ANil>();
+    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<APair<any, any> | ANil>();
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | ANil], not [unknown] (list->string)", () => {
-    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[APair | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[APair<any, any> | ANil]>();
   });
 
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
-    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<[AString, APair | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<
+      [AString, APair<any, any> | ANil]
+    >();
   });
 });
 

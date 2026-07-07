@@ -1,11 +1,11 @@
 /**
- * The reader's second stage: the Lexer's token stream → Scheme data, and the single text→datum entry
- * point (evaluator, analysis tools, and MCP all read through here).
+ * Lexer token stream → Scheme data — the single text→datum entry point (evaluator,
+ * analysis tools, and MCP all read through here).
  *
- * Two non-obvious things in `_read_object`: reader extensions (the quote family, the `specials`
- * registry) are evaluated at PARSE time, not later; and `_enterNesting` bounds native-stack descent so
- * a pathological input fails with a `ParseError` instead of a host `RangeError` (see the war story
- * below). Structure inspired by BiwaScheme's parser.
+ * Two gotchas in `_read_object`: reader extensions (the quote family, the `specials`
+ * registry) expand at PARSE time, not later; and `_enterNesting` bounds native-stack
+ * descent so a pathological input throws `ParseError` instead of a host `RangeError`
+ * (see `maxNestingDepth`).
  */
 import { DatumReference } from "../values/DatumReference.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -41,13 +41,12 @@ import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
 
-// Nesting-depth cap — rejects a deeply-nested input at PARSE time before it can
-// overflow the native JS stack. `_read_object`/`read_list` recurse one real frame
-// per open delimiter, so without this a pathological input throws a host
-// `RangeError` (uncatchable by sandbox `guard`) instead of a Scheme `ParseError`.
-// The check is O(1): `_state.parentheses` already IS the live descent depth. The
-// cap sits below the most fragile downstream consumer's overflow floor (a recursive
-// evaluator overflows ~3,500) and far above any real s-expression depth.
+// Nesting-depth cap: rejects deep input at PARSE time before it overflows the
+// native JS stack. `_read_object`/`read_list` recurse one frame per open delimiter,
+// so uncapped input throws a host `RangeError` (uncatchable by sandbox `guard`)
+// instead of a Scheme `ParseError`. O(1) check — `_state.parentheses` IS the live
+// descent depth. Cap sits below the most fragile consumer's overflow floor (a
+// recursive evaluator overflows ~3,500) and far above any real s-expression depth.
 let maxNestingDepth = 2_000;
 
 /** Current parser nesting-depth cap (open delimiters before a ParseError). */
@@ -106,9 +105,9 @@ export class Parser {
   private readonly _strict!: boolean;
   private readonly _curlyInfix!: boolean;
   private _refs!: (SchemeValue | Promise<SchemeValue>)[];
-  // `parentheses` is the live descent depth (the nesting-cap counter); `brackets`
-  // is the typed open-delimiter stack holding each open's EXPECTED close char, so
-  // a close must match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
+  // `parentheses` is the live descent depth (nesting-cap counter); `brackets` is the
+  // open-delimiter stack holding each open's EXPECTED close char, so a close must
+  // match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
   private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
   constructor({
@@ -226,11 +225,10 @@ export class Parser {
     const meta = this.__lexer__.__token__;
     if (!meta) return undefined;
     return {
-      line: meta.line + 1, // Convert 0-indexed to 1-indexed
+      line: meta.line + 1, // 0-indexed → 1-indexed
       col: meta.col,
       offset: meta.offset,
-      // `source` (this parser's filename/module path) makes frames read as
-      // `file:line`; undefined for sourceless parses (the bare REPL/entry).
+      // Stamped filename for `file:line` frames; undefined for sourceless parses.
       source: this._source,
     };
   }
@@ -305,7 +303,7 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(): Promise<APair | ANil> {
+  async read_list(): Promise<APair<any, any> | ANil> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
@@ -345,31 +343,30 @@ export class Parser {
       }
       chain = cell;
     }
-    return chain as APair | ANil;
+    return chain as APair<any, any> | ANil;
   }
 
   /**
-   * Collection-literal element reader: gather the flat datum sequence between `[`…`]` /
-   * `{`…`}` with POSITION-SCOPED comma separators (the JSON-gravity tolerance; see
+   * Gather the flat datum sequence between `[`…`]` / `{`…`}`, with POSITION-SCOPED
+   * comma separators (the JSON-gravity tolerance; see
    * docs/working-proposals/arrival-curly-vector-literals.md "Commas and keys").
    *
-   * A `,` is consumed as a SEPARATOR only where a JSON-writer would emit one —
-   * immediately after a complete element (`[1, 2]`), and for maps only after a complete
-   * key-value PAIR (an even boundary; JSON puts `:` between key and value, never `,`).
-   * At most one separator per boundary; every other comma reads as R7RS unquote
-   * (`{:a ,x}` under quasiquote keeps working). `,@` is never a separator. One trailing
-   * separator before the close is tolerated (`[1, 2,]`, JS gravity).
+   * A `,` is a SEPARATOR only where a JSON-writer would emit one: after a complete
+   * element (`[1, 2]`), or for maps only after a complete key-value pair (an even
+   * boundary — JSON puts `:` between key and value, never `,`). At most one separator
+   * per boundary; any other comma reads as R7RS unquote (`{:a ,x}` under quasiquote
+   * still works). `,@` is never a separator. One trailing separator before the close
+   * is tolerated (`[1, 2,]`).
    *
-   * Maps additionally absorb at most ONE lone `:` token at an ODD boundary (immediately
-   * after a complete key) — the verbatim-JSON string-key colon `{"a": 1}` (the lexer
-   * emits a clean separate `:` token there; a GLUED `:1` is one keyword token and is NOT
-   * absorbed — see the spec's flip section).
+   * Maps also absorb at most one lone `:` token at an ODD boundary (right after a
+   * complete key) — the verbatim-JSON string-key colon `{"a": 1}`. A GLUED `:1` is one
+   * keyword token and is NOT absorbed (see the spec's flip section).
    */
   private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
-    // Whether the CURRENT boundary already consumed its one separator comma.
+    // Has the current boundary already consumed its one separator comma?
     let separatorConsumed = false;
-    // Maps: whether the CURRENT odd boundary already absorbed its one JSON `:` token.
+    // Maps: has the current odd boundary already absorbed its one JSON `:` token?
     let colonConsumed = false;
     while (true) {
       const token = await this.peek();
@@ -382,11 +379,10 @@ export class Parser {
         break;
       }
       if (token === ",") {
-        // Separator position: something precedes, this boundary hasn't consumed one,
-        // and (maps) the preceding elements form complete pairs. Otherwise the comma
-        // is unquote — fall through to _read_object, which reads the `,`-prefixed form.
-        const separatorPosition =
-          elements.length > 0 && !separatorConsumed && (!isMap || elements.length % 2 === 0);
+        // Separator position: something precedes, this boundary hasn't consumed one yet,
+        // and (maps) the preceding elements form complete pairs. Otherwise it's unquote —
+        // fall through to _read_object, which reads the `,`-prefixed form.
+        const separatorPosition = elements.length > 0 && !separatorConsumed && (!isMap || elements.length % 2 === 0);
         if (separatorPosition) {
           separatorConsumed = true;
           this.skip();
@@ -415,26 +411,24 @@ export class Parser {
   }
 
   /**
-   * Validate + mint the `{…}` dict-literal node (default `{}` mode). Doors, phrased for
-   * model recovery: even arity; keys are `:keyword` / `"string"` / `key:` (all fold to
-   * the same string key) or an unquote form (quasiquote-substituted, validated
-   * post-substitution); duplicate static keys are loud (Clojure-faithful — a model's
-   * duplicate is a mistake).
+   * Validate + mint the `{…}` dict-literal node (default `{}` mode). Even arity; keys
+   * are `:keyword` / `"string"` / `key:` (fold to the same string key) or an unquote
+   * form (validated post quasiquote-substitution); duplicate static keys throw
+   * (Clojure-faithful — a model's duplicate is a mistake).
    *
-   * THE SUFFIX-KEYWORD FLIP (spec: "The suffix-keyword flip"): a symbol key with a
-   * single trailing colon is an EXPLICIT declaration and flips to the keyword —
-   * `{flight_number: "X"}` ≡ `{:flight_number "X"}`. The flipped key is REPLACED in the
-   * element sequence by its `:keyword` twin so every downstream face (code-position
-   * `(dict …)` lowering, quasiquote processing, the quoted-data AJSObject face) sees the
-   * one canonical spelling. Bare symbols (`{x 1}`) stay E-DICT-BAD-KEY — no commitment
-   * marker, could be an intended reference. Position-scoped: this is a dict-literal KEY
-   * rule, not a lexer change (`foo:` outside `{}` stays a plain symbol).
+   * SUFFIX-KEYWORD FLIP: a symbol key with a single trailing colon is an explicit
+   * declaration and flips to the keyword — `{flight_number: "X"}` ≡ `{:flight_number "X"}`.
+   * The flipped key REPLACES the original in the element sequence so every downstream
+   * face (code-position `(dict …)` lowering, quasiquote, the quoted-data AJSObject face)
+   * sees one canonical spelling. Bare symbols (`{x 1}`) stay E-DICT-BAD-KEY (could be an
+   * intended reference). Key rule is position-scoped: `foo:` outside `{}` stays a plain
+   * symbol.
    */
   private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
-    // Key validation runs BEFORE the arity check (and covers a trailing unpaired key):
-    // this matches the char-incremental order the sampler's Σ mirror necessarily judges
-    // in — a key token is judged the moment it completes, the close's arity check comes
-    // after — so `{a:1}` doors as the BAD KEY it is, not as odd arity.
+    // Key validation runs BEFORE the arity check (covers a trailing unpaired key too):
+    // matches the char-incremental order the sampler's Σ mirror judges in — a key token
+    // is judged the moment it completes, arity comes after — so `{a:1}` doors as the BAD
+    // KEY it is, not as odd arity.
     const seen = new Set<string>();
     for (let i = 0; i < elements.length; i += 2) {
       const suffixKey = suffixKeyName(elements[i]);
@@ -478,11 +472,11 @@ export class Parser {
     return makeDictLiteralNode(elements);
   }
 
-  // SRFI-105 curly-infix: gather the flat datum sequence between `{` and `}` (the transform to a
-  // canonical s-expr happens in canonicalizeCurly). Mirrors read_list's loop but collects a JS array
-  // and stops on `}`; `_read_object` recursion handles nested `{…}`/`(…)`/quotes for free.
-  // Reached ONLY under the opt-in `curlyInfix` flag (kept verbatim: no comma-separator logic here —
-  // in infix mode a `,` reads as unquote, exactly the pre-flag behavior).
+  // SRFI-105 curly-infix: gather the flat datum sequence between `{` and `}` (transform to
+  // a canonical s-expr happens in canonicalizeCurly). Mirrors read_list's loop but collects a
+  // plain array and stops on `}`; `_read_object` recursion handles nested forms for free.
+  // Reached only under the opt-in `curlyInfix` flag — no comma-separator logic here (in
+  // infix mode `,` reads as unquote).
   async read_curly_elements(): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
     while (true) {
@@ -527,8 +521,6 @@ export class Parser {
     // to the public datum union here.
     const object: SchemeValue | EOF = read instanceof DatumReference ? read.valueOf() : read;
     if (this._refs.length > 0 && object !== eof) {
-      // The method is async, so awaiting the resolver is the direct equivalent of the
-      // former `unpromise` then-callback (`_resolve_object` always returns a Promise).
       const resolved = await this._resolve_object(object);
       if (resolved instanceof APair) {
         // mark cycles on parser level
@@ -557,14 +549,10 @@ export class Parser {
     throw e;
   }
 
-  // Resolves any nested reader-internal DatumReference placeholders inside a freshly
-  // parsed datum. The only structure the reader emits that can carry a nested ref is an
-  // APair, so that is the sole recursive case; every other SchemeValue is a leaf and
-  // passes through. (A top-level ref is already unwrapped by read_object before this
-  // runs.) The former raw-array / plain-object branches were LIPS-era dead code — the
-  // reader no longer emits bare JS containers, so under the SchemeValue union they were
-  // both unreachable and type-incoherent (they built `SchemeValue[]` / `Record<…>`
-  // values that are not SchemeValue); removed rather than hardened with a cast.
+  // Resolves nested reader-internal DatumReference placeholders inside a freshly parsed
+  // datum. APair is the only structure the reader emits that can carry a nested ref, so
+  // it's the sole recursive case; every other SchemeValue is a leaf and passes through
+  // (a top-level ref is already unwrapped by read_object before this runs).
   async _resolve_object(object: SchemeValue): Promise<SchemeValue> {
     if (object instanceof APair) {
       return this._resolve_pair(object);
@@ -572,7 +560,7 @@ export class Parser {
     return object;
   }
 
-  async _resolve_pair(pair: APair): Promise<APair> {
+  async _resolve_pair(pair: APair<any, any>): Promise<APair<any, any>> {
     // Datum-label resolution IS the knot-tying case: `#0=(1 #0#)` closes a cycle no
     // construction order can express, so the placeholder patch goes through the door
     // (one of its three named consumers). Patch-not-recurse on the resolved branch keeps
@@ -601,20 +589,16 @@ export class Parser {
     if (token === eof) {
       return token;
     }
-    // Capture location early for all constructs
     const loc = this._getLocation();
     if (is_special(token)) {
-      // Handle vector literals #(...) specially
       if (is_vector_literal(token)) {
         this.skip();
         this._enterNesting(")");
         const list = await this.read_list();
-        // Convert list to a boxed vector (#(...) literal producer). R7RS literals
-        // are immutable → freeze, so a later vector-set!/fill! on the literal is
-        // an error (else it would corrupt the shared parsed AST node persistently).
-        // Shallow cdr-walk (the `list->vector` builtin's idiom) collects the elements
-        // as the honest `SchemeValue[]` the vector holds — `APair.to_array` returns
-        // the deliberately-`unknown[]` cons payload, which `AVector` can't accept.
+        // R7RS literals are immutable → freeze (a later vector-set!/fill! would
+        // corrupt the shared parsed AST node persistently). Shallow cdr-walk collects
+        // elements as the honest `SchemeValue[]` the vector holds — `APair.to_array`
+        // returns the deliberately-`unknown[]` cons payload, which `AVector` can't accept.
         const items: SchemeValue[] = [];
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
@@ -623,13 +607,11 @@ export class Parser {
         litVec.freeze();
         return litVec;
       }
-      // Handle bytevector literals #u8(...) specially
       if (is_bytevector_literal(token)) {
         this.skip();
         this._enterNesting(")");
         const list = await this.read_list();
-        // Convert list to a boxed bytevector (#u8(...) literal producer). R7RS
-        // literals are immutable → freeze (see the #(...) case above).
+        // Immutable → freeze, same rationale as the vector literal case above.
         let litBv: ABytevector;
         if (list instanceof ANil) {
           litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(0));
@@ -664,11 +646,9 @@ export class Parser {
       if (object === eof) {
         throw new Unterminated("Expecting expression, eof found");
       }
-      // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote prefixes, #(...),
-      // #u8(...)) — it expands into a list the interpreter evaluates later. LIPS user-registered reader
-      // macros (expanded by EVALUATING at parse time) were removed: nothing registered one, and that
-      // read-time evaluator call was the ONLY reason the reader imported the evaluator — the cycle that
-      // forced exec to dynamically import("stdlib") under the vestigial `lips` handle to break it.
+      // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote, #(...),
+      // #u8(...)) expanding into a list the interpreter evaluates later — no user-registered
+      // reader macros exist (that would require evaluating at parse time).
       invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
@@ -727,16 +707,13 @@ export class Parser {
       const elements = await this.read_literal_elements("}", true, "dict literal");
       return this.make_dict_literal(elements, loc ?? undefined);
     } else if (this.is_curly_close(token)) {
-      // a stray/mismatched `}` (read_curly_elements consumes its OWN close);
-      // _exitNesting reports the mismatch — e.g. a `}` inside a `(` list — or the
-      // unmatched close. It always throws on this path (the close is unmatched here),
-      // so this branch never produces a datum; the post-chain throw below makes that
-      // non-return explicit for the type checker.
+      // Stray/mismatched `}` (read_curly_elements consumes its own close) — e.g. a `}`
+      // inside a `(` list. _exitNesting always throws here; the post-chain throw below
+      // makes the non-return explicit for the type checker.
       this._exitNesting(token, loc ?? undefined);
     } else if (this.is_close(token)) {
-      // a stray/mismatched `)` — e.g. a `)` inside `{…}`, or a top-level close
-      // with nothing open. Strict pairing rejects it (the old code silently
-      // rebalanced and returned nothing). Like the `}` case, _exitNesting throws here.
+      // Stray/mismatched `)` — e.g. a `)` inside `{…}`, or a top-level close with
+      // nothing open. Strict pairing rejects it; _exitNesting throws here too.
       this._exitNesting(token, loc ?? undefined);
     } else if (this.is_open(token)) {
       this._enterNesting(")");
