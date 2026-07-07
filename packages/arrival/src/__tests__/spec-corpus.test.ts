@@ -11,6 +11,7 @@ import { parse } from "../reader/parse.js";
 import { isDictLiteralNode } from "../values/dict-literal.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
+import { ADict } from "../values/primitives/ADict.js";
 import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
@@ -75,7 +76,7 @@ function toJson(v: unknown): unknown {
     return { $sym: typeof v.__name__ === "string" ? v.__name__ : String(v.valueOf()) };
   }
   if (v instanceof AVector) return v.__vector__.map(toJson);
-  if (v instanceof AJSObject) {
+  if (v instanceof AJSObject || v instanceof ADict) {
     return Object.fromEntries(v.keys().map((k) => [k, toJson(v.get(k))]));
   }
   if (typeof v === "object" && !(v instanceof APair)) {
