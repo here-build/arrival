@@ -154,14 +154,14 @@ function bakedSort(): SequenceSymbolDef {
 
 describe("SRFI-95 sort — contract element precision", () => {
   it("declares the receiver as the representation-blind SCHEME identity (z.value), not host-blind z.unknown()", () => {
-    const items = bakedSort().in.def["items"];
+    const items = bakedSort().in.def.items;
     // Reference-identity (not just shape) — z.value is the shared module singleton, so this
     // proves the FILE chose it deliberately, not merely "some schema that happens to accept anything".
     expect(items[0]).toBe(z.value);
   });
 
   it("declares the comparator (less?) as a callable predicate schema, not z.unknown()", () => {
-    const items = bakedSort().in.def["items"];
+    const items = bakedSort().in.def.items;
     const comparator = items[1];
     expect(comparator.type).toBe("optional");
     // AValue.ts's single-source-of-truth member signature is
@@ -171,7 +171,7 @@ describe("SRFI-95 sort — contract element precision", () => {
   });
 
   it("declares the output as the representation-blind scheme identity (z.value), matching the receiver algebra's declared SchemeValue return", () => {
-    const items = bakedSort().out.def["items"];
+    const items = bakedSort().out.def.items;
     expect(items[0]).toBe(z.value);
   });
 });
