@@ -1,10 +1,10 @@
 /**
- * EXPERIMENT (spike) — classic Scheme → sweet-expression RENDERER.
+ * EXPERIMENT (spike) — classic Scheme → sugarcoat-expression RENDERER.
  *
- * The interesting half of a classic↔sweet bifunctor: sweet→classic is a
- * deterministic reader (SRFI-110 unsweeten), but classic→sweet is a *choice* of
+ * The interesting half of a classic↔sugarcoat bifunctor: sugarcoat→classic is a
+ * deterministic reader (SRFI-110 unsweeten), but classic→sugarcoat is a *choice* of
  * layout. This is a first HEURISTIC renderer (width-budget + a fixed head-line
- * rule) to SEE how the sweet shape reads on our real .scm — NOT the MDL-optimal
+ * rule) to SEE how the sugarcoat shape reads on our real .scm — NOT the MDL-optimal
  * version yet. If the shape is promising, the heuristic's failure modes tell us
  * what an MDL layout-cost must capture (the Yelland/optimal-DP step).
  *
@@ -20,7 +20,7 @@
  * KNOWN v0 LIMITATIONS (deliberate, for the spike):
  *   • head-line rule is fixed ("pull first arg if it fits"), not optimized.
  *   • dangling comments before a `)` (own line, no datum after) are dropped, and
- *     comments on inline-rendered operands aren't shown (only at formatSweet seams).
+ *     comments on inline-rendered operands aren't shown (only at formatSugarcoat seams).
  *   • no $ / \\ group markers, no vectors / #\char.
  */
 
@@ -54,8 +54,8 @@ const childList = (nd: Node): Node[] => {
 // A `;`-line-comment on its OWN line(s) before a datum becomes that datum's
 // `lead`; one on the SAME line just after a datum is its `trail`. (A dangling
 // comment before a `)` with no following datum is dropped.) Comments are trivia
-// to the sweet READER, and `nodeEq` ignores lead/trail, so carrying them in the
-// render keeps `sweetToScheme` form-matching — hence the round-trip — intact.
+// to the sugarcoat READER, and `nodeEq` ignores lead/trail, so carrying them in the
+// render keeps `sugarcoatToScheme` form-matching — hence the round-trip — intact.
 export function parseSexprs(src: string): Node[] {
   let i = 0;
   const n = src.length;
@@ -219,7 +219,7 @@ export function parseSexprs(src: string): Node[] {
 }
 
 // ── renderer ──────────────────────────────────────────────────────────────────
-export interface SweetOpts {
+export interface SugarcoatOpts {
   width: number;
   neoteric: boolean;
   curly: boolean;
@@ -233,7 +233,7 @@ export interface SweetOpts {
    *   ":"  → `tagline: value`     (JSON/YAML — leading colon flips to trailing) */
   pairGlyph: "=>" | ":";
 }
-export const DEFAULT_OPTS: SweetOpts = {
+export const DEFAULT_OPTS: SugarcoatOpts = {
   width: 120,
   neoteric: false,
   curly: true,
@@ -313,7 +313,7 @@ const precOf = (op: string): number => INFIX_PREC[op] ?? 3;
 
 /** Render the INSIDE of an infix node (no outer braces): `a glyph b glyph …`,
  *  recursing through operands at this op's precedence. */
-function infixContent(items: Node[], o: SweetOpts): string {
+function infixContent(items: Node[], o: SugarcoatOpts): string {
   const op = atomText(items[0]);
   const myPrec = precOf(op);
   return items
@@ -326,13 +326,13 @@ function infixContent(items: Node[], o: SweetOpts): string {
  *  braces only when it binds the same or looser than the parent (so grouping is
  *  preserved, incl. non-associative `-`/`/`); a tighter operand drops them and
  *  shares the zone. Non-infix operands render normally. */
-function infixOperand(nd: Node, parentPrec: number, o: SweetOpts): string {
+function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts): string {
   if (!isAtom(nd) && nd.list.length >= 3 && isInfix(nd.list, o)) {
     const opPrec = precOf(atomText(nd.list[0]));
     const content = infixContent(nd.list, o);
     return opPrec <= parentPrec ? `{${content}}` : content;
   }
-  return inlineSweet(nd, o);
+  return inlineSugarcoat(nd, o);
 }
 
 /** `(lambda (params…) single-body)` — rendered as an arrow `{(params) => body}`.
@@ -344,7 +344,7 @@ const isArrowLambda = (items: Node[]): boolean =>
 
 /** Render an arrow body. `=>` is the loosest operator (precedence 0), so the body
  *  shares the arrow's `{}` — any infix body (prec ≥ 1) drops its braces. */
-function inlineArrowBody(nd: Node, o: SweetOpts): string {
+function inlineArrowBody(nd: Node, o: SugarcoatOpts): string {
   return infixOperand(nd, 0, o);
 }
 
@@ -353,12 +353,12 @@ const isQuoteForm = (items: Node[]): boolean =>
 
 const hasDot = (items: Node[]): boolean => items.some((it) => isAtom(it) && !it.str && it.atom === ".");
 
-const isInfix = (items: Node[], o: SweetOpts): boolean =>
+const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
   o.curly && items.length >= 3 && !hasDot(items) && isAtom(items[0]) && !items[0].str && INFIX.has(items[0].atom);
 
 const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
 
-// ── at-expressions render (inverse of sweet-read's @-reader) ─────────────────────
+// ── at-expressions render (inverse of sugarcoat-read's @-reader) ─────────────────────
 // `(str …)`→`@{…}`, `(string-append …)`→`@string-append{…}`. dedent never appears in
 // canonical scheme (the reader dissolved it), so a multi-line `(str …)` renders as
 // `@dedent{…}` (handled in the broken renderer); the single-line forms live here.
@@ -373,12 +373,12 @@ const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!
  *  NEXT literal starts with an interp-class char (else the reader reads them glued).
  *  A classic list (`(f x)`) → `@(f x)` graft. Anything else → null (caller bails to
  *  classic — no sound at-exp spelling). */
-function interpPiece(p: Node, next: Node | undefined, o: SweetOpts): string | null {
+function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string | null {
   if (isAtom(p) && !p.str && INTERP_ID.test(p.atom)) {
     const glue = next != null && isStrNode(next) && INTERP_ID.test(unescapeScheme(next.atom)[0] ?? "");
     return glue ? `@|${p.atom}|` : `@${p.atom}`;
   }
-  const inner = inlineSweet(p, o);
+  const inner = inlineSugarcoat(p, o);
   return inner.startsWith("(") ? `@${inner}` : null;
 }
 
@@ -387,7 +387,7 @@ function interpPiece(p: Node, next: Node | undefined, o: SweetOpts): string | nu
  *  adjacent string literals (the reader coalesces), no `@`/brace/newline in literal
  *  text (no in-body escape for those; newline ⇒ the deferred multi-line path), and
  *  at least one prose literal (preference — don't at-exp `(str x y)`). */
-function renderAtExpr(items: Node[], o: SweetOpts): string | null {
+function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
   if (!o.curly || !isAtom(items[0]) || items[0].str || !AT_TEXT_HEADS.has(items[0].atom)) return null;
   const head = items[0].atom;
   const parts = items.slice(1);
@@ -420,7 +420,7 @@ function renderAtExpr(items: Node[], o: SweetOpts): string | null {
  *  common indent, else `@{…}` verbatim. Only `str` (string-append multi-line stays
  *  classic — one escaped line reads cleaner than a flush-left block). Returns null when
  *  not a newline-bearing representable str (single-line/classic handled elsewhere). */
-function renderAtDedentBlock(nd: Node, col: number, o: SweetOpts): string | null {
+function renderAtDedentBlock(nd: Node, col: number, o: SugarcoatOpts): string | null {
   if (!o.curly || isAtom(nd)) return null;
   const items = nd.list;
   if (!isAtom(items[0]) || items[0].str || items[0].atom !== "str") return null;
@@ -464,7 +464,7 @@ function renderAtDedentBlock(nd: Node, col: number, o: SweetOpts): string | null
 // A pair path `c[ad]+r` is a chain of just two ops applied inner→outer (read the
 // letters right-to-left): a PULL k = take element k (letters `dᵏa`), a DROP k =
 // drop the first k (letters `dᵏ`). Maximal `d…d a` runs fuse into one pull; an
-// innermost trailing `d…d` is a drop. The SAME chain has three faces — sweet
+// innermost trailing `d…d` is a drop. The SAME chain has three faces — sugarcoat
 // subscripts (`[k]`/`[k:]`), JS (`[k]`/`.slice(k)`), and the word itself — so this
 // one primitive is what the renderer prints, the reader fuses back (inverse), and
 // the chain-view compiler lowers. Total over the family (caar, cadadr… all swept
@@ -509,7 +509,7 @@ export const accessorStepLetters = (s: PairStep): number => ("pull" in s ? s.pul
 
 /** A pair accessor → its subscript-chain sugar: `(caadr x)`→`x[1][0]`, `(cdar x)`
  *  →`x[0][1:]`. null if not an accessor. Unconditional — render decomposes any word
- *  it is given; only the reader (sweet-read) caps fusion depth for portable output. */
+ *  it is given; only the reader (sugarcoat-read) caps fusion depth for portable output. */
 function accessorSubscript(head: string): string | null {
   const steps = decodeAccessor(head);
   if (!steps) return null;
@@ -528,7 +528,7 @@ const isRequirePrompt = (nd: Node): boolean =>
   !!nd.list[1].str &&
   nd.list[1].atom.endsWith(".prompt");
 
-const isKwargHead = (items: Node[], o: SweetOpts): boolean =>
+const isKwargHead = (items: Node[], o: SugarcoatOpts): boolean =>
   items.length > 0 &&
   ((isAtom(items[0]) && !items[0].str && o.kwargHeads.has(items[0].atom)) || isRequirePrompt(items[0]));
 
@@ -563,14 +563,14 @@ export function collectKwargHeads(forms: Node[]): Set<string> {
 // chain iff there are ≥2 steps OR the single step is an accessor / key / braced
 // method. A lone bare unary (`(not p)`) stays prefix — exactly the §5 gate.
 
-// ident-start glyphs (R7RS initial set, minus digits) — mirror of sweet-read's;
+// ident-start glyphs (R7RS initial set, minus digits) — mirror of sugarcoat-read's;
 // a `.` is a method-split only before one of these, so escSym escapes exactly the
 // dots rewrite_L would otherwise split. (Producer side of the same rule.)
 const RENDER_IDENT_START = /[A-Za-z!$%&*/:<=>?^_~]/;
 
 /** Re-escape any `.` in a symbol that `rewrite_L` would treat as a method split, so
  *  it reads back as a LITERAL dot in the symbol. No-op for the corpus (0 code dots);
- *  applied only to sweet bare-atom / method-op emission, never to classic output. */
+ *  applied only to sugarcoat bare-atom / method-op emission, never to classic output. */
 function escSym(s: string): string {
   let out = "";
   for (let k = 0; k < s.length; k++) {
@@ -658,7 +658,7 @@ const isPlainMethodOp = (nd: Node): nd is { atom: string; str?: boolean } =>
  *  the bare body would re-read as the lambda itself (dropping the `it` wrapper), so
  *  fall back to the explicit `{(p…) => B}`. ≥2 params always name (the pronoun
  *  breaks on ≥2 antecedents). */
-function renderTrailingLambda(lam: Node, o: SweetOpts): string {
+function renderTrailingLambda(lam: Node, o: SugarcoatOpts): string {
   const params = childList(lam)[1];
   const names = childList(params).map((p) => atomText(p));
   const body = childList(lam)[2];
@@ -673,7 +673,7 @@ type RStep = { sub: string } | { op: string; lam?: Node };
 
 /** Peel ONE outermost step off `nd`, returning the receiver + the step — or null if
  *  `nd` isn't a single-receiver postfix application. Mirrors §4.3's constructors. */
-function asStep(nd: Node, o: SweetOpts): { recv: Node; step: RStep } | null {
+function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null {
   if (isAtom(nd)) return null;
   const items = nd.list;
   // accessor `(c[ad]+r recv)` → subscript run; static key `(:k recv)` → `[:k]`.
@@ -684,7 +684,7 @@ function asStep(nd: Node, o: SweetOpts): { recv: Node; step: RStep } | null {
   }
   // dynamic key `(@ recv key)` → `[key]`.
   if (items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "@")
-    return { recv: items[1], step: { sub: `[${inlineSweet(items[2], o)}]` } };
+    return { recv: items[1], step: { sub: `[${inlineSugarcoat(items[2], o)}]` } };
   // braced method `(op LAMBDA recv)` — exactly two args, lambda first (§5 gate).
   if (items.length === 3 && isPlainMethodOp(items[0]) && !isAtom(items[1]) && isArrowLambda(items[1].list))
     return { recv: items[2], step: { op: items[0].atom, lam: items[1] } };
@@ -696,7 +696,7 @@ function asStep(nd: Node, o: SweetOpts): { recv: Node; step: RStep } | null {
 /** Peel `nd` fully into `base + [step…]` (base-first order) and decide whether to
  *  surface it as a postfix chain (§5): ≥2 steps, or a single accessor/key/braced
  *  step. A lone bare unary method canonicalizes to prefix (emit=false). */
-function peelChain(nd: Node, o: SweetOpts): { base: Node; steps: RStep[]; emit: boolean } {
+function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; emit: boolean } {
   const steps: RStep[] = [];
   let cur = nd;
   for (let s = asStep(cur, o); s; s = asStep(cur, o)) {
@@ -712,25 +712,25 @@ function peelChain(nd: Node, o: SweetOpts): { base: Node; steps: RStep[]; emit: 
  *  lambda-brace binds TIGHT to the op (no space) — isomorphic to a tight arg-group
  *  `fold(knil)`. This is load-bearing for round-trip: a loose `{…}` is a sibling
  *  curly operand, so only a tight brace reads back as THIS step's trailing lambda
- *  (else `recv.op {sibling}` would swallow the sibling — see sweet-read's brace gate). */
-function stepText(s: RStep, o: SweetOpts): string {
+ *  (else `recv.op {sibling}` would swallow the sibling — see sugarcoat-read's brace gate). */
+function stepText(s: RStep, o: SugarcoatOpts): string {
   if ("sub" in s) return s.sub;
   return s.lam ? `.${escSym(s.op)}${renderTrailingLambda(s.lam, o)}` : `.${escSym(s.op)}`;
 }
 
 /** One-line rendering, no width check. */
-export function inlineSweet(nd: Node, o: SweetOpts): string {
+export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : escSym(nd.atom);
   const items = nd.list;
   if (items.length === 0) return "()";
-  if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSweet(items[1], o);
+  if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
   const at = renderAtExpr(items, o);
   if (at != null) return at;
   if (isInfix(items, o)) {
     return `{${infixContent(items, o)}}`;
   }
   if (isArrowLambda(items)) {
-    return `{${inlineSweet(items[1], o)} => ${inlineArrowBody(items[2], o)}}`;
+    return `{${inlineSugarcoat(items[1], o)} => ${inlineArrowBody(items[2], o)}}`;
   }
   if (isCoalesce(nd)) {
     return `{${infixOperand(items[1], 1, o)} ?? ${infixOperand(items[3], 1, o)}}`;
@@ -742,14 +742,14 @@ export function inlineSweet(nd: Node, o: SweetOpts): string {
   // through). A bare `car`/`:k` passed as a VALUE (`(map car xs)`) has no receiver
   // step and never enters a chain.
   const chain = peelChain(nd, o);
-  if (chain.emit) return inlineSweet(chain.base, o) + chain.steps.map((s) => stepText(s, o)).join("");
+  if (chain.emit) return inlineSugarcoat(chain.base, o) + chain.steps.map((s) => stepText(s, o)).join("");
   if (o.neoteric && !hasDot(items) && isAtom(items[0]) && !items[0].str && QUOTE_PREFIX[items[0].atom] === undefined) {
     return `${items[0].atom}(${items
       .slice(1)
-      .map((it) => inlineSweet(it, o))
+      .map((it) => inlineSugarcoat(it, o))
       .join(" ")})`;
   }
-  return `(${items.map((it) => inlineSweet(it, o)).join(" ")})`;
+  return `(${items.map((it) => inlineSugarcoat(it, o)).join(" ")})`;
 }
 
 /** A flat list = every element is an atom, e.g. a function signature `(f x y)`. */
@@ -778,7 +778,7 @@ const isStringAppend = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length > 0 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "string-append";
 
 /** `(if X X Y)` (cond ≡ then) — the null-coalescing pattern, rendered `{X ?? Y}`.
- *  Pure sweet sugar over the if-pattern (no stored macro); reads back to (if X X Y),
+ *  Pure sugarcoat sugar over the if-pattern (no stored macro); reads back to (if X X Y),
  *  preserving its eval-twice semantics. `??` precedence ≈ `||`. */
 const isCoalesce = (nd: Node): boolean =>
   !isAtom(nd) &&
@@ -808,21 +808,21 @@ const isLetElidable = (nd: Node): boolean => {
 /** Break a too-long curly-infix `{a op b op …}` operator-led: first operand after
  *  `{`, each subsequent on its own line prefixed with the operator. Recurses, so a
  *  nested long curly (e.g. `{{a - b} < c}`) breaks at every level that overflows. */
-function formatInfix(items: Node[], col: number, o: SweetOpts): string {
+function formatInfix(items: Node[], col: number, o: SugarcoatOpts): string {
   const op = atomText(items[0]);
   const operands = items.slice(1);
-  let out = `{${formatSweet(operands[0], col + 1, o)}`;
+  let out = `{${formatSugarcoat(operands[0], col + 1, o)}`;
   const contCol = col + 2;
   for (let k = 1; k < operands.length; k++) {
     const g = glyphOf(op);
-    out += `\n${" ".repeat(contCol)}${g} ${formatSweet(operands[k], contCol + g.length + 1, o)}`;
+    out += `\n${" ".repeat(contCol)}${g} ${formatSugarcoat(operands[k], contCol + g.length + 1, o)}`;
   }
   return `${out}}`;
 }
 
 /** Emit a node's captured comments around its rendered `body`: each `lead` line
  *  before it (at column `col`), the same-line `trail` after. Applied at every
- *  formatSweet seam, so top-level forms and broken-list children show comments. */
+ *  formatSugarcoat seam, so top-level forms and broken-list children show comments. */
 function withComments(nd: Node, body: string, col: number): string {
   const pad = " ".repeat(col);
   let out = body;
@@ -831,17 +831,17 @@ function withComments(nd: Node, body: string, col: number): string {
   return out;
 }
 
-/** Render a node starting at column `col`; breaks to indented sweet form when it
+/** Render a node starting at column `col`; breaks to indented sugarcoat form when it
  *  exceeds the width budget. First line is unindented (caller positions it). The
  *  exported entry wraps the core renderer to re-emit the node's lead/trail comments
  *  (recursive calls hit this wrapper too, so nested comments render). */
-export function formatSweet(nd: Node, col: number, o: SweetOpts): string {
-  return withComments(nd, formatSweetCore(nd, col, o), col);
+export function formatSugarcoat(nd: Node, col: number, o: SugarcoatOpts): string {
+  return withComments(nd, formatSugarcoatCore(nd, col, o), col);
 }
-function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
+function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   const atBlock = renderAtDedentBlock(nd, col, o);
   if (atBlock != null) return atBlock; // multi-line @dedent{…}/@{…} for newline-bearing str
-  const flat = inlineSweet(nd, o);
+  const flat = inlineSugarcoat(nd, o);
   // Function defines, cond, and elidable let-family always break (uniform shape,
   // even if they'd fit); everything else stays inline when it fits. string-append
   // gets a wider budget — text assembly reads worse broken than as one long line.
@@ -855,7 +855,7 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
   // (e.g. a single long `let` binding `((cls (map …)))`). Round-trip > width here.
   if (items.length === 1) return flat;
 
-  if (isCoalesce(nd)) return inlineSweet(nd, o); // keep `{X ?? Y}`, never break as an `if`
+  if (isCoalesce(nd)) return inlineSugarcoat(nd, o); // keep `{X ?? Y}`, never break as an `if`
 
   // let-family with elidable bindings: `let*` ⏎ each binding `name` ⏎ `value` ⏎ body.
   // The `(( ))` is dropped in the view; the reader re-groups leading binding-shaped
@@ -869,10 +869,10 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
     // so childList re-asserts that proven arm — same idiom as items[0] above.
     for (const b of childList(items[1])) {
       const bind = childList(b);
-      out.push(pad2 + formatSweet(bind[0], col + 2, o)); // binding name
-      out.push(pad4 + formatSweet(bind[1], col + 4, o)); // binding value
+      out.push(pad2 + formatSugarcoat(bind[0], col + 2, o)); // binding name
+      out.push(pad4 + formatSugarcoat(bind[1], col + 4, o)); // binding value
     }
-    for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSweet(bodyExpr, col + 2, o));
+    for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
     return out.join("\n");
   }
 
@@ -885,18 +885,18 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
     const out = ["cond"];
     for (const clause of items.slice(1)) {
       if (isAtom(clause) || clause.list.length < 2) {
-        out.push(pad2 + inlineSweet(clause, o));
+        out.push(pad2 + inlineSugarcoat(clause, o));
         continue;
       }
-      out.push(pad2 + formatSweet(clause.list[0], col + 2, o)); // test (curly if infix)
-      for (const cons of clause.list.slice(1)) out.push(pad4 + formatSweet(cons, col + 4, o));
+      out.push(pad2 + formatSugarcoat(clause.list[0], col + 2, o)); // test (curly if infix)
+      for (const cons of clause.list.slice(1)) out.push(pad4 + formatSugarcoat(cons, col + 4, o));
     }
     return out.join("\n");
   }
 
   if (isQuoteForm(items)) {
     const pre = QUOTE_PREFIX[atomText(items[0])];
-    return pre + formatSweet(items[1], col + pre.length, o);
+    return pre + formatSugarcoat(items[1], col + pre.length, o);
   }
   if (isInfix(items, o)) return formatInfix(items, col, o); // operator-led break when over width
 
@@ -908,7 +908,7 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
   // generic prefix break (still faithful, just not dotted).
   {
     const chain = peelChain(nd, o);
-    const baseFlat = inlineSweet(chain.base, o);
+    const baseFlat = inlineSugarcoat(chain.base, o);
     if (
       chain.emit &&
       chain.steps.length >= 2 &&
@@ -925,10 +925,10 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
   // mid-pair — the failure the flat indenter had). Leading positionals (e.g. a
   // .prompt cache-key) render before the first keyword, untouched.
   if (isKwargHead(items, o)) {
-    let line = inlineSweet(items[0], o);
+    let line = inlineSugarcoat(items[0], o);
     let i = 1;
     if (i < items.length && !isKeyword(items[i])) {
-      const a1 = inlineSweet(items[i], o);
+      const a1 = inlineSugarcoat(items[i], o);
       if (col + line.length + 1 + a1.length <= o.width) {
         line += ` ${a1}`;
         i++;
@@ -941,7 +941,7 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
         // "=>" keeps the keyword as-is; ":" flips leading→trailing colon (JSON/YAML).
         const raw = atomText(items[i]);
         const keyPart = o.pairGlyph === ":" ? `${raw.slice(1)}:` : `${raw} =>`;
-        const vFlat = inlineSweet(items[i + 1], o);
+        const vFlat = inlineSugarcoat(items[i + 1], o);
         if (col + 2 + keyPart.length + 1 + vFlat.length <= o.width) {
           // fits: `key: value` on one line.
           out.push(`${pad + keyPart} ${vFlat}`);
@@ -951,24 +951,24 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
           // nesting staircase rightward (key-length compounds per level). The
           // hang keeps indentation linear in depth, YAML-style (`key:` ⏎ block).
           out.push(pad + keyPart);
-          out.push(" ".repeat(col + 4) + formatSweet(items[i + 1], col + 4, o));
+          out.push(" ".repeat(col + 4) + formatSugarcoat(items[i + 1], col + 4, o));
         }
         i += 2;
       } else {
-        out.push(pad + formatSweet(items[i], col + 2, o));
+        out.push(pad + formatSugarcoat(items[i], col + 2, o));
         i++;
       }
     }
     return out.join("\n");
   }
 
-  // sweet break: head on its own line (+ first arg if it still fits), rest indented.
+  // sugarcoat break: head on its own line (+ first arg if it still fits), rest indented.
   // If the head is itself a long compound (e.g. a `let` binding `(v (triage …))`),
   // BREAK it rather than inlining — inlining a compound head is what produced
   // 190-char lines for binding lists. A short/atom head keeps the first-arg pull.
-  const headFlat = inlineSweet(items[0], o);
+  const headFlat = inlineSugarcoat(items[0], o);
   const headFits = col + headFlat.length <= o.width;
-  let line = headFits ? headFlat : formatSweet(items[0], col, o);
+  let line = headFits ? headFlat : formatSugarcoat(items[0], col, o);
   let idx = 1;
   // Pull the first arg onto the head line ONLY if ≥1 element still remains as a
   // child (`items.length > 2`). A broken list is recovered by the reader as
@@ -976,7 +976,7 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
   // would read back as a flat token sequence, silently dropping the list's parens
   // (`((c …) (b …))` → `(c …) (b …)`). Keeping a child preserves the list.
   if (headFits && items.length > 2) {
-    const a1 = inlineSweet(items[1], o);
+    const a1 = inlineSugarcoat(items[1], o);
     if (col + headFlat.length + 1 + a1.length <= o.width) {
       line += ` ${a1}`;
       idx = 2;
@@ -984,7 +984,7 @@ function formatSweetCore(nd: Node, col: number, o: SweetOpts): string {
   }
   const pad = " ".repeat(col + 2);
   const out = [line];
-  for (; idx < items.length; idx++) out.push(pad + formatSweet(items[idx], col + 2, o));
+  for (; idx < items.length; idx++) out.push(pad + formatSugarcoat(items[idx], col + 2, o));
   return out.join("\n");
 }
 
@@ -1038,7 +1038,7 @@ export function nodeEq(a: Node, b: Node): boolean {
 
 /** Single-line classic serialization of a Node — the trivial inverse of
  *  parseSexprs at the atom level. String atoms wrap RAW (`"${atom}"`), exactly
- *  as inlineSweet does and as parseSexprs decodes them, so the AST round-trips. */
+ *  as inlineSugarcoat does and as parseSexprs decodes them, so the AST round-trips. */
 export function inlineScheme(nd: Node): string {
   if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : nd.atom;
   return `(${nd.list.map(inlineScheme).join(" ")})`;
@@ -1047,8 +1047,8 @@ export function inlineScheme(nd: Node): string {
 /** Pretty classic (prefix-only) serialization of a Node: inline when it fits the
  *  width, else break — the head (and, when the head is a bare symbol and the pair
  *  still fits, the first operand) stay on the open-paren line; the rest indent at
- *  col+2. Pure s-expressions, NO sweet transforms — this is the canonical-classic
- *  writer the sweet save-back emits for a CHANGED form. It only adds whitespace
+ *  col+2. Pure s-expressions, NO sugarcoat transforms — this is the canonical-classic
+ *  writer the sugarcoat save-back emits for a CHANGED form. It only adds whitespace
  *  over inlineScheme, so parseSexprs(printScheme(f)) ≡ f. */
 export function printScheme(nd: Node, col = 0, width = DEFAULT_OPTS.width): string {
   const flat = inlineScheme(nd);
@@ -1066,9 +1066,9 @@ export function printScheme(nd: Node, col = 0, width = DEFAULT_OPTS.width): stri
   return `(${lead}\n${rest.join("\n")})`;
 }
 
-/** Render a whole source file's top-level forms as sweet, blank-line separated. */
-export function schemeToSweet(src: string, opts: Partial<SweetOpts> = {}): string {
+/** Render a whole source file's top-level forms as sugarcoat, blank-line separated. */
+export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}): string {
   const forms = parseSexprs(src);
   const o = { ...DEFAULT_OPTS, kwargHeads: collectKwargHeads(forms), ...opts };
-  return forms.map((f) => formatSweet(f, 0, o)).join("\n\n");
+  return forms.map((f) => formatSugarcoat(f, 0, o)).join("\n\n");
 }

@@ -1,7 +1,7 @@
 {
-  "name": "@here.build/arrival-sweet",
+  "name": "@here.build/arrival-sugarcoat",
   "version": "0.1.0",
-  "description": "Sweet-expression lens for Arrival — classic↔sweet scheme-source rendering (curly-infix, => lambda, colon kwargs, ?? coalesce). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
+  "description": "Sugarcoat lens for Arrival — classic↔sugarcoat scheme-source rendering (SRFI-105 curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, ?? coalesce). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
   "keywords": [
     "arrival",
     "s-expressions",
@@ -17,7 +17,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-sweet"
+    "directory": "arrival/arrival-sugarcoat"
   },
   "license": "FSL-1.1-MIT",
   "author": "here.build",

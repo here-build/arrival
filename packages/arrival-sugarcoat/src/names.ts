@@ -12,7 +12,7 @@
  * "Most readable" is a ladder; "capture-avoiding" is exactly what `@here.build/lexical-namer`
  * computes. We FLIP the forward Mercury namer (`scheme-scope.ts`, which ranks `cleanName`
  * top and the pronoun never): here `it` ranks top, the original is the collision-fallback.
- * The resolver is reused verbatim; only the strategy (the sweet vocabulary — `it`, singular
+ * The resolver is reused verbatim; only the strategy (the sugarcoat vocabulary — `it`, singular
  * nouns) is new.
  *
  * The gem — **anaphora IS lexical scope**. Eligible lambdas nest as the scope tree; two
@@ -32,8 +32,8 @@
  *                               the VIEW shows the recovered name as a non-written inlay.
  *                               Right home: read-only viewing of foreign / not-yet-owned code.
  *
- * Zero-dependency-leaf invariant: arrival-sweet's `.` entry is a leaf consumed by codemirror.
- * This module is the `@here.build/arrival-sweet/names` SUBPATH; with `sideEffects:false`, a
+ * Zero-dependency-leaf invariant: arrival-sugarcoat's `.` entry is a leaf consumed by codemirror.
+ * This module is the `@here.build/arrival-sugarcoat/names` SUBPATH; with `sideEffects:false`, a
  * consumer importing `.` tree-shakes this file and its `lexical-namer` import away entirely.
  * `lexical-namer` is a workspace dep with zero external deps.
  */
@@ -41,9 +41,9 @@
 import { type Candidate, resolveLexicalNames, type ScopedEntity, type ScopeSpec } from "@here.build/lexical-namer";
 import pluralize from "pluralize";
 
-import { decodeAccessor, type Node, parseSexprs, printScheme } from "./sweet-render.js";
+import { decodeAccessor, type Node, parseSexprs, printScheme } from "./sugarcoat-render.js";
 
-// ── Node helpers (the arrival-sweet parse shape) ──────────────────────────────
+// ── Node helpers (the arrival-sugarcoat parse shape) ──────────────────────────────
 type AtomNode = {
   atom: string;
   str?: boolean;
@@ -61,7 +61,7 @@ const headName = (n: ListNode): string | undefined =>
 
 /** Heads that are NOT plain applications — a single-param lambda in their arg slot
  *  is a binder body / special-form clause, not an iteration callback. Mirrors the
- *  binder + control subset of sweet-render's NEVER_METHOD. */
+ *  binder + control subset of sugarcoat-render's NEVER_METHOD. */
 const SPECIAL_FORMS = new Set<string>([
   "quote",
   "quasiquote",

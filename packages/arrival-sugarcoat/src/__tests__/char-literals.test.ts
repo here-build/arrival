@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { parseSexprs } from "../sweet-render.js";
+import { parseSexprs } from "../sugarcoat-render.js";
 
 function atomOf(src: string): string {
   const forms = parseSexprs(src);

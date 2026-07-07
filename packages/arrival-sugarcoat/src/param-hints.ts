@@ -1,5 +1,5 @@
-import { readSweet, splitFormsWithBase } from "./sweet-read.js";
-import { type Node, parseSexprs } from "./sweet-render.js";
+import { readSugarcoat, splitFormsWithBase } from "./sugarcoat-read.js";
+import { type Node, parseSexprs } from "./sugarcoat-render.js";
 
 /**
  * Parameter-name inlay hints. For a call to a `(define (f a b c) …)`, place a hint
@@ -10,8 +10,8 @@ import { type Node, parseSexprs } from "./sweet-render.js";
  *
  * Pure function of the text → `{pos, name}[]`, where `pos` is the arg's start offset
  * (the hint renders just before it). Lens-agnostic in spirit; this entry parses
- * CLASSIC scheme (`parseSexprs`). The sweet lens reuses the same resolver over a
- * span-bearing sweet parse — a follow-up. Returns `[]` on a parse error so a
+ * CLASSIC scheme (`parseSexprs`). The sugarcoat lens reuses the same resolver over a
+ * span-bearing sugarcoat parse — a follow-up. Returns `[]` on a parse error so a
  * mid-edit buffer shows no hints rather than throwing.
  *
  * v1 scope (deliberate): user `define`d functions only — no builtins (no formals to
@@ -32,7 +32,7 @@ const isAtom = (n: Node | undefined): n is Atom => n != null && "atom" in n;
 const isList = (n: Node | undefined): n is List => n != null && "list" in n;
 
 /** First source offset of a node — its own span, or, for a span-LESS synthesized list (the
- *  sweet I-expression reader wraps `a` + an indented value into a `(a v)` binding with no
+ *  sugarcoat I-expression reader wraps `a` + an indented value into a `(a v)` binding with no
  *  span of its own), the start of its first child, recursively. So a hint lands on the
  *  binding's visible start (`(` inline, the symbol in an I-expression) in either lens. */
 const startOf = (n: Node | undefined): number | undefined =>
@@ -90,22 +90,22 @@ function shiftSpans(nd: Node, delta: number): void {
   if ("list" in nd) for (const c of nd.list) shiftSpans(c, delta);
 }
 
-/** Sweet lens: the SAME resolver over a span-bearing sweet parse. Read top-level
- *  forms ONE AT A TIME so a single form the sweet reader can't yet handle drops
+/** Sugarcoat lens: the SAME resolver over a span-bearing sugarcoat parse. Read top-level
+ *  forms ONE AT A TIME so a single form the sugarcoat reader can't yet handle drops
  *  only its own hints, not the whole file's. Defines are still collected globally
  *  across every form that DID parse, so a call resolves against a define in another
- *  form. Spans are in sweet-text (buffer) coordinates. */
-export function paramHintsSweet(src: string): ParamHint[] {
+ *  form. Spans are in sugarcoat-text (buffer) coordinates. */
+export function paramHintsSugarcoat(src: string): ParamHint[] {
   const forms: Node[] = [];
   for (const { text, base } of splitFormsWithBase(src)) {
     if (!text.trim()) continue;
     try {
-      for (const form of readSweet(text)) {
+      for (const form of readSugarcoat(text)) {
         shiftSpans(form, base); // form parsed at 0 → lift to its place in the buffer
         forms.push(form);
       }
     } catch {
-      // this form uses something the sweet reader doesn't handle yet — skip it
+      // this form uses something the sugarcoat reader doesn't handle yet — skip it
     }
   }
   return hintsFromForms(forms);

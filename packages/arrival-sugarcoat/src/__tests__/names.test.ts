@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { boundNameHints, tidyBoundNames } from "../names.js";
-import { schemeToSweet } from "../sweet-render.js";
+import { schemeToSugarcoat } from "../sugarcoat-render.js";
 
 const tidy = (scheme: string): string => tidyBoundNames(scheme);
-const sweet = (scheme: string): string => schemeToSweet(scheme).trim();
+const sugarcoat = (scheme: string): string => schemeToSugarcoat(scheme).trim();
 
 // §2 — the recovery ladder. A trailing-lambda's bound param is α-renamed to the most
 // readable member of its α-class: `it` when every element use is keyed, a singular noun
@@ -97,17 +97,17 @@ describe("tidyBoundNames: author's own `it` is left alone", () => {
 // The lens payoff (§4): after tidy, the renderer collapses a literal-`it` trailing lambda to
 // the pronoun form `{ it … }` with no renderer change; a recovered singular stays an explicit
 // `{(item) => …}` (α-equivalent, still round-trips). This is the whole point of mode A.
-describe("tidyBoundNames → schemeToSweet: the `it` collapse", () => {
+describe("tidyBoundNames → schemeToSugarcoat: the `it` collapse", () => {
   it("all-keyed collapses to the pronoun brace", () => {
-    expect(sweet(tidy("(map (lambda (e) (:family e)) evidence)"))).toBe("evidence.map{ it[:family] }");
+    expect(sugarcoat(tidy("(map (lambda (e) (:family e)) evidence)"))).toBe("evidence.map{ it[:family] }");
   });
   it("a keyed filter chain collapses", () => {
-    expect(sweet(tidy('(length (filter (lambda (e) (equal? (:verdict e) "miss")) closure))'))).toBe(
+    expect(sugarcoat(tidy('(length (filter (lambda (e) (equal? (:verdict e) "miss")) closure))'))).toBe(
       'closure.filter{ it[:verdict] == "miss" }.length',
     );
   });
   it("fan-out keeps an explicit recovered param", () => {
-    expect(sweet(tidy("(map (lambda (x) (process x)) items)"))).toBe("items.map{(item) => (process item)}");
+    expect(sugarcoat(tidy("(map (lambda (x) (process x)) items)"))).toBe("items.map{(item) => (process item)}");
   });
 });
 

@@ -1,7 +1,7 @@
 /**
- * Sweet → classic READER. Inverts sweet-render.ts so a live sweet view can be
+ * Sugarcoat → classic READER. Inverts sugarcoat-render.ts so a live sugarcoat view can be
  * saved back to canonical scm losslessly (stored entities are ALWAYS raw scm;
- * sweet is a lens). The law: read(render(x)) ≡ x on classic.
+ * sugarcoat is a lens). The law: read(render(x)) ≡ x on classic.
  *
  * Two layers:
  *   1. I-expressions (indentation): a line + its more-indented descendants form a
@@ -26,7 +26,7 @@ import {
   accessorStepLetters,
   type Node,
   type PairStep,
-} from "./sweet-render.js";
+} from "./sugarcoat-render.js";
 
 // glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE: only ==←equal?, &&←and,
 // ||←or are remapped; everything else (=, eq?, eqv?, arithmetic, comparison) is its
@@ -34,7 +34,7 @@ import {
 const GLYPH_OP: Record<string, string> = { "==": "equal?", "&&": "and", "||": "or" };
 const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 
-// glyph → precedence — must mirror sweet-render's INFIX_PREC. `=>` loosest;
+// glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>` loosest;
 // `??` (null-coalescing) ≈ `||`.
 const GLYPH_PREC: Record<string, number> = {
   "=>": 0,
@@ -51,7 +51,7 @@ const GLYPH_PREC: Record<string, number> = {
   ">=": 3,
   "+": 4,
   "-": 4,
-  // Multiplicative tier MUST mirror sweet-render's INFIX_PREC — render emits
+  // Multiplicative tier MUST mirror sugarcoat-render's INFIX_PREC — render emits
   // `modulo`/`quotient`/`remainder` as infix, so read has to recognise them back
   // or `{a modulo b}` fails as "unbalanced {" (round-trip break).
   "*": 5,
@@ -92,7 +92,7 @@ function regroupLetFamily(node: Node): Node {
   return { list: [h, { list: bindings }, ...node.list.slice(i)] };
 }
 
-// `start`/`end` are absolute offsets in the ORIGINAL sweet text, present only when
+// `start`/`end` are absolute offsets in the ORIGINAL sugarcoat text, present only when
 // `tokenize` is given a `base` (single-physical-line LogLines). They thread up into
 // `Node.span` for the editor's parameter hints; coalesced multi-line content passes
 // no base, so its tokens carry no offsets and produce no hints (graceful).
@@ -162,7 +162,7 @@ function splitMethodDots(w: string, s: number, base?: number): Tok[] {
  *  fused into `c[ad]+r` words); a `:keyword` is STATIC key access (→ `(:k obj)`, the
  *  recommended keyword-as-fn form); any other identifier or string is DYNAMIC key
  *  access (→ `(@ obj key)`). One bracket surface, disambiguated purely by the index's
- *  shape so the destinations can never collide. Inverse of sweet-render's emission. */
+ *  shape so the destinations can never collide. Inverse of sugarcoat-render's emission. */
 type Subscript = PairStep | { key: string } | { dyn: Node };
 
 function parseSubscript(t: Extract<Tok, { t: "word" }>): Subscript {
@@ -185,7 +185,7 @@ function parseSubscript(t: Extract<Tok, { t: "word" }>): Subscript {
  *  unbounded fusion (one `c[ad]+r` word per chain, resolved by the runtime catchall
  *  on both interpreter and compiler). A single inherently-deep subscript (`x[5]`,
  *  only ever produced by rendering an already-non-standard word) is never split —
- *  splitting would break the sweet-side round-trip — so the cap governs fusion of
+ *  splitting would break the sugarcoat-side round-trip — so the cap governs fusion of
  *  ADJACENT subscripts, the only place the reader actually has a choice. */
 export const R7RS_ACCESSOR_DEPTH = 4;
 
@@ -202,7 +202,7 @@ const QUOTE_WRAP: Record<string, string> = {
 // dissolves to (str <dedented>). Inside a body the only escape is `@`: `@id`
 // interpolates, `@(datum)` grafts code, `@head{…}` nests. Everything else — quotes,
 // newlines, balanced `{}` — is literal text. Spec:
-// docs/package-specific/arrival-sweet/arrival-sweet-at-expressions-2026-07-05.md.
+// docs/package-specific/arrival-sugarcoat/arrival-sugarcoat-at-expressions-2026-07-05.md.
 
 // head of `@head{`: any non-delimiter run (str, string-append, dedent, config/x).
 const AT_HEAD = /[^\s{}()[\]"@]/;
@@ -249,7 +249,7 @@ function readInterpId(src: string, i: number): { id: string; end: number } {
 }
 
 /** `@(datum)` graft — read the balanced `(…)` raw (string/escape aware) and parse it
- *  as one sweet expression. `i` points at the `(`. */
+ *  as one sugarcoat expression. `i` points at the `(`. */
 function readGraftParen(src: string, i: number): { node: Node; end: number } {
   let depth = 0;
   let inStr = false;
@@ -268,7 +268,7 @@ function readGraftParen(src: string, i: number): { node: Node; end: number } {
       break;
     }
   }
-  return { node: readSweetExpr(src.slice(i, j)), end: j };
+  return { node: readSugarcoatExpr(src.slice(i, j)), end: j };
 }
 
 /** An at-expression iff `@`, optional head, then `{`. Returns null for a bare
@@ -645,7 +645,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
 
 /** Single fully-delimited expression — phase-1 entry (used by the curly/arrow
  *  round-trip tests). For multi-element input it returns the first element. */
-export function readSweetExpr(src: string, opts: ReadOpts = {}): Node {
+export function readSugarcoatExpr(src: string, opts: ReadOpts = {}): Node {
   const elems = parseElements(tokenize(stripComments(src)), opts.accessorDepth);
   invariant(elems.length === 1, () => `expected one expression, got ${elems.length}`);
   return elems[0];
@@ -696,7 +696,7 @@ function bracketDepth(s: string): number {
   return d;
 }
 
-/** `base` = absolute offset of `content[0]` in the original sweet text, for span
+/** `base` = absolute offset of `content[0]` in the original sugarcoat text, for span
  *  attachment. Set only for a SINGLE-physical-line LogLine (offsets map directly);
  *  a coalesced multi-line one leaves it undefined → its nodes get no spans → no
  *  parameter hints there (rare, and the broken-`{…}` form is still readable). */
@@ -774,7 +774,7 @@ function parseNode(lines: LogLine[], idx: number, accessorDepth?: number): { ele
   const head = parseElements(headToks, accessorDepth);
   if (childElems.length === 0) {
     // SRFI-110: a CHILDLESS line of multiple datums is a list (`string-upcase s`
-    // → (string-upcase s)) — same rule readSweet applies to a whole top-level
+    // → (string-upcase s)) — same rule readSugarcoat applies to a whole top-level
     // form. Splicing them as siblings instead silently rewrote a hand-typed
     // body to junk on save-back. (The render never emits such lines — inline
     // children keep their parens — so the round-trip law never exercised this.)
@@ -799,9 +799,9 @@ function parseNode(lines: LogLine[], idx: number, accessorDepth?: number): { ele
 }
 
 /** Blank a `;`-line-comment (to end of line) to SPACES, string-aware — they're
- *  trivia in the sweet view (sweet-render re-emits them from the classic AST's
+ *  trivia in the sugarcoat view (sugarcoat-render re-emits them from the classic AST's
  *  lead/trail). Length-PRESERVING (comment → spaces, not removed) so every other
- *  char keeps its offset: that's what lets sweet-text spans (for the parameter
+ *  char keeps its offset: that's what lets sugarcoat-text spans (for the parameter
  *  hints) stay valid in the editor's comment-bearing buffer. tokenize skips the
  *  spaces, so the parsed Nodes are identical to before. Newlines are kept. */
 function stripComments(text: string): string {
@@ -851,8 +851,8 @@ export function splitFormsWithBase(text: string): { text: string; base: number }
   return out;
 }
 
-/** Full reader: sweet text → classic forms. */
-export function readSweet(text: string, opts: ReadOpts = {}): Node[] {
+/** Full reader: sugarcoat text → classic forms. */
+export function readSugarcoat(text: string, opts: ReadOpts = {}): Node[] {
   // Split into top-level forms by blank line FIRST: in the render, blank lines
   // appear ONLY between top-level forms (a comment is contiguous with its node),
   // so this is the true boundary. THEN blank comments within each form (length-
@@ -877,7 +877,7 @@ export function readSweet(text: string, opts: ReadOpts = {}): Node[] {
     });
 }
 
-// ── save-back: sweet → classic, preserving unchanged forms ──────────────────────
+// ── save-back: sugarcoat → classic, preserving unchanged forms ──────────────────────
 
 /** Byte spans of the top-level forms in classic source, in order. Inter-form
  *  whitespace and `;` line-comments are NOT part of any span (preserved verbatim
@@ -938,21 +938,21 @@ export function topFormSpans(src: string): Array<{ start: number; end: number }>
 }
 
 /**
- * Fold an edited sweet view back into canonical classic. Every UNCHANGED top-level
+ * Fold an edited sugarcoat view back into canonical classic. Every UNCHANGED top-level
  * form is preserved byte-for-byte (its comments + hand-formatting intact); only
  * forms whose AST changed are reprinted (canonical, via printScheme). Falls back to
  * a whole-file canonical reprint when the form correspondence is uncertain — the
- * form count differs (a form added/removed in sweet) or a span doesn't parse to
- * exactly one form. Throws if the sweet text is malformed (the caller keeps its
- * buffer and skips the save). The law: `sweetToScheme(schemeToSweet(c), c) === c`
- * byte-for-byte — viewing-then-saving an UNEDITED sweet view never touches storage.
+ * form count differs (a form added/removed in sugarcoat) or a span doesn't parse to
+ * exactly one form. Throws if the sugarcoat text is malformed (the caller keeps its
+ * buffer and skips the save). The law: `sugarcoatToScheme(schemeToSugarcoat(c), c) === c`
+ * byte-for-byte — viewing-then-saving an UNEDITED sugarcoat view never touches storage.
  */
-export function sweetToScheme(sweetText: string, prevClassic: string, opts: ReadOpts = {}): string {
-  const sweetForms = readSweet(sweetText, opts); // throws on malformed sweet → caller handles
-  const reprintAll = (): string => `${sweetForms.map((f) => printScheme(f)).join("\n\n")}\n`;
+export function sugarcoatToScheme(sugarcoatText: string, prevClassic: string, opts: ReadOpts = {}): string {
+  const sugarcoatForms = readSugarcoat(sugarcoatText, opts); // throws on malformed sugarcoat → caller handles
+  const reprintAll = (): string => `${sugarcoatForms.map((f) => printScheme(f)).join("\n\n")}\n`;
 
   const spans = topFormSpans(prevClassic);
-  if (spans.length !== sweetForms.length) return reprintAll(); // form added/removed → uncertain
+  if (spans.length !== sugarcoatForms.length) return reprintAll(); // form added/removed → uncertain
 
   const prevParsed = spans.map((s) => parseSexprs(prevClassic.slice(s.start, s.end)));
   if (prevParsed.some((forms) => forms.length !== 1)) return reprintAll(); // ambiguous split → uncertain
@@ -961,8 +961,8 @@ export function sweetToScheme(sweetText: string, prevClassic: string, opts: Read
   // spans' offsets stay valid; unchanged forms (and all inter-form bytes) survive.
   let out = prevClassic;
   for (let i = spans.length - 1; i >= 0; i--) {
-    if (nodeEq(sweetForms[i], prevParsed[i][0])) continue; // unchanged → keep original bytes
-    out = out.slice(0, spans[i].start) + printScheme(sweetForms[i]) + out.slice(spans[i].end);
+    if (nodeEq(sugarcoatForms[i], prevParsed[i][0])) continue; // unchanged → keep original bytes
+    out = out.slice(0, spans[i].start) + printScheme(sugarcoatForms[i]) + out.slice(spans[i].end);
   }
   return out;
 }

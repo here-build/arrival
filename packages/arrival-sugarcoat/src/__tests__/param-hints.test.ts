@@ -5,9 +5,9 @@
  * kwargs, rest, parse error).
  */
 import { describe, expect, it } from "vitest";
-import { paramHints, paramHintsSweet } from "../param-hints.js";
-import { sweetToScheme } from "../sweet-read.js";
-import { schemeToSweet } from "../sweet-render.js";
+import { paramHints, paramHintsSugarcoat } from "../param-hints.js";
+import { sugarcoatToScheme } from "../sugarcoat-read.js";
+import { schemeToSugarcoat } from "../sugarcoat-render.js";
 
 /** The char immediately at a hint's pos — should be the first char of its arg. */
 const charAt = (src: string, pos: number): string => src[pos];
@@ -116,68 +116,68 @@ describe("paramHints — built-in control forms", () => {
   });
 });
 
-describe("paramHintsSweet — the sweet lens", () => {
-  it("hints over RENDERED sweet, at sweet-text offsets pointing to each arg", () => {
+describe("paramHintsSugarcoat — the sugarcoat lens", () => {
+  it("hints over RENDERED sugarcoat, at sugarcoat-text offsets pointing to each arg", () => {
     const classic = `(define (evolve pool budget rng iter) (list pool budget rng iter))
 
 (evolve (list seed) (- BUDGET (length paretoset)) SEED-RNG 0)`;
-    const sweet = schemeToSweet(classic); // what the sweet editor buffer shows
-    const hints = paramHintsSweet(sweet);
+    const sugarcoat = schemeToSugarcoat(classic); // what the sugarcoat editor buffer shows
+    const hints = paramHintsSugarcoat(sugarcoat);
     expect(hints.map((h) => h.name)).toEqual(["pool", "budget", "rng", "iter"]);
     // Each pos is in-bounds, ascending, and lands on a non-whitespace char (an arg start).
     let prev = -1;
     for (const h of hints) {
       expect(h.pos).toBeGreaterThan(prev);
-      expect(/\S/.test(sweet[h.pos])).toBe(true);
+      expect(/\S/.test(sugarcoat[h.pos])).toBe(true);
       prev = h.pos;
     }
   });
 
-  it("hand-written sweet (indented body + curly arg) — names resolve", () => {
-    const sweet = `define (evolve pool budget rng iter)
+  it("hand-written sugarcoat (indented body + curly arg) — names resolve", () => {
+    const sugarcoat = `define (evolve pool budget rng iter)
   (list pool budget rng iter)
 
 evolve (list seed) {BUDGET - (length paretoset)} SEED-RNG 0`;
-    const hints = paramHintsSweet(sweet);
+    const hints = paramHintsSugarcoat(sugarcoat);
     expect(hints.map((h) => h.name)).toEqual(["pool", "budget", "rng", "iter"]);
-    expect(sweet.startsWith("(list seed)", hints[0].pos)).toBe(true);
-    expect(sweet.startsWith("{BUDGET", hints[1].pos)).toBe(true);
-    expect(sweet.startsWith("SEED-RNG", hints[2].pos)).toBe(true);
-    expect(sweet[hints[3].pos]).toBe("0");
+    expect(sugarcoat.startsWith("(list seed)", hints[0].pos)).toBe(true);
+    expect(sugarcoat.startsWith("{BUDGET", hints[1].pos)).toBe(true);
+    expect(sugarcoat.startsWith("SEED-RNG", hints[2].pos)).toBe(true);
+    expect(sugarcoat[hints[3].pos]).toBe("0");
   });
 
-  it("returns [] on malformed sweet", () => {
-    expect(paramHintsSweet(`define (f a b`)).toEqual([]);
+  it("returns [] on malformed sugarcoat", () => {
+    expect(paramHintsSugarcoat(`define (f a b`)).toEqual([]);
   });
 
   it("is resilient: one unparseable form doesn't zero out the rest", () => {
     // Middle form has an unbalanced `{` the reader can't parse; the define + call
     // around it (different top-level forms) must still resolve cross-form.
-    const sweet = `define (f a b)\n  (+ a b)\n\n{ this is broken\n\n(f 1 2)`;
-    expect(paramHintsSweet(sweet).map((h) => h.name)).toEqual(["a", "b"]);
+    const sugarcoat = `define (f a b)\n  (+ a b)\n\n{ this is broken\n\n(f 1 2)`;
+    expect(paramHintsSugarcoat(sugarcoat).map((h) => h.name)).toEqual(["a", "b"]);
   });
 
   it("resolves through modulo/quotient/remainder infix (the gepa LCG case)", () => {
     // `(modulo (* state 16807) n)` renders to `{{state * 16807} modulo n}`; read
     // must recognise `modulo` as infix or it throws "unbalanced {" → 0 hints.
     const classic = `(define (rng-next state) (modulo (* state 16807) 2147483647))\n\n(define (step s) (rng-next s))`;
-    const sweet = schemeToSweet(classic);
-    expect(() => sweetToScheme(sweet, classic)).not.toThrow(); // round-trip is restored
-    expect(paramHintsSweet(sweet).map((h) => h.name)).toEqual(["state"]); // (rng-next s) → [state]
+    const sugarcoat = schemeToSugarcoat(classic);
+    expect(() => sugarcoatToScheme(sugarcoat, classic)).not.toThrow(); // round-trip is restored
+    expect(paramHintsSugarcoat(sugarcoat).map((h) => h.name)).toEqual(["state"]); // (rng-next s) → [state]
   });
 
-  it("if control hints render over sweet", () => {
-    const hints = paramHintsSweet(schemeToSweet(`(if (>= round 3) idea (loop idea round))`));
+  it("if control hints render over sugarcoat", () => {
+    const hints = paramHintsSugarcoat(schemeToSugarcoat(`(if (>= round 3) idea (loop idea round))`));
     expect(hints.map((h) => h.name)).toEqual(["cond", "then", "else"]);
   });
 
-  it("let* control hints survive the sweet I-EXPRESSION reshape (span-less synthesized bindings)", () => {
+  it("let* control hints survive the sugarcoat I-EXPRESSION reshape (span-less synthesized bindings)", () => {
     // A multi-line let* renders as an I-expression whose `(a v)` binding-lists carry NO span
     // of their own — the hint must fall back to the binding's symbol start, not vanish.
     const classic = `(let* ((a (spark "seed" :topic "a calmer morning routine")) (b (refine "sharpen" :idea (field a "idea")))) (digest a b))`;
-    const sweet = schemeToSweet(classic);
-    const hints = paramHintsSweet(sweet);
+    const sugarcoat = schemeToSugarcoat(classic);
+    const hints = paramHintsSugarcoat(sugarcoat);
     expect(hints.map((h) => h.name)).toEqual(["let", "let", "return"]);
-    for (const h of hints) expect(/\S/.test(sweet[h.pos])).toBe(true); // lands on a binding start, not whitespace
+    for (const h of hints) expect(/\S/.test(sugarcoat[h.pos])).toBe(true); // lands on a binding start, not whitespace
   });
 });

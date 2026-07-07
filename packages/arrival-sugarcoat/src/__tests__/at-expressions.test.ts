@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { printScheme, schemeToSweet, parseSexprs } from "../sweet-render.js";
-import { readSweetExpr, readSweet } from "../sweet-read.js";
+import { printScheme, schemeToSugarcoat, parseSexprs } from "../sugarcoat-render.js";
+import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
-const read = (sweet: string): string => printScheme(readSweetExpr(sweet));
-const readAll = (sweet: string): string => readSweet(sweet).map((f) => printScheme(f)).join("\n");
+const read = (sugarcoat: string): string => printScheme(readSugarcoatExpr(sugarcoat));
+const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) => printScheme(f)).join("\n");
 
-// Spec: docs/package-specific/arrival-sweet/arrival-sweet-at-expressions-2026-07-05.md
+// Spec: docs/package-specific/arrival-sugarcoat/arrival-sugarcoat-at-expressions-2026-07-05.md
 // @head{text} → (head <part>…); headless → str; @dedent{…} dissolves to (str <dedented>).
 describe("read: at-expressions → (head part…)", () => {
   const cases: Array<[string, string]> = [
@@ -30,7 +30,7 @@ describe("read: at-expressions → (head part…)", () => {
     // lone @ with no valid interp is literal
     ["@{a @ b}", '(str "a @ b")'],
   ];
-  for (const [sweet, scheme] of cases) it(`${sweet} → ${scheme}`, () => expect(read(sweet)).toBe(scheme));
+  for (const [sugarcoat, scheme] of cases) it(`${sugarcoat} → ${scheme}`, () => expect(read(sugarcoat)).toBe(scheme));
 });
 
 describe("read: @dedent dissolves to str with indentation stripped", () => {
@@ -57,7 +57,7 @@ describe("read: multi-line at-body through the I-expression coalescer", () => {
   });
 });
 
-const render = (scheme: string): string => schemeToSweet(scheme).trim();
+const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
 
 describe("render: (str …) → single-line at-expression", () => {
   const cases: Array<[string, string]> = [
@@ -66,7 +66,7 @@ describe("render: (str …) → single-line at-expression", () => {
     ['(str "Say \\"" x "\\" loud")', '@{Say "@x" loud}'],
     ['(str "role: " (field lead "role"))', '@{role: @(field lead "role")}'],
   ];
-  for (const [scheme, sweet] of cases) it(`${scheme} → ${sweet}`, () => expect(render(scheme)).toBe(sweet));
+  for (const [scheme, sugarcoat] of cases) it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
 
   // preference / soundness — these stay classic
   const classic: string[] = [
@@ -79,7 +79,7 @@ describe("render: (str …) → single-line at-expression", () => {
 
 describe("read∘render = id (the moat) for single-line at-expressions", () => {
   const canon = (s: string): string => printScheme(parseSexprs(s)[0]);
-  const roundtrip = (s: string): string => printScheme(readSweetExpr(render(s)));
+  const roundtrip = (s: string): string => printScheme(readSugarcoatExpr(render(s)));
   for (const s of [
     '(str "a " x " b")',
     '(string-append "Pitch \\"" product "\\" now")',
@@ -105,7 +105,7 @@ describe("render: multi-line (str …) → @dedent{…} (the pretty projection)"
 
 describe("read∘render = id (the moat) for multi-line at-expressions", () => {
   const canon = (s: string): string => printScheme(parseSexprs(s)[0]);
-  const roundtrip = (s: string): string => printScheme(readSweetExpr(render(s)));
+  const roundtrip = (s: string): string => printScheme(readSugarcoatExpr(render(s)));
   for (const s of [
     '(str "Pitch\\nThis one\\nOne sentence")',
     '(str "Hi " name "!\\nBye " x)',

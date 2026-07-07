@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { schemeToSweet, printScheme } from "../sweet-render.js";
-import { readSweetExpr, readSweet } from "../sweet-read.js";
+import { schemeToSugarcoat, printScheme } from "../sugarcoat-render.js";
+import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
-const render = (scheme: string): string => schemeToSweet(scheme).trim();
-const read = (sweet: string): string => printScheme(readSweetExpr(sweet));
-const readAll = (sweet: string): string => readSweet(sweet).map((f) => printScheme(f)).join("\n");
+const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
+const read = (sugarcoat: string): string => printScheme(readSugarcoatExpr(sugarcoat));
+const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) => printScheme(f)).join("\n");
 
 // §2/§3/§4.3 — the method dot reads as the receiver-last fold: every step seats the
 // receiver in the LAST arg slot, unifying subscript `[…]` and method `.op`.
@@ -28,7 +28,7 @@ describe("read: method dot → receiver-last fold", () => {
     // method next to an infix curly must not swallow it (the §7.3 round-trip guard).
     ["(begin n.number->string.display {n + 1})", "(begin (display (number->string n)) (+ n 1))"],
   ];
-  for (const [sweet, scheme] of cases) it(`${sweet} → ${scheme}`, () => expect(read(sweet)).toBe(scheme));
+  for (const [sugarcoat, scheme] of cases) it(`${sugarcoat} → ${scheme}`, () => expect(read(sugarcoat)).toBe(scheme));
 });
 
 // §5 render gate — emit a chain iff ≥2 steps OR the single step is accessor / key /
@@ -46,12 +46,12 @@ describe("render: chain gate (≥2 steps OR a single accessor/key/braced)", () =
     // a bare op passed as a VALUE has no receiver step — never sugared
     ["(map car xs)", "(map car xs)"],
   ];
-  for (const [scheme, sweet] of cases) it(`${scheme} → ${sweet}`, () => expect(render(scheme)).toBe(sweet));
+  for (const [scheme, sugarcoat] of cases) it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
 });
 
 // The render gate's canonical sublanguage: render ∘ ⟦·⟧ = id on C (cyclic idempotence).
-describe("cyclic idempotence: sweet → scheme → sweet", () => {
-  for (const sweet of [
+describe("cyclic idempotence: sugarcoat → scheme → sugarcoat", () => {
+  for (const sugarcoat of [
     "xs.map{ it * 2 }",
     "xs.filter{ it == 0 }",
     "xs.map{(y) => y}",
@@ -59,7 +59,7 @@ describe("cyclic idempotence: sweet → scheme → sweet", () => {
     "x.f.g",
     "n.number->string.display",
   ]) {
-    it(sweet, () => expect(render(read(sweet))).toBe(sweet));
+    it(sugarcoat, () => expect(render(read(sugarcoat))).toBe(sugarcoat));
   }
 });
 
@@ -67,8 +67,8 @@ describe("cyclic idempotence: sweet → scheme → sweet", () => {
 // value (same CST + §4.3 fold as the inline chain, just broken by indentation).
 describe("newline method chains (⏎.op)", () => {
   it("folds dot-lines onto the parent value", () => {
-    const sweet = ["closure", "  .map{ it[:verdict] }", "  .filter{ it == \"miss\" }", "  .length"].join("\n");
-    expect(readAll(sweet)).toBe(
+    const sugarcoat = ["closure", "  .map{ it[:verdict] }", "  .filter{ it == \"miss\" }", "  .length"].join("\n");
+    expect(readAll(sugarcoat)).toBe(
       "(length (filter (lambda (it) (equal? it \"miss\")) (map (lambda (it) (:verdict it)) closure)))",
     );
   });
@@ -80,7 +80,7 @@ describe("newline method chains (⏎.op)", () => {
   });
 
   it("a long method chain renders broken: base ⏎ one .op per line", () => {
-    const out = schemeToSweet(
+    const out = schemeToSugarcoat(
       "(length (filter (lambda (item) (equal? (longish-field-name item) \"audience-miss\")) (map (lambda (item) (transform-the-record item)) the-closure-collection)))",
     );
     const lines = out.split("\n");

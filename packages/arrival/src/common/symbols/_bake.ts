@@ -230,10 +230,9 @@ export interface NativeSymbolDef {
  *  can carry tool-specific data without polluting the core schema.
  */
 export interface RosettaSymbolDef<
-  const I extends z.ZodTypeAny = z.ZodTypeAny,
-  const O extends z.ZodTypeAny = z.ZodTypeAny,
-  const Rest extends RestSpec = undefined,
-  const M extends Record<string, any> = Record<string, any>,
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  O extends z.ZodTypeAny = z.ZodTypeAny,
+  M extends Record<string, any> = Record<string, any>,
 > {
   readonly kind: "rosetta";
   readonly name: string;
