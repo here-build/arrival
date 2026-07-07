@@ -24,10 +24,12 @@ import { AValue } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { tf } from "../tagless-final.js";
-// Runtime import cycle (benign — same shape as AJSArray↔AVector): `_bake.ts` imports
-// rosetta.ts → value-guards.ts → ACallable.ts (this file), but `makeCallCtx` is called only
-// inside `applyCallback`'s function body, long after every module has finished evaluating.
-import { makeCallCtx } from "../../common/symbols/_bake.js";
+// makeCallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this
+// file never transitively imports common/scheme-zod.ts — that used to close a cycle (scheme-zod
+// imports ACallable for ALambda/etc.; _bake imports scheme-zod) that could leave a
+// z.instanceof(...) codec's captured class permanently undefined, depending on which path
+// entered it first.
+import { makeCallCtx } from "./CallCtx.js";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
  *  promise (JS-host entry). Non-value returns are narrowed out at the call boundary. */

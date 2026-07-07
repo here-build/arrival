@@ -18,22 +18,24 @@
  * BEFORE the bindings are set, which is the one degree of freedom golden-prov-infer
  * needs to register its deterministic `defineRosetta` sources.
  */
+import * as z from "../common/scheme-zod.js";
 import { initBridge } from "../bridge.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
-import { AString } from "../values/primitives/AString.js";
-import { AValue } from "../values/primitives/AValue.js";
-import { fromJs } from "../values/primitives/boxing.js";
+import type { AString } from "../values/primitives/AString.js";
+import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 
-/** Stamp a single source-id onto a string input (the per-element id carrier). */
-export const sStr = (s: string, p: number): AString => new AString(CONSTANT_CTX, s, new Set([p]));
+/** Stamp a single source-id onto a string input (the per-element id carrier). Codec
+ *  encode + withProvenance, not a direct AString construction. */
+export const sStr = (s: string, p: number): AString => z.string.encode(s).withProvenance(new Set([p]));
 
-/** Stamp a single source-id onto a number input (the scalar arithmetic carrier). */
-export const sNum = (n: number, p: number): AValue => fromJs(CONSTANT_CTX, n, new Set([p]));
+/** Stamp a single source-id onto a number input (the scalar arithmetic carrier). Codec
+ *  encode canonicalizes to AInexact — matches fromJs's old default for a bare JS number. */
+export const sNum = (n: number, p: number): AValue => z.number.encode(n).withProvenance(new Set([p]));
 
 /** A per-env setup applied before the bindings are written (e.g. `defineRosetta`). */
 export type EnvSetup = (env: Environment) => void;

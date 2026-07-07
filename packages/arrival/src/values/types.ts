@@ -36,7 +36,7 @@ import type { R7RSError } from "../errors.js";
 // env bindings, never values). No runtime brand distinguishes it from a plain
 // procedure, so a value resolved from the env arrives typed as one. `import
 // type` keeps the mutual edge with Environment.ts a pure compile-time cycle.
-import { CallCtx } from "../common/symbols/_bake.js";
+import type { CallCtx } from "./primitives/CallCtx.js";
 import type { ACallable } from "./primitives/ACallable.js";
 
 /**

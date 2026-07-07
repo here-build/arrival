@@ -29,7 +29,7 @@ import { is_lambda } from "./values/value-guards.js";
 // A non-portable JS value (function/undefined/unique symbol) crossing into Scheme has
 // no faithful representation and materializes to #void — warnMembrane makes that edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import { CallCtx } from "./common/symbols/_bake.js";
+import type { CallCtx } from "./values/primitives/CallCtx.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {

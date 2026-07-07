@@ -49,8 +49,8 @@
 
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { type InvocationLike } from "../../rosetta.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
+import { type CallCtx, makeCallCtx } from "../../values/primitives/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
 
@@ -196,27 +196,14 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly preludeOnly?: boolean;
 }
 
-/**
- * The ONE `this` every callable body sees — the dispatch-level receiver AND the
- * per-verb invocation context, fused (docs/working-proposals/callctx-unification.md).
- * `runCtx` is never optional (the constructor bakes in the `CONSTANT_CTX` default), so a
- * verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
- * provenance carrier (genuinely call-varying, unlike `runCtx` — never lives on RunContext).
- * Flat, not lazy getters: `runCtx` is already a cheap frozen per-run object and `invocation`
- * is a one-field carrier, so there's nothing expensive to defer.
- */
-export interface CallCtx {
-  readonly runCtx: RunContext;
-  readonly invocation: { currentInvocation: unknown };
-}
-
-/** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
- *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
- *  dispatch site (evaluator bare-fn call-head, `applyCallback`'s bare-fn fallback, the native
- *  bind in `capability.ts`) calls this instead of hand-building the shape. */
-export function makeCallCtx(runCtx: RunContext = CONSTANT_CTX, currentInvocation?: InvocationLike): CallCtx {
-  return { runCtx, invocation: { currentInvocation } };
-}
+// CallCtx/makeCallCtx moved to values/primitives/CallCtx.ts (2026-07-08): ACallable.ts needs
+// makeCallCtx as a real function call, and importing it from here made ACallable.ts (and
+// therefore common/scheme-zod.ts, which imports ACallable.ts) transitively depend on this
+// file, closing a cycle that could leave a z.instanceof(...) codec's captured class
+// permanently undefined depending on which path entered it first. Re-exported here (not just
+// imported above) so existing `_bake.js` importers are unaffected.
+export type { CallCtx };
+export { makeCallCtx };
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
