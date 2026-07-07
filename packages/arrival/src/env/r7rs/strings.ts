@@ -18,8 +18,9 @@
  */
 
 import foldCase from "fold-case";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
+import { CallCtx } from "../../common/symbols/_bake.js";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
@@ -277,7 +278,7 @@ export default new EnvCapability("scheme/strings", {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
-        let result: APair | ANil = nil;
+        let result: APair<any, any> | ANil = nil;
         for (let i = endIdx - 1; i >= startIdx; i--)
           result = new APair(CONSTANT_CTX, new ACharacter(CONSTANT_CTX, chars[i]), result);
         return result;
@@ -349,9 +350,9 @@ export default new EnvCapability("scheme/strings", {
         output: [z.string],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]) {
+      function (this: CallCtx, proc: unknown, ...strings: AString[]) {
         invariant(strings.length > 0, "string-map: expected at least one string");
-        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.runCtx;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
@@ -384,9 +385,9 @@ export default new EnvCapability("scheme/strings", {
         output: [z.undefinedResult],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
+      function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
-        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.runCtx;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];

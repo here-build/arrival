@@ -29,18 +29,17 @@
 //
 //   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). bake.rosetta
 //                       produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
-//                       skippable/gated) → impl.call(invCtx, decodedArgs) → await (async
+//                       skippable/gated) → impl.call(this, decodedArgs) → await (async
 //                       implicit) → encode return (codec) → build the scheme values-list. This
 //                       mirrors createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
 //                       the codecs standing in for the generic schemeToJs/jsToScheme.
 //                       The impl receives ONLY the decoded scheme args POSITIONALLY — ctx is
-//                       never a param. ctx-coupled verbs read run-state lazily off a per-call
-//                       invocation-`this` (`this.aborted` / `this.abortSignal` / `this.invocation`
-//                       — accessor getters over the captured ctx); a pure verb is an arrow that
-//                       ignores `this`, so the call is byte-identical to `impl(decodedArgs)` and
-//                       materializes nothing. (This lazy invocation-`this` REPLACES the planned
-//                       `symbol.contextual`.) PROVENANCE MINTING is RESOLVED: the evaluator
-//                       appends ctx), so it reads ctx.currentInvocation and mints/deep-stamps
+//                       never a param. ctx-coupled verbs read run-state off a per-call `this:
+//                       CallCtx` (`this.runCtx.signal` / `this.runCtx.signal?.aborted` /
+//                       `this.invocation.currentInvocation`); a pure verb is an arrow that
+//                       ignores `this`, so the call is byte-identical to `impl(decodedArgs)`.
+//                       PROVENANCE MINTING is RESOLVED: the evaluator appends ctx, so the
+//                       wrapper reads `this.invocation.currentInvocation` and mints/deep-stamps
 //                       EXACTLY as createRosettaWrapper does (a non-pure rosetta AEntity = a
 //                       source). withContext / argProvenance contract knobs are DROPPED here.
 //
@@ -50,11 +49,10 @@
 
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { looksLikeEvalContext, type CtxWithInvocation } from "../../rosetta.js";
-import { type RunContext } from "../../values/primitives/RunContext.js";
+import { type InvocationLike } from "../../rosetta.js";
+import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import { Macro } from "../../eval/Macro.js";
-import { EvalContext } from "../../eval/evaluator.js";
-import { HandlerCallCtx } from "../../env/r7rs/exceptions.js";
+import { ZodUnion } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -72,7 +70,15 @@ export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
  *  the JS face. A non-codec schema's faces coincide (`input ≡ output`), so every pre-codec
  *  contract types identically under either face — the split is strictly additive. */
 export type Face = "scheme" | "js";
-type ProjectFace<S extends z.ZodTypeAny, F extends Face> = F extends "scheme" ? z.input<S> : z.output<S>;
+type ProjectFaceAtom<S extends z.ZodTypeAny, F extends Face> = F extends "scheme" ? z.input<S> : z.output<S>;
+type ProjectFaceArray<S extends z.ZodTypeAny[], F extends Face> = S extends [
+  infer Head extends z.ZodTypeAny,
+  infer Tail extends z.ZodTypeAny[],
+]
+  ? ProjectFace<Head, F> | ProjectFaceArray<Tail, F>
+  : never;
+type ProjectFace<S extends z.ZodTypeAny, F extends Face> =
+  S extends ZodUnion<infer T extends z.ZodTypeAny[]> ? ProjectFaceArray<T, F> : ProjectFaceAtom<S, F>;
 
 /** The ONE shared traversal: map a VectorSpec through the selected face (`z.output` for the
  *  membrane/JS face — the default, byte-identical to the pre-Face behavior — or `z.input` for
@@ -132,12 +138,7 @@ export type DecodedArgsWithRest<
   : DecodedArgs<I, F>;
 
 /** A symbol's input/output contract. */
-export interface Contract<
-  I extends VectorSpec,
-  O extends VectorSpec,
-  Rest extends RestSpec = undefined,
-  Metadata extends Record<string, any> | undefined,
-> {
+export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
   /** The variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first
    *  arg is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
@@ -180,10 +181,29 @@ export interface Contract<
    *  runtime by capturing the call's RESULT in an ordinary define, never the verb itself. See
    *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
   readonly preludeOnly?: boolean;
-  readonly metadata?: Metadata;
 }
 
-export type ImplInvocationCtx = { ctx: HandlerCallCtx };
+/**
+ * The ONE `this` every callable body sees — the dispatch-level receiver AND the
+ * per-verb invocation context, fused (docs/working-proposals/callctx-unification.md).
+ * `runCtx` is never optional (the constructor bakes in the `CONSTANT_CTX` default), so a
+ * verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
+ * provenance carrier (genuinely call-varying, unlike `runCtx` — never lives on RunContext).
+ * Flat, not lazy getters: `runCtx` is already a cheap frozen per-run object and `invocation`
+ * is a one-field carrier, so there's nothing expensive to defer.
+ */
+export interface CallCtx {
+  readonly runCtx: RunContext;
+  readonly invocation: { currentInvocation: unknown };
+}
+
+/** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
+ *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
+ *  dispatch site (evaluator bare-fn call-head, `applyCallback`'s bare-fn fallback, the native
+ *  bind in `capability.ts`) calls this instead of hand-building the shape. */
+export function makeCallCtx(runCtx: RunContext = CONSTANT_CTX, currentInvocation?: InvocationLike): CallCtx {
+  return { runCtx, invocation: { currentInvocation } };
+}
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
@@ -196,7 +216,7 @@ export type Impl<
   O extends VectorSpec,
   Rest extends RestSpec = undefined,
   F extends Face = "js",
-> = (this: ImplInvocationCtx, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
+> = (this: CallCtx, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. AEntity — the baked, discriminated union (an interpreter primitive — TYPE-ONLY,
@@ -245,7 +265,7 @@ export interface RosettaSymbolDef<
    *  + (optionally) validates inputs, runs the (ctx-free) impl, awaits, encodes the output,
    *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
    *  see bakeRosetta). */
-  readonly run: (this: ImplInvocationCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
+  readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
   readonly pure?: boolean;
   /** See `Contract.type`. */
@@ -293,7 +313,7 @@ export interface SequenceSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: (this: { ctx: EvalContext }, ...schemeArgs: unknown[]) => Promise<unknown>;
+  readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** See `Contract.type`. */
   readonly type?: string;
 }
@@ -491,75 +511,6 @@ export interface BakeRuntimeOpts {
    *  Stored in `.metadata` on the resulting RosettaSymbolDef.
    *  Use the generic `RosettaSymbolDef<M>` to type it. */
   metadata?: Record<string, any>;
-}
-
-/** The structural slice of EvalContext the symbol wrappers read. Duck-typed (the full
- *  `EvalContext` lives in eval/evaluator.ts; pulling it here would be a layering cycle —
- *  same reason rosetta.ts duck-types it). Reuses rosetta's `CtxWithInvocation` for the
- *  `currentInvocation` shape (so the provenance mint reads the SAME `InvocationLike`, not a
- *  re-spelled cast) and adds the two extra fields symbol.ts threads: the per-run `runCtx` (for
- *  heap/strict) and the budget `signal` (the lazy invocation-`this`'s `aborted`/`abortSignal`).
- *  All optional: a direct-JS call (tests, host) hands NO ctx, so every reader tolerates absence. */
-interface EvalContextSlice extends CtxWithInvocation {
-  runCtx?: RunContext;
-  signal?: AbortSignal;
-}
-
-/** Narrow the evaluator-appended trailing arg to the EvalContext slice the symbol wrappers read,
- *  or `undefined` for a direct-JS call. Composes rosetta's `looksLikeEvalContext` (the shared
- *  duck-type probe — `resolver`/`currentInvocation`/`tap`/`signal`) and widens its narrow
- *  `Partial<CtxWithInvocation>` result to the `runCtx`-bearing slice this module threads. One
- *  typed seam replacing the scattered `ctx as { runCtx?: … }` / `ctx as { currentInvocation?… }`
- *  casts; the `ctx` it inspects is `unknown` until proven a context. */
-export function asEvalContext(ctx: unknown): EvalContextSlice | undefined {
-  return looksLikeEvalContext(ctx) ? ctx : undefined;
-}
-
-/** The per-call **invocation context** — the lazy `this` a rosetta impl is called with.
- *  Verbs that need run-state declare a `function` impl and read `this.abortSignal` /
- *  `this.aborted` / `this.invocation`; the 50+ pure verbs are arrows that ignore `this`
- *  entirely (so `impl.call(invCtx, …)` is byte-identical to `impl(…)` for them).
- *
- *  Every member is an **accessor getter** that reads the captured `ctx` on access, so a verb
- *  that never touches them materializes NOTHING — zero cost on the pure-verb hot path. */
-export interface InvocationContext {
-  /** Has the run been aborted? `ctx.signal?.aborted`, coerced to a real boolean (no signal /
-   *  no ctx ⇒ `false`: a run with no budget signal is, by definition, not aborted). */
-  readonly aborted: boolean;
-  /** The run's `AbortSignal` (for `fetch(url, { signal: this.abortSignal })` and friends), or
-   *  `undefined` when the run carries no budget signal / the impl was called direct-JS. */
-  readonly abortSignal: AbortSignal | undefined;
-  /** The invocation CARRIER the inference seam (infer / mcp / agentic) forwards to its host
-   *  resolver — `{ currentInvocation }`, the exact `{ currentInvocation?: unknown }` shape `InferFn`
-   *  / `McpEffectContext` are typed for (and the only field those resolvers structurally read, to
-   *  mark/trace the provenance node). It mirrors what the legacy `withContext` path forwarded as
-   *  its `ctx` arg: `createRosettaWrapper` handed the raw EvalContext, off which the resolver read
-   *  `.currentInvocation` — this is that field, re-wrapped to the minimal carrier. Direct-JS (no
-   *  ctx) ⇒ `{ currentInvocation: undefined }` (the resolver's `ctx?.currentInvocation` ⇒ absent).
-   *  Provenance MINTING is independent: `bakeRosetta` mints off the REAL captured ctx, so a verb
-   *  reading `this.invocation` and the wrapper's mint both reach the same `currentInvocation`. */
-  readonly invocation: { currentInvocation: unknown };
-}
-
-/** Build the lazy invocation-`this` over a captured ctx (or `undefined` for a direct-JS call).
- *  The getters close over `ctx` and read it on access — nothing is computed until a verb that
- *  declared a `function` impl actually touches `this.*`. */
-export function makeInvocationContext(ctx: EvalContextSlice | undefined): InvocationContext {
-  return {
-    get aborted(): boolean {
-      return ctx?.signal?.aborted ?? false;
-    },
-    get abortSignal(): AbortSignal | undefined {
-      return ctx?.signal;
-    },
-    get invocation(): { currentInvocation: unknown } {
-      // The minimal `{ currentInvocation }` carrier the inference seam forwards to its host
-      // resolver — structurally the `InferFn` / `McpEffectContext` ctx. Re-wrap (not the raw
-      // `ctx.currentInvocation`) so the resolver's `ctx?.currentInvocation` reaches the same
-      // Invocation the legacy `withContext` path delivered via the whole EvalContext.
-      return { currentInvocation: ctx?.currentInvocation };
-    },
-  };
 }
 
 // `bakeNative`/`bakeRosetta`/`bakeDoor` used to live here as separately-importable

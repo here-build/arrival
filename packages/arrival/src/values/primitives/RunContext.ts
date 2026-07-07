@@ -47,17 +47,30 @@ export interface RunContext {
    *  rosetta return (or any borrowed value) can't be mutated by the host afterward — prevention by
    *  construction, replacing the dev-only purity ASSERT. `false` opts out (host keeps it mutable). */
   readonly freezeRosettaReturns: boolean;
+  /** The run's execution-budget signal, if any (see `EvalContext.signal` in evaluator.ts for the
+   *  full war story — that's the trampoline's own copy, read at iteration boundaries). This is the
+   *  SAME reference, stamped here at the same mint site, so every `runCtx` consumer (a callable
+   *  body's `CallCtx.runCtx.signal`, not just the trampoline) can observe abort state — never
+   *  independently re-derived, so the two can't drift out of sync. */
+  readonly signal: AbortSignal | undefined;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
 export function makeRunContext(
-  opts: { strict?: boolean; heapBudget?: number; speculate?: boolean; freezeRosettaReturns?: boolean } = {},
+  opts: {
+    strict?: boolean;
+    heapBudget?: number;
+    speculate?: boolean;
+    freezeRosettaReturns?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): RunContext {
   return {
     strict: opts.strict ?? false,
     heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
     speculate: opts.speculate ?? false,
     freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
+    signal: opts.signal,
   };
 }
 
@@ -73,4 +86,5 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   heapMeter: undefined,
   speculate: false,
   freezeRosettaReturns: true,
+  signal: undefined,
 });

@@ -8,6 +8,7 @@ import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../inference-env.js";
 import { createRosettaWrapper, jsToScheme, schemeToJs } from "../rosetta.js";
+import { makeCallCtx } from "../common/symbols/_bake.js";
 import { exec } from "../eval/generator-exec.js";
 
 // Helper to unwrap exec results
@@ -171,7 +172,7 @@ describe("Rosetta Environment", () => {
 
       // Test with LIPS list
       const lipsList = await execOne("(list 1 2 3 4)");
-      const result = await rosettaFunction.call({ctx: {}}, lipsList);
+      const result = await rosettaFunction.call(makeCallCtx(), lipsList);
 
       console.log("Original LIPS list:", lipsList);
       console.log("Rosetta result:", result);
@@ -196,7 +197,7 @@ describe("Rosetta Environment", () => {
 
       // Test with LIPS list
       const lipsList = await execOne("(list 1 2 3 4 5 6)");
-      const result = await rosettaAnalyze.call({ctx: {}}, lipsList);
+      const result = await rosettaAnalyze.call(makeCallCtx(), lipsList);
 
       console.log("Analysis result:", result);
 
@@ -267,7 +268,7 @@ describe("Rosetta Environment", () => {
       const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
       const rosettaFn = inferenceEnv.get("extract-values");
       invariant(isCallable(rosettaFn), "extract-values must resolve to a callable rosetta wrapper");
-      const result = await rosettaFn.call({ctx: {}}, lipsData);
+      const result = await rosettaFn.call(makeCallCtx(), lipsData);
 
       console.log("Complex data result:", result);
 
@@ -300,7 +301,7 @@ describe("Rosetta Environment", () => {
       // Args cross the membrane as Scheme values: the wrapper runs schemeToJs on each
       // before invoking the underlying fn, so the property/value strings are boxed AStrings.
       const result = await filterFn.call(
-        { ctx: {} },
+        makeCallCtx(),
         lipsNodes,
         new AString(CONSTANT_CTX, "overflow"),
         new AString(CONSTANT_CTX, "hidden"),
@@ -339,7 +340,7 @@ describe("Rosetta Environment", () => {
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const statsFn = inferenceEnv.get("css-property-stats");
       invariant(isCallable(statsFn), "css-property-stats must resolve to a callable rosetta wrapper");
-      const result = await statsFn.call({ ctx: {} }, lipsNodes);
+      const result = await statsFn.call(makeCallCtx(), lipsNodes);
 
       console.log("CSS stats result:", result);
 

@@ -16,10 +16,10 @@ import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import { AString } from "../../values/primitives/AString.js";
-import { ImplInvocationCtx } from "../symbols/_bake.js";
+import { CallCtx } from "../symbols/_bake.js";
 
 type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (
-  this: ImplInvocationCtx,
+  this: CallCtx,
   ...args: Args
 ) => Result;
 

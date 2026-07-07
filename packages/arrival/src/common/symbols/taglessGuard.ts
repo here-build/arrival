@@ -3,8 +3,7 @@
 // namespace by `./index.ts`; the shared types + helpers live in `./_bake.js`.
 
 import * as z from "../scheme-zod.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
-import { parseNameDoc, resolveMethod, type TaglessGuardSymbolDef } from "./_bake.js";
+import { CallCtx, parseNameDoc, resolveMethod, type TaglessGuardSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
 
 /** A tagless GUARD binder — `symbol.taglessGuard\`name: doc\`` binds a predicate that dispatches
@@ -13,10 +12,10 @@ import { tf, type TaglessOp } from "../../values/tagless-final.js";
  *  (`vector?`, `null?`-style), not a declared sequence op. */
 export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessGuardSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
-  // A `function`, NOT an arrow — same fix as `tagless.ts`: the evaluator hands ctx via
-  // `this` for bare-fn dispatch; an arrow body can never read it.
-  const run = async function (this: { ctx?: { runCtx?: RunContext } }, ...args: unknown[]): Promise<unknown> {
-    const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+  // A `function`, NOT an arrow — same fix as `tagless.ts`: the evaluator hands the `CallCtx`
+  // via `this` for bare-fn dispatch; an arrow body can never read it.
+  const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
+    const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);

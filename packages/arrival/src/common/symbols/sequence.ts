@@ -2,8 +2,8 @@
 // per-tag factory files re-assembled into the `symbol` namespace by `./index.ts`; the
 // shared types + helpers live in `./_bake.js`.
 
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import {
+  CallCtx,
   type Contract,
   DecodedArgs,
   DecodedReturn,
@@ -14,7 +14,6 @@ import {
   type SequenceSymbolDef,
   type VectorSpec,
 } from "./_bake.js";
-import { EvalContext } from "../../eval/evaluator.js";
 
 /** Ctx-aware host op — the impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. `impl`'s args/return are
@@ -29,8 +28,8 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // `run` dispatches at runtime against a raw sliced-args array, which TS can't statically
     // match to `impl`'s own `DecodedArgs<I>` tuple — erase here, once, the same boundary
     // `rosetta.ts`'s `run` crosses. By construction (the contract), the array always matches.
-    const run = function (this: { ctx: EvalContext }, ...args: DecodedArgs<I, "scheme">) {
-      return impl(args, this.ctx?.runCtx ?? CONSTANT_CTX);
+    const run = function (this: CallCtx, ...args: DecodedArgs<I, "scheme">) {
+      return impl(args, this.runCtx);
     };
     // `fanout: true` → stamp the bound fn (capability binds def.run; cell-less packs bind it raw,
     // so the classifier reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
@@ -46,8 +45,8 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // `run` crosses — `rawImpl`). By construction (the contract), the sliced args array
       // always matches `DecodedArgs<I,"scheme">`.
       run: Object.assign(
-        function (this: { ctx: EvalContext }, ...args: unknown[]) {
-          return impl(args as DecodedArgs<I, "scheme">, this.ctx?.runCtx ?? CONSTANT_CTX);
+        function (this: CallCtx, ...args: unknown[]) {
+          return impl(args as DecodedArgs<I, "scheme">, this.runCtx);
         },
         { fanout: true },
       ) as SequenceSymbolDef["run"],

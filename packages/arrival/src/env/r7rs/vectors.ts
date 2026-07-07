@@ -25,8 +25,9 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
+import { CallCtx } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -223,9 +224,9 @@ export default new EnvCapability("scheme/vectors", {
         // for vector-append) → a new vector (`readonly unknown[]`).
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]) {
+      function (this: CallCtx, proc: unknown, ...vectors: AVector[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
-        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.runCtx;
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const result: SchemeValue[] = [];
@@ -256,9 +257,9 @@ export default new EnvCapability("scheme/vectors", {
         // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
         type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
       },
-      function (this: { ctx?: { runCtx?: RunContext } }, proc: unknown, ...vectors: AVector[]): AVoid | Promise<AVoid> {
+      function (this: CallCtx, proc: unknown, ...vectors: AVector[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
-        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.runCtx;
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const pending: unknown[] = [];

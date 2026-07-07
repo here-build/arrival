@@ -159,7 +159,7 @@ export interface ExecOptions {
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
   /** Predicate to suppress tap firing for specific nodes (atoms always skipped). */
-  nodeFilter?: (node: APair) => boolean;
+  nodeFilter?: (node: APair<any, any>) => boolean;
   /**
    * Execution-budget signal. When the signal aborts, the trampoline throws
    * `signal.reason ?? DOMException("aborted", "AbortError")` at the next
@@ -351,7 +351,7 @@ export async function exec(
   // strict + the heap meter as scaffolding — `exec` still installs the meter on the env
   // node below (where `to_array`/fl-interop find it by parent-walk) and ops read the
   // holders; N2 flips those readers to `runCtx`/`operand.ctx` and retires the holders.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns });
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns, signal });
   // ── THE EXEC SEAM (P4): glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
   // up its base-linked chain — byte-identical (zero change for arrival-chain/inhuman). `env`
@@ -470,6 +470,13 @@ export async function execExpr(
       ? new Resolver(actualEnv)
       : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
 
+  // Mint a per-run handle here too (mirrors exec() above) — closes two gaps at once: a
+  // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME abort
+  // signal `ctx.signal` already carries here, and the handler-stack WeakMap (exceptions.ts)
+  // stops falling back to the shared CONSTANT_CTX bucket for every require'd module (the gap
+  // that file's own header comment names as "the remaining gap... outside this pack").
+  const runCtx = makeRunContext({ speculate, signal });
+
   try {
     // A top-level form evaluates to a value, never a bare expander — seal it.
     return expectValue(
@@ -482,6 +489,7 @@ export async function execExpr(
           nodeFilter,
           signal,
           speculate,
+          runCtx,
         }),
         { signal, budgetMs },
       ),

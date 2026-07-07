@@ -13,7 +13,7 @@
 // real createRosettaWrapper tests use — no full evaluator needed to prove the wiring.
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../values/primitives/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef } from "../symbol.js";
@@ -23,9 +23,10 @@ import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { ImplInvocationCtx } from "../symbols/_bake.js";
+import { CallCtx, makeCallCtx } from "../symbols/_bake.js";
+import type { InvocationLike } from "../../rosetta.js";
 
-type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (this: ImplInvocationCtx, ...args: Args) => Result;
+type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (this: CallCtx, ...args: Args) => Result;
 
 /** A SchemeEnv that records every `set` binding (native + rosetta SymbolDefs route through set). */
 function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
@@ -42,24 +43,19 @@ function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
   return { env, verbs };
 }
 
-/** A synthetic EvalContext carrying a provenance-point invocation (the shape the wrapper reads). */
-function ctxWithInvocation(id: number): {
-  ctx: { env: unknown; currentInvocation: { id: number; isProvenancePoint: boolean; markProvenancePoint(): void } };
-  marked: () => boolean;
-} {
+/** A synthetic invocation carrying a provenance-point marker (the shape the wrapper reads
+ *  off `this.invocation.currentInvocation`). */
+function invocationWithId(id: number): { invocation: InvocationLike; marked: () => boolean } {
   let didMark = false;
-  const ctx = {
-    env: {},
-    currentInvocation: {
-      id,
-      isProvenancePoint: false,
-      markProvenancePoint() {
-        didMark = true;
-        this.isProvenancePoint = true;
-      },
+  const invocation: InvocationLike = {
+    id,
+    isProvenancePoint: false,
+    markProvenancePoint() {
+      didMark = true;
+      this.isProvenancePoint = true;
     },
   };
-  return { ctx, marked: () => didMark };
+  return { invocation, marked: () => didMark };
 }
 
 async function wireRosetta(def: RosettaSymbolDef): Promise<WithCtxFn> {
@@ -69,12 +65,17 @@ async function wireRosetta(def: RosettaSymbolDef): Promise<WithCtxFn> {
   return verbs.verb;
 }
 
-/** Invoke a bound verb the way the REAL evaluator does: `this = { ctx }` (bare-fn dispatch is
- *  `Reflect.apply(fn, { ctx }, args)`), never a trailing ctx ARGUMENT — the wrapper reads
- *  `this.ctx`. A bare `verb(...)` call (this test file's old convention) leaves `this`
- *  undefined and throws before even checking whether a ctx was intended. */
-function invoke(verb: WithCtxFn, ctx: unknown, ...args: unknown[]): unknown {
-  return verb.call({ ctx } as ImplInvocationCtx, ...(args as never[]));
+/** Invoke a bound verb the way the REAL evaluator does: `this = CallCtx` (bare-fn dispatch is
+ *  `Reflect.apply(fn, makeCallCtx(runCtx, currentInvocation), args)`), never a trailing ctx
+ *  ARGUMENT — the wrapper reads `this.runCtx`/`this.invocation` directly. A bare `verb(...)`
+ *  call (this test file's old convention) leaves `this` undefined and throws before even
+ *  checking whether a ctx was intended. */
+function invoke(
+  verb: WithCtxFn,
+  opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
+  ...args: unknown[]
+): unknown {
+  return verb.call(makeCallCtx(opts?.runCtx, opts?.currentInvocation), ...(args as never[]));
 }
 
 describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
@@ -98,15 +99,15 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
 
-    const { ctx, marked } = ctxWithInvocation(42);
-    const out = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "hello"))) as AInexact;
+    const { invocation, marked } = invocationWithId(42);
+    const out = (await invoke(verb, { currentInvocation: invocation }, new AString(CONSTANT_CTX, "hello"))) as AInexact;
 
     expect(out).toBeInstanceOf(AInexact);
     expect(out.real).toBe(5);
     // THE MINT: the output carries pointProvenance(42), and the invocation was marked a point.
     expect([...out.provenance]).toEqual([42]);
     expect(marked()).toBe(true);
-    expect(ctx.currentInvocation.isProvenancePoint).toBe(true);
+    expect(invocation.isProvenancePoint).toBe(true);
   });
 
   it("DEEP-STAMPS a structured (list) output — every element carries the minted origin", async () => {
@@ -118,8 +119,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     );
     const verb = await wireRosetta(def);
 
-    const { ctx } = ctxWithInvocation(7);
-    const out = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "ab"))) as AValue;
+    const { invocation } = invocationWithId(7);
+    const out = (await invoke(verb, { currentInvocation: invocation }, new AString(CONSTANT_CTX, "ab"))) as AValue;
     // Walk the spine: every reachable AValue must carry {7}.
     const seen: number[][] = [];
     const walk = (v: unknown): void => {
@@ -149,46 +150,49 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
 
-  it("invocation-`this`: a `function` impl reads run-state lazily off `this` (abortSignal / aborted)", async () => {
+  it("invocation-`this`: a `function` impl reads run-state off `this.runCtx` (signal / aborted)", async () => {
     // A ctx-coupled verb declares a `function` impl (NOT an arrow) and reads the run's abort
-    // state off the lazy invocation-`this`. The wrapper builds that `this` from the captured ctx.
-    type InvThis = { aborted: boolean; abortSignal: AbortSignal | undefined; invocation: unknown };
+    // state off the flat `CallCtx` `this`. The wrapper forwards that `this` as-is.
     const def = symbol.rosetta`probe: report the run's abort state`(
       { input: [z.string], output: [z.string] },
-      function (this: InvThis, s: string) {
-        // `this.abortSignal` is the ctx's signal; `this.aborted` is its `.aborted` (false here).
-        const tag = this.abortSignal ? (this.aborted ? "aborted" : "live") : "no-signal";
+      function (this: CallCtx, s: string) {
+        // `this.runCtx.signal` is the run's signal; `.aborted` is its own `.aborted` (false here).
+        const tag = this.runCtx.signal ? (this.runCtx.signal.aborted ? "aborted" : "live") : "no-signal";
         return `${s}:${tag}`;
       },
     );
     const verb = await wireRosetta(def);
 
-    // ctx carrying a (not-yet-aborted) AbortSignal — the shape the evaluator appends.
+    // runCtx carrying a (not-yet-aborted) AbortSignal — the shape a real exec() mints.
     const ac = new AbortController();
-    const ctx = { env: {}, signal: ac.signal };
-    const out = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "x"))) as AString;
+    const runCtx = makeRunContext({ signal: ac.signal });
+    const out = (await invoke(verb, { runCtx }, new AString(CONSTANT_CTX, "x"))) as AString;
     expect(out["arrival/toJS"]()).toBe("x:live"); // signal present, not aborted
 
-    // After abort, the SAME getter reads the now-aborted signal (lazy — read on access).
+    // After abort, the SAME signal reference reads as aborted (read on access).
     ac.abort();
-    const out2 = (await invoke(verb, ctx, new AString(CONSTANT_CTX, "y"))) as AString;
+    const out2 = (await invoke(verb, { runCtx }, new AString(CONSTANT_CTX, "y"))) as AString;
     expect(out2["arrival/toJS"]()).toBe("y:aborted");
   });
 
   it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
-    // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(invCtx, …)` is
-    // exactly `impl(…)`. Proven both WITH a ctx (signal present) and direct-JS (no ctx).
+    // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(this, …)` is
+    // exactly `impl(…)`. Proven both WITH a runCtx (signal present) and direct-JS (no ctx).
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
 
-    // direct-JS (no ctx → invCtx getters tolerate undefined; the arrow never looks)
+    // direct-JS (no ctx → CallCtx defaults to CONSTANT_CTX; the arrow never looks)
     const direct = (await invoke(verb, undefined, new AString(CONSTANT_CTX, "hello"))) as AInexact;
     expect(direct.real).toBe(5);
 
-    // with a ctx carrying an aborted signal — a pure arrow STILL ignores it (no early-out, same value)
+    // with a runCtx carrying an aborted signal — a pure arrow STILL ignores it (no early-out, same value)
     const ac = new AbortController();
     ac.abort();
-    const withCtx = (await invoke(verb, { env: {}, signal: ac.signal }, new AString(CONSTANT_CTX, "world"))) as AInexact;
+    const withCtx = (await invoke(
+      verb,
+      { runCtx: makeRunContext({ signal: ac.signal }) },
+      new AString(CONSTANT_CTX, "world"),
+    )) as AInexact;
     expect(withCtx.real).toBe(5);
   });
 
@@ -203,12 +207,12 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     );
     const verb = await wireRosetta(def);
 
-    const { ctx, marked } = ctxWithInvocation(42);
+    const { invocation, marked } = invocationWithId(42);
     const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
-    const out = (await invoke(verb, ctx, tagged)) as AString;
+    const out = (await invoke(verb, { currentInvocation: invocation }, tagged)) as AString;
     expect(out["arrival/toJS"]()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
     expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point
-    expect(ctx.currentInvocation.isProvenancePoint).toBe(false);
+    expect(invocation.isProvenancePoint).toBe(false);
   });
 });

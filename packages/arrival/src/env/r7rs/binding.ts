@@ -17,7 +17,6 @@ import { symbol } from "../../common/symbol.js";
 import { Values } from "../../values/primitives/Values.js";
 import { unpromise } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import { type SchemeValue } from "../../values/types.js";
 
 // R7RS § 6.10 multiple-value primitives, relocated VERBATIM from stdlib.ts global_env
@@ -70,7 +69,7 @@ export default new EnvCapability("scheme/r7rs/binding", {
         // usually a lambda, so its invocation may return a Promise — unwrap it BEFORE the
         // `instanceof Values` check, else a multi-value producer leaks the Promise as a single
         // arg (wrong arity).
-        const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+        const runCtx = this.runCtx;
         // unpromise is a generic (unknown-typed) sync/async unwrap utility — assert at this
         // one boundary that its result is what the callback below actually produces.
         return unpromise(applyCallback(producer, [], runCtx), (maybe) => {

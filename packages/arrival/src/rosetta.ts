@@ -35,7 +35,7 @@ import { is_lambda } from "./values/value-guards.js";
 // UNIQUE symbol) crossing INTO Scheme has no faithful representation → it materializes to #void,
 // and `warnMembrane` makes that interop edge VISIBLE (a silent #void would hide a portability bug).
 import { warnMembrane } from "./membrane-warn.js";
-import { ImplInvocationCtx } from "./common/symbols/_bake.js";
+import { CallCtx } from "./common/symbols/_bake.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
@@ -417,7 +417,7 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
   // the runtime now honors it instead of the legacy `provenancePoint` opt-in.
   const mintsPoint = pure !== true;
 
-  return async function rosettaWrapper(this: ImplInvocationCtx, ...schemeArgs: any[]) {
+  return async function rosettaWrapper(this: CallCtx, ...schemeArgs: any[]) {
     // Collect provenance from AValue inputs BEFORE schemeToJs runs — that pass
     // unwraps SchemeString/SchemeBool/SchemeJSObject down to JS primitives
     // and records, stripping the AValue identity (and the provenance field
@@ -425,22 +425,25 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     const inputAValues = schemeArgs.filter((a): a is AValue => a instanceof AValue);
     const inputProvenance = unionProvenance(inputAValues);
 
-    // Per-arg DEEP provenance (opt-in), aligned to schemeArgs, parked on ctx
-    // BEFORE schemeToJs strips the AValue identity. The consumer fn reads it to
+    // Per-arg DEEP provenance (opt-in), aligned to schemeArgs. The consumer fn reads it to
     // attribute each named input to its concrete producer (e.g. a `.prompt`
     // building `inputsProvenance[field]`), recovering per-field origins that the
-    // union — and the post-strip plain-JS args — can no longer distinguish.
-    if (options.argProvenance === true && this.ctx && typeof this.ctx === "object") {
-      (this.ctx as { argProvenance?: ReadonlySet<number>[] }).argProvenance = schemeArgs.map(deepProvenance);
-    }
+    // union — and the post-strip plain-JS args — can no longer distinguish. `fn`'s own
+    // contract is untyped/duck-typed (`this.ctx.argProvenance`) — reconstruct the SAME
+    // nested legacy shape `fn` has always read, sourced from the flat `CallCtx` fields.
+    const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
+    // `this?.` throughout (not just `this.invocation?.`): `createRosettaWrapper` is exercised
+    // directly by tests calling `.call({ ctx: {} }, …)` or similar non-`CallCtx` receivers, not
+    // only via `makeCallCtx`-built dispatch — so `this` may be any object, or in principle absent.
+    const runCtx = this?.runCtx ?? CONSTANT_CTX;
     try {
       const rawResult = await fn.apply(
-        { ctx: this.ctx },
+        { ctx: { runCtx, currentInvocation: this?.invocation?.currentInvocation, argProvenance } },
         schemeArgs.map((arg) => schemeToJs(arg, options)),
       );
 
-      const inv = (this.ctx as CtxWithInvocation | undefined)?.currentInvocation;
+      const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
 
       // Decide the output provenance BEFORE jsToScheme so the deep-stamp pass
       // reaches every constructed AValue in one traversal (spec §5.3 — every
@@ -465,12 +468,7 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
         resultProvenance = pointProvenance(inv.id);
       }
 
-      const result = jsToScheme(
-        (this.ctx as { runCtx?: RunContext } | undefined)?.runCtx ?? CONSTANT_CTX,
-        rawResult,
-        options,
-        resultProvenance,
-      );
+      const result = jsToScheme(runCtx, rawResult, options, resultProvenance);
       return options.returnEither ? [result, nil] : result;
     } catch (error) {
       console.error("Rosetta function error:", error);

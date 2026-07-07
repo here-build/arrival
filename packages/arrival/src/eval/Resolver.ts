@@ -30,7 +30,7 @@ import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
-import { ImplInvocationCtx } from "../common/symbols/_bake.js";
+import { CallCtx } from "../common/symbols/_bake.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -47,12 +47,12 @@ const CXR_RE = /^c[ad]+r$/;
 function cxrUnfold(name: string): SchemeValue | undefined {
   if (!CXR_RE.test(name)) return undefined;
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  return function (this: ImplInvocationCtx, arg: unknown): unknown {
-    // `this?.` (not just `this.ctx?.`): a native HOF (`map`/`vector-map`) invokes this
+  return function (this: CallCtx, arg: unknown): unknown {
+    // `this?.` (not just `this.runCtx`): a native HOF (`map`/`vector-map`) invokes this
     // synthesized accessor as a plain callback with `this === undefined`, so reading
-    // `this.ctx` would throw before the `?.` on `.ctx` could guard it.
+    // any property off `this` directly would throw before a nested `?.` could guard it.
     // todo this should be fixed - binding is clearly broken
-    const runCtx = this?.ctx?.runCtx ?? CONSTANT_CTX;
+    const runCtx = this?.runCtx ?? CONSTANT_CTX;
     let v: unknown = arg;
     for (const t of steps) {
       const m = v?.[tf(t === "a" ? "car" : "cdr")];

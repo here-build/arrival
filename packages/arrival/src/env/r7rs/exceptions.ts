@@ -26,7 +26,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { nil, type ANil } from "../../values/primitives/ANil.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
-import { ImplInvocationCtx } from "../../common/symbols/_bake.js";
+import { CallCtx } from "../../common/symbols/_bake.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-run isolation — the fix for the cross-request handler-stack leak.
@@ -57,23 +57,14 @@ import { ImplInvocationCtx } from "../../common/symbols/_bake.js";
 // in eval/evaluator.ts: "ops read run-state off the holders today and migrate to ctx.runCtx
 // ... at N2") — this is that migration landing, for this one holder.
 //
-// FALLBACK: `execGeneratorExpr` (used by `require`'s nested `.scm` module evaluation) does
-// not mint a `runCtx`, so `ctx.runCtx` is `undefined` there; those calls (and any direct
-// non-evaluator invocation, which carries no ctx at all) share ONE fallback bucket, keyed by
-// `CONSTANT_CTX` — the package's existing "run-neutral" shared context singleton. That is
-// EXACTLY today's pre-fix behavior for those call sites (one shared stack) — no regression,
-// just not yet isolated; the remaining gap needs `runCtx` minted at that entry point too
-// (`eval/generator-exec.ts`, outside this pack).
+// FALLBACK: only a genuinely direct, non-evaluator invocation (no ctx at all — e.g. a raw
+// unit-test call) falls through to the shared `CONSTANT_CTX` bucket now. `execExpr`
+// (`execGeneratorExpr`, `require`'s nested `.scm` module evaluation) mints its own `runCtx`
+// (see `eval/generator-exec.ts`), closing what used to be a real gap here — required modules
+// get the same per-run handler-stack isolation as top-level `exec()` calls.
 const handlerStacks = new WeakMap<RunContext, unknown>();
 
-/** The minimal structural slice of `EvalContext` these machinery verbs need — NOT the full
- *  `EvalContext` (keeps this pack decoupled from evaluator.ts's evolving shape, mirroring
- *  `arrival-scheme-env-loader`'s `loader.ts` narrow ctx type for the same reason). */
-export interface HandlerCallCtx {
-  runCtx?: RunContext;
-}
-
-const runKeyOf = (ctx: HandlerCallCtx | undefined): RunContext => ctx?.runCtx ?? CONSTANT_CTX;
+const runKeyOf = (ctx: CallCtx | undefined): RunContext => ctx?.runCtx ?? CONSTANT_CTX;
 
 export default new EnvCapability("scheme/r7rs/exceptions", {
   symbols: {
@@ -101,7 +92,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       function (): SchemeValue {
         // Opaque storage (native ops run no validation) — the boundary cast states what
         // every write below actually stores: a scheme value (nil, or a handler-stack pair).
-        return (handlerStacks.get(runKeyOf(this.ctx)) ?? nil) as SchemeValue;
+        return (handlerStacks.get(runKeyOf(this)) ?? nil) as SchemeValue;
       },
     ),
     "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
@@ -110,7 +101,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // not merely a wide one.
       { input: [z.value], output: [z.nil] },
       function (handlers) {
-        handlerStacks.set(runKeyOf(this.ctx), handlers);
+        handlerStacks.set(runKeyOf(this), handlers);
         return nil;
       },
     ),

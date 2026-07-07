@@ -24,6 +24,10 @@ import { AValue } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { tf } from "../tagless-final.js";
+// Runtime import cycle (benign — same shape as AJSArray↔AVector): `_bake.ts` imports
+// rosetta.ts → value-guards.ts → ACallable.ts (this file), but `makeCallCtx` is called only
+// inside `applyCallback`'s function body, long after every module has finished evaluating.
+import { makeCallCtx } from "../../common/symbols/_bake.js";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
  *  promise (JS-host entry). Non-value returns are narrowed out at the call boundary. */
@@ -209,7 +213,7 @@ export function applyCallback(
     );
   }
   if (typeof fn === "function") {
-    return Reflect.apply(fn, { ctx: { runCtx } }, args as unknown[]) as CallResult;
+    return Reflect.apply(fn, makeCallCtx(runCtx), args as unknown[]) as CallResult;
   }
   throw new TypeError(
     `not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`,

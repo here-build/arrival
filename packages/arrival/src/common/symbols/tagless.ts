@@ -3,8 +3,7 @@
 // the shared types + helpers live in `./_bake.js`.
 
 import * as z from "../scheme-zod.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
-import { describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
+import { CallCtx, describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
 
 /** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
@@ -17,13 +16,11 @@ import { tf, type TaglessOp } from "../../values/tagless-final.js";
 export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
   // A `function`, NOT an arrow: unlike native, tagless is ctx-AWARE (it needs the run's
-  // runCtx for the receiver's method) — the evaluator hands the ctx via `this` (bare-fn
-  // dispatch is `Reflect.apply(fn, { ctx }, args)`), which an arrow body can never read
-  // (arrows always close over the OUTER lexical `this`, ignoring whatever the caller
-  // supplies). This was the actual bug: no trailing ctx ARG has been appended for a long
-  // while — every other factory (rosetta/sequence) already reads `this.ctx`.
-  const run = async function (this: { ctx?: { runCtx?: RunContext } }, ...args: unknown[]): Promise<unknown> {
-    const runCtx = this.ctx?.runCtx ?? CONSTANT_CTX;
+  // runCtx for the receiver's method) — the evaluator hands the `CallCtx` via `this` (bare-fn
+  // dispatch builds it via `makeCallCtx`), which an arrow body can never read (arrows always
+  // close over the OUTER lexical `this`, ignoring whatever the caller supplies).
+  const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
+    const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);

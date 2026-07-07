@@ -39,7 +39,7 @@ import type { R7RSError } from "../errors.js";
 // procedure, so a value resolved from the env arrives typed as one and must be
 // admitted here. `import type` keeps the edge to Environment.ts (which itself
 // `import type { SchemeValue }`s from here) a pure compile-time cycle.
-import { ImplInvocationCtx } from "../common/symbols/_bake.js";
+import { CallCtx } from "../common/symbols/_bake.js";
 import type { ACallable } from "./primitives/ACallable.js";
 
 /**
@@ -57,7 +57,7 @@ export interface SchemeBounceMarker {
 export type SchemeValue =
   | AExact
   | AInexact
-  | APair
+  | APair<any, any>
   | ANil
   | AString
   | ASymbol
@@ -88,7 +88,7 @@ export type SchemeValue =
 // path). The trampolined/async return is the honest truth of a lambda's call;
 // the non-value returns are narrowed out at the call boundary before any use.
 export type AProcedure<Args extends [...SchemeValue[]] = [...any[]], Result extends SchemeValue = any> = ((
-  this: ImplInvocationCtx,
+  this: CallCtx,
   ...args: Args
 ) => Result | SchemeBounceMarker | Promise<Result>) & {
   __name__?: string | symbol;

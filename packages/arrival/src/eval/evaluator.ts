@@ -31,6 +31,8 @@ import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "
 import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
+import { makeCallCtx } from "../common/symbols/_bake.js";
+import type { InvocationLike } from "../rosetta.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
@@ -94,7 +96,7 @@ export interface EvalTap {
    * computes for the trampoline. Optional for backward-compat with taps that
    * don't care.
    */
-  enter(node: APair, parent: Invocation | null, tailPosition?: boolean): Invocation;
+  enter(node: APair<any, any>, parent: Invocation | null, tailPosition?: boolean): Invocation;
   /**
    * Returning a value-shaped result substitutes the evaluator's outgoing value
    * for the invocation. Used by provenance plumbing: the tap stamps the result
@@ -150,7 +152,7 @@ export interface EvalContext {
    * Optional filter — when present, returning false skips tap firing for a node
    * (atoms and macro-expansion-constructed Pairs are always skipped regardless).
    */
-  nodeFilter?: (node: APair) => boolean;
+  nodeFilter?: (node: APair<any, any>) => boolean;
   /** Current dynamic-stack invocation; sub-evaluations receive this as parent. */
   currentInvocation?: Invocation;
   /**
@@ -1780,7 +1782,7 @@ function bindingNameError(name: SchemeValue, form: string, location?: SourceLoca
  *  shared by both R2a (whole-list) and R2b (per-element) rewriting so the
  *  name-slot validation (and its destructuring special-case) is written once.
  *  `parts` is `[name, value]` or `[name, value, step]` (do). */
-function buildBindingPair(form: string, parts: SchemeValue[], location: SourceLocation | undefined): APair {
+function buildBindingPair(form: string, parts: SchemeValue[], location: SourceLocation | undefined): APair<any, any> {
   const name = parts[0];
   if (!(name instanceof ASymbol)) {
     throw bindingNameError(name, form, location);
@@ -2263,10 +2265,15 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // the main apply path uses. A builtin yields a value or a Promise, never a
   // Bounce; rule the bounce arm out explicitly (a builtin handing back a bounce
   // sentinel is a real invariant violation, not a value to thread).
-  // `this = { ctx }` — the same invocation-context shape the main apply path hands a
-  // builtin (see the `Reflect.apply(fn, { ctx }, …)` call in evalPair). A native impl
-  // reads `this.ctx`; passing `undefined` here crashed the `=>` arm (`(cond (test => cadr))`).
-  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = Reflect.apply(proc, { ctx }, [arg]);
+  // `this = CallCtx` — the same invocation-context shape the main apply path hands a
+  // builtin (see the `Reflect.apply(fn, makeCallCtx(...), …)` call in evalPair). A native
+  // impl reads `this.runCtx`; a genuinely undefined `this` crashed the `=>` arm
+  // (`(cond (test => cadr))`) before this shape existed.
+  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = Reflect.apply(
+    proc,
+    makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
+    [arg],
+  );
   invariant(!is_bounce_marker(result), "=> builtin returned a bounce sentinel");
   if (is_promise(result)) {
     result = yield result;
@@ -2778,7 +2785,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Handle catch clause if there was an error
     if (caughtError && catchClause) {
       // (catch (var) handler...)
-      const catchCdr = (catchClause as APair).cdr;
+      const catchCdr = (catchClause as APair<any, any>).cdr;
       invariant(catchCdr instanceof APair, "try: invalid catch syntax");
 
       const varSpec = catchCdr.car;
@@ -3222,19 +3229,23 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     let result: SchemeValue;
     try {
       // A callable VALUE is invoked through the seam (its apply term, `runCtx` threaded
-      // explicitly); a bare fn keeps the legacy `this = { ctx }` apply. No `this`-smuggling on
+      // explicitly); a bare fn keeps the legacy `this: CallCtx` apply. No `this`-smuggling on
       // the value path.
       // A callable VALUE dispatches through its apply term with the computed `_canBounce` (an
       // ALambda in tail position hands back a Bounce for the trampoline — TCO; an ANativeProcedure
       // ignores canBounce). NOT `applyCallback`, which forces canBounce=false (the HOF-callback
-      // contract). A bare fn keeps the legacy `this = { ctx }` apply.
+      // contract). A bare fn keeps the legacy `this: CallCtx` apply.
       result =
         is_callable_value(fn) || is_applyable(fn)
           ? (fn[tf("apply")](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, _canBounce) as SchemeValue)
           : // The outer gate (is_function || is_callable_value || is_applyable) already
             // guarantees one of the three; the ternary above excludes the latter two, so
             // only the plain-JS-function case remains here.
-            (Reflect.apply(fn as (...args: unknown[]) => unknown, { ctx }, wrappedArgs) as SchemeValue);
+            (Reflect.apply(
+              fn as (...args: unknown[]) => unknown,
+              makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
+              wrappedArgs,
+            ) as SchemeValue);
     } finally {
       _dynamicCallSite = __savedDynamicCallSite;
       _canBounce = __savedCanBounce;

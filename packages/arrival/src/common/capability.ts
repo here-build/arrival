@@ -21,7 +21,7 @@ import type { AEntity } from "./symbol.js";
 import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
-import { type RunContext } from "../values/primitives/RunContext.js";
+import { CallCtx, makeCallCtx } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { SPECULATE } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
@@ -248,18 +248,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // A native is a CONTOUR primitive — bind it as a first-class ANativeProcedure
                 // (callable-as-value), invoked through its `arrival/tagless-final/apply` term.
                 // The stored impl adapts the term surface `(args, runCtx)` to the legacy host
-                // impl, which reads only `runCtx` off `this.ctx` (verified: no native reads any
-                // other invocation field) — so `{ ctx: { runCtx } }` is behavior-identical, with
-                // no `this=undefined` crash from a HOF-invoked native. Provenance-transparent: a
+                // impl, which reads run-state off `this: CallCtx` (`makeCallCtx(runCtx)`) — no
+                // `this=undefined` crash from a HOF-invoked native. Provenance-transparent: a
                 // native value-op is a pure transform, never a source.
-                const hostImpl = def.impl as (this: { ctx: { runCtx: RunContext } }, ...a: unknown[]) => unknown;
+                const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
                 const proc = new ANativeProcedure({
                   name: verb,
                   // Arity is introspection-only in this cut (natives self-check); tighten from
                   // `def.in` when the MCP/type-lens surface consumes it.
                   arity: { min: 0, max: null },
                   contract: def,
-                  impl: (args, runCtx) => hostImpl.apply({ ctx: { runCtx } }, args) as SchemeValue,
+                  impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
                 });
                 // Preserve the markers the call-head force-skip (`[SPECULATE]`) and the lineage
                 // classifier (`.fanout`) read OFF THE BOUND VALUE, now the ANativeProcedure.

@@ -34,6 +34,7 @@ import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../com
 import { EnvCapability } from "../../common/capability.js";
 import { SPECULATE } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, unionProvenance } from "../../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -836,11 +837,11 @@ function looseOrderChain(sym, args) {
 function looseCompare(sym, core) {
   // strict is run-CONSTANT but can't ride the operands — an all-constant compare
   // (`(= '() '())`) carries only CONSTANT_CTX operands. It rides the run's ctx, reconstructed
-  // onto `this.ctx.runCtx` by the native-value adapter (capability.ts) at every invocation
+  // onto `this.runCtx` by the native-value adapter (capability.ts) at every invocation
   // path (call-head bare-fn, applyCallback fallback, ANativeProcedure impl). Replaces the
   // retired ambient `isStrict()` holder.
-  const fn = function (this: { ctx?: { runCtx?: { strict?: boolean } } }, ...args) {
-    if (this.ctx?.runCtx?.strict === true) {
+  const fn = function (this: CallCtx, ...args) {
+    if (this.runCtx.strict === true) {
       if (!args.every(isNumberOperand))
         throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core(...args);
