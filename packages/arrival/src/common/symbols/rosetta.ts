@@ -3,6 +3,7 @@
 // shared types + helpers live in `./_bake.js`.
 
 import * as z from "../scheme-zod.js";
+import { ZodType } from "zod";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -72,17 +73,17 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
       //    when a contract gains refinements a trusted caller may skip.
       void defaultValidate;
-      // A `z.kwargs(...)` input is a single OBJECT schema, not array-shaped — `inSchema` (the
-      // generic `VectorSchema`-typed handle `normalizeVector` hands back unchanged for it, see
-      // that fn's note) can't decode the RAW interleaved `:key value` pairs array directly
-      // against an object schema. Fold the pairs into the plain object `dict` would build
-      // (`collectKwargsObject` — the same key-name fold), THEN decode that object
-      // against the (narrowed, honest) kwargs schema, and wrap the one decoded value as the
-      // 1-element args array `DecodedArgs` already gives a non-tuple, non-array-output contract
-      // member. `isKwargs` narrows `contract.input` from `VectorSpec` to the branded
-      // object schema — no cast needed.
-      const decodedArgs: readonly unknown[] = z.isKwargs(contract.input)
-        ? [z.decode(contract.input, collectKwargsObject(args))]
+      // kwargs input: a plain-record `contract.inputRest` (its VALUES are ZodType, the CONTAINER
+      // is not) marks a trailing kwargs OBJECT — fold the interleaved `:key value` pairs into that
+      // object (`collectKwargsObject`, the same key-name fold `dict` does) and decode it against
+      // `z.object(shape)`, wrapping the one decoded value as the 1-element args array. A real
+      // `z.ZodType` `inputRest` (variadic tail) or none stays the ordinary array-shaped decode
+      // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
+      // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
+      const rest: RestSpec = contract.inputRest;
+      const kwargsSchema = rest !== undefined && !(rest instanceof ZodType) ? z.object(rest) : undefined;
+      const decodedArgs: readonly unknown[] = kwargsSchema
+        ? [z.decode(kwargsSchema, collectKwargsObject(args))]
         : z.decode(inSchema, args);
 
       // 2. RUN the impl with a per-call **invocation `this`** — the SAME flat `CallCtx` the

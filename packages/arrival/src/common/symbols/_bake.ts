@@ -52,7 +52,7 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { type InvocationLike } from "../../rosetta.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import { Macro } from "../../eval/Macro.js";
-import { ZodUnion } from "zod";
+import { ZodType, ZodUnion } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -108,9 +108,14 @@ export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O exten
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
 
-/** The variadic TAIL schema after a fixed leading `input` tuple — `undefined` when a
- *  contract has no rest (the default, unchanged shape). */
-export type RestSpec = z.ZodTypeAny | undefined;
+/** The variadic TAIL after a fixed leading `input` tuple. Two shapes:
+ *  - a `z.ZodTypeAny` — a repeated single element type (0+ times), the variadic-tail case; OR
+ *  - a plain kwargs SHAPE record `{k: schema}` — a trailing kwargs OBJECT. Its VALUES are
+ *    schemas but the CONTAINER is a plain object, NOT a ZodType — which is exactly the sound
+ *    `instanceof z.ZodType` discriminator between the two (no combinator can make a plain
+ *    record satisfy `instanceof z.ZodType`).
+ *  `undefined` = no rest (the default, unchanged shape). */
+export type RestSpec = z.ZodTypeAny | Record<string, z.ZodTypeAny> | undefined;
 
 /** Decoded arg types WITH a rest tail: `input`'s fixed-tuple decoded types, followed by a
  *  spread of `inputRest`'s element type (repeated 0+ times). A rest tail only composes with
@@ -135,7 +140,15 @@ export type DecodedArgsWithRest<
       ? [...Head, ...ProjectFace<Rest, F>[]]
       : never
     : never
-  : DecodedArgs<I, F>;
+  : Rest extends Record<string, z.ZodTypeAny>
+    // kwargs: a plain shape record `Rest` types the impl to ONE trailing arg — the decoded
+    // kwargs OBJECT (each field projected through the face), a single object param NOT a spread.
+    // Mirrors the runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
+    // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of
+    // it. Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
+    // so it never matches `extends z.ZodTypeAny`.
+    ? [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
+    : DecodedArgs<I, F>;
 
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
@@ -411,15 +424,9 @@ export function collectKwargsObject(args: readonly unknown[]): Record<string, un
 
 /** Normalize a VectorSpec to ONE `VectorSchema` describing the whole args/return vector:
  *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses
- *  the decoded-args array against (and what the harvest will print from).
- *
- *  ★A `z.kwargs(...)` object input is DELIBERATELY left as-is here (the "any other single
- *  schema" arm below) — it is NOT array-shaped, and normalizing it into a `VectorSchema`
- *  would change what `def.in`/`def.out` (the HARVEST surface the type-layer printer reads,
- *  schema-to-ts.ts's `paramList`) structurally see, regressing the type-layer's kwargs
- *  signature printing. The kwargs array↔object RESHAPE instead happens ONLY at the runtime
- *  decode call site (bakeRosetta's `run`, gated by `z.isKwargs`) — `def.in` stays the bare,
- *  unwrapped kwargs object schema, byte-identical to before this reshape existed. */
+ *  the decoded-args array against (and what the harvest will print from). (Kwargs no longer
+ *  ride this fn: a kwargs contract is `input: []` + a plain-record `inputRest`, folded to an
+ *  object schema by `normalizeInputVector`, never a single object `input` reaching here.) */
 export function normalizeVector(spec: VectorSpec): VectorSchema {
   // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
   // OUT of the union on the false branch — so probe the tuple member with a guard that carries
@@ -434,8 +441,7 @@ export function normalizeVector(spec: VectorSpec): VectorSchema {
   // A single array-ish schema (z.array variadic / a tuple / a union of those) — its codec sides
   // are array-shaped by the VectorSpec contract, but a bare `ZodTypeAny`'s static output is
   // `unknown`, so assert the vector shape ONCE here (the inner twin of the harvest-surface
-  // contract) rather than on each decode/encode result. (A kwargs object rides this arm too —
-  // see the note above; its "vector shape" assertion is never exercised at decode time.)
+  // contract) rather than on each decode/encode result.
   return spec as VectorSchema;
 }
 
@@ -456,12 +462,18 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
  *  (the OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
-  // `inputRest` needs a FIXED prefix length to split the call's raw args at — only a tuple
-  // `input` has one; a single schema (bare variadic, or a `z.kwargs` object) covers the WHOLE
-  // call with no well-defined split point. Combining `inputRest` with either is a contract-
-  // authoring bug: fail loudly here rather than silently ignoring the rest schema (which is what
-  // would happen if this guard didn't exist — `normalizeVector` would just return the single
-  // schema unchanged and the declared `inputRest` would silently never apply).
+  // kwargs: a plain shape record `inputRest` (values are ZodType, the CONTAINER is not) means the
+  // whole call is a trailing kwargs OBJECT, not a variadic element. `.in` becomes the bare
+  // `z.object(shape)` so the harvest surface prints the kwargs signature; `run` folds the raw
+  // `:k v` args into that object at decode time. instanceof is the sound discriminator — no
+  // combinator can make a plain record satisfy `instanceof z.ZodType`. (Cast: an object schema
+  // isn't array-shaped, but the kwargs decode path never parses the raw args array against it,
+  // the same benign cast the single-schema arm of `normalizeVector` already makes.)
+  if (!(inputRest instanceof ZodType)) return z.object(inputRest) as unknown as VectorSchema;
+  // A real `z.ZodType` `inputRest` (variadic tail) needs a FIXED prefix length to split the call's
+  // raw args at — only a tuple `input` has one; a single-schema `input` covers the WHOLE call with
+  // no well-defined split point. Combining `inputRest` with a single schema is a contract-authoring
+  // bug: fail loudly here rather than silently ignoring the rest schema.
   if (!isSchemaTuple(input)) {
     throw new Error(
       "inputRest requires `input` to be a fixed positional tuple (e.g. [z.string]) — a single " +

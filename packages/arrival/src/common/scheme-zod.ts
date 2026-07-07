@@ -96,6 +96,10 @@ export {
 } from "zod";
 export type { input, output, infer, ZodType, ZodTypeAny, ZodObject, ZodCustom, ZodRawShape } from "zod";
 
+export const value = z.lazy(() =>
+  z.union([number, pair, nil, exact, inexact, schemeNumber, lambda, string, boolean, char, undefinedResult, error]),
+);
+
 export const pair = z.instanceof(APair);
 export const symbol = z.instanceof(ASymbol);
 export const svector = z.custom<AVector>(
@@ -108,19 +112,9 @@ export const error = z.instanceof(R7RSError);
 
 export const lambda = z.custom<(...args: unknown[]) => unknown>((v) => typeof v === "function");
 
-const KWARGS = new WeakSet<object>();
-export function kwargs<S extends z.ZodRawShape>(shape: S) {
-  const schema = z.object(shape);
-  KWARGS.add(schema);
-  return schema;
-}
-export function isKwargs(schema: unknown): schema is z.ZodObject<z.ZodRawShape> {
-  return typeof schema === "object" && schema !== null && KWARGS.has(schema);
-}
-
 export function listOf<E extends z.ZodType>(element: E) {
   return z.codec(
-    z.custom<APair | ANil>((x) => x instanceof APair || x instanceof ANil),
+    z.custom<APair<any, any> | ANil>((x) => x instanceof APair || x instanceof ANil),
     z.array(element),
     {
       decode: (l) => {
@@ -135,7 +129,7 @@ export function listOf<E extends z.ZodType>(element: E) {
         // The out-side `z.array(element)` parse runs element.decode per slot after this.
         return out as z.input<E>[];
       },
-      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil,
+      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair<any, any> | ANil,
     },
   );
 }
@@ -287,8 +281,6 @@ export const numberOrBigint = z.codec(
     },
   },
 );
-
-export const value = z.union([number, bigint, integer, ]);
 
 const NAMES = new Map<unknown, string>([
   [value, "value"],
