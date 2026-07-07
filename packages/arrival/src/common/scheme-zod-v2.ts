@@ -122,17 +122,31 @@ export const string = z.codec(z.instanceof(AString), z.string(), {
   encode: (s) => new AString(CONSTANT_CTX, s),
 });
 
+// `symbolJsToSchemeCache` is a plain Map (not WeakMap — a fresh unique `Symbol()` isn't a
+// useful WeakMap key across engines this codebase targets) keyed by the minted jsSymbol,
+// so it needs its OWN cleanup: a FinalizationRegistry deletes the entry once the underlying
+// ASymbol is collected, mirroring the DefaultedWeakMap's weak hold on the scheme side. Without
+// this, every distinct ASymbol ever decoded would leak one entry here forever (module-level,
+// no run-scoping) — unlike this package's per-RunContext ASymbol interning.
 const symbolJsToSchemeCache = new Map<symbol, WeakRef<ASymbol>>();
+const symbolFinalizer = new FinalizationRegistry<symbol>((jsSymbol) => {
+  symbolJsToSchemeCache.delete(jsSymbol);
+});
 const symbolSchemeToJsCache = new DefaultedWeakMap<ASymbol, symbol>((schemeSymbol) => {
   const jsSymbol = Symbol(`arrival scheme membrane-wrapped symbol: ${schemeSymbol.__name__}`);
   symbolJsToSchemeCache.set(jsSymbol, new WeakRef<ASymbol>(schemeSymbol));
+  symbolFinalizer.register(schemeSymbol, jsSymbol);
   return jsSymbol;
 });
 /** Opaque brand — no JS-side transform, deliberately (see class doc above). */
 export const symbol = z.codec(z.instanceof(ASymbol), z.symbol(), {
   decode: (value) => symbolSchemeToJsCache.get(value),
-  // todo validate better
-  encode: (value) => symbolJsToSchemeCache.get(value),
+  encode: (value) => {
+    const ref = symbolJsToSchemeCache.get(value);
+    const schemeSymbol = ref?.deref();
+    Error.invariant(schemeSymbol !== undefined, "symbol codec: encode received a jsSymbol never minted by decode (or its ASymbol was already collected)");
+    return schemeSymbol;
+  },
 });
 
 export const nil = z.codec(z.instanceof(ANil), z.null(), {
@@ -146,43 +160,104 @@ export const undefinedResult = z.codec(z.instanceof(AVoid), z.undefined(), {
   encode: () => new AVoid(CONSTANT_CTX),
 });
 
-export const list = z.codec(
-  z.union([
+// list / vector / array are now *functions* (Zod style). See design notes in the
+// module header + user request for z.list(z.char, z.union(z.nil, z.boolean)) etc.
+//
+// We keep the old listOf/vectorOf names during transition as thin wrappers (they
+// will be removed when v2 becomes the active scheme-zod).
+
+const anyScheme = z.custom<SchemeValue>(() => true);
+
+function makeHomogeneousList<E extends z.ZodTypeAny>(element: E) {
+  const container = z.union([
     z.instanceof(APair) as z.ZodCustom<
       InstanceType<new (...args: ConstructorParameters<typeof APair>) => APair<any, any>>,
       InstanceType<new (...args: ConstructorParameters<typeof APair>) => APair<any, any>>
     >,
     z.instanceof(ANil),
-  ]),
-  z.array(z.any()),
-  {
-    decode: (l) => l.to_array(),
-    encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair | ANil,
-  },
-);
-
-// No per-element transform — length + slot-type narrowing only. Elements stay raw
-// SchemeValue instances (native-native call passes them through unboxed).
-export function listOf<X extends SchemeValue>(isElement: (x: SchemeValue) => x is X, length?: number) {
-  return list.refine((arr): arr is X[] => (length === undefined || arr.length === length) && arr.every(isElement));
+  ]);
+  return z.codec(container, z.array(element), {
+    decode: (l: any) => {
+      const out: unknown[] = [];
+      let node: any = l;
+      while (node instanceof APair) {
+        if (node.have_cycles && node.have_cycles("cdr")) {
+          throw new TypeError("list codec: cannot decode a circular list");
+        }
+        out.push(node.car);
+        node = node.cdr;
+      }
+      if (!(node instanceof ANil)) {
+        throw new TypeError("list codec: cannot decode an improper list");
+      }
+      return out;
+    },
+    encode: (arr: unknown[]) => APair.fromArray(CONSTANT_CTX, arr, false) as APair<any, any> | ANil,
+  });
 }
 
-// Two branches, no instanceof-in-decode: z.union picks by input type on decode, and
-// always encodes through the first matching branch — so encode canonically produces AVector.
-export const vector = z.union([
-  z.codec(z.instanceof(AVector), z.array(value), {
-    decode: (v) => v.__vector__,
-    encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
-  }),
-  z.codec(z.instanceof(AJSArray), z.array(value), {
-    decode: (v) => v.source as SchemeValue[],
-    encode: (arr) => new AJSArray(CONSTANT_CTX, arr as SchemeValue[]),
-  }),
-]);
+// EXACTLY one cons cell: car must match carE, cdr must match cdrE DIRECTLY (not
+// "eventually cdrE after more carE-typed elements"). This is `cons`, not a recursive
+// list — `z.list(z.char, z.nil)` accepts ONLY a single-char list, never 2+ chars,
+// because the second cdr is itself a Pair (not ANil). See the `list()` 2-arg branch
+// below for where this gets called from, and the regression test in
+// scheme-zod-v2.test.ts ("2-arg cons form is exactly one cons cell") that pins this
+// boundary — it looks like it should generalize to N elements-then-tail, it does not.
+function makeTypedCons<E1 extends z.ZodTypeAny, E2 extends z.ZodTypeAny>(carE: E1, cdrE: E2) {
+  return z.codec(z.instanceof(APair), z.tuple([carE, cdrE]), {
+    decode: (p: APair<any, any>) => [p.car, p.cdr],
+    encode: ([c, d]: unknown[]) => new APair(CONSTANT_CTX, c as any, d as any),
+  });
+}
 
-// No per-element transform — length + slot-type narrowing only, same shape as `listOf`.
-export function vectorOf<X extends SchemeValue>(isElement: (x: SchemeValue) => x is X, length?: number) {
-  return vector.refine((arr): arr is X[] => (length === undefined || arr.length === length) && arr.every(isElement));
+/**
+ * Three DIFFERENT shapes depending on arity — not one generalized pattern:
+ * - 0 args: any proper list of any scheme value (unbounded length).
+ * - 1 arg `list(E)`: a homogeneous proper list of E (unbounded length, nil-terminated).
+ * - 2 args `list(carE, cdrE)`: `cons` — EXACTLY one pair, car matches carE, cdr
+ *   matches cdrE DIRECTLY (not "eventually cdrE"). `list(char, nil)` accepts a
+ *   1-char list only, never 2+ chars — see makeTypedCons's doc comment.
+ * - 3+ args `list(A, B, C, ...)`: a FIXED-length proper list, one element per arg
+ *   in order, nil-terminated (heterogeneous tuple-as-list).
+ */
+export function list(...elements: z.ZodTypeAny[]) {
+  if (elements.length === 0) return makeHomogeneousList(anyScheme as any);
+  if (elements.length === 1) return makeHomogeneousList(elements[0]);
+  if (elements.length === 2) return makeTypedCons(elements[0], elements[1]);
+  // >2: build nested cons ending in nil (fixed-shape list)
+  let acc: any = nil;
+  for (let i = elements.length - 1; i >= 0; i--) {
+    acc = makeTypedCons(elements[i], acc);
+  }
+  return acc;
+}
+
+// Legacy names for partial compat while we port contracts. They delegate to the new form.
+export function listOf<E extends z.ZodTypeAny>(element: E, length?: number) {
+  const base = list(element);
+  if (length === undefined) return base;
+  return base.refine((arr: any): arr is any[] => arr.length === length);
+}
+
+// vector is now a function. Legacy vectorOf kept as compat wrapper.
+export function vector<E extends z.ZodTypeAny>(element: E = anyScheme as any) {
+  // Two branches, encode canonically produces AVector (first branch).
+  return z.union([
+    z.codec(z.instanceof(AVector), z.array(element), {
+      decode: (v: AVector) => v.__vector__,
+      encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
+    }),
+    z.codec(z.instanceof(AJSArray), z.array(element), {
+      decode: (v: AJSArray) => v.source as any,
+      encode: (arr) => new AJSArray(CONSTANT_CTX, arr as SchemeValue[]),
+    }),
+  ]);
+}
+
+export function vectorOf<E extends z.ZodTypeAny>(element: E, length?: number) {
+  const base = vector(element);
+  if (length === undefined) return base;
+  return base.refine((arr: any): arr is any[] => arr.length === length);
 }
 
 export const bytevector = z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
@@ -193,7 +268,7 @@ export const bytevector = z.codec(z.instanceof(ABytevector), z.instanceof(Uint8A
 // Same shape as `vector`: no instanceof-in-decode, and encode canonically produces a plain
 // record (first branch) rather than a boxed AJSObject.
 // note that we do not have native scheme dict class; instead, we offload its behavior to AJSObject
-export const dict = z.codec(z.instanceof(AJSObject), z.record(z.string(), value), {
+export const dict = z.codec(z.instanceof(AJSObject), z.record(z.string(), anyScheme), {
   decode: (d) => d.source as Record<string, SchemeValue>,
   encode: (rec) => new AJSObject(CONSTANT_CTX, rec),
 });
@@ -278,11 +353,10 @@ export const number = z.union([
   }),
 ]);
 
-// `array` decodes list-or-vector into a plain array — just the union of the two codecs
-// already defined above. `vector` listed first so encode canonically produces AVector, an
-// O(1)-indexed payload instead of a cons chain (nothing round-trip-sensitive distinguishes
-// them here).
-export const array = z.union([vector, list]);
+/** Scheme array (list or vector of the element). */
+export function array<E extends z.ZodTypeAny>(element: E = anyScheme as any) {
+  return z.union([list(element as any), vector(element as any)]);
+}
 
 export const exact = z.codec(z.instanceof(AExact), z.union([z.bigint(), z.number()]), {
   decode: (n) => {
@@ -301,4 +375,50 @@ export const inexact = z.codec(z.instanceof(AInexact), z.union([z.bigint(), z.nu
   encode: (n) => new AInexact(CONSTANT_CTX, typeof n === "bigint" ? Number(n) : n),
 });
 
-export const value = z.union([exact, inexact, vector, list, pair, procedure, lambda, error, dict, bytevector]);
+export const value = z.union([
+  exact,
+  inexact,
+  list(anyScheme),
+  vector(anyScheme),
+  pair,
+  procedure,
+  lambda,
+  error,
+  dict,
+  bytevector,
+]);
+
+// --- lookup for harvest / printing (modeled on active scheme-zod) ---
+const NAMES = new Map<unknown, string>([
+  [pair, "pair"],
+  [symbol, "symbol"],
+  // list/vector/array are functions — specific instances registered below when built
+  [nil, "nil"],
+  [exact, "exact"],
+  [inexact, "inexact"],
+  [schemeNumber, "schemeNumber"],
+  [lambda, "lambda"],
+  [string, "string"],
+  [boolean, "boolean"],
+  [char, "char"],
+  [undefinedResult, "undefinedResult"],
+  [error, "error"],
+]);
+
+export function lookupName(schema: unknown): string | undefined {
+  if (NAMES.has(schema)) return NAMES.get(schema);
+  // For constructed list/vector etc we can tag them at creation time.
+  // For now fall back to structural sniff for the common case the printer cares about.
+  return undefined;
+}
+
+// Helper to tag constructed collection schemas (future: printer can use name + elem)
+function tagCollection(name: string, s: unknown) {
+  NAMES.set(s, name);
+  return s;
+}
+
+// Re-tag the any- versions created at module load (and encourage callers of list(E) etc to tag if needed)
+tagCollection("list", list(anyScheme));
+tagCollection("vector", vector(anyScheme));
+tagCollection("array", array(anyScheme));
