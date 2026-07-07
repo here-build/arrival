@@ -62,11 +62,11 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeEncode([["a", 2]]).success).toBe(false);
   });
 
-  it("dict: output is an ADict-instance schema (native-dict-provenance.md) — accepts an ADict, rejects a plain object", () => {
+  it("dict: output is an ADict-accepting schema (native-dict-provenance.md) — accepts an ADict, rejects a plain object", () => {
     const def = nativeDef("dict");
-    // `z.dict` is `z.instanceof(ADict)` — a non-codec schema (both faces are ADict itself,
-    // matching `pair = z.instanceof(APair)`), so `.safeParse`/`.safeEncode` behave
-    // identically here; `.safeParse` is the simpler read.
+    // v2 `dict()` is the open-record codec whose SCHEME face is `ADict | dict-shaped-AJSObject`.
+    // A raw ADict decodes (its `arrival/toJS` record); a plain JS object / array / scalar is
+    // neither an ADict nor an AJSObject, so `.safeParse` rejects it — the precision this asserts.
     expect(def.out.safeParse([new ADict(CONSTANT_CTX, [])]).success).toBe(true);
     expect(def.out.safeParse([{ a: 1, b: "two" }]).success).toBe(false);
     expect(def.out.safeParse([{}]).success).toBe(false);

@@ -46,12 +46,6 @@
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod.js";
-// TRANSITIONAL: the named-generic `list`/`cons` registry lives in v2. Main vocabulary `z`
-// stays v1 until the atomic swap (migration step 14/15) repoints it — at which point these
-// two folds back into `z` and this import is deleted. Sourced from v2 now so step-11b's
-// `List<T>`/`Pair<Car,Cdr>` printing is exercisable against v2 schemas before the swap; on a
-// v1 schema both return undefined (its schemas aren't in v2's registry), so nothing changes.
-import { lookupName as lookupCollectionName, lookupCollectionElement } from "../common/scheme-zod-v2.js";
 import { tagToJsonSchema } from "../common/schema-tag.js";
 import type { AEntity } from "../common/symbol.js";
 
@@ -75,8 +69,6 @@ const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.Syn
 const bigintNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword);
 const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
 const consUnknownNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Cons", [unknownNode(ts)]);
-const readonlyUnknownArrayNode: NodeBuilder = (ts) =>
-  ts.factory.createTypeOperatorNode(ts.SyntaxKind.ReadonlyKeyword, ts.factory.createArrayTypeNode(unknownNode(ts)));
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
 const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
 /** `(...args: unknown[]) => unknown` — z.lambda's callable image. */
@@ -104,12 +96,17 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   ["string", stringNode],
   ["exact", bigintNode],
   ["inexact", numberNode],
+  // number/bigint are UNIONS of two same-output codecs in v2; without an image they'd print the
+  // duplicated `number | number` / `bigint | bigint`. The image is their carrier, printed once.
+  ["number", numberNode],
+  ["bigint", bigintNode],
   ["symbol", stringNode],
-  ["sbytevector", uint8ArrayNode],
+  // bytevector is a CODEC in v2 (out = z.instanceof(Uint8Array), a custom leaf that would print
+  // `unknown`); the name-keyed image restores its Uint8Array carrier (as v1's instanceof did).
+  ["bytevector", uint8ArrayNode],
   ["nil", nullNode],
   ["boolean", booleanNode],
   ["char", stringNode],
-  ["svector", readonlyUnknownArrayNode],
   ["value", unknownNode],
   ["lambda", lambdaNode],
   ["undefinedResult", voidNode], // R7RS's "unspecified" return — the honest TS analog is void
@@ -125,13 +122,12 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
  *  (total-harvest). Non-vocabulary schemas (object/array/union/literal/… and the codecs, which
  *  print via zod-to-ts's native `io:"output"` handling) defer to zod-to-ts (return undefined).
  *
- *  CRUCIAL guard: only fires for a LEAF `z.custom`-kind schema (`_zod.def.type === "custom"`),
- *  never a COMPOUND one — `lookupName` happily resolves a compound vocabulary export too
- *  (e.g. `schemeNumber`, a union), but intercepting it here would short-circuit zod-to-ts's
- *  own per-member union composition (the override must fire on EACH member — AExact/AInexact
- *  — not once on the union as a whole). Fires per-node, so `z.pair | z.nil` prints as
- *  "Cons<unknown> | null" and `z.schemeNumber` (a union of two customs) prints as
- *  "bigint | number", never short-circuited to "unknown". */
+ *  A registered vocabulary name WITH an image prints that image directly (fires for CODECS too —
+ *  v2 made most primitives codecs/pipes, not leaf customs). A registered name WITHOUT an image
+ *  (`schemeNumber`/`vector`/`dict`/`list`/`cons`, and the number/bigint UNION whose members carry
+ *  their own image) returns undefined so zod-to-ts composes it per-member — so `z.schemeNumber`
+ *  prints "bigint | number" (exact/inexact fire per-member), never short-circuited. An UNregistered
+ *  leaf custom degrades to `unknown` (never throw); an unregistered compound defers. */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
   // Named-generic pre-check — MUST fire before the leaf guard below: `list`/`cons` are CODECS
   // (`_zod.def.type === "pipe"`), so that guard would early-return them to zod-to-ts, which
@@ -140,9 +136,9 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
   // `list`/`cons` registers an element, nothing else does, so this fires for nothing but these
   // two (a `schemeNumber`-style union of custom leaves has no element registration → skips this,
   // reaching the per-member composition path below untouched).
-  const element = lookupCollectionElement(schema);
+  const element = z.lookupCollectionElement(schema);
   if (element !== undefined) {
-    const name = lookupCollectionName(schema);
+    const name = z.lookupName(schema);
     if (name === "list" && !Array.isArray(element)) {
       return typescript.factory.createTypeReferenceNode("List", [harvestNode(element as z.ZodTypeAny)]);
     }
@@ -151,13 +147,20 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
       return typescript.factory.createTypeReferenceNode("Pair", [harvestNode(carE), harvestNode(cdrE)]);
     }
   }
-  const s = schema as { _zod?: { def?: { type?: string } } };
-  if (s?._zod?.def?.type !== "custom") return undefined; // a compound (union/array/tuple/…) → recurse via zod-to-ts
+  // Registered vocabulary name → its image. MUST run before the leaf guard: v2 primitives are
+  // CODECS (pipe), so the guard would defer them to zod-to-ts and print the raw OUT schema
+  // (undefinedResult→undefined, bytevector→unknown, number→number|number) instead of the carrier
+  // image (void / Uint8Array / number). A registered name with NO image → undefined → composed
+  // per-member by zod-to-ts (schemeNumber → bigint | number; vector/dict/list/cons → structural).
   const name = z.lookupName(schema);
-  // "custom" is always a leaf (z.codec(...) compiles to "pipe", never reaches here) — no
-  // real case needs zod-to-ts's throw, so an unregistered name degrades to unknown too.
-  const builder = name !== undefined ? IMAGE_BY_NAME.get(name) : undefined;
-  return builder ? builder(typescript) : unknownNode(typescript); // robust default — never throw
+  if (name !== undefined) {
+    const builder = IMAGE_BY_NAME.get(name);
+    return builder ? builder(typescript) : undefined;
+  }
+  // Unregistered: a leaf custom degrades to unknown (never throw); a compound defers to zod-to-ts.
+  const s = schema as { _zod?: { def?: { type?: string } } };
+  if (s?._zod?.def?.type !== "custom") return undefined;
+  return unknownNode(typescript);
 };
 
 /** Collapse zod-to-ts's pretty-printed (multi-line, indented) output to a single

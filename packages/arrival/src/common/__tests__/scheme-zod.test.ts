@@ -1,4 +1,4 @@
-// Low-level tests for scheme-zod-v2 (the in-progress uniform vocabulary redesign).
+// Low-level tests for scheme-zod (the in-progress uniform vocabulary redesign).
 //
 // Focus: the new function forms for collections (z.list, z.vector, z.array) so that
 // callers can write z.list(z.char), z.list(z.char, z.union(z.nil, z.boolean)), etc.
@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import * as v8 from "node:v8";
 import * as vm from "node:vm";
 
-import * as z from "../scheme-zod-v2.js";
+import * as z from "../scheme-zod.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -59,7 +59,7 @@ function forceGc(): void {
   gc();
 }
 
-describe("scheme-zod-v2 collection functions (Zod style)", () => {
+describe("scheme-zod collection functions (Zod style)", () => {
   it("z.list(element) produces a codec for homogeneous proper lists", () => {
     const charList = z.list(z.char);
     expect(charList).toBeTruthy();
@@ -206,7 +206,7 @@ describe("scheme-zod-v2 collection functions (Zod style)", () => {
   });
 });
 
-describe("scheme-zod-v2 z.symbol codec", () => {
+describe("scheme-zod z.symbol codec", () => {
   it("decode then encode round-trips to the SAME ASymbol instance (opaque brand, no data loss)", () => {
     const sym = new ASymbol(CONSTANT_CTX, "my-symbol");
     const jsSymbol = z.symbol.parse(sym);
@@ -251,7 +251,7 @@ describe("scheme-zod-v2 z.symbol codec", () => {
   });
 });
 
-describe("scheme-zod-v2 z.dict(shape)/z.dict() — keyed to ADict.get()'s own protocol", () => {
+describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own protocol", () => {
   it("keyed round-trip against a real ADict", () => {
     const shaped = z.dict({ name: z.string, age: z.integer });
     const nativeDict = new ADict(CONSTANT_CTX, [
@@ -283,7 +283,7 @@ describe("scheme-zod-v2 z.dict(shape)/z.dict() — keyed to ADict.get()'s own pr
   });
 });
 
-describe("scheme-zod-v2 z.box — whole-object unwrap, not decomposition", () => {
+describe("scheme-zod z.box — whole-object unwrap, not decomposition", () => {
   it("round-trips identity: same reference, class/methods survive (not decomposed like dict)", () => {
     class Foo {
       constructor(readonly x: number) {}
@@ -303,7 +303,7 @@ describe("scheme-zod-v2 z.box — whole-object unwrap, not decomposition", () =>
   });
 });
 
-describe("scheme-zod-v2 z.procedure — contract-aware marshaling", () => {
+describe("scheme-zod z.procedure — contract-aware marshaling", () => {
   it("decode direction: marshals JS args → scheme → JS result when input/output are given", async () => {
     const doubleProc = new ANativeProcedure({
       name: "double",
@@ -346,7 +346,7 @@ describe("scheme-zod-v2 z.procedure — contract-aware marshaling", () => {
   });
 });
 
-describe("scheme-zod-v2 z.value — exhaustive predicate, passthrough on both faces", () => {
+describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces", () => {
   it("accepts every concrete scheme value kind (the completeness fix: symbol/dict/vector/bytevector included)", () => {
     const instances: unknown[] = [
       makeBool(true),
@@ -381,7 +381,7 @@ describe("scheme-zod-v2 z.value — exhaustive predicate, passthrough on both fa
   // behavior isn't a gap in practice — just not yet reachable from v2's own exports.
 });
 
-describe("scheme-zod-v2 z.nil", () => {
+describe("scheme-zod z.nil", () => {
   it("null round-trip", () => {
     const n = new ANil(CONSTANT_CTX);
     expect(z.nil.parse(n)).toBe(null);
@@ -394,7 +394,7 @@ describe("scheme-zod-v2 z.nil", () => {
   });
 });
 
-describe("scheme-zod-v2 z.undefinedResult / z.error — real codecs", () => {
+describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
   it("z.undefinedResult round-trips undefined ↔ AVoid", () => {
     const v = new AVoid(CONSTANT_CTX);
     expect(z.undefinedResult.parse(v)).toBeUndefined();
@@ -421,7 +421,7 @@ describe("scheme-zod-v2 z.undefinedResult / z.error — real codecs", () => {
   });
 });
 
-describe("scheme-zod-v2 number codec family — boundary cases (ported from v1's own coverage)", () => {
+describe("scheme-zod number codec family — boundary cases (ported from v1's own coverage)", () => {
   describe("z.exact", () => {
     it("round-trips a safe integer both ways (bigint and number encode inputs)", () => {
       expect(z.exact.parse(makeExact(42n))).toBe(42n);
@@ -523,7 +523,7 @@ describe("scheme-zod-v2 number codec family — boundary cases (ported from v1's
   });
 });
 
-describe("scheme-zod-v2 z.lookupName / named() — survives combinators, incl. the .refine() parent-walk", () => {
+describe("scheme-zod z.lookupName / named() — survives combinators, incl. the .refine() parent-walk", () => {
   it("resolves a function-constructed schema: z.list(z.char)", () => {
     expect(z.lookupName(z.list(z.char))).toBe("list");
   });
@@ -542,7 +542,7 @@ describe("scheme-zod-v2 z.lookupName / named() — survives combinators, incl. t
   });
 });
 
-describe("scheme-zod-v2 z.array — guard: still zod's own plain re-export", () => {
+describe("scheme-zod z.array — guard: still zod's own plain re-export", () => {
   it("is not a scheme-collection codec — a plain JS array of already-JS values parses directly, no scheme container involved", () => {
     // A real z.list/z.vector container schema requires an APair/ANil/AVector/AJSArray on the
     // input side; z.array here is zod's OWN array factory, so a bare JS array of plain values

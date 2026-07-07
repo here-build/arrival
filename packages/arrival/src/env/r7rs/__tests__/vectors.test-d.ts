@@ -7,12 +7,12 @@
 //     same runtime acceptance, precise STATIC output `SchemeValue`).
 //   - `vector-append`'s elements and `vector-ref`'s vec arg were bare `z.custom<unknown>()`/
 //     `z.array(z.custom<unknown>())` where every OTHER accessor in this file (vector-length/
-//     vector-copy/vector->string/list->vector/…) already uses `z.svector`.
+//     vector-copy/vector->string/list->vector/…) already uses `z.vector`.
 //   - `vector-ref`/`vector->list`'s RETURN was `z.custom<unknown>()` where `z.value` is the precise
 //     identity schema for "any scheme value, representation-blind by design".
 //   - `vector-map`/`vector-for-each` bundled their variadic vectors into ONE combined
 //     `z.tuple([head], z.custom<unknown>())` `input` rather than splitting the fixed proc head from an
-//     `inputRest: z.svector` tail — the mechanism `apply` (lists.ts) and the 2026-07-05
+//     `inputRest: z.vector` tail — the mechanism `apply` (lists.ts) and the 2026-07-05
 //     for-each/string-map/string-for-each migration already use (see symbol.test-d.ts's own
 //     "2026-07-05 audit" section, which this mirrors).
 //
@@ -24,7 +24,7 @@
 //
 // The runtime-observable half of this fix (does the REAL exported op's schema actually reject
 // a wrongly-shaped value?) lives in the sibling `vectors-contract-precision.test.ts` — and ONLY
-// for the z.svector-backed fixes. `z.value` (`z.custom<SchemeValue>()`, no predicate) accepts
+// for the z.vector-backed fixes. `z.value` (`z.custom<SchemeValue>()`, no predicate) accepts
 // anything at runtime BYTE-IDENTICAL to the `z.custom<unknown>()` it replaces (calibrated empirically
 // against the pinned zod 4.3.6 — see scheme-zod.ts's own doc comment on `value`), so `vector`'s
 // elements and `vector-ref`/`vector->list`'s returns are STATIC-ONLY precision gains — provable
@@ -35,9 +35,13 @@ import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, symbol 
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";
 import type { AInexact } from "../../../values/primitives/AInexact.js";
+import type { AJSArray } from "../../../values/primitives/AJSArray.js";
 import type { SchemeValue } from "../../../values/types.js";
 
-describe("scheme/vectors Contract precision — element/return precision (z.custom<unknown>() → z.value/z.svector)", () => {
+// v2 vector is the AVector|AJSArray union codec — SCHEME face = AVector | AJSArray, JS face = SchemeValue[].
+const svec = z.vector(z.value);
+
+describe("scheme/vectors Contract precision — element/return precision (z.custom<unknown>() → z.value/z.vector)", () => {
   test("vector: OLD z.array(z.custom<unknown>()) decoded FLAT unknown[] — no element precision", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
@@ -50,8 +54,8 @@ describe("scheme/vectors Contract precision — element/return precision (z.cust
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
-  test("vector-append: NEW z.array(z.svector) decodes AVector[] — matches every OTHER accessor's z.svector convention in this file", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.svector>>>>().toEqualTypeOf<AVector[]>();
+  test("vector-append: NEW z.array(z.vector(z.value)) decodes (AVector | AJSArray)[] on the scheme face — matches every OTHER accessor's z.vector convention in this file", () => {
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<(AVector | AJSArray)[]>();
   });
 
   test("vector-ref: OLD input [z.custom<unknown>(), z.schemeNumber] decoded [unknown, AExact|AInexact] — vec arg imprecise", () => {
@@ -60,8 +64,10 @@ describe("scheme/vectors Contract precision — element/return precision (z.cust
     >();
   });
 
-  test("vector-ref: NEW input [z.svector, z.schemeNumber] decodes [AVector, AExact|AInexact], not [unknown, …]", () => {
-    expectTypeOf<DecodedArgs<[typeof z.svector, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<[AVector, AExact | AInexact]>();
+  test("vector-ref: NEW input [z.vector(z.value), z.schemeNumber] decodes [AVector | AJSArray, AExact|AInexact], not [unknown, …]", () => {
+    expectTypeOf<DecodedArgs<[typeof svec, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
+      [AVector | AJSArray, AExact | AInexact]
+    >();
   });
 
   test("vector-ref / vector->list: OLD output [z.custom<unknown>()] collapses to a bare `unknown` return", () => {
@@ -78,8 +84,8 @@ describe("scheme/vectors Contract precision — negative proof", () => {
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`vm: proof`(
-        { input: [z.lambda], inputRest: z.svector, output: [z.svector] },
-        // @ts-expect-error — rest args decode via z.svector (AVector), annotating them string is wrong
+        { input: [z.lambda], inputRest: z.vector(z.value), output: [z.vector(z.value)] },
+        // @ts-expect-error — rest args decode via z.vector (AVector | AJSArray), annotating them string is wrong
         (proc: (...args: unknown[]) => SchemeValue, ...vectors: string[]): AVector => {
           void proc;
           void vectors;

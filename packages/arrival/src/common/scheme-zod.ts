@@ -11,78 +11,58 @@ import { ABool } from "../values/primitives/ABool.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
-import type { SchemeValue } from "../values/types.js";
 import { AVoid } from "../values/primitives/AVoid.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
+import { AJSArray } from "../values/primitives/AJSArray.js";
 import { R7RSError } from "../errors.js";
-import { ADict } from "../values/primitives/ADict.js";
-import { type ACallable, ANativeProcedure, applyCallback } from "../values/primitives/ACallable.js";
-import { is_callable_value } from "../values/value-guards.js";
-import { tf } from "../values/tagless-final.js";
+import { ALambda, ANativeProcedure, ARosettaProcedure, applyCallback } from "../values/primitives/ACallable.js";
+import type { AList, SchemeValue } from "../values/types.js";
 
 /**
- * Every primitive has a scheme-side (always) and maybe a JS-side codec. That "maybe" is the whole design.
- * Ambigulous names are chosen specifically as different from both environments to highlight that they are not
- * related to specific ontology.
+ * Every primitive has a scheme-side value (always) and maybe a JS-side codec. That "maybe" is
+ * the whole design. Primitive names are chosen to be ambiguous — deliberately different from
+ * both the Scheme vocabulary (`AExact`) and the JS vocabulary (`bigint`) — to highlight that
+ * they aren't tied to either ontology.
  *
- * ┌────────────┬────────────────────┬──────────────────────────┬─────────────────────────┐
- * │ primitive  │    scheme value   │  JS image (codec side)  │     rosetta-usable?    │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ value      │ any SchemeVlue    │ — (opaque, no transform) │ passthrough only       │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ boolean    │ ABool             │ boolean                  │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ integer    │ AExact            │ bigint                   │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ rational   │ AInexact          │ number                   │ ✅ (lossy acknowledged)│
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ char       │ ACharacter        │ string (len 1)           │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ string     │ AString           │ string                   │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ symbol     │ ASymbol           │ opaque brand             │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ nil        │ ANil              │ null                    │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ void       │ AVoid             │ undefined                │ ✅ (output)            │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ list       │ APair|ANil        │ array                    │ ✅ (input)             │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ vector     │ AVector           │ array                    │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ bytevector │ ABytevector       │ Uint8Array               │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ dict       │ record            │ object                   │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ error      │ R7RSError         │ Error                    │ ✅                     │
- * ├────────────┼────────────────────┼──────────────────────────┼─────────────────────────┤
- * │ procedure  │ ACallable / lambda │ bound function         │ ✅ (input)             │
- * └────────────┴────────────────────┴──────────────────────────┴─────────────────────────┘
+ * | primitive     | scheme value         | JS image (codec side)     | rosetta-usable?         |
+ * |---------------|----------------------|---------------------------|-------------------------|
+ * | `value`       | any `SchemeValue`    | — (opaque, no transform)  | passthrough only        |
+ * | `boolean`     | `ABool`              | `boolean`                 | ✅                      |
+ * | `integer`     | `AExact`/`AInexact`  | `number` (int)            | ✅                      |
+ * | `inexact`     | `AInexact`           | `number`                  | ✅ (lossy acknowledged) |
+ * | `char`        | `ACharacter`         | `string` (len 1)          | ✅                      |
+ * | `string`      | `AString`            | `string`                  | ✅                      |
+ * | `symbol`      | `ASymbol`            | opaque brand (JS symbol)  | ✅                      |
+ * | `nil`         | `ANil`               | `null`                    | ✅                      |
+ * | `void`        | `AVoid`              | `undefined`               | ✅ (output)             |
+ * | `list`        | `APair` / `ANil`     | `array`                   | ✅ (input)              |
+ * | `cons`        | `APair`              | `[car, cdr]`              | ✅                      |
+ * | `vector`      | `AVector`/`AJSArray` | `array`                   | ✅                      |
+ * | `bytevector`  | `ABytevector`        | `Uint8Array`              | ✅                      |
+ * | `dict`        | `ADict`              | `object`                  | ✅                      |
+ * | `box`         | `AJSObject`          | `object` (unwrapped)      | ✅                      |
+ * | `error`       | `R7RSError`          | `Error`                   | ✅                      |
+ * | `procedure`   | `ACallable`          | bound function            | ✅ (input)              |
  *
- * Symbol - as the core primitive of Scheme - is tilted towards it;
- * Rosetta is able to provide the types as opaque-branded; this allows struct manipulation without access
- * to the underlying container.
+ * A procedure returning *from* rosetta is banned — it would make provenance untraceable.
+ * Procedures passed *as arguments* travel wrapped inside the rosetta boundary.
  *
- * Procedure returning from rosetta is banned since it makes the provenance impossible.
- * Procedures as arguments are passed inside the Rosetta in wrapped state.
- * Native procedures get rosetta inverse-wrapped on both inputs and outputs.
+ * ## Additional casting types (rosetta type-casting conveniences; names match the target domain)
  *
- * Additional types are available for rosetta specifically as type-casting; target domain used intentionally.
- * Scheme -> JS
- * bigint: AExact and AInexact type-casted to bigint, with invariants
- * number: AExact and AInexact type-casted to number, with invariants; for native procedures, pass-through both types
- * array: List, Nil, and Vector type-casted to array
- *
- * JS -> Scheme
- * exact: bigint and number type-casted to AExact, with invariants
- * inexact: bigint and number type-casted to AInxact (no invariants needed, but math is on the table)
- *
+ * Scheme → JS: `bigint` (AExact/AInexact → bigint), `number` (→ number), `array` (list|vector → array).
+ * JS → Scheme: `exact` (bigint/number → AExact), `inexact` (bigint/number → AInexact, lossy accepted).
  */
 
+// `array` is zod's OWN array (the variadic arg-vector spec every native contract's
+// `z.array(z.value)` input/output slot uses). There is no scheme-collection `array()`
+// function — a scheme list/vector cast to an array uses `list`/`vector` directly.
 export {
+  array,
   tuple,
   union,
   record,
-  array,
   enum,
   decode,
   encode,
@@ -96,126 +76,206 @@ export {
 } from "zod";
 export type { input, output, infer, ZodType, ZodTypeAny, ZodObject, ZodCustom, ZodRawShape } from "zod";
 
-export const value = z.lazy(() =>
-  z.union([number, pair, nil, exact, inexact, schemeNumber, lambda, string, boolean, char, undefinedResult, error]),
-);
+// ---------------------------------------------------------------------------
+// :: Name registry — one `named()` + `WeakMap` chokepoint (called at every export site)
+// ---------------------------------------------------------------------------
 
-export const pair = z.instanceof(APair);
-export const symbol = z.instanceof(ASymbol);
-export const svector = z.custom<AVector>(
-  (x) => typeof (x as Record<string, unknown> | null | undefined)?.[tf("vector?")] === "function",
-);
-export const sbytevector = z.instanceof(ABytevector);
-export const nil = z.instanceof(ANil);
-export const undefinedResult = z.instanceof(AVoid);
-export const error = z.instanceof(R7RSError);
+const NAMES = new WeakMap<z.ZodType, string>();
 
-export const lambda = z.custom<(...args: unknown[]) => unknown>((v) => typeof v === "function");
+// Element schema(s) for a NAMED, PARAMETERIZED collection — one schema for a homogeneous
+// `list`, `[car, cdr]` for a `cons` — so the type-lens can print `List<T>`/`Pair<Car,Cdr>` by
+// NAME instead of decomposing the codec structurally. Keyed on the SAME core object NAMES is
+// (resolved through the same unwrap walk). ONLY `list`/`cons` register here — nothing else
+// needs named-generic printing (vector/dict already print adequately via structural output).
+const COLLECTION_ELEMENT = new WeakMap<z.ZodType, z.ZodTypeAny | readonly [z.ZodTypeAny, z.ZodTypeAny]>();
 
-export function listOf<E extends z.ZodType>(element: E) {
-  return z.codec(
-    z.custom<APair<any, any> | ANil>((x) => x instanceof APair || x instanceof ANil),
-    z.array(element),
-    {
-      decode: (l) => {
-        const out: unknown[] = [];
-        let node: unknown = l;
-        while (node instanceof APair) {
-          if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
-          out.push(node.car);
-          node = node.cdr;
-        }
-        if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
-        // The out-side `z.array(element)` parse runs element.decode per slot after this.
-        return out as z.input<E>[];
-      },
-      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr, false) as APair<any, any> | ANil,
-    },
-  );
+/** Register `schema` under `name` and return it, for inline use at the definition site.
+ *  Keyed by object identity — a fresh function-built schema (`list(char)`) registers each
+ *  instance it mints. */
+function named<S extends z.ZodType>(name: string, schema: S): S {
+  NAMES.set(schema, name);
+  return schema;
 }
 
-export const list = listOf(z.custom<SchemeValue>());
-
-export function vectorOf<E extends z.ZodType>(element: E) {
-  return z.codec(
-    z.custom<AVector>((x) => typeof (x as Record<string, unknown> | null | undefined)?.[tf("vector?")] === "function"),
-    z.array(element),
-    {
-      decode: (v) => {
-        // The protocol admits AVector (payload on __vector__) and AJSArray (borrowed
-        // source) — read whichever payload the answering value carries.
-        const payload =
-          (v as { __vector__?: SchemeValue[]; source?: unknown[] }).__vector__ ?? (v as { source?: unknown[] }).source;
-        if (!Array.isArray(payload))
-          throw new TypeError("vector codec: the operand answers vector? but carries no array payload");
-        return payload as z.input<E>[];
-      },
-      encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
-    },
-  );
+// Walk to the registered core. Check the registry at EACH hop (a registered codec IS a pipe and
+// carries its own `def.in` — unwrapping unconditionally would walk PAST it into its input schema
+// and lose the registration). At each level: registered? that IS the core. Else `_zod.parent` is
+// set ONLY by `.refine()`/`.check()` (they go through `core.clone(inst, def, {parent:true})`,
+// back-linking the pre-refine instance), NOT by `.extend()` (clones with no parent — a confirmed
+// dead end, no registered schema is `.extend()`ed today) — walk it. Else unwrap
+// `.optional()`/`.default()` (`def.innerType`) or an unregistered wrapper's `def.in`. Verified
+// against zod 4.3.6 source. Shared by `lookupName` + `lookupCollectionElement` so both resolve to
+// the identical core key.
+function resolveCore(schema: unknown): z.ZodType | undefined {
+  let s = schema as { _zod?: { parent?: unknown; def?: { innerType?: unknown; in?: unknown } } } | undefined;
+  while (s) {
+    if (NAMES.has(s as z.ZodType)) return s as z.ZodType;
+    if (s._zod?.parent) {
+      s = s._zod.parent as typeof s;
+      continue;
+    }
+    const inner = s._zod?.def?.innerType ?? s._zod?.def?.in;
+    if (inner) {
+      s = inner as typeof s;
+      continue;
+    }
+    break;
+  }
+  return undefined;
 }
 
-export const vector = vectorOf(z.custom<SchemeValue>());
+export function lookupName(schema: unknown): string | undefined {
+  const core = resolveCore(schema);
+  return core ? NAMES.get(core) : undefined;
+}
 
-// Native dict values are ADict instances (native-dict-provenance.md) — a real
-// SchemeValue kind, not a codec: no JS-side transform here, matching `pair`
-// above. AJSObject is no longer part of the dict role at all.
-export const dict = z.instanceof(ADict);
+/** The element schema(s) a `list`/`cons` was built with, for named-generic printing — a single
+ *  schema for `list`, `[car, cdr]` for `cons`, `undefined` for anything else (incl. a
+ *  fixed-heads `list([A,B])`, which has no single element and prints structurally). Resolves
+ *  through the same core walk `lookupName` uses. */
+export function lookupCollectionElement(
+  schema: unknown,
+): z.ZodTypeAny | readonly [z.ZodTypeAny, z.ZodTypeAny] | undefined {
+  const core = resolveCore(schema);
+  return core ? COLLECTION_ELEMENT.get(core) : undefined;
+}
 
-export const procedure = z.codec(
-  z.custom<ACallable | ((...args: unknown[]) => unknown)>((x) => typeof x === "function" || is_callable_value(x)),
-  z.custom<(...args: unknown[]) => unknown>((x) => typeof x === "function"),
-  {
-    decode: (fn) => {
-      return (...args: unknown[]) => applyCallback(fn, args);
-    },
-    encode: (fn) =>
-      new ANativeProcedure({
-        name: "<host-procedure>",
-        arity: { min: 0, max: null },
-        contract: undefined,
-        impl: (args) => fn(...args) as SchemeValue,
-      }),
-  },
-);
+// ---------------------------------------------------------------------------
+// :: value — the untransforming passthrough (defined early: `list` defaults its element to it)
+// ---------------------------------------------------------------------------
 
-export const string = z.codec(z.instanceof(AString), z.string(), {
-  decode: (s) => s["arrival/toJS"](),
-  encode: (s) => new AString(CONSTANT_CTX, s),
-});
+// `value` stays a PREDICATE, never a union of codecs: a union would make `z.decode(value, x)`
+// match a branch and TRANSFORM x (e.g. collapse AExact → bare bigint) — wrong for a slot whose
+// entire meaning is "hand back this scheme value untouched" (identity on both faces). The
+// predicate covers every concrete `A*` kind via `instanceof AValue` — closing v1's gap where
+// symbol/dict/vector/bytevector could not validate at all — plus a JS fn used as a procedure.
+function isSchemeValue(x: unknown): x is SchemeValue {
+  return x instanceof AValue || typeof x === "function";
+}
+// Rosetta escape hatch: `value` in a rosetta slot means "no automatic transform — the impl
+// receives/returns the raw scheme value and does its own schemeToJs/jsToScheme" (the single
+// legitimate rosetta use, env/overridable.ts's dynamic `overridable/resolve`).
+export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 
-export const boolean = z.codec(z.instanceof(ABool), z.boolean(), {
-  decode: (b) => b.value,
-  encode: (b) => new ABool(CONSTANT_CTX, b),
-});
-export const booleanFalse = z.codec(
-  z.instanceof(ABool).refine(({ value }) => !value),
-  z.boolean().refine((value) => value === false),
-  {
+// ---------------------------------------------------------------------------
+// :: Scalar primitives
+// ---------------------------------------------------------------------------
+
+export const boolean = named(
+  "boolean",
+  z.codec(z.instanceof(ABool), z.boolean(), {
     decode: (b) => b.value,
     encode: (b) => new ABool(CONSTANT_CTX, b),
-  },
+  }),
 );
 
-export const char = z.codec(z.instanceof(ACharacter), z.string().length(1), {
-  decode: (c) => c.valueOf(),
-  encode: (c) => new ACharacter(CONSTANT_CTX, c),
-});
+export const booleanTrue = boolean.refine((v): v is true => v === true);
+export const booleanFalse = boolean.refine((v): v is false => v === false);
 
-export const exact = z.codec(z.instanceof(AExact), z.bigint(), {
-  decode: (n) => {
-    Error.invariant(n.denom === 1n, `exact codec: exact rational ${n.toString()} has no integer bigint form`);
-    return n.num;
-  },
-  encode: (n) => new AExact(CONSTANT_CTX, n),
-});
+export const char = named(
+  "char",
+  z.codec(z.instanceof(ACharacter), z.string().length(1), {
+    decode: (c) => c.valueOf(),
+    encode: (c) => new ACharacter(CONSTANT_CTX, c),
+  }),
+);
 
-export const inexact = z.codec(z.instanceof(AInexact), z.number(), {
-  decode: (n) => n.real,
-  encode: (n) => new AInexact(CONSTANT_CTX, n),
-});
+export const string = named(
+  "string",
+  z.codec(z.instanceof(AString), z.string(), {
+    decode: (s) => s.valueOf(),
+    encode: (s) => new AString(CONSTANT_CTX, s),
+  }),
+);
 
-export const schemeNumber = z.union([exact, inexact]);
+// --- symbol: ASymbol ↔ JS Symbol, with the corrected GC direction ---
+
+// dedup on the scheme side (weak key = the ASymbol, collectable with it).
+const symbolSchemeToJs = new WeakMap<ASymbol, symbol>();
+// STRONG value, WEAK key (the minted jsSymbol) — the inverse of the draft's
+// `Map<symbol, WeakRef<ASymbol>>`+FinalizationRegistry, which held the ASymbol WEAKLY and so
+// could collect it out from under a live jsSymbol, making `encode` throw nondeterministically
+// on a legit round-trip. Here `encode` is TOTAL: the ASymbol lives exactly as long as its
+// jsSymbol. Valid only for UNREGISTERED symbols (`Symbol(desc)`, what decode mints) — a
+// `Symbol.for(...)` symbol is not a legal WeakMap key, but this codec never mints those.
+const symbolJsToScheme = new WeakMap<symbol, ASymbol>();
+export const symbol = named(
+  "symbol",
+  z.codec(z.instanceof(ASymbol), z.symbol(), {
+    decode: (s) => {
+      const existing = symbolSchemeToJs.get(s);
+      if (existing) return existing;
+      const js = Symbol(`arrival membrane symbol: ${s.__name__}`);
+      symbolSchemeToJs.set(s, js);
+      symbolJsToScheme.set(js, s);
+      return js;
+    },
+    encode: (js) => {
+      const s = symbolJsToScheme.get(js);
+      Error.invariant(s !== undefined, "symbol codec: encode received a jsSymbol never minted by decode");
+      return s;
+    },
+  }),
+);
+
+// --- nil / undefinedResult / error: real codecs (a bare instanceof would decode to the raw
+//     scheme instance while a sibling union branch decodes to a real JS value, breaking the
+//     union-uniformity every rosetta consumer depends on) ---
+
+// `nil` covers ONLY the null-value role; the empty-LIST role is absorbed by `list`'s own
+// decode (a proper list terminating in ANil decodes to `[]`, no separate schema needed).
+export const nil = named(
+  "nil",
+  z.codec(z.instanceof(ANil), z.null(), {
+    decode: () => null,
+    encode: () => new ANil(CONSTANT_CTX),
+  }),
+);
+
+/** Table calls this `void`, but that's a reserved word — exported as `undefinedResult`. */
+export const undefinedResult = named(
+  "undefinedResult",
+  z.codec(z.instanceof(AVoid), z.undefined(), {
+    decode: () => undefined,
+    encode: () => new AVoid(CONSTANT_CTX),
+  }),
+);
+
+export const error = named(
+  "error",
+  z.codec(z.instanceof(R7RSError), z.instanceof(Error), {
+    decode: (e) => new Error(e.message, { cause: e.irritants.length > 0 ? e.irritants : undefined }),
+    encode: (e) =>
+      new R7RSError(e.message, ...(Array.isArray(e.cause) ? e.cause : e.cause === undefined ? [] : [e.cause])),
+  }),
+);
+
+// --- numbers ---
+
+export const exact = named(
+  "exact",
+  z.codec(z.instanceof(AExact), z.union([z.bigint(), z.number()]), {
+    decode: (n) => {
+      Error.invariant(n.denom === 1n, `exact codec: exact rational ${n.toString()} has no integer form`);
+      return n.num;
+    },
+    encode: (n) => {
+      if (typeof n === "bigint") return new AExact(CONSTANT_CTX, n);
+      TypeError.invariant(Number.isSafeInteger(n), `exact codec: ${n} is not a safe integer`);
+      return new AExact(CONSTANT_CTX, BigInt(n));
+    },
+  }),
+);
+
+// `rational` folded into `inexact`: this codec is the superset (accepts bigint|number on
+// encode), so a separate AInexact→number codec bought nothing.
+export const inexact = named(
+  "inexact",
+  z.codec(z.instanceof(AInexact), z.union([z.bigint(), z.number()]), {
+    decode: (n) => n.real,
+    encode: (n) => new AInexact(CONSTANT_CTX, typeof n === "bigint" ? Number(n) : n),
+  }),
+);
 
 const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
@@ -223,7 +283,7 @@ const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 function exactToJsNumberOrDoor(n: AExact): number {
   Error.invariant(
     n.denom === 1n,
-    `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the schemeExact identity primitive`,
+    `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
   );
   Error.invariant(
     n.num <= SAFE_MAX && n.num >= SAFE_MIN,
@@ -232,74 +292,277 @@ function exactToJsNumberOrDoor(n: AExact): number {
   return Number(n.num);
 }
 
-export const number = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number(), {
-  decode: (n) => (n instanceof AInexact ? n.real : exactToJsNumberOrDoor(n)),
-  encode: (n) => new AInexact(CONSTANT_CTX, n),
-});
-
-export const integer = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
-  decode: (n) => {
-    if (n instanceof AInexact) {
-      TypeError.invariant(Number.isSafeInteger(n.real), `integer codec: inexact ${n.toString()} is not a safe integer`);
-      return n.real;
-    }
-    return exactToJsNumberOrDoor(n); // exactToJsNumberOrDoor already rejects rationals + out-of-range
-  },
-  encode: (n) => {
-    TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
-    return new AExact(CONSTANT_CTX, BigInt(n));
-  },
-});
-
-export const bigint = z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.bigint(), {
-  decode: (n) => {
-    if (n instanceof AInexact) {
-      TypeError.invariant(Number.isInteger(n.real), `bigint codec: inexact ${n.toString()} has a fractional part`);
-      return BigInt(n.real);
-    } else {
-      TypeError.invariant(n.denom === 1n, `bigint codec: exact rational ${n.toString()} has no integer bigint form`);
-      return n.num;
-    }
-  },
-  encode: (n) => new AExact(CONSTANT_CTX, n),
-});
-
-export const numberOrBigint = z.codec(
-  z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
-  z.union([z.number(), z.bigint()]),
-  {
+// `integer` — v1's real logic: accepts either exact-domain kind, JS image is `number().int()`,
+// canonicalizes `encode` to AExact (the integer's home representation).
+export const integer = named(
+  "integer",
+  z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
     decode: (n) => {
-      if (n instanceof AInexact) return n.real;
-      if (n.isInteger && n.num >= SAFE_MIN && n.num <= SAFE_MAX) return Number(n.num);
-      if (n.isInteger) return n.num;
-      return Number(n.num) / Number(n.denom);
+      if (n instanceof AInexact) {
+        TypeError.invariant(
+          Number.isSafeInteger(n.real),
+          `integer codec: inexact ${n.toString()} is not a safe integer`,
+        );
+        return n.real;
+      }
+      return exactToJsNumberOrDoor(n); // already rejects rationals + out-of-range
     },
     encode: (n) => {
-      if (typeof n === "bigint") return new AExact(CONSTANT_CTX, n);
-      if (Number.isSafeInteger(n)) return new AExact(CONSTANT_CTX, BigInt(n));
-      return new AInexact(CONSTANT_CTX, n);
+      TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
+      return new AExact(CONSTANT_CTX, BigInt(n));
     },
-  },
+  }),
 );
 
-const NAMES = new Map<unknown, string>([
-  [value, "value"],
-  [pair, "pair"],
-  [symbol, "symbol"],
-  [svector, "svector"],
-  [sbytevector, "sbytevector"],
-  [nil, "nil"],
-  [exact, "exact"],
-  [inexact, "inexact"],
-  [schemeNumber, "schemeNumber"],
-  [lambda, "lambda"],
-  [string, "string"],
-  [boolean, "boolean"],
-  [char, "char"],
-  [undefinedResult, "undefinedResult"],
-  [error, "error"],
-]);
+export const schemeNumber = named("schemeNumber", z.union([exact, inexact]));
 
-export function lookupName(schema: unknown): string | undefined {
-  return NAMES.get(schema);
+// AInexact listed first so encode canonically produces AInexact (not the safe-integer-
+// constrained AExact half).
+export const number = named(
+  "number",
+  z.union([
+    z.codec(z.instanceof(AInexact), z.number(), {
+      decode: (n) => n.real,
+      encode: (n) => new AInexact(CONSTANT_CTX, n),
+    }),
+    z.codec(z.instanceof(AExact), z.number(), {
+      decode: (n) => exactToJsNumberOrDoor(n),
+      encode: (n) => {
+        TypeError.invariant(Number.isSafeInteger(n), `number codec: ${n} is not a safe integer`);
+        return new AExact(CONSTANT_CTX, BigInt(n));
+      },
+    }),
+  ]),
+);
+
+// AExact listed first so encode canonically produces AExact (matches `integer`).
+export const bigint = named(
+  "bigint",
+  z.union([
+    z.codec(z.instanceof(AExact), z.bigint(), {
+      decode: (n) => {
+        TypeError.invariant(n.denom === 1n, `bigint codec: exact rational ${n.toString()} has no integer bigint form`);
+        return n.num;
+      },
+      encode: (n) => new AExact(CONSTANT_CTX, n),
+    }),
+    z.codec(z.instanceof(AInexact), z.bigint(), {
+      decode: (n) => {
+        TypeError.invariant(Number.isInteger(n.real), `bigint codec: inexact ${n.toString()} has a fractional part`);
+        return BigInt(n.real);
+      },
+      encode: (n) => new AInexact(CONSTANT_CTX, Number(n)),
+    }),
+  ]),
+);
+
+export const bytevector = named(
+  "bytevector",
+  z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
+    decode: (b) => b.__bytevector__ as Uint8Array<ArrayBuffer>,
+    encode: (b) => new ABytevector(CONSTANT_CTX, b),
+  }),
+);
+
+export const pair = named("pair", z.instanceof(APair));
+
+/** Raw predicate for a plain JS function — the "lambda" half of the `procedure` scheme side. */
+export const lambda = named(
+  "lambda",
+  z.custom<(...args: unknown[]) => unknown>((v) => typeof v === "function"),
+);
+
+// ---------------------------------------------------------------------------
+// :: Collections — head-tuple + optional tail (mirrors _bake.ts's Contract.input/inputRest)
+// ---------------------------------------------------------------------------
+
+// The list container: `APair | ANil` (a proper-list spine or the empty list).
+const listContainer = z.custom<AList>((x) => x instanceof APair || x instanceof ANil);
+
+// Walk the pair spine into a raw car array — rejecting cycles and improper (non-ANil-
+// terminated) lists. The OUT schema (`z.array`/`z.tuple`) validates the elements/arity.
+function spineToArray(l: AList): unknown[] {
+  const out: unknown[] = [];
+  let node: unknown = l;
+  while (node instanceof APair) {
+    if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
+    out.push(node.car);
+    node = node.cdr;
+  }
+  if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
+  return out;
+}
+
+/**
+ * A proper list, printed as `List<T>` (see `list([A,B])` for the fixed-heterogeneous form):
+ * - `list()` / `list(E)` — homogeneous unbounded list of E (E defaults to `value`).
+ * - `list([A, B])` — exactly A then B, nil-terminated (no tail).
+ * - `list([A, B], E)` — fixed heads A, B, then zero-or-more E, nil-terminated.
+ *
+ * NOT the same as `cons`: `list([carE])` is the proper list `(a)` = `(a . ())`, whereas
+ * `cons(a, b)` is a dotted pair whose cdr need not be nil-terminated at all.
+ */
+export function list<E extends z.ZodTypeAny = typeof value>(
+  element?: E,
+): z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodArray<E>>;
+export function list(
+  heads: readonly z.ZodTypeAny[],
+  tail?: z.ZodTypeAny,
+): z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
+export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = value, tail?: z.ZodTypeAny) {
+  const heads = Array.isArray(headsOrElement) ? (headsOrElement as readonly z.ZodTypeAny[]) : [];
+  // Bare / single-arg form: the lone schema is the homogeneous tail, not a head.
+  const effectiveTail = Array.isArray(headsOrElement) ? tail : (tail ?? (headsOrElement as z.ZodTypeAny));
+  const out: z.ZodType =
+    heads.length === 0
+      ? z.array(effectiveTail ?? value)
+      : effectiveTail
+        ? z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]], effectiveTail)
+        : z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
+  const schema = named(
+    "list",
+    z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
+      decode: (l) => spineToArray(l) as never,
+      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as unknown[], false) as AList,
+    }),
+  );
+  // Homogeneous form only carries a single element schema → prints `List<E>`. A fixed-heads
+  // `list([A,B])` has NO single element, so it registers nothing here and falls through to the
+  // structural tuple print — honest for a heterogeneous fixed-length list.
+  if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? value);
+  return schema as z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
+}
+
+// `cons` stays its OWN function, not subsumed by `list`'s tuple form: exactly one pair, car
+// matches carE and cdr matches cdrE DIRECTLY (not "eventually cdrE after more carE elements").
+// `cons(char, nil)` accepts a 1-char list only, never 2+ — the second cdr would itself be a
+// Pair, not ANil. Prints as `Pair<Car, Cdr>`, a dotted pair, not a 2-tuple.
+export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cdrE: D) {
+  const schema = named(
+    "cons",
+    z.codec(z.instanceof(APair), z.tuple([carE, cdrE]), {
+      // `as never`: zod's tuple input type is a variadic conditional it can't reconcile with
+      // a plain 2-array here (generic-boundary cast, same shape as v1's `as z.input<E>[]`).
+      decode: (p: APair<SchemeValue, SchemeValue>) => [p.car, p.cdr] as never,
+      encode: ([c, d]) => new APair(CONSTANT_CTX, c as SchemeValue, d as SchemeValue),
+    }),
+  );
+  // Two element schemas → prints `Pair<Car, Cdr>` (a dotted pair), NOT the structural `[A, B]`.
+  COLLECTION_ELEMENT.set(schema, [carE, cdrE]);
+  return schema;
+}
+
+// `vector` — representation-blind `AVector | AJSArray` union codec; encode canonically produces
+// AVector (the first union branch).
+export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value as unknown as E) {
+  return named(
+    "vector",
+    z.union([
+      z.codec(z.instanceof(AVector), z.array(element), {
+        decode: (v) => v.__vector__ as z.input<E>[],
+        encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
+      }),
+      z.codec(z.instanceof(AJSArray), z.array(element), {
+        decode: (v) => v.source as z.input<E>[],
+        encode: (arr) => new AJSArray(CONSTANT_CTX, arr as SchemeValue[]),
+      }),
+    ]),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// :: dict / box — two exports, both real codecs, keyed on the `dict?` protocol
+// ---------------------------------------------------------------------------
+
+/**
+ * `dict` — the native k/v map. Keyed shape (`dict({a: integer()})`) drives a per-key codec
+ * (TS-precise, feeds the type-lens); bare `dict()` is the open/homogeneous `Record<string,
+ * SchemeValue>` case, matching `ADict["arrival/toJS"]()` unmodified.
+ */
+export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S) {
+  const keys = Object.keys(shape);
+  return named(
+    "dict",
+    z.codec(
+      // dict codecs a UNION, not bare `z.instanceof(ADict)`: a dict-SHAPED AJSObject (a tool
+      // result with no prior Scheme lineage) must decode as a dict too — using ADict's own
+      // `isDictShaped` helper, the same one `dict?`/print cross-cut on. The `encode` never
+      // touches AJSObject's re-boxing path (it builds an ADict directly from encoded pairs),
+      // so the provenance bug that path had cannot recur here.
+      z.union([z.instanceof(ADict), z.instanceof(AJSObject).refine((o) => isDictShaped(o.source))]),
+      keys.length ? z.object(shape) : z.record(z.string(), value),
+      {
+        // The transform ONLY crosses the container boundary (ADict ↔ raw-scheme record) — the
+        // out-schema (`z.object(shape)`/`z.record`) owns per-field marshaling, exactly like
+        // `list`/`vector` delegate element marshaling to their `z.array` out-schema. Decoding
+        // fields here too would DOUBLE-decode (out-schema re-parses the transform's result).
+        // `as never`: the record shape is generic, so zod can't tie it to the out-schema input.
+        decode: (d) => {
+          const src = d as ADict | AJSObject;
+          return (keys.length ? Object.fromEntries(keys.map((k) => [k, src.get(k)])) : src["arrival/toJS"]()) as never;
+        },
+        encode: (rec: Record<string, unknown>) =>
+          new ADict(
+            CONSTANT_CTX,
+            Object.entries(rec).map(([k, v]) => [new ASymbol(CONSTANT_CTX, k), v as SchemeValue] as [DictKey, SchemeValue]),
+          ),
+      },
+    ),
+  );
+}
+
+// `box` — whole-object UNWRAP, not decomposition (unlike `dict`). "Behaves like Dict inside
+// Scheme, but rosetta simply unwraps the box instead of decomposing" — preserves class
+// identity/methods for genuinely-foreign values.
+export const box = named(
+  "box",
+  z.codec(z.instanceof(AJSObject), z.custom<object>(), {
+    decode: (o) => o.source,
+    encode: (o) => new AJSObject(CONSTANT_CTX, o),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// :: procedure — contract-aware marshaling (parametrized), not just reference-wrapping
+// ---------------------------------------------------------------------------
+
+/**
+ * A callable crossing the membrane. When `input`/`output` are supplied, each call marshals
+ * per-argument (encode inward, decode outward) instead of passing raw values through — near
+ * free at the declaration site. Untyped HOF callbacks (`map`/`filter`) omit both and keep the
+ * honest untransformed passthrough (nothing to marshal against).
+ *
+ * The return-direction ban stays: a rosetta result is never a bare JS function (provenance
+ * would be untraceable) — `encode` is only legitimate for an argument marshalled inward.
+ */
+export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?: I, output?: O) {
+  return named(
+    "procedure",
+    z.codec(
+      z.union([z.instanceof(ALambda), z.instanceof(ANativeProcedure), z.instanceof(ARosettaProcedure)]),
+      z.custom<(...a: unknown[]) => unknown>((v) => typeof v === "function"),
+      {
+        // decode closure is ASYNC (it wasn't before): `applyCallback`'s CallResult can be a
+        // Promise, and per-arg output decoding must await it — a sync closure could not.
+        // `as never` at each marshaling call: input/output are generic ZodTypeAny, so zod's
+        // encode/decode in/out param types are opaque conditionals here (generic boundary).
+        decode: (callable) => async (...jsArgs: unknown[]) => {
+          const schemeArgs = input ? jsArgs.map((a) => z.encode(input, a as never)) : jsArgs;
+          const r = await applyCallback(callable, schemeArgs as SchemeValue[]);
+          return output ? z.decode(output, r as never) : r;
+        },
+        encode: (jsFn) =>
+          new ANativeProcedure({
+            name: "<host-procedure>",
+            arity: { min: input ? 1 : 0, max: null },
+            contract: undefined,
+            impl: async (schemeArgs) => {
+              const jsArgs = input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs;
+              const r = await jsFn(...jsArgs);
+              return (output ? z.encode(output, r as never) : r) as SchemeValue;
+            },
+          }),
+      },
+    ),
+  );
 }

@@ -1012,9 +1012,9 @@ const numberToStringFn = (z: unknown, radix?: unknown): string => {
 // `match`/`toJS`/`fromJS` (not just its name):
 //
 //   SchemeNum → z.schemeNumber   identity (ANumeric↔ANumeric) — exact match.
-//   AnyNum    → z.numberOrBigint no existing schema decoded to `number | bigint`
-//               (z.number/z.integer are number-only, z.bigint is bigint-only);
-//               ported verbatim from AnyNum's own toJS/fromJS.
+//   AnyNum    → z.union([z.number, z.bigint])  no single schema decodes to `number | bigint`
+//               (z.number/z.integer are number-only, z.bigint is bigint-only); inlined at the
+//               call site (the standalone numberOrBigint export was dropped in the v2 vocabulary).
 //   Int       → z.bigint        decoded type (bigint) matches Int.toJS's return exactly;
 //               z.bigint's INPUT side also accepts AInexact (Int.match doesn't) — inert
 //               for a native contract, which is never decoded/validated at runtime.
@@ -1034,7 +1034,9 @@ const numberToStringFn = (z: unknown, radix?: unknown): string => {
 
 const CODEC_SCHEMA = new Map<NCodec<any, any>, z.ZodTypeAny>([
   [SchemeNum, z.schemeNumber],
-  [AnyNum, z.numberOrBigint],
+  // AnyNum → z.union([z.number, z.bigint]) inline: no single schema decodes to `number | bigint`
+  // (z.number is number-only, z.bigint is bigint-only). numberOrBigint export dropped — inlined here.
+  [AnyNum, z.union([z.number, z.bigint])],
   [Int, z.bigint],
   [SafeInt, z.integer],
   [Num, z.number],

@@ -143,7 +143,7 @@ export default new EnvCapability("scheme/polyglot", {
     ;; assoc-in needs to create missing intermediate maps on demand. \`@keys\` returns
     ;; a raw JS array (not a scheme list — filter/map need the term protocol), so
     ;; \`vector->list\` (R7RS §6.8 — a raw JS array is representation-blind as a
-    ;; vector here, per z.svector) lifts it first.
+    ;; vector here, per z.vector) lifts it first.
     ;; k v are placed LAST (not first): \`dict\`'s own key resolution (stringify, strip a
     ;; leading \`:\`) normalizes a keyword / symbol / string key to the
     ;; SAME underlying JS-object key as an already-stored string key — a plain \`equal?\`
@@ -408,7 +408,9 @@ export default new EnvCapability("scheme/polyglot", {
       // over a flat variadic without a shape that no longer matches the real call
       // form. The OUTPUT is unconditional: this impl always builds (and only ever
       // builds) an ADict.
-      { input: z.array(z.value), output: [z.dict] },
+      // v2 `dict` is a function (bare `dict()` = the open/homogeneous ADict codec) — was a bare
+      // `z.instanceof(ADict)` constant in v1. This op always builds an open-key ADict, so `dict()`.
+      { input: z.array(z.value), output: [z.dict()] },
       // Duplicate keys are last-write-wins: a Map re-set on an existing fold-name
       // updates the value but keeps the FIRST occurrence's iteration position —
       // the same behavior the old plain-object `obj[key] = value` loop had. ADict's

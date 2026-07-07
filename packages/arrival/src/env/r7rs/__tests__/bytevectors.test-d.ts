@@ -12,8 +12,8 @@
 // symbol.test-d.ts's "apply's own declared shape" note), so — mirroring that established
 // convention exactly — each proof below is a SYNTHETIC contract mirroring the op's real declared
 // shape, built from the SAME `scheme-zod.ts` schemas the fix uses. Both `z.schemeNumber` and
-// `z.sbytevector` already exist (unlike numeric.test-d.ts's `z.numberOrBigint`, which the fix
-// itself added), so this file compiles and passes both BEFORE and AFTER the source fix — it is a
+// `z.bytevector` are stable exports, so this file compiles and passes both BEFORE and AFTER the
+// source fix — it is a
 // mechanism/regression proof (does `DecodedArgs` compute the right type for the NEW schema?), not
 // a compile-gated RED. The genuine RED-before/GREEN-after lives in the sibling runtime file
 // `bytevectors-contract-precision.test.ts` (a schema's precision is only externally observable
@@ -31,7 +31,7 @@ describe("bytevector Contract precision — wholly-variadic homogeneous element 
   });
 
   test("NEW bytevector shape: z.array(z.schemeNumber) decodes to ANumeric[] — each arg IS a scheme number, not unknown", () => {
-    // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.sbytevector] }.
+    // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.bytevector] }.
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<ANumeric[]>();
   });
 
@@ -39,9 +39,10 @@ describe("bytevector Contract precision — wholly-variadic homogeneous element 
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
-  test("NEW bytevector-append shape: z.array(z.sbytevector) decodes to ABytevector[] — each arg IS a bytevector, not unknown", () => {
-    // Mirrors bytevector-append's real migrated contract: { input: z.array(z.sbytevector), output: [z.sbytevector] }.
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.sbytevector>>>>().toEqualTypeOf<ABytevector[]>();
+  test("NEW bytevector-append shape: z.array(z.bytevector) decodes to ABytevector[] on the scheme face — each arg IS a bytevector, not unknown", () => {
+    // Mirrors bytevector-append's real migrated contract: { input: z.array(z.bytevector), output: [z.bytevector] }.
+    // v2 bytevector is a codec: SCHEME face = ABytevector (the native op's face), JS face = Uint8Array.
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.bytevector>>, "scheme">>().toEqualTypeOf<ABytevector[]>();
   });
 });
 
@@ -53,7 +54,7 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
   test("bytevector: a wrong-typed rest element must NOT compile", () => {
     if (RUN) {
       symbol.native`bv: proof`(
-        { input: z.array(z.schemeNumber), output: [z.sbytevector] },
+        { input: z.array(z.schemeNumber), output: [z.bytevector] },
         // @ts-expect-error — elements decode via z.schemeNumber (ANumeric), annotating them string is wrong
         (...bytes: string[]): ABytevector => bytes as unknown as ABytevector,
       );
@@ -64,8 +65,8 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
   test("bytevector-append: a wrong-typed rest element must NOT compile", () => {
     if (RUN) {
       symbol.native`bva: proof`(
-        { input: z.array(z.sbytevector), output: [z.sbytevector] },
-        // @ts-expect-error — elements decode via z.sbytevector (ABytevector), annotating them number is wrong
+        { input: z.array(z.bytevector), output: [z.bytevector] },
+        // @ts-expect-error — elements decode via z.bytevector (ABytevector), annotating them number is wrong
         (...bvs: number[]): ABytevector => bvs as unknown as ABytevector,
       );
     }

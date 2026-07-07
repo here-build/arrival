@@ -9,7 +9,7 @@
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
  * validation — "zod for TYPES purely") and an impl bound raw. The bytevector
- * args declare `z.sbytevector` (the op's semantic domain); the raw-binary
+ * args declare `z.bytevector` (the op's semantic domain); the raw-binary
  * polymorphism stays a runtime property of `asBytevector`, unaffected by the
  * types-only schema. `bytevector?` keeps `z.value` since it deliberately
  * classifies ANY value.
@@ -48,7 +48,7 @@ export default new EnvCapability("scheme/bytevectors", {
     ),
 
     "make-bytevector": symbol.native`make-bytevector: a bytevector of length k filled with byte`(
-      { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.sbytevector] },
+      { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.bytevector] },
       (k, byte) => {
         const arr = new Uint8Array(toIndex(k));
         if (byte !== undefined) {
@@ -64,17 +64,17 @@ export default new EnvCapability("scheme/bytevectors", {
       // precise element schema, not an inputRest split. Each element flows through
       // toIndex(b) below, exactly like make-bytevector's byte/k args — z.schemeNumber
       // is that same op's own precedent for "this slot is a scheme number".
-      { input: [], inputRest: z.schemeNumber, output: [z.sbytevector] },
+      { input: [], inputRest: z.schemeNumber, output: [z.bytevector] },
       (...bytes) => withInputProvenance(bytes, new ABytevector(CONSTANT_CTX, new Uint8Array(bytes.map(toIndex)))),
     ),
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
-      { input: [z.sbytevector], output: [z.number] },
+      { input: [z.bytevector], output: [z.number] },
       (bv) => new AExact(CONSTANT_CTX, BigInt(asBytevector(bv, "bytevector-length").byteLength)),
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
-      { input: [z.sbytevector, z.schemeNumber], output: [z.number] },
+      { input: [z.bytevector, z.schemeNumber], output: [z.number] },
       (bv, k) => new AExact(CONSTANT_CTX, BigInt(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!)),
     ),
 
@@ -86,7 +86,7 @@ export default new EnvCapability("scheme/bytevectors", {
     "bytevector-copy!": symbol.notImplemented`bytevector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy returns a fresh bytevector)`,
 
     "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
-      { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
+      { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
       (bv, start, end) => {
         const view = asBytevector(bv, "bytevector-copy");
         return withInputProvenance(
@@ -101,10 +101,10 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "bytevector-append": symbol.native`bytevector-append: concatenation of all bytevector arguments`(
       // Wholly variadic + homogeneous, same shape as bytevector above — every argument
-      // IS a bytevector, so z.sbytevector is the precise element schema. The raw-binary
+      // IS a bytevector, so z.bytevector is the precise element schema. The raw-binary
       // FFI polymorphism asBytevector tolerates stays a runtime-only property,
       // unaffected by this types-only schema (see the module doc comment).
-      { input: [], inputRest: z.sbytevector, output: [z.sbytevector] },
+      { input: [], inputRest: z.bytevector, output: [z.bytevector] },
       (...bvs) => {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));
         const totalLen = views.reduce((sum, v) => sum + v.byteLength, 0);
@@ -119,7 +119,7 @@ export default new EnvCapability("scheme/bytevectors", {
     ),
 
     "utf8->string": symbol.native`utf8->string: decode a bytevector slice as UTF-8`(
-      { input: [z.sbytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
+      { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
       (bv, start, end) => {
         const view = asBytevector(bv, "utf8->string");
         return withInputProvenance(
@@ -137,7 +137,7 @@ export default new EnvCapability("scheme/bytevectors", {
       },
     ),
     "string->utf8": symbol.native`string->utf8: encode a string slice as UTF-8 bytes`(
-      { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.sbytevector] },
+      { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
       (str, start, end) => {
         const s_str = stringValue(str);
         return withInputProvenance(

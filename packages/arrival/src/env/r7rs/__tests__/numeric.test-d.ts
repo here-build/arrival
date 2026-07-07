@@ -16,14 +16,17 @@
 // static erasure above makes it type-unobservable — lives in the sibling
 // `numeric-contract-precision.test.ts`.
 //
-// RED-before: `z.numberOrBigint` does not exist until the AnyNum codec is added to
-// scheme-zod.ts (this file's AnyNum/abs proof), so this suite fails to even compile
-// before the fix — the expected first-class "new API surface" red.
+// AnyNum has no single scheme-zod schema (number-only / bigint-only don't cover the union), so
+// the pack's codec bridge maps it to an inline `z.union([z.number, z.bigint])` — decodes to
+// `number | bigint`. That inline union is mirrored here as `numOrBig`.
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbol.js";
 import type { ANumeric } from "../../../values/numbers.js";
+
+// AnyNum's inline pairing (numeric.ts CODEC_SCHEMA) — decodes to `number | bigint`.
+const numOrBig = z.union([z.number, z.bigint]);
 
 describe("numeric Contract precision — representative NumSpec shapes decode precisely", () => {
   test("pure-variadic (+): in:[], inRest:SchemeNum, out:SchemeNum — args are ANumeric[], return ANumeric (matches addFn's own (...args: ANumeric[]) => ANumeric)", () => {
@@ -43,15 +46,14 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
   });
 
   test("fixed-1-arity over AnyNum (abs): in:[AnyNum], out:AnyNum — number|bigint, NOT unknown (matches absFn's (x: number|bigint) => number|bigint)", () => {
-    // The genuinely NEW pairing: AnyNum has no pre-existing zod equivalent (number/integer/
-    // bigint each cover only ONE side of the number|bigint union) — z.numberOrBigint is added
-    // to scheme-zod.ts by this fix. Until it exists, this file does not compile (RED).
-    expectTypeOf<DecodedArgs<[typeof z.numberOrBigint]>>().toEqualTypeOf<[number | bigint]>();
-    expectTypeOf<DecodedReturn<[typeof z.numberOrBigint]>>().toEqualTypeOf<number | bigint>();
+    // AnyNum has no pre-existing single zod schema (number/integer/bigint each cover only ONE
+    // side of the number|bigint union) — the pack inlines `z.union([z.number, z.bigint])`.
+    expectTypeOf<DecodedArgs<[typeof numOrBig]>>().toEqualTypeOf<[number | bigint]>();
+    expectTypeOf<DecodedReturn<[typeof numOrBig]>>().toEqualTypeOf<number | bigint>();
   });
 
   test("boolean-output predicate (zero?): in:[AnyNum], out:Bool — return boolean, not unknown (matches isZeroFn's (x: number|bigint) => boolean)", () => {
-    expectTypeOf<DecodedArgs<[typeof z.numberOrBigint]>>().toEqualTypeOf<[number | bigint]>();
+    expectTypeOf<DecodedArgs<[typeof numOrBig]>>().toEqualTypeOf<[number | bigint]>();
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
@@ -65,8 +67,8 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
 describe("numeric Contract precision — regression guard: the shared mechanism stays sound for a non-numeric shape", () => {
   test("apply's own declared shape (lists.ts) is untouched by anything added here — same proof symbol.test-d.ts already carries", () => {
     // Mirrors symbol.test-d.ts's own "apply's own declared shape" test byte-for-byte — a
-    // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the new
-    // z.numberOrBigint export) cannot have perturbed the shared inputRest mechanism itself.
+    // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the inline
+    // z.union([z.number, z.bigint]) AnyNum pairing) cannot have perturbed the shared inputRest mechanism itself.
     expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<
       [import("../../../values/types.js").SchemeValue, ...import("../../../values/types.js").SchemeValue[]]
     >();
