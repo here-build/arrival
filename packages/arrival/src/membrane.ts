@@ -68,16 +68,9 @@ export {
   markInteropBoundary,
 } from "./interop-access.js";
 export { InteropAccessError } from "./errors.js";
-// Deprecated pre-rename aliases, kept until stdlib importers codemod off the
+// Deprecated pre-rename alias, kept until stdlib importers codemod off the
 // sandbox→interop naming.
-export {
-  accessMember as sandboxedAccess,
-  accessHas as sandboxedHas,
-  accessSet as sandboxedSet,
-  INTEROP_BOUNDARY as SANDBOX_BOUNDARY,
-  markInteropBoundary as markAsSandboxBoundary,
-} from "./interop-access.js";
-export { InteropAccessError as SandboxViolationError } from "./errors.js";
+export { markInteropBoundary as markAsSandboxBoundary } from "./interop-access.js";
 
 
 // ============================================================================
@@ -229,10 +222,15 @@ const jsToWrapper = new WeakMap<object, AJSArray | AJSObject>();
 // escape shape). Marking the wrapper classes stops the prototype walk here —
 // only own sandbox-safe properties on the wrapped value flow through.
 // ============================================================================
-/** Entry point for JS → Scheme boundary crossing. */
-export function fromJS(value: unknown): FromJSResult {
-  // Already scheme — no wrap.
-  if (isSchemeValue(value)) return value;
+/** Entry point for JS → Scheme boundary crossing. STRICT one-way door: an
+ *  already-boxed scheme value reaching this entry means the caller is confused
+ *  about which side of the membrane it stands on — refuse loudly instead of
+ *  passing through. Type-level: an `AValue`-typed argument resolves to `never`. */
+export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult {
+  invariant(
+    !isSchemeValue(value),
+    "fromJS: received an already-boxed scheme value — fromJS is the JS→Scheme membrane entry; an interpreter-minted value never crosses it. Use the value directly.",
+  );
 
   // Containers get membrane-specific handling: array → borrowed AJSArray vector (JS array IS an
   // R7RS vector); binary stays raw (FFI identity, membrane.spec pins it); Promise stays raw (the
@@ -260,24 +258,15 @@ export function fromJS(value: unknown): FromJSResult {
   return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE);
 }
 
-/** Exit point for Scheme → JS boundary crossing. */
-export function toJS(value: unknown): unknown {
-  if (value && typeof value === "object" && "arrival/toJS" in value) {
-    return (value as Record<string, () => unknown>)["arrival/toJS"]!();
-  }
-
-  // nil → null. `instanceof ANil` (see isSchemeValue above) — provenance-bearing
-  // Nil clones must project to JS null too, or they'd leak as opaque objects.
-  if (value instanceof ANil) return null;
-
-  // Native Scheme types unwrap via valueOf().
-  if (value instanceof AString) return value.valueOf();
-  if (value instanceof ACharacter) return value.valueOf();
-  if (value instanceof AExact) return value.valueOf();
-  if (value instanceof AInexact) return value.valueOf();
-
-  // ASymbol/APair pass through as-is (JS can call .toString() / work with car-cdr).
-  return value;
+/** Exit point for Scheme → JS boundary crossing. STRICT: only interpreter-minted
+ *  boxed values cross — a raw JS value reaching here means the caller is already
+ *  on the JS side and there is nothing to convert. */
+export function toJS(value: SchemeValue) {
+  invariant(
+    isSchemeValue(value),
+    "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS value is already JS. Pass it through directly.",
+  );
+  return value["arrival/toJS"]();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
