@@ -7,10 +7,23 @@
  * its GATE — the ruling or migration that flips it — and the law row that
  * replaces it.
  *
- * STUB PHASE: the index is the table; enforcement (a meta-test walking the
- * suite for unindexed it.fails) lands with the sweep.
+ * LEDGER CONVENTION (enforced below, not just documented): every `it.fails(...)`
+ * call inside a SUNRISE dir (src/__tests__/{laws,membrane,provenance,ledger,
+ * conformance,doors,agreement}/) must carry a `// @ledger: <id>` comment on the
+ * line immediately above the call, where `<id>` is the exact `id` string of a
+ * row in GAPS or INVERSIONS below. Example:
+ *
+ *   // @ledger: append drops element provenance
+ *   it.fails("(append (list a) (list b)) keeps element ids", () => { ... });
+ *
+ * This is how the walker meta-test cross-references a red row back to its gate
+ * without guessing by test name. The legacy (SUNSET) suite's `it.fails` calls
+ * are NOT governed by this convention — the walker only scans the sunrise dirs.
  */
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface LedgerRow {
   readonly id: string;
@@ -27,6 +40,18 @@ const GAPS: readonly LedgerRow[] = [
   { id: "live AHalfBaked escapes exec under speculate", gate: "force-on-egress", replacedBy: "membrane/crossing egress" },
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
+  // ── added by the 2026-07-08 sunrise honesty/reconciliation pass ──────────────────
+  { id: "isSchemeValue omits AVoid", gate: "membrane-recognition fix (R3 evidence)", replacedBy: "membrane/crossing undefined row" },
+  {
+    id: "isSchemeValue omits AHalfBaked — Environment.set re-wraps live carriers",
+    gate: "membrane-recognition fix (R3 evidence)",
+    replacedBy: "membrane/crossing egress rows",
+  },
+  { id: "append silently discards non-pair first operand", gate: "append P5 door fix", replacedBy: "laws/term-carrier concat cells" },
+  { id: "equal? verdict is empty-provenance flyweight", gate: "R8 boolean-provenance ruling", replacedBy: "laws/term-carrier equals cells" },
+  { id: "container toJS leaves boxed element residue", gate: "R9 lazy-egress ruling", replacedBy: "laws/term-carrier toJS cells" },
+  { id: "weak-door-colon-name-truncation", gate: "parseNameDoc colon fix", replacedBy: "doors/registry naming cells" },
+  { id: "weak-door-canonical-collision", gate: "canonicalize fix", replacedBy: "doors/registry collision alarm" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
@@ -38,6 +63,69 @@ const INVERSIONS: readonly LedgerRow[] = [
   { id: "boolean raw exit via op-helpers short-circuit", gate: "R1", replacedBy: "membrane/crossing exit column" },
 ] as const;
 
+// The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's
+// include list (laws/membrane/provenance/ledger land now; conformance/doors/agreement
+// are pre-declared per docs/test-suite-v2/DESIGN.md §2 and simply won't exist on disk yet).
+const SUNRISE_DIRS = ["laws", "membrane", "provenance", "ledger", "conformance", "doors", "agreement"] as const;
+
+const IT_FAILS_RE = /\bit\.fails\s*\(/;
+const LEDGER_COMMENT_RE = /^\s*\/\/\s*@ledger:\s*(.+?)\s*$/;
+
+const testsRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+function collectTestFiles(dir: string): string[] {
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return []; // dir doesn't exist yet (conformance/doors/agreement, pre-population)
+  }
+  const files: string[] = [];
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectTestFiles(full));
+    } else if (entry.isFile() && entry.name.endsWith(".test.ts")) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+/**
+ * Walks every sunrise `.test.ts` file for `it.fails(` occurrences and checks each one's
+ * immediately-preceding non-blank line for a `// @ledger: <id>` comment whose id resolves
+ * against `knownIds`. Returns one human-readable violation string per problem found.
+ */
+function findUnledgeredFails(knownIds: ReadonlySet<string>): string[] {
+  const violations: string[] = [];
+  for (const dirName of SUNRISE_DIRS) {
+    for (const file of collectTestFiles(join(testsRoot, dirName))) {
+      const lines = readFileSync(file, "utf8").split("\n");
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("*") || trimmed.startsWith("//")) return; // doc-comment mentions don't count
+        if (!IT_FAILS_RE.test(line)) return;
+        let ledgerId: string | undefined;
+        for (let back = idx - 1; back >= 0; back--) {
+          const prev = lines[back];
+          if (prev.trim() === "") continue; // blank lines don't break the search
+          const match = prev.match(LEDGER_COMMENT_RE);
+          if (match) ledgerId = match[1].trim();
+          break; // first non-blank line decides it either way
+        }
+        const loc = `${file}:${idx + 1}`;
+        if (!ledgerId) {
+          violations.push(`${loc}: it.fails with no preceding "// @ledger: <id>" comment`);
+        } else if (!knownIds.has(ledgerId)) {
+          violations.push(`${loc}: @ledger id "${ledgerId}" has no matching GAPS/INVERSIONS row`);
+        }
+      });
+    }
+  }
+  return violations;
+}
+
 describe("ledger — every gap names its gate", () => {
   it.each(GAPS.map((g) => [g.id, g] as const))("GAP %s", () => {
     /* index row — enforcement meta-test lands with the sweep */
@@ -45,6 +133,12 @@ describe("ledger — every gap names its gate", () => {
   it.each(INVERSIONS.map((g) => [g.id, g] as const))("INVERTS %s", () => {
     /* index row */
   });
-  it.todo("meta: no it.fails exists in the suite without a ledger row (walker)");
+
+  it("meta: no it.fails exists in the suite without a ledger row (walker)", () => {
+    const knownIds = new Set([...GAPS, ...INVERSIONS].map((row) => row.id));
+    const violations = findUnledgeredFails(knownIds);
+    expect(violations, violations.join("\n")).toEqual([]);
+  });
+
   it.todo("meta: no ledger gate references a ruling/migration that has already landed (staleness alarm)");
 });

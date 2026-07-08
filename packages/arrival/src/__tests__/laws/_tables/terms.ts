@@ -30,7 +30,11 @@ export const TERMS: readonly TermRow[] = [
   { term: "arrival/tagless-final/filter", verbs: ["filter"], boxDiscipline: "element-preserving", containerBox: null },
   { term: "arrival/tagless-final/reduce", verbs: ["reduce"], boxDiscipline: "element-unioning", containerBox: null },
   { term: "arrival/tagless-final/sort", verbs: ["sort"], boxDiscipline: "element-preserving", containerBox: null },
-  { term: "arrival/tagless-final/concat", verbs: ["append", "string-append", "vector-append"], boxDiscipline: "element-preserving", containerBox: null },
+  // `bytevector-append` completes the verb list — ABytevector genuinely implements this term
+  // (ABytevector.ts's `arrival/tagless-final/concat`) via its own dedicated native binding,
+  // same shape as string-append/vector-append; the table was missing exactly the kind of
+  // absent-cell gap DESIGN.md warns about (the DR4 divergence hid in an absent cell too).
+  { term: "arrival/tagless-final/concat", verbs: ["append", "string-append", "vector-append", "bytevector-append"], boxDiscipline: "element-preserving", containerBox: null },
   { term: "arrival/tagless-final/length", verbs: ["length", "vector-length", "string-length"], boxDiscipline: "element-unioning", containerBox: null },
   { term: "arrival/tagless-final/equals", verbs: ["equal?"], boxDiscipline: "element-unioning", containerBox: null },
   { term: "arrival/tagless-final/car", verbs: ["car"], boxDiscipline: "projecting", containerBox: null },
