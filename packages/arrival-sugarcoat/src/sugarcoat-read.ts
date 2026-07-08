@@ -87,7 +87,10 @@ function regroupLetFamily(node: Node): Node {
   if (alreadyBindingsList) return node;
   const bindings: Node[] = [];
   let i = 1;
-  while (i < node.list.length && bindingShaped(node.list[i])) bindings.push(node.list[i++]);
+  // Never consume the LAST child: a let-family form requires a body, so when every
+  // child is binding-shaped the final one is the body (`items.length` ⇒ `(length items)`
+  // as a body would otherwise be swallowed into the bindings, emitting a body-less let).
+  while (i < node.list.length - 1 && bindingShaped(node.list[i])) bindings.push(node.list[i++]);
   if (bindings.length === 0) return node;
   return { list: [h, { list: bindings }, ...node.list.slice(i)] };
 }
