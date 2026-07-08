@@ -38,6 +38,7 @@ import type { R7RSError } from "../errors.js";
 // type` keeps the mutual edge with Environment.ts a pure compile-time cycle.
 import type { CallCtx } from "./primitives/CallCtx.js";
 import type { ACallable } from "./primitives/ACallable.js";
+import { AValue } from "./primitives/AValue.js";
 
 /**
  * Opaque marker for the trampoline's bounce sentinel. The real `Bounce`
@@ -50,6 +51,40 @@ import type { ACallable } from "./primitives/ACallable.js";
 export interface SchemeBounceMarker {
   readonly __bounce: true;
 }
+
+// `[T] extends [...]` (tuple-wrapped) on purpose: a naked `T extends ...` conditional
+// DISTRIBUTES over the ~23-member SchemeValue union when `AListAlike` is used
+// unparameterized, exploding into a union of concrete APair<X, …> shapes that
+// unifies with no open generic (and trips TS2589 in deep spines).
+//
+// The maximal-T short-circuit (`[SchemeValue] extends [T]` arm) is load-bearing:
+// when T is the whole union, the recursive cdr constraint adds no information —
+// every element is already admissible — but it DOES make the alias strictly
+// narrower than a plain `APair<SchemeValue, SchemeValue>` (whose cdr is not
+// provably the recursive shape), so every real pair in the interpreter would
+// fail to assign into the type that's supposed to describe it. Collapse the
+// default to the honest `APair<SchemeValue, SchemeValue> | ANil` spine and keep
+// the recursive precision only for genuinely narrowed element types.
+type AArrayListAlike<T extends SchemeValue> = [SchemeValue] extends [T]
+  ? APair<SchemeValue, SchemeValue> | ANil
+  : APair<T, [T] extends [APair<any, any> | ANil] ? T : AArrayListAlike<T>> | ANil;
+type ATupleListAlike<T extends [...SchemeValue[]]> = T extends [
+  infer Car extends SchemeValue,
+  ...infer Cdr extends SchemeValue[],
+]
+  ? APair<Car, ATupleListAlike<Cdr>>
+  : ANil;
+
+export type AListAlike<T extends SchemeValue | [...SchemeValue[]] = SchemeValue> = [T] extends [[...SchemeValue[]]]
+  ? ATupleListAlike<T>
+  : [T] extends [SchemeValue]
+    ? AArrayListAlike<T>
+    : never;
+
+export type AListAlikeValue<T extends AListAlike> = T extends AListAlike<infer V> ? V : never;
+export type APairAsListValue<Car extends SchemeValue, Cdr extends SchemeValue> =
+  | Car
+  | (Cdr extends AListAlike ? AListAlikeValue<Cdr> : never);
 
 export type SchemeValue =
   | AExact
@@ -107,12 +142,6 @@ export function isString(x: unknown): x is SchemeStringLike | string {
   return typeof x === "string" || isSchemeString(x);
 }
 
-// Forward declaration avoiding a circular dependency on Pair's implementation.
-export interface APairLike<Car extends SchemeValue = SchemeValue, Cdr extends SchemeValue = SchemeValue> {
-  car: Car;
-  cdr: Cdr;
-}
-
 // AList: the "APair | ANil" scheme-list spine spelled out ~50x across the codebase.
 // Deliberately NOT recursive (type AList<T> = APair<T, AList<T>|ANil>) -- APair's own
 // method shapes are already self-referential through Cdr (see AConcatPair/APairValue),
@@ -123,4 +152,6 @@ export interface APairLike<Car extends SchemeValue = SchemeValue, Cdr extends Sc
 // bound (mirroring APairLike above and APair's own class signature) is load-bearing, not
 // decoration -- APair<Car, Cdr>'s own params require it, so a bare unconstrained `Car = any`
 // fails to satisfy APair's constraint at the alias's own declaration site.
-export type AList<Car extends SchemeValue = any, Cdr extends SchemeValue = any> = APair<Car, Cdr> | ANil;
+export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? ANil : SchemeValue = any> =
+  | APair<Car, Cdr>
+  | ANil;

@@ -110,7 +110,7 @@ describe("Parser — bar-quoted symbols (R7RS §7.1.1 |...|)", () => {
 
   it("reads |Picnic Tables| and |Public Restrooms| as two symbols inside a list", async () => {
     const [list] = await readAll("(list |Picnic Tables| |Public Restrooms|)");
-    const items = (list as APair).to_array(false) as ASymbol[];
+    const items = (list as APair<any, any>).to_array(false) as ASymbol[];
     expect(items.map((s) => s.valueOf())).toEqual(["list", "Picnic Tables", "Public Restrooms"]);
   });
 

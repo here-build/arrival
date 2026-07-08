@@ -20,7 +20,6 @@ import { describe, expect, it } from "vitest";
 import listsPack from "../env/r7rs/lists.js";
 import stringsPack from "../env/r7rs/strings.js";
 import srfi1Pack from "../env/srfi/srfi-1.js";
-import corePack from "../env/core/core.js";
 import equalityPack from "../env/r7rs/equality.js";
 import type { AEntity } from "../common/symbol.js";
 import { APair } from "../values/primitives/APair.js";
@@ -29,6 +28,7 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { AExact } from "../values/primitives/AExact.js";
 
 /** A pack's `.spec.symbols` map, generically — mirrors numeric-contract-precision.test.ts's
  *  `numericPack.spec.symbols as Record<string, AEntity>` access pattern. */
@@ -49,9 +49,8 @@ function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {
 }
 
 const fn = () => {};
-const properList = new APair(CONSTANT_CTX, 1, nil);
+const properList = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
 const realString = new AString(CONSTANT_CTX, "abc");
-const valuable = { valueOf: () => 1 };
 
 describe("2026-07-05 audit — runtime Contract precision on the REAL exported ops", () => {
   it("for-each: rest elements must now be a proper list (Pair|Nil) — a non-list used to slip through the old z.array(z.value)", () => {

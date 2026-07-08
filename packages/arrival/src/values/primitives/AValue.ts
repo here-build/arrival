@@ -153,8 +153,6 @@ export abstract class AValue {
   /** Semigroup — `this ⋄ other`: container-preserving PURE append (list/vector/bytevector
    *  concat builds a fresh spine, never mutates an operand). */
   ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;
-  /** Chain (Monad) — map then flatten (the re-homed fantasy-land `chain`). */
-  ["arrival/tagless-final/chain"]?(f: (x: unknown) => unknown): SchemeValue;
   /** Traversable — effectful traversal; `of` lifts into the applicative. Return stays
    *  `unknown` honestly: the traversal's carrier is the applicative's, not the term's. */
   ["arrival/tagless-final/traverse"]?(of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown;

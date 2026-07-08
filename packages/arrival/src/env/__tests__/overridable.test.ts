@@ -51,7 +51,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
        (list city country)`,
       { capabilities, config: { params: { city: "Paris" } } },
     );
-    const list = result.at(-1) as APair;
+    const list = result.at(-1) as APair<any, any>;
     expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "France"]);
   });
 

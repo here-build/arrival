@@ -10,7 +10,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
-import { tf } from "../values/tagless-final.js";
+import { tf, type TaglessOp } from "../values/tagless-final.js";
 
 type FL = Record<string, any>;
 
@@ -43,11 +43,13 @@ describe("SchemeString — structure-algebra behavior", () => {
     expect((r as AString).valueOf()).toBe("foobar");
   });
   it("empty() is the empty string", () => {
-    const e = (AString as FL)[tf("empty")]() as AString;
+    // "empty" not in canonical TaglessOp union today — cast reaches the algebra method
+    const e = (AString as FL)[tf("empty" as TaglessOp)]() as AString;
     expect(e.valueOf()).toBe("");
   });
   it("of(value) stringifies into a SchemeString", () => {
-    const s = (AString as FL)[tf("of")](42) as AString;
+    // "of" not in canonical TaglessOp union today — cast reaches the algebra method
+    const s = (AString as FL)[tf("of" as TaglessOp)](42) as AString;
     expect(s).toBeInstanceOf(AString);
     expect(s.valueOf()).toBe("42");
   });

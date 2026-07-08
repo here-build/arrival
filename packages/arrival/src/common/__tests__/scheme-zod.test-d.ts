@@ -26,7 +26,7 @@ import type { AString } from "../../values/primitives/AString.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import type { AVector } from "../../values/primitives/AVector.js";
 import type { AJSArray } from "../../values/primitives/AJSArray.js";
-import type { SchemeValue } from "../../values/types.js";
+import type { AListAlike, SchemeValue } from "../../values/types.js";
 import { type DecodedArgs, type SpecInfer } from "../symbols/_bake.js";
 
 // Helpers mirroring the Face logic used for contracts.
@@ -39,14 +39,14 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
 
     // Scheme (native) face: the interpreter container (APair is generic in the model)
     type S = SchemeFace<typeof charList>;
-    expectTypeOf<S>().toExtend<APair<any, any> | ANil>();
+    expectTypeOf<S>().toExtend<AListAlike>();
 
     // JS (rosetta) face: array of the element's JS image
     type J = JSFace<typeof charList>;
     expectTypeOf<J>().toExtend<string[]>();
 
     // Via the contract helpers (what actual symbol.native defs see — the SCHEME face)
-    expectTypeOf<DecodedArgs<[typeof charList], "scheme">>().toExtend<[APair<any, any> | ANil]>();
+    expectTypeOf<DecodedArgs<[typeof charList], "scheme">>().toExtend<[AListAlike]>();
     expectTypeOf<SpecInfer<typeof charList>>().toExtend<string[]>();
   });
 
@@ -54,7 +54,7 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
     type S = SchemeFace<typeof consShape>;
-    expectTypeOf<S>().toExtend<APair<any, any>>(); // the container
+    expectTypeOf<S>().toExtend<AListAlike>(); // the container
 
     type J = JSFace<typeof consShape>;
     // tuple of the two JS faces
@@ -100,7 +100,7 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     type In = DecodedArgs<typeof listInVecOut.input, "scheme">;
     type Out = DecodedArgs<typeof listInVecOut.output>;
 
-    expectTypeOf<In>().toExtend<[APair<any, any> | ANil]>();
+    expectTypeOf<In>().toExtend<[AListAlike]>();
     // NOT `any[]` — that's vacuous (any[] accepts almost anything, so this would pass
     // even if the decode type were wrong). z.vector(z.value)'s JS face is SchemeValue[].
     expectTypeOf<Out>().toExtend<[SchemeValue[]]>();
@@ -109,7 +109,7 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
   test("z.list() (any) is still usable as before", () => {
     const anyL = z.list();
     type S = SchemeFace<typeof anyL>;
-    expectTypeOf<S>().toExtend<APair<any, any> | ANil>();
+    expectTypeOf<S>().toExtend<AListAlike>();
 
     type J = JSFace<typeof anyL>;
     expectTypeOf<J>().toExtend<SchemeValue[]>();

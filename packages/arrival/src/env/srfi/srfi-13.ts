@@ -44,7 +44,7 @@ import { promise_all } from "../../utils/promises.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import type { AList, AProcedure, SchemeValue } from "../../values/types.js";
+import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
 
 // Pack-local copy of the list→array bridge helper `string-join` needs — byte-identical
 // to the strings.ts/lists.ts copies (incl. the per-run heap-meter charge at the
@@ -314,14 +314,16 @@ export default new EnvCapability("scheme/srfi-13", {
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        (str: unknown, criterion?: unknown): AList | Promise<AList> => {
+        (str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> => {
           const chars = [...stringValue(str)];
           const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
           return afterFlags(flags, (f) => {
             // Splitting op: each token is a fresh derived string — taint each with the
             // source's lineage so list elements stay grounded (cf. string-split below).
             const prov = collapseProvenance(str, criterion);
-            const tokens: (string | AString)[] = [];
+            // Only `taintString` (always an AString) is ever pushed below — narrow off the
+            // unused raw-`string` arm so `APair.fromArray` sees the honest `SchemeValue[]`.
+            const tokens: AString[] = [];
             let current = "";
             for (const [i, char] of chars.entries()) {
               if (f[i]) {

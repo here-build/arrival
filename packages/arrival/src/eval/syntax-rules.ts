@@ -26,7 +26,7 @@ import { Syntax } from "./Syntax.js";
 import { isNumeric } from "../values/numbers.js";
 import { DATA } from "../well-known-symbols.js";
 import { eqv } from "../values/structural-equal.js";
-import { type SchemeValue } from "../values/types.js";
+import { AListAlike, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../utils/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../reader/values-repr.js";
@@ -51,6 +51,26 @@ function same_atom(a, b) {
   // entirely in the value kernel (instanceof + .equals/__char__/.value).
   // See plan-2026-06-10-algebras-in-entities.md.
   return eqv(a, b);
+}
+
+// `concatPair`'s Semigroup contract (list ⋄ list) requires the tail to be list-alike
+// (`AListAlike`). A dotted-tail ellipsis template — e.g. `(a ... . b)` matched against
+// `(m 1 2 . 3)` — legitimately binds `b` to a bare scalar, so the ellipsis-expansion result
+// feeding these tails can be an arbitrary SchemeValue, not a list. Same cons-loop as
+// `concatPair` (values/primitives/APair.ts), typed for that wider arbitrary-tail domain
+// instead of forcing a scalar into AListAlike.
+function concatPairLoose(a: SchemeValue, b: SchemeValue): SchemeValue {
+  const cars: SchemeValue[] = [];
+  let node: unknown = a;
+  while (node instanceof APair) {
+    cars.push(node.car);
+    node = node.cdr;
+  }
+  let result: SchemeValue = b;
+  for (let i = cars.length; i--; ) {
+    result = new APair(CONSTANT_CTX, cars[i], result);
+  }
+  return result;
 }
 
 // ----------------------------------------------------------------------
@@ -374,17 +394,25 @@ export function extract_patterns(
       if (!(pattern.cdr.cdr instanceof ANil) && pattern.cdr.cdr instanceof APair) {
         // if we have (x ... a b) we need to remove two from the end
         const list_len = pattern.cdr.cdr.length();
-        const improper_list = !(pattern.last_pair()!.cdr instanceof ANil);
+        // `last_pair()` on a non-empty pair spine only returns via its
+        // `!(node.cdr instanceof APair)` arm — reached while `node instanceof APair` still
+        // holds — or `undefined` on a cycle; it never returns ANil. The guard below makes
+        // that runtime invariant explicit instead of casting the union away.
+        const patternLastPair = pattern.last_pair();
+        invariant(patternLastPair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
+        const improper_list = !(patternLastPair.cdr instanceof ANil);
         if (!(code instanceof APair)) {
           return false;
         }
         let code_len = code.length();
-        let list = code;
+        let list: SchemeValue = code;
         const trailing = improper_list ? 1 : 1;
         while (code_len - trailing > list_len) {
-          list = list.cdr as APair<any, any>;
+          invariant(list instanceof APair, "syntax: trailing-trim walk stays within the counted pair prefix");
+          list = list.cdr;
           code_len--;
         }
+        invariant(list instanceof APair, "syntax: trailing-trim walk stays within the counted pair prefix");
         const rest = list.cdr;
         // FRESH-PREFIX split (readonly-slot contract): the old `list.cdr = nil` SEVERED the
         // user's input form in place — and never restored it, so a matched form's spine stayed
@@ -392,11 +420,14 @@ export function extract_patterns(
         // contract surfaced). Build the head segment as a fresh spine instead: elements SHARED
         // (provenance preserved), spine fresh, the input form untouched.
         const prefixEls: SchemeValue[] = [];
-        for (let n: APair<any, any> = code; ; n = n.cdr as APair<any, any>) {
+        let n: SchemeValue = code;
+        while (true) {
+          invariant(n instanceof APair, "syntax: prefix walk stays within code's pair spine");
           prefixEls.push(n.car);
           if (n === list) break;
+          n = n.cdr;
         }
-        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as APair<any, any>;
+        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as AListAlike;
         const new_sate = { ...state, trailing: improper_list };
         if (!traverse(pattern.cdr.cdr, rest, new_sate)) {
           return false;
@@ -435,8 +466,10 @@ export function extract_patterns(
                 return traverse(pattern.cdr.cdr, code.cdr, state);
               }
             }
-            // code as improper list
-            const last_pair = code.last_pair()!;
+            // code as improper list. `last_pair()` on a non-empty pair spine is always a
+            // pair (see the identical guard above) or `undefined` on a cycle — never ANil.
+            const last_pair = code.last_pair();
+            invariant(last_pair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
             if (!(last_pair.cdr instanceof ANil)) {
               if (pattern.cdr.cdr instanceof ANil) {
                 // case (a ...) for (a b . x)
@@ -444,8 +477,11 @@ export function extract_patterns(
               } else {
                 // case (a ... . b) for (a b . x)
                 const copy = code.clone();
+                invariant(copy instanceof APair, "syntax: clone of a non-empty pair spine is a pair");
+                const copyLastPair = copy.last_pair();
+                invariant(copyLastPair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
                 // Ellipsis surgery on a PRIVATE clone — the knot door's third named consumer.
-                __tieKnot(copy.last_pair()!, "cdr", nil);
+                __tieKnot(copyLastPair, "cdr", nil);
                 bindings["..."].symbols[name] = copy;
                 return traverse(pattern.cdr.cdr, last_pair.cdr, state);
               }
@@ -682,7 +718,7 @@ export function transform_syntax({
         if (first in bindings.symbols) {
           return APair.fromArray(CONSTANT_CTX, [
             new ASymbol(CONSTANT_CTX, "."),
-            bindings.symbols[first],
+            bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
             ...parts.slice(1).map((x) => new AString(CONSTANT_CTX, x)),
           ]);
         }
@@ -797,7 +833,7 @@ export function transform_syntax({
               // concatPair. Discriminating on `car` keeps a pair from ever
               // reaching `.concat` (which APair does not have → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
-                return concatPair(CONSTANT_CTX, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue);
+                return concatPairLoose(item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue);
               }
               return item.car;
             } else if (item.car instanceof APair) {
@@ -809,7 +845,8 @@ export function transform_syntax({
             } else if (item.cdr instanceof ANil) {
               return item.car;
             } else if (expr instanceof APair) {
-              const last_pair = expr.last_pair()!;
+              const last_pair = expr.last_pair();
+              invariant(last_pair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
               if (last_pair.cdr instanceof ASymbol) {
                 next(name, item.last_pair());
                 return item.car;
@@ -920,7 +957,7 @@ export function transform_syntax({
                   car = car.valueOf();
                 }
                 if (is_spread) {
-                  result = result instanceof ANil ? (car as SchemeValue) : concatPair(CONSTANT_CTX, result, car as SchemeValue);
+                  result = result instanceof ANil ? (car as SchemeValue) : concatPairLoose(result, car as SchemeValue);
                 } else {
                   result = new APair(CONSTANT_CTX, car as SchemeValue, result);
                 }
@@ -940,7 +977,7 @@ export function transform_syntax({
               !ASymbol.is(expr.cdr.cdr.car, ellipsis_symbol)
             ) {
               const rest = traverse(expr.cdr.cdr, { disabled });
-              return concatPair(CONSTANT_CTX, result, rest);
+              return concatPairLoose(result, rest);
             }
             return result;
           } else {
@@ -994,7 +1031,7 @@ export function transform_syntax({
             if (is_null) {
               return node;
             }
-            result = result instanceof ANil ? node : concatPair(CONSTANT_CTX, result as SchemeValue, node);
+            result = result instanceof ANil ? node : concatPairLoose(result as SchemeValue, node);
           }
           return result;
         }

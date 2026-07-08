@@ -47,7 +47,7 @@ import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
-import { type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
+import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
 import { AString } from "../values/primitives/AString.js";
@@ -96,7 +96,7 @@ export interface EvalTap {
    * computes for the trampoline. Optional for backward-compat with taps that
    * don't care.
    */
-  enter(node: APair<any, any>, parent: Invocation | null, tailPosition?: boolean): Invocation;
+  enter(node: AListAlike, parent: Invocation | null, tailPosition?: boolean): Invocation;
   /**
    * Returning a value-shaped result substitutes the evaluator's outgoing value
    * for the invocation. Used by provenance plumbing: the tap stamps the result
@@ -151,7 +151,7 @@ export interface EvalContext {
    * Optional filter — when present, returning false skips tap firing for a node
    * (atoms and macro-expansion-constructed Pairs are always skipped regardless).
    */
-  nodeFilter?: (node: APair<any, any>) => boolean;
+  nodeFilter?: (node: AListAlike) => boolean;
   /** Current dynamic-stack invocation; sub-evaluations receive this as parent. */
   currentInvocation?: Invocation;
   /**
@@ -697,7 +697,10 @@ export function is_scheme_promise(o: unknown): o is SchemePromise {
 // ============================================================================
 
 function symbol_name(sym: ASymbol): string {
-  const name = sym.__name__;
+  // `__name__` is declared `string` but a gensym's is actually a JS symbol (see the
+  // identical note at ctxResolver's lookup below, and ASymbol.ts's own `isSymbol` check) —
+  // an over-narrow declared type, not something provable by a guard at this call site.
+  const name = sym.__name__ as string | symbol;
   return typeof name === "symbol" ? name.description || "" : name;
 }
 
@@ -1718,16 +1721,24 @@ function bindingNameError(name: SchemeValue, form: string, location?: SourceLoca
  *  shared by both R2a (whole-list) and R2b (per-element) rewriting so the
  *  name-slot validation (and its destructuring special-case) is written once.
  *  `parts` is `[name, value]` or `[name, value, step]` (do). */
-function buildBindingPair(form: string, parts: SchemeValue[], location: SourceLocation | undefined): APair<any, any> {
+function buildBindingPair<Car extends SchemeValue, Cdr extends SchemeValue[]>(
+  form: string,
+  parts: readonly [Car, ...Cdr],
+  location: SourceLocation | undefined,
+) {
   const name = parts[0];
   if (!(name instanceof ASymbol)) {
     throw bindingNameError(name, form, location);
   }
-  let cdr: SchemeValue = nil;
+  let cdr: APair<any, any> | ANil = nil;
   for (let i = parts.length - 1; i >= 1; i--) {
     cdr = new APair(CONSTANT_CTX, parts[i], cdr);
   }
-  return new APair(CONSTANT_CTX, name, cdr);
+  // Built element-by-element from `parts[1..]` in reverse (the loop above) — exactly the
+  // tuple-shaped spine `AListAlike<Cdr>` describes. TS's structural checker can't see that
+  // the loop's generic `APair<any,any> | ANil` accumulator matches the specific `Cdr` tuple
+  // shape it was just built from, so this narrows what the construction already proves.
+  return new APair<Car, AListAlike<Cdr>>(CONSTANT_CTX, name, cdr as AListAlike<Cdr>);
 }
 
 /**
@@ -1780,7 +1791,8 @@ function normalizeBindings(
       if (els.length < minLen || els.length > maxLen) {
         throw bindingArityError(binding, form, minLen, maxLen, node[LOCATION]);
       }
-      items.push(buildBindingPair(form, els, node[LOCATION]));
+      // Nonempty by the arity guard just above (every caller passes minLen ≥ 2).
+      items.push(buildBindingPair(form, els as readonly [SchemeValue, ...SchemeValue[]], node[LOCATION]));
     } else {
       items.push(binding);
     }
@@ -2686,7 +2698,8 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     if (caughtError && catchClause) {
-      const catchCdr = (catchClause as APair<any, any>).cdr;
+      invariant(catchClause instanceof APair, "try: invalid catch clause");
+      const catchCdr = catchClause.cdr;
       invariant(catchCdr instanceof APair, "try: invalid catch syntax");
 
       const varSpec = catchCdr.car;
@@ -2773,6 +2786,11 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // provenance. `#(…)` literals carry no flag and keep their R7RS
 // self-evaluating-constant semantics.
 
+// The lowering always prepends a head symbol (`vector`/`dict`) to `forms`, so the built
+// spine is provably non-empty — genuinely `APair<SchemeValue, SchemeValue>`, never `ANil`.
+// `AListAlike` was an over-wide return type; narrowed here to match what's actually built
+// (see the `as APair<SchemeValue, SchemeValue>` cast below, justified by that same
+// non-empty-array guarantee).
 const LOWERED_LITERALS = new WeakMap<AVector | AJSObject, APair<SchemeValue, SchemeValue>>();
 
 function loweredCollectionLiteral(node: AVector | DictLiteralNode): APair<SchemeValue, SchemeValue> {

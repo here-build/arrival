@@ -26,21 +26,19 @@ import {
 } from "../common/symbol.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
-import type { AList, SchemeValue } from "../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
   test("tuple spec: element-wise z.output, as a mutable tuple", () => {
     // z.pair is a real codec now (cons(value,value)) — its default (js) face is a
     // [SchemeValue,SchemeValue] tuple, not APair. Use the "scheme" face to get APair.
-    expectTypeOf<SpecInfer<[typeof z.pair], "scheme">>().toEqualTypeOf<[APair<SchemeValue, SchemeValue>]>();
-    expectTypeOf<SpecInfer<[typeof z.pair, typeof z.string], "scheme">>().toEqualTypeOf<
-      [APair<SchemeValue, SchemeValue>, AString]
-    >();
+    expectTypeOf<SpecInfer<[typeof z.pair], "scheme">>().toEqualTypeOf<[AListAlike]>();
+    expectTypeOf<SpecInfer<[typeof z.pair, typeof z.string], "scheme">>().toEqualTypeOf<[AListAlike, AString]>();
   });
 
   test("single-schema spec: bare z.output, no tuple wrapping", () => {
     expectTypeOf<SpecInfer<typeof z.string>>().toEqualTypeOf<string>();
-    expectTypeOf<SpecInfer<typeof z.pair, "scheme">>().toEqualTypeOf<APair<SchemeValue, SchemeValue>>();
+    expectTypeOf<SpecInfer<typeof z.pair, "scheme">>().toEqualTypeOf<AListAlike>();
   });
 
   test("a 1-tuple spec stays a 1-tuple (unlike DecodedArgs, SpecInfer never wraps/collapses — that's each caller's own job)", () => {
@@ -56,7 +54,7 @@ describe("symbol contract — decoded arg/return inference", () => {
   test("native: a scheme-face tuple infers the impl arg as the SCHEME TERM", () => {
     // `z.pair` is a real codec (cons(value,value)); native reads the SCHEME face (z.input),
     // which is still APair — symbol.native's own dispatch always selects "scheme" explicitly.
-    expectTypeOf<DecodedArgs<[typeof z.pair], "scheme">>().toEqualTypeOf<[APair<SchemeValue, SchemeValue>]>();
+    expectTypeOf<DecodedArgs<[typeof z.pair], "scheme">>().toEqualTypeOf<[AListAlike]>();
   });
 
   test("rosetta: a codec tuple infers the impl arg as the DECODED JS value", () => {
@@ -129,7 +127,7 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     // "scheme" face — z.pair is a real codec now (cons(value,value)); its default (js) face
     // decodes to a [SchemeValue,SchemeValue] tuple, not APair. The scheme face is still APair.
     expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.value, "scheme">>().toEqualTypeOf<
-      [APair<SchemeValue, SchemeValue>, ...SchemeValue[]]
+      [AListAlike, ...SchemeValue[]]
     >();
   });
 
@@ -137,9 +135,7 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<
       DecodedArgs<[typeof z.pair], "scheme">
     >();
-    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<
-      [APair<SchemeValue, SchemeValue>]
-    >();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<[AListAlike]>();
     expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<DecodedArgs<[typeof z.string]>>();
     expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<[string]>();
   });
@@ -388,8 +384,8 @@ describe("symbol.sequence — impl args/return typed via SpecInfer-built Decoded
       // symbol.sequence always projects the "scheme" face (SequenceImpl, _bake.ts) — z.string's
       // scheme face is AString, not the js-face `string`.
       { input: [z.pair, z.string], output: [z.string] },
-      (args: [APair<SchemeValue, SchemeValue>, AString], runCtx) => {
-        expectTypeOf(args).toEqualTypeOf<[APair<SchemeValue, SchemeValue>, AString]>();
+      (args: [AListAlike, AString], runCtx) => {
+        expectTypeOf(args).toEqualTypeOf<[AListAlike, AString]>();
         return args[1];
       },
     );
@@ -402,7 +398,7 @@ describe("symbol.sequence — impl args/return typed via SpecInfer-built Decoded
       symbol.sequence`seqproof2: proof`(
         { input: [z.pair], output: [z.pair] },
         // @ts-expect-error — args is [APair], annotating it [string] is wrong
-        (args: [string], runCtx) => args[0] as unknown as APair<SchemeValue, SchemeValue>,
+        (args: [string], runCtx) => args[0] as unknown as AListAlike,
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

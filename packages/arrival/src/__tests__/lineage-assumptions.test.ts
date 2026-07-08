@@ -15,6 +15,7 @@ import { inferenceEnv } from "../inference-env.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
+import type { SchemeValue } from "../values/types.js";
 import { classify, fullCone, type Classifier } from "../values/lineage.js";
 import { provOf } from "../values/lineage-shadow.js";
 import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers.js";
@@ -97,7 +98,10 @@ describe("ASSUMPTION — a pure-map length over-attributes through the live buil
 // the direction observable — the regression guard that a fold never silently flips. Numbers
 // are provenance-stamped (id 0) so the path exercises real AValue arithmetic, not a bare-JS shortcut.
 describe("CAPABILITY — eager map/filter/reduce pipelines yield the documented values", () => {
-  const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)), false) as unknown as AValue;
+  // sNum returns AValue (the base class), but fromArray's generic constraint demands
+  // `T extends SchemeValue`. The runtime value IS a SchemeValue (an AExact); the mismatch
+  // is purely in the declared return type. We cast through unknown at the boundary.
+  const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)) as unknown as SchemeValue[], false) as unknown as AValue;
   const jsVal = (r: unknown): unknown => (r instanceof AValue ? r["arrival/toJS"]() : r);
   const eval1 = async (chain: string): Promise<unknown> => jsVal(await runRaw(chain, { xs: nums() }));
 

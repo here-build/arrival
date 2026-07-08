@@ -251,7 +251,7 @@ describe("scheme/lists Contract precision — behavior spot-checks: is_pair-shad
   // suite (cyclic-list-ops.test.ts, clone-identity.test.ts, r7rs-identity.test.ts).
   it("list-tail behaves identically: walks k cdrs by reference, 0 steps returns the list itself", () => {
     const impl = nativeDef("list-tail").impl as (list: unknown, k: unknown) => unknown;
-    const list = properList(exact(1), exact(2), exact(3)) as APair;
+    const list = properList(exact(1), exact(2), exact(3)) as APair<any, any>;
     expect(impl(list, exact(0))).toBe(list);
     expect(impl(list, exact(1))).toBe(list.cdr); // the (2 3) tail, by reference
     expect(impl(list, exact(3))).toBe(nil); // walked off the end of a proper list
@@ -268,9 +268,9 @@ describe("scheme/lists Contract precision — behavior spot-checks: is_pair-shad
   it("list-copy behaves identically: fresh spine, same elements, ANil-clone-aware (not === nil)", () => {
     const impl = nativeDef("list-copy").impl as (list: unknown) => unknown;
     const list = properList(exact(1), exact(2));
-    const copy = impl(list) as APair;
+    const copy = impl(list) as APair<any, any>;
     expect(copy).not.toBe(list);
-    expect(copy.car).toBe((list as APair).car);
+    expect(copy.car).toBe((list as APair<any, any>).car);
     expect(copy instanceof APair).toBe(true);
     // nil (the canonical singleton) still copies to the shared `nil`, not a clone.
     expect(impl(nil)).toBe(nil);

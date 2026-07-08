@@ -20,7 +20,7 @@ import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
-import type { AList, SchemeValue } from "../../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
 // reduce — SRFI-1's higher-order list fold, a pure `symbol.tagless` dispatcher: no impl,
 // forwards to the receiver's own `arrival/tagless-final/reduce` term (APair/AVector left-fold;
@@ -40,7 +40,7 @@ import type { AList, SchemeValue } from "../../values/types.js";
 // back through this SchemeValue-returning fn casts it, mirroring lists.ts's established
 // "typecheck is not a TS guard; re-state it" idiom: `typecheck` above already re-validates
 // pair-or-nil on every recursive call, so the cast states a runtime-enforced invariant, not a blind one.
-function findImpl(arg: (...args: unknown[]) => unknown, list: AList): SchemeValue {
+function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike): SchemeValue {
   if (list instanceof ANil) {
     return nil;
   }
@@ -49,7 +49,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AList): SchemeValu
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr as AList);
+    return findImpl(arg, list.cdr as AListAlike);
   }) as SchemeValue;
 }
 

@@ -77,7 +77,7 @@ export class AJSArray extends AValue {
   }
 
   // Materialized element array — the vector surface the printer (and asVector) read.
-  get __vector__(): SchemeValue[] {
+  get __vector__(): readonly SchemeValue[] {
     return this.vec().__vector__;
   }
 

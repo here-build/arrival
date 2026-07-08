@@ -200,12 +200,15 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure;
 // elements as `unknown` (the spine-walk convention — narrowed at consumption, never asserted at
 // the slot), so the seam accepts that and casts ONCE here, at the boundary between the
 // unknown-typed algebra and the typed callable surface (the elements ARE scheme values).
+// `fn` is `unknown` for the same reason: every decoded callback argument funnels here,
+// and a non-callable is doored at runtime (the `not applicable` throw), not silently
+// tolerated by a type-level cast at each of the ~dozen call sites.
 export function applyCallback(
-  fn: ANativeProcedure | ARosettaProcedure | ALambda | ((...args: unknown[]) => unknown),
+  fn: unknown,
   args: readonly unknown[],
   runCtx: RunContext = CONSTANT_CTX,
 ): CallResult {
-  const term = fn?.[tf("apply")];
+  const term = (fn as Partial<ALambda> | null | undefined)?.[tf("apply")];
   if (typeof term === "function") {
     return (term as (args: SchemeValue[], runCtx: RunContext, canBounce?: boolean) => CallResult).call(
       fn,

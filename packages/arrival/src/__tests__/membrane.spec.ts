@@ -45,7 +45,7 @@ describe("Wrapper Layer", () => {
       expect(isSchemeValue(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
       expect(isSchemeValue(new AString(CONSTANT_CTX, "hello"))).toBe(true);
       expect(isSchemeValue(new ASymbol(CONSTANT_CTX, "foo"))).toBe(true);
-      expect(isSchemeValue(new APair(CONSTANT_CTX, 1, 2))).toBe(true);
+      expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)))).toBe(true);
     });
 
     it("recognizes wrappers as Scheme values", () => {
@@ -98,12 +98,16 @@ describe("Wrapper Layer", () => {
       expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
-    it("passes through Scheme values", () => {
+    it("refuses an already-boxed scheme value (strict one-way door)", () => {
+      // fromJS is the JS→Scheme entry; an interpreter-minted value never crosses
+      // it. The old pass-through masked which-side-am-I-on confusion in callers.
       const exact = new AExact(CONSTANT_CTX, 42n);
-      expect(fromJS(exact)).toBe(exact);
+      // @ts-expect-error type-level: an AValue argument resolves to never
+      expect(() => fromJS(exact)).toThrow(/already-boxed/);
 
-      const pair = new APair(CONSTANT_CTX, 1, 2);
-      expect(fromJS(pair)).toBe(pair);
+      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
+      // @ts-expect-error type-level: an AValue argument resolves to never
+      expect(() => fromJS(pair)).toThrow(/already-boxed/);
     });
 
     it("borrows arrays as a vector (AJSArray) keeping source identity", () => {
@@ -161,11 +165,11 @@ describe("Wrapper Layer", () => {
       expect(wrapped1).toBe(wrapped2);
     });
 
-    it("prevents double-wrapping", () => {
+    it("refuses re-entry of a wrapper — double-wrapping is impossible", () => {
       const obj = { a: 1 };
       const wrapped = fromJS(obj);
-      const doubleWrapped = fromJS(wrapped);
-      expect(doubleWrapped).toBe(wrapped);
+      // @ts-expect-error type-level: an AValue argument resolves to never
+      expect(() => fromJS(wrapped)).toThrow(/already-boxed/);
     });
   });
 
@@ -194,19 +198,20 @@ describe("Wrapper Layer", () => {
     });
 
     it("passes through primitives", () => {
-      expect(toJS(42)).toBe(42);
-      expect(toJS("hello")).toBe("hello");
-      expect(toJS(true)).toBe(true);
+      expect(toJS(new AExact(CONSTANT_CTX, 42n))).toBe(42);
+      expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
+      expect(toJS(new ABool(CONSTANT_CTX, true))).toBe(true);
     });
 
-    it("keeps SchemeSymbol as-is", () => {
+    it("converts SchemeSymbol via its own toJS protocol", () => {
+      // todo symbols gets transformed into opaque symbol
       const sym = new ASymbol(CONSTANT_CTX, "foo");
-      expect(toJS(sym)).toBe(sym);
+      expect(toJS(sym)).toBe("'foo");
     });
 
     it("keeps Pair as-is", () => {
-      const pair = new APair(CONSTANT_CTX, 1, 2);
-      expect(toJS(pair)).toBe(pair);
+      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
+      expect(toJS(pair)).toEqual([1, 2]);
     });
   });
 
@@ -287,6 +292,8 @@ describe("Wrapper Layer", () => {
     it("preserves object identity through roundtrip", () => {
       const original = { a: 1 };
       const wrapped = fromJS(original);
+      // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
+      // SchemeValue. The runtime value IS a SchemeValue (AJSObject) — the mismatch is in the union.
       const unwrapped = toJS(wrapped);
       expect(unwrapped).toBe(original);
     });
@@ -299,6 +306,8 @@ describe("Wrapper Layer", () => {
       const original = [1, 2, 3];
       const wrapped = fromJS(original);
       expect((wrapped as AJSArray).source).toBe(original);
+      // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
+      // SchemeValue. The runtime value IS a SchemeValue (AJSArray) — the mismatch is in the union.
       expect(toJS(wrapped)).toBe(original); // toJS unwraps via the TO_JS protocol → the same array
     });
 

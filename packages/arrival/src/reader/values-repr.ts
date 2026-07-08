@@ -60,7 +60,11 @@ export const gensym = (function () {
   let count = 0;
 
   function with_props(name: SymbolName, sym: symbol) {
-    const symbol = new ASymbol(CONSTANT_CTX, sym);
+    // ASymbol's ctor param is declared `string | SchemeStringLike`, but its own body only
+    // special-cases `typeof unwrapped === "string"` for interning — anything else (a gensym's
+    // raw ES6 symbol) is stored verbatim as `__name__` (ASymbol.ts's `isSymbol`/`is_gensym`
+    // helpers read it back as a symbol). Honest cast to the existing, already-handled contract.
+    const symbol = new ASymbol(CONSTANT_CTX, sym as unknown as string);
     hidden_prop(symbol, "__literal__", name);
     return symbol;
   }
@@ -74,7 +78,8 @@ export const gensym = (function () {
     }
     if (is_gensym(name)) {
       // avoid double-gensym in nested syntax-rules
-      return new ASymbol(CONSTANT_CTX, name);
+      // Same ASymbol contract as `with_props` above: a gensym's raw ES6 symbol is stored as-is.
+      return new ASymbol(CONSTANT_CTX, name as unknown as string);
     }
     // ES6 symbol guarantees uniqueness as the backing name.
     if (name !== null) {

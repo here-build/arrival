@@ -58,7 +58,7 @@ export function attest<V>(v: V): V {
 }
 
 /** Is this exact box attested? `false` for anything that is not an AValue. */
-export function isAttested(v: unknown): boolean {
+export function isAttested(v: unknown): v is SchemeValue {
   return v instanceof AValue && attested.has(v);
 }
 

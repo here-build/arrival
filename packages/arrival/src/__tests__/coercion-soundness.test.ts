@@ -264,7 +264,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
-    const found = (await force(listOps.assoc(el("k", 200), alist))) as APair;
+    const found = (await force(listOps.assoc(el("k", 200), alist))) as APair<any, any>;
     expect(provOf(found.car)).toEqual([100]); // key box
     expect(provOf(found.cdr)).toEqual([101]); // value box
   });

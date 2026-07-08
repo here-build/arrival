@@ -18,7 +18,7 @@ import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { R7RSError } from "../errors.js";
 import { ALambda, ANativeProcedure, ARosettaProcedure, applyCallback } from "../values/primitives/ACallable.js";
-import type { AList, SchemeValue } from "../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
 /**
  * Every primitive has a scheme-side value (always) and maybe a JS-side codec. That "maybe" is
@@ -375,11 +375,11 @@ export const lambda = named(
 // ---------------------------------------------------------------------------
 
 // The list container: `APair | ANil` (a proper-list spine or the empty list).
-const listContainer = z.custom<AList>((x) => x instanceof APair || x instanceof ANil);
+const listContainer = z.custom<AListAlike>((x) => x instanceof APair || x instanceof ANil);
 
 // Walk the pair spine into a raw car array — rejecting cycles and improper (non-ANil-
 // terminated) lists. The OUT schema (`z.array`/`z.tuple`) validates the elements/arity.
-function spineToArray(l: AList): unknown[] {
+function spineToArray(l: AListAlike): unknown[] {
   const out: unknown[] = [];
   let node: unknown = l;
   while (node instanceof APair) {
@@ -402,11 +402,11 @@ function spineToArray(l: AList): unknown[] {
  */
 export function list<E extends z.ZodTypeAny = typeof value>(
   element?: E,
-): z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodArray<E>>;
+): z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodArray<E>>;
 export function list(
   heads: readonly z.ZodTypeAny[],
   tail?: z.ZodTypeAny,
-): z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
+): z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodType>;
 export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = value, tail?: z.ZodTypeAny) {
   const heads = Array.isArray(headsOrElement) ? (headsOrElement as readonly z.ZodTypeAny[]) : [];
   // Bare / single-arg form: the lone schema is the homogeneous tail, not a head.
@@ -421,14 +421,14 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
     "list",
     z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
       decode: (l) => spineToArray(l) as never,
-      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as unknown[], false) as AList,
+      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as SchemeValue[], false) as AListAlike,
     }),
   );
   // Homogeneous form only carries a single element schema → prints `List<E>`. A fixed-heads
   // `list([A,B])` has NO single element, so it registers nothing here and falls through to the
   // structural tuple print — honest for a heterogeneous fixed-length list.
   if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? value);
-  return schema as z.ZodCodec<z.ZodCustom<AList, AList>, z.ZodType>;
+  return schema as z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodType>;
 }
 
 // `cons` stays its OWN function, not subsumed by `list`'s tuple form: exactly one pair, car
@@ -441,7 +441,7 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
     z.codec(z.instanceof(APair), z.tuple([carE, cdrE]), {
       // `as never`: zod's tuple input type is a variadic conditional it can't reconcile with
       // a plain 2-array here (generic-boundary cast, same shape as v1's `as z.input<E>[]`).
-      decode: (p: APair<SchemeValue, SchemeValue>) => [p.car, p.cdr] as never,
+      decode: (p) => [p.car, p.cdr] as never,
       encode: ([c, d]) => new APair(CONSTANT_CTX, c as SchemeValue, d as SchemeValue),
     }),
   );

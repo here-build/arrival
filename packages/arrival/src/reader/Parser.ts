@@ -36,7 +36,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { canonicalizeCurly } from "./curly-infix.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
-import type { AList, SchemeValue } from "../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
@@ -303,7 +303,7 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(): Promise<AList> {
+  async read_list(): Promise<AListAlike> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
@@ -343,7 +343,7 @@ export class Parser {
       }
       chain = cell;
     }
-    return chain as AList;
+    return chain as AListAlike;
   }
 
   /**
@@ -560,7 +560,7 @@ export class Parser {
     return object;
   }
 
-  async _resolve_pair(pair: APair<any, any>): Promise<APair<any, any>> {
+  async _resolve_pair(pair: AListAlike): Promise<AListAlike> {
     // Datum-label resolution IS the knot-tying case: `#0=(1 #0#)` closes a cycle no
     // construction order can express, so the placeholder patch goes through the door
     // (one of its three named consumers). Patch-not-recurse on the resolved branch keeps
@@ -595,35 +595,30 @@ export class Parser {
         this.skip();
         this._enterNesting(")");
         const list = await this.read_list();
-        // R7RS literals are immutable → freeze (a later vector-set!/fill! would
-        // corrupt the shared parsed AST node persistently). Shallow cdr-walk collects
-        // elements as the honest `SchemeValue[]` the vector holds — `APair.to_array`
-        // returns the deliberately-`unknown[]` cons payload, which `AVector` can't accept.
+        // R7RS literals are immutable — AVector itself has no mutation surface
+        // (vector-set!/fill! are notImplemented stubs), so no freeze is needed. Shallow
+        // cdr-walk collects elements as the honest `SchemeValue[]` the vector holds —
+        // `APair.to_array` returns the deliberately-`unknown[]` cons payload, which
+        // `AVector` can't accept.
         const items: SchemeValue[] = [];
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
         }
-        const litVec = new AVector(CONSTANT_CTX, items);
-        litVec.freeze();
-        return litVec;
+        return new AVector(CONSTANT_CTX, items);
       }
       if (is_bytevector_literal(token)) {
         this.skip();
         this._enterNesting(")");
         const list = await this.read_list();
-        // Immutable → freeze, same rationale as the vector literal case above.
-        let litBv: ABytevector;
+        // Immutable, same rationale as the vector literal case above.
         if (list instanceof ANil) {
-          litBv = new ABytevector(CONSTANT_CTX, new Uint8Array(0));
-        } else {
-          const arr = list.to_array(false) as number[];
-          litBv = new ABytevector(
-            CONSTANT_CTX,
-            new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
-          );
+          return new ABytevector(CONSTANT_CTX, new Uint8Array(0));
         }
-        litBv.freeze();
-        return litBv;
+        const arr = list.to_array(false) as number[];
+        return new ABytevector(
+          CONSTANT_CTX,
+          new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
+        );
       }
       // A parser extension is a symbol that expands at read time, in one of two
       // ways: a FUNCTION extension is applied FEXPR-style (result returned as-is);
@@ -673,7 +668,7 @@ export class Parser {
       this._refs[+ref_label] = this._read_object() as SchemeValue | Promise<SchemeValue>;
       return this._refs[+ref_label] as SchemeValue | Promise<SchemeValue>;
     } else if (token === "[") {
-      // `[…]` VECTOR literal (Clojure/JSON array shape). The node is a frozen AVector
+      // `[…]` VECTOR literal (Clojure/JSON array shape). The node is an immutable AVector
       // (a parsed literal is shared AST — quote hands it out as immutable data, like
       // `#(…)`) carrying `evalElements`: in code position the evaluator evaluates the
       // elements (lowering to `(vector …)` — see evaluator.ts), unlike the R7RS
@@ -683,7 +678,6 @@ export class Parser {
       const elements = await this.read_literal_elements("]", false, "vector literal");
       const vec = new AVector(CONSTANT_CTX, elements);
       vec.evalElements = true;
-      vec.freeze();
       return vec;
     } else if (token === "]") {
       // A stray/mismatched `]` (read_literal_elements consumes its own close). Always

@@ -1,64 +1,94 @@
 /**
- * Regression guard for the Pair.toJs cycle-safety fix (commit 5f7f9e46a).
+ * Pair list→JS conversion: cycle safety + one-way array design.
  *
- * The bug
- * -------
- * Before the fix, Pair.toJs walked the cdr chain in an unguarded
- * `while (true)` — feeding it a list with a cdr-cycle would loop forever
- * and hang the process (no stack overflow, no error, just dead CPU).
- *
- * The fix
- * -------
- * Pair.ts:583-606 now guards toJs with two complementary checks:
- *   1. Top-level `invariant(!this.have_cycles(), ...)` — fast O(metadata)
- *      reject when mark_cycles has already annotated the spine.
- *   2. A per-traversal `Set<Pair>` watchdog at line 588 — defence against
- *      a cycle introduced post-have_cycles via mutation during the walk
- *      itself (a malicious nested toJs override that mutates cdr).
+ * Design (acknowledged, 2026-07-08)
+ * ---------------------------------
+ * `["arrival/toJS"]` produces a JS ARRAY, always. There is NO idempotence /
+ * round-trip promise: scheme list → js array → scheme vector. Consequences:
+ *   • a proper list `(1 2 3)` → `[1, 2, 3]`
+ *   • an improper (dotted) list `(1 . 2)` → `[1, 2]` — the tail folds in as
+ *     the last element; the `{__dotted__, list, tail}` shape is retired
+ *   • a cyclic list must LOUD-FAIL — JS arrays have no ref-marker notation.
+ *     Cycle detection is the iterator's per-traversal WeakSet watchdog
+ *     (APair[Symbol.iterator]); toJS is `[...this]` over it.
  *
  * Pair.toString is DIFFERENT: it has always handled cycles via the
- * `__cycles__` / `__ref__` metadata machinery (Pair.ts:484-537), emitting
- * `#0=` / `#0#` ref markers. JSON has no equivalent notation — toJs must
- * loud-fail; toString can render.
+ * `__cycles__` / `__ref__` metadata machinery, emitting `#0=` / `#0#` ref
+ * markers. toJS must throw; toString must render.
  *
- * These tests guard both directions: toJs MUST throw, toString MUST NOT.
+ * Also guards the iterator itself: element order/count (a duplicate-yield
+ * regression shipped once), a list whose FIRST element is `'()` (the
+ * empty-pair sentinel is `car === undefined && cdr is nil`, NOT `car is
+ * nil` — a nil car is a legitimate element), and the empty-pair sentinel.
  */
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
+import { AExact } from "../values/primitives/AExact.js";
 
-describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => {
+const num = (n: number) => new AExact(CONSTANT_CTX, BigInt(n));
+const list = (...ns: number[]) => APair.fromArray(CONSTANT_CTX, ns.map(num), false) as APair<any, any>;
+
+describe("APair[Symbol.iterator]", () => {
+  it("yields every element exactly once, in order", () => {
+    expect([...list(10, 30)].map((v) => (v as AExact).valueOf())).toEqual([10, 30]);
+    expect([...list(1, 2, 3)].map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3]);
+  });
+
+  it("yields a single-element list once", () => {
+    expect([...list(7)].map((v) => (v as AExact).valueOf())).toEqual([7]);
+  });
+
+  it("a nil FIRST element is a legitimate element, not the sentinel", () => {
+    // (() 1) — car is nil, cdr is a real spine. Must iterate both elements.
+    const p = new APair(CONSTANT_CTX, nil, list(1));
+    const items = [...p];
+    expect(items).toHaveLength(2);
+    expect(items[0]).toBe(nil);
+    expect((items[1] as AExact).valueOf()).toBe(1);
+  });
+
+  it("the empty-pair sentinel (undefined car, nil cdr) iterates empty", () => {
+    const p = new APair(CONSTANT_CTX, undefined as never, nil);
+    expect([...p]).toEqual([]);
+  });
+
+  it("an improper tail is yielded as the last element", () => {
+    // (1 . 2)
+    const p = new APair(CONSTANT_CTX, num(1), num(2));
+    expect([...p].map((v) => (v as AExact).valueOf())).toEqual([1, 2]);
+  });
+
+  it("throws on a cyclic spine", () => {
+    const p = new APair(CONSTANT_CTX, num(1), nil);
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    p.cdr = p;
+    expect(() => [...p]).toThrow(/cycle/i);
+  });
+});
+
+describe("Pair.toJS — one-way array conversion", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {
-    // Construct: (1 . #0#) where #0 is the cell itself.
-    const p = new APair(CONSTANT_CTX, 1, nil);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any).cdr = p;
-    // Note: `have_cycles` only returns true after `mark_cycles` has stamped
-    // metadata. Without it, the top-level invariant doesn't trip — instead
-    // the per-traversal Set-watchdog (Pair.ts:588) fires. Both produce the
-    // same /cycle/i invariant message.
+    const p = new APair(CONSTANT_CTX, num(1), nil);
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    p.cdr = p;
     expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
   it("throws on a mutual cycle (two cells pointing at each other)", () => {
-    // Construct: a → b → a (cdr cycle through both cells).
-    const a = new APair(CONSTANT_CTX, 1, nil);
-    const b = new APair(CONSTANT_CTX, 2, nil);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (a as any).cdr = b;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (b as any).cdr = a;
+    const a = new APair(CONSTANT_CTX, num(1), nil);
+    const b = new APair(CONSTANT_CTX, num(2), nil);
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    a.cdr = b;
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    b.cdr = a;
     expect(() => a["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
-  it("throws on a mark_cycles-annotated cycle (fast-path invariant)", () => {
-    // When mark_cycles has run, `have_cycles()` returns true — the
-    // top-level invariant trips before the watchdog Set is even allocated.
-    // This is the cheaper path and is the one most callers hit, since
-    // parser-produced cyclic lists are pre-marked.
-    const p = new APair(CONSTANT_CTX, 1, nil);
+  it("throws on a mark_cycles-annotated cycle too (metadata does not exempt)", () => {
+    const p = new APair(CONSTANT_CTX, num(1), nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (p as any).cdr = p;
     p.mark_cycles();
@@ -67,54 +97,45 @@ describe("Pair.toJs cycle handling (regression guard for fix 5f7f9e46a)", () => 
   });
 
   it("returns an array for a proper list", () => {
-    // (1 2 3) → [1, 2, 3]; cdr-chain terminates at nil.
-    const p = APair.fromArray(CONSTANT_CTX, [1, 2, 3], false) as APair;
-    expect(p["arrival/toJS"]()).toEqual([1, 2, 3]);
+    expect(list(1, 2, 3)["arrival/toJS"]()).toEqual([1, 2, 3]);
   });
 
-  it("returns { __dotted__, list, tail } for a dotted (improper) pair", () => {
-    // (1 . 2) — cdr is a non-nil non-pair, the improper-list branch.
-    const p = new APair(CONSTANT_CTX, 1, 2);
-    const result = p["arrival/toJS"]() as { __dotted__: boolean; list: unknown[]; tail: unknown };
-    expect(result.__dotted__).toBe(true);
-    expect(result.list).toEqual([1]);
-    expect(result.tail).toBe(2);
+  it("folds a dotted (improper) tail into the array — no {__dotted__} shape", () => {
+    // (1 . 2) → [1, 2]. One-way conversion: (1 2) and (1 . 2) convert equal.
+    const p = new APair(CONSTANT_CTX, num(1), num(2));
+    expect(p["arrival/toJS"]()).toEqual([1, 2]);
   });
 
-  it("returns [] for the empty list (cdr is nil from the start)", () => {
-    // Edge case: a single Pair(undefined, nil) is not the empty list per
-    // se, but the cdr-traversal terminates immediately on the first
-    // `is_nil(node)` check. The toJs result includes the undefined car.
-    // (We avoid asserting on the singleton `nil` itself because Nil.toJs
-    // returns `null` — different codepath, tested separately.)
-    const p = new APair(CONSTANT_CTX, 1, nil);
+  it("converts a nested list element to a nested array", () => {
+    // ((1 2) 3) → [[1, 2], 3]
+    const p = APair.fromArray(CONSTANT_CTX, [list(1, 2), num(3)], false) as APair<any, any>;
+    expect(p["arrival/toJS"]()).toEqual([[1, 2], 3]);
+  });
+
+  it("single-element list converts", () => {
+    const p = new APair(CONSTANT_CTX, num(1), nil);
     expect(p["arrival/toJS"]()).toEqual([1]);
   });
 });
 
 describe("Pair.toString cycle handling (uses ref-marker notation — fundamentally different)", () => {
   it("does NOT throw on a self-cycle (renders via #0= / #0# markers)", () => {
-    // Construct (1 . #0#) — self-cycle on cdr — then mark_cycles to
-    // populate the __cycles__ / __ref__ metadata that toString reads.
-    const p = new APair(CONSTANT_CTX, 1, nil);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any).cdr = p;
+    const p = new APair(CONSTANT_CTX, num(1), nil);
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    p.cdr = p;
     p.mark_cycles();
-    // Should produce something like `#0=(1 . #0#)` — exact format depends
-    // on the ref/cycle numbering, but it MUST NOT throw and MUST contain
-    // a ref marker.
     expect(() => p.toString()).not.toThrow();
     const rendered = p.toString();
     expect(rendered).toMatch(/#0[=#]/);
   });
 
   it("does NOT throw on a mutual cycle", () => {
-    const a = new APair(CONSTANT_CTX, 1, nil);
-    const b = new APair(CONSTANT_CTX, 2, nil);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (a as any).cdr = b;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (b as any).cdr = a;
+    const a = new APair(CONSTANT_CTX, num(1), nil);
+    const b = new APair(CONSTANT_CTX, num(2), nil);
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    a.cdr = b;
+    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    b.cdr = a;
     a.mark_cycles();
     expect(() => a.toString()).not.toThrow();
   });

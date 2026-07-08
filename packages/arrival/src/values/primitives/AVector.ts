@@ -1,7 +1,9 @@
 /**
  * Boxes a raw JS array into the AValue kernel so it carries provenance and hosts Fantasy Land
- * algebra instances. Modeled on AString/ABytevector. Vectors are MUTABLE (vector-set!/fill!/
- * copy!) — the payload stays writable.
+ * algebra instances. Modeled on AString/ABytevector. Vectors are IMMUTABLE — the env is
+ * immutable by design and vector-set!/vector-fill!/vector-copy! are all notImplemented stubs, so
+ * the payload is never written after construction; every "mutator" instead returns a fresh
+ * AVector.
  *
  * DISAMBIGUATION (boxing plan §1): a raw JS `Array` is heavily overloaded — evaluateArgs' args
  * carrier, Values, HalfBaked, syntax-rules ellipsis machinery, and JS-array-as-list at the
@@ -40,17 +42,10 @@ import type { SchemeValue } from "../types.js";
 // bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare } from "../op-helpers.js";
 
-export class AVector extends AValue {
+export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "vector";
   readonly kind = "vector" as const;
-
-  /** Mutable raw payload — vector-set!/fill!/copy! write through this. */
-  __vector__: SchemeValue[];
-
-  /** R7RS: a #(...) literal is immutable. The Parser freezes literals; the
-   *  vector mutators reject a frozen target. Constructed vectors stay mutable. */
-  frozen = false;
 
   /** `[…]` reader-literal marker: the evaluator, meeting this node in CODE position,
    *  evaluates the elements (Clojure semantics) by lowering to the equivalent
@@ -60,9 +55,15 @@ export class AVector extends AValue {
    *  Reader-minted only. */
   evalElements = false;
 
-  constructor(ctx: RunContext, items: SchemeValue[], provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+  constructor(
+    ctx: RunContext,
+    /** Element payload — public but dunder-named to hint internals: read-only
+     *  (`readonly T[]`, and elements are themselves immutable AValues, so the
+     *  readonly is deep). Mutation goes nowhere — construct a fresh vector. */
+    public readonly __vector__: readonly T[],
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+  ) {
     super(ctx, provenance);
-    this.__vector__ = items;
   }
 
   get length(): number {
@@ -71,11 +72,6 @@ export class AVector extends AValue {
 
   static isVector(x: unknown): x is AVector {
     return x instanceof AVector;
-  }
-
-  /** Mark immutable (a literal). Idempotent. */
-  freeze(): void {
-    this.frozen = true;
   }
 
   ref(i: number): SchemeValue {
@@ -88,19 +84,16 @@ export class AVector extends AValue {
 
   // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
   // array (elements convert lazily, as with AJSArray).
-  ["arrival/toJS"](): SchemeValue[] {
+  ["arrival/toJS"](): readonly T[] {
     return this.__vector__;
   }
 
-  valueOf(): SchemeValue[] {
+  valueOf(): readonly T[] {
     return this.__vector__;
   }
 
   withProvenance(p: ReadonlySet<number>): AVector {
     const v = new AVector(this.ctx, this.__vector__, p);
-    // The copy shares the payload by reference, so a frozen literal stays frozen
-    // (else re-stamping a literal's provenance would yield a mutable alias of it).
-    if (this.frozen) v.freeze();
     // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
     v.evalElements = this.evalElements;
     return v;
@@ -266,14 +259,17 @@ export class AVector extends AValue {
   // element is grounded, else the bare count. No heap-charge / no strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     const count = this.__vector__.length;
-    // `__vector__` is `SchemeValue[]`; `Extract<…, AValue>` keeps exactly the
-    // AValue-subclass arms (drops the function arm), so the predicate type is
-    // assignable to both the element type (TS2677) and `unionProvenance`'s
-    // `readonly AValue[]` (TS2345). Runtime `instanceof AValue` excludes the
-    // function arm identically.
-    const inputs = this.__vector__.filter((e): e is Extract<SchemeValue, AValue> => e instanceof AValue);
+    // `__vector__` is `readonly T[]` for the class's own (possibly narrowed) T — the predicate
+    // must assert `Extract<T, AValue>`, not `Extract<SchemeValue, AValue>`: for an abstract T,
+    // the wider SchemeValue-rooted Extract isn't provably assignable back into T (TS2677).
+    // `Extract<T, AValue>` IS assignable to both T (by construction) and AValue (every surviving
+    // arm was already an AValue subtype) — runtime `instanceof AValue` excludes the function arm
+    // identically either way.
+    const inputs = this.__vector__.filter((e): e is Extract<T, AValue> => e instanceof AValue);
     if (inputs.length === 0) return count;
-    const prov = unionProvenance(inputs);
+    // `Extract<T, AValue>` is deferred for abstract T, same limitation as above — the cast
+    // documents that every element here already passed `instanceof AValue`.
+    const prov = unionProvenance(inputs as AValue[]);
     return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
   }
 

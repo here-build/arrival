@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 interface TestInv {
   id: number;
-  node: APair;
+  node: APair<any, any>;
   parent: TestInv | null;
 }
 
@@ -41,7 +41,7 @@ function recorder() {
   const events: Event[] = [];
   let nextId = 0;
   const tap = {
-    enter(node: APair, parent: TestInv | null): TestInv {
+    enter(node: APair<any, any>, parent: TestInv | null): TestInv {
       const inv: TestInv = { id: nextId++, node, parent };
       events.push({ kind: "enter", inv });
       return inv;
@@ -103,7 +103,7 @@ describe("evaluation tap", () => {
     await exec("(map (lambda (x) (* x x)) '(1 2 3))", { tap });
 
     // Group invocations by node identity.
-    const byNode = new Map<APair, TestInv[]>();
+    const byNode = new Map<APair<any, any>, TestInv[]>();
     for (const e of enters(events)) {
       const arr = byNode.get(e.inv.node) ?? [];
       arr.push(e.inv);
@@ -192,7 +192,7 @@ describe("evaluation tap", () => {
   it("nodeFilter off-switch: no events when filter rejects everything", async () => {
     const events: Event[] = [];
     const tap = {
-      enter(node: APair, parent: TestInv | null): TestInv {
+      enter(node: APair<any, any>, parent: TestInv | null): TestInv {
         const inv: TestInv = { id: 0, node, parent };
         events.push({ kind: "enter", inv });
         return inv;

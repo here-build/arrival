@@ -81,7 +81,7 @@ describe("JS-interop: symbols", () => {
 describe("JS-interop: lists (Pair)", () => {
   it("a list is iterable from JS (spread / for-of / Array.from)", async () => {
     const lst = await one("(list 1 2 3)");
-    expect(Array.from(lst).length).toBe(3);
+    expect(Array.from(lst)).toHaveLength(3);
     let count = 0;
     for (const _ of lst) count++;
     expect(count).toBe(3);

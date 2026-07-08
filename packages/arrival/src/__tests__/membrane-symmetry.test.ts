@@ -261,7 +261,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("Pair → true", () => {
-    expect(isSchemeValue(new APair(CONSTANT_CTX, 1, nil))).toBe(true);
+    expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil))).toBe(true);
   });
 
   it("nil singleton → true (via the `=== nil` short-circuit)", () => {
@@ -313,10 +313,13 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 
 describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () => {
   it("primitive round-trips: string", () => {
+    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
+    // SchemeValue. The runtime value IS a SchemeValue — the mismatch is in the declared union.
     expect(toJS(fromJS("hello"))).toBe("hello");
   });
 
   it("primitive round-trips: number", () => {
+    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(42))).toBe(42);
   });
 
@@ -324,11 +327,13 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     // host-agnostic: 10n is the exact integer 10. fromJS boxes it to AExact; toJS gives back the
     // exact value as a JS number (the bigint type is a host detail arrival does not preserve).
     expect(fromJS(10n)).toBeInstanceOf(AExact);
+    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(10n))).toBe(10);
   });
 
   it("null round-trips through nil", () => {
     // fromJS(null) → nil (the singleton). toJS(nil) → null via `value === nil`.
+    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(null))).toBe(null);
   });
 
@@ -336,6 +341,7 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     const obj = { a: 1 };
     const wrapped = fromJS(obj);
     expect(wrapped).toBeInstanceOf(AJSObject);
+    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(wrapped)).toBe(obj);
   });
 

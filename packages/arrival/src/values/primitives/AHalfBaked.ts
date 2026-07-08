@@ -83,15 +83,9 @@ type SettleListener = () => void;
  *  - `"number"` — a narrowing integer interval derived from a collection's
  *    cardinality (what `length` returns). `force()` folds to a settled count.
  */
-export class AHalfBaked extends AValue {
+export class AHalfBaked<T extends SchemeValue = SchemeValue> extends AValue {
   static [INTEROP_BOUNDARY] = true;
   readonly kind = "halfbaked" as const;
-
-  private readonly domain: "collection" | "number";
-
-  // ── collection domain ──────────────────────────────────────────────────
-  private readonly slots: readonly Promise<SchemeValue[]>[];
-  private readonly records: SlotRecord[];
 
   // shared settle machinery (collection owns it; number domain delegates)
   private readonly source: AHalfBaked; // self for collection, the list for number
@@ -102,9 +96,9 @@ export class AHalfBaked extends AValue {
 
   private constructor(
     ctx: RunContext,
-    domain: "collection" | "number",
-    slots: readonly Promise<SchemeValue[]>[],
-    records: SlotRecord[],
+    private readonly domain: "collection" | "number",
+    private readonly slots: readonly Promise<T[]>[],
+    private readonly records: SlotRecord[],
     source: AHalfBaked | null,
     provenance: Provenance,
   ) {

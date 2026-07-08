@@ -40,35 +40,29 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
     return restamped;
   }
 
-  const tag = resolveTypeofTag(v);
-  switch (tag) {
+  if (v === null) {
+    // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
+    // the two distinct Scheme absences rather than collapsing to one.
+    return new ANil(ctx, provenance);
+  }
+  switch (typeof v) {
     case "string":
-      return new AString(ctx, v as string, provenance);
-    case "number": {
+      return new AString(ctx, v, provenance);
+    case "number":
       // Safe-integer JS numbers route to exact (precision-preserving through scheme
       // arithmetic); anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
-      const n = v as number;
-      return Number.isSafeInteger(n) ? new AExact(ctx, BigInt(n), 1n, provenance) : new AInexact(ctx, n, provenance);
-    }
+      return Number.isSafeInteger(v) ? new AExact(ctx, BigInt(v), 1n, provenance) : new AInexact(ctx, v, provenance);
     case "bigint":
-      return new AExact(ctx, v as bigint, 1n, provenance);
+      return new AExact(ctx, v, 1n, provenance);
     case "boolean":
       // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
-      return provenance === EMPTY_PROVENANCE
-        ? v
-          ? schemeTrue
-          : schemeFalse
-        : new ABool(ctx, v as boolean, provenance);
-    case "null":
-      // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
-      // the two distinct Scheme absences rather than collapsing to one.
-      return new ANil(ctx, provenance);
+      return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v, provenance);
     case "undefined":
       return new AVoid(ctx, provenance);
     case "object":
       // `typeof [] === "object"`: a JS array IS an R7RS vector → a borrowed AJSArray (the
       // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
-      return Array.isArray(v) ? new AJSArray(ctx, v, provenance) : new AJSObject(ctx, v as object, provenance);
+      return Array.isArray(v) ? new AJSArray(ctx, v, provenance) : new AJSObject(ctx, v, provenance);
     case "function":
       // A borrowed JS function is NOT a portable Scheme value → #void + warn, the same as
       // the inbound crossings (fromJS/jsToScheme). Never mints a callable wrapper.
@@ -77,18 +71,6 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
     default:
       // "symbol" and any future tag: not boxable here (symbols cross via the membrane's
       // keyword/Symbol.for path, never fromJs). A programmer error, not a runtime one.
-      invariant(false, `fromJs: no boxer for typeof tag "${tag}"`);
-  }
-}
-
-/** `null` gets its own tag — JS quirk: `typeof null === "object"`. */
-function resolveTypeofTag(v: unknown): string {
-  switch (true) {
-    case v === null:
-      return "null";
-    case v === undefined:
-      return "undefined";
-    default:
-      return typeof v;
+      invariant(false, `fromJs: no boxer for typeof tag "${typeof v}"`);
   }
 }

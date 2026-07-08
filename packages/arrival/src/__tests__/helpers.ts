@@ -7,13 +7,12 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { type SchemeValue } from "../values/types.js";
-import { nil } from "../values/primitives/ANil.js";
+import { AListAlike, type SchemeValue } from "../values/types.js";
 
 /**
  * Create a Scheme list from JS values
  */
-export function list(...items: SchemeValue[]): APair | typeof nil {
+export function list<T extends SchemeValue>(...items: T[]): AListAlike<T> {
   return APair.fromArray(CONSTANT_CTX, items, false);
 }
 

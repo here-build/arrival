@@ -241,7 +241,6 @@ describe("the flag gate — default (flag OFF) is the dict/vector literal gramma
       const [datum] = await readAll("[1 2]", flag);
       expect(datum).toBeInstanceOf(AVector);
       expect((datum as AVector).evalElements).toBe(true);
-      expect((datum as AVector).frozen).toBe(true);
     }
   });
 });

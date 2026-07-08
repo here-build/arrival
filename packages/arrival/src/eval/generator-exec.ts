@@ -25,7 +25,7 @@ import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import { APair } from "../values/primitives/APair.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
-import type { SchemeValue } from "../values/types.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
 
 // The value-layer shadow-cone skip reads the macro classes' `[CLASS]` brand
 // directly via `is_macro_value` in value-guards.ts — a downward, eval-import-free
@@ -151,8 +151,10 @@ export interface ExecOptions {
   use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
-  /** Predicate to suppress tap firing for specific nodes (atoms always skipped). */
-  nodeFilter?: (node: APair<any, any>) => boolean;
+  /** Predicate to suppress tap firing for specific nodes (atoms always skipped). Piped straight
+   *  through to `EvalContext.nodeFilter` (evaluator.ts), whose domain is the full `AListAlike`
+   *  spine, not just `APair` — matching that signature exactly instead of the narrower one. */
+  nodeFilter?: (node: AListAlike) => boolean;
   /**
    * Execution-budget signal. When the signal aborts, the trampoline throws
    * `signal.reason ?? DOMException("aborted", "AbortError")` at the next

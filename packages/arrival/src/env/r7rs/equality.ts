@@ -200,7 +200,10 @@ export default new EnvCapability("scheme/equality", {
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         { input: [z.value], output: [z.boolean] },
-        (obj): ABool => new ABool(obj.ctx, obj instanceof AJSObject || obj instanceof ADict),
+        // `obj` is the honest `SchemeValue` union, which includes non-AValue arms (EOF, Values,
+        // a bare fn) with no `.ctx` — `ctxOf` (already imported) is the narrowing read: an AValue
+        // yields its own ctx, anything else falls back to CONSTANT_CTX.
+        (obj): ABool => new ABool(ctxOf(obj), obj instanceof AJSObject || obj instanceof ADict),
       ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(

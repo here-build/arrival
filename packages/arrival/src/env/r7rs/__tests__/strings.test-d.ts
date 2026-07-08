@@ -19,7 +19,7 @@
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/symbol.js";
-import type { AList, SchemeValue } from "../../../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../../../values/types.js";
 import type { APair } from "../../../values/primitives/APair.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
@@ -58,7 +58,7 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
     // default type params, which toEqualTypeOf can't reconcile against a computed type here
     // (a real expect-type limitation with defaulted generics, verified directly).
     expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<
-      [AString, AList<SchemeValue, SchemeValue>]
+      [AString, AListAlike]
     >();
   });
 });

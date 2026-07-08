@@ -21,6 +21,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { tf } from "../values/tagless-final.js";
+import { AListAlike } from "../values/types.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
  *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk. */
@@ -28,7 +29,7 @@ const source = (impl: () => unknown) => symbol.rosetta`t: test source`({ input: 
 
 /** A SOURCE rosetta echoing its scheme argument — the identity fast path through
  *  jsToScheme returns the very same box, which the return walk then deep-attests. */
-const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.value] }, (v: unknown) => v);
+const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.value] }, (v) => v);
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
   it("refuses the exempt singletons: nil, #void, interned symbols, #t/#f flyweights", async () => {
@@ -113,12 +114,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("attests a pair spine + leaves (car/cdr on a source return are attested STORED boxes)", async () => {
     const [pair] = await exec("'(1 2 3)");
-    const out = (await echo.run(pair)) as APair;
+    const out = (await echo.run(pair)) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
     expect(isAttested(out.car)).toBe(true);
     expect(isAttested(out.cdr)).toBe(true);
-    expect(isAttested((out.cdr as APair).car)).toBe(true);
+    expect(isAttested(out.cdr.car)).toBe(true);
   });
 
   it("attests a vector's stored elements", async () => {
@@ -141,10 +142,10 @@ describe("attestDeep", () => {
   it("walks a mixed spine and skips the exempt singletons", async () => {
     const [pair] = await exec("'(1 #(2 3))");
     attestDeep(pair);
-    const p = pair as APair;
+    const p = pair as APair<any, APair<AVector, any>>;
     expect(isAttested(p)).toBe(true);
     expect(isAttested(p.car)).toBe(true);
-    const inner = (p.cdr as APair).car as AVector;
+    const inner = p.cdr.car as AVector;
     expect(isAttested(inner)).toBe(true);
     for (const el of inner.__vector__) expect(isAttested(el)).toBe(true);
     // the shared nil list-terminator never enters the registry

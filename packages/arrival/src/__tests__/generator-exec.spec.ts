@@ -134,9 +134,9 @@ describe("generator-exec", () => {
     it("should handle quasiquote with unquote", async () => {
       const [result] = await exec("(let ((x 42)) `(a ,x c))");
       expect(result).toBeInstanceOf(APair);
-      const list = result as APair;
-      expect((list.car as ASymbol).__name__).toBe("a");
-      expect(((list.cdr as APair).car as AExact).num).toBe(42n);
+      const list = result as APair<ASymbol, APair<AExact, any>>;
+      expect(list.car.__name__).toBe("a");
+      expect(list.cdr.car.num).toBe(42n);
     });
 
     it("should handle cons/car/cdr", async () => {

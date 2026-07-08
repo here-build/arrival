@@ -2,10 +2,12 @@
  * Boxes a raw Uint8Array into the AValue kernel so it carries provenance and
  * hosts Fantasy Land algebra instances. Modeled on SchemeString.
  *
- * Bytevectors are MUTABLE (bytevector-u8-set!/copy!) — the payload stays
- * writable, unlike a frozen string literal. The ArrayBuffer/DataView/Buffer
- * coercion is co-located in the constructor, so a SchemeBytevector always
- * normalizes to a single Uint8Array payload.
+ * Bytevectors are IMMUTABLE — the env is immutable by design and
+ * bytevector-u8-set!/bytevector-copy!/bytevector-fill! are all notImplemented
+ * stubs, so the payload is never written after construction; every
+ * "mutator" instead returns a fresh ABytevector. The ArrayBuffer/DataView/
+ * Buffer coercion is co-located in the constructor, so a SchemeBytevector
+ * always normalizes to a single Uint8Array payload.
  *
  * Boxing track: docs/plan-2026-06-10-boxing-track.md (S1).
  *
@@ -54,13 +56,7 @@ export class ABytevector extends AValue {
   static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 
-  /** Mutable raw payload — bytevector-u8-set!/copy! write through this. */
-  __bytevector__: Uint8Array;
-
-  /** R7RS: a #u8(...) literal is immutable. Parser freezes literals; the
-   *  bytevector mutators reject a frozen target. (Object.freeze can't be used —
-   *  it throws on a non-empty typed array — so a flag is the uniform mechanism.) */
-  frozen = false;
+  readonly __bytevector__: Uint8Array;
 
   constructor(ctx: RunContext, source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
@@ -73,11 +69,6 @@ export class ABytevector extends AValue {
 
   static isBytevector(x: unknown): x is ABytevector {
     return x instanceof ABytevector;
-  }
-
-  /** Mark immutable (a literal). Idempotent. */
-  freeze(): void {
-    this.frozen = true;
   }
 
   ref(i: number): number {
@@ -99,9 +90,7 @@ export class ABytevector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ABytevector {
-    const bv = new ABytevector(this.ctx, this.__bytevector__, p);
-    if (this.frozen) bv.freeze();
-    return bv;
+    return new ABytevector(this.ctx, this.__bytevector__, p);
   }
 
   // Print protocol — R7RS external repr `#u8(byte …)` (matches the printer's get_instances

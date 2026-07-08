@@ -141,7 +141,11 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return APair.fromArray(ctxOf(vec), arr.slice(s, e));
+        // `vec` stays `unknown` (asVector also tolerates a transitional raw array — not an
+        // AValue) — ctxOf's own body (`x instanceof AValue ? x.ctx : CONSTANT_CTX`) already
+        // guards non-AValue input and falls back to CONSTANT_CTX, so this cast changes nothing
+        // at runtime; it only states the domain ctxOf already handles.
+        return APair.fromArray(ctxOf(vec as SchemeValue), arr.slice(s, e));
       },
     ),
 

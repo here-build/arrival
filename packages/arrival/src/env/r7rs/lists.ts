@@ -40,7 +40,7 @@ import { SPECULATE } from "../../well-known-symbols.js";
 import { call_function } from "../../eval/call-function.js";
 import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
-import type { AList, AProcedure, SchemeValue } from "../../values/types.js";
+import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -49,13 +49,20 @@ import type { AList, AProcedure, SchemeValue } from "../../values/types.js";
 // procedure shape the union already names.
 const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue => is_function(o);
 
+// `member`/`assoc`'s optional `compare` decodes to the z.lambda scheme face
+// `(...args: unknown[]) => unknown` — `structuralEqual`'s own signature
+// `(a: any, b: any, seen?: SeenMap) => boolean` isn't directly assignable as a default
+// value for that parameter (its optional 3rd param is narrower than the rest tuple's
+// `unknown`), so this two-arg adapter is the exact contracted shape.
+const defaultCompare = (a: unknown, b: unknown): unknown => structuralEqual(a, b);
+
 // Pack-local copies of the list<->array bridge helpers. The stdlib originals
 // (`listToArray`/`arrayToList`/`to_array`/`isProperList`) stay in stdlib.ts for
 // its remaining consumers; these reproduce the same logic byte-for-byte (incl.
 // the per-run heap-meter charge `to_array` levies at the collection choke) so
 // the relocated defs are behavior-identical.
-function to_array(name: string): (list: AList) => SchemeValue[] {
-  return function recur(list: AList): SchemeValue[] {
+function to_array(name: string): (list: AListAlike) => SchemeValue[] {
+  return function recur(list: AListAlike): SchemeValue[] {
     if (list instanceof ANil) {
       return [];
     }
@@ -138,7 +145,7 @@ const lengthImpl = (obj: unknown): SchemeValue => {
 // a multi-list map.
 function multiListMap(
   fn: AProcedure,
-  lists: readonly AList[],
+  lists: readonly AListAlike[],
   runCtx: RunContext,
 ): SchemeValue | Promise<SchemeValue> {
   if (lists.some((list) => list instanceof ANil)) return nil;
@@ -171,7 +178,7 @@ function multiListMap(
 // mapImpl's per-arg `isProperList` cycle-check raises "map: argument N is not a
 // list", whereas multiListMap lets listToArray raise its own circular-list error.
 // Unifying the two is a deferred behavior-preserving cleanup.
-function mapImpl(fn: SchemeValue, ...lists: Array<AList>): SchemeValue | Promise<SchemeValue> {
+function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Promise<SchemeValue> {
   // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
   // as a type-level assertion so `call_function` sees the JS-callable it needs.
   invariant(is_callable(fn), `map: the first argument is not a procedure`);
@@ -255,7 +262,7 @@ export default new EnvCapability("scheme/lists", {
           // that documented, real invariant rather than widening the contract's own DecodedReturn.
           return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
         }
-        return multiListMap(fn, lists as readonly AList[], runCtx);
+        return multiListMap(fn, lists as readonly AListAlike[], runCtx);
       },
     ),
     // R7RS 6.4 — for-each: like map but run for side effects, returning unspecified.
@@ -338,7 +345,7 @@ export default new EnvCapability("scheme/lists", {
       // ("can't convert improper list") rather than crashing on a non-iterable spread.
       function (this: CallCtx, fn: unknown, ...rest: unknown[]) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
-        const spread = listToArray(rest[rest.length - 1] as AList);
+        const spread = listToArray(rest[rest.length - 1] as AListAlike);
         // Seam-routed: `fn` is a callable VALUE (ANativeProcedure/lambda) now, not a bare fn.
         // applyCallback pins canBounce=false, so a Bounce never reaches here — the CallResult
         // narrows to value-or-promise.
@@ -354,11 +361,11 @@ export default new EnvCapability("scheme/lists", {
       // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
       // testable ceiling (see lists-contract-precision.test.ts).
       { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
-      (k: unknown, fill?: unknown): AList => {
+      (k: unknown, fill?: unknown): AListAlike => {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         // The default fill is #f — the flyweight ABool (Face split), not a raw JS false.
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
-        let result: AList = nil;
+        let result: AListAlike = nil;
         for (let i = 0; i < count; i++) {
           result = new APair(CONSTANT_CTX, value, result);
         }
@@ -460,7 +467,10 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
       (obj, list) => {
         let current: unknown = list;
-        TypeError.invariant(!isCircularList(list), "memv: circular list");
+        // `list` decodes to the honest `AListAlike` (ANil | APair) — isCircularList only
+        // accepts a Pair (an ANil head can never be circular), so the ANil arm short-circuits
+        // the check to `false`, matching the prior behavior exactly.
+        TypeError.invariant(!(list instanceof APair && isCircularList(list)), "memv: circular list");
         while (current instanceof APair) {
           if (eqv(current.car, obj)) return current;
           current = current.cdr;
@@ -474,7 +484,8 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
       (obj, alist) => {
         let current: unknown = alist;
-        TypeError.invariant(!isCircularList(alist), "assq: circular list");
+        // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
+        TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assq: circular list");
         while (current instanceof APair) {
           const pair = current.car;
           if (pair instanceof APair && pair.car === obj) return pair;
@@ -489,7 +500,8 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
       (obj, alist) => {
         let current: unknown = alist;
-        TypeError.invariant(!isCircularList(alist), "assv: circular list");
+        // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
+        TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
         while (current instanceof APair) {
           const pair = current.car;
           if (pair instanceof APair && eqv(pair.car, obj)) return pair;
@@ -513,9 +525,10 @@ export default new EnvCapability("scheme/lists", {
         // null` list → `unknown | false`), plus the optional binary comparator.
         type: "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
       },
-      (obj, list, compare = structuralEqual) => {
+      (obj, list, compare = defaultCompare) => {
         let current: unknown = list;
-        TypeError.invariant(!isCircularList(list), "member: circular list");
+        // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
+        TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
         while (current instanceof APair) {
           // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
           // SchemeBool post-L1 (a truthy JS object); route through is_false.
@@ -536,9 +549,10 @@ export default new EnvCapability("scheme/lists", {
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
       },
-      (obj, alist, compare = structuralEqual) => {
+      (obj, alist, compare = defaultCompare) => {
         let current: unknown = alist;
-        TypeError.invariant(!isCircularList(alist), "assoc: circular list");
+        // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
+        TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
         while (current instanceof APair) {
           const pair = current.car;
           // `compare` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
@@ -570,7 +584,13 @@ export default new EnvCapability("scheme/lists", {
           if (item instanceof ANil) {
             return acc;
           }
-          return concatPair(ctxOf(item), acc, item);
+          // concatPair's `Cdr extends AListAlike` bound is narrower than its actual behavior:
+          // its body embeds `b` as an opaque tail (`let result: AListAlike = b ?? nil`, then
+          // conses onto it — APair.ts) without ever inspecting its shape. append's own contract
+          // (z.array(z.value)) genuinely allows a non-list LAST argument (R7RS §6.4's improper-
+          // tail form), so `item` here can be a bare SchemeValue — the cast matches concatPair's
+          // real runtime contract, not just its (over-narrow) declared one.
+          return concatPair(ctxOf(item), acc, item as AListAlike);
         }, nil);
       },
     ),
@@ -606,7 +626,7 @@ export default new EnvCapability("scheme/lists", {
         // AExact resolves through valueOf), exactly as the bare `count < index` did.
         const idx = Number(index);
         if (obj instanceof APair) {
-          let node: APair<SchemeValue, SchemeValue> = obj;
+          let node = obj;
           let count = 0;
           while (count < idx) {
             const next = node.cdr;

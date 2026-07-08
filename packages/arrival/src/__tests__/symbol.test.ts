@@ -14,6 +14,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import * as arrival from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { APair } from "../values/primitives/APair.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
@@ -26,7 +27,10 @@ describe("symbol.native — scheme-identity, no validation", () => {
     const def = symbol.native`pair-id: identity on a pair`(
       { input: [z.pair], output: [z.pair] },
       (p) => {
-        expectTypeOf(p).toEqualTypeOf<APair>();
+        // z.pair is cons(value, value) where value is z.value (AValue codec). The decoded
+        // param type is `APair<AValue, AValue>` — AValue satisfies SchemeValue and preserves
+        // the withProvenance method signature (unlike `any`/`unknown`).
+        expectTypeOf(p).toEqualTypeOf<APair<AValue, AValue>>();
         return p;
       },
     );
@@ -50,7 +54,7 @@ describe("symbol.native — scheme-identity, no validation", () => {
   it("does NOT reject a value the identity schema wouldn't accept (no runtime validation)", () => {
     const def = symbol.native`as-is: passthrough`({ input: [z.pair], output: [z.pair] }, (p) => p);
     // A NON-Pair would fail a zod parse, but native never parses — it just runs.
-    const notAPair = { car: 1, cdr: 2 } as unknown as APair;
+    const notAPair = { car: 1, cdr: 2 } as unknown as APair<any, any>;
     expect(() => def.impl(notAPair)).not.toThrow();
   });
 });
@@ -237,7 +241,7 @@ describe("type inference (compile-time)", () => {
     symbol.rosetta`bad-rosetta: wrong impl`(
       { input: [z.string], output: [z.number] },
       // @ts-expect-error — impl receives a decoded string, not a Pair
-      (s: APair) => s as unknown as number,
+      (s: APair<any, any>) => s as unknown as number,
     );
     expect(true).toBe(true);
   });

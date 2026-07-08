@@ -50,7 +50,7 @@ import {
   rational_re,
 } from "../../values/primitives.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
-import type { AList, SchemeValue } from "../../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
 // Pack-local copy of the list->array helper `join` needs (lists.ts carries its
 // own copy — pack isolation forbids a cross-pack import), including the per-run
@@ -60,7 +60,9 @@ function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
     if (list instanceof ANil) {
       return [];
     }
-    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
+    // `list`'s declared param type is the wide `SchemeValue` (not `AListAlike`) — isCircularList
+    // only accepts a Pair, so narrow here; a non-Pair reaches the loop's own `ANil` invariant below.
+    invariant(!(list instanceof APair && isCircularList(list)), `${name}: can't convert a circular list`);
     // Heap meter off the operand's ctx (RunContext.ts).
     const meter = ctxOf(list).heapMeter;
     const result: SchemeValue[] = [];
@@ -266,7 +268,7 @@ export default new EnvCapability("scheme/strings", {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
-        let result: AList = nil;
+        let result: AListAlike = nil;
         for (let i = endIdx - 1; i >= startIdx; i--)
           result = new APair(CONSTANT_CTX, new ACharacter(CONSTANT_CTX, chars[i]), result);
         return result;

@@ -37,7 +37,7 @@ import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { Environment } from "../Environment.js";
 import { APair } from "./primitives/APair.js";
-import type { SchemeValue } from "./types.js";
+import type { AListAlike, SchemeValue } from "./types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
 
 /** Provenance ids on a value, sorted — `[]` for a non-AValue. Mirrors the
@@ -58,7 +58,7 @@ export type ShadowSkip =
  *  are recognised from the SURFACE head, before any expansion. */
 export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
   if (!(form instanceof APair)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
-  const head = (form as APair<any, any>).car;
+  const head = form.car;
   if (!(head instanceof ASymbol)) return null; // computed operator — fall through (classify stringifies it)
   const op = String(head.valueOf());
 
