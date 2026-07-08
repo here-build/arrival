@@ -201,38 +201,12 @@ export function isNumeric(value: unknown): value is ANumeric | number | bigint {
 // Type Checking Functions
 // ============================================================================
 
-export function isNativeNumber(n: unknown): n is number | bigint {
-  return typeof n === "number" || typeof n === "bigint";
-}
-
-export function isFloat(n: unknown): n is AInexact | number {
-  if (n instanceof AInexact) {
-    return true;
-  }
-  if (n instanceof AExact) {
-    return false;
-  }
-  return typeof n === "number" && n % 1 !== 0;
-}
-
 /**
  * Check if value is complex (has a non-zero imaginary part). arrival is reals-only,
  * so no representable value is ever complex — always #f. (Kept as a total guard so
  * callers don't need to special-case its removal.)
  */
 export function isComplex(_n: unknown): boolean {
-  return false;
-}
-
-/** Rational: exact with denom != 1. */
-export function isRational(n: unknown): n is AExact | { num: unknown; denom: unknown } {
-  if (n instanceof AExact) {
-    return n.denom !== 1n;
-  }
-  // Duck typing for legacy {num, denom} objects.
-  if (n && typeof n === "object" && "num" in n && "denom" in n) {
-    return true;
-  }
   return false;
 }
 
@@ -252,13 +226,6 @@ export function isInteger(n: unknown): n is AExact | bigint | number {
   return false;
 }
 
-/** Big integer = exact integer (denom 1n), or a raw bigint. */
-export function isBigInteger(n: unknown): n is AExact | bigint {
-  if (n instanceof AExact) {
-    return n.denom === 1n;
-  }
-  return typeof n === "bigint";
-}
 // ============================================================================
 // INTEROP BOUNDARIES
 // ============================================================================

@@ -135,22 +135,6 @@ export function is_applyable(o: unknown): boolean {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
 }
 
-export function is_instance(obj: unknown): boolean {
-  if (!obj) {
-    return false;
-  }
-  if (typeof obj !== "object") {
-    return false;
-  }
-  // __instance__ is read only for instances
-  const o = obj as { __instance__?: boolean };
-  if (o.__instance__) {
-    o.__instance__ = false;
-    return o.__instance__;
-  }
-  return false;
-}
-
 export const has_own_symbol = (obj: unknown, symbol: symbol): boolean =>
   obj !== null && typeof obj === "object" ? Object.hasOwn(obj, symbol) : false;
 

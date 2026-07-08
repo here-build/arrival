@@ -54,6 +54,3 @@ export const CYCLES = Symbol.for("arrival/cycles");
  * three packages and is intentionally out of scope here.
  */
 export const LOCATION = Symbol.for("__location__");
-
-/** Reserved prototype-chain marker. Currently unreferenced; kept for parity. */
-export const PROTOTYPE = Symbol.for("arrival/prototype");

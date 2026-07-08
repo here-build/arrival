@@ -92,7 +92,6 @@ export const int_re = make_type_re(gen_integer_re);
 export const int_bare_re = new RegExp(`^(?:${gen_integer_re("", "[0-9a-f]")})$`, "i");
 export const rational_bare_re = new RegExp(`^(?:${gen_rational_re("", "[0-9a-f]")})$`, "i");
 export const complex_bare_re = new RegExp(`^(?:${gen_complex_re("", "[0-9a-f]")})$`, "i");
-export const complex_bare_match_re = make_complex_match_re("", "[0-9a-fA-F]");
 // those constants need to be add as rules to the Lexer to work with vector literals
 export const parsable_contants = {
   // `#null` → nil (the empty list — JS null's Rosetta translation; no separate JS-null

@@ -1,5 +1,5 @@
 import { EOF } from "../values/primitives/EOF.js";
-import { is_function, is_instance, is_iterator } from "../values/value-guards.js";
+import { is_function, is_iterator } from "../values/value-guards.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -93,12 +93,6 @@ export function type(obj): string {
       if (obj instanceof value) {
         return key;
       }
-    }
-    if (is_instance(obj)) {
-      if (is_function(obj.typeOf)) {
-        return obj.typeOf();
-      }
-      return "instance";
     }
     if (obj.constructor) {
       if (obj.constructor[CLASS]) {

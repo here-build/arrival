@@ -9,7 +9,6 @@ export {
   has_own_symbol,
   is_false,
   is_function,
-  is_instance,
   is_iterator,
   is_native,
   is_nil,

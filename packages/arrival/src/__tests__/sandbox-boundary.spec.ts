@@ -6,7 +6,6 @@ import {
   accessHas,
   accessKeys,
   accessSet,
-  accessDelete,
   NOT_FOUND,
   markInteropBoundary,
   isInteropBoundary,
@@ -168,30 +167,6 @@ describe("Sandbox Boundary", () => {
     });
   });
 
-  describe("sandboxedDelete", () => {
-    it("deletes own properties", () => {
-      const obj: any = { name: "Alice" };
-      expect(accessDelete(obj, "name")).toBe(true);
-      expect("name" in obj).toBe(false);
-    });
-
-    it("returns false for missing properties", () => {
-      const obj: any = { name: "Alice" };
-      expect(accessDelete(obj, "missing")).toBe(false);
-    });
-
-    it("returns false for inherited properties (no-op)", () => {
-      const obj: any = { name: "Alice" };
-      expect(accessDelete(obj, "toString")).toBe(false);
-      // toString still works via prototype
-      expect(obj.toString).toBeInstanceOf(Function);
-    });
-
-    it("returns false for blocked properties", () => {
-      const obj: any = { name: "Alice" };
-      expect(accessDelete(obj, "constructor")).toBe(false);
-    });
-  });
 
   describe("markAsSandboxBoundary", () => {
     it("marks a class as a boundary", () => {

@@ -256,13 +256,6 @@ export function markInteropPrivate<T extends Function>(target: T, _context?: unk
 /** The `arrival` namespace surface for the decorator ergonomic — `@arrival.private`. */
 export const arrival = { private: markInteropPrivate };
 
-/**
- * Add a custom blocked property name.
- */
-export function blockPropertyName(name: string): void {
-  BLOCKED_PROPERTY_NAMES.add(name);
-}
-
 // ============================================================================
 // Sentinel Value
 // ============================================================================
