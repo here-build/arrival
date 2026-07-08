@@ -554,9 +554,12 @@ export default new EnvCapability("scheme/lists", {
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
         while (current instanceof APair) {
-          // `cmp` may be a user-supplied Scheme predicate whose result is a boxed
-          // SchemeBool post-L1 (a truthy JS object); route through is_false.
-          if (!is_false(compare(obj, current.car))) return current;
+          // `compare` is a callable VALUE when user-supplied (ANativeProcedure/ALambda), not
+          // a bare JS function — invoke it through the seam (`call_function`, the same
+          // chokepoint mapImpl/multiListMap use above), not a raw JS call (which throws
+          // "compare is not a function" on any boxed scheme procedure). Its result may be a
+          // boxed SchemeBool post-L1 (a truthy JS object); route through is_false.
+          if (!is_false(call_function(compare, [obj, current.car], {}))) return current;
           current = current.cdr;
         }
         return schemeFalse;
@@ -579,8 +582,10 @@ export default new EnvCapability("scheme/lists", {
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
         while (current instanceof APair) {
           const pair = current.car;
-          // `compare` may be a user-supplied Scheme predicate → boxed SchemeBool post-L1.
-          if (pair instanceof APair && !is_false(compare(obj, pair.car))) return pair;
+          // Same seam-routing as member above — `compare` is a callable VALUE when
+          // user-supplied, invoked via `call_function`, not a raw JS call. Its result may
+          // be a boxed SchemeBool post-L1 (a truthy JS object) → route through is_false.
+          if (pair instanceof APair && !is_false(call_function(compare, [obj, pair.car], {}))) return pair;
           current = current.cdr;
         }
         return schemeFalse;

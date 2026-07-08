@@ -38,11 +38,18 @@ export default new EnvCapability("scheme/core", {
     // special form has no env value, so a USER syntax-rules macro expanding to it could not
     // resolve. cond/case/when/unless stay evaluator SPECIAL FORMS (evalCond/… — TCO-correct,
     // unlike the nested-genRun syntax-rules path), now ALSO keywords so all control forms are
-    // uniformly first-class and reachable from macro templates. (let* / letrec / and / or
-    // follow as the remaining primitives are keyworded.)
+    // uniformly first-class and reachable from macro templates. let* / letrec / letrec* /
+    // and / or now follow, keyworded for the same hygiene reason: a syntax-rules template
+    // expanding to one of these (e.g. test-numeric-syntax's `(let* (…) …)`) renames the head
+    // to a gensym, and only a keyworded form has an env value for rename() to copy onto it.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
     let: symbol.keyword`let: bind locals over a body`,
+    "let*": symbol.keyword`let*: bind locals sequentially, each seeing the prior bindings`,
+    letrec: symbol.keyword`letrec: bind locals that may reference each other (mutual recursion)`,
+    "letrec*": symbol.keyword`letrec*: like letrec, but bindings are evaluated in order`,
+    and: symbol.keyword`and: evaluate left to right, short-circuiting on the first false`,
+    or: symbol.keyword`or: evaluate left to right, short-circuiting on the first true`,
     if: symbol.keyword`if: conditional — evaluate the consequent or the alternative`,
     begin: symbol.keyword`begin: evaluate a sequence, yield the last`,
     quote: symbol.keyword`quote: the datum, unevaluated`,

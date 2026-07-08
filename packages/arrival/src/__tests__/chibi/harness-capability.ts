@@ -118,7 +118,12 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
         ((and (number? a) (number? b))
          (if (and (exact? a) (exact? b))
              (equal? a b)
-             (< (abs (- a b)) (+ 1e-10 (* 1e-6 (max (abs a) (abs b)))))))
+             ;; Equal infinities first: (- +inf.0 +inf.0) is +nan.0, and (< +nan.0 _) is
+             ;; always #f, so the epsilon-diff below always "fails" two equal infinities
+             ;; even though they print identically. = compares infinities correctly
+             ;; (R7RS numeric equality), so route through it before the subtraction.
+             (or (= a b)
+                 (< (abs (- a b)) (+ 1e-10 (* 1e-6 (max (abs a) (abs b))))))))
         ((and (pair? a) (pair? b))
          (and (chibi-test-equal? (car a) (car b))
               (chibi-test-equal? (cdr a) (cdr b))))

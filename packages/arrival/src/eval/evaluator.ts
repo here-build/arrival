@@ -782,6 +782,16 @@ export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promis
   });
 }
 
+// A non-Error scheme value thrown (raw `raise`/`%raise`, R7RS §6.11 — ANY object is a
+// valid raised value) gets stringified into an `ArrivalError` by `failAndWrap` below
+// (`ArrivalError.cause` is typed `Error` — errors.ts — so a SchemeValue can't ride there).
+// This module-level side channel preserves the ORIGINAL raised value, keyed by the wrapper
+// instance, so `evalTry`'s catch/guard binding can recover the real object instead of a
+// printed re-presentation of it. Module-level (not per-`run()`-call) because `evalTry` reads
+// it from a DIFFERENT function than the one that populates it; a WeakMap so a never-caught
+// wrapper's raised value doesn't outlive it.
+const rawRaisedValues = new WeakMap<ArrivalError, SchemeValue>();
+
 // ============================================================================
 // Flat Trampoline Runner
 // ============================================================================
@@ -841,7 +851,17 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       }
     }
     if (error instanceof ArrivalError) throw error;
-    if (!(error instanceof Error)) throw new ArrivalError(String(error), frames, undefined);
+    if (!(error instanceof Error)) {
+      // R7RS `raise` accepts ANY scheme object (§6.11) — a native throw of a raw, non-Error
+      // value (e.g. `%raise` throwing a boxed APair) arrives here. `ArrivalError.cause` is
+      // typed `Error` (errors.ts), so the original SchemeValue can't ride there directly —
+      // stash it in the side channel below, keyed by the wrapper instance, so a `guard`/
+      // `catch` upstream (evalTry) can recover the ORIGINAL raised value instead of this
+      // stringified re-presentation (see rawRaisedValues' own doc comment).
+      const wrapped = new ArrivalError(String(error), frames, undefined);
+      rawRaisedValues.set(wrapped, error as SchemeValue);
+      throw wrapped;
+    }
     // A raw host-runtime throw is an INTERNAL defect (a native impl that skipped its
     // contract), not a user error. Name the innermost scheme frame's procedure and flag it
     // internal so it reads as an arrival bug to fix — never as a user mistake to explain. The
@@ -2709,31 +2729,41 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
       const catchResolver = ctxResolver(ctx).child("catch", "catch");
 
-      // Bind the error. Unwrap an ArrivalError to the original raised value;
-      // the catch path only ever surfaces host `Error`s here (a raised Scheme
-      // value arrives wrapped, and `ArrivalError.cause` is typed `Error`), so
-      // `caught` is an `Error`.
-      const caught: Error = caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
-      // Conformance + security: a raw host `Error` here would make `error-object?`
-      // return #f (non-conformant per §6.11) and leak host file paths (`.stack`/
-      // `.fileName` are OWN properties the membrane's fast path hands across). Every
-      // path re-presents to an `R7RSError` carrying only the message — the one Error
-      // subtype the SchemeValue union admits as a value.
-      //
-      // `R7RSError` is loaded LAZILY: a static top-of-module import would pull
-      // bridge's eager `set_interaction_env` into evaluator init and break the
-      // SchemePromise circular-init ordering. By the time a `try` body has thrown,
-      // every module is initialized, so the dynamic import resolves synchronously.
-      const { R7RSError } = await import("../errors.js");
-      const errorValue: SchemeValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
-      // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
-      // construction) plus any inherited `.cause`/`.fileName`. The membrane's
-      // own-property fast path would hand those host frames to Scheme code, so
-      // strip them — the message is the only datum a §6.11 handler needs.
-      const errObj = errorValue as { stack?: unknown; cause?: unknown; fileName?: unknown };
-      delete errObj.stack;
-      delete errObj.cause;
-      delete errObj.fileName;
+      // Bind the error. A `%raise` of a raw (non-Error) scheme value is stringified by the
+      // trampoline's `failAndWrap` (`rawRaisedValues`' own doc comment above `run()`) —
+      // recover the ORIGINAL raised value from that side channel when present, so a guard
+      // clause like `(assq 'a condition)` sees the real structure R7RS §6.11 promises (raise
+      // accepts ANY object), not a printed re-presentation of it.
+      const rawRaised = caughtError instanceof ArrivalError ? rawRaisedValues.get(caughtError) : undefined;
+      let errorValue: SchemeValue;
+      if (rawRaised !== undefined) {
+        errorValue = rawRaised;
+      } else {
+        // Unwrap an ArrivalError to the original raised value; the remaining catch path
+        // only ever surfaces host `Error`s here (error()/make-error-object already produce
+        // a real Error, and `ArrivalError.cause` carries it), so `caught` is an `Error`.
+        const caught: Error = caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
+        // Conformance + security: a raw host `Error` here would make `error-object?`
+        // return #f (non-conformant per §6.11) and leak host file paths (`.stack`/
+        // `.fileName` are OWN properties the membrane's fast path hands across). Every
+        // path re-presents to an `R7RSError` carrying only the message — the one Error
+        // subtype the SchemeValue union admits as a value.
+        //
+        // `R7RSError` is loaded LAZILY: a static top-of-module import would pull
+        // bridge's eager `set_interaction_env` into evaluator init and break the
+        // SchemePromise circular-init ordering. By the time a `try` body has thrown,
+        // every module is initialized, so the dynamic import resolves synchronously.
+        const { R7RSError } = await import("../errors.js");
+        errorValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
+        // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
+        // construction) plus any inherited `.cause`/`.fileName`. The membrane's
+        // own-property fast path would hand those host frames to Scheme code, so
+        // strip them — the message is the only datum a §6.11 handler needs.
+        const errObj = errorValue as { stack?: unknown; cause?: unknown; fileName?: unknown };
+        delete errObj.stack;
+        delete errObj.cause;
+        delete errObj.fileName;
+      }
       catchResolver.define(varName, errorValue);
 
       try {
