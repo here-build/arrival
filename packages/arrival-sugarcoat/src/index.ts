@@ -2,7 +2,7 @@
 //
 // A zero-dependency leaf (its own S-expr parser; only tiny-invariant). The classic↔sugarcoat view:
 // `schemeToSugarcoat` renders stored canonical scheme as a readable "sugarcoat" form (curly-infix, `=>`
-// lambda, colon kwargs, `??` coalesce); `sugarcoatToScheme`/`readSugarcoat` fold an edited sugarcoat view back.
+// lambda, colon kwargs); `sugarcoatToScheme`/`readSugarcoat` fold an edited sugarcoat view back.
 // Consumed by the studio editor toggle, codemirror, the chain-view compiler, sift's lowering, and
 // provenance region-label rendering — none of which need (or pull) the eval engine.
 

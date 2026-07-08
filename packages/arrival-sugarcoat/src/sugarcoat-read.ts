@@ -34,11 +34,9 @@ import {
 const GLYPH_OP: Record<string, string> = { "==": "equal?", "&&": "and", "||": "or" };
 const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 
-// glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>` loosest;
-// `??` (null-coalescing) ≈ `||`.
+// glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>` loosest.
 const GLYPH_PREC: Record<string, number> = {
   "=>": 0,
-  "??": 1,
   "||": 1,
   "&&": 2,
   "==": 3,
@@ -61,15 +59,6 @@ const GLYPH_PREC: Record<string, number> = {
   remainder: 5,
 };
 const isOp = (w: string): boolean => w in GLYPH_PREC;
-
-const atom2 = (w: string): Node => ({ atom: w });
-/** `{a ?? b}` → (if a a b); right-folds a chain `{a ?? b ?? c}` → (if a a (if b b c)). */
-function coalesceNode(ops: Node[]): Node {
-  // ops is always a non-empty `??` chain (≥1 operand) — `.at(-1)` is the seed.
-  let acc: Node = ops.at(-1)!;
-  for (let i = ops.length - 2; i >= 0; i--) acc = { list: [atom2("if"), ops[i]!, ops[i]!, acc] };
-  return acc;
-}
 
 const LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
 const isAtomNode = (n: Node): n is { atom: string; str?: boolean } => "atom" in n;
@@ -607,9 +596,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       left =
         glyph === "=>"
           ? { list: [atom("lambda"), operands[0], operands[1]] }
-          : glyph === "??"
-            ? coalesceNode(operands)
-            : { list: [atom(opOf(glyph)), ...operands] };
+          : { list: [atom(opOf(glyph)), ...operands] };
     }
     return left;
   }

@@ -1,7 +1,7 @@
 {
   "name": "@here.build/arrival-sugarcoat",
   "version": "0.1.0",
-  "description": "Sugarcoat lens for Arrival — classic↔sugarcoat scheme-source rendering (SRFI-105 curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, ?? coalesce). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
+  "description": "Sugarcoat lens for Arrival — classic↔sugarcoat scheme-source rendering (indentation I-expressions, curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, at-expressions). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
   "keywords": [
     "arrival",
     "s-expressions",

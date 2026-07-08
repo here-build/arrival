@@ -732,9 +732,6 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (isArrowLambda(items)) {
     return `{${inlineSugarcoat(items[1], o)} => ${inlineArrowBody(items[2], o)}}`;
   }
-  if (isCoalesce(nd)) {
-    return `{${infixOperand(items[1], 1, o)} ?? ${infixOperand(items[3], 1, o)}}`;
-  }
   // postfix chain (§4.3 + §5 gate): accessor/key subscripts (`(car X)`→`X[0]`,
   // `(:k X)`→`X[:k]`, `(@ X k)`→`X[k]`) and method dots (`(map Λ xs)`→`xs.map{…}`,
   // `(g (f x))`→`x.f.g`), unified — emit iff ≥2 steps or a single accessor/key/
@@ -776,17 +773,6 @@ const isCondForm = (nd: Node): boolean =>
 /** `(string-append …)` — see STRING_APPEND_WIDTH. Granted the wider inline budget. */
 const isStringAppend = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length > 0 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "string-append";
-
-/** `(if X X Y)` (cond ≡ then) — the null-coalescing pattern, rendered `{X ?? Y}`.
- *  Pure sugarcoat sugar over the if-pattern (no stored macro); reads back to (if X X Y),
- *  preserving its eval-twice semantics. `??` precedence ≈ `||`. */
-const isCoalesce = (nd: Node): boolean =>
-  !isAtom(nd) &&
-  nd.list.length === 4 &&
-  isAtom(nd.list[0]) &&
-  !nd.list[0].str &&
-  nd.list[0].atom === "if" &&
-  nodeEq(nd.list[1], nd.list[2]);
 
 const LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
 const isBindingShaped = (nd: Node): boolean => !isAtom(nd) && nd.list.length === 2 && isAtom(nd.list[0]);
@@ -854,8 +840,6 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // reads back as X, not (X) — so keep it inline even past the width budget
   // (e.g. a single long `let` binding `((cls (map …)))`). Round-trip > width here.
   if (items.length === 1) return flat;
-
-  if (isCoalesce(nd)) return inlineSugarcoat(nd, o); // keep `{X ?? Y}`, never break as an `if`
 
   // let-family with elidable bindings: `let*` ⏎ each binding `name` ⏎ `value` ⏎ body.
   // The `(( ))` is dropped in the view; the reader re-groups leading binding-shaped
