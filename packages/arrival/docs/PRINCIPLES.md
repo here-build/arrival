@@ -136,6 +136,20 @@ codec encode/decode arms re-describing what classes already know.
 vector serializes; codecs with hand-written transform bodies for representation (contract
 refinement — ranges, arity, element types — is the codec's real job and stays).
 
+*Corollary — the key taxonomy (ruled 2026-07-09, RULINGS.md).* Protocol keys come in three
+roles, one mechanism each, never mixed:
+- **Algebra instruction keys** (`arrival/tagless-final/*`, `arrival/toJS`, `arrival/print`,
+  `arrival/class`) are STRINGS — every static interpreter (type lens, oracle, lineage
+  classifier, trace, MCP harvest) consumes instruction names as data (P0's N-interpreter
+  clause); symbols would privilege the runtime pair.
+- **Capability brands** (INTEROP_BOUNDARY) are MODULE-LOCAL symbols, never `Symbol.for` — a
+  registry symbol is forgeable from any code and a forged brand is an escape vector.
+- **Metadata slots** (LOCATION, CYCLES, REF, DATA) are `Symbol.for` — enumeration-invisible
+  (reader metadata never leaks into user-shaped data) and stable across duplicate module
+  instances, which is what registry symbols uniquely buy.
+The string-forgery hazard (a borrowed JSON object carrying a literal `arrival/*` key) is the
+membrane's duty: a foreign value's own data key is DATA, never protocol — an F3 law row.
+
 **P8. One algebra, every carrier** *(corollary of P0)*.
 A term has ONE semantics across all representations: if `map` preserves element boxes on a
 Pair, it preserves them on a Vector and a borrowed AJSArray. This is not uniformity
