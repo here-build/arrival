@@ -39,6 +39,7 @@ import { AValue, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
+import { AString } from "../../values/primitives/AString.js";
 import { Values } from "../../values/primitives/Values.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
 import {
@@ -913,19 +914,23 @@ const exactFn = (z: unknown): AExact => {
   return new AExact(inexact.ctx, num / g, scale / g);
 };
 
-const numberToStringFn = (z: unknown, radix?: unknown): string => {
+// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc above for why a raw
+// return would crash `exec`'s uniform plain-JS exit. Carries the union of the
+// operand(s)' own provenance (the `nativeNumericOp`/`applyNumeric` convention this
+// direct-bound native otherwise bypasses).
+const numberToStringFn = (z: unknown, radix?: unknown): AString => {
   const n = coerceNumeric(z);
-  const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
+  const radixArg = radix === undefined ? undefined : coerceNumeric(radix);
+  const base = radixArg === undefined ? 10 : Number(radixArg.valueOf());
+  let s: string;
   if (n instanceof AExact) {
-    if (n.denom === 1n) return n.num.toString(base);
-    return `${n.num.toString(base)}/${n.denom.toString(base)}`;
+    s = n.denom === 1n ? n.num.toString(base) : `${n.num.toString(base)}/${n.denom.toString(base)}`;
+  } else {
+    // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
+    s = base === 10 ? n.toString() : n.real.toString(base);
   }
-  const inexact = n;
-  // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
-  if (base === 10) {
-    return inexact.toString();
-  }
-  return inexact.real.toString(base);
+  const provenance = unionProvenance(radixArg === undefined ? [n] : [n, radixArg]);
+  return new AString(n.ctx, s, provenance);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1111,10 +1116,15 @@ const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   output: [z.exact],
 };
 
-/** `number->string` — `(z: unknown, radix?: unknown) => string` (a RAW JS string, not a
- *  boxed AString — matches `z.string`'s DECODED type exactly; see the codec-bridge note
- *  on `Bool`/`z.boolean` above for why the codec's boxed INPUT side is inert here too).
- *  Both `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
+/** `number->string` — `(z: unknown, radix?: unknown) => AString` (boxed, carrying the
+ *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier now calls
+ *  `toJS` on every result, which strict-doors a raw, never-boxed value; a native
+ *  returning bare JS here would crash any top-level `(number->string …)` call the
+ *  instant it reached the uniform exit, not just this one test). The `z.string`
+ *  contract's DECODED type is still `string` (unchanged: it names what the value
+ *  represents, not the native's own return shape — same as every other native in
+ *  this file). Both `z`/`radix` are `z.schemeNumber` — `numberToStringFn`
+ *  `coerceNumeric`s each. */
 const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber.optional()],
   output: [z.string],

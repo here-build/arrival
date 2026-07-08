@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { parse } from "../reader/parse.js";
 import { isDictLiteralNode } from "../values/dict-literal.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -105,8 +105,12 @@ for (const file of corpusFiles) {
             const datums = await parse(c.input);
             return renderAst(datums.at(-1));
           }
-          const results = await exec(c.input);
-          return toJson(results.at(-1));
+          // execState (COMPLEX tier): `toJson`'s canonicalization discriminates by BOXED
+          // type (ASymbol vs AString vs AExact, …) — a boxed-state concern (RULINGS.md
+          // R1), not the SIMPLE tier's plain-JS exit (whose apostrophe-prefixed symbol
+          // string is indistinguishable from a real string starting with `'`).
+          const { values } = await execState(c.input);
+          return toJson(values.at(-1));
         };
         if (c.expect.error !== undefined) {
           let failed: unknown = undefined;

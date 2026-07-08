@@ -22,7 +22,7 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import {
   INTEROP_BOUNDARY,
@@ -411,7 +411,10 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     inferenceEnv.set("__cyc_a", jsToScheme(CONSTANT_CTX, a));
     inferenceEnv.set("__cyc_b", jsToScheme(CONSTANT_CTX, b));
 
-    const [result] = await exec("(equal? __cyc_a __cyc_b)", { env: inferenceEnv });
+    // execState (COMPLEX tier): the test name asserts the BOXED `#f` verdict
+    // specifically (RULINGS.md R1) — `exec`'s plain-JS exit would give the raw
+    // `false` this test is explicitly distinguishing itself from.
+    const [result] = (await execState("(equal? __cyc_a __cyc_b)", { env: inferenceEnv })).values;
     expect(String(result)).toBe("#f");
   });
 });

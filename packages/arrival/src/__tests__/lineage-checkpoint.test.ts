@@ -15,7 +15,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge.js";
 import { parse } from "../eval/generator-exec.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage.js";
@@ -57,7 +57,8 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
     env.set("b", sStr("b", 101));
     env.set("c", sStr("c", 102));
 
-    const [r] = await exec(`(length (list a b c))`, { env });
+    // execState (COMPLEX tier): `provOf` reads BOXED provenance (RULINGS.md R1).
+    const [r] = (await execState(`(length (list a b c))`, { env })).values;
     const eager = provOf(r);
 
     // Static skeleton (no eval) + leaf provenances read from the env = "runtime stamping".
@@ -96,7 +97,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
     }
     // MINTED (R2's constructor verb): `list` unions all N args' own provenance onto the
     // produced head (env/r7rs/lists.ts) — genuinely O(N) container-level provenance.
-    const [r] = await exec(`(length (list ${names.join(" ")}))`, { env });
+    const [r] = (await execState(`(length (list ${names.join(" ")}))`, { env })).values;
     return provOf(r).length; // the count's retained provenance set size
   }
 
@@ -132,7 +133,7 @@ describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-o
       false,
     );
     env.set("xs", xs);
-    const [r] = await exec(`(length (map (lambda (e) e) xs))`, { env });
+    const [r] = (await execState(`(length (map (lambda (e) e) xs))`, { env })).values;
     return provOf(r).length;
   }
 

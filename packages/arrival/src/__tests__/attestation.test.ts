@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import * as z from "../common/scheme-zod.js";
 import { symbol } from "../common/symbol.js";
 import { attest, attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
@@ -37,7 +37,8 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
     expect(isAttested(attest(theVoid))).toBe(false);
     expect(isAttested(attest(schemeTrue))).toBe(false);
     expect(isAttested(attest(schemeFalse))).toBe(false);
-    const [kw] = await exec("(quote some-symbol)");
+    // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
+    const [kw] = (await execState("(quote some-symbol)")).values;
     expect(kw).toBeInstanceOf(ASymbol);
     expect(isAttested(attest(kw))).toBe(false);
     // non-AValues are a no-op, never a throw
@@ -113,7 +114,9 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a pair spine + leaves (car/cdr on a source return are attested STORED boxes)", async () => {
-    const [pair] = await exec("'(1 2 3)");
+    // execState (COMPLEX tier): `echo.run` is a rosetta expecting a real boxed
+    // AValue input (RULINGS.md R1) — `exec`'s plain-JS exit would fail its decode.
+    const [pair] = (await execState("'(1 2 3)")).values;
     const out = (await echo.run(pair)) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
@@ -123,7 +126,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a vector's stored elements", async () => {
-    const [vec] = await exec("#(1 2)");
+    const [vec] = (await execState("#(1 2)")).values;
     const out = (await echo.run(vec)) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);
@@ -140,7 +143,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
 describe("attestDeep", () => {
   it("walks a mixed spine and skips the exempt singletons", async () => {
-    const [pair] = await exec("'(1 #(2 3))");
+    const [pair] = (await execState("'(1 #(2 3))")).values;
     attestDeep(pair);
     const p = pair as APair<any, APair<AVector, any>>;
     expect(isAttested(p)).toBe(true);

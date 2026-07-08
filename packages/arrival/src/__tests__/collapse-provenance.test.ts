@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { collapseProvenance } from "../provenance-collapse.js";
 import { initBridge } from "../bridge.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -66,7 +66,8 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
     const env = inferenceEnv.inherit("collapse-prov-join");
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
-    const [r] = await exec(`(join "," (list a b))`, { env });
+    // execState (COMPLEX tier): asserts box discipline + provenance (RULINGS.md R1).
+    const [r] = (await execState(`(join "," (list a b))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
     expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);
   });
@@ -76,7 +77,7 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
     const env = inferenceEnv.inherit("collapse-prov-append");
     env.set("a", stamped("alpha", 1));
     env.set("b", stamped("beta", 2));
-    const [r] = await exec(`(string-append "x:" (join "," (list a b)))`, { env });
+    const [r] = (await execState(`(string-append "x:" (join "," (list a b)))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
     expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);
   });

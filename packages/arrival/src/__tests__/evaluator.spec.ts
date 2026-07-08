@@ -611,7 +611,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // stack size exceeded"). With tail-call collapse + the bounce protocol
       // the loop iterates flat, so 10k completes cleanly.
       const [, result] = await execSource("(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop 10000)");
-      expect(String(result)).toBe("done");
+      // `execSource` (generator-exec `exec`, RULINGS.md R1) is the SIMPLE-tier
+      // plain-JS exit: a symbol's toJS is apostrophe-prefixed (ASymbol's
+      // documented, deferred opaque-exit marker — two-tier-exec-api.md §9).
+      expect(String(result)).toBe("'done");
     }, 15000);
   });
 });

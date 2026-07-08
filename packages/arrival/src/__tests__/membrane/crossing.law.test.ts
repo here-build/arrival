@@ -2,22 +2,24 @@
  * LAW F3 — the membrane converts everything, once, uniformly (P4/P5/P9).
  *
  * Driven entirely by _tables/crossings.ts: entry form, exit form (ONE convention
- * column — R1-gated), round-trip promise. Plus the violation table: every
+ * column — R1-RULED), round-trip promise. Plus the violation table: every
  * forbidden crossing throws its teaching door.
  *
  * BODY PHASE: titles stay data-driven off the table (row.entryForm / row.exitForm /
  * row.roundTrip decide the TEXT); bodies are per-row because the table doesn't carry
- * a sample JS value. The exitForm column is still "R1-PENDING" on every boxed-type
- * row — those exit cells stay `it.todo` (bodies land after V's exit-convention
- * ruling; filling one now would re-pin one side of the P4 contradiction). Everything
- * else (entry, round-trip, provenance) is fillable today and doesn't depend on that
- * ruling — provenance-stripping on exit is universal regardless of what shape the
- * final exit convention takes.
+ * a sample JS value. RULINGS.md R1 (two-tier-exec-api.md) settled the scalar exit
+ * convention — `exec`'s SIMPLE tier fully unwraps via `toJS`, so the boolean/
+ * safe-int/float/bigint/string exit cells are now live, asserted against REAL
+ * `exec` output (end-to-end through the parser/evaluator, not just `toJS` directly
+ * — the other cells in this file already exercise `toJS` in isolation). The
+ * registered-symbol exit cell stays `it.todo` — ASymbol's opaque-exit mapping is
+ * still design-pending (two-tier-exec-api.md §9), unrelated to this ruling.
  */
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../laws/_tables/crossings.js";
 import { fromJS, toJS, isSchemeValue } from "../../membrane.js";
 import { jsToScheme, schemeToJs } from "../../rosetta.js";
+import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../../membrane-warn.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { ABool } from "../../values/primitives/ABool.js";
@@ -60,10 +62,9 @@ const exitJS = (entered: unknown): unknown => toJS(entered as SchemeValue);
 
 describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, row) => {
   const entryTitle = `entry (JS→scheme): becomes ${row.entryForm}`;
-  const exitTitle =
-    row.exitForm === "R1-PENDING"
-      ? "exit (scheme→JS): single exit convention [RULING-GATED: R1]"
-      : `exit (scheme→JS): becomes ${row.exitForm}`;
+  // R1 (RULINGS.md) settled the single exit convention — every row's exitForm is
+  // now the ruled text, no "gated" placeholder branch needed.
+  const exitTitle = `exit (scheme→JS): becomes ${row.exitForm}`;
   const roundTripTitle = row.roundTrip
     ? "round-trip: exact (promised, tested as a law — P9)"
     : "one-way: total honest projection, no reconstruction markers (P9)";
@@ -76,7 +77,13 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(ABool);
         expect((entered as ABool).valueOf()).toBe(true);
       });
-      it.todo(exitTitle); // R1-PENDING
+      it(exitTitle, async () => {
+        // REAL exec output, end-to-end (RULINGS.md R1) — the SIMPLE tier's plain-JS exit.
+        const [t] = await exec("#t");
+        const [f] = await exec("#f");
+        expect(t).toBe(true);
+        expect(f).toBe(false);
+      });
       it(roundTripTitle, () => {
         expect(exitJS(fromJS(true))).toBe(true);
         expect(exitJS(fromJS(false))).toBe(false);
@@ -96,7 +103,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(AExact);
         expect((entered as AExact).num).toBe(42n);
       });
-      it.todo(exitTitle); // R1-PENDING
+      it(exitTitle, async () => {
+        const [n] = await exec("42");
+        expect(n).toBe(42);
+        expect(typeof n).toBe("number");
+      });
       it(roundTripTitle, () => {
         expect(exitJS(fromJS(42))).toBe(42);
       });
@@ -115,7 +126,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(AInexact);
         expect((entered as AInexact).real).toBe(3.14);
       });
-      it.todo(exitTitle); // R1-PENDING
+      it(exitTitle, async () => {
+        const [n] = await exec("3.14");
+        expect(n).toBe(3.14);
+        expect(typeof n).toBe("number");
+      });
       it(roundTripTitle, () => {
         expect(exitJS(fromJS(3.14))).toBe(3.14);
       });
@@ -134,7 +149,16 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(AExact);
         expect((entered as AExact).num).toBe(10n);
       });
-      it.todo(exitTitle); // R1-PENDING
+      it(exitTitle, async () => {
+        // In-range: exits as a plain JS number — no bigint tag survives.
+        const [inRange] = await exec("10");
+        expect(inRange).toBe(10);
+        expect(typeof inRange).toBe("number");
+        // Out-of-range: a real bigint, not a lossy Number() cast or a marker object.
+        const [huge] = await exec("12345678901234567890");
+        expect(typeof huge).toBe("bigint");
+        expect(huge).toBe(12345678901234567890n);
+      });
       it(`${roundTripTitle} — normalizes to number in-range`, () => {
         // In-range: the exact integer surfaces as a plain JS number — no bigint tag survives.
         const inRange = exitJS(fromJS(10n));
@@ -162,7 +186,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(AString);
         expect((entered as AString).valueOf()).toBe("hello");
       });
-      it.todo(exitTitle); // R1-PENDING
+      it(exitTitle, async () => {
+        const [s] = await exec('"hello"');
+        expect(s).toBe("hello");
+        expect(typeof s).toBe("string");
+      });
       it(roundTripTitle, () => {
         expect(exitJS(fromJS("hello"))).toBe("hello");
       });
@@ -238,7 +266,10 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(ASymbol);
         expect((entered as ASymbol).__name__).toBe(":test");
       });
-      it.todo(exitTitle); // R1-PENDING
+      // Not R1-gated (R1 is settled) — ASymbol's opaque-exit mapping is its OWN
+      // deferred design (two-tier-exec-api.md §9, R1-doc'd separately); filling
+      // this now would invent that unrelated decision.
+      it.todo(exitTitle);
       it(`${roundTripTitle} — a symbol exits as a string, never the original JS Symbol`, () => {
         const out = exitJS(fromJS(Symbol.for("test")));
         expect(typeof out).toBe("string");
@@ -430,6 +461,14 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(out).toEqual([1, 2, 3]);
         expect(JSON.stringify(out)).toBe("[1,2,3]");
       });
+      it(`${exitTitle} — via REAL exec output`, async () => {
+        // Not just a synthetic toJS(hand-built-APair) call — a real parsed/evaluated
+        // program's exec() result (RULINGS.md R1's actual end-to-end contract).
+        const [out] = await exec("(list 1 2 3)");
+        expect(Array.isArray(out)).toBe(true);
+        expect(out).toEqual([1, 2, 3]);
+        expect(JSON.stringify(out)).toBe("[1,2,3]");
+      });
       it(roundTripTitle, () => {
         const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)]);
         const out = toJS(list);
@@ -452,6 +491,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it(exitTitle, () => {
         const dotted = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
         expect(toJS(dotted)).toEqual([1, 2]);
+      });
+      it(`${exitTitle} — via REAL exec output`, async () => {
+        const [out] = await exec("(cons 1 2)");
+        expect(Array.isArray(out)).toBe(true);
+        expect(out).toEqual([1, 2]);
       });
       it(`${roundTripTitle} — no {__dotted__} escape shape`, () => {
         const dotted = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
@@ -483,6 +527,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(JSON.stringify(out)).toBe('[1,"two",3]');
         expect([...(out as unknown[])]).toEqual([1, "two", 3]); // spread/iteration
       });
+      it(`${exitTitle} — via REAL exec output`, async () => {
+        const [out] = await exec('#(1 "two" 3)');
+        expect(Array.isArray(out)).toBe(true);
+        expect(out).toEqual([1, "two", 3]);
+        expect(JSON.stringify(out)).toBe('[1,"two",3]');
+      });
       it(roundTripTitle, () => {
         const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
         const out = toJS(vec) as object;
@@ -511,6 +561,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(JSON.stringify(out)).toBe('{"a":1,"b":"two"}');
         expect(Object.keys(out as object)).toEqual(["a", "b"]);
         expect({ ...(out as object) }).toEqual({ a: 1, b: "two" }); // spread
+      });
+      it(`${exitTitle} — via REAL exec output`, async () => {
+        const [out] = await exec('(dict "a" 1 "b" "two")');
+        expect(Array.isArray(out)).toBe(false);
+        expect(out).toEqual({ a: 1, b: "two" });
+        expect(JSON.stringify(out)).toBe('{"a":1,"b":"two"}');
       });
       it(roundTripTitle, () => {
         const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n)]]);

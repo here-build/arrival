@@ -72,7 +72,11 @@ const INVERSIONS: readonly LedgerRow[] = [
   { id: "defineRosetta legacy arm authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
   { id: "bare-fn env.set harness wiring", gate: "reverse-membrane", replacedBy: "EnvCapability-wired fixtures" },
   { id: "z.procedure region-free callbacks", gate: "region-discipline", replacedBy: "membrane/region" },
-  { id: "boolean raw exit via op-helpers short-circuit", gate: "R1", replacedBy: "membrane/crossing exit column" },
+  // "boolean raw exit via op-helpers short-circuit" RETIRED (R1 landed,
+  // two-tier-exec-api.md §8 step 4): `exec`'s uniform plain-JS exit + the R8 mint
+  // (step 2) together mean every predicate/comparison result is boxed BEFORE the
+  // uniform unwrap — see membrane/crossing.law.test.ts's boolean exit row (now
+  // plain `it()`, asserted against real `exec` output).
 ] as const;
 
 // The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's

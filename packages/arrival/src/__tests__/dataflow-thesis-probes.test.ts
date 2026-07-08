@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { initBridge } from "../bridge.js";
 import { AString } from "../values/primitives/AString.js";
@@ -26,7 +26,7 @@ describe("PROBE — DROP: does (length (map f xs)) compute f today?", () => {
     const env = inferenceEnv.inherit("probe-drop-baseline");
     let calls = 0;
     env.defineRosetta("ftick", { fn: (x: unknown) => (calls++, x) });
-    const [n] = await exec(`(length (map ftick (list 1 2 3 4 5)))`, { env });
+    const [n] = (await execState(`(length (map ftick (list 1 2 3 4 5)))`, { env })).values;
     expect(Number(n)).toBe(5);
     expect(calls).toBe(5); // eager: f ran for every element even though length ignores the values
   });
@@ -36,7 +36,7 @@ describe("PROBE — DROP: does (length (map f xs)) compute f today?", () => {
     const env = inferenceEnv.inherit("probe-drop-target");
     let calls = 0;
     env.defineRosetta("ftick", { fn: (x: unknown) => (calls++, x) });
-    const [n] = await exec(`(length (map ftick (list 1 2 3 4 5)))`, { env });
+    const [n] = (await execState(`(length (map ftick (list 1 2 3 4 5)))`, { env })).values;
     expect(Number(n)).toBe(5);
     expect(calls).toBe(0); // flips to passing when the flip defers the map and length reads the cheap count
   });
@@ -55,7 +55,8 @@ describe("PROBE — ATTRIBUTION: does a count's provenance depend on which eleme
     env.set("a", stamped("a", ids[0]));
     env.set("b", stamped("b", ids[1]));
     env.set("c", stamped("c", ids[2]));
-    const [n] = await exec(`(length (list a b c))`, { env });
+    // execState (COMPLEX tier): `provOf` reads BOXED provenance (RULINGS.md R1).
+    const [n] = (await execState(`(length (list a b c))`, { env })).values;
     expect(Number(n)).toBe(3);
     return provOf(n);
   }

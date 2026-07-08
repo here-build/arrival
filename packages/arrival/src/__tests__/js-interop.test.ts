@@ -29,17 +29,16 @@ describe("JS-interop: numbers", () => {
     expect(`${n}`).toBe("3");
   });
 
-  // [P15] FLIP-TO-FAILS (docs/test-invariant-atlas/verdicts/provenance.md, membrane.md):
-  // this used to pin the current-broken BigInt-throw plain green ("documented current
-  // behavior") — the test's own old comment even said "when fixed this stops throwing
-  // and the test goes red," which is exactly what `it.fails` exists for. The body now
-  // asserts the IDEAL behavior (matches this file's own convention, see header).
-  it.fails("exact numbers SHOULD JSON.stringify to their value (BROKEN: BigInt-backed throws)", async () => {
+  // PROMOTED (RULINGS.md R1, two-tier-exec-api.md §8 step 4): `exec`'s uniform
+  // plain-JS exit landed — a safe-int result is a bare JS number now, no BigInt
+  // backing to throw on. The it.fails gap this row named is closed.
+  it("exact numbers SHOULD JSON.stringify to their value", async () => {
     const n = await one("(+ 1 2)");
     expect(JSON.stringify(n)).toBe("3");
   });
 
-  it.fails("inexact numbers SHOULD JSON.stringify to their value (BROKEN: leaks {provenance,kind,real,imag})", async () => {
+  // PROMOTED (same landing): a bare JS float, no boxed {provenance,kind,real,imag} leak.
+  it("inexact numbers SHOULD JSON.stringify to their value", async () => {
     const n = await one("(+ 1.5 0.5)");
     expect(JSON.stringify(n)).toBe("2");
   });
@@ -57,32 +56,38 @@ describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)
     expect(JSON.stringify(String(s))).toBe('"abc"');
   });
 
-  // R8 mint (RULINGS.md R8, two-tier-exec-api.md §6) landed: op-helpers.mintVerdict
-  // replaced the empty-provenance raw-JS-boolean fast path that used to make an
-  // unstamped `(< 1 2)` exit `exec()` as a bare `true` — every boolean verdict now
-  // boxes uniformly (ABool), matching every other value's boxed exit (P4). Natural
-  // JS-boolean auto-unwrap returns once the SIMPLE exec tier maps `toJS` over the
-  // exit (two-tier-exec-api.md §8 step 4, R1 — a later, separate migration step).
-  it("booleans come back BOXED (ABool) — R8 uniform mint, not the old raw-JS-boolean escape", async () => {
+  // INVERTED (RULINGS.md R1, two-tier-exec-api.md §8 step 4): the SIMPLE exec tier
+  // now maps `toJS` over every result — R8's uniform ABool mint (step 2) still boxes
+  // every verdict INSIDE the membrane, but `exec`'s plain-JS exit unwraps it before
+  // it reaches the caller, same as every other scalar. Natural JS-boolean auto-unwrap
+  // is back (this is what the step-2-era comment above named as "a later, separate
+  // migration step" — this is that step).
+  it("booleans come back as plain JS booleans — R1's uniform plain-JS exit", async () => {
     const lt = await one("(< 1 2)");
-    expect(lt).toBeInstanceOf(ABool);
-    expect((lt as ABool).valueOf()).toBe(true);
+    expect(lt).not.toBeInstanceOf(ABool);
+    expect(lt).toBe(true);
     const gt = await one("(< 2 1)");
-    expect((gt as ABool).valueOf()).toBe(false);
+    expect(gt).toBe(false);
   });
 });
 
 describe("JS-interop: characters", () => {
-  it.fails("char SHOULD coerce to the JS char (BROKEN: stringifies to the Scheme literal '#\\\\a')", async () => {
+  // PROMOTED (RULINGS.md R1): ACharacter's toJS is the raw char — `exec`'s plain-JS
+  // exit hands back "a" directly, not the boxed `.toString()` write-form "#\\a".
+  it("char SHOULD coerce to the JS char", async () => {
     const ch = await one("#\\a");
     expect(String(ch)).toBe("a");
   });
 });
 
 describe("JS-interop: symbols", () => {
-  it("symbol coerces to its name in a template literal", async () => {
+  // REBASELINED (RULINGS.md R1): ASymbol's toJS is apostrophe-prefixed (its own
+  // deferred opaque-exit marker — two-tier-exec-api.md §9, unchanged by this
+  // migration) — `exec`'s plain-JS exit hands back "'foo", not the boxed
+  // `.toString()`'s bare "foo".
+  it("symbol coerces to its apostrophe-prefixed name in a template literal", async () => {
     const sym = await one("'foo");
-    expect(`${sym}`).toBe("foo");
+    expect(`${sym}`).toBe("'foo");
   });
 
   it.fails("schemeToJs(symbol) SHOULD unwrap to a string (BROKEN: returns the internal struct)", async () => {
@@ -100,9 +105,10 @@ describe("JS-interop: lists (Pair)", () => {
     expect(count).toBe(3);
   });
 
-  // [P15] FLIP-TO-FAILS (same root cause + pattern as the exact-number BigInt row
-  // above): pinned the current-broken throw plain green; body now asserts the ideal.
-  it.fails("JSON.stringify(list) SHOULD serialize the list (BROKEN: BigInt elements throw)", async () => {
+  // PROMOTED (RULINGS.md R1 + R9): the list egresses as a lazy array proxy over
+  // plain-number elements — JSON.stringify materializes and serializes it cleanly,
+  // no BigInt-backed element to throw on. The it.fails gap this row named is closed.
+  it("JSON.stringify(list) SHOULD serialize the list", async () => {
     const lst = await one("(list 1 2 3)");
     expect(JSON.stringify(lst)).toBe("[1,2,3]");
   });

@@ -14,7 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -40,7 +40,8 @@ describe("string-contains? — boolean predicate", () => {
     await initBridge();
     const env = inferenceEnv.inherit("string-contains-pred-prov");
     env.set("name", stamped("Alloy.exe", 7));
-    const [r] = await exec('(string-contains? name "Alloy")', { env });
+    // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
+    const [r] = (await execState('(string-contains? name "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
   });
@@ -50,7 +51,7 @@ describe("string-contains — SRFI-13 index-or-#f", () => {
   it("returns the index of the first occurrence", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("string-contains-idx");
-    const [r] = await exec('(string-contains "abcAlloy" "Alloy")', { env });
+    const [r] = (await execState('(string-contains "abcAlloy" "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AExact);
     expect(js(r)).toBe(3);
   });

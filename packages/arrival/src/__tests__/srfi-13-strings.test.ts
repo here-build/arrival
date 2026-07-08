@@ -16,7 +16,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
@@ -33,6 +33,16 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
   const env = inferenceEnv.inherit(`srfi-13-${seq++}`);
   for (const [k, v] of Object.entries(bindings)) env.set(k, v);
   const [r] = await exec(src, { env });
+  return r;
+}
+
+// execState (COMPLEX tier): the "carries the provenance" cells below assert box
+// discipline directly (`toBeInstanceOf(AValue)`, `.provenance` — RULINGS.md R1).
+async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
+  await initBridge();
+  const env = inferenceEnv.inherit(`srfi-13-${seq++}`);
+  for (const [k, v] of Object.entries(bindings)) env.set(k, v);
+  const [r] = (await execState(src, { env })).values;
   return r;
 }
 
@@ -54,7 +64,7 @@ describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order
     expect(js(await run('(string-suffix? "foo" "foobar")'))).toBe(false);
   });
   it("carries the provenance of the searched string", async () => {
-    const r = await run('(string-prefix? "Al" name)', { name: stamped("Alloy.exe", 7) });
+    const r = await runBoxed('(string-prefix? "Al" name)', { name: stamped("Alloy.exe", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
   });
@@ -104,7 +114,7 @@ describe("string-take / string-drop and the -right twins", () => {
     await expect(run('(string-drop-right "hi" 3)')).rejects.toThrow(/out of range/);
   });
   it("slices carry the source string's lineage", async () => {
-    const r = await run("(string-take name 2)", { name: stamped("Alloy", 7) });
+    const r = await runBoxed("(string-take name 2)", { name: stamped("Alloy", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
   });
@@ -161,7 +171,7 @@ describe("string-join — list of strings to one (default delimiter: single spac
     expect(js(await run("(string-join '())"))).toBe("");
   });
   it("collapsing op: re-stamps the union of element lineage", async () => {
-    const r = await run('(string-join (list name "x") "-")', { name: stamped("Alloy", 7) });
+    const r = await runBoxed('(string-join (list name "x") "-")', { name: stamped("Alloy", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
   });
@@ -197,7 +207,7 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
     expect(js(await run('(length (string-split "a," ","))'))).toBe(2);
   });
   it("pieces carry the source string's lineage (grounded list elements)", async () => {
-    const r = await run('(car (string-split name ","))', { name: stamped("Alloy,exe", 7) });
+    const r = await runBoxed('(car (string-split name ","))', { name: stamped("Alloy,exe", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
     expect(js(r)).toBe("Alloy");
@@ -216,7 +226,7 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
   });
 
   it("a character delimiter still taints pieces with the source string's lineage", async () => {
-    const r = await run('(car (string-split name #\\,))', { name: stamped("Alloy,exe", 7) });
+    const r = await runBoxed('(car (string-split name #\\,))', { name: stamped("Alloy,exe", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
     expect(js(r)).toBe("Alloy");

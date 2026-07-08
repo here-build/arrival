@@ -74,21 +74,24 @@ import { describe, it, expect } from "vitest";
 import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
 import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
-import { exec } from "../../eval/generator-exec.js";
+import { execState } from "../../eval/generator-exec.js";
 import type { Environment } from "../../Environment.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
 
-/** Runs `src` against a law env with one container bound as `c`. */
+/** Runs `src` against a law env with one container bound as `c`. Boxed-result tier
+ *  (execState) — this file asserts box discipline/provenance on the return, a
+ *  COMPLEX-tier concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit. */
 async function run1(env: Environment, c: SchemeValue, src: string): Promise<SchemeValue> {
-  const [r] = await exec(src, { env: env.inherit("call-site", { c }) });
+  const [r] = (await execState(src, { env: env.inherit("call-site", { c }) })).values;
   return r;
 }
 
-/** Runs `src` against a law env with two containers bound as `c1`/`c2`. */
+/** Runs `src` against a law env with two containers bound as `c1`/`c2`. Boxed-result
+ *  tier (execState) — see `run1`. */
 async function run2(env: Environment, c1: SchemeValue, c2: SchemeValue, src: string): Promise<SchemeValue> {
-  const [r] = await exec(src, { env: env.inherit("call-site", { c1, c2 }) });
+  const [r] = (await execState(src, { env: env.inherit("call-site", { c1, c2 }) })).values;
   return r;
 }
 

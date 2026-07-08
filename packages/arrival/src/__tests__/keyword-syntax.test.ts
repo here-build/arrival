@@ -4,13 +4,21 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
+}
+
+// execState (COMPLEX tier): the two callers below assert box discipline directly
+// (`.car`, `.constructor.name` — RULINGS.md R1) — `exec`'s plain-JS exit would
+// hand back an array/`null` with no such shape.
+async function execOneBoxed(expr: string, env = inferenceEnv): Promise<any> {
+  const { values } = await execState(expr, { env });
+  return values[0];
 }
 
 // Three vacuous exploratory blocks DELETED here (2026-07-08 test-invariant-atlas sweep,
@@ -36,7 +44,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
   });
 
   it("should test quotations", async () => {
-    const result = await execOne(
+    const result = await execOneBoxed(
       `(list |24|)`,
       inferenceEnv.inherit("quotation-test", {
         "24": jsToScheme(CONSTANT_CTX, "unqouted"),
@@ -79,7 +87,7 @@ describe("LIPS Keyword Syntax Investigation", () => {
     const obj = { name: "test" };
     inferenceEnv.set("obj", jsToScheme(CONSTANT_CTX, obj));
 
-    const result = await execOne(`(:missing obj)`);
+    const result = await execOneBoxed(`(:missing obj)`);
     expect(result.constructor.name).toBe("ANil");
   });
 });

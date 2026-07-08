@@ -4,10 +4,12 @@
 // matcher dependency). These assert the surface behaves; the drafting horde
 // exec-verified each proc, this is the committed floor.
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
+// COMPLEX tier (execState): stringifies the BOXED result (Scheme print format,
+// e.g. list "(2 4 6)") — a boxed-state read, not the SIMPLE tier's plain-JS exit.
 async function run(src: string): Promise<string> {
-  const r = await exec(src, {});
+  const { values: r } = await execState(src, {});
   const x = r[r.length - 1] as { toString(): string } | undefined;
   return String(x?.toString?.() ?? x);
 }

@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { global_env } from "../env-roots.js";
 import { inferenceEnv } from "../inference-env.js";
 import { schemeToJs } from "../rosetta.js";
@@ -63,7 +63,8 @@ for (const [label, env] of [["global_env", global_env], ["inferenceEnv", inferen
     it("an accessor that walks off the end follows the run's nil-projection — tolerant ⇒ nil, strict ⇒ throw", async () => {
       // (cadr (list 1)): cdr → (), then car of () — the unified ANil nil-projection. The WHOLE
       // family now inherits the atoms' mode-gating (the old strict resolver always threw here).
-      expect(((await exec("(cadr '(1))", { env }))[0])).toBeInstanceOf(ANil);
+      // execState (COMPLEX tier): asserts box discipline (`toBeInstanceOf(ANil)`, RULINGS.md R1).
+      expect(((await execState("(cadr '(1))", { env })).values[0])).toBeInstanceOf(ANil);
       await expect(exec("(cadr '(1))", { env, strict: true })).rejects.toThrow();
     });
   });

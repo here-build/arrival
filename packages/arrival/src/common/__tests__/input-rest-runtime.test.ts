@@ -18,7 +18,7 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import type { Environment } from "../../Environment.js";
-import { exec } from "../../eval/generator-exec.js";
+import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -77,12 +77,14 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
   });
 
   it('(headtail "h") — 0-length tail through a real exec', async () => {
-    const [out] = await exec(`(headtail "h")`, { env });
+    // execState (COMPLEX tier): calls the `arrival/toJS` protocol method directly —
+    // a boxed-state concern (RULINGS.md R1).
+    const [out] = (await execState(`(headtail "h")`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
   it('(headtail "h" 1 2) — 2-element tail through a real exec', async () => {
-    const [out] = await exec(`(headtail "h" 1 2)`, { env });
+    const [out] = (await execState(`(headtail "h" 1 2)`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 });

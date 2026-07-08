@@ -1,10 +1,19 @@
 // polyglot pack — assemble onto a real env, then RUN the threading macros.
-import { exec, sandboxedEnv } from "../../index.js";
+import { execState, sandboxedEnv, type ExecOptions } from "../../index.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
 import polyglot from "../polyglot.js";
+
+// This whole file stringifies the BOXED result's Scheme print form (list "(1 4 9)")
+// and checks box discipline directly (`.constructor.name === "AVector"`) — a
+// boxed-state concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit. Local
+// `exec` shadows the barrel export with the COMPLEX tier (execState) so every call
+// site below is unchanged and still reads the boxed SchemeValue[] it always did.
+async function exec(code: string, options?: ExecOptions) {
+  return (await execState(code, options)).values.slice();
+}
 
 describe("@here.build/arrival/polyglot", () => {
   it("installs the idiom macros and they thread correctly", async () => {

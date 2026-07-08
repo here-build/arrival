@@ -24,10 +24,12 @@
 //     termination here.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
-const run = async (form: string) => (await exec(form, { env }) as unknown[])[0];
+// COMPLEX tier (execState): callers stringify the BOXED verdict (Scheme print
+// form "#t"/"#f") — a boxed-state read, not the SIMPLE tier's plain-JS exit.
+const run = async (form: string) => (await execState(form, { env })).values[0];
 
 // Verdicts print as the boxed scheme booleans (`#t`/`#f` — equal? returns the
 // schemeTrue/schemeFalse flyweights under the Face split; the raw JS "true"/"false"

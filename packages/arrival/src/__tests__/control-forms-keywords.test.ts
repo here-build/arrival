@@ -15,6 +15,10 @@ import { describe, expect, it } from "vitest";
 import { exec, schemeToJs, sandboxedEnv } from "../index.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+// `exec` (RULINGS.md R1) now returns the plain-JS unwrap: a symbol's toJS is
+// apostrophe-prefixed (ASymbol's documented, deferred opaque-exit marker —
+// two-tier-exec-api.md §9 — unchanged by this migration, only newly VISIBLE
+// through exec's exit instead of a boxed `.toString()`).
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
 
 describe("cond/case/when/unless — special forms that are first-class keywords", () => {
@@ -40,7 +44,7 @@ describe("cond/case/when/unless — special forms that are first-class keywords"
         (syntax-rules ()
           ((classify n) (cond ((< n 0) 'neg) ((= n 0) 'zero) (else 'pos)))))
       (classify 5)`;
-    expect(repr(await exec(src, { env: sandboxedEnv.inherit("cf4") }))).toBe("pos");
+    expect(repr(await exec(src, { env: sandboxedEnv.inherit("cf4") }))).toBe("'pos");
   });
 
   it("user macro expanding to `case` with => and else — both auxiliary keywords survive hygiene", async () => {

@@ -9,10 +9,14 @@
 // later step (boxing all predicate/comparison returns to SchemeBool): when that
 // lands, EVERY predicate produces these SchemeBools, and these stay green.
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
+// COMPLEX tier (execState, not exec): this file reads the BOXED result's own
+// `.toString()` (Scheme print format, e.g. list "(2 3)", boolean "#t"/"#f") to
+// verify box discipline through the HOF pipeline — a boxed-state concern
+// (RULINGS.md R1), not the SIMPLE tier's plain-JS exit.
 async function run(src: string): Promise<string> {
-  const r = await exec(src, {});
+  const { values: r } = await execState(src, {});
   const x = r[r.length - 1] as { toString(): string } | undefined;
   return String(x?.toString?.() ?? x);
 }

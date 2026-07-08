@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
-import { exec, execExpr, parse } from "../eval/generator-exec.js";
+import { execExpr, execState, parse, type ExecOptions } from "../eval/generator-exec.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -15,6 +15,16 @@ import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
 import { nil } from "../values/primitives/ANil.js";
 import { freshEnv } from "./_fresh-env.js";
+import type { SchemeValue } from "../values/types.js";
+
+// This whole file exercises the EVALUATOR's correctness (arithmetic, special forms,
+// macros, …) through box-shaped assertions (`toBeInstanceOf`, `.num`, `.__name__`) —
+// a boxed-state concern (RULINGS.md R1), not the SIMPLE-tier `exec`'s plain-JS exit.
+// Local `exec` shadows the barrel export with the COMPLEX tier (execState), so every
+// call site below is unchanged and still reads the boxed SchemeValue[] it always did.
+async function exec(code: string, options?: ExecOptions): Promise<SchemeValue[]> {
+  return (await execState(code, options)).values.slice();
+}
 
 describe("generator-exec", () => {
   describe("exec() - basic operations", () => {

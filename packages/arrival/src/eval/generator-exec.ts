@@ -26,6 +26,7 @@ import { classify, type LineageNode } from "../values/lineage.js";
 import { APair } from "../values/primitives/APair.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
+import { toJS } from "../membrane.js";
 
 // The value-layer shadow-cone skip reads the macro classes' `[CLASS]` brand
 // directly via `is_macro_value` in value-guards.ts — a downward, eval-import-free
@@ -432,16 +433,16 @@ export async function execState(
 /**
  * SIMPLE tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — THE
  * default exec surface, "run, get JS". Delegates to {@link execState} (COMPLEX
- * tier) and returns just its boxed `values`.
- *
- * NOTE (migration step 1 of 5, §8): this step is BEHAVIOR-UNCHANGED — `values` is
- * still boxed `SchemeValue[]`, not plain JS. The `toJS` final-unwrap (making this
- * tier's return type genuinely `unknown[]`) is step 4, a later task; do not add it
- * here.
+ * tier) and fully unwraps each result through {@link toJS} — a true P4 membrane
+ * crossing. Outside this function only plain-JS-observable values exist; the
+ * provenance reading stays in the run's trace (containers egress as R9 lazy
+ * proxies, see membrane.ts's `toJS`). Callers that need boxed values, the
+ * lexical scope, or the run context (law tests, tooling, REPL continuation)
+ * use {@link execState} directly.
  *
  * @param code - String of Scheme code or pre-parsed SchemeValue
  * @param options - Optional environment and dynamic binding options
- * @returns Promise<SchemeValue[]> - Array of evaluation results (one per expression)
+ * @returns Promise<unknown[]> - one plain-JS value per top-level expression
  *
  * @example
  * ```typescript
@@ -456,9 +457,9 @@ export async function execState(
  * const [result] = await exec("x", { env });  // result = 42
  * ```
  */
-export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<SchemeValue[]> {
+export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<unknown[]> {
   const state = await execState(code, options);
-  return state.values.slice();
+  return state.values.map((v) => toJS(v));
 }
 
 /**

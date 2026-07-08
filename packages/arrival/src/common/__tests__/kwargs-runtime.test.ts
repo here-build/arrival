@@ -22,7 +22,7 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import type { Environment } from "../../Environment.js";
-import { exec } from "../../eval/generator-exec.js";
+import { exec, execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -71,17 +71,19 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
   });
 
   it("(tool :a v :b v2) invokes the impl with the constructed {a,b} object", async () => {
-    const [out] = await exec(`(kw-greet :a "Ada" :b 5)`, { env });
+    // execState (COMPLEX tier): calls the `arrival/toJS` protocol method directly —
+    // a boxed-state concern (RULINGS.md R1).
+    const [out] = (await execState(`(kw-greet :a "Ada" :b 5)`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
   it("keyword ORDER at the call site is independent of the shape's declared order", async () => {
-    const [out] = await exec(`(kw-greet :b 5 :a "Ada")`, { env });
+    const [out] = (await execState(`(kw-greet :b 5 :a "Ada")`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
   it("an optional kwarg omitted leaves it undefined, no decode failure", async () => {
-    const [out] = await exec(`(kw-greet :a "Ada")`, { env });
+    const [out] = (await execState(`(kw-greet :a "Ada")`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:undefined");
   });
 

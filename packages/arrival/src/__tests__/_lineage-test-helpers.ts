@@ -21,7 +21,7 @@
 import * as z from "../common/scheme-zod.js";
 import { initBridge } from "../bridge.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
@@ -43,11 +43,15 @@ export type EnvSetup = (env: Environment) => void;
 let seq = 0;
 
 /**
- * Run `src` in a fresh inherited sandbox env and return the RAW result value. Each
- * call gets a uniquely-named child env; `binds` are boxed through `jsToScheme` (the
- * same membrane `env.set` applies internally; already-boxed AValue inputs short-circuit
- * to identity) and written with `env.set`. `setup` (if given) runs against the env
- * first — used to register `defineRosetta` sources.
+ * Run `src` in a fresh inherited sandbox env and return the RAW (still-boxed) result
+ * value. Each call gets a uniquely-named child env; `binds` are boxed through
+ * `jsToScheme` (the same membrane `env.set` applies internally; already-boxed AValue
+ * inputs short-circuit to identity) and written with `env.set`. `setup` (if given) runs
+ * against the env first — used to register `defineRosetta` sources.
+ *
+ * COMPLEX tier (`execState`, not `exec`) — this whole file exists to read
+ * provenance/box discipline off the result (`provOf`, `deepIds`, `collapseProvenance`),
+ * a boxed-state concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit.
  */
 export async function runRaw(
   src: string,
@@ -58,7 +62,7 @@ export async function runRaw(
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   setup?.(env);
   for (const [k, v] of Object.entries(binds)) env.set(k, jsToScheme(CONSTANT_CTX, v));
-  const [r] = await exec(src, { env });
+  const [r] = (await execState(src, { env })).values;
   return r;
 }
 

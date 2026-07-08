@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -225,7 +225,9 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     const oneShot = async (src: string): Promise<unknown> => {
       const env = inferenceEnv.inherit(`la-${seq++}`);
       env.set("xs", mkVec());
-      const [r] = await exec(src, { env });
+      // execState (COMPLEX tier): `summary` reads the BOXED result's constructor
+      // name + `provOf` provenance — a boxed-state concern (RULINGS.md R1).
+      const [r] = (await execState(src, { env })).values;
       return summary(r);
     };
     const golden = {

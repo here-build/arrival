@@ -13,7 +13,7 @@
  * sub-evaluations receive their parent as the second arg to enter().
  */
 import { beforeAll, describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { Environment } from "../Environment.js";
 import type { APair } from "../values/primitives/APair.js";
@@ -141,7 +141,12 @@ describe("evaluation tap", () => {
     env.set("await-this", () => pending);
 
     const { events, tap } = recorder();
-    const finished = exec("(await-this)", { env, tap });
+    // execState (COMPLEX tier): the bare `env.set`-bound native returns a raw
+    // (unboxed) resolved value BY DESIGN (env.set is the no-codec escape hatch —
+    // see chibi-harness.ts's doc) — `exec`'s plain-JS `toJS` unwrap would refuse
+    // it (RULINGS.md R1's strict door). This test only cares about tap
+    // enter/exit accounting, not the returned value's shape.
+    const finished = execState("(await-this)", { env, tap });
 
     // Wait for the evaluator to reach the pending promise.
     await new Promise((r) => setTimeout(r, 20));

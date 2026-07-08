@@ -42,7 +42,7 @@ import { describe, it, expect } from "vitest";
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { initBridge } from "../bridge.js";
-import { exec, parse } from "../eval/generator-exec.js";
+import { exec, execState, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -84,7 +84,8 @@ async function shadow(src: string, binds: Record<string, SchemeValue>): Promise<
 
   // exec under the flag: this is the in-engine shadow assert (slices 2+3). If the
   // static cone diverged from the eager stamp on any form, exec would throw here.
-  const [result] = await exec(src, { env, irLineage: true });
+  // execState (COMPLEX tier): `provOf` reads BOXED provenance (RULINGS.md R1).
+  const [result] = (await execState(src, { env, irLineage: true })).values;
   const eager = provOf(result);
 
   // Out-of-band recompute for a call-site-visible assertion against the golden ids.
@@ -241,7 +242,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
     env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
-    const [result] = await exec(`(map (lambda (e) e) xs)`, { env, irLineage: true });
+    const [result] = (await execState(`(map (lambda (e) e) xs)`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager spine
     const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
     const skel = classify(ast, classifierFromEnv(env, new Set()));
@@ -263,7 +264,7 @@ describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
     env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
-    const [result] = await exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true });
+    const [result] = (await execState(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager — C4 fix
     const [ast] = await parse(`(length (map (lambda (e) e) xs))`, env);
     const skel = classify(ast, classifierFromEnv(env, new Set()));

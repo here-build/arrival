@@ -24,24 +24,20 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 
 /** Coerce a Scheme numeric result to a JS number (handles SchemeExact). */
-// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
-// RULINGS.md R1): tolerates boxed-with-valueOf AND raw number/bigint simultaneously —
-// literally the "accepts boxed or raw" contract P4 forbids, baked into shared test infra
-// across this file, r7rs-numbers.test.ts, and r7rs-identity.test.ts instead of exposing
-// exec()'s exit-convention inconsistency. Collapses to one asserted shape once R1's
-// uniform exit convention (toJS/schemeToJs always fully unwraps) lands.
+// INVERTED (RULINGS.md R1, docs/test-invariant-atlas/verdicts/evaluator.md): exec's
+// uniform plain-JS exit landed — `evalScheme` below always returns a plain
+// number/bigint now. Collapsed to that one asserted shape (was: tolerate
+// boxed-with-valueOf AND raw simultaneously — the "accepts boxed or raw" contract
+// P4 forbids).
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;
   if (typeof r === "bigint") return Number(r);
-  if (r && typeof (r as { valueOf?: unknown }).valueOf === "function") {
-    return Number((r as { valueOf: () => unknown }).valueOf());
-  }
   return Number.NaN;
 };
 
@@ -68,8 +64,10 @@ describe("r7rs unicode — passing invariants (regression guards)", () => {
   it("char-foldcase on a single-folded char (#\\A → #\\a) works", async () => {
     // Only ß-class chars (where Unicode fold expands to 2+ chars) trip the
     // truncation bug. ASCII fold is fine.
+    // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: ACharacter's toJS is
+    // the RAW char (write-form "#\\a" was the boxed `.toString()`, no longer read here).
     const r = await evalScheme("(char-foldcase #\\A)");
-    expect(String(r)).toBe("#\\a");
+    expect(String(r)).toBe("a");
   });
 });
 
@@ -122,8 +120,10 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
       // producing a different character from the input.
       //
       // FIXED: returns #\ß unchanged now (multi-char folds are identity per R7RS).
+      // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: ACharacter's toJS is
+      // the RAW char, not the boxed `.toString()` write-form.
       const r = await evalScheme("(char-foldcase #\\ß)");
-      expect(String(r)).toBe("#\\ß");
+      expect(String(r)).toBe("ß");
     },
   );
 
@@ -154,7 +154,11 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
       // to whichever name comes last in source order — `bel`.
       //
       // FIXED: names as 'alarm' (R7RS-canonical) now, not 'bel'.
-      const r = await evalScheme("(integer->char 7)");
+      // execState (COMPLEX tier): the NAME distinction (alarm vs bel) lives only in
+      // the boxed `.toString()` write-form — `exec`'s plain-JS toJS unwrap discards
+      // `__name__` entirely (RULINGS.md R1's §9 ASymbol-adjacent deferral applies to
+      // ACharacter's name too: only the raw char crosses).
+      const [r] = (await execState("(integer->char 7)", { env })).values;
       expect(String(r)).toBe("#\\alarm");
     },
   );

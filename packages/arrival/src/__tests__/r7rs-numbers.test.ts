@@ -35,30 +35,19 @@ import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 
-// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
-// RULINGS.md R1): num()/truthy() below tolerate boxed-with-valueOf AND raw number/
-// bigint/boolean simultaneously — literally the "accepts boxed or raw" contract P4
-// forbids, baked into shared test infra across this file, r7rs-unicode.test.ts, and
-// r7rs-identity.test.ts instead of exposing exec()'s exit-convention inconsistency.
-// Collapses to one asserted shape once R1's uniform exit convention (toJS/schemeToJs
-// always fully unwraps) lands.
+// INVERTED (RULINGS.md R1, docs/test-invariant-atlas/verdicts/evaluator.md): exec's
+// uniform plain-JS exit landed — `evalScheme` below always returns number/bigint/
+// boolean now, never a boxed-with-valueOf shape. num()/truthy() collapse to that one
+// asserted shape (was: tolerate boxed-with-valueOf AND raw simultaneously — the
+// "accepts boxed or raw" contract P4 forbids).
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;
   if (typeof r === "bigint") return Number(r);
-  if (r && typeof (r as { valueOf?: unknown }).valueOf === "function") {
-    return Number((r as { valueOf: () => unknown }).valueOf());
-  }
   return Number.NaN;
 };
 
 const truthy = (r: unknown): boolean => {
   if (typeof r === "boolean") return r;
-  if (r && typeof r === "object" && "value" in (r as { value?: unknown })) {
-    return Boolean((r as { value: unknown }).value);
-  }
-  if (r && typeof (r as { valueOf?: unknown }).valueOf === "function") {
-    return Boolean((r as { valueOf: () => unknown }).valueOf());
-  }
   return Boolean(r);
 };
 

@@ -11,13 +11,26 @@
 
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../../index.js";
+import { execState, type ExecOptions } from "../../index.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
 import { overridableCapability } from "../overridable.js";
 
 const capabilities = [overridableCapability];
+
+// This whole file calls `arrival/toJS` directly on exec results (`.["arrival/toJS"]()`)
+// — a boxed-state concern (RULINGS.md R1). Local `exec` shadows the barrel export with
+// the COMPLEX tier (execState) so every call site below is unchanged and still reads
+// the boxed SchemeValue[] it always did. (Several cells in this file still fail —
+// baseline-pre-existing, unrelated to R1: `overridable/resolve`'s `nameSym.toString()`
+// stringifies the sz.symbol codec's native-Symbol decode as "Symbol(arrival membrane
+// symbol: X)" instead of the bare name, so a config.params[bindingName] override lookup
+// never matches. This wrapper only restores the boxed-result access this file always
+// used — it does not touch that pre-existing bug.)
+async function exec(code: string, options?: ExecOptions) {
+  return (await execState(code, options)).values.slice();
+}
 
 describe("arrival/overridable — plain define plus validation, through the consumer door", () => {
   it("a host-supplied override wins over the in-form default, and validates", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { is_nil, is_false } from "../eval/guards.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -34,6 +34,12 @@ import { ANil } from "../values/primitives/ANil.js";
 const run = (code: string, strict: boolean) =>
   exec(code, { env: inferenceEnv.inherit("nil-tol"), strict });
 
+// execState (COMPLEX tier): the two `toBeInstanceOf(ANil)` cells below assert box
+// discipline directly (RULINGS.md R1) — `is_false`-based cells stay on the simple
+// `run`/`exec` above since `is_false` is representation-blind (raw `false` too).
+const runBoxed = (code: string, strict: boolean) =>
+  execState(code, { env: inferenceEnv.inherit("nil-tol"), strict }).then((s) => s.values);
+
 // Args that are NEITHER a list/pair NOR the absent value -> type errors (throw in BOTH modes).
 // #f is included deliberately: it is a real boolean, NOT "absent", so projecting it is a type error.
 // A vector is NOT here: in LOOSE mode car/cdr read it list-like (see the dedicated block below).
@@ -49,8 +55,8 @@ const TYPE_ERRORS: [string, string][] = [
 
 describe("car/cdr nil-tolerance: absent value '() — the ONLY mode-dependent cell", () => {
   it("default (tolerant): (car '()) and (cdr '()) resolve to nil", async () => {
-    expect(((await run("(car '())", false))[0])).toBeInstanceOf(ANil);
-    expect(((await run("(cdr '())", false))[0])).toBeInstanceOf(ANil);
+    expect(((await runBoxed("(car '())", false))[0])).toBeInstanceOf(ANil);
+    expect(((await runBoxed("(cdr '())", false))[0])).toBeInstanceOf(ANil);
   });
   it("strict: (car '()) and (cdr '()) throw the R7RS pair typecheck", async () => {
     await expect(run("(car '())", true)).rejects.toThrow();
@@ -95,7 +101,7 @@ describe("base env (user_env) shares the unified nil-projection — strict drive
     await expect(exec("(cdr '())", { strict: true })).rejects.toThrow();
   });
   it("default (tolerant): (car '()) and (cdr '()) project to nil — uniform with the inference env", async () => {
-    expect(((await exec("(car '())", { strict: false }))[0])).toBeInstanceOf(ANil);
-    expect(((await exec("(cdr '())", { strict: false }))[0])).toBeInstanceOf(ANil);
+    expect(((await execState("(car '())", { strict: false })).values[0])).toBeInstanceOf(ANil);
+    expect(((await execState("(cdr '())", { strict: false })).values[0])).toBeInstanceOf(ANil);
   });
 });

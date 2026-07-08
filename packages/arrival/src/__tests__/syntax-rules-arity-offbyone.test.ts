@@ -18,13 +18,17 @@
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
 
+// COMPLEX tier (execState): callers below assert box discipline directly
+// (`toBeInstanceOf(AVector)`, `.__vector__`) and stringify the BOXED Scheme
+// print form (e.g. list "(9 8)") — a boxed-state read, not the SIMPLE tier's
+// plain-JS exit.
 async function run(form: string): Promise<unknown> {
-  const r = await exec(form, { env });
-  return (r as unknown[])[0];
+  const { values: r } = await execState(form, { env });
+  return r[0];
 }
 
 describe("syntax-rules matcher off-by-one (PRE-EXISTING pre-L1 gap — drops first code element)", () => {

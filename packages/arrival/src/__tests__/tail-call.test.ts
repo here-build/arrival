@@ -60,9 +60,20 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec as execSource } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import { nil } from "../values/primitives/ANil.js";
+import type { ExecOptions } from "../eval/generator-exec.js";
+
+/**
+ * Execute Scheme source through the full default-env trampoline and return the
+ * BOXED values (COMPLEX tier, execState — RULINGS.md R1): this file's
+ * assertions read the result's own Scheme-print `.toString()` ("done"/"#t"),
+ * a boxed-state concern, not the SIMPLE tier's plain-JS exit.
+ */
+async function execSource(src: string, options?: ExecOptions): Promise<readonly unknown[]> {
+  return (await execState(src, options)).values;
+}
 
 /**
  * Execute Scheme source through the full default-env trampoline and return the

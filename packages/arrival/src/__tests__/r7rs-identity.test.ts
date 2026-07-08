@@ -33,20 +33,13 @@ import { freshEnv } from "./_fresh-env.js";
 const env = await freshEnv();
 
 /** Coerce a Scheme result to a JS primitive — handles SchemeBool wrapper and raw JS booleans. */
-// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
-// RULINGS.md R1): tolerates boolean-as-raw AND boxed-with-.value/valueOf simultaneously —
-// literally the "accepts boxed or raw" contract P4 forbids, baked into shared test infra
-// across this file, r7rs-numbers.test.ts, and r7rs-unicode.test.ts instead of exposing
-// exec()'s exit-convention inconsistency. Collapses to one asserted shape once R1's
-// uniform exit convention (toJS/schemeToJs always fully unwraps) lands.
+// INVERTED (RULINGS.md R1, docs/test-invariant-atlas/verdicts/evaluator.md): exec's
+// uniform plain-JS exit landed — `evalScheme` below always returns a plain boolean
+// now. Collapsed to that one asserted shape (was: tolerate boolean-as-raw AND
+// boxed-with-.value/valueOf simultaneously — the "accepts boxed or raw" contract P4
+// forbids).
 const truthy = (r: unknown): boolean => {
   if (typeof r === "boolean") return r;
-  if (r && typeof r === "object" && "value" in (r as { value?: unknown })) {
-    return Boolean((r as { value: unknown }).value);
-  }
-  if (r && typeof (r as { valueOf?: unknown }).valueOf === "function") {
-    return Boolean((r as { valueOf: () => unknown }).valueOf());
-  }
   return Boolean(r);
 };
 

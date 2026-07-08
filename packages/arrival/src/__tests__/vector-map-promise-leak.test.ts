@@ -9,10 +9,12 @@
 // awaits settled values.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
-const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
+// COMPLEX tier (execState): stringifies the BOXED result (Scheme print format,
+// e.g. list "(2 4 6)") — a boxed-state read, not the SIMPLE tier's plain-JS exit.
+const run = async (form: string) => String((await execState(form, { env })).values[0]);
 
 // An async proc: a JS function returning a resolved Promise. Mirrors a
 // membrane-crossing callback whose body awaits an async boundary.

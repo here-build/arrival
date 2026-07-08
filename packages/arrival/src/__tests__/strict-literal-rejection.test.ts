@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { is_nil } from "../eval/guards.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -23,12 +23,14 @@ describe("strict rejects the #void/#null reader literals (portability control)",
   }
 
   it("loose (default): #void resolves to the void singleton", async () => {
-    const [result] = await exec("#void");
+    // execState (COMPLEX tier): asserts box IDENTITY (RULINGS.md R1) — `exec`'s
+    // plain-JS exit would unwrap AVoid to `undefined`, losing the singleton check.
+    const [result] = (await execState("#void")).values;
     expect(result).toBe(theVoid);
   });
 
   it("loose (default): #null resolves to nil", async () => {
-    const [result] = await exec("#null");
+    const [result] = (await execState("#null")).values;
     expect((result)).toBeInstanceOf(ANil);
   });
 });

@@ -14,10 +14,12 @@
 // IS the regression signal.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
-import { exec } from "../eval/generator-exec.js";
+import { execState } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
-const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
+// COMPLEX tier (execState): stringifies the BOXED result (Scheme print format,
+// e.g. "#f"/"#t") — a boxed-state read, not the SIMPLE tier's plain-JS exit.
+const run = async (form: string) => String((await execState(form, { env })).values[0]);
 // c = a reader-built circular list: (1 2 3 …) whose last cdr points back at itself.
 const cyclic = (op: string) => `(let ((c '#0=(1 2 3 . #0#))) ${op})`;
 

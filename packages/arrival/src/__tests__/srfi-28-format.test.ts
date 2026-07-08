@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { exec, sandboxedEnv } from "../index.js";
+import { exec, execState, sandboxedEnv } from "../index.js";
 import { assembleEnv } from "../common/kernel.js";
 import { type SchemeEnv } from "../common/scheme-env.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -37,6 +37,16 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
   await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
   for (const [k, v] of Object.entries(bindings)) (env as unknown as { set(k: string, v: unknown): void }).set(k, v);
   const [r] = await exec(src, { env });
+  return r;
+}
+
+// execState (COMPLEX tier): the provenance cells below assert box discipline
+// directly (`toBeInstanceOf(AValue)`, `.provenance` — RULINGS.md R1).
+async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
+  const env = sandboxedEnv.inherit(`srfi-28-${seq++}`);
+  await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
+  for (const [k, v] of Object.entries(bindings)) (env as unknown as { set(k: string, v: unknown): void }).set(k, v);
+  const [r] = (await execState(src, { env })).values;
   return r;
 }
 
@@ -174,21 +184,21 @@ describe("format — directive and arity errors are clear", () => {
 
 describe("format — provenance (collapsing op, carries the union of fmt + args)", () => {
   it("the result carries an arg's lineage", async () => {
-    const r = await run('(format "hello ~a" name)', { name: stamped("Alloy", 7) });
+    const r = await runBoxed('(format "hello ~a" name)', { name: stamped("Alloy", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
     expect(js(r)).toBe("hello Alloy");
   });
 
   it("the result carries the DEEP union of several stamped args", async () => {
-    const r = await run('(format "~a/~a" a b)', { a: stamped("x", 3), b: stamped("y", 9) });
+    const r = await runBoxed('(format "~a/~a" a b)', { a: stamped("x", 3), b: stamped("y", 9) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([3, 9]);
     expect(js(r)).toBe("x/y");
   });
 
   it("a literal-only format carries no provenance (empty-provenance AString)", async () => {
-    const r = await run('(format "~a" "lit")');
+    const r = await runBoxed('(format "~a" "lit")');
     // Boxed under the Face split (taintString always returns the AString scheme face);
     // "no provenance" now means an EMPTY provenance set, not a raw unboxed string.
     expect(r).toBeInstanceOf(AValue);
