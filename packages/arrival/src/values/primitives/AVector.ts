@@ -253,8 +253,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // elements' deep union — a pure count depends only on cardinality, not on what each
   // element became. The container's own stamp is already an accurate synopsis by
   // construction (MINTED at `vector`, PROXIED through map/sort, PROVENANCED fresh by
-  // filter — see the term×carrier law table, _tables/terms.ts). No heap-charge / no
-  // strict-gating.
+  // filter — see the term×carrier law table, _tables/terms.ts). Always a fresh boxed
+  // AExact post bare-value purge (A4/P4) — `withInputProvenance` no longer has a raw-scalar
+  // tolerance. No heap-charge / no strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], this.__vector__.length);
   }

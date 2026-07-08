@@ -145,15 +145,16 @@ const lengthImpl = (obj: unknown): AExact | AInexact => {
   if (typeof m === "function") {
     const result: unknown = m.call(obj);
     // The protocol's own declared shape (`AValue | number`, AValue.ts) is wider than what
-    // any known implementor actually produces for a COUNT: a raw JS number on the
-    // empty-provenance fast path (`withInputProvenance` skips boxing when the receiver
-    // carries no provenance to stamp), else an AExact via `fromJs`'s number arm — never an
-    // AInexact/ABool/etc. Box the raw-number arm here so `length`'s own contract can
-    // honestly narrow to z.schemeNumber instead of the fully-permissive z.value (the
-    // permissive schema existed only because Tier-2 speculation could also hand back a
-    // live AHalfBaked carrier — see docs/working-proposals/halfbaked-existence-review.md).
-    if (typeof result === "number") return new AExact(CONSTANT_CTX, BigInt(result));
-    invariant(result instanceof AExact || result instanceof AInexact, "length: a term's own length must be a count");
+    // any implementor may honestly produce post bare-value purge (A4/P4): `withInputProvenance`
+    // (op-helpers.ts) no longer has a raw-scalar tolerance, and ANil's own length boxes its
+    // empty-provenance zero — so every real term now returns an AExact/AInexact, never a raw
+    // number. A raw number reaching here would be a P4 violation in whichever term produced
+    // it (the sibling class of the `number->string` bug, c0852b879c); fail loudly (P5) rather
+    // than silently re-boxing it.
+    invariant(
+      result instanceof AExact || result instanceof AInexact,
+      `length: a term's own length must be a boxed count (bare-value-purge/P4) — got ${typeof result}`,
+    );
     return result;
   }
   if (typeof obj === "object" && "length" in obj) {

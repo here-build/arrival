@@ -156,7 +156,8 @@ export class AJSArray extends AValue {
   // APair/AVector's `length` (P8, one algebra every carrier). A borrowed array's own
   // top-level provenance is empty by construction today (the R2 grouping-fact mint for
   // AJSArray/ADict is a separate, already-ticketed gap — term-carrier.law.test.ts's
-  // `equalsContainerHasNoGroupingFact`), so this reads as the bare count until that lands.
+  // `equalsContainerHasNoGroupingFact`), so this reads as an empty-provenance boxed AExact
+  // until that lands (post-A4, `withInputProvenance` always boxes — never a bare count).
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     this.freezeSource();
     return withInputProvenance([this], this.source.length);

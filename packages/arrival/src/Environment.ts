@@ -202,9 +202,11 @@ export class Environment implements SchemeEnv {
     else if (isSchemeValue(value)) {
       storedValue = value;
     }
-    else if (typeof value === "boolean" || typeof value === "string" || typeof value === "symbol") {
-      storedValue = value as EnvironmentValue;
-    }
+    // Bare-value purge (A4/P4): a raw JS boolean/string/symbol used to pass through
+    // unboxed here — a P4 violation (the membrane's world ends at the frame boundary;
+    // storage IS inside). Falls to the `fromJS` branch below, which boxes it
+    // (boolean→ABool, string→AString, a registered symbol→keyword ASymbol, a unique
+    // symbol→#void+warn) exactly like every other non-scheme JS value entering storage.
     // Membrane wrapping happens at interop points, not storage
     else if (typeof value === "function") {
       storedValue = value as EnvironmentValue;

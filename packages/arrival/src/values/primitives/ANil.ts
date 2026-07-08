@@ -12,6 +12,7 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
+import { AExact } from "./AExact.js";
 
 export class ANil extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -114,10 +115,12 @@ export class ANil extends AValue {
 
   // Length of the EMPTY list is 0 — the authoritative empty-count (mirrors the map/filter/
   // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO
-  // the term). No elements ⇒ no provenance to carry: a bare `0`. No heap-charge / no
-  // strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
-  ["arrival/tagless-final/length"](_runCtx?: unknown): number {
-    return 0;
+  // the term). No elements ⇒ no provenance to carry, but P4 still requires a boxed AValue
+  // (a raw `0` is a bare-value-purge violation — the sibling of the `number->string` bug,
+  // c0852b879c): a fresh empty-provenance `AExact`. No heap-charge / no strict-gating, so
+  // the trailing runCtx `symbol.tagless` threads is ignored.
+  ["arrival/tagless-final/length"](_runCtx?: unknown): AExact {
+    return new AExact(CONSTANT_CTX, 0n);
   }
 }
 

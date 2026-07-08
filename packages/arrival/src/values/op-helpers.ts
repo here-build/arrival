@@ -15,7 +15,7 @@ import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./primitives/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
 
-import { AValue, unionProvenance } from "./primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./primitives/AValue.js";
 import { type ABool, schemeFalse, schemeTrue } from "./primitives/ABool.js";
 import { fromJs } from "./primitives/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
@@ -335,11 +335,17 @@ export function isSchemeNumber(value: unknown): boolean {
  * all produce fresh AValue / array / Uint8Array results whose provenance must
  * inherit from their inputs.
  *
- * In provenanced mode (`prov.size > 0`) every scalar is boxed — string/number/
- * bigint/boolean — so no derived scalar drops its grounding (the HOFs route
- * truthiness through `is_false`, which is blind to a boxed `SchemeBool`, so boxing
- * a boolean here is safe). Non-scalars (Pair / vector / object) stay raw — they
- * carry provenance structurally and `AValue.fromJs` would double-wrap them.
+ * Every scalar is boxed — string/number/bigint/boolean — UNCONDITIONALLY (the
+ * bare-value purge, DAG node A4, RULINGS.md R1/P4): inside the membrane only
+ * boxed AValues exist, so a raw JS scalar handed back here — even with empty
+ * provenance to stamp — is a term the box-layer interpreter cannot execute
+ * (P0/P4). This ONE call already existed a flyweight for the empty-provenance
+ * case (`fromJs`'s `provenance === EMPTY_PROVENANCE` branch reuses `schemeTrue`/
+ * `schemeFalse`/interns nothing for string/number — hot loops stay
+ * allocation-free for booleans; strings/numbers get a fresh box, which is
+ * correct, not merely tolerated — see `mintVerdict`'s doc for the boolean case).
+ * Non-scalars (Pair / vector / object) stay raw — they carry provenance
+ * structurally and `AValue.fromJs` would double-wrap them.
  *
  * RETURN-TYPE CAST — the second `as T` (`fromJs(…) as T`) is INHERENT, not
  * laziness: it's the seam between two layers that model values differently. The
@@ -356,13 +362,16 @@ export function isSchemeNumber(value: unknown): boolean {
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   const inputs = args.filter((a): a is AValue => a instanceof AValue);
-  if (inputs.length === 0) return result;
-  const prov = unionProvenance(inputs);
-  if (prov.size === 0) return result;
-  if (result instanceof AValue) return result.withProvenance(prov) as T;
+  if (result instanceof AValue) {
+    if (inputs.length === 0) return result;
+    const prov = unionProvenance(inputs);
+    return (prov.size === 0 ? result : result.withProvenance(prov)) as T;
+  }
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    return fromJs(inputs[0].ctx, result, prov) as T;
+    const ctx = inputs.length > 0 ? inputs[0].ctx : CONSTANT_CTX;
+    const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
+    return fromJs(ctx, result, prov) as T;
   }
   return result;
 }

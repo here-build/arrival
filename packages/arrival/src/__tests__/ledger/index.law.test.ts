@@ -67,7 +67,17 @@ const GAPS: readonly LedgerRow[] = [
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
-  { id: "representation-blind equality (string/boolean boxed≡raw)", gate: "bare-value-purge", replacedBy: "laws/equality strict-door rows" },
+  // "representation-blind equality (string/boolean boxed≡raw)" RETIRED (bare-value-purge/A4
+  // landed, docs/REWORK-DAG.md): op-helpers.ts withInputProvenance/ANil length/
+  // Environment.set no longer produce a raw scalar anywhere inside the membrane, so no
+  // INTERNAL producer can hand equal?/eq?/eqv? an unboxed operand during real scheme
+  // execution. VERDICT — not a strict-door throw: AString/ABool's Setoid-level
+  // representation-blindness is independently pinned as DURABLE by scheme-string-
+  // algebra.test.ts and boolean-landmine-regression.test.ts (both verified "Clean" —
+  // unrelated to this purge, not scheduled to change) — a throw would contradict those
+  // siblings, the exact aspirational-door case the purge warns against. See
+  // equality-representation.test.ts and tagless-final-equals.test.ts's LANDMINE pin for
+  // the full reasoning; both retagged off `[INVERTS: bare-value-purge/P4]`.
   { id: "LAMBDA-branded fn passes jsToScheme by identity", gate: "reverse-membrane step 6", replacedBy: "membrane/crossing function row" },
   { id: "defineRosetta legacy arm authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
   { id: "bare-fn env.set harness wiring", gate: "reverse-membrane", replacedBy: "EnvCapability-wired fixtures" },

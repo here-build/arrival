@@ -407,11 +407,16 @@ describe("G6 equality-suite cleanup", () => {
       // but the Setoid itself IS representation-blind (documents the divergence):
       // The return type of [tf("equals")] is `boolean`; the inner `true` is the `other`
       // arg (also `unknown`). No cast needed — the method is typed on ABool directly.
-      // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/values.md,
-      // RULINGS.md R1): asserts the Setoid "IS representation-blind" as a durable fact —
-      // this is the scheduled-to-invert case P4 names. Once the bare-value purge lands
-      // (R1's uniform exit convention), a raw JS boolean should never reach the Setoid
-      // boundary at all, and this assertion flips to a strict-door throw.
+      // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration: op-helpers.ts's
+      // withInputProvenance now always boxes, ANil's length boxes, Environment.set boxes
+      // every stored scalar — so no INTERNAL producer inside the membrane can hand
+      // `equal?`/`eq?`/`eqv?` a raw JS boolean anymore during real scheme execution. That
+      // does NOT flip this assertion to a strict-door throw: equality-representation.test.ts
+      // (see its boolean row) and boolean-landmine-regression.test.ts's own header comment
+      // ("EVERY predicate produces these SchemeBools, and these stay green") both
+      // independently pin the Setoid's representation-blindness as DURABLE, general JS-API
+      // convenience, not a transitional accommodation. A throw here would contradict those
+      // verified-durable siblings — the aspirational door the purge explicitly warns against.
       expect(
         (new ABool(CONSTANT_CTX, true))[tf("equals")](true),
       ).toBe(true);

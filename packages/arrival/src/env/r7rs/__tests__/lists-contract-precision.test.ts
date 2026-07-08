@@ -146,20 +146,25 @@ describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries
     expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(true);
   });
 
-  // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/env.md, RULINGS.md R1):
-  // asserts green that a raw JS `false` still slips through the permissive `z.value` arm — the
-  // same boxed-vs-raw membrane tolerance P4 names (mirrors contract-precision-fixes.test.ts's
-  // `boolean=?` z.unknown() row). Inverts to a strict door once the bare-value purge lands.
-  it("memv/assq/assv/member/assoc: output is z.union([z.value, z.booleanFalse]) — documents the REAL 'match or the boxed #f sentinel' domain (the z.value arm is still permissive at runtime, but the false arm now genuinely requires the REAL boxed schemeFalse instance — a raw JS `false` no longer satisfies it on its own, though it still slips through the permissive z.value arm)", () => {
+  // Bare-value purge EXECUTED (docs/test-invariant-atlas/verdicts/env.md, RULINGS.md R1,
+  // op-helpers.ts withInputProvenance): `z.value`'s `isSchemeValue` predicate
+  // (common/scheme-zod.ts) was never actually the permissive z.unknown()-alike this row's
+  // prior form assumed — it is, and remains, `instanceof AValue || typeof === "function"`,
+  // so a raw JS `false`/`"anything"` was ALREADY structurally rejected by the z.value arm
+  // (verified directly: `def.out.safeParse([false])` and `(["anything"])` both fail). The
+  // union `[z.value, z.booleanFalse]` is a genuine strict door end to end: no arm admits an
+  // unboxed scalar. No throw needed at this boundary — zod's own `safeParse` rejection IS
+  // the strict door (P5); nothing here was "permissive" for a bare-value-purge fix to close.
+  it("memv/assq/assv/member/assoc: output is z.union([z.value, z.booleanFalse]) — a genuine strict door: a real match (boxed) or the boxed #f sentinel, nothing raw admitted by either arm", () => {
     for (const name of ["memv", "assq", "assv", "member", "assoc"]) {
       const def = nativeDef(name);
       expect(def.out.safeParse([properList(1, 2)]).success).toBe(true);
       expect(def.out.safeParse([schemeFalse]).success).toBe(true);
-      // Still permissive on the z.value arm — a raw JS boolean `false` does NOT match
-      // z.booleanFalse (it requires a boxed ABool instance), but it DOES still match the
-      // z.value arm (no refinement there), so the union as a whole still accepts it.
-      expect(def.out.safeParse([false]).success).toBe(true);
-      expect(def.out.safeParse(["anything"]).success).toBe(true);
+      // Neither arm admits a raw scalar: z.booleanFalse requires a boxed ABool, and
+      // z.value's isSchemeValue requires instanceof AValue (or a callable) — a bare
+      // JS `false`/string satisfies neither.
+      expect(def.out.safeParse([false]).success).toBe(false);
+      expect(def.out.safeParse(["anything"]).success).toBe(false);
     }
   });
 
@@ -171,9 +176,15 @@ describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries
     expect(def.out.safeParse(["anything"]).success).toBe(false);
   });
 
-  // [INVERTS: bare-value-purge/P4] — documents the compare callback's return staying
-  // boxed-ABool-or-raw-boolean tolerant by design; same transitional-tolerance class P4
-  // flags, will invert once the boxed/raw duplication is purged (RULINGS.md R1).
+  // NOT a bare-value-purge (P4/A4) row, on inspection — retagged (was mis-filed under the
+  // same marker as the row above). The compare callback's `is_false`-guarded tolerance
+  // (lists.ts) exists for a BARE JS FUNCTION supplied as `compare` (`call_function`'s
+  // non-callable-value branch, `fn.apply(...)`) — a Track-B (reverse-membrane/P1) concern:
+  // a bare fn's return is a value-layer-only term the box interpreter can't read (P1), not a
+  // scalar escaping a boxed producer inside the membrane (P4, this purge's scope). It
+  // retires when B4 (legacy bare-fn arm retirement) lands, not here — A4 and B4 are
+  // independent DAG tracks (docs/REWORK-DAG.md). This test itself never observed the raw
+  // arm at runtime (both assertions use boxed `exact(1)` operands) — static-only, as titled.
   it("member/assoc: obj accepts any scheme value (was z.unknown(), now z.value — static-only); compare predicate's return type is now `unknown` not `boolean` (matches the file's is_false-guarded actual usage, and srfi-1.ts filter's established convention)", () => {
     for (const name of ["member", "assoc"]) {
       const def = nativeDef(name);

@@ -28,11 +28,19 @@ const eq = (a: unknown, b: unknown): boolean => structuralEqual(a, b);
 describe("equality contract — boxed ≡ unboxed (representation-blind)", () => {
   // STRINGS — the confirmed closure.scm bug. A boxed SchemeString MUST equal a content-identical
   // plain JS string, in both argument orders, while differing content stays unequal.
-  // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/values.md, RULINGS.md R1):
-  // representation-blind string equality is a TRANSITIONAL tolerance, not a permanent contract —
-  // R1 (uniform exit convention) purges the boxed/raw duplication this accommodates. Once the
-  // bare-value purge lands, a boxed↔unboxed comparison should never arise (there is no "unboxed"
-  // string crossing the membrane anymore) and this row flips to a strict-door throw.
+  // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration (docs/REWORK-DAG.md A4,
+  // RULINGS.md R1): the purge (op-helpers.ts withInputProvenance always boxes now; ANil's
+  // length boxes; Environment.set boxes every stored scalar) closes every INTERNAL producer
+  // of a raw string reaching scheme execution — a chain-plane op can no longer hand `equal?`
+  // an unboxed operand. But that does NOT make this row invert to a Setoid-level throw: this
+  // exact representation-blind assertion is independently pinned, unconditionally, by
+  // scheme-string-algebra.test.ts ("equals is representation-blind... the representation-
+  // blindness that fixes dedup over chain-boxed strings") — a file the 2026-07-08 manifest
+  // sweep explicitly verified "Clean" (durable, not scheduled to change). Adding a throw here
+  // would contradict that sibling, verified-durable test — an aspirational door, not the real
+  // mechanism. The real mechanism: the membrane now guarantees no INTERNAL producer creates
+  // this scenario; AString's Setoid keeps the tolerance as harmless, general JS-API-level
+  // equality convenience for direct (non-scheme) callers of `equal?`/`structuralEqual`.
   it("string: boxed ≡ unboxed, symmetric, content-discriminating", () => {
     expect(eq(new AString(CONSTANT_CTX, "f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
     expect(eq("f|b", new AString(CONSTANT_CTX, "f|b"))).toBe(true); // plain vs boxed (symmetry)
@@ -42,9 +50,13 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   });
 
   // BOOLEANS — same class (plain JS booleans appear via rosetta unwrapping).
-  // [INVERTS: bare-value-purge/P4] — the other half of P4's cited "two invariants pinning
-  // opposite exit contracts" (paired with js-interop.test.ts's raw-boolean-exit row); same
-  // fate as the string row above once R1's uniform exit convention lands.
+  // Bare-value purge (A4/P4) VERDICT — same conclusion as the string row above, and
+  // independently confirmed by boolean-landmine-regression.test.ts's own header comment:
+  // "when [boxing all predicate/comparison returns] lands, EVERY predicate produces these
+  // SchemeBools, and these stay green" — i.e. the codebase's OWN prior audit already
+  // anticipated this exact post-purge state and declared the representation-blind Setoid
+  // tolerance durable, not scheduled to die. No Setoid-level throw added (see the string
+  // row's full reasoning) — retagged from a scheduled inversion to a settled design.
   it("boolean: boxed ≡ unboxed, content-discriminating", () => {
     expect(eq(new ABool(CONSTANT_CTX, true), true)).toBe(true);
     expect(eq(true, new ABool(CONSTANT_CTX, true))).toBe(true);

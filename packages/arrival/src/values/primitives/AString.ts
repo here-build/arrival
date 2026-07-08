@@ -124,9 +124,10 @@ export class AString extends AValue {
   // characters carry NO element ids (chars aren't separately grounded), so — UNLIKE the
   // Pair/Vector element-union — this carries the STRING's OWN provenance (container prov),
   // matching `string-length` (a separate `symbol.native` binding; THIS is the generalized
-  // `length` dispatching here). `withInputProvenance([this], count)` boxes the count with
-  // this string's provenance when non-empty, else the bare `count`. Code-point length
-  // (spread), so astral chars count once — identical to the `length` getter / `string-length`.
+  // `length` dispatching here). `withInputProvenance([this], count)` always boxes the count
+  // post bare-value purge (A4/P4) — stamped with this string's provenance when non-empty,
+  // a fresh empty-provenance `AExact` otherwise. Code-point length (spread), so astral chars
+  // count once — identical to the `length` getter / `string-length`.
   // No heap-charge / no strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], [...this.__string__].length);
