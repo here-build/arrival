@@ -18,6 +18,37 @@ import type {
   SchemeIdeQuickInfo,
 } from "./ide.js";
 
+/** Diagnostic code namespace for sugarcoat-surface lints (not tsc codes). */
+const SURFACE_LINT_INTERP_SUBSCRIPT = 90001;
+
+/**
+ * Surface-face lints — patterns that are VALID sugarcoat (so the reader must not
+ * reject them; prose is prose) but near-certainly not what the author meant.
+ *
+ * `@id[` — an at-body interpolation stops at the bare name, so a tight `[:key]`
+ * after it is literal prose, silently. Found by the LEARN.md custdev loop
+ * (LongCat wrote `@s[:baseline]` expecting keyed access). Excluded: `,@` splices,
+ * spaced brackets, and the explicit-boundary form `@|id|[` — an author who wrote
+ * the boundary already decided where the name ends, so trailing prose brackets
+ * are plausibly deliberate. A bare tight `@id[` has no other plausible intent.
+ */
+export function sugarcoatSurfaceLints(sugarcoat: string): SchemeIdeDiagnostic[] {
+  const out: SchemeIdeDiagnostic[] = [];
+  const interpThenBracket = /(?<!,)@([A-Za-z!$%&*/<=>?^_~][\w!$%&*/<=>?^_~-]*)\[/g;
+  for (const m of sugarcoat.matchAll(interpThenBracket)) {
+    out.push({
+      start: m.index,
+      length: m[0].length,
+      severity: "warning",
+      code: SURFACE_LINT_INTERP_SUBSCRIPT,
+      messageText:
+        "interpolation stops at the name — the '[…]' here is literal prose; " +
+        "for keyed access graft a form: @(:key name)",
+    });
+  }
+  return out;
+}
+
 /** Per-buffer memo (all queries see same doc between edits). */
 function makeAligner(): (sugarcoat: string) => SugarcoatAlignment | null {
   let lastText: string | null = null;
@@ -56,10 +87,12 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
 
   const wrapped: SchemeIdeBackend = {
     async getSemanticDiagnostics(sugarcoat: string): Promise<SchemeIdeDiagnostic[]> {
+      // Surface lints are face-only (sugarcoat coordinates already) — they fire even
+      // when alignment degrades, since they need no classic projection.
+      const out: SchemeIdeDiagnostic[] = sugarcoatSurfaceLints(sugarcoat);
       const a = align(sugarcoat);
-      if (a === null) return [];
+      if (a === null) return out;
       const diags = await backend.getSemanticDiagnostics(a.classic);
-      const out: SchemeIdeDiagnostic[] = [];
       for (const d of diags) {
         const span = a.toSugarcoat(d.start, d.length);
         if (span !== null) out.push({ ...d, start: span.start, length: span.length });
