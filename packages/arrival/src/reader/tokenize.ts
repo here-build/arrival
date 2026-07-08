@@ -3,7 +3,7 @@
 // Lexer + eof + AString, so it sits cycle-neutral below the monolith (Lexer does not import
 // stdlib). `tokenize` is the one public entry; `tokens`/`strip_s_comments` are its private
 // helpers. stdlib imports `tokenize` back for its single native-lambda literal; the reader's
-// own consumers (reader/Formatter, utils/balanced) import it from here directly.
+// own consumers (utils/balanced) import it from here directly.
 import { Lexer } from "./Lexer.js";
 import { eof } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";
@@ -11,8 +11,7 @@ import invariant from "tiny-invariant";
 
 // The lexer's per-token metadata record — the SHAPE the lexer's meta mode yields, not a
 // Scheme value. (`Lexer.peek(true)` returns these; a token is reader-internal, never an
-// AValue.) This is the canonical home for the type and its overload — `reader/Formatter.ts`
-// re-declares an identical `TokenMeta` only to avoid the cycle (it imports `tokenize` from here).
+// AValue.) This is the canonical home for the type and its overload.
 export interface TokenMeta {
   token: string;
   col: number;

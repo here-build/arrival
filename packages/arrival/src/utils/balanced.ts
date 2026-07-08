@@ -1,8 +1,7 @@
 // Bracket-matching predicate for partial input — the REPL uses it to decide whether an expression is
 // complete or needs a continuation line. Lexer-driven, so it agrees with the real reader's tokenizer.
 // TODO: have the Parser reuse this Stack rather than its own parentheses counter.
-import { tokenize } from "../reader/tokenize.js";
-import { TokenMeta } from "../reader/Formatter.js";
+import { tokenize, TokenMeta } from "../reader/tokenize.js";
 import { Parser } from "../reader/Parser.js";
 import invariant from "tiny-invariant";
 
