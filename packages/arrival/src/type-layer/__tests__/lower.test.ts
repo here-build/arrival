@@ -240,9 +240,13 @@ describe("lower — s.* combinators (TS reserved-word forms)", () => {
 });
 
 describe("lower — integration: lowered call ∩ harvested prelude", () => {
-  // get-route takes a proper list (z.pair | z.nil → List) + a string; set-timer takes a number.
+  // get-route takes a proper list (z.list() → List<unknown>) + a string; set-timer takes a
+  // number. REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value) — a real
+  // dotted-pair codec (prints Pair<Car,Cdr>), not the list-shaped `Cons<unknown>` it used to
+  // alias — z.union([z.pair, z.nil]) no longer means "a proper list." z.list() is the actual
+  // proper-list constructor (prints List<unknown> via the named-generic pre-check).
   const getRoute = symbol.rosetta`get-route: route between stops`(
-    { input: [z.union([z.pair, z.nil]), z.string], output: [z.string] },
+    { input: [z.list(), z.string], output: [z.string] },
     () => "",
   );
   const setTimer = symbol.native`set-timer: start a timer`(

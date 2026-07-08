@@ -31,9 +31,11 @@ function compileErrors(source: string): string[] {
 }
 
 describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => {
-  // `get-route` takes a proper list (z.pair | z.nil → Cons<unknown> | null = List) + a string.
+  // `get-route` takes a proper list (z.list() → List<unknown>) + a string. REBASELINE
+  // (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value) — a dotted-pair codec (prints
+  // Pair<Car,Cdr>), not list-shaped — z.union([z.pair, z.nil]) no longer means "a proper list."
   const getRoute = symbol.rosetta`get-route: route between stops`(
-    { input: [z.union([z.pair, z.nil]), z.string], output: [z.string] },
+    { input: [z.list(), z.string], output: [z.string] },
     () => "",
   );
   const setTimer = symbol.rosetta`set-timer: start a timer`(

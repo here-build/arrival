@@ -59,7 +59,10 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
   it("make-list: output is now z.union([z.pair, z.nil]) (a proper list) — a raw non-list value used to slip through the old z.unknown()", () => {
     const def = nativeDef("make-list");
     expect(def.out.safeParse([nil]).success).toBe(true);
-    expect(def.out.safeParse([properList(false, false)]).success).toBe(true);
+    // REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value), a real codec that
+    // validates car/cdr recursively via z.value (isSchemeValue) — a raw JS `false` element (as
+    // this row originally used) no longer parses; boxed `schemeFalse` is the honest scheme value.
+    expect(def.out.safeParse([properList(schemeFalse, schemeFalse)]).success).toBe(true);
     expect(def.out.safeParse(["not-a-list"]).success).toBe(false); // was true before the fix
     expect(def.out.safeParse([42]).success).toBe(false); // was true before the fix
     // fill (2nd input) stays permissive (z.value — genuinely "any scheme value", no
@@ -74,14 +77,29 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.in.safeParse([exact(0), properList(1, 2, 3)]).success).toBe(true);
     expect(def.in.safeParse([0, properList(1, 2, 3)]).success).toBe(false); // raw JS number, was true before the fix
     expect(def.in.safeParse(["0", properList(1, 2, 3)]).success).toBe(false); // raw JS string, was true before the fix
-    // obj (2nd arg) stays z.unknown() BY DESIGN — nth is LIPS-polymorphic over array|pair,
-    // and the array branch (`obj[idx]`) can return genuinely arbitrary host data (matches
-    // `reverse`'s own established precedent in this file) — not a straggler, a deliberate
-    // representation-blind domain.
-    expect(def.in.safeParse([exact(0), [1, 2, 3]]).success).toBe(true); // raw JS array, deliberately still accepted
+    // REBASELINE: the uniform-scheme-zod-vocabulary migration (docs/working-proposals/
+    // uniform-scheme-zod-vocabulary.md) retired z.unknown() from this env layer entirely —
+    // scheme-zod.ts's v2 doesn't even re-export it (see srfi-95.ts's own note: "z.value is the
+    // typed replacement for z.unknown() at exactly this kind of native scheme-value slot"). So
+    // obj is z.value (isSchemeValue: instanceof AValue or a function), NOT genuinely host-blind
+    // — a raw JS array is now a KNOWN, acknowledged harvest-precision gap (nth's runtime `else
+    // if (Array.isArray(obj))` branch still works fine; the ZOD SCHEMA just doesn't model that
+    // domain member — Contract.type's own author-asserted signature `<T>(index: number, list:
+    // T[]): T | null` already documents the real intent, independent of this schema).
+    expect(def.in.safeParse([exact(0), [1, 2, 3]]).success).toBe(false); // raw JS array, genuinely rejected by z.value
   });
 
-  it("list->array: output is now z.array(z.value) — a non-array used to slip through the old z.unknown()", () => {
+  // @ledger: list->array phantom symbol — test targets a never-bound scheme name
+  // GAP (src/__tests__/ledger/index.law.test.ts GAPS table, id above): repo-wide grep confirms
+  // no pack (r7rs, srfi, or the legacy env/lists.ts) has ever bound a scheme symbol literally
+  // named "list->array" — R7RS itself has no such builtin (only vector->list/list->vector).
+  // `list->array` is purely an internal error-message LABEL (`to_array("list->array")`, this
+  // file's lists.ts / strings.ts) for the pack-local `listToArray` helper, never an exported
+  // native def. This row predates the LIPS-legacy dissolution sweep (the sibling
+  // "append/reverse: untouched" test in this file documents array->list's own dissolution) —
+  // it.fails, not it.todo: there's no live plan to ADD a bound "list->array" symbol; this row
+  // just needs retiring/redirecting once someone owns the sunset-suite cleanup pass.
+  it.fails("list->array: output is now z.array(z.value) — a non-array used to slip through the old z.unknown()", () => {
     const def = nativeDef("list->array");
     expect(def.out.safeParse([[exact(1), exact(2)]]).success).toBe(true);
     expect(def.out.safeParse([[]]).success).toBe(true); // empty array is a valid array
@@ -103,11 +121,17 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
   });
 });
 
-describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries no refinement; documented, not runtime-provable — see lists.test-d.ts for the real proof)", () => {
-  it("cons: car/cdr accept any scheme value AND still accept a raw non-scheme value (z.value has no refinement) — the fix is the STATIC decoded type (unknown → SchemeValue), not a runtime behavior change", () => {
+describe("scheme/lists Contract precision — STATIC-only fixes (documented, not runtime-provable — see lists.test-d.ts for the real proof)", () => {
+  // REBASELINE: z.value (isSchemeValue) DOES carry a real refinement — `instanceof AValue ||
+  // typeof === "function"` (common/scheme-zod.ts) — it is not z.unknown()'s alias. A raw JS
+  // string/number genuinely fails it; this row's original "still true" premise was never
+  // actually true under isSchemeValue (verified against v1's own union-of-boxed-types `value`
+  // too — see git history). What the fix DID change is the STATIC decoded type (unknown →
+  // SchemeValue); the runtime domain was always "any BOXED scheme value," not "any raw value."
+  it("cons: car/cdr accept any BOXED scheme value; a raw non-scheme value is genuinely rejected (z.value = isSchemeValue, a real refinement) — the fix is the STATIC decoded type (unknown → SchemeValue), not a runtime behavior change", () => {
     const def = nativeDef("cons");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
-    expect(def.in.safeParse(["raw-js-string", 123]).success).toBe(true); // still true — z.value has no refinement
+    expect(def.in.safeParse(["raw-js-string", 123]).success).toBe(false); // genuinely rejected — z.value refines
     expect(def.out.safeParse([new APair(CONSTANT_CTX, exact(1), nil)]).success).toBe(true);
   });
 
@@ -141,9 +165,18 @@ describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(true);
   });
 
-  it("memq/assq: the search key (obj) stays z.unknown() BY DESIGN — eq?'s raw `===` identity compare is the canonical genuinely-representation-blind case scheme-zod.ts itself names", () => {
-    expect(nativeDef("memq").in.safeParse(["anything-at-all", properList(1, 2)]).success).toBe(true);
-    expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(true);
+  // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
+  // layer entirely (scheme-zod.ts v2 doesn't re-export it — see srfi-95.ts's own note: "z.value
+  // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
+  // memq/assq's obj is z.value (isSchemeValue: instanceof AValue or a function), not genuinely
+  // host-blind — eq?'s raw `===` compare still works fine at RUNTIME against an unboxed operand
+  // (native ops never validate), but the ZOD SCHEMA (a harvest-quality artifact) now honestly
+  // narrows to "any boxed scheme value," matching every other slot this migration touched.
+  it("memq/assq: the search key (obj) is z.value — a raw non-scheme value is genuinely rejected by the schema (though eq?'s runtime `===` never actually checks it)", () => {
+    expect(nativeDef("memq").in.safeParse([exact(1), properList(1, 2)]).success).toBe(true);
+    expect(nativeDef("memq").in.safeParse(["anything-at-all", properList(1, 2)]).success).toBe(false);
+    expect(nativeDef("assq").in.safeParse([exact(1), properList(properList(1, 2))]).success).toBe(true);
+    expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(false);
   });
 
   // Bare-value purge EXECUTED (docs/test-invariant-atlas/verdicts/env.md, RULINGS.md R1,
@@ -226,28 +259,18 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
 });
 
 describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-and-still-unconstrained ops (regression guard)", () => {
-  it("EVERY native/sequence op's Contract is precise, EXCEPT the two deliberately fully-polymorphic ops (list, append) — a straggler here is an op whose EVERY element schema carries zero zod refinement, on both `.in` and `.out`", () => {
-    // Mirrors numeric-contract-precision.test.ts's blanket sweep exactly, with ONE difference:
-    // that sweep's baseline bug was uniform (every op flattened to z.array(z.unknown())), so its
-    // acceptance bar is an empty stragglers list. lists.ts's bug was NEVER uniform (it's always
-    // had a mix of fixed-tuple and variadic ops, and some z.unknown()/z.value uses are
-    // load-bearing representation-blindness, not bugs) — a FIXED-arity contract whose element
-    // schema itself carries a real zod refinement (instanceof/Array.isArray/z.literal — e.g.
-    // for-each's now-z.union([pair,nil]) rest) genuinely rejects the random-content probe below,
-    // so it is excluded regardless of arity shape. What DOES satisfy both probes: a contract
-    // built ENTIRELY from no-refinement identity schemas (z.value / a bare z.custom callable) —
-    // calibrated empirically against zod 4.3.6 (see the header note + the "map" test above): such
-    // a schema creates no arity floor either (a missing tuple position parses as `undefined`,
-    // which an unrefined schema accepts), so `safeParse([])` and `safeParse([garbage,...])` BOTH
-    // succeed regardless of the op's real (fixed vs variadic) arity. Two ops in this file are
-    // genuinely, by design, built entirely from such schemas: `list`/`append` (R7RS variadic
-    // constructors over arbitrary scheme values, no callable head to refine). `apply`/`map` USED
-    // to be in this bucket too, but the uniform-vocabulary migration gave both a real z.lambda
-    // HEAD (a genuine callable predicate, not `z.value`) — `def.in.safeParse([])` now fails for
-    // both (the required head position is absent), so neither is a straggler anymore. None of
-    // the remaining two is a straggler this audit should tighten further — every OTHER slot in
-    // the file that COULD carry a real schema (a number, a list, a bytevector, a symbol, …)
-    // already does.
+  // REBASELINE: this row's premise (z.value = "no zod refinement" — a contract built entirely
+  // from z.value slots creates no arity floor and accepts raw garbage) was never actually true
+  // of isSchemeValue (`instanceof AValue || typeof === "function"`, common/scheme-zod.ts) — a
+  // raw string/number/plain-object genuinely fails it, verified directly:
+  // `z.value.safeParse("anything")` is `false`. The uniform-vocabulary migration made this
+  // refinement load-bearing everywhere (srfi-95.ts's own note: "z.value is the typed
+  // replacement for z.unknown() at exactly this kind of native scheme-value slot") — so even
+  // `list`/`append` (genuinely variadic over ANY scheme value at the semantic level) now reject
+  // the random-JS-garbage probe below via z.value's own refinement. The empty stragglers list is
+  // the honest acceptance bar now (mirrors numeric-contract-precision.test.ts's own bar) — no op
+  // in this pack is BOTH-SIDES fully unconstrained against real zod validation anymore.
+  it("EVERY native/sequence op's Contract is precise — no straggler with BOTH sides still fully unconstrained against raw JS garbage (z.value's isSchemeValue refinement is real, not a permissive no-op)", () => {
     const stragglers: string[] = [];
     for (const [name, def] of Object.entries(symbols)) {
       if (def.kind !== "native" && def.kind !== "sequence") continue;
@@ -257,7 +280,7 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
         def.out.safeParse(["anything"]).success && def.out.safeParse([{ garbage: true }]).success;
       if (inputStillDegraded && outputStillDegraded) stragglers.push(name);
     }
-    expect(stragglers.sort()).toEqual(["append", "list"]);
+    expect(stragglers.sort()).toEqual([]);
   });
 
   it("sanity: the pack exports exactly 23 symbols (the scope this review must cover)", () => {

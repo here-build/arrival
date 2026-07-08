@@ -58,6 +58,7 @@ import * as sz from "../common/scheme-zod.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../common/schema-tag.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { schemaCapability } from "./schema.js";
 
 /** Lower a `define/overridable` type tag — an EVALUATED scheme value, already `schemeToJs`'d
@@ -131,9 +132,17 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   symbols: ({ configuration }) => ({
     "overridable/resolve":
       symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
-        { input: [sz.symbol, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
+        // `name` stays `sz.value` (the raw ASymbol), NOT `sz.symbol`: the v1→v2 scheme-zod swap
+        // (4ebe73abbe, 2026-07-08) turned `sz.symbol` into a REAL codec that decodes to an
+        // OPAQUE host JS `symbol` (`Symbol("arrival membrane symbol: <name>")` — see
+        // scheme-zod.ts's own `symbol` primitive) instead of the bare ASymbol identity-pass v1
+        // had. `nameSym.toString()` on that opaque brand prints the whole wrapper description,
+        // not the bare name — this capability genuinely needs the readable name (every error
+        // message names the binding), so it reads the ASymbol directly via `.literal()` (the
+        // same "bare symbol name" accessor the print protocol itself uses).
+        { input: [sz.value, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
         (nameSym, typeTag, defaultVal) => {
-          const bindingName = nameSym.toString();
+          const bindingName = (nameSym as ASymbol).literal();
           const jsTag = schemeToJs(typeTag);
           const zodType = lowerTag(jsTag, bindingName);
 

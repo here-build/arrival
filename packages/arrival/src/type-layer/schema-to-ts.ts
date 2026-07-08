@@ -54,9 +54,10 @@ import type { AEntity } from "../common/symbol.js";
 //
 // The harvest re-presents each scheme primitive as the TS type the lens narrows against:
 // the membrane makes a boundary value its plain JS type, and list/pair/vector project to
-// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair → Cons<unknown>` so the natural
-// list zod `z.union([z.pair, z.nil])` composes to `Cons<unknown> | null` = `List<unknown>`
-// with no special-case. An unmapped custom/instanceof scheme primitive degrades to `unknown`
+// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(value, value)` (see
+// scheme-zod.ts's own doc comment on `pair`) — it carries the name "cons", not "pair", so
+// it prints via the named-generic pre-check below as `Pair<unknown, unknown>`, not through
+// this table. An unmapped custom/instanceof scheme primitive degrades to `unknown`
 // (robust default — never throw; the total-harvest contract, e.g. a future zod primitive).
 // ─────────────────────────────────────────────────────────────────────────────
 type Ts = typeof import("typescript");
@@ -68,7 +69,6 @@ const numberNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.Synt
 const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword);
 const bigintNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword);
 const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
-const consUnknownNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Cons", [unknownNode(ts)]);
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
 const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
 /** `(...args: unknown[]) => unknown` — z.lambda's callable image. */
@@ -92,7 +92,8 @@ const lambdaNode: NodeBuilder = (ts) => {
 // knows every vocabulary item's identity; this file now only needs to know how to PRINT
 // a given name, not how to RECOGNIZE one.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
-  ["pair", consUnknownNode], // `z.pair | z.nil` → `Cons<unknown> | null` = List<unknown>
+  // NOTE: no "pair" entry — `z.pair` is `cons(value, value)`, named "cons", and prints via
+  // the named-generic pre-check as `Pair<unknown, unknown>` before this table is ever consulted.
   ["string", stringNode],
   ["exact", bigintNode],
   ["inexact", numberNode],

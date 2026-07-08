@@ -18,8 +18,11 @@ import { createQueryLens } from "../query.js";
 //   sum_readings  (a: number[])                 => Promise<number>   — vector slot; number return
 //   set_timer     (a: number)                   => Promise<void>     — scalar slot; void return
 //   make_route    ()                            => Promise<List<unknown>>  — a list-RETURNING head
+// REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value) — a dotted-pair codec
+// (prints Pair<Car,Cdr>), not list-shaped — z.union([z.pair, z.nil]) no longer means "a proper
+// list." z.list() is the actual proper-list constructor (prints List<unknown>).
 const getRoute = symbol.rosetta`get-route: route between stops`(
-  { input: [z.union([z.pair, z.nil]), z.string], output: [z.string] },
+  { input: [z.list(), z.string], output: [z.string] },
   () => "",
 );
 const sumReadings = symbol.rosetta`sum-readings: total the readings`(
@@ -31,7 +34,7 @@ const setTimer = symbol.rosetta`set-timer: start a timer`(
   () => undefined,
 );
 const makeRoute = symbol.rosetta`make-route: build a fresh route`(
-  { input: [], output: [z.union([z.pair, z.nil])] },
+  { input: [], output: [z.list()] },
   () => nil,
 );
 //   plan_route   (a: "fast" | "scenic",          — a DIRECT closed string-literal enum slot

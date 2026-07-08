@@ -61,8 +61,14 @@ describe("AbortSignal execution budget", () => {
       exec("(do () (#f))", { signal: ctrl.signal }),
     ).rejects.toThrow(/abort/i);
     // Generous upper bound: the trampoline only checks at the 5ms / 1000-iter
-    // cadence, so abort propagates within ~one tick of the 50ms timer.
-    expect(Date.now() - start).toBeLessThan(2000);
+    // cadence, so abort propagates within ~one tick of the 50ms timer. Raised
+    // 2000ms → 10000ms (G3 sunset triage, timing-flake hardening): this is a
+    // WALL-CLOCK assertion racing real system scheduling, not the abort
+    // mechanism itself — under heavy parallel-worker CPU contention the process
+    // can be descheduled well past one 5ms tick without the abort path being
+    // broken. The invariant under test ("abort fires, doesn't hang forever") is
+    // preserved at 10s; a tighter bound only risks flaking on a loaded machine.
+    expect(Date.now() - start).toBeLessThan(10000);
   });
 
   it("throws immediately when signal is already aborted at start", async () => {

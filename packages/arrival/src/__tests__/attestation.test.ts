@@ -22,10 +22,21 @@ import { AVector } from "../values/primitives/AVector.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { tf } from "../values/tagless-final.js";
 import { AListAlike } from "../values/types.js";
+import { jsToScheme } from "../rosetta.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
- *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk. */
-const source = (impl: () => unknown) => symbol.rosetta`t: test source`({ input: [], output: [z.value] }, impl);
+ *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk.
+ *  REBASELINE (v1→v2 scheme-zod swap, 4ebe73abbe, 2026-07-08): `z.value` used to be a UNION
+ *  of auto-boxing codecs (v1's `value = z.union([number, string, boolean, …])`), so a raw JS
+ *  return auto-boxed via whichever union member matched. v2's `value` is a bare
+ *  `z.custom(isSchemeValue)` predicate — a real "no automatic transform" escape hatch (see its
+ *  doc comment: "the impl receives/returns the raw scheme value and does its own
+ *  schemeToJs/jsToScheme"). The impl must now box its own return, exactly like the one real
+ *  production consumer of this pattern (env/overridable.ts's `overridable/resolve`, which ends
+ *  `return jsToScheme(CONSTANT_CTX, outcome.data)`). */
+const source = (impl: () => unknown) =>
+  symbol.rosetta`t: test source`({ input: [], output: [z.value] }, () => jsToScheme(CONSTANT_CTX, impl()));
 
 /** A SOURCE rosetta echoing its scheme argument — the identity fast path through
  *  jsToScheme returns the very same box, which the return walk then deep-attests. */

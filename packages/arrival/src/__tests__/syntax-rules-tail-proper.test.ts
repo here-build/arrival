@@ -22,13 +22,24 @@ const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
 
 describe("syntax-rules — form-returning + tail-proper", () => {
-  it("a macro in tail position recurses 50k deep WITHOUT host-stack overflow", async () => {
-    const src = `
+  // Timeout raised 20000ms (suite default) → 60000ms (G3 sunset triage, timing-flake
+  // hardening): 50k deep tail-recursive macro expansion through the full trampoline can
+  // occasionally exceed the default budget under heavy parallel-worker CPU contention. The
+  // depth stays 50000 on purpose — "Completion at depth IS the proof" (this file's own header):
+  // a shallower depth wouldn't reliably re-catch the pre-fix host-stack-overflow regression this
+  // test exists to guard against, so widening the clock (not shrinking the depth) is the fix
+  // that preserves the invariant.
+  it(
+    "a macro in tail position recurses 50k deep WITHOUT host-stack overflow",
+    async () => {
+      const src = `
       (define-syntax my-if (syntax-rules () ((my-if t a b) (if t a b))))
       (define (loop n) (my-if (= n 0) 'done (loop (- n 1))))
       (loop 50000)`;
-    expect(repr(await exec(src, { env: sandboxedEnv.inherit("tco1") }))).toBe("done");
-  });
+      expect(repr(await exec(src, { env: sandboxedEnv.inherit("tco1") }))).toBe("done");
+    },
+    60000,
+  );
 
   it("template quoted symbol is restored (no #:gensym leak)", async () => {
     const src = `

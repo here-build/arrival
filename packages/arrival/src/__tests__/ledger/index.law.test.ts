@@ -71,6 +71,14 @@ const GAPS: readonly LedgerRow[] = [
   // `restrictControlFlowProvenance`) falls through to the generic `return value` branch
   // and hands back a Nil object where callers expect `null`.
   { id: "nil-clone schemeToJs entry loses identity", gate: "rosetta.ts:70 fix", replacedBy: "laws/identity" },
+  // Sunset-suite row (not walker-governed — this file lives under env/r7rs/__tests__, outside
+  // the SUNRISE_DIRS this ledger's own walker scans; recorded here anyway per the G3 sunset-
+  // cutover triage's own instruction to name every genuine gap). "list->array" was never a
+  // bound scheme symbol in any pack (repo-wide grep confirms; R7RS itself has no such builtin)
+  // — it's purely an internal error-message label for the pack-local listToArray helper. The
+  // test predates the LIPS-legacy dissolution sweep and needs retiring/redirecting, not a
+  // reintroduced symbol.
+  { id: "list->array phantom symbol", gate: "sunset-suite cleanup pass", replacedBy: "n/a — test retirement, not a feature to land" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [

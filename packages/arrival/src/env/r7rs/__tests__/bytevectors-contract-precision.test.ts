@@ -53,11 +53,18 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([Uint8Array.from([1, 2, 3])]).success).toBe(false);
   });
 
-  it("bytevector?'s deliberately-blind classifier is untouched by this fix (still z.unknown() — a predicate that classifies ANY value)", () => {
+  // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
+  // layer entirely — scheme-zod.ts v2 doesn't re-export it (see srfi-95.ts's own note: "z.value
+  // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
+  // bytevector?'s classifier is now z.value (isSchemeValue: instanceof AValue or a function),
+  // not genuinely host-blind — the impl still happily classifies a raw Uint8Array at RUNTIME
+  // (native ops never validate), but the schema itself now honestly narrows to "any boxed
+  // scheme value," matching every other slot this migration touched.
+  it("bytevector?'s classifier is z.value — a raw non-scheme value is genuinely rejected by the schema (though the impl's own instanceof checks still classify raw binary fine at runtime)", () => {
     const def = nativeDef("bytevector?");
     expect(def.in.safeParse([bv([1])]).success).toBe(true);
-    expect(def.in.safeParse(["anything"]).success).toBe(true);
-    expect(def.in.safeParse([Uint8Array.from([1])]).success).toBe(true);
+    expect(def.in.safeParse(["anything"]).success).toBe(false);
+    expect(def.in.safeParse([Uint8Array.from([1])]).success).toBe(false);
   });
 
   it("EVERY bytevectors native op's Contract is precise — no straggler with BOTH sides still fully unconstrained", () => {

@@ -111,12 +111,20 @@ describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolea
     expect(def.in.safeParse(["not-a-symbol", 42]).success).toBe(false); // no symbols at all — was true before the fix
   });
 
-  it("boolean=?: input STAYS z.array(z.unknown()) — the impl's own unwrap() branches on boxed ABool vs raw JS boolean, so blindness is load-bearing, not imprecision", () => {
+  // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
+  // layer entirely (scheme-zod.ts v2 doesn't re-export it — see srfi-95.ts's own note: "z.value
+  // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
+  // boolean=?'s contract is `inputRest: z.value` (isSchemeValue: instanceof AValue or a
+  // function) — genuinely NOT host-blind at the schema level (a raw JS boolean fails it), even
+  // though the impl's own unwrap() still handles both representations at RUNTIME (native ops
+  // never validate — see this file's own header note). The mixed-representation runtime
+  // behavior stays load-bearing (equality.ts's unwrap()); only the zod schema's acceptance
+  // domain is now honestly "boxed scheme value," matching every other slot this migration
+  // touched.
+  it("boolean=?: input is z.value — a raw JS boolean is genuinely rejected by the schema (though the impl's own unwrap() still accepts both representations at runtime)", () => {
     const def = contractDef(equalityPack, "boolean=?");
-    // Both representations — and a MIX of the two in one call — must be ACCEPTED: this
-    // IS the point of z.unknown() here, not a degraded placeholder like the fixed ops above.
-    expect(def.in.safeParse([true, false]).success).toBe(true);
+    expect(def.in.safeParse([true, false]).success).toBe(false);
     expect(def.in.safeParse([new ABool(CONSTANT_CTX, true), new ABool(CONSTANT_CTX, false)]).success).toBe(true);
-    expect(def.in.safeParse([true, new ABool(CONSTANT_CTX, true)]).success).toBe(true);
+    expect(def.in.safeParse([true, new ABool(CONSTANT_CTX, true)]).success).toBe(false);
   });
 });

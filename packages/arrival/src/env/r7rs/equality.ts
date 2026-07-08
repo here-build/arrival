@@ -10,7 +10,7 @@
  * predicate returns the shared `schemeTrue`/`schemeFalse` FLYWEIGHTS (eq?-stable,
  * empty-provenance; `structuralEqual` treats them identically). Inputs stay
  * REPRESENTATION-BLIND by design (a boxed SchemeBool/SchemeSymbol OR a raw JS
- * value that arrived via rosetta unwrapping — see equality-representation.test.ts),
+ * value that arrived via rosetta unwrapping — see laws/equality.law.test.ts),
  * so the honest input term is `z.value`.
  *
  * ALSO HOLDS the R7RS TYPE predicates `string?` / `pair?` / `null?` / `boolean?` /
@@ -57,7 +57,16 @@ export default new EnvCapability("scheme/equality", {
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
         // the type-guard one line up would already have rejected the schemeTrue
         // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-        const unwrap = (b: SchemeValue): boolean | undefined => (b instanceof ABool ? b.value : undefined);
+        // FIX (regression from 47e1b41cf9's tf()-adoption pass, which silently dropped the raw
+        // `typeof b === "boolean"` arm while relocating this closure — never an intended logic
+        // change per that commit's own message): both representations are load-bearing here
+        // (the contract's own `z.value` input + this file's header doc both still document
+        // "booleans cross the rosetta membrane unboxed"), so a raw JS boolean must unwrap too.
+        const unwrap = (b: SchemeValue): boolean | undefined => {
+          if (typeof b === "boolean") return b;
+          if (b instanceof ABool) return b.value;
+          return undefined;
+        };
         const first = unwrap(bools[0]);
         if (first === undefined) return schemeFalse;
         // todo use actual context instead of CONSTANT_CTX
@@ -71,7 +80,7 @@ export default new EnvCapability("scheme/equality", {
     // R7RS 6.5 Symbols. Unlike `boolean=?` above, this is NOT representation-blind: the
     // impl only ever checks `instanceof ASymbol` (no raw-JS-symbol unwrap branch), and
     // symbols have no plain-JS counterpart in this language (no codec for them in
-    // scheme-zod.ts, unlike string/boolean/char/number — see equality-representation.test.ts's
+    // scheme-zod.ts, unlike string/boolean/char/number — see laws/equality.law.test.ts's
     // own "always boxed in practice" note for characters & symbols). So `z.symbol` (the SAME
     // identity primitive `symbol->string`/`string->symbol` below already use) is the honest
     // domain, not `z.value` — this is a precision fix, not a blindness removal.
