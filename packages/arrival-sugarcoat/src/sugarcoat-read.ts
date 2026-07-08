@@ -600,9 +600,24 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     }
     return left;
   }
+  /** Close-check for `{…}` contexts, phrased for the actual failure. When the token
+   *  that stopped the infix parse is a WORD, the problem is almost never bracket
+   *  balance — it's an unknown infix operator (a removed glyph like `??`, a typo) or
+   *  a second datum where an operator belongs. Name it and list the vocabulary. */
+  function requireCurlyClose(context: string): void {
+    const t = peek();
+    if (t?.t === "}") return;
+    if (t?.t === "word")
+      invariant(
+        false,
+        () =>
+          `expected '}' or an infix operator, got '${t.v}'${context} — operators: ${Object.keys(GLYPH_PREC).join(" ")}`,
+      );
+    invariant(false, () => `unbalanced {${context}`);
+  }
   function curly(): Node {
     const e = infix(0);
-    invariant(!!peek() && peek()!.t === "}", "unbalanced {");
+    requireCurlyClose("");
     next();
     return e;
   }
@@ -614,7 +629,10 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
   // (§3.3): `{B}` ⇒ (lambda (it) B). Consumes the closing `}`.
   function trailingLambda(): Node {
     const body = infix(0);
-    invariant(peek()?.t === "}", "unbalanced { in trailing lambda");
+    requireCurlyClose(
+      " in trailing-lambda body (code context: indentation forms don't group inside braces — " +
+        "write the body delimited, e.g. .map{(r) => (dict :id r[:id])}, or bind pieces in a let* first)",
+    );
     next();
     // Pass a body through only when it's ALREADY the arrow-lambda shape `(lambda (p…) …)`
     // — param slot a LIST. A variadic `(lambda x)` (x a rest-symbol atom) is NOT what the
