@@ -21,8 +21,8 @@
  * (PurityError). There is deliberately NO `assign`/`ref`/`set!` method here;
  * `define` is a frame rebind (let/lambda/letrec/define), not value mutation.
  */
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { type BindingName, Environment, type EnvironmentValue } from "../Environment.js";
 import { resolveMemberPath } from "../member-walk.js";
@@ -30,7 +30,6 @@ import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
-import { CallCtx } from "../common/symbols/_bake.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -44,27 +43,44 @@ import { tf } from "../values/tagless-final.js";
 // runCtx.strict), provenance (APair re-stamps), and the totalic "primitive does not support
 // car" throw for free.
 const CXR_RE = /^c[ad]+r$/;
-function cxrUnfold(name: string): SchemeValue | undefined {
+/** Memoized per name so `(eq? cadr cadr)` holds across two resolution misses — reference
+ *  identity IS the equality contract for callables (ACallable's `arrival/tagless-final/equals`),
+ *  and `withProvenance` on a callable is an identity-preserving no-op. */
+const cxrCache = new Map<string, ANativeProcedure>();
+function cxrUnfold(name: string): ANativeProcedure | undefined {
   if (!CXR_RE.test(name)) return undefined;
+  const cached = cxrCache.get(name);
+  if (cached !== undefined) return cached;
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  return function (this: CallCtx, arg: unknown): unknown {
-    // `this?.` (not just `this.runCtx`): a native HOF (`map`/`vector-map`) invokes this
-    // synthesized accessor as a plain callback with `this === undefined`, so reading
-    // any property off `this` directly would throw before a nested `?.` could guard it.
-    // todo this should be fixed - binding is clearly broken
-    const runCtx = this?.runCtx ?? CONSTANT_CTX;
-    let v: unknown = arg;
-    for (const t of steps) {
-      const m = v?.[tf(t === "a" ? "car" : "cdr")];
-      TypeError.invariant(
-        typeof m === "function",
-        () =>
-          `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
-      );
-      v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
-    }
-    return v;
-  } satisfies SchemeValue;
+  // The reverse-membrane pilot (reverse-membrane-for-callables.md §6): the synthesized
+  // accessor is an ANativeProcedure, never a bare fn returned into value space. Every
+  // invocation route (evaluator call-head, `call_function`'s callable-value branch, HOFs
+  // via `applyCallback`) dispatches the apply term with an EXPLICIT runCtx — the old
+  // `this?.runCtx ?? CONSTANT_CTX` apology (a HOF calling with `this === undefined`
+  // silently degraded strict mode) is structurally impossible now.
+  const proc = new ANativeProcedure({
+    name,
+    arity: { min: 1, max: 1 },
+    contract: undefined,
+    impl: ([arg], runCtx) => {
+      let v: unknown = arg;
+      for (const t of steps) {
+        const m = (v as Partial<Record<symbol, unknown>> | null | undefined)?.[tf(t === "a" ? "car" : "cdr")];
+        TypeError.invariant(
+          typeof m === "function",
+          () =>
+            `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
+        );
+        v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
+      }
+      // The walk's result is the receivers' own car/cdr algebra output — scheme values by
+      // construction; typed `unknown` by the spine-walk convention, narrowed once at this
+      // boundary (same convention as applyCallback's arg cast).
+      return v as SchemeValue;
+    },
+  });
+  cxrCache.set(name, proc);
+  return proc;
 }
 
 /**

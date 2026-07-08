@@ -17,7 +17,7 @@
 import { is_promise } from "./guards.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { is_callable_value } from "../values/value-guards.js";
-import { applyCallback } from "../values/primitives/ACallable.js";
+import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
 import { LambdaContext } from "./LambdaContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
@@ -27,7 +27,7 @@ import { promise_all } from "../utils/promises.js";
 type SchemeFunction = (...args: any[]) => any;
 
 export function call_function(
-  fn: SchemeFunction,
+  fn: SchemeFunction | ACallable,
   args: SchemeValue[],
   { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx?: RunContext } = {},
 ) {

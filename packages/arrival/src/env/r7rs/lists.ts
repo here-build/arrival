@@ -27,6 +27,7 @@ import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { is_false, is_function, is_promise } from "../../eval/guards.js";
+import { is_callable_value } from "../../values/value-guards.js";
 import { type, typeErrorMessage } from "../../utils/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
@@ -204,8 +205,10 @@ function multiListMap(
 // Unifying the two is a deferred behavior-preserving cleanup.
 function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Promise<SchemeValue> {
   // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
-  // as a type-level assertion so `call_function` sees the JS-callable it needs.
-  invariant(is_callable(fn), `map: the first argument is not a procedure`);
+  // as a type-level assertion so `call_function` sees a shape it can invoke. Callable
+  // VALUES (ANativeProcedure — e.g. the kernel-synthesized cxr accessors — /ALambda)
+  // are first-class here: `call_function` routes them through the applyCallback seam.
+  invariant(is_callable(fn) || is_callable_value(fn), `map: the first argument is not a procedure`);
   const is_list = isProperList;
   for (const [i, arg] of lists.entries()) {
     // detect cycles
