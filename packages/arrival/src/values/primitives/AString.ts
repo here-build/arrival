@@ -1,5 +1,8 @@
-// String wrapper — copy + in-place mutation (string-set!/string-fill!) over a
-// code-point view, with provenance and Fantasy Land algebras on the instance.
+// String wrapper — immutable (string-set!/string-fill! are notImplemented stubs; every
+// "mutator" below returns a fresh AString) over a code-point view, with provenance and
+// Fantasy Land algebras on the instance. `freeze()` is JS-level defense-in-depth
+// (Object.defineProperty non-writable/non-configurable) for a parsed literal, not a
+// runtime-enforced mutation guard.
 // Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
 import { CLASS } from "../../well-known-symbols.js";

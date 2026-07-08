@@ -95,13 +95,12 @@ export function toIndex(v: unknown): number {
 }
 
 /** Structural guard for the vector PROTOCOL — a boxed AVector or a borrowed AJSArray, both
- *  answering `arrival/tagless-final/vector?` and exposing their element payload via `__vector__`
- *  (a literal also carries `frozen`). Honest duck-narrowing — no `instanceof AVector` reach-around,
- *  no operand cast in `asVector`'s body. */
+ *  answering `arrival/tagless-final/vector?` and exposing their element payload via `__vector__`.
+ *  Honest duck-narrowing — no `instanceof AVector` reach-around, no operand cast in `asVector`'s
+ *  body. */
 interface VectorLike {
   "arrival/tagless-final/vector?"(): boolean;
   __vector__: SchemeValue[];
-  frozen?: boolean;
 }
 // todo smell, eliminate
 function isVectorLike(obj: unknown): obj is VectorLike {
@@ -109,19 +108,15 @@ function isVectorLike(obj: unknown): obj is VectorLike {
 }
 
 /**
- * Resolve a vector argument to its raw element array (read/mutate view).
+ * Resolve a vector argument to its raw element array (read view).
  *
  * PROTOCOL dispatch — anything answering `arrival/tagless-final/vector?` (a boxed AVector OR a
- * borrowed AJSArray, which IS a vector) exposes its element payload via `__vector__`. For an
- * owned vector that's the writable payload by reference (in-place mutators write through); for a
- * borrowed view the getter materializes its source on first read. No `instanceof AVector`
- * reach-around. The `frozen` check guards a literal's payload from in-place writes (a borrowed
- * view has no `frozen` field, and a writable source it never had — the mutators are doored
- * regardless). A raw JS array is still tolerated (transition; S10 will remove it). Throws otherwise.
+ * borrowed AJSArray, which IS a vector) exposes its element payload via `__vector__`. No
+ * `instanceof AVector` reach-around. A raw JS array is still tolerated (transition; S10 will
+ * remove it). Throws otherwise.
  */
-export function asVector(obj: unknown, fnName: string, forMutation = false): SchemeValue[] {
+export function asVector(obj: unknown, fnName: string): SchemeValue[] {
   if (isVectorLike(obj)) {
-    TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable vector literal`);
     return obj.__vector__;
   }
   if (Array.isArray(obj)) return obj; // transitional raw-array tolerance (S10 will remove this)
@@ -133,12 +128,12 @@ export function asVector(obj: unknown, fnName: string, forMutation = false): Sch
  * Accepts Uint8Array, ArrayBuffer, DataView, Node Buffer.
  * Preserves identity for Uint8Array, creates view for others.
  */
-export function asBytevector(obj: unknown, fnName: string, forMutation = false): Uint8Array {
+export function asBytevector(obj: unknown, fnName: string): Uint8Array {
   switch (true) {
     case obj instanceof ABytevector:
-      // Unwrap by reference so in-place mutators (bytevector-u8-set!,
-      // bytevector-copy!) write through to the boxed payload.
-      TypeError.invariant(!forMutation || !obj.frozen, `${fnName}: cannot mutate an immutable bytevector literal`);
+      // Unwrap by reference (env is immutable by design — vector-set!/bytevector-u8-
+      // set!/etc. are all notImplemented stubs, so there is no in-place writer left
+      // to guard against).
       return obj.__bytevector__;
     case obj instanceof Uint8Array:
       // FFI coercion: a raw Uint8Array handed to byte vector op (e.g., from a
