@@ -33,11 +33,11 @@ import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/sy
 import type { SchemeValue } from "../../../values/types.js";
 
 describe("scheme/r7rs/binding Contract precision — values", () => {
-  test("OLD shape (z.array(z.custom<unknown>())) decoded flat unknown[] / unknown — no scheme-term precision", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
-    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
-  });
-
+  // OLD-shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
+  // with no reachable production path. The NEW-side row below (matching numeric.test-d.ts's
+  // converged NEW-side-only shape) is the load-bearing proof.
   test("NEW shape: z.array(z.value) / [z.value] — args are SchemeValue[], return is SchemeValue (matches Values.from's own fixed signature)", () => {
     // Mirrors values's real migrated contract: { input: z.array(z.value), output: [z.value] }.
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.value>>>>().toEqualTypeOf<SchemeValue[]>();

@@ -30,6 +30,12 @@ import { freshEnv } from "./_fresh-env.js";
 const env = await freshEnv();
 
 /** Coerce a Scheme numeric result to a JS number (handles SchemeExact). */
+// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
+// RULINGS.md R1): tolerates boxed-with-valueOf AND raw number/bigint simultaneously —
+// literally the "accepts boxed or raw" contract P4 forbids, baked into shared test infra
+// across this file, r7rs-numbers.test.ts, and r7rs-identity.test.ts instead of exposing
+// exec()'s exit-convention inconsistency. Collapses to one asserted shape once R1's
+// uniform exit convention (toJS/schemeToJs always fully unwraps) lands.
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;
   if (typeof r === "bigint") return Number(r);
@@ -67,16 +73,21 @@ describe("r7rs unicode — passing invariants (regression guards)", () => {
   });
 });
 
-describe("r7rs unicode — known bugs (it.fails — flipping to green = regression of the bug)", () => {
+// [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P15]
+// docs/test-invariant-atlas/verdicts/evaluator.md): this describe title + the per-test
+// "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
+// a plain `it(...)` — ran the suite, all pass today, so the bugs these describe are
+// already FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..."
+// convention instead of stale "known bug" framing that could mislead a reader into
+// thinking there's a live tracked regression.
+describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
   it(
     "char->integer on a non-BMP character returns the full code point",
     async () => {
-      // R7RS § 6.6: `char->integer` returns the Unicode scalar value.
-      // `bridge.ts:649` uses `charValue(char).charCodeAt(0)` which returns
-      // the FIRST UTF-16 code unit. For U+1F600 (😀), the high surrogate
-      // is 0xD83D = 55,357, not the actual code point 128,512.
-      //
-      // Predicted failure value: 55,357 instead of 128,512.
+      // FIXED (was: `bridge.ts:649` used `charValue(char).charCodeAt(0)`, the FIRST
+      // UTF-16 code unit — for U+1F600 (😀) the high surrogate 0xD83D = 55,357, not the
+      // actual code point 128,512). R7RS § 6.6: `char->integer` returns the Unicode
+      // scalar value; now uses a code-point API and returns it correctly.
       const r = await evalScheme("(char->integer #\\😀)");
       expect(num(r)).toBe(128512);
     },
@@ -93,7 +104,7 @@ describe("r7rs unicode — known bugs (it.fails — flipping to green = regressi
       // because char->integer also misreads — but here `` is a single
       // BMP code unit so charCodeAt(0) returns 62976 correctly).
       //
-      // Predicted failure value: 62,976 instead of 128,512.
+      // FIXED: round-trips to 128,512 correctly now.
       const r = await evalScheme("(char->integer (integer->char 128512))");
       expect(num(r)).toBe(128512);
     },
@@ -110,7 +121,7 @@ describe("r7rs unicode — known bugs (it.fails — flipping to green = regressi
       // `folded[0] || charValue(char)` — silently TRUNCATES "ss" to "s",
       // producing a different character from the input.
       //
-      // Predicted failure value: #\s instead of #\ß.
+      // FIXED: returns #\ß unchanged now (multi-char folds are identity per R7RS).
       const r = await evalScheme("(char-foldcase #\\ß)");
       expect(String(r)).toBe("#\\ß");
     },
@@ -126,7 +137,7 @@ describe("r7rs unicode — known bugs (it.fails — flipping to green = regressi
       // there's no case distinction → toLowerCase() === toUpperCase() →
       // predicate returns #f.
       //
-      // Predicted failure value: #f instead of #t.
+      // FIXED: returns #t for CJK ideographs now.
       const r = await evalScheme("(char-alphabetic? #\\漢)");
       expect(Boolean((r as { valueOf?: () => unknown })?.valueOf?.() ?? r)).toBe(true);
     },
@@ -142,7 +153,7 @@ describe("r7rs unicode — known bugs (it.fails — flipping to green = regressi
       // `Object.keys(characters)` and OVERWRITES, so the codepoint resolves
       // to whichever name comes last in source order — `bel`.
       //
-      // Predicted failure value: "#\bel" instead of "#\alarm".
+      // FIXED: names as 'alarm' (R7RS-canonical) now, not 'bel'.
       const r = await evalScheme("(integer->char 7)");
       expect(String(r)).toBe("#\\alarm");
     },

@@ -69,7 +69,13 @@ describe("@here.build/arrival/srfi", () => {
     expect(await num("((always 7) 1 2 3)")).toBe(7);
   });
 
-  it("allSrfi exposes the whole set", () => {
+  // [STALE-LABEL] fix (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/env.md): this count pin used to carry no rationale,
+  // unlike every sibling pack-count pin in this scope (11/22/23/32/81 all carry a "the
+  // scope this fix/review must cover" comment). Added the same drift-alarm rationale — the
+  // exact count is here to force a reviewer to touch this test when a SRFI pack is
+  // added/removed, not to freeze the number as a design constraint.
+  it("allSrfi exposes the whole set (sanity: exactly 13 SRFI packs — the scope this fix must cover)", () => {
     expect(allSrfi).toHaveLength(13);
     expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-1");
     expect(allSrfi.map((c) => c.name)).toContain("scheme/srfi-13");

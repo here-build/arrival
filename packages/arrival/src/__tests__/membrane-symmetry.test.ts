@@ -138,6 +138,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // `.hbs`/`.prompt` CALLABLE RULE shape) gets VOIDED on its way back out through
   // `require`'s own rosetta return-marshal — the "require-returns-lambda voids" bug.
   // The membrane's law is unchanged: an UNBRANDED (borrowed host) function still voids.
+  //
+  // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/membrane.md): P1's
+  // own "Revealed by" line names this exact test as evidence of a JS artifact (a bare
+  // function, LAMBDA-branded or not) living in value space without lineage. Framed above
+  // as correct-by-fiat, but it is the TRANSITIONAL shape, not the target state — once
+  // callables-as-values / the reverse-membrane migration lands, a scheme lambda crossing
+  // jsToScheme should carry its own provenance rather than pass through as a bare branded fn.
   it("a LAMBDA-branded function passes through jsToScheme by identity (it IS a scheme value)", () => {
     const lam = Object.assign(() => 42, { [LAMBDA]: true });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);

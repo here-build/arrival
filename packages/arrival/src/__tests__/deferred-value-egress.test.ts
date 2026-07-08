@@ -76,13 +76,17 @@ describe("deferred egress — the exec/membrane boundary", () => {
     expect(is_half_baked(result)).toBe(false);
   });
 
-  it("CHARACTERIZATION: under speculate:true, a top-level result ESCAPES exec as a LIVE AHalfBaked", async () => {
-    // The real, reproducible leak. exec does `results.push(result); return results` with no
-    // force-on-egress, so the speculative carrier — run-A promises + MUTABLE records settled
-    // by a microtask .then — crosses the boundary live. Under the ctx migration it also drags
-    // run-A's ctx. force-on-egress must force it BEFORE exec returns; the todos below pin that.
+  // [P4/P6] FLIP-TO-FAILS (docs/test-invariant-atlas/verdicts/provenance.md): this used to
+  // pin the leak plain-green ("the real, reproducible leak") while the fix (force-on-egress)
+  // sat in `it.todo` right below it — the exact live-carrier-crosses-unforced pattern P4/P6
+  // forbid. Asserts the INTENDED behavior instead: exec does `results.push(result); return
+  // results` with no force-on-egress today, so the speculative carrier — run-A promises +
+  // MUTABLE records settled by a microtask .then — crosses the boundary live. Under the ctx
+  // migration it also drags run-A's ctx. force-on-egress must force it BEFORE exec returns;
+  // this flips green once that lands (the todos below pin the rest of the contract).
+  it.fails("exec materializes a top-level result BEFORE egress — even under speculate:true (no live AHalfBaked escapes)", async () => {
     const [result] = await exec("(filter (lambda (x) (> x 0)) (list 1 -2 3))", { speculate: true });
-    expect(is_half_baked(result)).toBe(true);
+    expect(is_half_baked(result)).toBe(false);
   });
 
   // ── force-on-egress: the contract the hermetic-ctx migration installs ──────────────

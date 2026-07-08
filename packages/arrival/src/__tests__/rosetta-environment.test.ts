@@ -67,7 +67,14 @@ describe("Rosetta Environment", () => {
     // this one is tricky and will probably require deep rewrite of runtime.
     // what needs to be done to introduce second instance of nil that will be "representing empty array"
     // to preserve metadata on reverse conversion
-    it.skip("should convert empty LIPS list to empty JS array", async () => {
+    //
+    // [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P15]
+    // docs/test-invariant-atlas/verdicts/membrane.md): this is a fully-bodied test with real
+    // assertions, marked `it.skip` — outside the suite's declared three-state truth table
+    // (green/`it.fails`/`it.todo`). The atlas itself classifies this as `[todo]` even though
+    // the code said `skip`; promoted to `it.todo` to match (vitest's `it.todo` also accepts
+    // a body, unlike `it.skip` it signals "designed, not yet buildable" rather than "disabled").
+    it.todo("should convert empty LIPS list to empty JS array", async () => {
       const emptyList = await execOne("(list)");
       const jsArray = schemeToJs(emptyList, {});
 
@@ -210,6 +217,10 @@ describe("Rosetta Environment", () => {
     });
   });
 
+  // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/membrane.md): exercises
+  // the legacy `env.defineRosetta` arm — P1's own "Revealed by" line names this exact form
+  // ("env.defineRosetta's legacy form") as a JS artifact living in value space without
+  // lineage. Travels with the reverse-membrane migration; not a permanent contract.
   describe("Environment.defineRosetta", () => {
     it("should extend environment with Rosetta functions", async () => {
       // Define a Rosetta function in the environment
@@ -277,6 +288,9 @@ describe("Rosetta Environment", () => {
     });
   });
 
+  // [INVERTS: reverse-membrane/P1] — same legacy `defineRosetta` arm as the describe above
+  // (MCP CSS-filtering / stats patterns exercised here); travels with the same transitional
+  // tag rather than reading as a permanent contract.
   describe("Real-world Use Cases", () => {
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP

@@ -13,18 +13,18 @@ async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   return results[0];
 }
 
+// Three vacuous exploratory blocks DELETED here (2026-07-08 test-invariant-atlas sweep,
+// [P16] docs/test-invariant-atlas/verdicts/values.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+// §A keyword-syntax.test.ts row): "should test if bare :keyword works" (both-outcomes-pass,
+// `expect(true).toBe(true)` regardless of the actual result), "should test if quoted
+// ':keyword works" (fully vacuous — try-branch asserted nothing meaningful, catch-branch
+// asserted nothing at all), and "should test what Claude's actual query needs" (console.log
+// only, zero assertions in either branch — cannot ever fail). The real accessor cases below
+// (keyword-as-getter, quotations, keyword-extractor map/filter, missing-key) survive as the
+// load-bearing coverage; a move to a `laws/accessor.law.test.ts` table is deferred (the v2
+// `laws/` dir is out of this sweep's scope) — left in place here per the manifest's fallback
+// ("else leave in place and note").
 describe("LIPS Keyword Syntax Investigation", () => {
-  it("should test if bare :keyword works", async () => {
-    try {
-      const result = await execOne(":keyword");
-      console.log("Bare :keyword result:", result, "Type:", typeof result);
-      expect(true).toBe(true); // Just log, don't fail
-    } catch (e: any) {
-      console.log("Bare :keyword failed:", e.message);
-      expect(e.message).toContain("Unbound variable");
-    }
-  });
-
   it("should test if bare :keyword works as getter", async () => {
     const result = await execOne(
       "(:pasword obj)",
@@ -33,38 +33,6 @@ describe("LIPS Keyword Syntax Investigation", () => {
       }),
     );
     expect(result.toString()).toBe("swordfish"); // Just log, don't fail
-  });
-
-  it("should test if quoted ':keyword works", async () => {
-    try {
-      const result = await execOne("':keyword");
-      console.log("Quoted ':keyword result:", result, "Type:", result?.constructor?.name);
-      expect(true).toBe(true);
-    } catch (e: any) {
-      console.log("Quoted ':keyword failed:", e.message);
-    }
-  });
-
-  it("should test what Claude's actual query needs", async () => {
-    const testObj = { name: "test-value", id: "test-id" };
-    inferenceEnv.set("project", jsToScheme(CONSTANT_CTX, testObj));
-
-    // Try different syntaxes
-    const tests = [
-      { desc: "string", expr: '(@ project "name")' },
-      { desc: "quoted symbol", expr: "(@ project 'name)" },
-      { desc: "bare symbol", expr: "(@ project name)" }, // Will fail - unbound
-      { desc: "escaped symbol", expr: "(@ project |name|)" },
-    ];
-
-    for (const { desc, expr } of tests) {
-      try {
-        const result = await execOne(expr);
-        console.log(`✓ ${desc}: ${expr} => ${result}`);
-      } catch (e: any) {
-        console.log(`✗ ${desc}: ${expr} => ${e.message}`);
-      }
-    }
   });
 
   it("should test quotations", async () => {

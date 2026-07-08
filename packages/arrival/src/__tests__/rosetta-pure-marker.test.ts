@@ -5,6 +5,15 @@
  * pipe — like string-append). This proves the marker round-trips onto the env and
  * drives the lineage classifier's source-vs-pipe cut. The richer role taxonomy and
  * the live runtime propagation are deferred; this is the starting-point foothold.
+ *
+ * [STAGING: rosetta-pure-marker] (2026-07-08 test-invariant-atlas sweep, [P14]
+ * docs/test-invariant-atlas/verdicts/membrane.md): honestly self-labeled above as a
+ * "starting-point foothold," but the `Classifier` consumed below (the `C` object in the
+ * second test) is assembled INLINE in the test itself — not read from any production
+ * wiring — unlike P14's model case (the static lineage classifier), which is staged via
+ * an `it.todo`/gate-ledger naming the production wiring gate. This file needs the same:
+ * a named gate for "when does a REAL production classifier read `rosettaPureOf` this
+ * way" rather than reading as an already-shipped classification.
  */
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../bridge.js";

@@ -25,10 +25,10 @@ import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
 describe("scheme/strings Contract precision — array-element tightening (string / comparisons / string-append / concat)", () => {
-  test("OLD shape (z.array(z.custom<unknown>())) decoded FLAT unknown[] — no element precision", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
-  });
-
+  // OLD-shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B "env test-d museum rows") — decoded a retired synthetic schema, no reachable
+  // production path. NEW-side rows below are the load-bearing proof.
   test("NEW `string` shape: z.array(z.schemeChar) decodes to ACharacter[], not unknown[]", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>, "scheme">>().toEqualTypeOf<ACharacter[]>();
   });
@@ -41,10 +41,7 @@ describe("scheme/strings Contract precision — array-element tightening (string
 describe("scheme/strings Contract precision — list-shaped slots (string->list output / list->string input / join 2nd-arg / split output)", () => {
   const listSchema = z.union([z.pair, z.nil]);
 
-  test("OLD shape ([z.custom<unknown>()]) decoded to a bare unknown — no list-shape guarantee", () => {
-    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
-  });
-
+  // OLD-shape row DELETED (same sweep/rationale as the array-element block above).
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list / split) — nil's JS face is null, not ANil; AList is the scheme face", () => {
     expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
   });

@@ -134,6 +134,10 @@ describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries
     expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(true);
   });
 
+  // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/env.md, RULINGS.md R1):
+  // asserts green that a raw JS `false` still slips through the permissive `z.value` arm — the
+  // same boxed-vs-raw membrane tolerance P4 names (mirrors contract-precision-fixes.test.ts's
+  // `boolean=?` z.unknown() row). Inverts to a strict door once the bare-value purge lands.
   it("memv/assq/assv/member/assoc: output is z.union([z.value, z.booleanFalse]) — documents the REAL 'match or the boxed #f sentinel' domain (the z.value arm is still permissive at runtime, but the false arm now genuinely requires the REAL boxed schemeFalse instance — a raw JS `false` no longer satisfies it on its own, though it still slips through the permissive z.value arm)", () => {
     for (const name of ["memv", "assq", "assv", "member", "assoc"]) {
       const def = nativeDef(name);
@@ -155,6 +159,9 @@ describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries
     expect(def.out.safeParse(["anything"]).success).toBe(false);
   });
 
+  // [INVERTS: bare-value-purge/P4] — documents the compare callback's return staying
+  // boxed-ABool-or-raw-boolean tolerant by design; same transitional-tolerance class P4
+  // flags, will invert once the boxed/raw duplication is purged (RULINGS.md R1).
   it("member/assoc: obj accepts any scheme value (was z.unknown(), now z.value — static-only); compare predicate's return type is now `unknown` not `boolean` (matches the file's is_false-guarded actual usage, and srfi-1.ts filter's established convention)", () => {
     for (const name of ["member", "assoc"]) {
       const def = nativeDef(name);

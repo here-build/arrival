@@ -18,7 +18,10 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  *   (length (map id xs))    — TODAY over-attributes: the count carries EVERY
  *                             element id, though a pure-map length can depend only
  *                             on the GROUPING fact (the cardinality), not on what
- *                             each element became. This is the A13 over-attribution.
+ *                             each element became. This is the A13 over-attribution
+ *                             — pinned below as `it.fails` (2026-07-08 mechanical
+ *                             sweep), not plain green: it is a real gap [GATE: G2],
+ *                             not a golden to freeze.
  *   (length (filter p xs))  — TODAY runs the predicate `p`; the surviving elements'
  *                             provenance flows into the count. A filter is
  *                             length-CHANGING, so the static target keeps the
@@ -62,20 +65,25 @@ const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 10
 // ============================================================================
 
 describe("GOLDEN (G2 oracle) — pure-map length over a Pair source OVER-ATTRIBUTES today", () => {
-  it("(length (map id xs)): count is 3, provenance carries EVERY element id (the A13 leak)", async () => {
+  // [P10/P15] FLIP-TO-FAILS (docs/test-invariant-atlas/verdicts/provenance.md): this
+  // used to be pinned plain-green as "the A13 leak" while a sibling it.todo GATE
+  // section (below) already specified the correct fix — the "documents today's
+  // behavior, even annotated" pattern P15 forbids. A pure-map length's cone must be
+  // the MINIMAL grouping fact, not every element id (G2). This fixture mints no
+  // container-level "grouping" id at all (a plain APair.fromArray list, no Rosetta-IN
+  // crossing for the list itself), so the minimal correct cone is EMPTY — asserting
+  // the absence of the leak, not a specific replacement id (that id only exists once
+  // R2 / the static classifier's grouping-fact node lands). Mirrors the canonical
+  // `it.fails` row in provenance/conservation.law.test.ts's "known violations" §2
+  // (@ledger: A13 count-cone over-attribution).
+  it.fails("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
       prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
-    }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          100,
-          101,
-          102,
-        ],
-        "value": 3,
-      }
-    `);
+    }).toEqual({
+      value: 3,
+      prov: [],
+    });
   });
 
   it("(map id xs): the mapped LIST head's own provenance is EMPTY — element ids live on the elements", async () => {

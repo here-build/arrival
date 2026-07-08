@@ -12,11 +12,16 @@
  * same `toString() === "()"`) but FAILS `=== nil` because it is a different
  * heap object.
  *
- * `is_nil` in guards.ts was FIXED to use `instanceof Nil` (see the doc
- * comment at guards.ts:92-103). The 20 sites enumerated below were left on
- * `=== nil`; each one is a place where a Nil clone slips through with the
- * wrong answer. The audit count is informally "~21"; we map 20 concrete
- * sites here and a summary stub that documents the meta-bug count.
+ * `is_nil` (now `value-guards.ts:46`, re-exported by `eval/guards.ts`) was
+ * FIXED to use `instanceof ANil` (see the doc comment at value-guards.ts:34-45).
+ * The sites enumerated below were once left on `=== nil`; each is a place
+ * where a Nil clone could slip through with the wrong answer. As of
+ * 2026-07-08 every cited site below has been re-verified against current
+ * source (see the per-`describe` notes) — most are already fixed, so this
+ * file now doubles as the regression suite proving the fix holds rather than
+ * a live bug catalogue. The one remaining open gap (`rosetta.ts:70`) stays
+ * `it.fails`. The original 14-site war-story ledger lives at
+ * `docs/archaeology/nil-clone-sweep.md`.
  *
  * Test shape
  * ----------
@@ -89,26 +94,21 @@ describe("nil-clone witness sanity (NOT a bug — guards the test fixture)", () 
 // =========================================================================
 
 describe("membrane.ts — `=== nil` identity-equality sites", () => {
-  // membrane.ts:71 — `isSchemeValue(value)` short-circuits with `if (value === nil) return true`.
-  // A Nil clone is a Scheme value (it IS an instance of Nil and AValue) but
-  // the short-circuit fires false, falling through to a long chain of
-  // `instanceof` checks that does NOT include Nil. Result: false.
-  // Cascade: `fromJS` (line 288) uses `isSchemeValue` to detect "already a
-  // Scheme value, pass through" — a Nil clone takes the slow path and
-  // re-wraps as if it were a plain JS object. Re-entering rosetta would
-  // double-wrap and lose the original.
-  it("isSchemeValue(nil-clone) — should be true (membrane.ts:71)", () => {
+  // FIXED (verified against current source, 2026-07-08): `isSchemeValue`
+  // (membrane.ts:139) no longer special-cases nil at all — it dispatches on
+  // `value instanceof AValue` (a Nil clone IS an AValue) plus the few
+  // explicit non-AValue control-form arms (R3, RULINGS.md). A Nil clone
+  // recognizes correctly with no `=== nil` short-circuit in the path.
+  it("isSchemeValue(nil-clone) — is true (membrane.ts:139, instanceof AValue dispatch)", () => {
     expect(isSchemeValue(cloneNil())).toBe(true);
   });
 
-  // membrane.ts:326 — `toJS(value)` returns `null` only when `value === nil`.
-  // A Nil clone has the TO_JS protocol path guarded behind `TO_JS in value`,
-  // but Nil does NOT implement the symbol — so we fall through past line 326
-  // and the value is returned as-is (the Nil clone itself, not `null`).
-  // Cascade: any FFI/codec exit that hands the result to JS consumers
-  // (Rosetta returns, Operator.toJS bridges) returns a Nil instance instead
-  // of null, breaking shape contracts on the JS side.
-  it("toJS(nil-clone) — should be null (membrane.ts:326)", () => {
+  // FIXED (verified against current source, 2026-07-08): `toJS(value)`
+  // (membrane.ts:240) has no `=== nil` special case at all — it calls
+  // `value["arrival/toJS"]()` unconditionally for any `isSchemeValue`. Nil's
+  // own `arrival/toJS` implementation returns `null` regardless of whether
+  // the instance is the singleton or a provenance-bearing clone.
+  it("toJS(nil-clone) — is null (membrane.ts:240, full protocol dispatch)", () => {
     expect(toJS(cloneNil())).toBe(null);
   });
 });
@@ -154,65 +154,57 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
 // bridge.ts — 3 sites
 // =========================================================================
 
-describe("bridge.ts — `=== nil` identity-equality sites", () => {
-  // bridge.ts:985 — `list-copy`'s top-level guard: `if (list === nil) return nil`.
-  // R7RS `list-copy` must return a FRESH allocation distinct from its input.
-  // With the singleton, the guard correctly returns the singleton (still
-  // distinct from the input AValue, since both are the same singleton —
-  // OK by R7RS for empty lists). But with a Nil clone, the guard misses,
-  // the `!(list instanceof Pair)` check on line 986 catches it, and the
-  // function returns the EXACT SAME Nil clone reference — never running
-  // the `withInputProvenance` re-stamp on line 994. Observable bug: the
-  // result IS the input by reference (an aliasing leak across an operator
-  // that is supposed to allocate fresh).
-  it("list-copy(nil-clone) — should NOT alias the input by reference (bridge.ts:985)", () => {
+describe("list-copy (env/r7rs/lists.ts, formerly bridge.ts) — `=== nil` identity-equality sites", () => {
+  // FIXED (verified against current source, 2026-07-08): `bridge.ts` no
+  // longer contains `list-copy` at all (down to 137 lines); the op lives in
+  // `env/r7rs/lists.ts`. R7RS `list-copy` must return a FRESH allocation
+  // distinct from its input. The top-level guard (lists.ts:450) is
+  // `if (list instanceof ANil) return nil` — catches both the singleton AND
+  // any provenance-bearing clone, so a clone input no longer mis-routes
+  // through the improper-list branch and alias the input by reference.
+  it("list-copy(nil-clone) — does NOT alias the input by reference (env/r7rs/lists.ts:450)", () => {
     const listCopy = LIST_OPS["list-copy"] as (l: unknown) => unknown;
     const input = cloneNil();
     const result = listCopy(input) as unknown;
-    // R7RS contract: result must be distinct from input. Today the clone
-    // case mis-routes through line 986 and returns the SAME reference.
+    // R7RS contract: result must be distinct from input.
     expect(result === input).toBe(false);
   });
 
-  // bridge.ts:989 — Inside the recursive `copy(lst)` helper, the base case
-  // `if (lst === nil) return nil` terminates the spine walk with a fresh
-  // singleton. With a Pair whose cdr is a Nil clone, the recursion's base
-  // case at :989 misses, falls through to `!(lst instanceof Pair) return lst`
-  // (the improper-list-tail branch, intended for genuinely-improper lists),
-  // and PRESERVES the Nil clone as the cdr instead of normalizing to nil.
-  // Observable: the copied list's tail is the SAME clone reference as the
-  // original's tail — an aliasing leak inside an op that should produce a
-  // fully fresh spine.
-  it("list-copy(Pair(1, nil-clone)) — tail must NOT alias the input's tail (bridge.ts:989)", () => {
+  // FIXED (verified against current source, 2026-07-08): the recursive
+  // `copy(lst)` helper's base case (lists.ts:455) is likewise
+  // `if (lst instanceof ANil) return nil` — a Pair whose cdr is a Nil clone
+  // terminates the recursion correctly and normalizes to the canonical `nil`
+  // instead of preserving the clone as an aliased tail reference.
+  it("list-copy(Pair(1, nil-clone)) — tail does NOT alias the input's tail (env/r7rs/lists.ts:455)", () => {
     const listCopy = LIST_OPS["list-copy"] as (l: unknown) => unknown;
     const cdrClone = cloneNil();
     const input = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cdrClone);
     const result = listCopy(input);
     expect(result).toBeInstanceOf(APair);
-    // The cdr should be the canonical singleton (or a freshly minted Nil), but
-    // never the input's exact reference. Today the clone is preserved as-is.
+    // The cdr should be the canonical singleton, never the input's exact reference.
     expect((result as APair<any, any>).cdr === cdrClone).toBe(false);
   });
 
 });
 
 // =========================================================================
-// fantasy-land-lips.ts — 5 sites
+// fantasy-land-lips.ts no longer exists — the algebra lives directly on
+// APair (src/values/primitives/APair.ts, the `arrival/tagless-final/*` term
+// methods)
 // =========================================================================
 
-describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
-  // The FL helpers live on Pair.prototype (declared in the Pair class body).
-  // For unit-level granularity we exercise the recursion through a Pair
-  // whose cdr is a nil-clone — every FL helper recurses on `pair.cdr` and
-  // hits the base case there.
+describe("APair.ts tagless-final map/filter/reduce/traverse (formerly fantasy-land-lips.ts) — `=== nil` identity-equality sites", () => {
+  // The algebra terms live directly on APair (declared in the class body,
+  // `arrival/tagless-final/map` etc.). For unit-level granularity we exercise
+  // the recursion through a Pair whose cdr is a nil-clone — every term walks
+  // `node instanceof APair` and stops the walk there.
 
-  // fantasy-land-lips.ts:89 — `mapPair`'s base case `if (!pair || pair === nil) return nil`.
-  // A Pair(1, nil-clone) recurses into mapPair(f, nil-clone). The clone is
-  // truthy AND `!== nil`, so the base case misses. Then it accesses
-  // `nil-clone.car` (undefined for Nil) and `nil-clone.cdr` (undefined).
-  // `f(undefined)` is called, then recursion runs on `undefined` and hits
-  // `!pair` returning nil — but a phantom undefined was passed through `f`.
-  it("mapPair(f, Pair(1, nil-clone)) — should produce (1) only, fn called once (fantasy-land-lips.ts:89)", async () => {
+  // FIXED (verified against current source, 2026-07-08): `arrival/tagless-final/map`
+  // (APair.ts, "Functor" section) walks `while (node instanceof APair)` — a
+  // Nil clone is NOT an APair (it's ANil), so the walk terminates correctly
+  // regardless of which provenance the clone carries; no phantom `undefined`
+  // element is ever produced.
+  it("mapPair(f, Pair(1, nil-clone)) — produces (1) only, fn called once (APair.ts arrival/tagless-final/map)", async () => {
     // mapPair is not exported; invoke via the FL protocol installed on Pair.prototype.
     const calls: unknown[] = [];
     const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
@@ -228,10 +220,11 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     expect((result as APair<any, any>).cdr instanceof ANil).toBe(true);
   });
 
-  // fantasy-land-lips.ts:94 — same shape as 89 but for `filterPair`. The
-  // base case misses on a clone, leading to predicate being called with
-  // undefined and a phantom Pair node being added to the result.
-  it("filterPair(_, Pair(1, nil-clone)) — predicate called once (fantasy-land-lips.ts:94)", async () => {    let predCalls = 0;
+  // FIXED (verified against current source, 2026-07-08): `arrival/tagless-final/filter`
+  // (APair.ts, "Filterable" section) uses the same `while (node instanceof APair)`
+  // walk — a Nil clone in tail position ends the walk cleanly, no phantom
+  // predicate invocation.
+  it("filterPair(_, Pair(1, nil-clone)) — predicate called once (APair.ts arrival/tagless-final/filter)", async () => {    let predCalls = 0;
     const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await p[tf("filter")](() => {
@@ -241,13 +234,11 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     expect(predCalls).toBe(1);
   });
 
-  // fantasy-land-lips.ts:102 — `reducePair`'s base case
-  // `if (!pair || pair === nil) return initial`. With a clone in tail
-  // position, recursion calls `f(acc, undefined)` then recurses on
-  // undefined, hitting the `!pair` branch — so the bug is "one phantom
-  // f-invocation with `undefined`." Expected: f called once with the
-  // genuine element only.
-  it("reducePair(f, init, Pair(1, nil-clone)) — f called once (fantasy-land-lips.ts:102)", async () => {    const collected: unknown[] = [];
+  // FIXED (verified against current source, 2026-07-08): `arrival/tagless-final/reduce`
+  // (APair.ts) walks `while (node instanceof APair)` — a Nil-clone tail ends
+  // the fold cleanly, `fn` is called exactly once per genuine element, never
+  // with a phantom `undefined`.
+  it("reducePair(f, init, Pair(1, nil-clone)) — f called once (APair.ts arrival/tagless-final/reduce)", async () => {    const collected: unknown[] = [];
     const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
@@ -258,18 +249,18 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     expect(collected.map((v) => (v as AExact).valueOf())).toEqual([1]);
   });
 
-  // fantasy-land-lips.ts:108 — `traversePair`'s base case
-  // `if (!pair || pair === nil) return of(nil)`. With a clone in tail
-  // position, recursion proceeds one phantom step. Expected: `of` called
-  // exactly once at termination, with `nil` argument.
-  // Post-Nil-fix: `traversePair` correctly terminates at the clone via
-  // `pair instanceof Nil`, so the of-call count is now driven purely by the
-  // algorithm (one of() for the base case + one of(new Pair(...)) for each
-  // leaf-mode head wrapping). For a 1-element Pair that's 2 calls — the
-  // pre-existing assertion `ofCalls.length === 1` reflected the broken-
-  // termination shape rather than the algorithm's correct invariant, so we
-  // keep it `.fails` until the assertion is rewritten.
-  it.fails("traversePair(of, f, Pair(1, nil-clone)) — of-nil called once (fantasy-land-lips.ts:108)", () => {    const ofCalls: unknown[] = [];
+  // FIXED + REWRITTEN (2026-07-08): `traversePair` (APair.ts, the free
+  // function backing `arrival/tagless-final/traverse`) terminates correctly
+  // at a Nil clone via its own `while (node instanceof APair)` collection
+  // loop. The FORMER assertion here (`ofCalls.length === 1`) was a stale
+  // artifact of the pre-fix broken-termination shape, not the algorithm's
+  // actual invariant — `of` is called ONCE for the `nil` base-case seed
+  // (`acc = of(nil)`) and ONCE MORE per leaf-mode head wrap
+  // (`of(new APair(ctx, mappedCar, acc))`, since no element here implements
+  // `ap`), so a 1-element list produces exactly 2 `of` calls: the base case
+  // first (right-fold, innermost first), then the single leaf wrap.
+  it("traversePair(of, f, Pair(1, nil-clone)) — of called once for the nil base case + once per leaf wrap (APair.ts traversePair)", () => {
+    const ofCalls: unknown[] = [];
     const of = (v: unknown) => {
       ofCalls.push(v);
       return v;
@@ -277,25 +268,22 @@ describe("fantasy-land-lips.ts — `=== nil` identity-equality sites", () => {
     const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p[tf("traverse")](of, (x: unknown) => x);
-    expect(ofCalls.length).toBe(1);
+    expect(ofCalls.length).toBe(2);
     expect(ofCalls[0] instanceof ANil).toBe(true);
   });
 });
 
 // =========================================================================
-// sandbox-env.ts — 2 sites
+// sandbox-env.ts no longer exists — the `@`/`@?` accessors are membrane.ts's
+// readMember/hasMember
 // =========================================================================
 
-describe("sandbox-env.ts — `=== nil` identity-equality sites", () => {
-  // sandbox-env.ts:123 — Inside the `@` field accessor, `rawKeyStr == null || rawKeyStr === nil`
-  // short-circuits to `return nil` when the user passes nil as the key
-  // (typically through a Scheme `@` invocation with no key). A Nil clone
-  // bypasses the guard, then `String(rawKeyStr)` runs on the Nil instance
-  // — producing `"()"`. The property-access then runs against literal `()`
-  // which is silently empty rather than visibly invalid.
-  // Note: sandboxedEnv `@` and `@?` accept *any* JS value as `key`, so the
-  // guard is on the membrane boundary — clone-leak is observable.
-  it("'@' obj nil-clone — should return nil, not String(Nil) lookup (membrane.readMember)", () => {
+describe("membrane.ts readMember/hasMember (formerly sandbox-env.ts) — `=== nil` identity-equality sites", () => {
+  // FIXED (verified against current source, 2026-07-08): `readMember`
+  // (membrane.ts:269) guards with `if (rawKey == null || rawKey instanceof ANil) return nil`
+  // — a Nil clone is caught by the `instanceof` arm, so it never falls
+  // through to `String(rawKey)` and a spurious `"()"` key lookup.
+  it("'@' obj nil-clone — returns nil, not String(Nil) lookup (membrane.ts:269 readMember)", () => {
     // The `@` accessor IS membrane's `readMember` (the polyglot capability binds it
     // verbatim); invoke it directly rather than through an async-assembled env.
     const accessor = readMember as (obj: unknown, key: unknown) => unknown;
@@ -304,48 +292,16 @@ describe("sandbox-env.ts — `=== nil` identity-equality sites", () => {
     expect(result instanceof ANil).toBe(true);
   });
 
-  // Same shape but for the `@?` "has" accessor (membrane's `hasMember`).
-  // A Nil clone bypasses the guard and `hasMember(obj, "()")` runs;
-  // returns true if the object happens to have the literal key "()".
-  it("'@?' obj nil-clone — should return false, not has(\"()\") (membrane.hasMember)", () => {
+  // FIXED (verified against current source, 2026-07-08): `hasMember`
+  // (membrane.ts:312) has the identical `instanceof ANil` guard.
+  it("'@?' obj nil-clone — returns false, not has(\"()\") (membrane.ts:312 hasMember)", () => {
     const accessor = hasMember as (obj: unknown, key: unknown) => boolean;
     const result = accessor({ "()": "PHANTOM" }, cloneNil());
     expect(result).toBe(false);
   });
 });
 
-// =========================================================================
-// Meta-bug summary
-// =========================================================================
-
-describe("META — provenance clones break identity-equality systematically", () => {
-  // War-story documentation. Not a real assertion. Lists the count and the
-  // shape of the bug so the next person to touch any of these files sees
-  // immediately what is going on.
-  it("documents 15 known sites where `=== nil` would silently misroute a Nil clone", () => {
-    // ramda-functions.ts (polymorphicMap/filter/reduce, 5 sites) was deleted when
-    // Ramda was removed from the sandbox; those wrappers were already overridden by
-    // sandbox-env's hardened map/filter/reduce, so the sites left with the code. The
-    // remaining 15 stand.
-    const sites = [
-      "membrane.ts:71  — isSchemeValue",
-      "membrane.ts:326 — toJS",
-      "rosetta.ts:70   — schemeToJs entry",
-      "rosetta.ts:130  — schemeToJs Pair-spine tail",
-      "bridge.ts:985   — list-copy entry",
-      "bridge.ts:989   — list-copy recursion base",
-      "bridge.ts:1351  — single",
-      "fantasy-land-lips.ts:89  — mapPair base",
-      "fantasy-land-lips.ts:94  — filterPair base",
-      "fantasy-land-lips.ts:102 — reducePair base",
-      "fantasy-land-lips.ts:108 — traversePair base",
-      "fantasy-land-lips.ts:120 — chainPair base",
-      "sandbox-env.ts:123 — '@' accessor",
-      "sandbox-env.ts:163 — '@?' accessor",
-    ];
-    expect(sites.length).toBe(14);
-    // Each entry is the file:line of an `=== nil` site that should be
-    // migrated to `is_nil(...)`. The single FIXED site (guards.ts:104) is
-    // the model — match its instanceof check.
-  });
-});
+// The META war-story ledger (the original 14-site count + narrative) moved to
+// docs/archaeology/nil-clone-sweep.md (2026-07-08 test-invariant-atlas sweep,
+// docs/test-suite-v2/REMOVAL-MANIFEST.md) — `expect(sites.length).toBe(14)`
+// tested nothing observable and belongs in docs, not as a test assertion.

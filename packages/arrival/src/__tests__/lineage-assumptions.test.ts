@@ -66,30 +66,14 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
   });
 });
 
-describe("ASSUMPTION — a count is identity-entangled today (teleological); the tree must serve both queries (§5)", () => {
-  it("A13: (length (map identity xs)) carries every element's provenance (over-attributes through map)", async () => {
-    const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
-    expect(await run(`(length (map (lambda (e) e) xs))`, { xs: xs as unknown as AValue })).toMatchInlineSnapshot(`
-      [
-        100,
-        101,
-        102,
-      ]
-    `);
-  });
-});
-
-// ── Step 2 — eager map/length over the live builtins ──
-// Laziness is IMPLICIT (Scheme symbols return Promises, the evaluator awaits); the
-// explicit `(lazy-seq …)` carrier + the ALazySeq demand-cone class are gone. A pure-map
-// length therefore reverts to the conservative eager union (A13): every element id leaks
-// into the count. That is sound (a superset of the minimal cone), just non-minimal.
-describe("ASSUMPTION — a pure-map length over-attributes through the live builtins (§5, A13 baseline)", () => {
-  it("A18b: (length (map id ys)) over a Pair carries every element's provenance (eager over-attribution)", async () => {
-    const ys = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
-    expect(await run(`(length (map (lambda (e) e) ys))`, { ys: ys as unknown as AValue })).toEqual([100, 101, 102]);
-  });
-});
+// A13/A18b (the "(length (map identity xs)) over-attributes through map" duplicate green
+// pins) DELETED here (2026-07-08 test-invariant-atlas sweep,
+// docs/test-suite-v2/REMOVAL-MANIFEST.md §B): both were verbatim duplicates of
+// golden-prov-fan.test.ts's own A13 leak, pinned green a second/third time in a
+// different file with no `it.fails`. The ONE surviving assertion of this invariant is
+// golden-prov-fan.test.ts's `it.fails` row (flipped in the same sweep) plus the canonical
+// `it.fails` row in provenance/conservation.law.test.ts's "known violations" §2
+// (@ledger: A13 count-cone over-attribution).
 
 // ── EAGER PIPELINE VALUES — the forcing ops produce the documented results ──
 // Laziness is now implicit; there is no `(lazy-seq …)` carrier to contrast against. These
@@ -224,8 +208,9 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
 
   // G6 — carrier-coercion soundness: provenance survives the standard transforms
   // across ALL carriers; no coercion silently drops a provenance box.
-  // Pair is pinned by A13 above; the runnable golden below
-  // pins the SchemeVector carrier (the remaining constructible one) under the
+  // Pair is pinned by golden-prov-fan.test.ts's A13 row (it.fails, per the same
+  // sweep); the runnable golden below pins the SchemeVector carrier (the
+  // remaining constructible one) under the
   // EAGER engine — the oracle the static path must reproduce. AJSArray is a
   // membrane wrapper (no public constructor here) and is asserted only via the
   // todo, end-to-end through the flag.

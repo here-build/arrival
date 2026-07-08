@@ -33,6 +33,12 @@ import { freshEnv } from "./_fresh-env.js";
 const env = await freshEnv();
 
 /** Coerce a Scheme result to a JS primitive — handles SchemeBool wrapper and raw JS booleans. */
+// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
+// RULINGS.md R1): tolerates boolean-as-raw AND boxed-with-.value/valueOf simultaneously —
+// literally the "accepts boxed or raw" contract P4 forbids, baked into shared test infra
+// across this file, r7rs-numbers.test.ts, and r7rs-unicode.test.ts instead of exposing
+// exec()'s exit-convention inconsistency. Collapses to one asserted shape once R1's
+// uniform exit convention (toJS/schemeToJs always fully unwraps) lands.
 const truthy = (r: unknown): boolean => {
   if (typeof r === "boolean") return r;
   if (r && typeof r === "object" && "value" in (r as { value?: unknown })) {
@@ -84,48 +90,42 @@ describe("r7rs identity — passing invariants (regression guards)", () => {
   });
 });
 
-describe("r7rs identity — known bugs (it.fails — flipping to green = regression of the bug)", () => {
+// [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P15]
+// docs/test-invariant-atlas/verdicts/evaluator.md): this describe title + the per-test
+// "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
+// a plain `it(...)`. Ran the suite — all pass today, so the described bugs are already
+// FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..." convention.
+describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)", () => {
   it(
-    "eq? on two distinct string-copy results SHOULD be #f (R7RS § 6.1)",
+    "eq? on two distinct string-copy results is #f (R7RS § 6.1)",
     async () => {
-      // R7RS § 6.1: `(eq? "x" "x")` on literals is implementation-defined,
-      // BUT distinct heap instances (`string-copy` minted fresh objects)
-      // should not compare eq? — the predicate is meant to be at most a
-      // pointer-grade check. Current bug: `lips.ts:670-672` compares strings
-      // via `.valueOf()`, returning #t for two unrelated heap instances.
-      // This collapses eq?/eqv? into string-equal? shape, breaking the
-      // R7RS three-tier hierarchy.
-      //
-      // Predicted failure value: result === #t (truthy) instead of #f.
+      // FIXED (was: `lips.ts:670-672` compared strings via `.valueOf()`, returning #t
+      // for two unrelated heap instances — collapsing eq?/eqv? into string-equal? shape).
+      // R7RS § 6.1: `(eq? "x" "x")` on literals is implementation-defined, but distinct
+      // heap instances (`string-copy` minted fresh objects) should not compare eq? — the
+      // predicate is meant to be at most a pointer-grade check.
       const r = await evalScheme(`(eq? (string-copy "abc") (string-copy "abc"))`);
       expect(truthy(r)).toBe(false);
     },
   );
 
   it(
-    "eqv? on two distinct string-copy results SHOULD be #f (R7RS § 6.1)",
+    "eqv? on two distinct string-copy results is #f (R7RS § 6.1)",
     async () => {
-      // Same root cause: `lips.ts:3634-3635` aliases both eq? and eqv? to
-      // the same `equal` helper. R7RS § 6.1 leaves eqv? on string literals
-      // unspecified, but the same-instance-vs-fresh-instance distinction
-      // must be respected — value-comparing-via-valueOf makes eqv?
-      // indistinguishable from equal? for strings.
-      //
-      // Predicted failure value: result === #t (truthy) instead of #f.
+      // FIXED (same root cause as above: eq?/eqv? no longer alias a value-comparing-via-
+      // valueOf helper). R7RS § 6.1 leaves eqv? on string literals unspecified, but the
+      // same-instance-vs-fresh-instance distinction is now respected.
       const r = await evalScheme(`(eqv? (string-copy "abc") (string-copy "abc"))`);
       expect(truthy(r)).toBe(false);
     },
   );
 
   it(
-    "eqv? on two distinct make-string results SHOULD be #f (R7RS § 6.1)",
+    "eqv? on two distinct make-string results is #f (R7RS § 6.1)",
     async () => {
-      // Same alias chain exercised through a different constructor. Every
-      // `make-string` call mints a fresh SchemeString; eqv? on two distinct
-      // heap instances should answer #f under atom-grade semantics, but the
-      // `equal`-via-valueOf path collapses them to #t.
-      //
-      // Predicted failure value: result === #t (truthy) instead of #f.
+      // FIXED (same fix, exercised through a different constructor). Every
+      // `make-string` call mints a fresh SchemeString; eqv? on two distinct heap
+      // instances now correctly answers #f under atom-grade semantics.
       const r = await evalScheme(`(eqv? (make-string 1 #\\a) (make-string 1 #\\a))`);
       expect(truthy(r)).toBe(false);
     },

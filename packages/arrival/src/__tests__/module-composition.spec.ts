@@ -8,6 +8,18 @@
  *
  * Note: These tests use _lookupWithResolvers directly to avoid
  * dependency on lips runtime (which patch_value requires).
+ *
+ * [RETAG — deliberate internal-module unit suite, not a test-only-API artifact]
+ * (2026-07-08 test-invariant-atlas sweep, [P16] docs/test-invariant-atlas/verdicts/evaluator.md,
+ * docs/test-suite-v2/REMOVAL-MANIFEST.md §A): `_lookupWithResolvers` is real production
+ * surface (`Resolver.ts`, `Capabilities.ts`, `LexicalScope.ts`, `common/capability.ts` all
+ * call it — confirmed via grep), not a test-only hack. Checked the two candidate public-
+ * altitude covers: `src/common/__tests__/capability.test.ts` explicitly does NOT exercise
+ * resolver ordering (its own header comment: "registerResolver / list / allBoundNames are
+ * not exercised by these tests"), and `capabilities-assembled.test.ts` only tests the
+ * assembled-base sentinel, not resolver yield/chain-order semantics. No public-altitude
+ * survivor exists, so this file stays — parallel to `parser.test.ts`'s honest framing of
+ * bypassing `exec()` for a fast internal-module unit floor.
  */
 
 import { describe, expect, it } from "vitest";

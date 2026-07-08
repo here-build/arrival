@@ -21,7 +21,6 @@ import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
-import { tf } from "../values/tagless-final.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   let env: Environment;
@@ -165,6 +164,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       expect(result).toEqual(new AExact(CONSTANT_CTX, 26n)); // 6 + 20
     });
 
+    // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/evaluator.md):
+    // `env.set("async-add", ...)` binds a bare JS fn, and `expect(result).toBe(30)` asserts
+    // raw unboxed pass-through — the exact scheduled-inversion pattern the comment below
+    // already names ("With membrane, JS functions receive JS values, not SchemeExact").
+    // Dies with the reverse-membrane migration (callables-as-values).
     it("should handle JS functions that return promises", async () => {
       // With membrane, JS functions receive JS values (not SchemeExact)
       env.set("async-add", async (a: number, b: number) => {
@@ -228,18 +232,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("if", () => {
-      it("should evaluate then branch when condition is true", async () => {
-        // (if #t 1 2)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeTrue, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 1n));
-      });
-
-      it("should evaluate else branch when condition is false", async () => {
-        // (if #f 1 2)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeFalse, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 2n));
-      });
-
+      // [P15 redundancy] DELETED (2026-07-08 test-invariant-atlas sweep,
+      // docs/test-invariant-atlas/verdicts/evaluator.md): "then branch when true" /
+      // "else branch when false" point-duplicated generator-exec.spec.ts's own
+      // "should handle if expressions" (which asserts both branches already). Kept the
+      // if-without-else, nil-truthy, and nested-if cases below (evaluator-only content).
       it("should evaluate then branch when condition is nil (Scheme: only #f is false)", async () => {
         // (if () 1 2) - in R7RS Scheme, only #f is false, () is truthy
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), nil, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false);
@@ -265,12 +262,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("begin", () => {
-      it("should evaluate expressions in order and return last value", async () => {
-        // (begin 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "begin"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3n));
-      });
-
+      // [P15 redundancy] DELETED (same sweep/rationale as if above): "expressions in
+      // order, return last value" point-duplicated generator-exec.spec.ts's own
+      // "should handle begin" test. Kept empty-begin (evaluator-only) and side-effects
+      // (verifies execution ORDER/count, not just the return value — distinct point).
       it("should return undefined for empty begin", async () => {
         // (begin)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "begin")], false);
@@ -322,26 +317,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // (r7rs/binding); arrival is pure dataflow, so there is no rebind form to test.
 
     describe("lambda", () => {
-      it("should create a callable function", async () => {
-        // (lambda (x) x)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x")], false), new ASymbol(CONSTANT_CTX, "x")], false);
-        const fn = await exec(code, { env });
-        // A lambda is an ALambda value declaring the apply term (its callability).
-        expect(fn).toBeInstanceOf(ALambda);
-        expect(typeof fn[tf("apply")]).toBe("function");
-      });
-
-      it("should execute lambda with arguments", async () => {
-        // ((lambda (x y) (+ x y)) 3 4)
-        const code = APair.fromArray(CONSTANT_CTX, [
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "y")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "y")], false)], false),
-          new AExact(CONSTANT_CTX, 3n),
-          new AExact(CONSTANT_CTX, 4n),
-        ], false);
-        const result = await exec(code, { env });
-        expect(result).toEqual(new AExact(CONSTANT_CTX, 7n));
-      });
-
+      // [P15 redundancy] DELETED (same sweep/rationale as if/begin above): "create a
+      // callable function" / "execute with arguments" point-duplicated generator-exec.spec.ts's
+      // own "should evaluate lambdas" (basic `((lambda (x) ...) ...)` call). Kept
+      // closures and rest-params below (evaluator-only content, not covered by the
+      // single generator-exec lambda test).
       it("should capture closure environment", async () => {
         // (define a 10)
         // ((lambda (x) (+ a x)) 5)
@@ -360,16 +340,12 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("let", () => {
-      it("should bind variables in body", async () => {
-        // (let ((x 10) (y 20)) (+ x y))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "let"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 10n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "y"), new AExact(CONSTANT_CTX, 20n)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "y")], false),
-        ], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 30n));
-      });
-
+      // [P15 redundancy] DELETED (same sweep/rationale as if/begin/lambda above):
+      // "bind variables in body" point-duplicated generator-exec.spec.ts's own
+      // "should handle let bindings"; "named let for loops" point-duplicated
+      // generator-exec.spec.ts's dedicated "exec() - named let" describe (same
+      // factorial-via-accumulator pattern). Kept parallel-binding-semantics (a
+      // distinct scoping/shadowing invariant not covered by either).
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
         env.set("x", new AExact(CONSTANT_CTX, 100n));
@@ -377,61 +353,13 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // y should be 100 (outer x), not 1 (inner x)
         expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100n));
       });
-
-      it("should handle named let for loops", async () => {
-        // (let loop ((n 5) (acc 1)) (if (<= n 1) acc (loop (- n 1) (* acc n))))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "let"),
-          new ASymbol(CONSTANT_CTX, "loop"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "n"), new AExact(CONSTANT_CTX, 5n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "acc"), new AExact(CONSTANT_CTX, 1n)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [
-            new ASymbol(CONSTANT_CTX, "if"),
-            APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "<="), new ASymbol(CONSTANT_CTX, "n"), new AExact(CONSTANT_CTX, 1n)], false),
-            new ASymbol(CONSTANT_CTX, "acc"),
-            APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "loop"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "-"), new ASymbol(CONSTANT_CTX, "n"), new AExact(CONSTANT_CTX, 1n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new ASymbol(CONSTANT_CTX, "acc"), new ASymbol(CONSTANT_CTX, "n")], false)], false),
-          ], false),
-        ], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 120n)); // 5!
-      });
     });
 
-    describe("let*", () => {
-      it("should bind variables sequentially", async () => {
-        // (let* ((x 10) (y (+ x 5))) y)
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "let*"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 10n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "y"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 5n)], false)], false)], false),
-          new ASymbol(CONSTANT_CTX, "y"),
-        ], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 15n));
-      });
-    });
-
-    describe("letrec", () => {
-      it("should allow recursive bindings", async () => {
-        // (letrec ((fact (lambda (n) (if (<= n 1) 1 (* n (fact (- n 1))))))) (fact 5))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "letrec"),
-          APair.fromArray(CONSTANT_CTX, [
-            APair.fromArray(CONSTANT_CTX, [
-              new ASymbol(CONSTANT_CTX, "fact"),
-              APair.fromArray(CONSTANT_CTX, [
-                new ASymbol(CONSTANT_CTX, "lambda"),
-                APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "n")], false),
-                APair.fromArray(CONSTANT_CTX, [
-                  new ASymbol(CONSTANT_CTX, "if"),
-                  APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "<="), new ASymbol(CONSTANT_CTX, "n"), new AExact(CONSTANT_CTX, 1n)], false),
-                  new AExact(CONSTANT_CTX, 1n),
-                  APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new ASymbol(CONSTANT_CTX, "n"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "fact"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "-"), new ASymbol(CONSTANT_CTX, "n"), new AExact(CONSTANT_CTX, 1n)], false)], false)], false),
-                ], false),
-              ], false),
-            ], false),
-          ], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "fact"), new AExact(CONSTANT_CTX, 5n)], false),
-        ], false);
-        expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 120n));
-      });
-    });
+    // [P15 redundancy] let*'s sole test ("bind variables sequentially") and letrec's sole
+    // test ("allow recursive bindings") DELETED (same sweep/rationale as above) — both
+    // point-duplicated generator-exec.spec.ts's own "should handle let* bindings" /
+    // "should handle letrec for recursion" (both compute a small factorial). The
+    // describe blocks are removed with them (zero surviving evaluator-only content).
 
     describe("and", () => {
       it("should return true for empty and", async () => {
@@ -486,17 +414,12 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("cond", () => {
-      it("should evaluate matching clause", async () => {
-        // (cond ((< 1 2) 'yes) (else 'no))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "cond"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "<"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "yes")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "else"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "no")], false)], false),
-        ], false);
-        const result = (await exec(code, { env })) as ASymbol;
-        expect(result.__name__).toBe("yes");
-      });
-
+      // [P15 redundancy] DELETED (same sweep/rationale as if/begin/lambda/let above):
+      // "evaluate matching clause" point-duplicated generator-exec.spec.ts's own
+      // "should handle cond" (also selects a truthy clause over a false one, falling
+      // through to else). Kept else-clause, no-expressions, and => (evaluator-only
+      // content — none of these edge cases are exercised by the single generator-exec
+      // cond test).
       it("should evaluate else clause when nothing matches", async () => {
         // (cond ((> 1 2) 'no) (else 'yes))
         const code = APair.fromArray(CONSTANT_CTX, [
@@ -514,6 +437,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5n));
       });
 
+      // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/evaluator.md):
+      // `env.set("double", ...)` bare-fn producer, same scheduled-inversion pattern/fate as
+      // the "JS functions that return promises" test above.
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => (lambda (x) (* x 2))))
         // With membrane, JS functions receive JS values (not SchemeExact)
@@ -525,19 +451,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("case", () => {
-      it("should match datum", async () => {
-        // (case 2 ((1) 'one) ((2) 'two) (else 'other))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol(CONSTANT_CTX, "case"),
-          new AExact(CONSTANT_CTX, 2n),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "one")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "two")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "else"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "other")], false)], false),
-        ], false);
-        const result = (await exec(code, { env })) as ASymbol;
-        expect(result.__name__).toBe("two");
-      });
-
+      // [P15 redundancy] DELETED (same sweep/rationale as cond above): "match datum"
+      // point-duplicated generator-exec.spec.ts's own "should handle case" (matches
+      // datum 2 → 'two, identical shape). Kept "else when no match" (a distinct edge
+      // case — the generator-exec case test never exercises its own else branch, since
+      // its datum always matches a listed clause).
       it("should use else when no match", async () => {
         // (case 5 ((1) 'one) ((2) 'two) (else 'other))
         const code = APair.fromArray(CONSTANT_CTX, [

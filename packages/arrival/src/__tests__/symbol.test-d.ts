@@ -182,10 +182,10 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
   const forEachHead = z.lambda;
   const listRest = z.union([z.pair, z.nil]);
 
-  test("OLD for-each shape (z.array(z.value)) decoded FLAT — no head/tail distinction", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.value>>>>().toEqualTypeOf<SchemeValue[]>();
-  });
-
+  // OLD for-each shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/values.md): decoded a retired synthetic schema,
+  // documentation-as-test with no reachable production path. NEW-side row (below) is
+  // the load-bearing proof.
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
     // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
     // Both members of the rest union are real codecs now: nil's JS face is null (not ANil),
@@ -201,10 +201,8 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 
   const stringHOFHead = z.lambda;
 
-  test("OLD string-map/string-for-each shape (z.array(z.unknown())) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<ReturnType<typeof z.unknown>>>>>().toEqualTypeOf<unknown[]>();
-  });
-
+  // OLD string-map/string-for-each shape row DELETED (same sweep/rationale as the
+  // for-each OLD row above).
   test("NEW string-map/string-for-each shape: [callable, ...AString[]], not flat unknown[]", () => {
     // Mirrors both ops' real migrated contract: { input: [z.custom<...>()], inputRest: z.schemeString, output: [...] }.
     expectTypeOf<DecodedArgsWithRest<[typeof stringHOFHead], typeof z.string>>().toEqualTypeOf<
@@ -214,11 +212,7 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 });
 
 describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a fixed 2-tuple", () => {
-  test("OLD shape: z.tuple(fixed, rest) — a SINGLE array-ish schema — decodes OPEN-ENDED", () => {
-    const oldShape = z.tuple([z.unknown()], z.unknown());
-    expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[unknown, ...unknown[]]>();
-  });
-
+  // OLD filter shape row DELETED (same sweep/rationale).
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
     // Mirrors filter's real migrated contract: { input: [predSchema, z.value], output: [z.unknown()], fanout: true }.
     const predSchema = z.lambda;
@@ -234,24 +228,14 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
   // slots are the predicate (arg1) and the return.
   const listOrNil = z.union([z.pair, z.nil]);
 
-  test("OLD shape: predicate slot z.unknown() decodes to a bare unknown, not a callable", () => {
-    // pair and nil are both real codecs now — JS face is [SchemeValue,SchemeValue]|null,
-    // not APair|ANil (AList, which is the scheme face).
-    expectTypeOf<DecodedArgs<[ReturnType<typeof z.unknown>, typeof listOrNil]>>().toEqualTypeOf<
-      [unknown, [SchemeValue, SchemeValue] | null]
-    >();
-  });
-
+  // OLD predicate-slot shape row DELETED (same sweep/rationale).
   test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
     expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, [SchemeValue, SchemeValue] | null]
     >();
   });
 
-  test("OLD output z.unknown() collapses to a bare unknown return — the found element/nil loses its SchemeValue identity", () => {
-    expectTypeOf<DecodedReturn<[ReturnType<typeof z.unknown>]>>().toEqualTypeOf<unknown>();
-  });
-
+  // OLD output-shape row DELETED (same sweep/rationale).
   test("NEW output z.value collapses to SchemeValue — mirrors vectors.ts's vector-ref/vector->list z.unknown()→z.value fix (vectors.test-d.ts)", () => {
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
@@ -278,15 +262,7 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
   const s3 = z.custom<{ valueOf(): unknown } | Function>();
   const s4 = z.custom<number | null>().optional();
 
-  test("OLD shape: z.tuple(fixed-3, rest) decodes to an UNBOUNDED tail, not a genuinely-optional 4th", () => {
-    const oldShape = z.tuple([s1, z.unknown(), s3], s4);
-    // The old shape's rest was `z.custom<number|null>()` WITHOUT `.optional()` (unbounded 0+ tail
-    // of that element type) — its decoded type is an array tail, not a single optional slot.
-    expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<
-      [{ valueOf(): unknown }, unknown, { valueOf(): unknown } | Function, ...(number | null | undefined)[]]
-    >();
-  });
-
+  // OLD typecheck shape row DELETED (same sweep/rationale).
   test("NEW shape: a plain 4-element array — the 4th slot's VALUE admits undefined, but there are EXACTLY 4 positions", () => {
     // Mirrors typecheck's real migrated contract exactly (2nd slot z.value per the audit's other fix).
     expectTypeOf<DecodedArgs<[typeof s1, typeof z.value, typeof s3, typeof s4]>>().toEqualTypeOf<
@@ -353,11 +329,7 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
 describe("symbol contract — 2026-07-05 audit: curry's contract narrows the leading-args tail to SchemeValue (srfi-235.ts)", () => {
   const curryHead = z.lambda;
 
-  test("OLD curry shape: z.tuple(fixed, rest=z.unknown()) — leading args decode as bare unknown, no head/tail distinction in the contract fields", () => {
-    const oldShape = z.tuple([curryHead], z.undefinedResult);
-    expectTypeOf<DecodedArgs<typeof oldShape>>().toEqualTypeOf<[(...args: unknown[]) => unknown, ...unknown[]]>();
-  });
-
+  // OLD curry shape row DELETED (same sweep/rationale).
   test("NEW curry shape: input=[head], inputRest=z.value — leading args decode as SchemeValue, not unknown", () => {
     // Mirrors curry's real migrated contract: { input: [z.custom<...>()], inputRest: z.value, output: [z.custom<...>()] }.
     expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.value>>().toEqualTypeOf<

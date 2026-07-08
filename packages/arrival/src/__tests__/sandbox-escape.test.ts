@@ -63,6 +63,12 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * (i.e., the sandbox), NOT to global_env. Inside the sandbox, looking up
    * `+` should fail with Unbound — `+` isn't an exported sandbox binding.
    */
+  // [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/membrane.md): the test name/header comment narrate an
+  // "eval defaults to sandbox env, not global" fallback POLICY — but `eval` was deleted
+  // outright (the host-language sweep), so there is no fallback decision left to make; the
+  // actual assertion is just "Unbound." Harmless, but the title pins a stale internal
+  // narrative rather than current behavior. Left as a regression guard that `eval` stays gone.
   it("eval defaults to sandbox env, NOT global, when no env arg", async () => {
     await initBridge();
     // `+` is NOT in inferenceEnv directly (sandbox uses scheme arithmetic).
@@ -224,17 +230,25 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * Secure invariant: `make-string` with a length > some host-configured cap
    * must throw a cap-related error in O(1), not allocate.
    */
-  it("(make-string 1e8 ...) errors fast instead of allocating ~200MB", async () => {
+  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P5]
+  // docs/test-invariant-atlas/verdicts/membrane.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B "sandbox-escape weak doors"): was `caught === true` + timing only — never verified
+  // the thrown error IS the intended cap-policy door (vs. an engine RangeError). Verified
+  // the actual thrown message (`op-helpers.ts`'s `assertAllocatable`): "make-string:
+  // requested length 100000000 exceeds allocation limit 16777216" — teaches the op name,
+  // the requested count, and the cap (P5). Assert that shape, not just "it threw fast".
+  it("(make-string 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
     await initBridge();
     const start = Date.now();
-    let caught = false;
+    let err: Error | undefined;
     try {
       await exec("(make-string 100000000 #\\x)", { env: inferenceEnv });
-    } catch {
-      caught = true;
+    } catch (e) {
+      err = e as Error;
     }
     const elapsed = Date.now() - start;
-    expect(caught).toBe(true);
+    expect(err).toBeDefined();
+    expect(err?.message).toMatch(/make-string: requested length \d+ exceeds allocation limit \d+/);
     expect(elapsed).toBeLessThan(500);
   });
 
@@ -247,17 +261,21 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    *
    * Secure invariant: same as make-string — host-configurable cap, error fast.
    */
-  it("(make-vector 1e8 ...) errors or completes fast (no host hang)", async () => {
+  // REWRITE (same sweep/rationale as make-string above): verified the actual thrown
+  // message — "make-vector: requested length 100000000 exceeds allocation limit
+  // 16777216" (same `assertAllocatable` policy shared with make-string).
+  it("(make-vector 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
     await initBridge();
     const start = Date.now();
-    let caught = false;
+    let err: Error | undefined;
     try {
       await exec("(make-vector 100000000 #f)", { env: inferenceEnv });
-    } catch {
-      caught = true;
+    } catch (e) {
+      err = e as Error;
     }
     const elapsed = Date.now() - start;
-    expect(caught).toBe(true);
+    expect(err).toBeDefined();
+    expect(err?.message).toMatch(/make-vector: requested length \d+ exceeds allocation limit \d+/);
     expect(elapsed).toBeLessThan(500);
   }, 15000);
 
@@ -345,7 +363,13 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * with a clear message ("input nesting depth exceeded N"), not a native
    * RangeError. The parser should track depth explicitly and bail.
    */
-  it("deeply-nested input throws a graceful parse error, not stack overflow", async () => {
+  // REWRITE (same sweep/rationale as make-string/make-vector above): the old assertion
+  // only checked the message did NOT match /Maximum call stack/ — the comment even
+  // proposed the ideal (/nest|depth|too deep/i) but never asserted it, so it didn't
+  // verify the door "teaches" per P5. Verified the actual thrown message: "input nesting
+  // depth exceeded 2000 at 1:2000" — already teaches the depth cap and position. Assert
+  // that positive shape.
+  it("deeply-nested input throws a graceful parse error naming the nesting-depth cap, not stack overflow", async () => {
     await initBridge();
     const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
     let err: Error | undefined;
@@ -355,10 +379,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
       err = e as Error;
     }
     expect(err).toBeDefined();
-    // The native message is "Maximum call stack size exceeded" — we want
-    // anything BUT that.
     expect(err?.message).not.toMatch(/Maximum call stack/i);
-    // Ideally something like /nest|depth|too deep/i
+    expect(err?.message).toMatch(/nest|depth|too deep/i);
   });
 
   /**
@@ -373,7 +395,14 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * throw a Scheme-level error. Cyclic structures should compare via
    * structural-equality-with-occurs-check, not JSON.stringify.
    */
-  it("(equal? a b) on cyclic structures does not throw native JSON error", async () => {
+  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/membrane.md): the old assertion accepted EITHER
+  // outcome (returns-a-boolean OR throws-with-safe-message) — the "vacuous both-outcomes-
+  // pass" shape P16 forbids. Ran it: `equal?` on two independently-cyclic (self-referencing,
+  // not mutually-referencing) JS objects returns the boxed `#f` (an `ABool`, not a raw JS
+  // boolean, and never throws — no native "circular structure"/JSON error). Commit to that
+  // one behavior.
+  it("(equal? a b) on cyclic structures returns the boxed #f, never a native JSON error", async () => {
     await initBridge();
     const a: Record<string, unknown> = {};
     a.self = a;
@@ -382,24 +411,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     inferenceEnv.set("__cyc_a", jsToScheme(CONSTANT_CTX, a));
     inferenceEnv.set("__cyc_b", jsToScheme(CONSTANT_CTX, b));
 
-    let err: Error | undefined;
-    let result: unknown;
-    try {
-      [result] = await exec("(equal? __cyc_a __cyc_b)", { env: inferenceEnv });
-    } catch (e) {
-      err = e as Error;
-    }
-    // Either:
-    //   (a) returns a boolean (preferred — structural equality with occurs-check), OR
-    //   (b) throws a Scheme-level error whose message does NOT mention "JSON"
-    //       or "circular structure"
-    if (err) {
-      expect(err.message).not.toMatch(/circular structure|JSON/i);
-    } else {
-      // A verdict is the boxed scheme boolean (`equal?` returns the schemeTrue/schemeFalse
-      // flyweights under the Face split; raw JS booleans were the LIPS-legacy form).
-      expect(String(result) === "#t" || String(result) === "#f" || typeof result === "boolean").toBe(true);
-    }
+    const [result] = await exec("(equal? __cyc_a __cyc_b)", { env: inferenceEnv });
+    expect(String(result)).toBe("#f");
   });
 });
 

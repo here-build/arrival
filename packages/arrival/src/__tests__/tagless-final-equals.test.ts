@@ -409,6 +409,11 @@ describe("G6 equality-suite cleanup", () => {
       // but the Setoid itself IS representation-blind (documents the divergence):
       // The return type of [tf("equals")] is `boolean`; the inner `true` is the `other`
       // arg (also `unknown`). No cast needed — the method is typed on ABool directly.
+      // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/values.md,
+      // RULINGS.md R1): asserts the Setoid "IS representation-blind" as a durable fact —
+      // this is the scheduled-to-invert case P4 names. Once the bare-value purge lands
+      // (R1's uniform exit convention), a raw JS boolean should never reach the Setoid
+      // boundary at all, and this assertion flips to a strict-door throw.
       expect(
         (new ABool(CONSTANT_CTX, true))[tf("equals")](true),
       ).toBe(true);

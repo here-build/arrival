@@ -215,9 +215,14 @@ describe("generator-exec", () => {
     });
   });
 
-  describe("async/promise handling", () => {
-    it("should handle promises returned from JS functions", async () => {
-      // Create a test that uses JS async functions
+  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P15]
+  // docs/test-invariant-atlas/verdicts/evaluator.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B): renamed from "async/promise handling" / "should handle promises returned from JS
+  // functions" — `async-add` here is a pure Scheme `(lambda (a b) (+ a b))`, no async fn, no
+  // promise anywhere. It only tests that a lambda defined in one top-level form persists into
+  // the next form's evaluation (a real, legitimate invariant) — mislabeled, not broken.
+  describe("cross-form lambda persistence", () => {
+    it("a lambda defined in one top-level form is callable from the next", async () => {
       const results = await exec(`
         (define async-add (lambda (a b)
           (+ a b)))

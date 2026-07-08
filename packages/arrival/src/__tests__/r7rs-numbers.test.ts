@@ -35,6 +35,13 @@ import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 
+// [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/evaluator.md,
+// RULINGS.md R1): num()/truthy() below tolerate boxed-with-valueOf AND raw number/
+// bigint/boolean simultaneously — literally the "accepts boxed or raw" contract P4
+// forbids, baked into shared test infra across this file, r7rs-unicode.test.ts, and
+// r7rs-identity.test.ts instead of exposing exec()'s exit-convention inconsistency.
+// Collapses to one asserted shape once R1's uniform exit convention (toJS/schemeToJs
+// always fully unwraps) lands.
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;
   if (typeof r === "bigint") return Number(r);

@@ -28,6 +28,11 @@ const eq = (a: unknown, b: unknown): boolean => structuralEqual(a, b);
 describe("equality contract — boxed ≡ unboxed (representation-blind)", () => {
   // STRINGS — the confirmed closure.scm bug. A boxed SchemeString MUST equal a content-identical
   // plain JS string, in both argument orders, while differing content stays unequal.
+  // [INVERTS: bare-value-purge/P4] (docs/test-invariant-atlas/verdicts/values.md, RULINGS.md R1):
+  // representation-blind string equality is a TRANSITIONAL tolerance, not a permanent contract —
+  // R1 (uniform exit convention) purges the boxed/raw duplication this accommodates. Once the
+  // bare-value purge lands, a boxed↔unboxed comparison should never arise (there is no "unboxed"
+  // string crossing the membrane anymore) and this row flips to a strict-door throw.
   it("string: boxed ≡ unboxed, symmetric, content-discriminating", () => {
     expect(eq(new AString(CONSTANT_CTX, "f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
     expect(eq("f|b", new AString(CONSTANT_CTX, "f|b"))).toBe(true); // plain vs boxed (symmetry)
@@ -37,6 +42,9 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   });
 
   // BOOLEANS — same class (plain JS booleans appear via rosetta unwrapping).
+  // [INVERTS: bare-value-purge/P4] — the other half of P4's cited "two invariants pinning
+  // opposite exit contracts" (paired with js-interop.test.ts's raw-boolean-exit row); same
+  // fate as the string row above once R1's uniform exit convention lands.
   it("boolean: boxed ≡ unboxed, content-discriminating", () => {
     expect(eq(new ABool(CONSTANT_CTX, true), true)).toBe(true);
     expect(eq(true, new ABool(CONSTANT_CTX, true))).toBe(true);

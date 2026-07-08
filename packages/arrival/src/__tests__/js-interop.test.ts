@@ -28,11 +28,14 @@ describe("JS-interop: numbers", () => {
     expect(`${n}`).toBe("3");
   });
 
-  it("exact numbers do NOT JSON.stringify today — BigInt-backed throws (flips → promote to .toBe ideal when fixed)", async () => {
+  // [P15] FLIP-TO-FAILS (docs/test-invariant-atlas/verdicts/provenance.md, membrane.md):
+  // this used to pin the current-broken BigInt-throw plain green ("documented current
+  // behavior") — the test's own old comment even said "when fixed this stops throwing
+  // and the test goes red," which is exactly what `it.fails` exists for. The body now
+  // asserts the IDEAL behavior (matches this file's own convention, see header).
+  it.fails("exact numbers SHOULD JSON.stringify to their value (BROKEN: BigInt-backed throws)", async () => {
     const n = await one("(+ 1 2)");
-    // Pin the SPECIFIC current failure, not an undifferentiated throw: when the
-    // BigInt backing is fixed this stops throwing and the test goes red.
-    expect(() => JSON.stringify(n)).toThrow(/BigInt/);
+    expect(JSON.stringify(n)).toBe("3");
   });
 
   it.fails("inexact numbers SHOULD JSON.stringify to their value (BROKEN: leaks {provenance,kind,real,imag})", async () => {
@@ -87,9 +90,11 @@ describe("JS-interop: lists (Pair)", () => {
     expect(count).toBe(3);
   });
 
-  it("JSON.stringify(list) throws today — BigInt elements (flips → promote to [1,2,3] ideal when fixed)", async () => {
+  // [P15] FLIP-TO-FAILS (same root cause + pattern as the exact-number BigInt row
+  // above): pinned the current-broken throw plain green; body now asserts the ideal.
+  it.fails("JSON.stringify(list) SHOULD serialize the list (BROKEN: BigInt elements throw)", async () => {
     const lst = await one("(list 1 2 3)");
-    expect(() => JSON.stringify(lst)).toThrow(/BigInt/);
+    expect(JSON.stringify(lst)).toBe("[1,2,3]");
   });
 
   it("schemeToJs(list) is the working escape hatch", async () => {

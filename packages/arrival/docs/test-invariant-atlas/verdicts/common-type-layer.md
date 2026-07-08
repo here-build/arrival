@@ -6,6 +6,11 @@
 
 ## Findings
 
+**Note (2026-07-08 mechanical sweep):** every finding below lives under `src/common/__tests__/`,
+`src/__benchmarks__/`, or `src/type-layer/__tests__/` — none of which are in the sunset-sweep's
+assigned directories (`src/__tests__/` and `src/env/**/__tests__/` only). All rows in this file
+are **SKIPPED** for that reason (out of directory scope for this pass), marked individually below.
+
 `evaluator-benchmark.spec.ts > all three describe groups — [P15] verdict: REWRITE — the "LIPS (promise-based)" side imports `exec` from `eval/generator-exec.ts`, which drives the SAME generator evaluator as the "Generator" side's `eval/evaluator.ts` exec (the lips handle was retired in 0849de566b); the A/B labels are fiction and the "speedup" measures only the public-exec seam (bootstrap gate + Resolver + runCtx minting) vs a raw `run(evaluate(...))` call — relabel as a seam-overhead benchmark or delete the comparison group.`
 
 `evaluator-benchmark.spec.ts > listLips/genAst harness — [P1] verdict: RETAG — the hand-built ASTs put raw unboxed JS numbers (`1`, `2`) as pair cars, terms the provenance interpreter cannot execute; retag to boxed AExact construction when the bare-value purge reaches harnesses.`

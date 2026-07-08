@@ -42,36 +42,23 @@ import type { SchemeValue } from "../../../values/types.js";
 const svec = z.vector(z.value);
 
 describe("scheme/vectors Contract precision — element/return precision (z.custom<unknown>() → z.value/z.vector)", () => {
-  test("vector: OLD z.array(z.custom<unknown>()) decoded FLAT unknown[] — no element precision", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
-  });
-
+  // 4 OLD-shape rows (vector / vector-append / vector-ref input / vector-ref-vector->list
+  // output) DELETED here (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B "env test-d museum rows") — each decoded a retired synthetic schema, no reachable
+  // production path. NEW-side rows below are the load-bearing proof.
   test("vector: NEW z.array(z.value) decodes SchemeValue[], matching the impl's own (...objs: SchemeValue[]) body — and make-vector's own fill-slot convention", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.value>>>>().toEqualTypeOf<SchemeValue[]>();
-  });
-
-  test("vector-append: OLD z.array(z.custom<unknown>()) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
   test("vector-append: NEW z.array(z.vector(z.value)) decodes (AVector | AJSArray)[] on the scheme face — matches every OTHER accessor's z.vector convention in this file", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<(AVector | AJSArray)[]>();
   });
 
-  test("vector-ref: OLD input [z.custom<unknown>(), z.schemeNumber] decoded [unknown, AExact|AInexact] — vec arg imprecise", () => {
-    expectTypeOf<DecodedArgs<[z.ZodCustom<unknown>, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
-      [unknown, AExact | AInexact]
-    >();
-  });
-
   test("vector-ref: NEW input [z.vector(z.value), z.schemeNumber] decodes [AVector | AJSArray, AExact|AInexact], not [unknown, …]", () => {
     expectTypeOf<DecodedArgs<[typeof svec, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
       [AVector | AJSArray, AExact | AInexact]
     >();
-  });
-
-  test("vector-ref / vector->list: OLD output [z.custom<unknown>()] collapses to a bare `unknown` return", () => {
-    expectTypeOf<DecodedReturn<[z.ZodCustom<unknown>]>>().toEqualTypeOf<unknown>();
   });
 
   test("vector-ref / vector->list: NEW output [z.value] collapses to a bare `SchemeValue` return — representation-blind by design, not unknown", () => {

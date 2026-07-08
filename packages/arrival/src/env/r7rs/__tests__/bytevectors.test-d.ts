@@ -26,17 +26,13 @@ import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";
 
 describe("bytevector Contract precision — wholly-variadic homogeneous element domains", () => {
-  test("OLD bytevector shape (z.array(z.custom<unknown>())) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
-  });
-
+  // Both OLD-shape rows DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
+  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
+  // §B "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
+  // with no reachable production path. The NEW-side rows below are the load-bearing proof.
   test("NEW bytevector shape: z.array(z.schemeNumber) decodes to ANumeric[] — each arg IS a scheme number, not unknown", () => {
     // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.bytevector] }.
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<ANumeric[]>();
-  });
-
-  test("OLD bytevector-append shape (z.array(z.custom<unknown>())) decoded FLAT unknown[]", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<z.ZodCustom<unknown>>>>>().toEqualTypeOf<unknown[]>();
   });
 
   test("NEW bytevector-append shape: z.array(z.bytevector) decodes to ABytevector[] on the scheme face — each arg IS a bytevector, not unknown", () => {
