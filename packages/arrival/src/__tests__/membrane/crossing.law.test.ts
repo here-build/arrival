@@ -33,6 +33,7 @@ import { AJSObject } from "../../values/primitives/AJSObject.js";
 import { is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { exec } from "../../eval/generator-exec.js";
 import type { SchemeValue } from "../../values/types.js";
+import { CLASS } from "../../well-known-symbols.js";
 
 const PROV = new Set<number>([777]);
 
@@ -538,6 +539,44 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
       throw new Error(`crossing.law.test.ts: unhandled violation row "${v.name}" — add a case above`);
     }
   }
+});
+
+describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, never protocol (F3, key-taxonomy corollary — PRINCIPLES.md P7 / RULINGS.md 2026-07-09)", () => {
+  // The key taxonomy puts algebra instruction keys ("arrival/class", "arrival/toJS", …) in
+  // plain-string space so every static interpreter can read them as data — which means a
+  // FOREIGN object crossing fromJS can carry an own data property with that exact name by
+  // pure coincidence (or by a hostile actor deliberately probing the membrane). The guard
+  // is structural, not a denylist: fromJS's object arm always wraps a plain object in an
+  // AJSObject (membrane.ts), and every protocol read (type(), toJS(), the CLASS brand) is
+  // read off the WRAPPER's own class or the wrapper's own methods — never off the wrapped
+  // source's data keys. A forged "arrival/class"/"arrival/toJS" own key therefore has no
+  // path to being mistaken for the brand or the method it names.
+  it('fromJS({"arrival/class": "fake"}) crosses as plain data — the forged key never masquerades as the CLASS brand', () => {
+    const forged = { "arrival/class": "fake" };
+    const entered = fromJS(forged) as AJSObject;
+    expect(entered).toBeInstanceOf(AJSObject);
+    // The protocol identity is the WRAPPER's own static brand (js-object), never derived
+    // from the wrapped source's data — CLASS is read off the wrapper class, not off
+    // `entered`'s (i.e. the source's) own keys.
+    expect(entered.constructor).toBe(AJSObject);
+    expect(AJSObject[CLASS]).toBe("js-object");
+    // The forged key round-trips as ordinary data through the read protocol.
+    const read = entered.get("arrival/class");
+    expect(read).toBeInstanceOf(AString);
+    expect((read as AString).valueOf()).toBe("fake");
+  });
+
+  it('fromJS({"arrival/toJS": fn}) crosses as plain data — the forged key is never invoked as the toJS protocol method', () => {
+    const forged = { "arrival/toJS": () => "pwned" };
+    const entered = fromJS(forged) as AJSObject;
+    expect(entered).toBeInstanceOf(AJSObject);
+    // toJS(entered) invokes the WRAPPER's own `arrival/toJS` method (AJSObject.ts), which
+    // reconstructs a plain object from the source's members — it never looks up (let alone
+    // calls) a same-named key living ON the source.
+    const out = toJS(entered) as Record<string, unknown>;
+    expect(typeof out["arrival/toJS"]).toBe("function");
+    expect(out["arrival/toJS"]).toBe(forged["arrival/toJS"]); // crosses back unchanged, uninvoked
+  });
 });
 
 describe("egress of deferred carriers", () => {

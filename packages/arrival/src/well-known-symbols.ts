@@ -8,13 +8,29 @@
 // Naming: `Symbol.for("arrival/<name>")` namespaces our brands in the global
 // symbol registry so an unrelated `Symbol.for("data")` elsewhere can never
 // collide. The one exception is LOCATION — see its note.
+//
+// CLASS is the other exception, in the opposite direction (key taxonomy,
+// PRINCIPLES.md P7 corollary / RULINGS.md 2026-07-09): it is an ALGEBRA
+// INSTRUCTION KEY, not a metadata slot, so it is a plain STRING
+// (`"arrival/class"`), not a `Symbol.for` registry entry — every static
+// interpreter (type lens, oracle, lineage classifier, trace, MCP harvest)
+// consumes instruction names as data, and a symbol would privilege the
+// runtime pair. This is the sibling convention to `arrival/tagless-final/*`
+// and `arrival/toJS`/`arrival/print`, which are also string-keyed directly on
+// the value classes (see `values/tagless-final.ts`). It lives in this file
+// (rather than beside those) only because it long predates the taxonomy
+// split; a forged own data key named `"arrival/class"` on a borrowed JS
+// object is DATA, never protocol — the membrane never reads a wrapped
+// source's own keys as instructions (F3 forgery-guard law row,
+// `membrane/crossing.law.test.ts`).
 
 /**
  * STRING tag identifying a value class, read via `constructor[CLASS]`
- * (`stdlib.ts`, `utils/typecheck.ts`, `eval/guards.ts`). The KEY is this
- * symbol; the VALUE stays a plain string ("pair" / "vector" / …).
+ * (`utils/typecheck.ts`, `values/value-guards.ts`). Both the KEY and the
+ * VALUE are plain strings: the key is always `"arrival/class"`, the value is
+ * the per-class tag ("pair" / "vector" / …).
  */
-export const CLASS = Symbol.for("arrival/class");
+export const CLASS = "arrival/class";
 
 /**
  * Marks a JS function as a Scheme lambda (`true`). Set by the evaluator when it
