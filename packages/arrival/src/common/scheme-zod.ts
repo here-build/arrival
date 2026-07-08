@@ -205,7 +205,7 @@ export const symbol = named(
     decode: (s) => {
       const existing = symbolSchemeToJs.get(s);
       if (existing) return existing;
-      const js = Symbol(`arrival membrane symbol: ${s.__name__}`);
+      const js = Symbol(`arrival membrane symbol: ${String(s.__name__)}`);
       symbolSchemeToJs.set(s, js);
       symbolJsToScheme.set(js, s);
       return js;

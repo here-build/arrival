@@ -697,10 +697,7 @@ export function is_scheme_promise(o: unknown): o is SchemePromise {
 // ============================================================================
 
 function symbol_name(sym: ASymbol): string {
-  // `__name__` is declared `string` but a gensym's is actually a JS symbol (see the
-  // identical note at ctxResolver's lookup below, and ASymbol.ts's own `isSymbol` check) —
-  // an over-narrow declared type, not something provable by a guard at this call site.
-  const name = sym.__name__ as string | symbol;
+  const name = sym.__name__;
   return typeof name === "symbol" ? name.description || "" : name;
 }
 

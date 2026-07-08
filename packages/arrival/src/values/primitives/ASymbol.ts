@@ -59,18 +59,21 @@ export class ASymbol extends AValue {
   static readonly literal: unique symbol = Symbol.for("__literal__");
   static readonly object = Symbol.for("__object__");
   readonly kind = "symbol" as const;
-  declare __name__: string;
+  /** Interned symbols carry their string name; a GENSYM carries a raw ES6 `symbol`
+   *  as its name — the symbol IS the uniqueness (uninterned by construction, no
+   *  capture in macro expansion). Every reader must handle both arms. */
+  declare __name__: string | symbol;
   declare [ASymbol.literal]?: string | number;
 
   constructor(
     ctx: RunContext,
-    name: string | SchemeStringLike,
+    name: string | symbol | SchemeStringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
     intern: symbol | true = true,
   ) {
     super(ctx, provenance);
-    // Unwrap SchemeStringLike to plain string
-    const unwrapped: string = isSchemeString(name) ? name.valueOf() : name;
+    // Unwrap SchemeStringLike to plain string; a raw ES6 symbol (gensym carrier) passes through.
+    const unwrapped: string | symbol = isSchemeString(name) ? name.valueOf() : name;
 
     // A keyword redirects to AKeywordSymbol — a real subclass with a statically-declared
     // `apply` method, not a per-instance patch. `new.target` distinguishes "someone called
@@ -78,7 +81,7 @@ export class ASymbol extends AValue {
     // (already the right class — proceed as normal below). The redirect happens before
     // interning so the CACHED instance (whichever branch mints or hits it) is always the
     // correctly-typed one.
-    if (new.target === ASymbol && isKeywordName(unwrapped)) {
+    if (new.target === ASymbol && typeof unwrapped === "string" && isKeywordName(unwrapped)) {
       return new AKeywordSymbol(ctx, unwrapped, provenance, intern);
     }
 
@@ -146,8 +149,9 @@ export class ASymbol extends AValue {
     return this.__name__ as string;
   }
 
-  valueOf(): string {
-    // Returned raw — used as environment keys.
+  valueOf(): string | symbol {
+    // Returned raw — used as environment keys (a gensym's ES6-symbol name is a
+    // legal, collision-free Map/Record key like any string).
     return this.__name__;
   }
 

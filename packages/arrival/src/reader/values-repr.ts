@@ -64,7 +64,7 @@ export const gensym = (function () {
     // special-cases `typeof unwrapped === "string"` for interning — anything else (a gensym's
     // raw ES6 symbol) is stored verbatim as `__name__` (ASymbol.ts's `isSymbol`/`is_gensym`
     // helpers read it back as a symbol). Honest cast to the existing, already-handled contract.
-    const symbol = new ASymbol(CONSTANT_CTX, sym as unknown as string);
+    const symbol = new ASymbol(CONSTANT_CTX, sym);
     hidden_prop(symbol, "__literal__", name);
     return symbol;
   }
