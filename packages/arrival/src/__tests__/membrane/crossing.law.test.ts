@@ -357,6 +357,18 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         const obj = { a: 1 };
         expect(exitJS(fromJS(obj))).toBe(obj);
       });
+      // Regression, carried from rosetta-environment.test.ts (docs/test-suite-v2/
+      // REMOVAL-MANIFEST.md §A): `Object.entries` in schemeToJs used to drop symbol keys, so
+      // opaque/private backing data on objects crossing the membrane was silently lost.
+      // String keys must be unchanged; symbol-keyed slots must survive the round-trip.
+      it(`${roundTripTitle} — symbol-keyed properties survive alongside string keys`, () => {
+        const SECRET = Symbol("secret");
+        const original: Record<string | symbol, unknown> = { visible: 1 };
+        original[SECRET] = [4, 5, 6];
+        const roundTripped = exitJS(fromJS(original)) as Record<string | symbol, unknown>;
+        expect(roundTripped.visible).toBe(1); // string key unchanged
+        expect(roundTripped[SECRET]).toEqual([4, 5, 6]); // symbol key survives
+      });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, { name: "claude" }, {}, PROV);
         expect(stamped).toBeInstanceOf(AJSObject);
@@ -483,6 +495,15 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out[0]);
       });
+      // Carried from rosetta-environment.test.ts (docs/test-suite-v2/REMOVAL-MANIFEST.md
+      // §A) as a design-pending stub, not dropped: `(list)` evaluates to the `nil`
+      // singleton, and today `schemeToJs(nil)` exits per the "null" row above (JS `null`),
+      // not `[]`. Whether the EMPTY list should instead exit as an empty array (matching a
+      // non-empty proper list's array shape) is an open design question — it needs a
+      // second nil-like marker distinguishing "empty list" from "not a list at all" to
+      // preserve that metadata on the reverse conversion. Original v1 comment: "this one
+      // is tricky and will probably require deep rewrite of runtime."
+      it.todo("exit: (list) — the empty list — as an empty array, not null (open design question)");
       break;
     }
 

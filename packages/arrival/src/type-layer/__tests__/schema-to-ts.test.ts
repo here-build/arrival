@@ -22,15 +22,19 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   });
   it("prints the rest of the scheme-identity primitives as their plain-TS image", () => {
     expect(printType(z.symbol)).toBe("string");
-    // RESIDUAL v2 ARTIFACT: vector(E) = union[array(E), array(E)] (two same-output codec branches),
-    // and `vector` carries no name-image (its element varies), so it prints the duplicated
-    // `unknown[] | unknown[]`. TS collapses it to `unknown[]` at the type level; a harvest
-    // union-member dedup would clean the printed string (tracked follow-up).
-    expect(printType(z.vector(z.value))).toBe("unknown[] | unknown[]");
     expect(printType(z.bytevector)).toBe("Uint8Array");
     expect(printType(z.nil)).toBe("null");
     expect(printType(z.boolean)).toBe("boolean");
     expect(printType(z.char)).toBe("string");
+  });
+  // GAP (ledger/index.law.test.ts GAPS: "schema-to-ts vector union not deduped", gate:
+  // "printer dedup follow-up"). vector(E) = union[array(E), array(E)] (two same-output codec
+  // branches), and `vector` carries no name-image (its element varies), so it prints the
+  // duplicated `unknown[] | unknown[]`. TS collapses it to `unknown[]` at the type level; the
+  // IDEAL is a harvest union-member dedup that cleans the printed string to match. Flips green
+  // when that dedup lands.
+  it.fails("prints z.vector(z.value) deduped as 'unknown[]', not the duplicated union branches", () => {
+    expect(printType(z.vector(z.value))).toBe("unknown[]");
   });
   it("prints the representation-blind value primitive as unknown", () => {
     expect(printType(z.value)).toBe("unknown");

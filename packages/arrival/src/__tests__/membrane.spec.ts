@@ -203,11 +203,14 @@ describe("Wrapper Layer", () => {
       expect(toJS(new ABool(CONSTANT_CTX, true))).toBe(true);
     });
 
-    it("converts SchemeSymbol via its own toJS protocol", () => {
-      // todo symbols gets transformed into opaque symbol
-      const sym = new ASymbol(CONSTANT_CTX, "foo");
-      expect(toJS(sym)).toBe("'foo");
-    });
+    // Was a green pin of the apostrophe-prefixed-string exit shape with a stale
+    // "todo symbols gets transformed into opaque symbol" comment (docs/test-suite-v2/
+    // REMOVAL-MANIFEST.md §B) — the SAME still-undecided design question
+    // membrane/crossing.law.test.ts's "registered symbol (Symbol.for)" exit cell already
+    // stages as `it.todo` (ASymbol's opaque-exit mapping, two-tier-exec-api.md §9,
+    // deferred separately from R1). Promoted to `it.todo` here too rather than pinning
+    // one arbitrary shape as if it were the settled design.
+    it.todo("converts SchemeSymbol via its own toJS protocol — opaque-symbol exit design pending (two-tier-exec-api.md §9)");
 
     it("keeps Pair as-is", () => {
       const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));

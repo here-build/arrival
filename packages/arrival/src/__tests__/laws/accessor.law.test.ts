@@ -1,0 +1,97 @@
+/**
+ * LAW — keyword-as-accessor: `(:key obj)` extracts `obj[key]` (P0/P8).
+ *
+ * Survivor of `keyword-syntax.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A):
+ * that file's three vacuous exploratory blocks were deleted by the 2026-07-08
+ * test-invariant-atlas sweep (G1); the remaining real cases move here as ONE law with
+ * a small table, per DESIGN.md's F1 convention (one invariant × its subjects).
+ *
+ * THE LAW: a bare `:key` symbol, applied to a single argument, is a getter — it reads
+ * `key` off the argument the same way `(dict-ref obj 'key)` or a JS `obj.key` would.
+ * This falls out of `:key` being ordinary applicable data (no special evaluation rule),
+ * so the SAME accessor composes for free wherever a procedure is expected — `map`,
+ * `filter`, anywhere a callable slot exists. A missing key reads as `nil` (the
+ * membrane's universal "absent" value), never `undefined`/a thrown error.
+ */
+import { describe, expect, it } from "vitest";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { exec, execState } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { jsToScheme, schemeToJs } from "../../rosetta.js";
+
+async function execOne(expr: string, env = inferenceEnv): Promise<any> {
+  const results = await exec(expr, { env });
+  return results[0];
+}
+
+async function execOneBoxed(expr: string, env = inferenceEnv): Promise<any> {
+  const { values } = await execState(expr, { env });
+  return values[0];
+}
+
+describe("keyword-as-getter: (:key obj) reads obj[key]", () => {
+  it("bare :keyword applies as a getter", async () => {
+    const result = await execOne(
+      "(:pasword obj)",
+      inferenceEnv.inherit("keyword-accessor-getter", {
+        obj: jsToScheme(CONSTANT_CTX, { pasword: "swordfish" }),
+      }),
+    );
+    expect(result.toString()).toBe("swordfish");
+  });
+
+  it("a missing key reads as nil, not undefined or a thrown error", async () => {
+    const obj = { name: "test" };
+    const env = inferenceEnv.inherit("keyword-accessor-missing", {
+      obj: jsToScheme(CONSTANT_CTX, obj),
+    });
+    const result = await execOneBoxed(`(:missing obj)`, env);
+    expect(result.constructor.name).toBe("ANil");
+  });
+});
+
+describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take it for free", () => {
+  it("(map :name users) — the getter extracts one field per element", async () => {
+    const users = [
+      { id: "1", name: "Alice" },
+      { id: "2", name: "Bob" },
+      { id: "3", name: "Charlie" },
+    ];
+    const env = inferenceEnv.inherit("keyword-accessor-map", {
+      users: jsToScheme(CONSTANT_CTX, users),
+    });
+    expect(schemeToJs(await execOne(`(map :name users)`, env))).toEqual(["Alice", "Bob", "Charlie"]);
+  });
+
+  it("(filter :active items) — the getter doubles as a predicate", async () => {
+    const items = [
+      { active: true, name: "Item 1" },
+      { active: false, name: "Item 2" },
+      { active: true, name: "Item 3" },
+    ];
+    const env = inferenceEnv.inherit("keyword-accessor-filter", {
+      items: jsToScheme(CONSTANT_CTX, items),
+    });
+    const filtered = schemeToJs(await execOne(`(filter :active items)`, env));
+    expect(filtered).toHaveLength(2);
+    expect(filtered[0].name).toBe("Item 1");
+    expect(filtered[1].name).toBe("Item 3");
+  });
+});
+
+// Co-located rather than dropped: this exercises pipe-quoted-symbol-as-VARIABLE
+// resolution (`|24|`), a reader/binding case adjacent to keyword syntax (both are
+// identifier-namespace edge cases) but NOT itself an accessor law — kept here so the
+// coverage isn't lost in the keyword-syntax.test.ts retirement (no closer-fitting home
+// exists yet; see docs/test-suite-v2/REMOVAL-MANIFEST.md §A keyword-syntax.test.ts row).
+describe("adjacent reader case: a pipe-quoted symbol resolves as an ordinary variable", () => {
+  it("(list |24|) — |24| is a bound identifier, not a numeric literal", async () => {
+    const result = await execOneBoxed(
+      `(list |24|)`,
+      inferenceEnv.inherit("pipe-symbol-variable", {
+        "24": jsToScheme(CONSTANT_CTX, "unqouted"),
+      }),
+    );
+    expect(result.car.toString()).toEqual("unqouted");
+  });
+});

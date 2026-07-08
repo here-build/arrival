@@ -9,7 +9,7 @@
  * carriers all meet the polymorphic `map`/`filter`/`length`/`reduce`.
  *
  * DR5 (pre-mortem): every assertion inspects `.provenance` DIRECTLY — never via
- * `equal?`. `structuralEqual` is representation-blind (equality-representation.ts):
+ * `equal?`. `structuralEqual` is representation-blind (laws/equality.law.test.ts):
  * it sees a value's content, NOT whether a provenance box was dropped, so it is
  * the wrong oracle for "did the box survive."
  *

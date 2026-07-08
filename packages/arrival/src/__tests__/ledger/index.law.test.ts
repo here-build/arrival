@@ -64,6 +64,13 @@ const GAPS: readonly LedgerRow[] = [
   // their OWN top-level provenance with the R2 grouping-fact union at construction —
   // independent of R8, un-implemented (R2 is its own, later design item).
   { id: "AJSArray/ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (AJSArray/ADict)" },
+  // Carried from clone-identity.test.ts (docs/test-suite-v2/REMOVAL-MANIFEST.md §A) — the
+  // one still-open site of the `=== nil` identity-equality sweep (docs/archaeology/
+  // nil-clone-sweep.md). `schemeToJs`'s entry point special-cases `value === nil` instead
+  // of `instanceof ANil`, so a provenance-bearing Nil clone (minted by
+  // `restrictControlFlowProvenance`) falls through to the generic `return value` branch
+  // and hands back a Nil object where callers expect `null`.
+  { id: "nil-clone schemeToJs entry loses identity", gate: "rosetta.ts:70 fix", replacedBy: "laws/identity" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
@@ -76,9 +83,17 @@ const INVERSIONS: readonly LedgerRow[] = [
   // algebra.test.ts and boolean-landmine-regression.test.ts (both verified "Clean" —
   // unrelated to this purge, not scheduled to change) — a throw would contradict those
   // siblings, the exact aspirational-door case the purge warns against. See
-  // equality-representation.test.ts and tagless-final-equals.test.ts's LANDMINE pin for
-  // the full reasoning; both retagged off `[INVERTS: bare-value-purge/P4]`.
-  { id: "LAMBDA-branded fn passes jsToScheme by identity", gate: "reverse-membrane step 6", replacedBy: "membrane/crossing function row" },
+  // laws/equality.law.test.ts (relocated from equality-representation.test.ts, G2) and
+  // tagless-final-equals.test.ts's LANDMINE pin for the full reasoning; both retagged off
+  // `[INVERTS: bare-value-purge/P4]`.
+  // "LAMBDA-branded fn passes jsToScheme by identity" RETIRED (reverse-membrane-for-
+  // callables.md §3 step 1, 2026-07-09): named-let's loopFn — the LAMBDA brand's last live
+  // producer per the B4 audit — is a real ALambda now, so the identity-pass-through law is
+  // unconditional on `instanceof AValue` (jsToScheme's first case), no brand check involved.
+  // The LAMBDA brand itself was deleted (well-known-symbols.ts) along with its readers
+  // (membrane.ts isSchemeValue, rosetta.ts jsToScheme, print.ts functionRepr). See
+  // membrane-symmetry.test.ts's retagged "a real ALambda passes through jsToScheme by
+  // identity" row, now a plain `it()`.
   { id: "defineRosetta legacy arm authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
   // "bare-fn env.set harness wiring" — PARTIALLY retired (B4 audit, 2026-07-09):
   // input-rest-runtime.test.ts / kwargs-runtime.test.ts converted to real

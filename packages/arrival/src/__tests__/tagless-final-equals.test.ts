@@ -411,7 +411,7 @@ describe("G6 equality-suite cleanup", () => {
       // withInputProvenance now always boxes, ANil's length boxes, Environment.set boxes
       // every stored scalar — so no INTERNAL producer inside the membrane can hand
       // `equal?`/`eq?`/`eqv?` a raw JS boolean anymore during real scheme execution. That
-      // does NOT flip this assertion to a strict-door throw: equality-representation.test.ts
+      // does NOT flip this assertion to a strict-door throw: laws/equality.law.test.ts
       // (see its boolean row) and boolean-landmine-regression.test.ts's own header comment
       // ("EVERY predicate produces these SchemeBools, and these stay green") both
       // independently pin the Setoid's representation-blindness as DURABLE, general JS-API

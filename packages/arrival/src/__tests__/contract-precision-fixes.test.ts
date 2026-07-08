@@ -94,7 +94,7 @@ describe("2026-07-05 audit — runtime Contract precision on the REAL exported o
 // membrane unboxed — see scheme-zod.ts's `boolean` codec). `z.array(z.unknown())` stays.
 //
 // `symbol=?`'s impl has NO such unwrap step — it is a bare `instanceof ASymbol` check,
-// with no raw-JS-symbol branch. The representation test (`equality-representation.test.ts`)
+// with no raw-JS-symbol branch. The representation test (`laws/equality.law.test.ts`)
 // independently confirms this for the whole scalar pair: "CHARACTERS & SYMBOLS — always
 // boxed in practice (no plain-JS counterpart)". There is no codec for symbols in
 // scheme-zod.ts either (only string/boolean/char/number/integer/bigint have one) — so no

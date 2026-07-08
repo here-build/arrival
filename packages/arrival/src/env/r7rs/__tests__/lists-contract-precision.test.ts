@@ -265,41 +265,12 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
   });
 });
 
-describe("scheme/lists Contract precision — behavior spot-checks: is_pair-shadow swap (raw instanceof → the file's own SchemeValue-narrowing helper) is byte-identical at runtime", () => {
-  // list-tail/list-ref/list-copy's bodies swap `x instanceof APair`/`x instanceof ANil` for the
-  // file-local `is_pair`/`is_nil` shadow helpers SOLELY so `.car`/`.cdr` narrow to SchemeValue
-  // (letting the tightened z.value OUTPUT typecheck) — is_pair/is_nil are themselves exactly
-  // `o instanceof APair`/`o instanceof ANil` (value-guards.ts), so this is a proven no-op at
-  // runtime. These spot-checks call the real bound impls directly (bypassing the interpreter)
-  // to additionally confirm end-to-end — the interpreter-level proof is the untouched existing
-  // suite (cyclic-list-ops.test.ts, clone-identity.test.ts, r7rs-identity.test.ts).
-  it("list-tail behaves identically: walks k cdrs by reference, 0 steps returns the list itself", () => {
-    const impl = nativeDef("list-tail").impl as (list: unknown, k: unknown) => unknown;
-    const list = properList(exact(1), exact(2), exact(3)) as APair<any, any>;
-    expect(impl(list, exact(0))).toBe(list);
-    expect(impl(list, exact(1))).toBe(list.cdr); // the (2 3) tail, by reference
-    expect(impl(list, exact(3))).toBe(nil); // walked off the end of a proper list
-  });
-
-  it("list-ref behaves identically: returns the k-th car", () => {
-    const impl = nativeDef("list-ref").impl as (list: unknown, k: unknown) => unknown;
-    const list = properList(exact(10), exact(20), exact(30));
-    expect((impl(list, exact(0)) as AExact).num).toBe(10n);
-    expect((impl(list, exact(1)) as AExact).num).toBe(20n);
-    expect((impl(list, exact(2)) as AExact).num).toBe(30n);
-  });
-
-  it("list-copy behaves identically: fresh spine, same elements, ANil-clone-aware (not === nil)", () => {
-    const impl = nativeDef("list-copy").impl as (list: unknown) => unknown;
-    const list = properList(exact(1), exact(2));
-    const copy = impl(list) as APair<any, any>;
-    expect(copy).not.toBe(list);
-    expect(copy.car).toBe((list as APair<any, any>).car);
-    expect(copy instanceof APair).toBe(true);
-    // nil (the canonical singleton) still copies to the shared `nil`, not a clone.
-    expect(impl(nil)).toBe(nil);
-  });
-});
+// "is_pair-shadow swap byte-identical" spot-checks RETIRED (docs/test-suite-v2/
+// REMOVAL-MANIFEST.md §B, G2): a helper-equivalence impl-pin bypassing the interpreter to
+// prove `is_pair`/`is_nil` behave identically to `instanceof APair`/`instanceof ANil` —
+// the block's own comment already named its replacement as "the untouched existing suite
+// (cyclic-list-ops.test.ts, clone-identity.test.ts, r7rs-identity.test.ts)", which covers
+// list-tail/list-ref/list-copy through the REAL interpreter, not a bypassed direct call.
 
 describe("scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type \"custom\" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)", () => {
   // These ops carry a z.custom<callable>() in their contract (map/for-each's fn head,

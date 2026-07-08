@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
-import { ABool } from "../values/primitives/ABool.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { structuralEqual } from "../values/structural-equal.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
+import { ABool } from "../../values/primitives/ABool.js";
+import { AString } from "../../values/primitives/AString.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
+import { structuralEqual } from "../../values/structural-equal.js";
+import { ACharacter } from "../../values/primitives/ACharacter.js";
 
-// THE EQUALITY CONTRACT — representation-blindness (R7RS §6.1).
+// LAW — the equality contract: representation-blindness (R7RS §6.1) (P0/P8).
+//
+// Survivor of `equality-representation.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A):
+// the manifest originally scheduled these rows `[INVERTS: bare-value-purge/P4]`, expected to
+// flip to strict-door throws once the purge landed. A4 (docs/REWORK-DAG.md, landed) settled
+// the mechanism question instead — see each row's comment below for the per-type verdict —
+// so this file relocates as ONE plain law table, no more `[INVERTS]` framing.
 //
 // `equal?` compares VALUES, not REPRESENTATIONS. A value that is BOXED (a SchemeString carrying
 // provenance, minted by a chain-plane op) must compare equal to the SAME value UNBOXED (a plain JS
