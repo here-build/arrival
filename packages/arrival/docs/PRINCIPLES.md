@@ -87,7 +87,12 @@ Inside: boxed AValues, because both interpreters run. Outside: plain JS, because
 value reading crosses — the provenance reading STAYS, in the run's trace, keyed by scope.
 So the conversion is total and uniform in both directions for every type: boxes exist exactly
 where the second interpreter runs, and a bare value inside (or a box outside) is a piece of
-one world lost in the other.
+one world lost in the other. Two refinements (ruled 2026-07-09, RULINGS.md R1/R9): the exec
+API is two-tier — the SIMPLE flow ("run, get JS") is a true exit and fully unwraps; the
+COMPLEX flow ("run, get reusable state") deliberately hands boxed state to JS-side TOOLING
+and is not a crossing, it is a session handle into the inside. And "plain JS" means
+plain-JS-OBSERVABLE: container egress may be a lazy ref-tracking proxy that materializes on
+demand — observationally plain, no AValue ever readable through it.
 *Revealed by:* strings crossing out boxed while booleans cross raw (two invariants pinning
 opposite exit contracts); representation-blind `equal?` and `boolean=?`'s deliberate
 `z.unknown()` — tolerance machinery that exists only because bare values leak inward.
@@ -177,8 +182,10 @@ by whether the input was reconstructible.
 
 **P10. Provenance is total or it is nothing** *(P0's conservation law)*.
 Every derivation propagates lineage — the second interpreter never skips an instruction. The
-ONLY sheds are named, explicit, semantic: `exact->inexact` (lossiness opt-in), egress past
-the membrane (the trace keeps it; the JS value doesn't). An op that "rebuilds and therefore
+ONLY shed is named, explicit, semantic: egress past the membrane (the trace keeps it; the
+JS value doesn't). (`exact->inexact` was hypothesized as a second shed when this document was
+first written; the conservation suite MEASURED it propagating lineage fully — the exactness
+loss is the value layer's, the box layer keeps its history. The shed list is egress, only.) An op that "rebuilds and therefore
 drops" is a bug, full stop — rebuilding is an implementation detail of the value layer, and
 the value layer does not get to abort the box layer.
 *Revealed by:* `append` rebuilding the spine and dropping every element's provenance; `cdr`

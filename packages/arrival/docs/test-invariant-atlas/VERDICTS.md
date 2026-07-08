@@ -25,7 +25,11 @@ ledgers in [`verdicts/`](verdicts/). Verdict vocabulary is closed:
 | common/type-layer | 13 | 1 | 0 | 3 | 8 | 1 | 20/26 |
 | **total** | **~74** | **8** | **~17** | **12** | **25** | **~18** | **84/121** |
 
-## The ruling queue (18 RULING-NEEDED findings compress to 7 decisions)
+## The ruling queue — RESOLVED 2026-07-09
+All rulings below (grown to R1–R9 during the sunrise build) are decided; the answers live in
+`docs/test-suite-v2/RULINGS.md`. Kept here as the original question record.
+
+## The original queue (18 RULING-NEEDED findings compress to 7 decisions)
 
 **R1 — Exit convention (P4).** Mechanism LOCATED: `op-helpers.ts` comparison paths
 short-circuit boxing on empty-provenance operands and return bare JS booleans, while

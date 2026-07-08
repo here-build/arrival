@@ -12,20 +12,21 @@ export interface CrossingRow {
   /** JS value entering scheme space (fromJS/jsToScheme) becomes… */
   readonly entryForm: string; // e.g. "AExact" | "AInexact" | "AString" | "borrowed AJSArray" | "VOID (refused, warn)"
   /** scheme value exiting to JS (toJS/schemeToJs) becomes… R1-gated. */
-  readonly exitForm: "R1-PENDING" | string;
+  /** ruled by R1: uniform plain-JS exit (containers = lazy ref-tracking proxy) */
+  readonly exitForm: string;
   /** is a round-trip promised (P9)? if false, one-way projection only */
   readonly roundTrip: boolean;
 }
 
 export const CROSSINGS: readonly CrossingRow[] = [
-  { type: "boolean", entryForm: "ABool", exitForm: "R1-PENDING", roundTrip: true },
-  { type: "safe-int number", entryForm: "AExact", exitForm: "R1-PENDING", roundTrip: true },
-  { type: "float number", entryForm: "AInexact", exitForm: "R1-PENDING", roundTrip: true },
-  { type: "bigint", entryForm: "AExact", exitForm: "R1-PENDING", roundTrip: false }, // normalizes to number in-range
-  { type: "string", entryForm: "AString", exitForm: "R1-PENDING", roundTrip: true },
+  { type: "boolean", entryForm: "ABool", exitForm: "boolean", roundTrip: true },
+  { type: "safe-int number", entryForm: "AExact", exitForm: "number", roundTrip: true },
+  { type: "float number", entryForm: "AInexact", exitForm: "number", roundTrip: true },
+  { type: "bigint", entryForm: "AExact", exitForm: "number in safe range, else bigint", roundTrip: false }, // normalizes to number in-range
+  { type: "string", entryForm: "AString", exitForm: "string", roundTrip: true },
   { type: "null", entryForm: "ANil (nil)", exitForm: "null", roundTrip: false }, // known asymmetry, [fails]-ledgered
   { type: "undefined", entryForm: "AVoid", exitForm: "undefined", roundTrip: true },
-  { type: "registered symbol (Symbol.for)", entryForm: "ASymbol", exitForm: "R1-PENDING", roundTrip: false },
+  { type: "registered symbol (Symbol.for)", entryForm: "ASymbol", exitForm: "opaque symbol mapping (design pending, todo-ledgered)", roundTrip: false },
   { type: "unique symbol", entryForm: "VOID (refused, warn)", exitForm: "n/a", roundTrip: false },
   { type: "array", entryForm: "borrowed AJSArray (identity-cached)", exitForm: "raw source array", roundTrip: true },
   { type: "plain object", entryForm: "AJSObject (identity-cached, lazy)", exitForm: "raw source object", roundTrip: true },

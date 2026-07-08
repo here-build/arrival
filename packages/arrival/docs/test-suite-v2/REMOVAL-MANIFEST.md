@@ -43,7 +43,7 @@ because nothing true was enforced.
 | membrane.spec symbol quoted-name green pin (todo-in-comment) | the opaque-symbol gap | `it.fails`/`it.todo` per the opaque-symbol design |
 | rosetta-pure-marker inline-assembled Classifier consumer | pure/pipe classification semantics | `provenance/` law rows + a P14 staging ledger naming the production wiring gate |
 | lists-contract "is_pair-shadow swap byte-identical" spot-checks | helper-equivalence impl-pin | gone (cyclic-list-ops + chibi cover the behavior) |
-| curly-infix flag-on suite (~40) | SRFI-105 semantics behind an unwired flag | R6-gated: wire `ExecOptions.curlyInfix` and keep as `laws/reader-curly.law.test.ts`, or move to a reader-internal suite with the honest framing |
+| curly-infix flag-on suite (~40) | SRFI-105 semantics behind an unwired flag | R6 RULED: n-expressions force-eliminated — the reader's curly-infix MODE is deleted; `{a * b}` gets an explicit BAN door (educational, points at dict-literal grammar + sugarcoat); suite shrinks to ban-door + dict-grammar rows in `doors/`; neoteric syntax lives in arrival-sugarcoat only |
 
 ## C. Retagged in place (not removed — expiry-tagged)
 
