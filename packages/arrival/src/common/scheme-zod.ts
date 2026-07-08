@@ -506,7 +506,13 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
         // `as never`: the record shape is generic, so zod can't tie it to the out-schema input.
         decode: (d) => {
           const src = d as ADict | AJSObject;
-          return (keys.length ? Object.fromEntries(keys.map((k) => [k, src.get(k)])) : src["arrival/toJS"]()) as never;
+          // Both arms build the shallow BOXED record here (the out-schema owns per-field
+          // marshaling) — `arrival/toJS` is no longer usable for this: it egresses an R9
+          // lazy proxy with the values already unwrapped to plain JS (egress-proxy.ts),
+          // the membrane exit shape, not the inside-the-sandbox record this codec feeds
+          // its out-schema.
+          const names = keys.length ? keys : src.keys();
+          return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
         },
         encode: (rec: Record<string, unknown>) =>
           new ADict(

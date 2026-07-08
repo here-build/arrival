@@ -236,7 +236,14 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
 
 /** Exit point for Scheme → JS boundary crossing. STRICT: only interpreter-minted
  *  boxed values cross — a raw JS value reaching here means the caller is already
- *  on the JS side and there is nothing to convert. */
+ *  on the JS side and there is nothing to convert.
+ *
+ *  R9 (two-tier-exec-api.md §5): native containers (AVector/APair/ADict) egress as
+ *  lazy ref-tracking proxies. The same-box→same-proxy WeakMap pre-check lives in
+ *  values/egress-proxy.ts's single chokepoint (which every container's own
+ *  `arrival/toJS` calls), NOT here — protocol dispatch lands in that cache whether
+ *  the exit came through this function or a direct protocol call, so a second
+ *  membrane-side check would be redundant. */
 export function toJS(value: SchemeValue) {
   invariant(
     isSchemeValue(value),

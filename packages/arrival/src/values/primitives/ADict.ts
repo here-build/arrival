@@ -17,6 +17,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { egressContainerProxy } from "../egress-proxy.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
@@ -114,14 +115,14 @@ export class ADict extends AValue {
     return new ADict(this.ctx, [...this.byKey.entries()], p);
   }
 
-  /** Shallow, folded to plain string keys — mirrors AJSObject's `["arrival/toJS"]`
-   *  contract exactly. The recursive Scheme→JS primitive conversion belongs to
-   *  schemeToJs (rosetta.ts), which already owns that recursion for every other
-   *  boxed type. */
-  ["arrival/toJS"](): Record<string, SchemeValue> {
-    const out: Record<string, SchemeValue> = {};
-    for (const name of this.keys()) out[name] = this.get(name);
-    return out;
+  /** R9 lazy egress: folded plain string keys, values unwrapping through their own
+   *  `arrival/toJS` on first read — observationally a plain read-only object; same
+   *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). */
+  ["arrival/toJS"](): Record<string, unknown> {
+    return egressContainerProxy(this, "object", {
+      keys: () => this.keys(),
+      read: (name) => this.get(name),
+    }) as Record<string, unknown>;
   }
 
   // Print protocol — a real `(dict :k v ...)` repr; neither prior dict representation

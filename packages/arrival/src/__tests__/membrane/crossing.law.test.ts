@@ -28,6 +28,8 @@ import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
 import { APair } from "../../values/primitives/APair.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { ADict } from "../../values/primitives/ADict.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
 import { AJSObject } from "../../values/primitives/AJSObject.js";
 import { is_half_baked } from "../../values/primitives/AHalfBaked.js";
@@ -423,7 +425,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
           new AExact(CONSTANT_CTX, 2n),
           new AExact(CONSTANT_CTX, 3n),
         ]);
-        expect(toJS(list)).toEqual([1, 2, 3]);
+        const out = toJS(list);
+        // R9: the proxy is observationally a plain array — deep-equal to the eager
+        // projection, native Array.isArray, JSON round-trips.
+        expect(Array.isArray(out)).toBe(true);
+        expect(out).toEqual([1, 2, 3]);
+        expect(JSON.stringify(out)).toBe("[1,2,3]");
       });
       it(roundTripTitle, () => {
         const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)]);
@@ -464,6 +471,64 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       break;
     }
 
+    case "native vector (scheme→JS only)": {
+      it.todo(entryTitle); // scheme→JS only — fromJS(array) mints a BORROWED AJSArray, never an AVector
+      it(exitTitle, () => {
+        const vec = new AVector(CONSTANT_CTX, [
+          new AExact(CONSTANT_CTX, 1n),
+          new AString(CONSTANT_CTX, "two"),
+          new AExact(CONSTANT_CTX, 3n),
+        ]);
+        const out = toJS(vec);
+        expect(Array.isArray(out)).toBe(true);
+        expect(out).toEqual([1, "two", 3]);
+        expect(JSON.stringify(out)).toBe('[1,"two",3]');
+        expect([...(out as unknown[])]).toEqual([1, "two", 3]); // spread/iteration
+      });
+      it(roundTripTitle, () => {
+        const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+        const out = toJS(vec) as object;
+        expect(Object.keys(out).some((k) => k.startsWith("__"))).toBe(false);
+      });
+      it(provenanceTitle, () => {
+        const stamped = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n, 1n, PROV)], PROV);
+        const out = toJS(stamped) as unknown[];
+        expectNoProvenanceProperty(out);
+        expectNoProvenanceProperty(out[0]);
+        expect(out[0]).toBe(1); // the element unwrapped, not a box
+      });
+      break;
+    }
+
+    case "native dict (scheme→JS only)": {
+      it.todo(entryTitle); // scheme→JS only — fromJS(object) mints a BORROWED AJSObject, never an ADict
+      it(exitTitle, () => {
+        const dict = new ADict(CONSTANT_CTX, [
+          [new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n)],
+          [new ASymbol(CONSTANT_CTX, "b"), new AString(CONSTANT_CTX, "two")],
+        ]);
+        const out = toJS(dict);
+        expect(Array.isArray(out)).toBe(false);
+        expect(out).toEqual({ a: 1, b: "two" });
+        expect(JSON.stringify(out)).toBe('{"a":1,"b":"two"}');
+        expect(Object.keys(out as object)).toEqual(["a", "b"]);
+        expect({ ...(out as object) }).toEqual({ a: 1, b: "two" }); // spread
+      });
+      it(roundTripTitle, () => {
+        const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n)]]);
+        const out = toJS(dict) as object;
+        expect(Object.keys(out).some((k) => k.startsWith("__"))).toBe(false);
+      });
+      it(provenanceTitle, () => {
+        const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n, 1n, PROV)]], PROV);
+        const out = toJS(dict) as Record<string, unknown>;
+        expectNoProvenanceProperty(out);
+        expectNoProvenanceProperty(out.a);
+        expect(out.a).toBe(1);
+      });
+      break;
+    }
+
     default: {
       // Exhaustiveness guard: a row added to the table without a case here is a
       // design bug the stub grid should catch (F3 design note: "a stub grid that
@@ -471,6 +536,74 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       throw new Error(`crossing.law.test.ts: unhandled crossing row type "${row.type}" — add a case above`);
     }
   }
+});
+
+describe("R9 lazy egress laws — containers exit as ref-tracking proxies (two-tier-exec-api.md §5)", () => {
+  it("identity: the same box always egresses as the SAME proxy", () => {
+    const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+    expect(toJS(vec)).toBe(toJS(vec));
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+    expect(toJS(list)).toBe(toJS(list));
+    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n)]]);
+    expect(toJS(dict)).toBe(toJS(dict));
+  });
+
+  it("aliasing: a child container shared by two parents egresses as ONE object (reference equality observable from JS)", () => {
+    const child = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 42n)]);
+    const parentA = new AVector(CONSTANT_CTX, [child]);
+    const parentB = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "kid"), child]]);
+    const outA = toJS(parentA) as unknown[];
+    const outB = toJS(parentB) as Record<string, unknown>;
+    expect(outA[0]).toBe(outB.kid);
+    expect(outA[0]).toBe(toJS(child));
+  });
+
+  it("cycles: a container reaching itself through an element egresses without recursion (WeakMap registration precedes materialization)", () => {
+    // Immutable values can't self-reference through the language; build the knot on the
+    // JS side, exactly how a host embedding could — the payload array is captured by
+    // reference, so pushing after construction closes the cycle.
+    const payload: SchemeValue[] = [];
+    const vec = new AVector(CONSTANT_CTX, payload);
+    payload.push(vec);
+    const out = toJS(vec) as unknown[];
+    expect(out[0]).toBe(out); // the reach-back resolves to the SAME proxy, structurally
+    // …and the result behaves like a genuinely cyclic plain array (observationally
+    // plain JS): JSON refuses it the same way it refuses any circular structure.
+    expect(() => JSON.stringify(out)).toThrow(/circular/i);
+  });
+
+  it("laziness: an element's unwrap runs on first read, not at egress (second read is a cache hit — same materialized object)", () => {
+    const inner = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 7n)]);
+    const outer = new AVector(CONSTANT_CTX, [inner]);
+    const out = toJS(outer) as unknown[];
+    const first = out[0];
+    expect(first).toBe(out[0]); // target-as-cache: one materialization, stable identity
+    expect(first).toBe(toJS(inner)); // and it IS the child's own canonical proxy
+  });
+
+  it("write family throws the taught membrane door (P5 — the egressed value is a projection, not a mailbox)", () => {
+    const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+    const arr = toJS(vec) as unknown[];
+    expect(() => {
+      arr[0] = 99;
+    }).toThrow(/writes are banned/);
+    expect(() => {
+      delete arr[0];
+    }).toThrow(/mutations are banned/);
+    expect(() => Object.defineProperty(arr, "0", { value: 99 })).toThrow(/mutations are banned/);
+    expect(() => Object.setPrototypeOf(arr, null)).toThrow(/mutations are banned/);
+    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1n)]]);
+    const obj = toJS(dict) as Record<string, unknown>;
+    expect(() => {
+      obj.a = 99;
+    }).toThrow(/writes are banned/);
+    expect(() => {
+      delete obj.a;
+    }).toThrow(/mutations are banned/);
+    // nothing crossed the boundary
+    expect((toJS(vec) as unknown[])[0]).toBe(1);
+    expect((toJS(dict) as Record<string, unknown>).a).toBe(1);
+  });
 });
 
 describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: %s", (_n, v) => {

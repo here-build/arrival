@@ -57,9 +57,11 @@
  *     the carrier-appropriate verb; both carriers' concat cells are asserted as
  *     `unsupported by design` doors above (formerly ledgered as "append silently
  *     discards non-pair first operand" — GAPS row retired).
- *   - AVector/AJSArray/ADict's own `arrival/toJS` leaves elements still boxed
- *     ("convert lazily") instead of a fully-recursive unwrap.
- *     @ledger: "container toJS leaves boxed element residue".
+ *   - FIXED (R9): native containers (AVector/APair/ADict) egress toJS as lazy
+ *     ref-tracking proxies — elements unwrap on first read, nothing boxed is
+ *     observable past the exit ("container toJS leaves boxed element residue"
+ *     GAPS row retired). AJSArray is the deliberate exception: borrowed source
+ *     exits by identity (see the toJS case's own comment).
  */
 import { describe, it, expect } from "vitest";
 import { TERMS } from "./_tables/terms.js";
@@ -69,6 +71,7 @@ import { exec } from "../../eval/generator-exec.js";
 import type { Environment } from "../../Environment.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
+import { AJSArray } from "../../values/primitives/AJSArray.js";
 
 /** Runs `src` against a law env with one container bound as `c`. */
 async function run1(env: Environment, c: SchemeValue, src: string): Promise<SchemeValue> {
@@ -87,10 +90,10 @@ async function run2(env: Environment, c1: SchemeValue, c2: SchemeValue, src: str
  * leaves) collecting every reachable AValue's own provenance ids. Unlike
  * `deepIds` (fixtures.ts, scoped to the INSIDE-the-sandbox carriers), this is
  * for testing egress RESIDUE specifically — a toJS/print result is, by
- * contract, raw JS, but AVector/AJSArray/ADict's own `arrival/toJS` leave
- * elements boxed ("convert lazily"), so a plain `deepIds` read (which doesn't
- * know how to walk a bare JS object) would give a false "no provenance"
- * reading for the wrong reason. This one actually looks.
+ * contract, raw JS, so a plain `deepIds` read (which doesn't know how to walk
+ * a bare JS object) would give a false "no provenance" reading for the wrong
+ * reason. This one actually looks — and against an R9 lazy proxy the walk IS
+ * the materialization, which is exactly what an egress-residue probe wants.
  */
 function rawDeepIds(value: unknown, seen = new Set<unknown>()): Set<number> {
   const acc = new Set<number>();
@@ -426,15 +429,21 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         });
 
         // P4: "boxes exist exactly where the second interpreter runs... a box outside is a
-        // piece of one world lost in the other." AVector/AJSArray/ADict's own `arrival/toJS`
-        // leave elements STILL BOXED (AVector/AJSArray's own doc comments say "convert
-        // lazily"; ADict's `arrival/toJS` copies `this.get(name)` verbatim, same story) —
-        // unlike APair's fully-recursive unwrap. Ledgered as "container toJS leaves boxed
-        // element residue" (src/__tests__/ledger/index.law.test.ts GAPS) for these three
-        // carriers. `rawDeepIds` (not `deepIds`, which only knows how to walk the
-        // INSIDE-the-sandbox carriers) actually looks inside the raw object/array toJS
-        // hands back.
-        const lazyEgress = carrier.carrier === "AVector" || carrier.carrier === "AJSArray" || carrier.carrier === "ADict";
+        // piece of one world lost in the other." NATIVE containers (AVector/APair/ADict)
+        // egress as R9 lazy proxies (egress-proxy.ts): elements unwrap through their own
+        // `arrival/toJS` on first read, so nothing boxed is ever OBSERVABLE past the exit —
+        // the "container toJS leaves boxed element residue" GAPS row retired with this flip
+        // (two-tier-exec-api.md §5, RULINGS R9). `rawDeepIds` (not `deepIds`, which only
+        // knows how to walk the INSIDE-the-sandbox carriers) actually looks inside the raw
+        // object/array shape toJS hands back — through a lazy proxy that walk IS the
+        // materialization, which is exactly the point.
+        //
+        // AJSArray is the deliberate exception, NOT a gap: a BORROWED array exits as its
+        // raw source by IDENTITY (crossings.ts roundTrip:true; design §4 "borrowed values
+        // exit as their source"). The mint3 fixture plants boxed elements INTO the borrowed
+        // source (JS-side data, by construction) — identity egress faithfully returns that
+        // same array, boxes and all: the membrane never re-writes a foreign object's own
+        // contents, in either direction.
         const boxesBody = async () => {
           const { value } = await mint3(carrier);
           const result = (value as AValue)["arrival/toJS"]();
@@ -446,13 +455,14 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = (value as AValue)["arrival/toJS"]();
           expect(rawDeepIds(result).size).toBe(0);
         };
-        if (lazyEgress) {
-          // @ledger: container toJS leaves boxed element residue
-          it.fails("boxes [TICKETED GAP]: no AValue should survive past the toJS egress", boxesBody);
-          // @ledger: container toJS leaves boxed element residue
-          it.fails("provenance [TICKETED GAP]: toJS egress carries NO provenance by design (P4/P9)", provBody);
+        if (carrier.carrier === "AJSArray") {
+          it("borrowed identity: toJS returns the SAME source array — the membrane never rewrites foreign contents (P9 round-trip)", async () => {
+            const { value } = await mint3(carrier);
+            const source = (value as AJSArray).source;
+            expect((value as AValue)["arrival/toJS"]()).toBe(source);
+          });
         } else {
-          it("boxes: no AValue survives past the toJS egress (P4 — the box's world ends at the membrane)", boxesBody);
+          it("boxes: no AValue survives past the toJS egress (P4 — the box's world ends at the membrane; R9 proxies unwrap on read)", boxesBody);
           it("provenance: toJS egress carries NO provenance by design (P4/P9 — the trace keeps it, the JS value doesn't)", provBody);
         }
         break;

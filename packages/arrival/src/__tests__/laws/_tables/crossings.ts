@@ -35,8 +35,10 @@ export const CROSSINGS: readonly CrossingRow[] = [
   { type: "Uint8Array/ArrayBuffer/DataView", entryForm: "raw passthrough (named superset: FFI identity)", exitForm: "raw", roundTrip: true },
   { type: "Promise", entryForm: "raw passthrough (trampoline awaits)", exitForm: "n/a", roundTrip: false },
   { type: "function (borrowed)", entryForm: "VOID (refused, warn)", exitForm: "region-scoped wrapper [INVERTS: reverse-membrane/P6]", roundTrip: false },
-  { type: "proper list (scheme→JS only)", entryForm: "n/a", exitForm: "array (one-way, P9)", roundTrip: false },
-  { type: "dotted pair (scheme→JS only)", entryForm: "n/a", exitForm: "array with tail folded (one-way, P9)", roundTrip: false },
+  { type: "proper list (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },
+  { type: "dotted pair (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy, tail folded (R9, one-way, P9)", roundTrip: false },
+  { type: "native vector (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },
+  { type: "native dict (scheme→JS only)", entryForm: "n/a", exitForm: "lazy object proxy (R9, one-way, P9)", roundTrip: false },
 ] as const;
 
 /** Forbidden crossings — every row must THROW with a teaching message (P5). */

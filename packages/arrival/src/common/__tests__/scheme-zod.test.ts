@@ -274,12 +274,19 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     expect(shaped.parse(toolResult)).toEqual({ name: "from a tool" });
   });
 
-  it("z.dict() bare (open-record) matches ADict['arrival/toJS']() unmodified", () => {
+  it("z.dict() bare (open-record) is the shallow BOXED record — the inside-the-sandbox shape, NOT the membrane exit", () => {
+    // Rebaselined for R9 (two-tier-exec-api.md §5): `arrival/toJS` now egresses a lazy
+    // proxy with values already unwrapped to plain JS — the OUTSIDE shape. This codec
+    // feeds its out-schema (`z.record(z.string(), value)`) per-field, so its decode
+    // builds the boxed record from keys()/get() directly and must NOT route through the
+    // membrane exit.
+    const a = makeExact(1n);
+    const b = makeString("x");
     const nativeDict = new ADict(CONSTANT_CTX, [
-      [new ASymbol(CONSTANT_CTX, "a"), makeExact(1n)],
-      [new ASymbol(CONSTANT_CTX, "b"), makeString("x")],
+      [new ASymbol(CONSTANT_CTX, "a"), a],
+      [new ASymbol(CONSTANT_CTX, "b"), b],
     ]);
-    expect(z.dict().parse(nativeDict)).toEqual(nativeDict["arrival/toJS"]());
+    expect(z.dict().parse(nativeDict)).toEqual({ a, b });
   });
 });
 

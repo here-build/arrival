@@ -24,6 +24,7 @@ import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
+import { egressContainerProxy } from "../egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
@@ -75,10 +76,16 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return new AVector(this.ctx, this.__vector__.slice(start, end));
   }
 
-  // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as its raw
-  // array (elements convert lazily, as with AJSArray).
-  ["arrival/toJS"](): readonly T[] {
-    return this.__vector__;
+  // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as an R9 lazy
+  // egress proxy — observationally a plain array (Array.isArray true, JSON/spread/
+  // iteration work), elements unwrap through their own `arrival/toJS` on first read,
+  // same box → same proxy (egress-proxy.ts owns the tracker and the write doors).
+  ["arrival/toJS"](): readonly unknown[] {
+    const elements = this.__vector__;
+    return egressContainerProxy(this, "array", {
+      keys: () => elements.map((_, i) => String(i)),
+      read: (key) => elements[Number(key)],
+    }) as readonly unknown[];
   }
 
   valueOf(): readonly T[] {

@@ -30,6 +30,7 @@ import { AHalfBaked } from "./AHalfBaked.js";
 // directions are referenced only inside function bodies (concatPair/cdr here; the walk closure
 // there), never at module-eval time, so the cycle never bites.
 import { collapseProvenance } from "../../provenance-collapse.js";
+import { egressContainerProxy } from "../egress-proxy.js";
 import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type SchemeValue, } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
@@ -41,7 +42,6 @@ import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { tf } from "../tagless-final.js";
 import { MaybePromise } from "../../common/symbols/_bake.js";
-import { DefaultedWeakMap } from "@here.build/collections";
 
 // Trampoline thunk: `mark_cycles` walks arbitrarily deep lists, so it bounces
 // through these instead of recursing and overflowing the native stack.
@@ -485,9 +485,18 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return [this.car, this.cdr];
   }
 
-  ["arrival/toJS"](): APairAsListValue<Car, Cdr>[] {
-    const mapping = new DefaultedWeakMap<SchemeValue, any>((v) => v["arrival/toJS"]());
-    return [...this].map((item) => mapping.get(item));
+  // R9 lazy egress: the spine snapshots ONCE at proxy creation (an O(n) pointer copy —
+  // a linked spine can't be lazily indexed without O(n²)); the ELEMENTS stay lazy,
+  // unwrapping through their own `arrival/toJS` on first read. Improper tail folds in
+  // as the last element, per the one-way list→array projection (P9). A cyclic SPINE
+  // still throws the iterator's taught invariant — an infinite list has no finite
+  // array projection; cycles THROUGH elements terminate via the proxy tracker.
+  ["arrival/toJS"](): unknown[] {
+    const spine: SchemeValue[] = [...this];
+    return egressContainerProxy(this, "array", {
+      keys: () => spine.map((_, i) => String(i)),
+      read: (key) => spine[Number(key)],
+    }) as unknown[];
   }
 
   // Setoid (Fantasy Land) — structural car/cdr equality, threading the harness's shared `seen`.
