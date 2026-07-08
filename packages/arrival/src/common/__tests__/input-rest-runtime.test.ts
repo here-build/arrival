@@ -26,6 +26,7 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { symbol } from "../symbol.js";
 import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod.js";
+import { EnvCapability } from "../capability.js";
 
 describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + variadic tail", () => {
   it("decodes a FIXED head + a 0-length variadic tail", async () => {
@@ -73,7 +74,14 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    env.set("headtail", headtail.run);
+    // Wired through the REAL EnvCapability binder (post-B2 binder cut: the "rosetta" kind
+    // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
+    // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
+    // "EnvCapability-wired fixtures") retires with this fixture.
+    await new EnvCapability("test/input-rest-runtime", { symbols: { headtail } }).lower({}).apply(
+      env,
+      undefined as never,
+    );
   });
 
   it('(headtail "h") — 0-length tail through a real exec', async () => {

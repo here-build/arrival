@@ -164,11 +164,20 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       expect(result).toEqual(new AExact(CONSTANT_CTX, 26n)); // 6 + 20
     });
 
-    // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/evaluator.md):
-    // `env.set("async-add", ...)` binds a bare JS fn, and `expect(result).toBe(30)` asserts
-    // raw unboxed pass-through — the exact scheduled-inversion pattern the comment below
-    // already names ("With membrane, JS functions receive JS values, not SchemeExact").
-    // Dies with the reverse-membrane migration (callables-as-values).
+    // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] `env.set("async-add", ...)`
+    // binds a bare JS fn directly (bypassing EnvCapability), and `expect(result).toBe(30)`
+    // asserts raw unboxed pass-through via the evaluator call-head's `Reflect.apply` fallback
+    // (ACallable.ts / evaluator.ts:3125-3135, kept deliberately per
+    // docs/working-proposals/reverse-membrane-for-callables.md §5 item 5 — "keep, demoted to
+    // the legacy-defineRosetta compatibility path; delete with step 6"). Does NOT die with the
+    // B1-B3 reverse-membrane landing (cxr pilot + capability.ts binder cut + region discipline
+    // — all landed 2026-07-09): none of those steps touch bare `env.set`. Real gate: step 6
+    // (`AProcedure` arm removal from `SchemeValue`), itself gated on the legacy
+    // `env.defineRosetta` arm's retirement — see ledger row "defineRosetta legacy arm
+    // authoring form" (gate: McpEnvCapability annotation-lifting, undone — McpEnvCapability
+    // still authors every verb as a bare fn / RosettaSpec-shaped object; downstream consumers
+    // confirmed live: inhuman/sift-submission/mcp/src/packs/*.ts, here.build/saas/server/{mcp,
+    // arrival}, inhuman/saas/mcp).
     it("should handle JS functions that return promises", async () => {
       // With membrane, JS functions receive JS values (not SchemeExact)
       env.set("async-add", async (a: number, b: number) => {
@@ -437,9 +446,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         expect(await exec(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5n));
       });
 
-      // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/evaluator.md):
-      // `env.set("double", ...)` bare-fn producer, same scheduled-inversion pattern/fate as
-      // the "JS functions that return promises" test above.
+      // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] `env.set("double", ...)`
+      // bare-fn producer, same still-valid Reflect.apply-fallback pattern/gate as the "JS
+      // functions that return promises" test above (see that comment for the full gate chain:
+      // step 6 / AProcedure removal, gated on the undone McpEnvCapability annotation-lifting
+      // migration, NOT on B1-B3 which already landed).
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => (lambda (x) (* x 2))))
         // With membrane, JS functions receive JS values (not SchemeExact)

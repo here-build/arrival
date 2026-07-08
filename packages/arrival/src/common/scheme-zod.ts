@@ -370,9 +370,15 @@ export const bytevector = named(
 
 /** Raw predicate for a callable — a callable VALUE (ALambda/ANativeProcedure/
  *  ARosettaProcedure, the post-B2 shape every builtin binds as) or a plain JS function.
- *  [INVERTS: reverse-membrane/P1] the bare-fn arm: it admits the legacy bare-function
- *  callables (defineRosetta wrappers, user-borrowed fns) and dies when B4 retires the
- *  legacy arm — the predicate then narrows to the ACallable union alone. */
+ *  [RETAGGED 2026-07-09, B4 — was "dies when B4 retires the legacy arm"] B4 (2026-07-09)
+ *  audited this: the bare-fn arm does NOT retire yet — it has THREE independent live
+ *  producers, none touched by the B1-B3 reverse-membrane landing (cxr pilot + capability.ts
+ *  binder cut + region discipline): (1) `env.defineRosetta`'s legacy form / McpEnvCapability's
+ *  whole inline-annotation authoring shape (gate: McpEnvCapability annotation-lifting,
+ *  undone); (2) named-let's `loopFn` (evaluator.ts:1860, still `[LAMBDA]`-branded, not an
+ *  ALambda — gate: reverse-membrane-for-callables.md §3 "Step 1", undone); (3) `curry`'s
+ *  returned partial-application closure (env/srfi/srfi-235.ts, still a bare JS arrow — gate:
+ *  §3 "Step 2", undone). Narrows to the ACallable union alone only once all three land. */
 export const lambda = named(
   "lambda",
   z.custom<(...args: unknown[]) => unknown>(

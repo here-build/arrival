@@ -80,8 +80,17 @@ const INVERSIONS: readonly LedgerRow[] = [
   // the full reasoning; both retagged off `[INVERTS: bare-value-purge/P4]`.
   { id: "LAMBDA-branded fn passes jsToScheme by identity", gate: "reverse-membrane step 6", replacedBy: "membrane/crossing function row" },
   { id: "defineRosetta legacy arm authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
+  // "bare-fn env.set harness wiring" — PARTIALLY retired (B4 audit, 2026-07-09):
+  // input-rest-runtime.test.ts / kwargs-runtime.test.ts converted to real
+  // EnvCapability-wired fixtures. The pattern still has live instances elsewhere
+  // (vector-map-promise-leak.test.ts, generator-exec.spec.ts, laws/_tables/fixtures.ts,
+  // evaluator.spec.ts's two deliberately-kept Reflect.apply-fallback probes) — row stays
+  // until those convert too (or are confirmed permanent test-harness shortcuts, same as
+  // evaluator.spec.ts's pair).
   { id: "bare-fn env.set harness wiring", gate: "reverse-membrane", replacedBy: "EnvCapability-wired fixtures" },
-  { id: "z.procedure region-free callbacks", gate: "region-discipline", replacedBy: "membrane/region" },
+  // "z.procedure region-free callbacks" RETIRED (B4 audit, 2026-07-09 — region-discipline/B3
+  // landed 2026-07-09): membrane/region.law.test.ts's "z.procedure decode adopts the same
+  // scope token" row is now a plain green `it()`; no `it.fails()` referenced this id.
   // "boolean raw exit via op-helpers short-circuit" RETIRED (R1 landed,
   // two-tier-exec-api.md §8 step 4): `exec`'s uniform plain-JS exit + the R8 mint
   // (step 2) together mean every predicate/comparison result is boxed BEFORE the

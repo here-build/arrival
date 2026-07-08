@@ -217,10 +217,18 @@ describe("Rosetta Environment", () => {
     });
   });
 
-  // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/membrane.md): exercises
-  // the legacy `env.defineRosetta` arm — P1's own "Revealed by" line names this exact form
-  // ("env.defineRosetta's legacy form") as a JS artifact living in value space without
-  // lineage. Travels with the reverse-membrane migration; not a permanent contract.
+  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] exercises the legacy
+  // `env.defineRosetta` arm — P1's own "Revealed by" line names this exact form as a JS
+  // artifact living in value space without lineage, still true. Does NOT die with B1-B3
+  // (landed 2026-07-09): the ledger already carries the precise gate — see
+  // `src/__tests__/ledger/index.law.test.ts`'s INVERSIONS row "defineRosetta legacy arm
+  // authoring form" (gate: McpEnvCapability annotation-lifting). Confirmed still undone:
+  // `McpEnvCapability` (arrival-mcp/src/McpEnvCapability.ts) authors every verb as a bare fn /
+  // RosettaSpec-shaped object, and every real downstream consumer (inhuman/sift-submission/
+  // mcp/src/packs/*.ts, here.build/saas/server/{mcp,arrival}, inhuman/saas/mcp) constructs
+  // `SymbolDeclaration`s this exact way. `capability.ts`'s own doc comment (SymbolDeclaration,
+  // ~L62-78) independently confirms this arm is "load-bearing OUTSIDE it… NOT dead code."
+  // Travels with the McpEnvCapability migration, not the reverse-membrane one.
   describe("Environment.defineRosetta", () => {
     it("should extend environment with Rosetta functions", async () => {
       // Define a Rosetta function in the environment
@@ -288,9 +296,9 @@ describe("Rosetta Environment", () => {
     });
   });
 
-  // [INVERTS: reverse-membrane/P1] — same legacy `defineRosetta` arm as the describe above
-  // (MCP CSS-filtering / stats patterns exercised here); travels with the same transitional
-  // tag rather than reading as a permanent contract.
+  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] — same legacy `defineRosetta`
+  // arm as the describe above (MCP CSS-filtering / stats patterns exercised here); same gate
+  // (McpEnvCapability annotation-lifting, undone), not the reverse-membrane migration.
   describe("Real-world Use Cases", () => {
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP

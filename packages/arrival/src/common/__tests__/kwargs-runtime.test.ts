@@ -30,6 +30,7 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
+import { EnvCapability } from "../capability.js";
 
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
  *  keyword-tagless-apply.md), for the UNIT plane (no evaluator round trip). */
@@ -67,7 +68,14 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    env.set("kw-greet", greet.run);
+    // Wired through the REAL EnvCapability binder (post-B2 binder cut: the "rosetta" kind
+    // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
+    // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
+    // "EnvCapability-wired fixtures") retires with this fixture.
+    await new EnvCapability("test/kwargs-runtime", { symbols: { "kw-greet": greet } }).lower({}).apply(
+      env,
+      undefined as never,
+    );
   });
 
   it("(tool :a v :b v2) invokes the impl with the constructed {a,b} object", async () => {

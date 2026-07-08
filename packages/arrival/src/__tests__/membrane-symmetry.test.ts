@@ -139,12 +139,20 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // `require`'s own rosetta return-marshal — the "require-returns-lambda voids" bug.
   // The membrane's law is unchanged: an UNBRANDED (borrowed host) function still voids.
   //
-  // [INVERTS: reverse-membrane/P1] (docs/test-invariant-atlas/verdicts/membrane.md): P1's
-  // own "Revealed by" line names this exact test as evidence of a JS artifact (a bare
-  // function, LAMBDA-branded or not) living in value space without lineage. Framed above
-  // as correct-by-fiat, but it is the TRANSITIONAL shape, not the target state — once
-  // callables-as-values / the reverse-membrane migration lands, a scheme lambda crossing
-  // jsToScheme should carry its own provenance rather than pass through as a bare branded fn.
+  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] P1's own "Revealed by" line
+  // names this exact test as evidence of a JS artifact (a bare function, LAMBDA-branded or
+  // not) living in value space without lineage — still true, but the B1-B3 reverse-membrane
+  // landing (cxr pilot + capability.ts binder cut + region discipline, all landed 2026-07-09)
+  // does NOT retire it: `evalLambda` mints a proper `ALambda` now (evaluator.ts:1506, caught
+  // by jsToScheme's earlier generic `instanceof AValue` branch, never reaching this LAMBDA-tag
+  // check at all), but named-let's `loopFn` (evaluator.ts:1860, `loopFn[LAMBDA] = true`) is
+  // STILL a bare JS function — the proposal's "Step 1 — named-let → ALambda"
+  // (reverse-membrane-for-callables.md §3) has not landed. `loopFn` is the LAMBDA brand's
+  // sole remaining live producer (confirmed: only other reader/writer sites are
+  // `wrapLambda`/`wrapLambdaArgs`, which re-wrap an already-branded fn, not new producers).
+  // Real gate: named-let → ALambda (step 1) — an independent, still-open migration item, not
+  // covered by B4's scope (B2/B3) and not the same gate as the McpEnvCapability/step-6 chain
+  // the evaluator.spec.ts bare-fn tests cite.
   it("a LAMBDA-branded function passes through jsToScheme by identity (it IS a scheme value)", () => {
     const lam = Object.assign(() => 42, { [LAMBDA]: true });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);

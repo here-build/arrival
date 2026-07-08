@@ -20,6 +20,13 @@ const echoResource: Resource<Echo> = {
 };
 
 // THE inline declaration: no annotation on `this` anywhere below.
+// NOTE (B4 audit, 2026-07-09): `symbols.describe` below is deliberately a BARE method (the
+// legacy `SymbolDeclaration` authoring shape, capability.ts's `isSymbolSpec`/`env.defineRosetta`
+// arm) — it's the only path today that binds `this` to the per-env `Activation` (config +
+// resources), which is exactly what this suite proves. Not stale debt: this arm is confirmed
+// load-bearing (McpEnvCapability's whole authoring model + every live downstream consumer)
+// and is NOT scheduled to retire by the reverse-membrane migration (B1-B3) — see the ledger's
+// "defineRosetta legacy arm authoring form" row (gate: McpEnvCapability annotation-lifting).
 const net = new EnvCapability("net", {
   configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
   resources: { sock: echoResource },
