@@ -441,27 +441,3 @@ export function accessSet(data: unknown, key: string | symbol, value: unknown): 
   });
 }
 
-/**
- * Interop member deletion.
- * Only deletes own properties, silently ignores inherited ones.
- */
-export function accessDelete(data: unknown, key: string | symbol): boolean {
-  if (data === null || data === undefined) {
-    return false;
-  }
-
-  const keyStr = typeof key === "symbol" ? key : String(key);
-
-  if (isBlockedPropertyName(keyStr)) {
-    return false;
-  }
-
-  const obj = data as Record<string | symbol, unknown>;
-
-  if (Object.prototype.hasOwnProperty.call(obj, keyStr)) {
-    return Reflect.deleteProperty(obj, keyStr);
-  }
-
-  // Silently ignore attempts to delete inherited properties.
-  return false;
-}
