@@ -42,10 +42,13 @@
  * TICKETED FINDINGS (this audit's ledger-reconciliation pass gave each its own
  * GAPS row and flipped the cells from plain `it()` to `it.fails` — same
  * assertions, now loud when fixed instead of silently red):
- *   - `equal?`'s result is always the shared empty-provenance ABool flyweight
- *     (env/r7rs/equality.ts) — contradicts the term's declared "element-unioning"
- *     discipline for EVERY carrier (booleans never carry provenance in this
- *     codebase today). @ledger: "equal? verdict is empty-provenance flyweight".
+ *   - FIXED (RULINGS.md R8, docs/working-proposals/two-tier-exec-api.md §6):
+ *     `equal?`'s result used to always be the shared empty-provenance ABool
+ *     flyweight (env/r7rs/equality.ts) — contradicting the term's declared
+ *     "element-unioning" discipline for EVERY carrier. `equal?`/`eq?`/`eqv?` now
+ *     route through `op-helpers.mintVerdict` (stamped operands → the verdict
+ *     carries their union); both cells are plain `it()` below — GAPS row
+ *     "equal? verdict is empty-provenance flyweight" retired.
  *   - FIXED: `concat` had no real dispatch path for AJSArray/ADict (neither has an
  *     `arrival/tagless-final/concat` method or a dedicated verb): the only available
  *     verb (`append`) used to silently return the SECOND operand unchanged, discarding
@@ -332,24 +335,42 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           expect((other as AValue).valueOf()).toBe(false);
         });
 
-        // DOCUMENTED FINDING (see file header): `equal?` always returns the shared
-        // empty-provenance ABool flyweight — ledgered as "equal? verdict is empty-
-        // provenance flyweight" (src/__tests__/ledger/index.law.test.ts GAPS).
-        // @ledger: equal? verdict is empty-provenance flyweight
-        it.fails(`boxes [TICKETED GAP]: ${term.boxDiscipline} — the verdict should carry the consumed elements' unioned provenance`, async () => {
+        // FIXED (RULINGS.md R8): `equal?` now routes through `mintVerdict`
+        // (op-helpers.ts) — stamped operands' union rides the verdict. GAPS row
+        // "equal? verdict is empty-provenance flyweight" retired (ledger/index.law).
+        //
+        // AJSArray/ADict are a SEPARATE, pre-existing gap this fix does not touch:
+        // `mintVerdict` faithfully forwards whatever provenance the operand's OWN
+        // top-level `.provenance` carries — for APair/AVector/AString/ABytevector that
+        // already IS the R2 grouping-fact union (their constructors stamp it), but
+        // `borrow-array`'s `fromJS(args)` and `dict`'s `new ADict(CONSTANT_CTX, ...)`
+        // (env/polyglot.ts) construct with an EMPTY top-level provenance — the R2
+        // ruling's container-grouping-fact is un-implemented for these two carriers,
+        // independent of R8. Ticketed rather than silently green.
+        const equalsContainerHasNoGroupingFact = carrier.carrier === "AJSArray" || carrier.carrier === "ADict";
+        const boxesTitle = `boxes: ${term.boxDiscipline} — the verdict carries the consumed elements' unioned provenance`;
+        const boxesBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(equal? c c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        });
-
-        // @ledger: equal? verdict is empty-provenance flyweight
-        it.fails("provenance [TICKETED GAP]: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
+        };
+        const provTitle = "provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)";
+        const provBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(equal? c c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        });
+        };
+        if (equalsContainerHasNoGroupingFact) {
+          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          it.fails(`${boxesTitle} [TICKETED GAP: R2 container-provenance]`, boxesBody);
+          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          it.fails(`${provTitle} [TICKETED GAP: R2 container-provenance]`, provBody);
+        } else {
+          it(boxesTitle, boxesBody);
+          it(provTitle, provBody);
+        }
         break;
       }
 

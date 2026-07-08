@@ -4,11 +4,19 @@
 import * as z from "../scheme-zod.js";
 import { CallCtx, parseNameDoc, resolveMethod, type TaglessGuardSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
+import { mintVerdict } from "../../values/op-helpers.js";
 
 /** A tagless GUARD binder — `symbol.taglessGuard\`name: doc\`` binds a predicate that dispatches
  *  to the receiver's own `arrival/tagless-final/name`, returning #f when it declares none. Unlike
  *  `tagless` (a Record keyed by the closed algebra), the name is FREE — a per-type predicate
- *  (`vector?`, `null?`-style), not a declared sequence op. */
+ *  (`vector?`, `null?`-style), not a declared sequence op.
+ *
+ *  R8 mint (op-helpers.mintVerdict): `out: z.value` below is representation-blind (no codec
+ *  crossing), and capability.ts binds a tagless-guard's `run` directly (no generic
+ *  encode/mint step) — so THIS is the one boxing point for every taglessGuard predicate
+ *  (`pair?`/`symbol?`/`char?`/`vector?`), whose own `arrival/tagless-final/*?` algebra
+ *  methods answer with a raw JS boolean (an internal instruction, not the bound Scheme
+ *  value — P7: the class stays the representation authority, the wrap layer mints). */
 export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessGuardSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
   // `function`, not arrow: the evaluator hands `CallCtx` via `this` for bare-fn dispatch,
@@ -21,8 +29,9 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): Tagl
     // `name` is a free author string; cast to the declared `TaglessOp` union at this one
     // boundary. A typo'd op just resolves no method and falls to the #f below.
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
-    if (fn === undefined) return false; // graceful #f — the receiver simply can't answer
-    return await fn.call(receiver, ...leading, runCtx);
+    if (fn === undefined) return mintVerdict([receiver], false); // graceful #f — receiver can't answer
+    const verdict = await fn.call(receiver, ...leading, runCtx);
+    return mintVerdict([receiver, ...leading], typeof verdict === "boolean" ? verdict : Boolean(verdict));
   };
   return { kind: "tagless-guard", name, doc, in: z.array(z.value), out: z.value, run };
 }

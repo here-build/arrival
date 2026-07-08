@@ -17,6 +17,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { exec, schemeToJs } from "../index.js";
+import { ABool } from "../values/primitives/ABool.js";
 
 const one = async (src: string): Promise<any> => (await exec(src))[0];
 
@@ -56,9 +57,18 @@ describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)
     expect(JSON.stringify(String(s))).toBe('"abc"');
   });
 
-  it("booleans come back as raw JS booleans", async () => {
-    expect(await one("(< 1 2)")).toBe(true);
-    expect(await one("(< 2 1)")).toBe(false);
+  // R8 mint (RULINGS.md R8, two-tier-exec-api.md §6) landed: op-helpers.mintVerdict
+  // replaced the empty-provenance raw-JS-boolean fast path that used to make an
+  // unstamped `(< 1 2)` exit `exec()` as a bare `true` — every boolean verdict now
+  // boxes uniformly (ABool), matching every other value's boxed exit (P4). Natural
+  // JS-boolean auto-unwrap returns once the SIMPLE exec tier maps `toJS` over the
+  // exit (two-tier-exec-api.md §8 step 4, R1 — a later, separate migration step).
+  it("booleans come back BOXED (ABool) — R8 uniform mint, not the old raw-JS-boolean escape", async () => {
+    const lt = await one("(< 1 2)");
+    expect(lt).toBeInstanceOf(ABool);
+    expect((lt as ABool).valueOf()).toBe(true);
+    const gt = await one("(< 2 1)");
+    expect((gt as ABool).valueOf()).toBe(false);
   });
 });
 

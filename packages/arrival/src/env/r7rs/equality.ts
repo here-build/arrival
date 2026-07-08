@@ -33,7 +33,7 @@ import { is_callable, is_false, is_macro } from "../../eval/guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
-import { schemeBool as bool, stringValue, withInputProvenance } from "../../values/op-helpers.js";
+import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } from "../../values/op-helpers.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { printValue } from "../../values/print.js";
@@ -129,9 +129,13 @@ export default new EnvCapability("scheme/equality", {
       (obj) => new AString(ctxOf(obj), printValue(obj)),
     ),
 
+    // R8 mint (RULINGS.md R8): a verdict derived from lineage carries it — stamped
+    // operands union into the result, provenance-free operands still get `bool`'s
+    // shared flyweight (mintVerdict's allocation-free path). Was `bool(...)` direct
+    // (an always-empty-provenance flyweight, a P10 drop when operands were stamped).
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (a, b) => bool(structuralEqual(a, b)),
+      (a, b) => mintVerdict([a, b], structuralEqual(a, b)),
     ),
 
     // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates. `eqv?`
@@ -140,12 +144,12 @@ export default new EnvCapability("scheme/equality", {
     // the single comparison home in `structural-equal.ts`.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (x, y) => bool(eq(x, y)),
+      (x, y) => mintVerdict([x, y], eq(x, y)),
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.value, z.value], output: [z.boolean] },
-      (x, y) => bool(eqv(x, y)),
+      (x, y) => mintVerdict([x, y], eqv(x, y)),
     ),
 
     // R7RS 6.3 — logical negation. This native pack binds onto global_env BEFORE

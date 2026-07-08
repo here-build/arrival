@@ -46,19 +46,21 @@ describe("SRFI-43 — vector library (pure)", () => {
     expect(await run("(vector-fold + 0 #(1 2 3 4))")).toBe("10");
     expect(await run("(vector-fold-right + 0 #(1 2 3 4))")).toBe("10");
   });
-  // NB: arrival predicate builtins (=, eq?, pair?, null?, …) return JS booleans
-  // (stringify "true"/"false"), so these SRFI predicates — which end in a bare
-  // predicate call — are consistent with that, not "#t"/"#f". (The SRFI-128
-  // chain procs below DO return "#t"/"#f" because %chain-rel wraps in literals.)
+  // R8 mint (RULINGS.md R8, two-tier-exec-api.md §6, landed): arrival predicate
+  // builtins (=, eq?, pair?, null?, …) used to leak a raw JS boolean when no
+  // provenance rode the operands (stringifying "true"/"false") — the empty-
+  // provenance fast path op-helpers.mintVerdict replaces. Every boolean verdict
+  // now boxes uniformly, so these SRFI predicates print "#t"/"#f" like the
+  // SRFI-128 chain procs below always did.
   it("vector-count / vector-index / vector-empty?", async () => {
     expect(await run("(vector-count even? #(1 2 3 4))")).toBe("2");
     expect(await run("(vector-index odd? #(2 4 5 6))")).toBe("2");
-    expect(await run("(vector-empty? #())")).toBe("true");
+    expect(await run("(vector-empty? #())")).toBe("#t");
   });
   it("vector-any / vector-every", async () => {
-    expect(await run("(vector-any even? #(1 3 4))")).toBe("true");
-    expect(await run("(vector-every even? #(2 4 6))")).toBe("true");
-    // failure path returns the literal #f (success returns the JS-boolean pred result)
+    expect(await run("(vector-any even? #(1 3 4))")).toBe("#t");
+    expect(await run("(vector-every even? #(2 4 6))")).toBe("#t");
+    // failure path returns the literal #f (success returns the boxed ABool pred result)
     expect(await run("(vector-every even? #(2 4 5))")).toBe("#f");
   });
 });

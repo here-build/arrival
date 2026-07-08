@@ -3327,6 +3327,8 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
 /**
  * Execute Scheme code and return the result. The low-level evaluator entry (the
  * production seam is generator-exec's `exec`, which assembles the capability base).
+ * COMPLEX tier (two-tier-exec-api §3, internal) — returns one boxed SchemeValue,
+ * never unwrapped.
  *
  * Bootstrap bridge: `EvalContext.resolver` is the single binding channel, but this
  * entry stays ergonomic for embedders/low-level tests that hand a bare `env` — when

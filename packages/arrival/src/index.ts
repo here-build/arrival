@@ -162,7 +162,7 @@ export { installHeapMeter, findHeapMeter, type HeapMeter } from "./heap-budget.j
 // The generator `ExecOptions` is a strict superset of stdlib's exec options
 // ({env, dynamic_env, use_dynamic} shared, + signal/budgetMs/tap), so bare-`exec`
 // callers gain a killable, bounded evaluator.
-export { exec, parse } from "./eval/generator-exec.js";
+export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js";
 
 // Static lineage carrier — the STATIC analogue of the runtime provenance trace:
 // `classify` builds a per-form lineage skeleton from the parsed AST (no eval); the

@@ -34,7 +34,7 @@ import { SPECULATE } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, unionProvenance } from "../../values/primitives/AValue.js";
-import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
+import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
@@ -46,7 +46,7 @@ import {
   isOrd,
   ORD_REL,
   nilOrderCompare,
-  withInputProvenance,
+  mintVerdict,
   type AOrd,
 } from "../../values/op-helpers.js";
 import { type } from "../../utils/typecheck.js";
@@ -214,14 +214,13 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
       throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause: error });
     }
     const result: unknown = marshalCall(name, spec, converted);
-    if (provenance.size > 0) {
-      if (result instanceof AValue) return result.withProvenance(provenance);
-      // Box JS bool coming out of comparison/predicate operators. Empty-provenance
-      // path returns raw bool to keep find/`!== false` callers alive (the landmine).
-      if (typeof result === "boolean") {
-        return (result ? schemeTrue : schemeFalse).withProvenance(provenance);
-      }
-    }
+    if (provenance.size > 0 && result instanceof AValue) return result.withProvenance(provenance);
+    // R8 mint (RULINGS.md R8, op-helpers.mintVerdict): every boolean verdict boxes —
+    // provenance-free operands still get the shared eq?-stable flyweight (allocation-free),
+    // stamped operands a fresh ABool carrying the union. Replaces the empty-provenance
+    // bare-JS-boolean fast path (the landmine `is_false`/`find`/`filter` already tolerate
+    // both shapes for).
+    if (typeof result === "boolean") return mintVerdict(callArgs, result);
     return result;
   };
 
@@ -247,18 +246,21 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
  * The R7RS tower-type predicates (`complex?`/`real?`/`rational?`/`integer?`/`exact?`/
  * …/`nan?`) — carved from bridge.ts's `makeTypePredicate`. A DIFFERENT shape from
  * `nativeNumericOp`: total over the value domain (a non-number returns #f, never an
- * error) and NO provenance box (raw JS bool, exactly as `makeTypePredicate` returned).
+ * error). R8 mint (op-helpers.mintVerdict): boxes + forwards `value`'s provenance —
+ * `symbol.native`'s `"native"` kind binds the impl's return raw (no codec crossing,
+ * capability.ts), so an unboxed `boolean` here would be a bare value living inside
+ * the membrane (P4), not just an allocation shortcut.
  */
 function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): (...args: unknown[]) => unknown {
-  const fn = (value: unknown): boolean => {
+  const fn = (value: unknown): ABool => {
     if (!isSchemeNumber(value)) {
-      return false;
+      return mintVerdict([value], false);
     }
     try {
       const converted = coerceNumeric(value);
-      return predicate(converted);
+      return mintVerdict([value], predicate(converted));
     } catch {
-      return false;
+      return mintVerdict([value], false);
     }
   };
   Object.defineProperty(fn, "name", { value: name });
@@ -329,10 +331,8 @@ function speculativeCompare(name: string, args: unknown[]): unknown | undefined 
   // Normalize so the interval is on the left of the operator.
   const verdict = verdictFor(aHB ? name : REFLECT[name], k);
   if (!verdict) return undefined;
-  const provenance = unionProvenance(args.filter((x): x is AValue => x instanceof AValue));
-  return hb
-    .decide(verdict)
-    .then((bool) => (provenance.size > 0 ? (bool ? schemeTrue : schemeFalse).withProvenance(provenance) : bool));
+  // R8 mint — always boxed (mintVerdict), matching applyNumeric's uniform exit.
+  return hb.decide(verdict).then((bool) => mintVerdict(args, bool));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -770,13 +770,18 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
   const isOrdEntity = (x: unknown): x is AOrd => isOrd(x) && !isSchemeNumber(x);
   const fn = (...args: unknown[]): unknown => {
     if (args.length >= 2 && args.some(isOrdEntity)) {
+      let verdict = true;
       for (let i = 0; i < args.length - 1; i++) {
         const a = args[i];
         const b = args[i + 1];
         if (!isOrdEntity(a) || !isOrdEntity(b)) return numeric(...args); // mixed → numeric path's clear error
-        if (!rel(a, b)) return schemeFalse;
+        if (!rel(a, b)) {
+          verdict = false;
+          break;
+        }
       }
-      return schemeTrue;
+      // R8 mint — the whole chain's operand union, not just the deciding pair (mirrors deriveOrd).
+      return mintVerdict(args, verdict);
     }
     return numeric(...args);
   };
@@ -830,7 +835,8 @@ function looseOrderChain(sym, args) {
       break;
     }
   }
-  return withInputProvenance(args, verdict);
+  // R8 mint — always boxed, matching applyNumeric/wrapOrd's uniform exit.
+  return mintVerdict(args, verdict);
 }
 function looseCompare(sym, core) {
   // strict is run-CONSTANT but can't ride the operands — an all-constant compare
@@ -845,7 +851,8 @@ function looseCompare(sym, core) {
       return core(...args);
     }
     if (args.some(isNilOperand)) {
-      if (sym === "=") return withInputProvenance(args, args.every(isNilOperand));
+      // R8 mint — always boxed, matching looseOrderChain's uniform exit.
+      if (sym === "=") return mintVerdict(args, args.every(isNilOperand));
       return looseOrderChain(sym, args);
     }
     return core(...args);
@@ -1028,8 +1035,8 @@ const numberToStringFn = (z: unknown, radix?: unknown): string => {
 //   Bool      → z.boolean       decoded type (boolean) matches Bool.toJS's return exactly;
 //               z.boolean's INPUT side is `z.instanceof(ABool)` (a boxed scheme bool)
 //               where Bool.match is a raw JS `typeof v === "boolean"` (marshalCall runs
-//               BEFORE nativeNumericOp's provenance wrapper boxes to ABool/schemeTrue/
-//               schemeFalse) — again inert for the same reason.
+//               BEFORE nativeNumericOp's applyNumeric mints the ABool via mintVerdict,
+//               RULINGS.md R8) — again inert for the same reason.
 // ════════════════════════════════════════════════════════════════════════════
 
 const CODEC_SCHEMA = new Map<NCodec<any, any>, z.ZodTypeAny>([
@@ -1402,8 +1409,14 @@ export default new EnvCapability("scheme/numeric", {
       truncateSlashFn as (...args: unknown[]) => unknown,
     ),
     lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),
-    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, ((value: unknown) =>
-      isSchemeNumber(value)) as (...args: unknown[]) => unknown),
+    // R8 mint: boxes + forwards the operand's provenance (was a raw-boolean `as` cast — see
+    // nativeTypePredicate's doc comment for why an unboxed native return is a P4 violation,
+    // not just an allocation shortcut). Rest-param shape (not `(value: unknown)`) matches
+    // Impl's variadic contract honestly — no arity-erasing cast needed.
+    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, (...args: unknown[]): ABool => {
+      const [value] = args;
+      return mintVerdict([value], isSchemeNumber(value));
+    }),
     "1+": symbol.native`1+: increment by one`(
       ONE_ARG_NUM_OUTPUT_CONTRACT,
       onePlusFn as (...args: unknown[]) => unknown,

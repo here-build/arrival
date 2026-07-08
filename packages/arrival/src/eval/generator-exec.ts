@@ -15,7 +15,7 @@ import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evalua
 import { isHostRuntimeBug } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
-import type { LexicalScope } from "./LexicalScope.js";
+import { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv } from "../common/kernel.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalSchemeInto } from "../common/scheme-env.js";
@@ -24,7 +24,7 @@ import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import { APair } from "../values/primitives/APair.js";
-import { makeRunContext } from "../values/primitives/RunContext.js";
+import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
 
 // The value-layer shadow-cone skip reads the macro classes' `[CLASS]` brand
@@ -251,26 +251,40 @@ export interface ExecOptions {
 }
 
 /**
- * Parse and execute Scheme code using the generator-based evaluator.
+ * COMPLEX tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — "run,
+ * get reusable state": boxed, provenance-bearing results PLUS the session handles a
+ * caller needs to continue or introspect the run. Not a membrane crossing (P4's
+ * refinement) — this hands boxed state to JS-side TOOLING (law tests, REPL
+ * continuation, arrival-chain), it does not exit. `exec` (SIMPLE tier, below)
+ * delegates here and unwraps; `execExpr`/`evaluator.exec` are the other COMPLEX-tier
+ * entries (form-at-a-time; unchanged by this migration).
+ */
+export interface ExecState {
+  /** Boxed, provenance-bearing results — one per top-level form. */
+  readonly values: readonly SchemeValue[];
+  /**
+   * The run's lexical accumulation handle — the SAME type `ExecOptions.scope`
+   * accepts. When the caller passed `scope`, this IS that object (identity holds via
+   * `LexicalScope.for`'s per-env memoization); when not, it wraps the run's
+   * `lexicalRoot` so a follow-up `execState(code, { scope })` continues the session.
+   * Glass-env runs (`env` option set) have no cut scope — `scope` is the wrapper over
+   * that env's exec frame.
+   */
+  readonly scope: LexicalScope;
+  /** The per-run hermetic handle (strict / heap meter / signal / speculate). */
+  readonly runCtx: RunContext;
+}
+
+/**
+ * Parse and execute Scheme code using the generator-based evaluator — the COMPLEX
+ * tier (see {@link ExecState}). This IS the exec body; `exec` (SIMPLE tier) is a
+ * thin delegate over this that unwraps `state.values`.
  *
  * @param code - String of Scheme code or pre-parsed SchemeValue
  * @param options - Optional environment and dynamic binding options
- * @returns Promise<SchemeValue[]> - Array of evaluation results (one per expression)
- *
- * @example
- * ```typescript
- * // Simple arithmetic
- * const [result] = await exec("(+ 1 2 3)");  // result = 6
- *
- * // Multiple expressions
- * const results = await exec("(define x 10) (+ x 5)");  // results = [undefined, 15]
- *
- * // With custom environment
- * const env = new Environment("my-env", { x: 42 });
- * const [result] = await exec("x", { env });  // result = 42
- * ```
+ * @returns Promise<ExecState> - boxed results + the run's scope/runCtx handles
  */
-export async function exec(
+export async function execState(
   code: string | SchemeValue,
   {
     env,
@@ -291,7 +305,7 @@ export async function exec(
     irLineage,
     irLineageSources,
   }: ExecOptions = {},
-): Promise<SchemeValue[]> {
+): Promise<ExecState> {
   // Resolve the default env from the env-roots leaf — `user_env` is arrival's
   // interaction scope (`global_env.inherit("user-env")`), sourced STATICALLY so this
   // entry never imports the stdlib monolith. The bootstrap gate below drives
@@ -422,7 +436,39 @@ export async function exec(
     if (heapBudget !== undefined) execEnv.__heapMeter__ = priorMeter;
   }
 
-  return results;
+  return { values: results, scope: runResolver.scope, runCtx };
+}
+
+/**
+ * SIMPLE tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — THE
+ * default exec surface, "run, get JS". Delegates to {@link execState} (COMPLEX
+ * tier) and returns just its boxed `values`.
+ *
+ * NOTE (migration step 1 of 5, §8): this step is BEHAVIOR-UNCHANGED — `values` is
+ * still boxed `SchemeValue[]`, not plain JS. The `toJS` final-unwrap (making this
+ * tier's return type genuinely `unknown[]`) is step 4, a later task; do not add it
+ * here.
+ *
+ * @param code - String of Scheme code or pre-parsed SchemeValue
+ * @param options - Optional environment and dynamic binding options
+ * @returns Promise<SchemeValue[]> - Array of evaluation results (one per expression)
+ *
+ * @example
+ * ```typescript
+ * // Simple arithmetic
+ * const [result] = await exec("(+ 1 2 3)");  // result = 6
+ *
+ * // Multiple expressions
+ * const results = await exec("(define x 10) (+ x 5)");  // results = [undefined, 15]
+ *
+ * // With custom environment
+ * const env = new Environment("my-env", { x: 42 });
+ * const [result] = await exec("x", { env });  // result = 42
+ * ```
+ */
+export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<SchemeValue[]> {
+  const state = await execState(code, options);
+  return state.values.slice();
 }
 
 /**
@@ -438,8 +484,9 @@ export async function parse(code: string, _env?: Environment, source?: string): 
 }
 
 /**
- * Execute a single pre-parsed expression.
- * Use this when you've already parsed the code.
+ * Execute a single pre-parsed expression. COMPLEX tier (two-tier-exec-api §3) — the
+ * internal form-at-a-time entry (require, prelude eval); returns one boxed
+ * SchemeValue, never unwrapped. Use this when you've already parsed the code.
  */
 export async function execExpr(
   expr: SchemeValue,

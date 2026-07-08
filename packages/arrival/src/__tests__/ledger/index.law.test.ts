@@ -38,14 +38,24 @@ const GAPS: readonly LedgerRow[] = [
   // of their elements (P10), and AVector's map is box-preserving (P8) — see
   // provenance/conservation.law.test.ts §2 and laws/term-carrier map×AVector/AJSArray,
   // now plain `it()` rows.
+  //
+  // "equal? verdict is empty-provenance flyweight" RETIRED (R8 mint landed,
+  // two-tier-exec-api.md §8 step 2): equal?/eq?/eqv? now route through
+  // op-helpers.mintVerdict — see laws/term-carrier equals cells, now plain `it()`.
   { id: "A13 count-cone over-attribution", gate: "G2", replacedBy: "provenance/conservation" },
   { id: "exact/list JSON.stringify throws (BigInt backing)", gate: "numeric-json design", replacedBy: "membrane/crossing" },
   { id: "live AHalfBaked escapes exec under speculate", gate: "force-on-egress", replacedBy: "membrane/crossing egress" },
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
   // ── added by the 2026-07-08 sunrise honesty/reconciliation pass ──────────────────
-  { id: "equal? verdict is empty-provenance flyweight", gate: "R8 boolean-provenance ruling", replacedBy: "laws/term-carrier equals cells" },
   { id: "container toJS leaves boxed element residue", gate: "R9 lazy-egress ruling", replacedBy: "laws/term-carrier toJS cells" },
+  // ── added by the two-tier-exec-api R8 mint sweep (step 2) ─────────────────────────
+  // Surfaced while flipping the equal?-verdict flyweight rows above: mintVerdict
+  // faithfully forwards operand provenance, but AJSArray (`borrow-array`'s `fromJS`)
+  // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot.ts) never stamp
+  // their OWN top-level provenance with the R2 grouping-fact union at construction —
+  // independent of R8, un-implemented (R2 is its own, later design item).
+  { id: "AJSArray/ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (AJSArray/ADict)" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [

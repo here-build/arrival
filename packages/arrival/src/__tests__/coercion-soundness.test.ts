@@ -32,6 +32,7 @@ import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js
 import { PortabilityError } from "../errors.js";
 import { initBridge } from "../bridge.js";
 import { APair } from "../values/primitives/APair.js";
+import { ABool } from "../values/primitives/ABool.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
@@ -285,13 +286,16 @@ const vectorSymbols = vectorsCap.spec.symbols as Record<
   { run?: (...a: unknown[]) => unknown; impl?: (...a: unknown[]) => unknown }
 >;
 describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof reach-around)", () => {
+  // R8 mint (RULINGS.md R8): taglessGuard's `run` now boxes its verdict (mintVerdict) —
+  // out: z.value skips any generic codec crossing here, so this WAS the one raw-boolean
+  // escape hatch a taglessGuard predicate had; `.valueOf()` reads the boxed truth.
   it("vector? (taglessGuard): a SchemeVector and a borrowed AJSArray both answer #t", async () => {
-    expect(await vectorSymbols["vector?"].run!(mkVec())).toBe(true);
-    expect(await vectorSymbols["vector?"].run!(mkArr())).toBe(true);
+    expect(((await vectorSymbols["vector?"].run!(mkVec())) as ABool).valueOf()).toBe(true);
+    expect(((await vectorSymbols["vector?"].run!(mkArr())) as ABool).valueOf()).toBe(true);
   });
   it("vector? (taglessGuard): a non-vector declares no method → graceful #f, NOT a throw", async () => {
-    expect(await vectorSymbols["vector?"].run!(mkPair())).toBe(false);
-    expect(await vectorSymbols["vector?"].run!(el("x", 1))).toBe(false);
+    expect(((await vectorSymbols["vector?"].run!(mkPair())) as ABool).valueOf()).toBe(false);
+    expect(((await vectorSymbols["vector?"].run!(el("x", 1))) as ABool).valueOf()).toBe(false);
   });
   it("vector-ref dispatches to the operand's method — borrowed array boxes element k lazily", () => {
     expect(provOf(vectorSymbols["vector-ref"].impl!(mkArr(), 1))).toEqual([101]);

@@ -163,7 +163,8 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
 // does. The per-type order lives in the entity's instance, so the string<? /
 // char<? families are type-agnostic chains over it — adding a new ordered type
 // needs no new comparison builtin. Numeric operands take the numeric/speculative
-// path (bridge's `wrapOrd`) — the FL check is one inexpensive property read.
+// path (numeric.ts's `wrapOrd` — carved out of bridge.ts's former `wrapOperator`) —
+// the FL check is one inexpensive property read.
 export interface AOrd {
   "arrival/tagless-final/lte"(other: unknown): boolean;
 }
@@ -202,10 +203,9 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
         break;
       }
     }
-    // The verdict is the boxed scheme face (flyweight; Face split). Plumbing: it carries
-    // its operands' provenance (forward, never mint — withInputProvenance clones the
-    // flyweight with the union when provenance rides, hands back the shared one when not).
-    return withInputProvenance(args, schemeBool(verdict));
+    // R8 mint (op-helpers.mintVerdict, below) — this composition (withInputProvenance +
+    // schemeBool) is the ORIGINAL of the law mintVerdict now names for every site.
+    return mintVerdict(args, verdict);
   };
 }
 
@@ -375,3 +375,18 @@ export { schemeTrue, schemeFalse } from "./primitives/ABool.js";
  *  provenance). The one boxing point every env pack's boolean-returning native uses
  *  under the Face split (a `z.boolean` output demands an ABool, never a raw JS boolean). */
 export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
+
+/**
+ * THE ONE boxing point for boolean VERDICTS (RULINGS.md R8, two-tier-exec-api.md §6):
+ * provenance-free operands → the shared eq?-stable flyweight (`schemeTrue`/`schemeFalse`
+ * — hot loops stay allocation-free); stamped operands → a fresh `ABool` carrying the
+ * union. A verdict derived from lineage carries it; one derived from constants doesn't.
+ * This composition already existed ad hoc inside `deriveOrd` (below) — naming it here
+ * makes it the law every boolean-verdict site (equal?/eqv?/eq?, the numeric comparison
+ * wrappers, predicate natives returning a boolean through a wrap layer) routes through,
+ * replacing the raw-boolean fast-path those sites used to fall through to on an
+ * empty-provenance operand set.
+ */
+export function mintVerdict(operands: readonly unknown[], verdict: boolean): ABool {
+  return withInputProvenance(operands, schemeBool(verdict));
+}
