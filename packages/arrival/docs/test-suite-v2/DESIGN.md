@@ -1,0 +1,106 @@
+# Test Suite v2 — Design
+
+*The brave-new-world suite, designed before any code. Derived from PRINCIPLES.md: the suite's
+job is to enforce the constitution, and its strongest form is the coherence law (P15) — one
+invariant × a table of subjects, `describe.each`/`it.each` all the way down. Point tests exist
+only where a law genuinely has one subject.*
+
+## 1. What the new suite ENFORCES (the invariant families)
+
+Every family below is new or newly-systematic — the v1 suite enforced many of these
+accidentally, per-file, per-carrier, with gaps exactly where the lies lived.
+
+**F1 — Term×Carrier coherence (P0/P8).** For every tagless term (map, filter, reduce, sort,
+concat, equals, length, car/cdr, toJS, print) × every carrier that implements it (APair,
+AVector, AJSArray, AString where applicable, ADict where applicable): the VALUE result
+matches the reference semantics AND the BOX discipline matches the law's declaration
+(box-preserving / box-unioning / container-minting). One `describe.each(TERMS)` ×
+`it.each(CARRIERS)` grid. A carrier that legitimately doesn't implement a term is an explicit
+`unsupported` cell, not an absent row — absence is how the DR4 divergence hid.
+
+**F2 — Provenance conservation (P10/P11).** Property-based + golden:
+- conservation: for generated pure programs, every input provenance id is reachable in the
+  output's deep-collapsed provenance (no drops — append/cdr become rows here);
+- minting: ids appear ONLY at declared source crossings (mint-at-edge);
+- purity: `pure: true` ops never mint (the seal-laundering guard, generalized);
+- idempotence/commutativity/associativity of union (absorbs provenance-algebra.property).
+The eager goldens (golden-prov-*) stay as the oracle side of the static-lineage coherence law.
+
+**F3 — Membrane crossing laws (P4/P5).** ONE table: every value type × both directions ×
+(representation-in, representation-out, round-trip promise yes/no). The exit convention is a
+single column — the table structurally cannot express "strings boxed, booleans raw" without
+the contradiction being visible in the diff (this is how R1 stays fixed once ruled). Strict
+doors: every forbidden crossing (boxed into fromJS, raw into toJS, borrowed fn, AValue from
+JS) is an `it.each` over the violation table asserting the TAUGHT message.
+
+**F4 — Value-layer conformance (P15 coherence with the spec).** Chibi harness v2: one vitest
+test per scheme test form (separate design doc — chibi-harness-v2). r7rs-numbers/unicode/
+identity fold in as arrival-specific extension tables beside it.
+
+**F5 — Region discipline (P6).** New, staged: reverse-lambda scoping laws (call-after-return
+throws, pending-at-return throws, abort cancels, per-scope wrapper identity) as `it.todo`
+stubs gated on the reverse-membrane landing — written NOW so the migration has its acceptance
+tests before its code.
+
+**F6 — Doors (P5/errors-as-doors).** Registry-driven: `it.each(WELL_KNOWN_SYMBOLS)` asserts
+every stubbed/famous name doors with a message naming its alternative; every resource cap
+(heap, budget, nesting) doors with the policy message, not an engine error. The registry IS
+the test input — a door added without a registry row fails the completeness floor.
+
+**F7 — Static-interpretation agreement (P0's N-interpreter clause).** The existing strong
+suites, kept and named as a family: oracle-contract (Σ vs reference), lineage-shadow (static
+classifier vs eager stamps), type-lens (lower+tsc bite-guards), name-escape (bifunctor law).
+New suites join this family with the same shape: interpreter A vs interpreter B over a shared
+corpus, divergence = throw.
+
+**F8 — The ledger (P15's taxonomy).** One suite that OWNS the truth table: every `it.fails`
+gap row cites its fix gate; every `it.todo` cites its staging gate; every `[INVERTS: gate]`
+transitional row is indexed here with the law row that replaces it. CI can then answer "what
+does green mean" mechanically: nothing red-expected is silently green, nothing green is a lie.
+
+**F9 — Drift alarms (P16's sanctioned pins).** Pack symbol counts, anti-vacuity floors,
+registry completeness — each with its rationale string IN the table row.
+
+## 2. Architecture
+
+```
+src/__tests__/
+  laws/            F1 term-carrier grids, equality, identity (nil-clone), accessor, env-resolution
+  membrane/        F3 crossing tables, strict doors, egress
+  provenance/      F2 conservation + minting + purity; goldens as oracle fixtures
+  conformance/     F4 chibi v2 + arrival extension tables (r7rs-*)
+  doors/           F6 registry-driven door suites
+  agreement/       F7 (oracle-contract, shadow, type-lens relocate here over time)
+  ledger/          F8 gap/staging/inversion index
+  _tables/         shared describe.each inputs: CARRIERS, TERMS, CROSSINGS, VIOLATIONS —
+                   typed, single-sourced; a law file imports its table, never redeclares it
+```
+
+Conventions:
+- **Law files are named `<subject>.law.test.ts`** and contain ONE law (possibly many rows).
+- **Tables are data modules** (`_tables/*.ts`), typed, imported by law files AND usable by
+  future interpreters (the static lineage classifier can consume CARRIERS/TERMS too).
+- **No helper tolerance**: comparison helpers assert ONE representation (post-R1 contract).
+  A helper that accepts boxed-or-raw is a P4 violation in test clothing.
+- **Every table row is individually addressable** in vitest output (`%s` naming from row
+  fields) — a failing cell names its term, carrier, and law.
+- **Stubs-first discipline**: v2 lands as `it.todo` grids with the full tables populated —
+  the SHAPE of the suite (which cells exist) is reviewable before any assertion body is
+  written. A stub grid that can't express an invariant is a design bug caught free.
+
+## 3. Migration
+
+1. Stubs land (full grids, `it.todo` bodies) — reviewable shape. **[this phase]**
+2. Chibi v2 harness lands per its own design; v1 harness retired at registry parity + floor.
+3. Mechanical sweep from VERDICTS.md runs against v1 files (flips/deletes/retags) — v1 stays
+   the gate while v2 fills in.
+4. Law bodies fill per family; each v1 survivor-row from REMOVAL-MANIFEST.md is deleted only
+   when its v2 cell goes green (or `it.fails` with the same gate).
+5. R1–R7 rulings unblock their gated cells as they land.
+
+## 4. Open dependencies
+
+- R1 (exit convention) blocks F3's exit column and the shared comparison helper.
+- R2 (container box) blocks four F1/F2 cells.
+- Reverse-membrane landing blocks F5 bodies (stubs land now).
+- Chibi v2 design doc (in flight, Fable) defines F4's module layout.
