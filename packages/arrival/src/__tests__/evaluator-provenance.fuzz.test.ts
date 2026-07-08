@@ -27,13 +27,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../values/primitives/AValue.js";
 import { initBridge } from "../bridge.js";
 import { ABool } from "../values/primitives/ABool.js";
-import { exec } from "./exec-adapter.js";
+import { exec } from "../eval/generator-exec.js";
 
-// exec-adapter only imports lips.ts (not index.ts), so wrappedOps don't get
-// installed automatically. Without this, every random program below would
-// fail with "Unbound variable `+'" — the harness used to "pass" by routing
-// through the unbound-variable whitelist branch, never actually exercising
-// the arithmetic dispatch. See bridge.ts:236 war story.
+// wrappedOps don't get installed automatically just by importing exec —
+// without this, every random program below would fail with "Unbound
+// variable `+'" — the harness used to "pass" by routing through the
+// unbound-variable whitelist branch, never actually exercising the
+// arithmetic dispatch. See bridge.ts:236 war story.
 beforeAll(async () => {
   await initBridge();
 });
