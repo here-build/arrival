@@ -12,6 +12,35 @@ itself.**
 
 ---
 
+## 0. The keystone
+
+**P0. Execution happens on two layers simultaneously — computation over values, provenance
+over boxes — and the tagless algebra is the choreography that keeps the two interpretations
+coherent.**
+
+A box is NOT a monadic container. It is the execution unit of a second, higher-order
+interpreter that runs the SAME program the value interpreter runs: the value layer computes
+*what*, the box layer computes *where it came from*, and every `arrival/tagless-final/*` term
+is one instruction with two coherent readings. This is why every item is boxed — not for
+wrapping discipline, but because an unboxed value is a term the provenance interpretation
+cannot execute: the second interpreter doesn't skip it, it silently ABORTS mid-program while
+the first keeps running, and the trace it produces from that point on is fiction.
+
+Consequences, before any other principle applies:
+- Dropping a box is not a simplification — it is killing one of the two executions.
+- "One algebra, every carrier" (P8) is not an aesthetic: a term whose box discipline varies
+  by carrier is a term whose provenance reading is undefined.
+- "Provenance total or nothing" (P10) is this principle's conservation law.
+- The membrane (P4/P5) is where the two-layer execution legitimately ENDS — the one place a
+  value may exist without its box, because past the boundary only one interpreter runs.
+
+*Revealed by:* every provenance lie in the audit, seen at once — append's drop, vector-map's
+strip, the unstamped cdr spine. Each looked like a local style inconsistency; together they
+are one bug: treating the box as decoration on the real computation instead of the other
+computation.
+
+---
+
 ## I. The value plane
 
 **P1. Nothing is a value unless it carries ctx + provenance.**
@@ -183,8 +212,9 @@ suite is strongest (provenance: 12 of 258).
 
 ## Precedence
 
-When principles collide, the order is: **P10/P11 (provenance truth) > P4/P5 (membrane
-strictness) > P8 (algebra uniformity) > P7 (representation authority) > everything else.**
-Rationale: provenance is the product; the membrane is what makes provenance sound; a uniform
-algebra is what makes the membrane's promises statable; authority placement is how the first
-three stay maintainable. Convenience never appears in this list.
+When principles collide, the order is: **P0 (two-layer coherence) > P10/P11 (provenance
+truth) > P4/P5 (membrane strictness) > P8 (algebra uniformity) > P7 (representation
+authority) > everything else.** Rationale: the two-layer execution IS the machine — the rest
+describe how to keep it running. Provenance is the product; the membrane is what makes
+provenance sound; a uniform algebra is what makes the membrane's promises statable; authority
+placement is how the first three stay maintainable. Convenience never appears in this list.
