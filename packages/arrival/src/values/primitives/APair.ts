@@ -16,8 +16,7 @@ import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js"
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
-import { fromJs } from "./boxing.js";
+import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
@@ -581,17 +580,21 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       );
       return AHalfBaked.collection(this.ctx, slots, () => [1, 1]);
     }
+    // R2/C2 (docs/test-suite-v2/RULINGS.md R2, naive-but-explicit strategy): map is
+    // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
+    // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
+    // top-level provenance onto the fresh head; a no-op when the input carries no stamp).
     if (results.some(is_promise)) {
       // `resolved`'s settled payloads are CallResult's SchemeValue arm — the seam's
       // `canBounce: false` (see the invocation-seam comment above) rules out a bounce marker
       // reaching a HOF-applied callback's result.
       return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-        APair.fromArray(this.ctx, resolved as SchemeValue[], false),
+        withInputProvenance([this], APair.fromArray(this.ctx, resolved as SchemeValue[], false)),
       );
     }
     // Same CallResult→SchemeValue narrowing as above: `results` holds no promise (checked) and
     // no bounce marker (canBounce: false at the seam), so every element is a settled SchemeValue.
-    return APair.fromArray(this.ctx, results as SchemeValue[], false);
+    return withInputProvenance([this], APair.fromArray(this.ctx, results as SchemeValue[], false));
   }
 
   // Filterable — preserves every kept element's box. Keep-rule matches the eager `filter`
@@ -628,20 +631,20 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       });
       return AHalfBaked.collection(this.ctx, slots, () => [0, 1]);
     }
+    // R2/C2 (RULINGS.md R2): filter is LENGTH-CHANGING — the container's own grouping/
+    // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
+    // container's own top-level stamp and (b) the decision lineage that changed the
+    // length — here, the SURVIVING elements' own top-level provenance (the dropped
+    // elements never flow; naive-but-explicit, not a deep walk: `withInputProvenance
+    // ([this, ...survivors], …)`).
     if (verdicts.some(is_promise)) {
-      return (promise_all(verdicts) as Promise<unknown[]>).then((results) =>
-        APair.fromArray(
-          this.ctx,
-          elements.filter((_, i) => kept(results[i])),
-          false,
-        ),
-      );
+      return (promise_all(verdicts) as Promise<unknown[]>).then((results) => {
+        const survivors = elements.filter((_, i) => kept(results[i]));
+        return withInputProvenance([this, ...survivors], APair.fromArray(this.ctx, survivors, false));
+      });
     }
-    return APair.fromArray(
-      this.ctx,
-      elements.filter((_, i) => kept(verdicts[i])),
-      false,
-    );
+    const survivors = elements.filter((_, i) => kept(verdicts[i]));
+    return withInputProvenance([this, ...survivors], APair.fromArray(this.ctx, survivors, false));
   }
 
   // Canonical async-aware reduce, SRFI fold convention `fn(element, acc)` (acc last), left fold.
@@ -672,8 +675,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // array, sorts with `deriveSortCompare` (no comparator ⇒ elements' own
   // `arrival/tagless-final/lte` total order, so `(sort '(2 10))` is `(2 10)`, the lte-default
   // bug-fix; comparator ⇒ SRFI-95 `less?`), then re-cons SHALLOW via Pair.fromArray(_, false):
-  // element boxes are preserved (only reordered), the container box drops, an empty list is
-  // nil. ES Array.sort is sync + stable; charges heap before materializing.
+  // element boxes are preserved (only reordered). ES Array.sort is sync + stable; charges heap
+  // before materializing. R2/C2: sort is LENGTH-PRESERVING — the container's own grouping/
+  // length-fact stamp is PROXIED through unchanged (`withInputProvenance([this], …)`), same
+  // convention as map above; P8 requires this to agree with AVector's sort (both PROXY).
   ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AListAlike {
     chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];
@@ -685,29 +690,29 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       node = p.cdr;
     }
     out.sort(deriveSortCompare(comparator));
-    return APair.fromArray(this.ctx, out, false);
+    return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
   }
 
-  // Element-count — `length` carrying the ELEMENTS' (cars') unioned provenance, NOT the
-  // container box: a count carries the grounding of every element it touched. Walks the
-  // cdr-spine counting elements + collecting their AValue cars; returns the bare count if none
-  // are grounded, else `fromJs(count, unioned-prov)`. No heap-charge (a count allocates
-  // nothing). Throws "length: circular list" on a cycle, matching the base stdlib `length`'s
-  // error. Honors the empty-pair sentinel.
+  // Element-count. C4/A13 interim fix (docs/test-suite-v2/RULINGS.md R2,
+  // docs/working-proposals/execution-plan-wireframe.md §7): `length` reads the CONTAINER's
+  // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)` unions just
+  // `this`'s own top-level provenance) — it no longer deep-walks the spine unioning every
+  // element's box. A pure count depends only on cardinality, not on what each element
+  // became; the container's own stamp is already an accurate synopsis by construction
+  // (MINTED at `list`/`cons`, PROXIED through map/sort, PROVENANCED fresh by filter/concat —
+  // see the term×carrier law table, _tables/terms.ts). Still throws "length: circular list"
+  // on a cycle, matching the base stdlib `length`'s error; still honors the empty-pair
+  // sentinel (both checks only touch cardinality, never element boxes).
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     if (isCircularList(this)) throw new TypeError("length: circular list");
     let count = 0;
-    const inputs: AValue[] = [];
     let node: SchemeValue = this;
     while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
       count++;
-      if (node.car instanceof AValue) inputs.push(node.car);
       node = node.cdr;
     }
-    if (inputs.length === 0) return count;
-    const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
+    return withInputProvenance([this], count);
   }
 
   // car/cdr compute directly on the term (mirrors map/filter/reduce) rather than routing

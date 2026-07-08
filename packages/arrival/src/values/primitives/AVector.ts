@@ -23,10 +23,9 @@ import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
-import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
-import { fromJs } from "./boxing.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
@@ -34,7 +33,7 @@ import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import type { SchemeValue } from "../types.js";
 // op-helpers imports AVector back, but both directions are referenced only inside function
 // bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
-import { deriveSortCompare } from "../op-helpers.js";
+import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 
 export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   static [INTEROP_BOUNDARY] = true;
@@ -169,12 +168,15 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
+    // R2/C2 (RULINGS.md R2): map is LENGTH-PRESERVING — PROXY the container's own
+    // grouping/length-fact stamp through unchanged (mirrors APair's map, P8 "one algebra,
+    // every carrier" — the two carriers must agree, not just their element boxes).
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then(
-        (resolved): AVector => new AVector(this.ctx, resolved),
+        (resolved): AVector => withInputProvenance([this], new AVector(this.ctx, resolved)),
       );
     }
-    return new AVector(this.ctx, results as SchemeValue[]);
+    return withInputProvenance([this], new AVector(this.ctx, results as SchemeValue[]));
   }
 
   // Filterable — keeps elements satisfying the predicate into a fresh vector, PRESERVING every
@@ -198,7 +200,12 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       const verdict = await applyCallback(pred, [v], runCtx);
       if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
-    return new AVector(this.ctx, out);
+    // R2/C2: filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
+    // PROVENANCED, minted fresh as the union of (a) the INPUT container's own top-level
+    // stamp and (b) the decision lineage that changed the length — here, the SURVIVING
+    // elements' own top-level provenance (mirrors APair's filter — naive-but-explicit,
+    // not a deep walk).
+    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
   }
 
   // Canonical async-aware reduce, SRFI fold convention `fn(element, acc)` (acc last), left
@@ -227,7 +234,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // `lte` total order; comparator ⇒ SRFI-95 `less?`). Element boxes are PRESERVED (only
   // reordered — this is NOT the cross-out map; mirrors the box-preserving filter). Source
   // payload untouched (slice copy), so a frozen literal is safe. ES Array.sort is stable;
-  // charges heap before materializing.
+  // charges heap before materializing. R2/C2: sort is LENGTH-PRESERVING — the container's
+  // own grouping/length-fact stamp is PROXIED through unchanged (P8 — must agree with
+  // APair's sort, which proxies identically; the two carriers no longer diverge).
   ["arrival/tagless-final/sort"](
     comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
     runCtx?: RunContext,
@@ -235,26 +244,19 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     chargeHeap(runCtx, this.__vector__.length);
     const out = this.__vector__.slice();
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined));
-    return new AVector(this.ctx, out);
+    return withInputProvenance([this], new AVector(this.ctx, out));
   }
 
-  // Element-count — `length` carrying the ELEMENTS' unioned provenance, not the container box
-  // (a count is grounded by every element it touched). `fromJs(count, unioned-prov)` when any
-  // element is grounded, else the bare count. No heap-charge / no strict-gating.
+  // Element-count. C4/A13 interim fix (docs/test-suite-v2/RULINGS.md R2,
+  // docs/working-proposals/execution-plan-wireframe.md §7): `length` reads the CONTAINER's
+  // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)`), never the
+  // elements' deep union — a pure count depends only on cardinality, not on what each
+  // element became. The container's own stamp is already an accurate synopsis by
+  // construction (MINTED at `vector`, PROXIED through map/sort, PROVENANCED fresh by
+  // filter — see the term×carrier law table, _tables/terms.ts). No heap-charge / no
+  // strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    const count = this.__vector__.length;
-    // `__vector__` is `readonly T[]` for the class's own (possibly narrowed) T — the predicate
-    // must assert `Extract<T, AValue>`, not `Extract<SchemeValue, AValue>`: for an abstract T,
-    // the wider SchemeValue-rooted Extract isn't provably assignable back into T (TS2677).
-    // `Extract<T, AValue>` IS assignable to both T (by construction) and AValue (every surviving
-    // arm was already an AValue subtype) — runtime `instanceof AValue` excludes the function arm
-    // identically either way.
-    const inputs = this.__vector__.filter((e): e is Extract<T, AValue> => e instanceof AValue);
-    if (inputs.length === 0) return count;
-    // `Extract<T, AValue>` is deferred for abstract T, same limitation as above — the cast
-    // documents that every element here already passed `instanceof AValue`.
-    const prov = unionProvenance(inputs as AValue[]);
-    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
+    return withInputProvenance([this], this.__vector__.length);
   }
 
   // Type predicate — the receiver answers directly (`symbol.taglessGuard`) instead of the

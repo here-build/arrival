@@ -19,12 +19,16 @@
  *      survives the coercion. These are the G6 guarantees, including the one this
  *      wave REPAIRED (the `collectElements` SchemeVector gap).
  *
- *   2. GOLDEN(eager-parity) — the deliberate, named drops the research (Galois
- *      slicing: `length`/`sort` are the upper adjoint; the container grouping is
- *      NOT in a count's cone) and the eager engine already exhibit. The static
- *      path must MATCH these byte-for-byte (G2), so they are pinned as
- *      characterization, NOT "fixed." Each is cross-referenced to a contested
- *      ruling for the parent/V.
+ *   2. RULED (R2, docs/test-suite-v2/RULINGS.md) — the container's own grouping-
+ *      fact stamp used to be silently dropped by every rebuilding op (`length`/
+ *      `sort`/`map`/`filter`); the C1/C2/C4 batch (docs/REWORK-DAG.md) fixed this
+ *      at the root — length-PRESERVING ops (map/sort) PROXY the container's own
+ *      stamp through, length-CHANGING ops (filter) PROVENANCE a fresh derived
+ *      stamp, and `length` itself reads the container's OWN flat stamp instead of
+ *      deep-unioning elements (the A13 fix). Was "GOLDEN(eager-parity) —
+ *      characterization, not fixed"; now the fixed, ruled behavior, asserted
+ *      directly. See `_tables/terms.ts`'s `containerBox` column for the full
+ *      per-term law table.
  */
 
 import { describe, it, expect } from "vitest";
@@ -119,7 +123,7 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// STRATUM 1 — SOUND (REPAIRED THIS WAVE): the `collectElements` SchemeVector gap.
+// STRATUM 1 — SOUND (REPAIRED an earlier wave): the `collectElements` SchemeVector gap.
 //
 // `collectElements` (used by `length`) had no SchemeVector branch — a vector
 // matched none of {Pair-spine, AJSArray, raw array} and silently collected
@@ -127,47 +131,69 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // Its twin `collapseProvenance` (provenance-collapse.ts) already walked
 // `__vector__`; the two near-twin deep-walkers disagreed (pre-mortem DR6). Fixed
 // by adding the symmetric SchemeVector branch.
+//
+// C4/A13 UPDATE (docs/test-suite-v2/RULINGS.md R2): the count no longer carries a deep
+// union of the ELEMENTS' own provenance (the over-attribution the A13 golden pinned) —
+// `length` now reads the CONTAINER's own flat grouping-fact stamp instead (see
+// _tables/terms.ts's `containerBox` column). The gap this describe block repaired
+// (length(vector) used to silently count 0) stays fixed; only the provenance the count
+// carries changed shape.
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
-  it("length(vector) counts every element (not 0) and carries their unioned provenance", async () => {
+  it("length(vector) counts every element (not 0) and carries the CONTAINER's own grounding", async () => {
     const r = await force(listOps.length(mkVec()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
-    // Element grounding (100,101) rides onto the count — the teleological-seal
-    // need the term length documents ("a count the seal can't sign is the hole").
-    expect(provOf(r)).toEqual([100, 101]);
+    // C4: the CONTAINER's own stamp (mkVec's {7}), NOT a deep union of the elements' own
+    // {100,101} — the old over-attributing design the A13 golden documented.
+    expect(provOf(r)).toEqual([7]);
   });
 
-  it("length(AJSArray) carries element provenance (the membrane-wrapper carrier)", async () => {
+  it("length(AJSArray) reads the CONTAINER's own stamp — empty here, a separate ticketed gap (mkArr mints no container-level provenance)", async () => {
     const r = await force(listOps.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
-    expect(provOf(r)).toEqual([100, 101]);
+    // AJSArray's own top-level provenance is empty by construction here — the R2 grouping-
+    // fact mint for AJSArray/ADict is a separate, already-ticketed gap
+    // (term-carrier.law.test.ts's `equalsContainerHasNoGroupingFact`); C4 correctly reads
+    // THAT empty stamp rather than deep-unioning the elements, so the count comes back
+    // with no provenance box at all.
+    expect(provOf(r)).toEqual([]);
   });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// STRATUM 2 — GOLDEN (eager-parity): the deliberate drops. Characterized, NOT
-// fixed — the static path must reproduce them (G2). Each maps to a contested
-// ruling returned to the parent/V. If a future wave ELEVATES one to a fix, the
-// assertion here is the canary that the eager behavior changed.
+// STRATUM 2 — RULED (R2, docs/test-suite-v2/RULINGS.md): the container's own
+// grouping-fact stamp is no longer silently dropped by a rebuild. C2 threads it
+// explicitly: length-PRESERVING ops (map/sort) PROXY the container's own stamp
+// through unchanged; length-CHANGING ops (filter) PROVENANCE a fresh derived
+// stamp = union(the input container's own stamp, the decision lineage that
+// changed the length — here, the surviving elements' own provenance). `length`
+// itself (C4/A13) reads the container's OWN flat stamp, never the elements'
+// deep union — see _tables/terms.ts's containerBox column for the full table.
+// mkPair()/mkVec() are explicitly minted with container provenance {7}
+// (`.withProvenance(new Set([7]))`), so these rows exercise a REAL, non-empty
+// grouping fact — the golden-prov-fan fixture (an unminted `fromArray` list)
+// covers the empty-stamp case instead.
 // ════════════════════════════════════════════════════════════════════════════
-describe("G6 golden(eager-parity) — container-grouping drops the research blesses", () => {
-  // Galois-slicing upper adjoint: a count/sort does not depend on the container
-  // grouping box, so the box is not carried. Element boxes (stratum 1) survive.
-  it("Pair · length drops the container box, carries the ELEMENTS' provenance (the seal need)", async () => {
+describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANCED (filter), never silently dropped", () => {
+  it("Pair · length reads the CONTAINER's own grouping-fact stamp {7}, NOT the elements' union {100,101}", async () => {
     const r = await force(listOps.length(mkPair()));
-    expect(provOf(r)).toEqual([100, 101]); // NOT [7] — container grouping is outside a count's cone
+    expect(provOf(r)).toEqual([7]); // C4: the container's own MINTED stamp, not a deep element union
   });
 
-  it("Pair · sort drops the container box (spine rebuilt; element boxes survive)", async () => {
-    // APair's arrival/tagless-final/sort re-cons the spine via `Pair.fromArray(_, false)`
-    // (the shared spine-rebuild drop) and makes NO collapseProvenance call. Element boxes
-    // survive (stratum 1); the container box does not — identical to map/filter.
-    expect(provOf(await force(mkPair()[tf("sort")](cmp)))).toEqual([]);
+  it("Pair · sort is LENGTH-PRESERVING — PROXIES the container's own grouping-fact stamp through", async () => {
+    // APair's arrival/tagless-final/sort re-cons the spine via `Pair.fromArray(_, false)` but
+    // threads `withInputProvenance([this], …)` (C2) — the container's own {7} stamp survives
+    // the rebuild, agreeing with AVector's sort below (P8 — ONE answer, the old divergence
+    // this row used to pin is gone).
+    expect(provOf(await force(mkPair()[tf("sort")](cmp)))).toEqual([7]);
   });
 
-  it("Pair · map / filter drop the container box (spine rebuilt; element boxes survive)", async () => {
-    expect(provOf(await force(mkPair()[tf("map")](idSync)))).toEqual([]);
-    expect(provOf(await force(mkPair()[tf("filter")](keepAll)))).toEqual([]);
+  it("Pair · map is LENGTH-PRESERVING (PROXIES {7} through); filter is LENGTH-CHANGING (PROVENANCES a fresh union)", async () => {
+    // map: the container's own {7} stamp threads through unchanged (PROXIED).
+    expect(provOf(await force(mkPair()[tf("map")](idSync)))).toEqual([7]);
+    // filter (keepAll — nothing dropped): PROVENANCED mints union(container's own {7},
+    // survivors' own {100,101}) — a fresh derived fact, not a bare passthrough of {7} alone.
+    expect(provOf(await force(mkPair()[tf("filter")](keepAll)))).toEqual([7, 100, 101]);
   });
 
   it("SchemeVector · map PRESERVES every element's box, rebuilding a fresh AVector [FIXED: DR4]", async () => {
@@ -186,6 +212,10 @@ describe("G6 golden(eager-parity) — container-grouping drops the research bles
     // (b) every element's own box survives by reference — no re-boxing, no provenance loss.
     expect(elemProvs(r)).toEqual([[100], [101]]);
 
+    // (c) R2/C2: map is LENGTH-PRESERVING — the container's own grouping-fact stamp {7}
+    // PROXIES through (agrees with Pair · map above, P8 — one algebra, every carrier).
+    expect(provOf(r)).toEqual([7]);
+
     const vec = r as AVector;
     expect(vec.__vector__.every((e) => e instanceof AString)).toBe(true);
     expect(vec.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
@@ -197,17 +227,21 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // silently fell through to nil — worse-than-throw. Now sort is dissolved onto the term:
   // AVector's arrival/tagless-final/sort returns a FRESH sorted vector, PRESERVING every
   // element's box (no unwrapForeign — this is the box-preserving reorder, not the cross-out
-  // map). Container-preserving (vector→vector) by the term returning its own shape.
+  // map). Container-preserving (vector→vector) by the term returning its own shape — AND
+  // (R2/C2) the container's own grouping-fact stamp PROXIES through too (the claim this
+  // describe's title always made, now actually asserted, not just documented).
   it("sort(vector) returns a sorted VECTOR (boxes preserved, container preserved)", async () => {
     const r = await force(mkVec()[tf("sort")](cmp));
     expect(r).toBeInstanceOf(AVector);
     expect(elemProvs(r)).toEqual([[100], [101]]); // element boxes survive the reorder
+    expect(provOf(r)).toEqual([7]); // R2/C2: container's own grouping-fact stamp PROXIES through
   });
   it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
     const reversed = new AVector(CONSTANT_CTX, [el("b", 101), el("a", 100)], new Set([7]));
     const r = (await force(reversed[tf("sort")](cmp))) as AVector;
     expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
+    expect(provOf(r)).toEqual([7]); // container stamp proxies through the reorder too
   });
 
   // RESOLVED (was CONTESTED): a borrowed JS array is now a VECTOR — it answers the

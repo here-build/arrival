@@ -184,6 +184,17 @@ export function toPlain(value: unknown): unknown {
 }
 
 /**
+ * The CONTAINER's own top-level provenance, sorted — R2/C1's "grouping-fact" reader
+ * (`value.provenance` directly, never a deep walk). `[]` for a non-AValue. Distinct
+ * from `elementBoxes` (per-element) and `deepIds` (deep-collapsed) — this is
+ * specifically the flat stamp the container-box law rows (PROXIED/PROVENANCED/MINTED,
+ * `_tables/terms.ts`'s `containerBox`) assert on.
+ */
+export function containerProv(value: unknown): readonly number[] {
+  return value instanceof AValue ? [...value.provenance].sort((a, b) => a - b) : [];
+}
+
+/**
  * Deep-collapsed provenance of a result — the union of every reachable AValue's
  * OWN point ids (P10 conservation's oracle). Delegates to the production
  * `collapseProvenance` (provenance-collapse.ts) for the carriers it walks

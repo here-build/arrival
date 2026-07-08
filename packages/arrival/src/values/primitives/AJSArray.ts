@@ -18,8 +18,8 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
-import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
-import { fromJs } from "./boxing.js";
+import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { withInputProvenance } from "../op-helpers.js";
 import { AVector } from "./AVector.js";
 import { printValue } from "../print.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
@@ -150,17 +150,16 @@ export class AJSArray extends AValue {
     return other instanceof AJSArray && other.source === this.source;
   }
 
-  // Element-count read straight off `source` (no materialize) — filters for elements that
-  // are ALREADY AValue-boxed (a borrowed array can hold either raw JS or pre-boxed values)
-  // and unions their provenance; a raw/live element carries none (post-box it'd be
-  // empty-provenance).
+  // Element-count read straight off `source` (no materialize). C4/A13 interim fix
+  // (docs/test-suite-v2/RULINGS.md R2): reads the CONTAINER's own flat grouping/length-fact
+  // stamp (`withInputProvenance([this], count)`), never the elements' union — matches
+  // APair/AVector's `length` (P8, one algebra every carrier). A borrowed array's own
+  // top-level provenance is empty by construction today (the R2 grouping-fact mint for
+  // AJSArray/ADict is a separate, already-ticketed gap — term-carrier.law.test.ts's
+  // `equalsContainerHasNoGroupingFact`), so this reads as the bare count until that lands.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     this.freezeSource();
-    const count = this.source.length;
-    const inputs = this.source.filter((e): e is AValue => e instanceof AValue);
-    if (inputs.length === 0) return count;
-    const prov = unionProvenance(inputs);
-    return prov.size === 0 ? count : fromJs(this.ctx, count, prov);
+    return withInputProvenance([this], this.source.length);
   }
 
   // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).

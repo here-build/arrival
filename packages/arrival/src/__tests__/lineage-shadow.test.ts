@@ -25,14 +25,18 @@
  * arithmetic, the string-collapse path, `cons`/`append` union, and `if`/`let`/`cond`
  * whose conservative selector∪arms superset equals the taken-arm eager cone. The
  * by-design divergences (element-projection car/cdr, cardinality-drop string-length,
- * control-flow cond superset, fan-cardinality length-over-map) are deliberately NOT
+ * control-flow cond superset, filter's fresh container stamp) are deliberately NOT
  * run under the flag — `exec` would throw on them, which is the correct shadow
  * signal that they lie outside the provable set (they are covered as eager goldens
  * in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc). `append` MOVED
  * out of this divergence set (conservation repair, docs/test-suite-v2/RULINGS.md
  * R2): the rebuilt spine's head now carries the deep-collapsed union of both
  * operands' elements, matching the static classifier's pure-op union exactly — see
- * the agreement test below, not the boundary describe.
+ * the agreement test below, not the boundary describe. `length`-over-`map` ALSO
+ * MOVED out (C1/C2/C4 batch, same ruling): the A13 leak is closed — `length` reads
+ * the container's own (now-correct) stamp, agreeing with the static spine. `filter`
+ * MOVED IN as the new boundary case: R2/C2's PROVENANCED fresh stamp is exactly the
+ * "grouping/element split" the v0.1 static fan model doesn't represent yet.
  */
 import { describe, it, expect } from "vitest";
 import invariant from "tiny-invariant";
@@ -243,15 +247,27 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
     const skel = classify(ast, classifierFromEnv(env, new Set()));
     expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]); // static spine — agree
   });
-  it("(filter (lambda (e) (not (string=? e \"b\"))) xs) — filtered spine carries []", async () => {
+});
+
+describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE", () => {
+  // MOVED here from the BOUNDARY describe below (was: "fan cardinality
+  // over-attribution... static {} (spine), eager {100,101,102}", asserted to THROW).
+  // C4's interim fix (docs/test-suite-v2/RULINGS.md R2, docs/REWORK-DAG.md C1/C2/C4):
+  // `length` now reads the container's own flat grouping-fact stamp instead of
+  // deep-unioning every mapped element — for this UNMINTED source (`xs` built via a
+  // plain `APair.fromArray`, no Rosetta-IN crossing), that stamp is EMPTY, matching
+  // EXACTLY what the static classifier already predicted (`fullCone` == `[]`, a
+  // length-preserving fan pruned to the spine). The eager and static cones AGREE now
+  // — no more shadow divergence, no more throw.
+  it("(length (map (lambda (e) e) xs)) — static [] == eager [] (the A13 leak is closed)", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
     env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
-    const [result] = await exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true });
-    expect(provOf(result)).toEqual([]);
-    const [ast] = await parse(`(filter (lambda (e) (not (string=? e "b"))) xs)`, env);
+    const [result] = await exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true });
+    expect(provOf(result)).toEqual([]); // eager — C4 fix
+    const [ast] = await parse(`(length (map (lambda (e) e) xs))`, env);
     const skel = classify(ast, classifierFromEnv(env, new Set()));
-    expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]);
+    expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]); // static — unchanged, agrees
   });
 });
 
@@ -282,15 +298,25 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
       runFlagged(`(cond ((< v 0) a) (else b))`, { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) }),
     ).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
   });
-  it("fan cardinality over-attribution: (length (map id xs)) — static {} (spine), eager {100,101,102}", async () => {
-    // The A13 leak (golden-prov-fan): length touches each element and unions their
-    // ids; the static spine carries []. The grouping/element split is v0.2 (G1/B1).
+  // MOVED OUT (2026-07-08, C1/C2/C4 batch): "fan cardinality over-attribution:
+  // (length (map id xs))" used to throw here (static {}, eager {100,101,102} — the
+  // A13 leak). C4 closed A13 — eager now reads the container's own (empty) stamp,
+  // agreeing with the static spine. See "SHADOW — length-over-map fan: A13 CLOSED"
+  // above, not a boundary divergence anymore.
+  //
+  // NEW divergence introduced by the SAME fix, moved IN: filter is length-CHANGING
+  // (R2/C2) — its container's own stamp is now PROVENANCED (the survivors' own
+  // union), which the v0.1 static classifier's fan model does not yet represent (it
+  // still treats every fan's result spine as carrying []). This is exactly the
+  // "grouping/element split is v0.2" scope note the OLD A13 row already named —
+  // filter is simply the fan where the split now matters on the EAGER side first.
+  it("filter fresh container stamp: (filter pred xs) — static [] (spine, v0.1 fan model), eager [100,102] (R2/C2 PROVENANCED survivors)", async () => {
     await initBridge();
     const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
     env.set("xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
-    await expect(exec(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).rejects.toThrow(
-      /PROVENANCE-SHADOW-DIVERGENCE/,
-    );
+    await expect(
+      exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true }),
+    ).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
   });
 });
 

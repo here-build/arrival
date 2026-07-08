@@ -237,12 +237,13 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
       // is NOT carried onto the count today (the eager reality the static path
       // must match; G2 forbids "improving" it under the flag).
       vectorLength: await oneShot(`(vector-length xs)`),
-      // Coercing a vector through the generic list `map`+`length`: FIXED (DR4 conservation
-      // repair) — `map` no longer cross-out-strips to a raw AJSArray, so `length` now finds
-      // every mapped element's box and unions them. This is the A13-shaped over-attribution
-      // (a count's cone is every touched element, not the minimal grouping fact) — the SAME
-      // gap conservation.law.test.ts's "A13 count-cone over-attribution" row pins for the
-      // Pair carrier [GATE: G2], not something this repair minimizes.
+      // FIXED TWICE OVER: DR4 conservation repair (map no longer cross-out-strips to a raw
+      // AJSArray) AND the C4/A13 interim fix (RULINGS.md R2) — `length` now reads the
+      // CONTAINER's own flat grouping-fact stamp instead of deep-unioning every mapped
+      // element's box. `map` is length-preserving, so it PROXIES `xs`'s own stamp {7}
+      // through unchanged; `length` reads exactly that. This WAS the A13-shaped
+      // over-attribution conservation.law.test.ts's "A13 count-cone over-attribution" row
+      // pins for the Pair carrier [GATE: G2] — CLOSED for both carriers now.
       mapLengthCoerce: await oneShot(`(length (map (lambda (e) e) xs))`),
       // vector->list converts the carrier; the collection-level box does not
       // ride onto the resulting Pair today.
@@ -253,8 +254,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
         "mapLengthCoerce": {
           "ctor": "AExact",
           "prov": [
-            100,
-            101,
+            7,
           ],
         },
         "vectorLength": {

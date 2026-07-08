@@ -29,7 +29,14 @@
  *     scalar-result term, on the result's own provenance).
  *   - provenance conservation (P10): deep-collapsed result provenance ⊇ the
  *     consumed elements' minted ids.
- *   - container box: R2-gated, left `it.todo` per the task brief — untouched.
+ *   - container box (R2 RULED, docs/test-suite-v2/RULINGS.md; C1/C2/C4 per
+ *     docs/REWORK-DAG.md): map/filter/sort each assert the term's declared
+ *     `containerBox` verb (`_tables/terms.ts`) directly — PROXIED (map/sort: the
+ *     container's own grouping-fact stamp threads through unchanged) or
+ *     PROVENANCED (filter: a fresh stamp, union(input container's own stamp,
+ *     the survivors' own ids)) — run for every carrier the switch reaches, so a
+ *     carrier that silently diverged (the old Pair-sort-drops/Vector-sort-
+ *     preserves split) would fail here (P8).
  *
  * KNOWN VIOLATIONS get `it.fails` with a `// @ledger: <id>` line citing
  * `src/__tests__/ledger/index.law.test.ts`'s GAPS table (enforced by that
@@ -66,7 +73,7 @@
 import { describe, it, expect } from "vitest";
 import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
-import { mint3, mint3Pair, elementBoxes, deepIds, toPlain } from "./_tables/fixtures.js";
+import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
 import { exec } from "../../eval/generator-exec.js";
 import type { Environment } from "../../Environment.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -165,6 +172,11 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         };
         it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
         it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
+        it("container box: PROXIED — map is length-preserving, the container's own grouping-fact stamp threads through unchanged (R2/C2, P8)", async () => {
+          const { env, value } = await mint3(carrier);
+          const result = await run1(env, value, `(map (lambda (x) x) c)`);
+          expect(containerProv(result)).toEqual(containerProv(value));
+        });
         break;
       }
 
@@ -192,6 +204,12 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = await run1(env, value, `(filter (lambda (x) #t) c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
+        });
+        it("container box: PROVENANCED — filter is length-changing (keep-all), the fresh stamp is union(input container's own stamp, the survivors' own ids) (R2/C2, P8)", async () => {
+          const { env, value, ids } = await mint3(carrier);
+          const result = await run1(env, value, `(filter (lambda (x) #t) c)`);
+          const expected = [...new Set([...containerProv(value), ...ids])].sort((a, b) => a - b);
+          expect(containerProv(result)).toEqual(expected);
         });
         break;
       }
@@ -237,6 +255,11 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
+        });
+        it("container box: PROXIED — sort is length-preserving, the container's own grouping-fact stamp threads through unchanged (R2/C2, P8 — closes the old Pair-drops/Vector-preserves divergence)", async () => {
+          const { env, value } = await mint3(carrier);
+          const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
+          expect(containerProv(result)).toEqual(containerProv(value));
         });
         break;
       }
@@ -313,19 +336,43 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           expect(Number((result as AValue).valueOf())).toBe(3);
         });
 
-        it(`boxes: ${term.boxDiscipline} — the count carries the elements' unioned provenance`, async () => {
+        // C4/A13 interim fix (RULINGS.md R2): `length` reads the CONTAINER's own flat
+        // grouping-fact stamp (`withInputProvenance([this], count)`), never a deep union of
+        // the elements it touched (the OLD over-attributing design golden-prov-fan.test.ts's
+        // A13 row documented). For APair/AVector/AString/ABytevector, `mint3`'s fixture
+        // builds via a MINTED constructor (list/vector/string/bytevector), whose own
+        // top-level stamp is ALREADY the union of the 3 minted ids — so these two rows still
+        // pass, for a different reason than before: not because length unions elements, but
+        // because the container's own stamp happens to equal that union at construction time.
+        const boxesTitle = "container box: the count reads the CONTAINER's own grouping-fact stamp (C4) — equals the elements' union here because `mint3`'s constructor MINTED it that way";
+        const boxesBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(length c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        });
-
-        it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
+        };
+        const provTitle = "provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)";
+        const provBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(length c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        });
+        };
+        // AJSArray's OWN top-level provenance is empty by construction (`borrow-array`'s
+        // `fromJS` mints no container-level grouping fact) — the SAME pre-existing,
+        // already-ticketed gap the `equals` case above gates as
+        // `equalsContainerHasNoGroupingFact`. C4 correctly reads that empty stamp, so these
+        // two rows (which assume a populated container stamp) now fail for AJSArray — not a
+        // NEW regression, the same R2 container-provenance gap surfacing at a second term.
+        if (carrier.carrier === "AJSArray") {
+          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          it.fails(`${boxesTitle} [TICKETED GAP: R2 container-provenance]`, boxesBody);
+          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          it.fails(`${provTitle} [TICKETED GAP: R2 container-provenance]`, provBody);
+        } else {
+          it(boxesTitle, boxesBody);
+          it(provTitle, provBody);
+        }
         break;
       }
 
@@ -493,7 +540,13 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
       default:
         throw new Error(`term-carrier.law.test.ts: no supported-cell body wired for term ${term.term}`);
     }
-
-    it.todo("container box: per R2 ruling [RULING-GATED: R2]");
+    // Container-box (R2, RULED): map/filter/sort each carry their OWN "container box: …"
+    // row inline above (PROXIED/PROVENANCED per `_tables/terms.ts`'s `containerBox`
+    // column), run for every carrier the switch reaches. concat's container-box is
+    // PROVENANCED for APair only today (the H2 conservation-repair fix, `concatPair`) —
+    // AVector/AString/ABytevector's own `concat` methods don't yet mint one (a real,
+    // separate P8 gap this batch didn't touch), so no blanket concat row is asserted
+    // here to avoid pinning that gap green; reduce/length/equals/car/cdr/toJS/print are
+    // "n/a" (scalar results or pure projections, no container-box question).
   });
 });

@@ -15,18 +15,24 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  * MODELS but never measured against the live builtins, pinned here as observed
  * reality over Pair-backed sources:
  *
- *   (length (map id xs))    — TODAY over-attributes: the count carries EVERY
- *                             element id, though a pure-map length can depend only
- *                             on the GROUPING fact (the cardinality), not on what
- *                             each element became. This is the A13 over-attribution
- *                             — pinned below as `it.fails` (2026-07-08 mechanical
- *                             sweep), not plain green: it is a real gap [GATE: G2],
- *                             not a golden to freeze.
+ *   (length (map id xs))    — FIXED (C4 interim fix, RULINGS.md R2): the count no
+ *                             longer over-attributes to EVERY element id — a
+ *                             pure-map length depends only on the GROUPING fact
+ *                             (the cardinality), not on what each element became.
+ *                             `length` reads the container's own flat stamp; `map`
+ *                             (length-preserving) PROXIES that stamp through
+ *                             unchanged. This WAS the A13 over-attribution, pinned
+ *                             `it.fails` (2026-07-08 mechanical sweep) — now green
+ *                             [GATE: G2 closed].
  *   (length (filter p xs))  — TODAY runs the predicate `p`; the surviving elements'
  *                             provenance flows into the count. A filter is
- *                             length-CHANGING, so the static target keeps the
- *                             predicate's cone (the count genuinely depends on it)
- *                             — unlike the pure-map fan, which the static path prunes.
+ *                             length-CHANGING, so its own container stamp is
+ *                             PROVENANCED fresh from the union of the input
+ *                             container's stamp + the survivors' own provenance
+ *                             (the naive-but-explicit realization of "the static
+ *                             target keeps the predicate's cone") — unlike the
+ *                             pure-map fan, which the static path (and the naive
+ *                             PROXY today) prunes.
  *
  * The `it.todo` block pins the static G2 target the eager golden must converge to:
  *   - pure-map length cone  == grouping-fact-only (the source cardinality id), NOT
@@ -64,19 +70,18 @@ const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 10
 // oracle. `flag-off` (today's eager engine) MUST stay byte-identical to these.
 // ============================================================================
 
-describe("GOLDEN (G2 oracle) — pure-map length over a Pair source OVER-ATTRIBUTES today", () => {
-  // [P10/P15] FLIP-TO-FAILS (docs/test-invariant-atlas/verdicts/provenance.md): this
-  // used to be pinned plain-green as "the A13 leak" while a sibling it.todo GATE
-  // section (below) already specified the correct fix — the "documents today's
-  // behavior, even annotated" pattern P15 forbids. A pure-map length's cone must be
-  // the MINIMAL grouping fact, not every element id (G2). This fixture mints no
-  // container-level "grouping" id at all (a plain APair.fromArray list, no Rosetta-IN
-  // crossing for the list itself), so the minimal correct cone is EMPTY — asserting
-  // the absence of the leak, not a specific replacement id (that id only exists once
-  // R2 / the static classifier's grouping-fact node lands). Mirrors the canonical
-  // `it.fails` row in provenance/conservation.law.test.ts's "known violations" §2
-  // (@ledger: A13 count-cone over-attribution).
-  it.fails("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
+describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 leak is CLOSED", () => {
+  // FIXED (C4 interim fix, docs/test-suite-v2/RULINGS.md R2 + execution-plan-wireframe.md
+  // §7, batch C1/C2/C4 per docs/REWORK-DAG.md): `length` now reads the CONTAINER's own
+  // flat grouping/length-fact stamp instead of deep-unioning every element it touched
+  // (values/primitives/APair.ts, AVector.ts, AJSArray.ts's `arrival/tagless-final/length`).
+  // `map` is length-PRESERVING so it PROXIES the container's own stamp through unchanged
+  // (values/op-helpers.ts's `withInputProvenance`) — this fixture mints no container-level
+  // "grouping" id at all (a plain APair.fromArray list, no Rosetta-IN crossing for the list
+  // itself), so the correct cone is EMPTY. Was `it.fails` (@ledger: A13 count-cone
+  // over-attribution, provenance/conservation.law.test.ts's "known violations" §2) — now
+  // flipped GREEN alongside that row.
+  it("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
       prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
@@ -116,11 +121,18 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     `);
   });
 
-  it("(filter pred xs): the filtered LIST head's own provenance is EMPTY — survivors carry their ids", async () => {
-    // Same shape as the map fan: the filtered SPINE carries [], the surviving
-    // elements keep their own ids. The count's survivor-exact cone (next tests)
-    // comes from folding the surviving elements, not from the spine.
-    expect(await prov(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { xs: triple() })).toMatchInlineSnapshot(`[]`);
+  it("(filter pred xs): the filtered LIST HEAD's own provenance now CARRIES the survivors' ids (C2/R2 fix)", async () => {
+    // FIXED (C2, RULINGS.md R2): unlike the map fan (whose head stays [] — map only PROXIES
+    // whatever container stamp it was handed, and this fixture mints none), filter is
+    // LENGTH-CHANGING — its own head is PROVENANCED fresh from union(input container's own
+    // stamp [empty here], survivors' own ids). `length` no longer needs to fold the
+    // elements itself; it reads exactly this head stamp (C4).
+    expect(await prov(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { xs: triple() })).toMatchInlineSnapshot(`
+      [
+        100,
+        102,
+      ]
+    `);
   });
 
   it("(length (filter pred xs)) keeping ALL: pred always true; count is 3, all ids carried", async () => {
