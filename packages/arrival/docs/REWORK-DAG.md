@@ -56,12 +56,13 @@ graph TD
   end
 
   subgraph "Track C — provenance (R2/R5)"
+    C0[C0 arrival-provenance merge into core]
     C1[C1 containerBox vocabulary]
     C2[C2 structural facts: length]
     C3[C3 execution-plan wireframe design]
     C4[C4 count-cone minimality G2/A13]
-    H4 --> C1 --> C2
-    C3 --> C4
+    H4 --> C0 --> C1 --> C2
+    C0 --> C3 --> C4
   end
 
   subgraph "Track D — type layer (R3/R4)"
@@ -116,7 +117,8 @@ rows cite unflipped `[INVERTS:]` tags).
 | **B2** | Procedure fleet rollout: remaining native/rosetta procedures to ACallable pattern | Sonnet fleet | B1 | all env packs on ACallable; capability RosettaSpec arm intact |
 | **B3** | Region discipline: scope tokens, pending counters, escape-throws (callbacks region-bound to invocation) | Sonnet (design exists, §7) | B1 | `membrane/region.law.test.ts` it.fails flip; `[INVERTS: region-discipline/P6]` tags die |
 | **B4** | Legacy arm retirement: defineRosetta legacy fixtures, migration-gated SymbolDeclaration arm (capability.ts:62-69), `[INVERTS: reverse-membrane/P1]` flips | Sonnet | B2, B3 | legacy arm deleted; zero reverse-membrane tags |
-| **C1** | terms.ts containerBox vocabulary: R2 grouping-fact + named structural-fact fields, EXPLICIT naive strategy | Sonnet | H4 (H2's naive union) | law table names every container's facts; no emergent fields |
+| **C0** | Merge `arrival-provenance` into core as `src/provenance/` (spine already in; remaining = analysis layer: flow-graph, lineage, statechart, slice, uneval, regions + its `__tests__`). `git mv` to preserve history; package becomes a pure re-export shim (or dies if downstream can absorb the import change). Goal: types wiring + tests visible IN core so bad provenance decisions surface instantly, not downstream | Sonnet (mechanical move) + **Fable** eyeball on seam (mobx/Observable split stays behind seams) | H4 | core `tsc` 0; provenance tests run under sunrise runners; shim re-exports only |
+| **C1** | terms.ts containerBox vocabulary: R2 grouping-fact + named structural-fact fields, EXPLICIT naive strategy | Sonnet | C0 (H2's naive union) | law table names every container's facts; no emergent fields |
 | **C2** | Structural facts: length PROXIED through map/sort, PROVENANCED in filter; keyset postponed | Sonnet | C1 | R2 law rows green across carriers (P8: one answer) |
 | **C3** | Execution-plan wireframe design: AST → base wireframe, static wires collapse to single provenance edges, runtime wiring into abstract flow; CF-worker memory budget | **Fable** (major design) | — (parallel) | design doc; supersession plan for per-op accumulation |
 | **C4** | Count-cone minimality: A13 over-attribution repair riding wireframe (or interim fix if wireframe far) | **Fable** design → Sonnet | C3 | golden-prov-fan A13 it.fails flips; G2 gate closes |
@@ -146,3 +148,9 @@ rows cite unflipped `[INVERTS:]` tags).
   interim, lattice is the target).
 - **Fleet discipline** — agents never commit; main thread (Fable) verifies standing gates
   and commits with explicit pathspecs, straight to main.
+- **Downstream breakage is EXPECTED, not a blocker** — downstream packages (arrival-mcp,
+  arrival-chain facade, arrival-manifold, …) are already partially broken from prior API
+  reworks. When a task surfaces something deeply wrong in a downstream package or its
+  tests: record it in [`POST-MIGRATION.md`](POST-MIGRATION.md) and KEEP GOING. Only the
+  core package's standing gates block a commit. Fixing downstream is a separate
+  post-migration phase, sequenced after Z.
