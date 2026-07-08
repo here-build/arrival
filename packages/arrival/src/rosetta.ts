@@ -22,7 +22,21 @@ import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { LAMBDA } from "./well-known-symbols.js";
-import { is_lambda } from "./values/value-guards.js";
+import { is_callable_value, is_lambda } from "./values/value-guards.js";
+import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
+import {
+  closeRegionScope,
+  currentRegionScope,
+  DETACHED_SCOPE,
+  openRegionScope,
+  withRegionCall,
+  withRegionScope,
+} from "./values/primitives/region-scope.js";
+// A leaf with ZERO imports of its own — see that file's header for why the
+// ambient dynamic-call-site holder lives there rather than in eval/evaluator.ts
+// (which this module cannot import without closing a cycle: evaluator.ts →
+// Environment.ts → rosetta.ts already).
+import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
 
 // warnMembrane lives in the leaf membrane-warn.ts, shared with boxing.ts's `function`
 // boxer, so the value layer needn't import this evaluator-heavy module just to warn.
@@ -106,6 +120,43 @@ export interface CtxWithInvocation {
 const isLipsPair = (x: unknown): x is { car: unknown; cdr: unknown } =>
   x != null && typeof x === "object" && "car" in x && "cdr" in x;
 
+/**
+ * The reverse-membrane wrapper (docs/working-proposals/
+ * reverse-membrane-for-callables.md §4/§7c): a scheme callable crossing
+ * scheme→JS becomes a region-scoped async JS function. Reads whichever
+ * `RegionScope` is AMBIENT right now (`currentRegionScope()` — see
+ * `region-scope.ts`'s header for why it's ambient) and CLOSES OVER it: the
+ * wrapper never re-reads the holder, so a call arriving after the exporting
+ * symbol invocation returned still sees the (by-then closed) scope it was
+ * minted against — that's what makes the escape door detectable at all.
+ *
+ * Per-(callable, scope) identity: `scope.cache` is a WeakMap owned by the
+ * scope itself, so the SAME callable exported twice through the SAME scope
+ * gets back the SAME wrapper (eq?-stability), while two DIFFERENT scopes
+ * (two invocations) each mint their own.
+ */
+function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
+  const scope = currentRegionScope() ?? DETACHED_SCOPE;
+  const cached = scope.cache.get(value);
+  if (cached) return cached;
+  const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
+    withRegionCall(scope, async () => {
+      // Args mint under the ENCLOSING invocation's runCtx, never CONSTANT_CTX
+      // (§7b) — `scope.runCtx` is exactly that (or CONSTANT_CTX itself, for the
+      // detached fallback, which never claimed otherwise).
+      const schemeArgs = jsArgs.map((a) => jsToScheme(scope.runCtx, a, options));
+      // The re-entry's trace nests under the exporting invocation (§7b's "child
+      // scope"), via the SAME ambient mechanism the evaluator's own HOF-boundary
+      // wrappers use — never through the callable's `this` (§9's ruling).
+      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, scope.runCtx));
+      // A nested callable inside the result crosses under the SAME scope — one
+      // discipline for the whole re-entry, not just its top-level return value.
+      return withRegionScope(scope, () => schemeToJs(raw, options));
+    });
+  scope.cache.set(value, wrapper);
+  return wrapper;
+}
+
 export function schemeToJs(value: any, options: RosettaOptions = {}): any {
   // `instanceof ANil` not `=== nil`: `nil.withProvenance(p)` mints fresh Nil
   // clones — reference equality would miss them and leak the clone to the caller.
@@ -158,6 +209,15 @@ export function schemeToJs(value: any, options: RosettaOptions = {}): any {
 
   if (value instanceof AJSArray) {
     return value.source.map((el: any) => schemeToJs(el, options));
+  }
+
+  // A scheme callable crossing OUT becomes a region-scoped JS wrapper — the
+  // reverse-membrane crossing (§4/§7c). One branch before generic object
+  // handling: an ACallable would otherwise fall through as an uncallable
+  // opaque object (the exact bug this migration fixes — see the working
+  // proposal's "New finding" on an ALambda reaching host impls uncallable).
+  if (is_callable_value(value)) {
+    return callableToHostFn(value, options);
   }
 
   if (value instanceof ABool) {
@@ -362,13 +422,23 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     // `this?.` throughout: tests call the wrapper directly via `.call({ ctx: {} }, …)`,
     // not only through `makeCallCtx` dispatch, so `this` may be any object or absent.
     const runCtx = this?.runCtx ?? CONSTANT_CTX;
+    const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
+    // Region discipline (§7c): this ONE call — from here to `fn.apply` settling —
+    // is the "symbol invocation" any scheme callable among `schemeArgs` gets
+    // region-bound to. Opened before marshaling (a callable arg's wrapper is
+    // minted DURING `schemeToJs`, which reads the ambient scope), closed the
+    // moment `fn` settles (rule 2: throws if a reverse call is still pending).
+    const scope = openRegionScope({ runCtx, dynSite: inv });
     try {
-      const rawResult = await fn.apply(
-        { ctx: { runCtx, currentInvocation: this?.invocation?.currentInvocation, argProvenance } },
-        schemeArgs.map((arg) => schemeToJs(arg, options)),
-      );
-
-      const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
+      let rawResult: unknown;
+      try {
+        rawResult = await fn.apply(
+          { ctx: { runCtx, currentInvocation: inv, argProvenance } },
+          withRegionScope(scope, () => schemeArgs.map((arg) => schemeToJs(arg, options))),
+        );
+      } finally {
+        closeRegionScope(scope);
+      }
 
       // Decide output provenance before jsToScheme so the deep-stamp reaches every
       // constructed AValue in one pass (spec §5.3) — the mint overrides inputs.

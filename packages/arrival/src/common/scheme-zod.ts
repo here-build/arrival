@@ -18,6 +18,10 @@ import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { R7RSError } from "../errors.js";
 import { ALambda, ANativeProcedure, ARosettaProcedure, applyCallback } from "../values/primitives/ACallable.js";
+import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../values/primitives/region-scope.js";
+// A leaf with ZERO imports of its own (see its header) — safe from any of
+// scheme-zod.ts's own cycles, same rationale as rosetta.ts's identical import.
+import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
 /**
@@ -527,7 +531,9 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
         encode: (rec: Record<string, unknown>) =>
           new ADict(
             CONSTANT_CTX,
-            Object.entries(rec).map(([k, v]) => [new ASymbol(CONSTANT_CTX, k), v as SchemeValue] as [DictKey, SchemeValue]),
+            Object.entries(rec).map(
+              ([k, v]) => [new ASymbol(CONSTANT_CTX, k), v as SchemeValue] as [DictKey, SchemeValue],
+            ),
           ),
       },
     ),
@@ -557,6 +563,13 @@ export const box = named(
  *
  * The return-direction ban stays: a rosetta result is never a bare JS function (provenance
  * would be untraceable) — `encode` is only legitimate for an argument marshalled inward.
+ *
+ * `decode` is the TYPED half of the reverse-membrane crossing (docs/working-proposals/
+ * reverse-membrane-for-callables.md §7c row 7: "z.procedure decode adopts the same scope
+ * token — one discipline, typed and untyped paths"): it reads the SAME ambient region scope
+ * `rosetta.ts`'s `schemeToJs` reads (`currentRegionScope()`), falling back to the shared
+ * `DETACHED_SCOPE` when decoded with no crossing live (a unit test calling `.parse(...)`
+ * directly) — the pre-region-discipline behavior, unchanged.
  */
 export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?: I, output?: O) {
   return named(
@@ -565,14 +578,33 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
       z.union([z.instanceof(ALambda), z.instanceof(ANativeProcedure), z.instanceof(ARosettaProcedure)]),
       z.custom<(...a: unknown[]) => unknown>((v) => typeof v === "function"),
       {
-        // decode closure is ASYNC (it wasn't before): `applyCallback`'s CallResult can be a
-        // Promise, and per-arg output decoding must await it — a sync closure could not.
         // `as never` at each marshaling call: input/output are generic ZodTypeAny, so zod's
         // encode/decode in/out param types are opaque conditionals here (generic boundary).
-        decode: (callable) => async (...jsArgs: unknown[]) => {
-          const schemeArgs = input ? jsArgs.map((a) => z.encode(input, a as never)) : jsArgs;
-          const r = await applyCallback(callable, schemeArgs as SchemeValue[]);
-          return output ? z.decode(output, r as never) : r;
+        decode: (callable) => {
+          const scope = currentRegionScope() ?? DETACHED_SCOPE;
+          const cached = scope.cache.get(callable);
+          if (cached) return cached;
+          // The wrapper CLOSES OVER `scope` (minted here, at decode time) — it never
+          // re-reads the ambient holder, so a call arriving after the exporting symbol
+          // invocation returned still sees the (by then closed) scope it was minted
+          // against. `withRegionCall` owns the escape/pending/abort bookkeeping (§7c
+          // rules 1/3/4); this closure owns only the marshaling.
+          const wrapper = (...jsArgs: unknown[]) =>
+            withRegionCall(scope, async () => {
+              const schemeArgs = input ? jsArgs.map((a) => z.encode(input, a as never)) : jsArgs;
+              // Re-entry nests under the exporting invocation via the SAME ambient
+              // mechanism the untyped path uses — never through the callable's `this`
+              // (§9's ruling). `scope.runCtx` also carries the call itself (strict mode,
+              // abort signal) even though the per-field zod codecs above stay CONSTANT_CTX
+              // by design (unrelated to region discipline — see scheme-zod.ts's own
+              // primitive encoders, e.g. `bytevector`'s `encode`).
+              const r = await withDynamicCallSite(scope.dynSite, () =>
+                applyCallback(callable, schemeArgs as SchemeValue[], scope.runCtx),
+              );
+              return output ? z.decode(output, r as never) : r;
+            });
+          scope.cache.set(callable, wrapper);
+          return wrapper;
         },
         encode: (jsFn) =>
           new ANativeProcedure({

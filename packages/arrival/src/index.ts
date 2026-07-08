@@ -113,9 +113,13 @@ export {
   type EvalContext,
   type EvalGenerator,
   type EvalTap,
-  type Invocation,
   type StackFrame,
 } from "./eval/evaluator.js";
+// `Invocation` moved to its own leaf (2026-07-09, the reverse-membrane migration's
+// dynamic-call-site extraction — see `eval/dynamic-call-site.ts`'s header) so
+// `rosetta.ts` can install one without importing the evaluator; re-exported from
+// here unchanged for existing external importers of this package.
+export type { Invocation } from "./eval/dynamic-call-site.js";
 
 // Generator exec entry point (parser + generator evaluator) for string-to-value eval.
 export {

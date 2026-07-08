@@ -33,6 +33,12 @@ import { is_applyable, is_callable_value, is_lambda } from "../values/value-guar
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx } from "../common/symbols/_bake.js";
 import type { InvocationLike } from "../rosetta.js";
+import {
+  currentDynamicCallSite,
+  setDynamicCallSite,
+  withDynamicCallSite,
+  type Invocation,
+} from "./dynamic-call-site.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
@@ -73,12 +79,12 @@ export interface StackFrame {
 // Types
 // ============================================================================
 
-/**
- * Opaque tag for one dynamic evaluation of an AST node. The tap implementation
- * defines its shape; the evaluator only threads it through as the parent of
- * nested invocations.
- */
-export type Invocation = unknown;
+// `Invocation` — opaque tag for one dynamic evaluation of an AST node (the tap
+// implementation defines its shape; the evaluator only threads it through as
+// the parent of nested invocations) — is imported above from `./dynamic-call-site.js`
+// (type-only) for internal use in this file's own signatures. `index.ts` now
+// imports the type straight from that leaf instead of re-exporting through
+// here — see the leaf's header for why the ambient holder lives there.
 
 /**
  * Tap callback surface for tracing evaluation. The evaluator fires `enter`
@@ -232,23 +238,23 @@ export interface RunOptions {
   budgetMs?: number;
 }
 
-/**
- * Module-level dynamic call site holder. Set by evaluatePair just before
- * invoking a callable, read by evalLambda / named-let loopFn when building
- * the body ctx so that a lambda's body runs with the DYNAMIC parent invocation
- * (the call site) rather than the LEXICAL one captured at lambda-creation.
- *
- * Why: when a native JS HOF (map/filter/reduce) iterates over a user lambda,
- * the lambda's body would otherwise inherit currentInvocation from the lexical
- * ctx (e.g., the enclosing define), severing the parent chain at the HOF
- * boundary. With this holder, the lambda picks up the calling Pair's
- * invocation, so DNF path reconstruction can surface HOF iteration via
- * parent-walking.
- *
- * Single-threaded JS makes a module-level holder safe; we save/restore around
- * each apply to handle nesting.
- */
-let _dynamicCallSite: Invocation | undefined = undefined;
+// Module-level dynamic call site holder — MOVED to `./dynamic-call-site.js`
+// (imported above as `currentDynamicCallSite`/`setDynamicCallSite`/
+// `isStrictDescendant`/`withDynamicCallSite`); see that leaf's header for why.
+// Set by evaluatePair just before invoking a callable, read by evalLambda /
+// named-let loopFn when building the body ctx so that a lambda's body runs
+// with the DYNAMIC parent invocation (the call site) rather than the LEXICAL
+// one captured at lambda-creation.
+//
+// Why: when a native JS HOF (map/filter/reduce) iterates over a user lambda,
+// the lambda's body would otherwise inherit currentInvocation from the lexical
+// ctx (e.g., the enclosing define), severing the parent chain at the HOF
+// boundary. With this holder, the lambda picks up the calling Pair's
+// invocation, so DNF path reconstruction can surface HOF iteration via
+// parent-walking.
+//
+// Single-threaded JS makes a module-level holder safe; we save/restore around
+// each apply to handle nesting.
 
 /**
  * Module-level "may return a Bounce" flag — set by evaluatePair RIGHT BEFORE
@@ -330,36 +336,25 @@ function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): S
   return out ?? args;
 }
 
-/** Is `a` a strict descendant of `b` in the invocation tree? Walks `a`'s parent
- *  chain looking for `b`. Used to pick the deeper of two candidate dynamic call
- *  sites in `wrapLambda` (the genuine nested call site vs the HOF boundary). */
-function isStrictDescendant(a: Invocation | undefined, b: Invocation | undefined): boolean {
-  if (!a || !b) return false;
-  // `Invocation` is opaque (`unknown`) to the evaluator — the tap owns its shape —
-  // but every tap invocation exposes a `parent` link; narrow structurally to walk it.
-  type ParentLinked = { parent: ParentLinked | null };
-  for (let p = (a as ParentLinked).parent; p; p = p.parent) if (p === b) return true;
-  return false;
-}
+// `isStrictDescendant`/`withDynamicCallSite` now live in `./dynamic-call-site.js`
+// (imported above) — used locally by `wrapLambda`/`wrapLambdaValue` below. The
+// reverse-membrane crossing (`rosetta.ts`/`scheme-zod.ts`, per
+// docs/working-proposals/reverse-membrane-for-callables.md §7b/§9) imports
+// `withDynamicCallSite` straight from that leaf too, rather than through this
+// module — no re-export needed here.
 
 function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): LambdaFunction {
   const wrapped: LambdaFunction = function (this: unknown, ...values: SchemeValue[]) {
-    const saved = _dynamicCallSite;
     // Prefer the DEEPER of the two candidate dynamic parents. `dynSite` is the HOF
-    // boundary (e.g. `index-map`'s call site); `saved` is whatever the immediate
-    // caller set — for a genuine Scheme-to-Scheme call `(f i x)`, a descendant of
-    // `dynSite` sitting inside the loop iteration that invoked the lambda. Keeping
-    // `saved` when it's a descendant nests a loop's per-iteration work under the
+    // boundary (e.g. `index-map`'s call site); the current holder is whatever the
+    // immediate caller set — for a genuine Scheme-to-Scheme call `(f i x)`, a
+    // descendant of `dynSite` sitting inside the loop iteration that invoked the
+    // lambda. Keeping that descendant nests a loop's per-iteration work under the
     // iteration instead of scattering it to the outer driver (needed for TCO loops
     // calling a passed-in lambda). The native-HOF escape (map/filter/reduce
-    // iterating from JS with no Scheme call Pair) leaves `saved` equal to `dynSite`
-    // or absent, falling through unchanged. See: arrival-chain index-map fan-out.
-    _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
-    try {
-      return lambda.apply(this, values);
-    } finally {
-      _dynamicCallSite = saved;
-    }
+    // iterating from JS with no Scheme call Pair) leaves it equal to `dynSite` or
+    // absent, falling through unchanged. See: arrival-chain index-map fan-out.
+    return withDynamicCallSite(dynSite, () => lambda.apply(this, values));
   };
   wrapped[LAMBDA] = true;
   if (lambda.__name__) wrapped.__name__ = lambda.__name__;
@@ -369,23 +364,16 @@ function wrapLambda(lambda: LambdaFunction, dynSite: Invocation | undefined): La
 
 /** The ALambda twin of {@link wrapLambda}: re-install `_dynamicCallSite` on each invocation of a
  *  lambda VALUE passed as a HOF arg. Delegates to the original's apply term (its runner is
- *  private) inside the same save/deeper-of-two/restore the fn wrapper uses; the holder is read in
- *  the runner's synchronous prologue, so the finally-restore never races the bounced body. */
+ *  private) inside {@link withDynamicCallSite}; the holder is read in the runner's synchronous
+ *  prologue, so the finally-restore never races the bounced body. */
 function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALambda {
   const wrapped = new ALambda({
     name: lambda.name,
     arity: lambda.arity,
     scope: lambda.scope,
     ctx: lambda.ctx,
-    runner: (values, runCtx, canBounce) => {
-      const saved = _dynamicCallSite;
-      _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
-      try {
-        return lambda[tf("apply")](values, runCtx, canBounce);
-      } finally {
-        _dynamicCallSite = saved;
-      }
-    },
+    runner: (values, runCtx, canBounce) =>
+      withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, runCtx, canBounce)),
   });
   wrapped.__name__ = lambda.__name__;
   wrapped.__params__ = lambda.__params__;
@@ -1257,7 +1245,8 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       // foldSubstitutedDictKey only accepts AString/ASymbol/plain-string (else throws
       // E-DICT-BAD-KEY above) — a bare string form is wrapped so the stored key is
       // always a real DictKey object, keeping whatever provenance it already has.
-      const key: DictKey = keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(CONSTANT_CTX, name);
+      const key: DictKey =
+        keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(CONSTANT_CTX, name);
       pairs.push([key, processed[i + 1]]);
     }
     return new ADict(CONSTANT_CTX, pairs);
@@ -1496,7 +1485,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Dynamic call site: the caller (evaluatePair / wrapLambda) set the holder just before
     // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
     // prologue, so a wrapLambda finally-restore after this point is harmless (bodyCtx captured it).
-    const dynamicInv = _dynamicCallSite ?? ctx.currentInvocation;
+    const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
     // Lambda bodies start in tail position (R7RS §3.5): the terminal body expr is tail w.r.t. the
     // caller, so tail=true here propagates through evalBegin/evalIf/… to it.
     const bodyCtx: EvalContext = { ...ctx, resolver: callResolver, currentInvocation: dynamicInv, tail: true };
@@ -1850,7 +1839,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         loopResolver.define(param, values[i]);
       }
 
-      const dynamicInv = _dynamicCallSite ?? ctx.currentInvocation;
+      const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
       const bodyCtx: EvalContext = {
         ...ctx,
         resolver: loopResolver,
@@ -2120,13 +2109,13 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // legacy lambda arm below; an ANativeProcedure returns a value/promise (canBounce ignored).
   if (is_callable_value(proc)) {
     const dynSite = ctx.currentInvocation;
-    const __savedDynamicCallSite = _dynamicCallSite;
-    _dynamicCallSite = dynSite;
+    const __savedDynamicCallSite = currentDynamicCallSite();
+    setDynamicCallSite(dynSite);
     let r: CallResult;
     try {
       r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), ctx.runCtx ?? CONSTANT_CTX, is_lambda(proc));
     } finally {
-      _dynamicCallSite = __savedDynamicCallSite;
+      setDynamicCallSite(__savedDynamicCallSite);
     }
     if (is_bounce(r)) {
       if (ctx.tail) return yield { tailCall: { generator: r.generator } } as unknown as SchemeValue;
@@ -2139,8 +2128,8 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // through the trampoline so a tail `=>` collapses instead of overflowing.
   if (is_function(proc) && (proc as LambdaFunction)[LAMBDA] === true) {
     const dynSite = ctx.currentInvocation;
-    const __savedDynamicCallSite = _dynamicCallSite;
-    _dynamicCallSite = dynSite;
+    const __savedDynamicCallSite = currentDynamicCallSite();
+    setDynamicCallSite(dynSite);
     const __savedCanBounce = _canBounce;
     _canBounce = true;
     const wrappedArgs = wrapLambdaArgs([arg], dynSite);
@@ -2148,7 +2137,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     try {
       result = (proc as LambdaFunction)(...wrappedArgs);
     } finally {
-      _dynamicCallSite = __savedDynamicCallSite;
+      setDynamicCallSite(__savedDynamicCallSite);
       _canBounce = __savedCanBounce;
     }
 
@@ -2711,7 +2700,8 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // Unwrap an ArrivalError to the original raised value; the remaining catch path
         // only ever surfaces host `Error`s here (error()/make-error-object already produce
         // a real Error, and `ArrivalError.cause` carries it), so `caught` is an `Error`.
-        const caught: Error = caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
+        const caught: Error =
+          caughtError instanceof ArrivalError && caughtError.cause ? caughtError.cause : caughtError;
         // Conformance + security: a raw host `Error` here would make `error-object?`
         // return #f (non-conformant per §6.11) and leak host file paths (`.stack`/
         // `.fileName` are OWN properties the membrane's fast path hands across). Every
@@ -3094,8 +3084,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     // call back into lambdas oblivious — they see `_canBounce` false and
     // get a Promise as before. See the flag's war story.
     const dynSite = ctx.currentInvocation;
-    const __savedDynamicCallSite = _dynamicCallSite;
-    _dynamicCallSite = dynSite;
+    const __savedDynamicCallSite = currentDynamicCallSite();
+    setDynamicCallSite(dynSite);
     const __savedCanBounce = _canBounce;
     _canBounce = (fn as LambdaFunction)[LAMBDA] === true || is_lambda(fn);
     const __savedRunEnv = _currentRunEnv;
@@ -3125,7 +3115,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
               wrappedArgs,
             ) as SchemeValue);
     } finally {
-      _dynamicCallSite = __savedDynamicCallSite;
+      setDynamicCallSite(__savedDynamicCallSite);
       _canBounce = __savedCanBounce;
       _currentRunEnv = __savedRunEnv;
     }
