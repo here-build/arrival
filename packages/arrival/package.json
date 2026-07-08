@@ -105,7 +105,6 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sunrise": "vitest run --config vitest.sunrise.config.ts",
     "test-d": "vitest run --config vitest.typecheck.config.ts",
     "benchmarks": "vitest run --config vitest.benchmarks.config.ts",
     "typecheck": "tsc --noEmit && vitest run --config vitest.typecheck.config.ts"
