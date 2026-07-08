@@ -34,7 +34,6 @@ import { parse_argument } from "../utils/parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
-import { canonicalizeCurly } from "./curly-infix.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -83,11 +82,6 @@ interface ParserOptions {
   /** Strict (R7RS-faithful) parse — rejects loose-mode reader tolerances like
    *  `#void`/`#null`. Defaults false (loose), the studio default. */
   strict?: boolean;
-  /** SRFI-105 curly-infix `{a + b}` → `(+ a b)` (the pre-2026-07 default). Defaults
-   *  false: `{…}` reads as a DICT literal (≡ `(dict :k v …)`) and `[…]` as a vector
-   *  literal — the Clojure/JSON shapes models emit. Mutually exclusive on the `{}`
-   *  delimiter; `[…]` reads as a vector literal in BOTH modes. */
-  curlyInfix?: boolean;
 }
 
 function defaultFormatter(token: { token: string; col: number; offset: number; line: number }) {
@@ -103,7 +97,6 @@ export class Parser {
   private readonly _meta!: boolean;
   private readonly _source?: string;
   private readonly _strict!: boolean;
-  private readonly _curlyInfix!: boolean;
   private _refs!: (SchemeValue | Promise<SchemeValue>)[];
   // `parentheses` is the live descent depth (nesting-cap counter); `brackets` is the
   // open-delimiter stack holding each open's EXPECTED close char, so a close must
@@ -115,7 +108,6 @@ export class Parser {
     formatter = defaultFormatter,
     source,
     strict = false,
-    curlyInfix = false,
   }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
       value: formatter,
@@ -134,11 +126,6 @@ export class Parser {
     });
     Object.defineProperty(this, "_strict", {
       value: strict,
-      configurable: true,
-      enumerable: false,
-    });
-    Object.defineProperty(this, "_curlyInfix", {
-      value: curlyInfix,
       configurable: true,
       enumerable: false,
     });
@@ -285,8 +272,10 @@ export class Parser {
   }
 
   // `[` / `]` are NOT interchangeable list delimiters: s-expressions use `(` … `)`
-  // only. `[` … `]` is a VECTOR literal and `{` … `}` a DICT literal (or SRFI-105
-  // curly-infix under the opt-in `curlyInfix` flag) — see _read_object.
+  // only. `[` … `]` is a VECTOR literal and `{` … `}` a DICT literal — see
+  // _read_object. (SRFI-105 curly-infix n-expressions are BANNED — R6 — the
+  // reader's curly-infix mode was deleted; `{a * b}`-shaped forms door via
+  // make_dict_literal's infix-intent heuristic instead of silently misparsing.)
   is_open(token: string) {
     return token === "(";
   }
@@ -425,6 +414,34 @@ export class Parser {
    * symbol.
    */
   private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
+    // R6 infix-ban door, checked FIRST (before key validation reads its own, less
+    // specific, error into the same shape). SRFI-105 n-expressions always flatten to an
+    // ODD-length element sequence (k operands + k-1 operators = 2k-1) with a bare
+    // SYMBOL sitting in the "operator" slot at index 1 — `{a * b}`, `{a + b + c}`,
+    // `{a op b}` for ANY symbol op. Guard against the genuine-dict false positive
+    // `{:a foo :b}` (a valid key at index 0, `foo` its VALUE, `:b` a dangling key —
+    // odd arity, not infix): only fire when index 0 does NOT look like a key either
+    // (`staticDictKey`/`suffixKeyName`/`isUnquoteForm` all reject it), so the shape is
+    // "operand operator operand", never "key value key". That combination can never be
+    // a legitimate dict (a real one would have a key-shaped element 0), so it's
+    // unambiguously stray infix intent or reader-syntax confusion — both deserve this
+    // teaching door rather than the generic "bad key" message about `elements[0]`.
+    const head = elements[0];
+    const headLooksLikeKey =
+      suffixKeyName(head) !== null || staticDictKey(head) !== null || isUnquoteForm(head);
+    if (elements.length % 2 === 1 && elements.length >= 3 && elements[1] instanceof ASymbol && !headLooksLikeKey) {
+      const op = String(elements[1]);
+      throw new ParseError(
+        `\`{…}\` is a dict literal, not an infix expression — this reader has no curly-infix ` +
+          `mode (SRFI-105 n-expressions are not supported here). '${op}' in the middle position ` +
+          `looks like an infix operator; if you meant (${op} …), write the s-expression directly. ` +
+          `A dict literal needs alternating :keyword/value pairs, e.g. {:a 1 :b 2} — see ` +
+          `E-DICT-BAD-KEY/E-DICT-ODD-ARITY below for that grammar. Infix/neoteric syntax ` +
+          `(where \`{a * b}\` DOES mean (* a b)) lives in arrival-sugarcoat, not core arrival.`,
+        loc,
+        "E-DICT-INFIX-BANNED",
+      );
+    }
     // Key validation runs BEFORE the arity check (covers a trailing unpaired key too):
     // matches the char-incremental order the sampler's Σ mirror judges in — a key token
     // is judged the moment it completes, arity comes after — so `{a:1}` doors as the BAD
@@ -470,35 +487,6 @@ export class Parser {
       );
     }
     return makeDictLiteralNode(elements);
-  }
-
-  // SRFI-105 curly-infix: gather the flat datum sequence between `{` and `}` (transform to
-  // a canonical s-expr happens in canonicalizeCurly). Mirrors read_list's loop but collects a
-  // plain array and stops on `}`; `_read_object` recursion handles nested forms for free.
-  // Reached only under the opt-in `curlyInfix` flag — no comma-separator logic here (in
-  // infix mode `,` reads as unquote).
-  async read_curly_elements(): Promise<SchemeValue[]> {
-    const elements: SchemeValue[] = [];
-    while (true) {
-      const token = await this.peek();
-      if (token === eof) {
-        throw new Unterminated("unterminated curly-infix '{'");
-      }
-      if (typeof token === "string" && this.is_curly_close(token)) {
-        this._exitNesting(token, this._getLocation());
-        this.skip();
-        break;
-      }
-      if (token === ".") {
-        throw new ParseError("'.' not allowed in curly-infix", this._getLocation());
-      }
-      const node = await this._read_object();
-      if (node === eof) {
-        throw new Unterminated("unterminated curly-infix '{'");
-      }
-      elements.push(node as SchemeValue);
-    }
-    return elements;
   }
 
   async read_value() {
@@ -686,22 +674,15 @@ export class Parser {
     } else if (this.is_curly_open(token)) {
       this._enterNesting("}");
       this.skip();
-      if (this._curlyInfix) {
-        // Opt-in SRFI-105 curly-infix — the pre-2026-07 default, verbatim.
-        const elements = await this.read_curly_elements();
-        const datum = canonicalizeCurly(elements, loc);
-        if (loc && datum instanceof APair) {
-          datum.setLocation(loc);
-        }
-        return datum;
-      }
-      // `{…}` DICT literal (default): `{:k v …}` ≡ `(dict :k v …)` in code position;
-      // data under quote. See read_literal_elements (comma rule) / make_dict_literal
-      // (key doors) and docs/working-proposals/arrival-curly-vector-literals.md.
+      // `{…}` DICT literal (the ONLY `{}` grammar — R6: the reader's curly-infix mode
+      // is deleted; there is no flag that reads `{}` any other way): `{:k v …}` ≡
+      // `(dict :k v …)` in code position; data under quote. See read_literal_elements
+      // (comma rule) / make_dict_literal (key doors, including the infix-intent ban)
+      // and docs/working-proposals/arrival-curly-vector-literals.md.
       const elements = await this.read_literal_elements("}", true, "dict literal");
       return this.make_dict_literal(elements, loc ?? undefined);
     } else if (this.is_curly_close(token)) {
-      // Stray/mismatched `}` (read_curly_elements consumes its own close) — e.g. a `}`
+      // Stray/mismatched `}` (read_literal_elements consumes its own close) — e.g. a `}`
       // inside a `(` list. _exitNesting always throws here; the post-chain throw below
       // makes the non-return explicit for the type checker.
       this._exitNesting(token, loc ?? undefined);
