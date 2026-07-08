@@ -24,14 +24,6 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
   ): SequenceSymbolDef => {
-    // Erase here: TS can't statically match a raw sliced-args array to `impl`'s own
-    // `DecodedArgs<I>` tuple. By construction (the contract), it always matches.
-    const run = function (this: CallCtx, ...args: DecodedArgs<I, "scheme">) {
-      return impl(args, this.runCtx);
-    };
-    // Stamp fanout on the bound fn: cell-less packs bind `def.run` raw, so the lineage
-    // classifier reads `.fanout` off `env.get(op)` directly (the SPECULATE shape, minus the Symbol).
-    if (contract.fanout) (run as { fanout?: boolean }).fanout = true;
     return {
       kind: "sequence",
       name,
@@ -41,11 +33,14 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // Erased to the def's stored shape — SequenceSymbolDef.run is deliberately non-generic
       // (the same erasure boundary rosetta.ts's `rawImpl` crosses). By construction, the sliced
       // args array always matches `DecodedArgs<I,"scheme">`.
+      // Stamp fanout on the bound fn only when the contract declares it: cell-less packs bind
+      // `def.run` raw, so the lineage classifier reads `.fanout` off `env.get(op)` directly
+      // (the SPECULATE shape, minus the Symbol).
       run: Object.assign(
         function (this: CallCtx, ...args: unknown[]) {
           return impl(args as DecodedArgs<I, "scheme">, this.runCtx);
         },
-        { fanout: true },
+        contract.fanout ? { fanout: true } : {},
       ) as SequenceSymbolDef["run"],
       type: contract.type,
     };
