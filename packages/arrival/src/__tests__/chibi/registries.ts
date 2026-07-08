@@ -138,6 +138,38 @@ export const EXCLUDED: readonly Exclusion[] = [
     match: { kind: "symbols", anyOf: ["file-exists?", "delete-file"] },
     feature: "filesystem — sandbox omits",
   },
+  // Block-member symbol-visibility gap (manifest.ts blockMembers): each of these 5 is a
+  // `(let* ((out (open-output-string)) (value …)) (test … (get-output-string out)) (test …
+  // value))` block (r7rs-tests.scm §6.11, the SRFI-34 with-exception-handler examples) —
+  // the `value`-only companion test doesn't itself reference `open-output-string`/
+  // `get-output-string` (that's in the block's OWN binding head), so the ports Exclusion
+  // above never sees it. The sibling test in each pair (which DOES mention
+  // `get-output-string` directly) is already caught correctly.
+  {
+    match: { kind: "form", exact: normalizeText(`(test 65 value)`) },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+    note: "block-member symbol-visibility gap: `out`/`value` come from `open-output-string` in the enclosing `let*`, not this test's own datum",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 'exception value)`) },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 'positive value)`) },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 'negative value)`) },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 'zero value)`) },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   {
     match: {
       kind: "symbols",
@@ -164,6 +196,16 @@ export const EXCLUDED: readonly Exclusion[] = [
     feature: "numeric procedure not yet implemented",
   },
   {
+    match: { kind: "form", exact: normalizeText(`(test 35 (* root rem))`) },
+    feature: "numeric procedure not yet implemented — cascading: `root`/`rem` come from `exact-integer-sqrt` in the enclosing `let*-values`",
+    note: "block-member symbol-visibility gap (manifest.ts blockMembers): `exact-integer-sqrt` sits in the block's OWN binding head, not this member's datum",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 0 rem)`) },
+    feature: "numeric procedure not yet implemented — cascading: `rem` comes from `exact-integer-sqrt` in the enclosing `let*-values`",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
+  {
     match: { kind: "symbols", anyOf: ["let-values", "let*-values", "call-with-values", "values"] },
     feature: "multiple values (R7RS §6.10) — not fully supported",
   },
@@ -184,11 +226,143 @@ export const EXCLUDED: readonly Exclusion[] = [
     match: { kind: "symbols", anyOf: ["environment", "null-environment", "scheme-report-environment"] },
     feature: "eval/environment reification — omitted by design (arrival is pure dataflow)",
   },
+  {
+    match: { kind: "symbols", anyOf: ["delay", "force", "make-promise", "delay-force", "promise?"] },
+    feature:
+      "delayed evaluation (R7RS §4.2.5) — omitted by design (defers a value's identity to force-time, not " +
+      "construction-site; see r7rs/control.ts's notImplemented doors)",
+  },
+  {
+    match: { kind: "symbols", anyOf: ["make-parameter", "parameterize"] },
+    feature:
+      "dynamic bindings (R7RS §4.2.6) — omitted by design (ties identity to call-time extent, not " +
+      "construction-site; see r7rs/control.ts's notImplemented doors)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test 2 (head (tail (tail integers))))`),
+    },
+    feature: "delayed evaluation (R7RS §4.2.5 omitted) — cascading: `integers`'s own definition uses `delay`",
+    note:
+      "block-member symbol-visibility gap (manifest.ts blockMembers): the SETUP form defining `integers` via " +
+      "`delay` is a sibling of this test, not part of its own datum, so the `delay` Exclusion above never sees " +
+      "it — reported as a harness fix design, not editable here",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test 5 (head (tail (tail (stream-filter odd? integers)))))`),
+    },
+    feature: "delayed evaluation (R7RS §4.2.5 omitted) — cascading: `stream-filter`/`integers` use `delay-force`/`delay`",
+    note: "same block-member symbol-visibility gap as the `integers` row above",
+  },
+  {
+    match: { kind: "symbols", anyOf: ["any-arity", "rest-arity", "dead-clause"] },
+    feature: "case-lambda (R7RS §4.2.6-adjacent lambda form) — not implemented (no `case-lambda` binding anywhere in env/)",
+  },
+  {
+    match: { kind: "symbols", anyOf: ["radix"] },
+    feature: "dynamic bindings (R7RS §4.2.6 omitted) — cascading: `radix` is defined via the doored `make-parameter`",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test "12" (f 12))`) },
+    feature: "dynamic bindings (R7RS §4.2.6 omitted) — cascading: `f` calls the never-defined `radix` parameter",
+    note: "block/setup symbol-visibility gap — `f`'s own definition references `radix`, not this test's datum",
+  },
+  {
+    match: {
+      kind: "symbols",
+      anyOf: ["current-second", "current-jiffy", "jiffies-per-second", "features"],
+    },
+    feature: "process/system (R7RS §6.14) — sandbox omits (extends the command-line/exit/env-var rule above)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #t (list? env))`) },
+    feature: "process/system (R7RS §6.14) — sandbox omits `get-environment-variables`",
+    note: "block-member symbol-visibility gap: `env` is bound via `get-environment-variables` in the enclosing `let`, not this test's own datum",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #t (all? env-pair? env))`) },
+    feature: "process/system (R7RS §6.14) — sandbox omits `get-environment-variables`",
+    note: "same block-member symbol-visibility gap as the row above",
+  },
+  // -----------------------------------------------------------------------
+  // `define-record-type` — genuinely UNBOUND (not a notImplemented door; verified via direct
+  // exec: "Unbound variable `define-record-type'"), i.e. not implemented at all. As the
+  // superseded-note above (§ "5 Program structure") already anticipated: it only ever heads a
+  // `setup` step, never a TestStep, so it's structurally dead as a `symbols` Exclusion; the
+  // downstream accessor tests use corpus-chosen names (kons/kar/kdr/pare?/set-kar!) that
+  // aren't safely enumerable as a general rule (kar/kdr in particular collide with the
+  // c[ad]+r resolver-structural family). Transcribed as five `form`-exact rows instead —
+  // the anticipated follow-up triage.
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "form", exact: normalizeText(`(test #t (pare? (kons 1 2)))`) },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #f (pare? (cons 1 2)))`) },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 1 (kar (kons 1 2)))`) },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 2 (kdr (kons 1 2)))`) },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test 3 (let ((k (kons 1 2)))
+          (set-kar! k 3)
+          (kar k)))`),
+    },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
 ];
 
 // ── EXPECTED_FAILURES — documented deviations, not bugs (§11.2 point 2). ─────────────────────
 
 export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
+  // -----------------------------------------------------------------------
+  // Keyword-migration hygiene gap (src/eval/evaluator.ts / src/env/core/core.ts) — the
+  // DOMINANT signature (72 rows, all of "Numeric syntax"). `test-numeric-syntax`'s
+  // syntax-rules template (r7rs-tests.scm:2297-2304) expands to a literal `(let* (…) …)`.
+  // `let*` is one of the special forms NOT YET migrated to a `symbol.keyword` marker
+  // (core.ts only keywords lambda/define/let/if/begin/quote/quasiquote/cond/case/when/
+  // unless — core.ts:41's own comment says "let* / letrec / and / or follow as the
+  // remaining primitives are keyworded", i.e. this is a KNOWN, planned, incomplete
+  // migration, not a fresh bug). Mechanism: syntax-rules.ts's `rename()` hygiene-renames
+  // every free template identifier to a gensym, copying the identifier's ENV VALUE onto
+  // the gensym IF ONE EXISTS (`defChild.lookupSettled(name)`); a keyworded special form
+  // has a real env value (a `Keyword` instance) to copy, so it round-trips through
+  // `evaluatePair`'s VALUE-FIRST dispatch (`resolved instanceof Keyword ? SPECIAL_FORMS[
+  // resolved.name] : …`) regardless of the gensym. `let*` has NO env binding (it's dispatched
+  // purely by `SPECIAL_FORMS[symbol_name(first)]`, the STRING-keyed fallback) — so the
+  // renamed head is a bare gensym backing a JS `Symbol("#:let*")` with no copied value.
+  // `symbol_name()` reads the gensym's `.description` ("#:let*"), which misses the
+  // `SPECIAL_FORMS["let*"]` table entirely, falls through to variable-lookup, and throws
+  // "Unbound variable `Symbol(#:let*)'" (the JS Symbol's raw toString(), not the description
+  // — evaluator.ts:3054's error path stringifies `first.__name__` directly).
+  // Minimal repro (verified): a `(define-syntax m (syntax-rules () ((m x) (let* ((z x)) z))))`
+  // then `(m 42)` throws this exact error; the same shape with `let` (already keyworded)
+  // returns 42 cleanly. Fix design: add `let*`, `letrec`, `letrec*`, `and`, `or` (and
+  // arguably `do`/`while`/`try`) as `symbol.keyword` bindings in core.ts, mirroring the
+  // existing 11 — purely additive (SPECIAL_FORMS already has working handlers for all of
+  // these; only the value-first dispatch path is missing). Real interpreter bug — a bug
+  // report, not a harness defect — high value given it's the single largest red cluster.
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "symbols", anyOf: ["test-numeric-syntax"] },
+    reason:
+      "hygiene gap: test-numeric-syntax's syntax-rules template expands to a literal `let*`, which isn't yet a " +
+      "symbol.keyword (core.ts) — the hygienic renamer mints a gensym with no copied env value, and " +
+      "SPECIAL_FORMS['let*'] (string-keyed) never sees the renamed head — 'Unbound variable `Symbol(#:let*)`'",
+    gate: "core.ts: add let*/letrec/letrec*/and/or as symbol.keyword bindings (core.ts:41's own planned-next comment)",
+  },
   {
     match: { kind: "form", exact: "(test #f (= 9007199254740992.0 9007199254740993))" },
     reason: "IEEE 754 precision limit: numbers beyond 2^53 lose precision when inexact",
@@ -228,14 +402,43 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored",
     gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
   },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 6 (+ x 1))`) },
+    reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set! x 5)` doors, aborting before this member runs",
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers (harness fix design, not editable here)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 6 (force p))`) },
+    reason:
+      "intentional — purity invariant; cascading — `(define p (delay (begin (set! count …) …)))` evaluates its " +
+      "argument (applicative order) before `delay`'s own door fires, so `set!` throws first",
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #t (eqv? x y))`) },
+    reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #f (list? y))`) },
+    reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #f (list? x))`) },
+    reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
   // -----------------------------------------------------------------------
   // Macro engine / hygiene gaps — pre-L1, separate from AValue work.
+  //
+  // NOTE: `let-syntax` (v1/early-v2 rule, symbols:["let-syntax"]) was REMOVED —
+  // r7rs-tests.scm:408's nested let-syntax/syntax-rules hygiene test now passes
+  // (verified directly via exec: returns 'outer as expected). Its only other match,
+  // r7rs-tests.scm:398, is independently caught by the "set!" rule above (that test's
+  // body also contains a literal set!, and "set!" precedes this bucket in iteration
+  // order) — so the rule was fully dead and is deleted, not just narrowed.
   // -----------------------------------------------------------------------
-  {
-    match: { kind: "symbols", anyOf: ["let-syntax"] },
-    reason: "let-syntax + nested syntax-rules don't bind cleanly — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine",
-  },
   {
     match: { kind: "symbols", anyOf: ["swap!"] },
     reason: "Local define-syntax + set! inside the rewrite — pre-L1 hygiene gap",
@@ -281,8 +484,16 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     reason: "Nested define-syntax (ffoo → ff) — inner macro unbound — pre-L1 macro engine gap",
     gate: "pre-L1 macro engine (nested define-syntax)",
   },
+  // NOTE: narrowed from the original symbols:["elli-esc-1"] (3 matches) — the zero-arg
+  // call `(elli-esc-1)` @472 now passes (verified directly via exec: returns '... as
+  // expected). The 1-arg/2-arg calls below remain genuinely broken.
   {
-    match: { kind: "symbols", anyOf: ["elli-esc-1"] },
+    match: { kind: "form", exact: normalizeText(`(test '(100 ...) (elli-esc-1 100))`) },
+    reason: "Ellipsis-escape (... ...) in the syntax-rules template — pre-L1 macro engine gap",
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test '(... 100 200) (elli-esc-1 100 200))`) },
     reason: "Ellipsis-escape (... ...) in the syntax-rules template — pre-L1 macro engine gap",
     gate: "pre-L1 macro engine (ellipsis handling)",
   },
@@ -298,6 +509,31 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
         '(test \'#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:" . "tail")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77 . "tail")))',
     },
     reason: "Improper-list (dotted-tail) ellipsis pattern — pre-L1 macro engine gap",
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
+  // Ellipsis sub-pattern `(m n) ...` in the MIDDLE of a pattern (followed by a fixed `x y`
+  // tail) — verified: `m`/`n` bind to `()` instead of the collected elements (expected
+  // `(31 41 51)`/`(32 42 52)`, actual `()`/`()`); the head/tail-only parts (`a b`, `x y`)
+  // bind fine. A middle-ellipsis-sub-pattern capture gap, same family as the other pre-L1
+  // ellipsis-handling rows above.
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(
+        `(test '#((10 43) (31 41 51) (32 42 52) (63 77)) (part-2 10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77))`,
+      ),
+    },
+    reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(
+        `(test '#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77)))`,
+      ),
+    },
+    reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
     gate: "pre-L1 macro engine (ellipsis handling)",
   },
   {
@@ -324,8 +560,14 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     reason: "Lambda identity — lookup/eval yields distinct closures, eq? sees two objects — pre-L1",
     gate: "pre-L1 (evaluator identity)",
   },
+  // NOTE: narrowed from the original symbols:["gen-counter"] (2 matches) — that broad rule
+  // ALSO caught `(test #f (eqv? (gen-counter) (gen-counter)))` @713, which now passes:
+  // two SEPARATE gen-counter calls legitimately produce non-eqv? closures regardless of the
+  // identity bug, so the expected #f actually holds (verified directly via exec). Only the
+  // self-comparison form below (the same lexical binding looked up twice, the actual identity
+  // bug's shape) remains genuinely broken.
   {
-    match: { kind: "symbols", anyOf: ["gen-counter"] },
+    match: { kind: "form", exact: normalizeText(`(test #t (let ((g (gen-counter))) (eqv? g g)))`) },
     reason: "Lambda identity — same root cause as the (eq? p p) case above",
     gate: "pre-L1 (evaluator identity)",
   },
@@ -335,13 +577,112 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "pre-L1 (evaluator identity)",
   },
   // -----------------------------------------------------------------------
-  // 6.5 Symbols — bootstrap's symbol->string / string->symbol uses raw JS-property
-  // dot-syntax that doesn't resolve through the current Environment.get path.
+  // 6.5 Symbols — symbol->string/string->symbol REMOVED (v1/early-v2 rule). Verified fixed:
+  // the described bug ("core.ts uses JS dot-access that no longer resolves") no longer applies
+  // — the implementation moved to r7rs/equality.ts and uses `s.__name__` cleanly (a real
+  // ASymbol API, not raw dot-access into a stale type). Direct exec confirms
+  // `(symbol->string 'flying-fish)` → "flying-fish". All 7 matched rows now pass; the stale
+  // it.fails rows were the ONLY thing keeping them red (was failing with "Expect test to fail").
+  // -----------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Harness comparator bug — chibi-test-equal?'s inexact branch (harness-capability.ts prelude)
+  // computes `(< (abs (- a b)) epsilon)`; for two infinities this is `(- +inf.0 +inf.0)` = NaN,
+  // and `(< NaN _)` is always #f — so comparing any two equal infinities always "fails" even
+  // though `expected`/`actual` print identically. NOT an arrival interpreter bug (confirmed:
+  // `(eqv? (max 100 +inf.0) +inf.0)` → #t; the interpreter's own equality is correct) — it's the
+  // harness's OWN comparator prelude, out of scope to edit here (report only). Fix design: special-
+  // case `(and (infinite? a) (infinite? b))` → `(= a b)` before the epsilon subtraction, or route
+  // through `=` first when both operands are non-finite.
   // -----------------------------------------------------------------------
   {
-    match: { kind: "symbols", anyOf: ["symbol->string", "string->symbol"] },
-    reason: "core.ts uses JS dot-access (s.__name__, scheme.SchemeSymbol) that no longer resolves — pre-L1",
-    gate: "pre-L1 (core.ts env resolution)",
+    match: { kind: "form", exact: normalizeText(`(test +inf.0 (max 100 +inf.0))`) },
+    reason: "harness comparator bug (chibi-test-equal?): epsilon-diff of two +inf.0 is NaN, never < epsilon",
+    gate: "harness-capability.ts prelude fix (report only — not an arrival interpreter bug)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test -inf.0 (min -inf.0 -100))`) },
+    reason: "harness comparator bug (chibi-test-equal?): epsilon-diff of two -inf.0 is NaN, never < epsilon",
+    gate: "harness-capability.ts prelude fix (report only — not an arrival interpreter bug)",
+  },
+  // -----------------------------------------------------------------------
+  // member/assoc custom-compare bug (src/env/r7rs/lists.ts): the native impl calls
+  // `compare(obj, x)` as a RAW JS function invocation, but a scheme-level procedure value
+  // (e.g. `string-ci=?`, `=`, or any user lambda) decodes to a boxed `ANativeProcedure`/ALambda
+  // object, not `typeof === "function"` — so the call throws "compare is not a function" (a
+  // plain JS TypeError, wrapped by the evaluator as "internal error in `?`: …"). Every OTHER
+  // list native taking a user procedure (map/for-each/etc in the same file) correctly invokes
+  // via `call_function(fn, args, {runCtx})` — member/assoc are the outliers calling it directly.
+  // Fix design: replace `compare(obj, current.car)` with `call_function(compare, [obj,
+  // current.car], {})` in both `member` and `assoc` (lists.ts ~L559, ~L583), matching
+  // `mapImpl`'s pattern. Confirmed via direct exec repro; genuine interpreter bug, report only.
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "form", exact: normalizeText(`(test '("b" "c") (member "B" '("a" "b" "c") string-ci=?))`) },
+    reason: "member's custom `compare` is invoked as a raw JS call, not via call_function — throws on any boxed scheme procedure",
+    gate: "src/env/r7rs/lists.ts member/assoc fix (report only — genuine interpreter bug)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test '(2 4) (assoc 2.0 '((1 1) (2 4) (3 9)) =))`) },
+    reason: "assoc's custom `compare` is invoked as a raw JS call, not via call_function — throws on any boxed scheme procedure",
+    gate: "src/env/r7rs/lists.ts member/assoc fix (report only — genuine interpreter bug)",
+  },
+  // -----------------------------------------------------------------------
+  // guard/raise value-loss bug (src/eval/evaluator.ts evalTry, ~L2693-2694): when `%raise`
+  // throws a RAW non-Error scheme value (e.g. a pair — R7RS raise accepts ANY object), the
+  // catch handler's `error instanceof Error` check is false, so it falls to
+  // `new Error(String(error))` — STRINGIFYING the raised value and permanently losing it. The
+  // `condition` variable guard's `catch` binds is therefore an R7RSError whose message is the
+  // printed original value, not the original value itself — so `(assq 'a condition)` etc. can
+  // never match, every clause falls through to `(else (raise ,var))`, and the (now twice-
+  // stringified) error surfaces at the top level. Confirmed via direct repro: `assq` on the
+  // raised list works fine in isolation; only the guard/catch round-trip loses it. Only trips
+  // for raise of NON-Error data (raising via `error`/`make-error-object` already produces a
+  // real Error instance, unaffected — hence only these 3 rows, not all of 6.11).
+  // Fix design: in evalTry's catch, detect a raw (non-Error) scheme value BEFORE the
+  // `instanceof Error` branch and preserve it directly as `errorValue` (skip the R7RSError
+  // wrap-and-stringify path entirely for that case) — condition should bind the ORIGINAL raised
+  // value, not a re-presentation of it. Genuine interpreter bug, report only.
+  // -----------------------------------------------------------------------
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test 42
+    (guard (condition
+            ((assq 'a condition) => cdr)
+            ((assq 'b condition)))
+      (raise (list (cons 'a 42)))))`),
+    },
+    reason: "guard/raise of a raw non-Error value gets stringified by evalTry's catch, losing the original value",
+    gate: "src/eval/evaluator.ts evalTry fix (report only — genuine interpreter bug)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test '(b . 23)
+    (guard (condition
+            ((assq 'a condition) => cdr)
+            ((assq 'b condition)))
+      (raise (list (cons 'b 23)))))`),
+    },
+    reason: "guard/raise of a raw non-Error value gets stringified by evalTry's catch, losing the original value",
+    gate: "src/eval/evaluator.ts evalTry fix (report only — genuine interpreter bug)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test 'caught-d
+    (guard (condition
+            ((assq 'c condition) 'caught-c)
+            ((assq 'd condition) 'caught-d))
+      (list
+       (sqrt 8)
+       (guard (condition
+               ((assq 'a condition) => cdr)
+               ((assq 'b condition)))
+         (raise (list (cons 'd 24)))))))`),
+    },
+    reason: "guard/raise of a raw non-Error value gets stringified by evalTry's catch, losing the original value",
+    gate: "src/eval/evaluator.ts evalTry fix (report only — genuine interpreter bug)",
   },
 ];
 
