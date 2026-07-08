@@ -39,9 +39,17 @@ Full mechanical list: `knip` with the config used lives in the session scratchpa
 `npx knip --config knip.json --include exports,types,files` with entries = the 14 package.json
 export targets, project = `src/**` minus test dirs.
 
-### Bucket 1 — DEAD (unreachable from production, no live external consumer, no behavioral
-invariant anchoring it). Safe to delete; verified against foundations/, second-foundation/,
-here.build/, inhuman/:
+### Bucket 1 — DEAD candidates (unreachable from production entries, no live external
+consumer found by grep, no behavioral invariant anchoring them)
+
+> **V review required per item before deletion** (2026-07-08): several entries static
+> analysis flags are in fact live or imminently-live — reachability from package exports
+> misses scheme-surface dispatch, planned wiring, and workflow-in-flight consumers. Treat
+> this list as a QUESTION per line, not a verdict. Note also: the provenance tracing spine
+> (trace/scope-id/trace-snapshot) moved INTO core on 2026-07-08 — provenance-adjacent
+> "unused" flags predate that move.
+
+Verified against foundations/, second-foundation/, here.build/, inhuman/:
 
 - `src/bindings.ts` — whole file, zero importers
 - `src/utils/balanced.ts` — whole file after the Formatter deletion trimmed its last reader

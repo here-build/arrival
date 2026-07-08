@@ -1,0 +1,41 @@
+## Findings
+
+`evaluator.spec.ts > evaluate() > "should handle JS functions that return promises"` — [P1] RETAG transitional: `env.set("async-add", async (a,b)=>...)` binds a bare JS fn, `expect(result).toBe(30)` asserts raw unboxed pass-through — the exact scheduled-inversion pattern (comment: "With membrane, JS functions receive JS values (not SchemeExact)"); dies with the reverse-membrane migration.
+
+`evaluator.spec.ts > special forms > cond > "should handle => syntax"` — [P1] RETAG transitional: `env.set("double", (x:number)=>x*2)` bare-fn producer, `expect(await exec(code,{env})).toBe(6)` raw pass-through (comment: "Result passes through fromJS which keeps numbers as-is") — same convention as above, same fate.
+
+`evaluator.spec.ts > "special forms" (whole describe, ~30 point-assertions) vs generator-exec.spec.ts > "exec() - special forms"/"data structures" vs chibi-r7rs.spec.ts` — [P15 redundancy] RULING-NEEDED: three suites re-assert the same if/let/let*/letrec/begin/and/or/cond/case/do point semantics at three altitudes (hand-built AST+bare-fn env / string-source+full env / official R7RS corpus). chibi is the authoritative coherence law; evaluator.spec.ts's hand-AST layer duplicates generator-exec.spec.ts almost 1:1 minus a few evaluator-only cases (empty begin, if-without-else, nested-if, closures, rest-params) — keep those, drop the rest as point-duplicate of an established coherence law.
+
+`curly-infix.test.ts > "SRFI-105 base classifier"/"arithmetic precedence"/"any single operator folds"/"errors-as-door"/"quote distribution"/"non-regression"/"structural errors" (~40 tests, all "flag on")` — [P14] RULING-NEEDED: `curlyInfix` lives only on `ParserOptions`; `ExecOptions` (generator-exec.ts) has no passthrough and `parse()`/`exec()` never forward it — confirmed via grep, no production entry (CLI/MCP/capability) can ever reach curly-infix. This is PRINCIPLES.md's own cited P14 example. Options: (a) wire `curlyInfix` through `ExecOptions`, or (b) retag the file as reader-internal-only (matching parser.test.ts's honest framing) and trim from ~40 exhaustive invariants for an unreachable path.
+
+`curly-infix.test.ts > "lexer tokenization" / "the flag gate — default (flag OFF)" / "pure module is independently testable"` — Clean: tokenization is flag-agnostic (real behavior), default dict/vector-literal grammar is actually shipped, FIXITY/canonicalizeCurly are pure functions legitimately unit-tested directly.
+
+`r7rs-unicode.test.ts > "known bugs (it.fails — flipping to green = regression of the bug)"` (5 tests) — [P15] RETAG: describe title + header prose claim `it.fails` semantics with "predicted failure values," but every test is a plain `it(...)`. Ran the suite — all pass today, so the described bugs are already fixed; the "known bug"/predicted-failure language is stale and could mislead a future reader into thinking there's a live tracked bug. Reframe like r7rs-numbers.test.ts's honest "FIXED" language.
+
+`r7rs-identity.test.ts > "known bugs (it.fails — flipping to green = regression of the bug)"` (3 tests) — [P15] RETAG: identical issue to the unicode file — plain `it()`, verified passing, stale it.fails/predicted-failure framing.
+
+`r7rs-numbers.test.ts, r7rs-unicode.test.ts, r7rs-identity.test.ts > shared num()/truthy() coercion helpers` — [P4] RULING-NEEDED: helpers tolerate boolean-as-raw / boxed-with-valueOf / object-with-`.value`, and number-as-raw/bigint/valueOf simultaneously — literally the "accepts boxed or raw" contract P4 forbids, baked into shared test infra across 3 files instead of exposing exec()'s inconsistent exit convention. Should collapse to one asserted shape once the membrane purge lands.
+
+`module-composition.spec.ts > "Resolver Yielding" / "_lookupWithResolvers"` (all 3 tests) — [P16] RULING-NEEDED: pins the underscore-named `_lookupWithResolvers` directly with hand-rolled `ResolverSpec`s, bypassing `exec()`. Confirmed via grep this is real production surface (`Resolver.ts`, `Capabilities.ts`, `LexicalScope.ts`, `common/capability.ts` all call it) not a test-only hack, and sibling suites outside this cluster (`common/__tests__/capability.test.ts`, `capabilities-assembled.test.ts`) may already cover the same resolution order via capabilities+exec(). If so, DELETE as a lower-altitude duplicate; if not, RETAG the header to justify it as a deliberate internal-module unit test (parallel to parser.test.ts) rather than an accidental test-only-API artifact.
+
+`generator-exec.spec.ts > "async/promise handling" > "should handle promises returned from JS functions"` — REWRITE: name promises "handle promises returned from JS functions," but the source defines `async-add` as a pure scheme `(lambda (a b) (+ a b))` — no async fn, no promise anywhere. It only tests cross-top-level-form lambda persistence (a real, legitimate invariant) — mislabeled, not broken. Rename to match what it tests.
+
+## Clean
+
+- `let-bracket-binding-door.test.ts` — well-scoped named superset (R1-R9), doors use precise E-LET-BRACKET-* codes (legit P16 drift-alarm use), R3 equivalence exercised as a coherence law via `assertEquivalent`.
+- `cond-case-do-bracket-clause.test.ts` — same pattern, same verdict.
+- `escaped-symbols.test.ts` — uses `defineRosetta`/`jsToScheme`/`schemeToJs` throughout, the correct membrane doors; no raw env.set bare-fn producers.
+- `parser.test.ts` — pure reader-layer unit tests, round-trips via toString(), honestly framed as bypassing exec() for a fast behavioral floor.
+- `tail-call.test.ts` — exemplary; positive/negative proof design explicitly documented; the one impl-pinned tap-balance assertion is justified (no public observable equivalent).
+- `abort.test.ts` — raceAbort's impl-pinning explicitly justified (parked-promise abort is unobservable through exec() from inside a vitest test).
+- `chibi-r7rs.spec.ts` (harness level) — exemplary; anti-vacuity floor, per-row reporting, EXCLUDED/EXPECTED_FAILURES/SKIPPED registries all match PRINCIPLES.md's own model-of-staging-done-right description.
+- `syntax-rules-arity-offbyone.test.ts` — correct `it.fails` usage for the genuinely-unfixed vector-pattern gap; the positive control for P15.
+- `syntax-rules-special-forms.test.ts`, `syntax-rules-tail-proper.test.ts` — routed through real `exec()`/`sandboxedEnv`/`schemeToJs`, no shortcuts.
+- `r7rs-numbers.test.ts` — both describe blocks honestly framed ("FIXED at ..."), no stale it.fails claims.
+
+## Counts
+
+- Tests/groups judged: ~18 files, ~346 invariants per the atlas index.
+- Findings: 9 (2 P1 RETAG, 1 P15 redundancy RULING-NEEDED, 1 P14 RULING-NEEDED, 2 P15 RETAG, 1 P4 RULING-NEEDED, 1 P16 RULING-NEEDED, 1 REWRITE).
+- Clean files: 10 of the ~14 files in cluster (curly-infix split between Clean subset and P14 finding).
+- DELETE/FLIP-TO-FAILS verdicts: 0 (no current-broken-behavior-pinned-green found; the r7rs-* "known bugs" issue is stale-labeling on already-passing tests, not a live P15 violation).
