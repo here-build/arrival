@@ -20,7 +20,7 @@ import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./sch
 import type { AEntity } from "./symbol.js";
 import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
-import { ANativeProcedure } from "../values/primitives/ACallable.js";
+import { ANativeProcedure, type CallableImpl } from "../values/primitives/ACallable.js";
 import { CallCtx, makeCallCtx } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -251,16 +251,57 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
               }
               case "sequence":
               case "tagless":
-              case "tagless-guard":
-              case "rosetta": {
-                // `run` is the COMPLETE decode→validate→impl→encode→mint wrapper.
-                // Bind it via `set`, NOT defineRosetta — routing it through defineRosetta would
-                // double-wrap the membrane (a second schemeToJs/jsToScheme over the codec output).
-                // Resource pre-spawning still applies if the capability owns cells.
-                const runFn = def.run;
-                // The four kinds' `.run` share the call SHAPE but not a common `this` type
+              case "tagless-guard": {
+                // `run` is the complete ctx-aware wrapper. Bind it as a first-class
+                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term
+                // (the B2 binder cut: no bare JS functions in env value space, P1). These
+                // three kinds read ONLY `this.runCtx` — the apply term's threaded runCtx
+                // reconstructs their `this` losslessly (`makeCallCtx(runCtx)`). Resource
+                // pre-spawning gates inside the impl when the capability owns cells.
+                //
+                // The kinds' `.run` share the call SHAPE but not a common `this` type
                 // (tagless/tagless-guard declare none at all) — erase once here, the same
                 // boundary rosetta.ts's own `rawImpl` crosses.
+                const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
+                // Boundary cast per applyCallback's convention: the wrapper produces scheme
+                // values by construction; TS sees only `unknown`.
+                const impl: CallableImpl =
+                  cellList.length === 0
+                    ? (args, runCtx) => rawRun.apply(makeCallCtx(runCtx), args) as Promise<SchemeValue>
+                    : async (args, runCtx) => {
+                        await ensureSpawned();
+                        return (await rawRun.apply(makeCallCtx(runCtx), args)) as SchemeValue;
+                      };
+                const proc = new ANativeProcedure({
+                  name: verb,
+                  // Arity is introspection-only in this cut; tighten from `def.in` when the
+                  // MCP/type-lens surface consumes it.
+                  arity: { min: 0, max: null },
+                  contract: def,
+                  impl,
+                });
+                // Preserve the marker the lineage classifier reads OFF THE BOUND VALUE
+                // (sequence.ts stamps `.fanout` on `def.run`; the classifier now finds it
+                // on the bound ANativeProcedure instead).
+                const markers = def.run as { fanout?: boolean };
+                if (markers.fanout) (proc as { fanout?: boolean }).fanout = true;
+                bindTarget(def).set(verb, proc);
+                break;
+              }
+              case "rosetta": {
+                // DELIBERATELY NOT CONVERTED to ARosettaProcedure in the B2 cut: a source
+                // rosetta MINTS its provenance off `this.invocation.currentInvocation`, and
+                // the apply term threads ONLY `runCtx` (run-level state) — the per-call
+                // invocation has no seam through the term yet. Converting here silently
+                // degrades every source rosetta's mint to the input-union fallback
+                // (conservation.law's seal-laundering rows catch it). The invocation-
+                // threading design belongs to the rosetta stage-3 migration (see
+                // reverse-membrane-for-callables.md §7b + ACallable.ts's ARosettaProcedure
+                // doc). Until then: the legacy bare-fn binding, whose evaluator path passes
+                // `makeCallCtx(ctx.runCtx, ctx.currentInvocation)`.
+                //
+                // Bind via `set`, NOT defineRosetta — that would double-wrap the membrane.
+                const runFn = def.run;
                 const rawRun = runFn as (...args: unknown[]) => unknown;
                 const gatedRun =
                   cellList.length === 0

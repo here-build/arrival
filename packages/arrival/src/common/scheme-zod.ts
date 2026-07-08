@@ -364,10 +364,20 @@ export const bytevector = named(
   }),
 );
 
-/** Raw predicate for a plain JS function — the "lambda" half of the `procedure` scheme side. */
+/** Raw predicate for a callable — a callable VALUE (ALambda/ANativeProcedure/
+ *  ARosettaProcedure, the post-B2 shape every builtin binds as) or a plain JS function.
+ *  [INVERTS: reverse-membrane/P1] the bare-fn arm: it admits the legacy bare-function
+ *  callables (defineRosetta wrappers, user-borrowed fns) and dies when B4 retires the
+ *  legacy arm — the predicate then narrows to the ACallable union alone. */
 export const lambda = named(
   "lambda",
-  z.custom<(...args: unknown[]) => unknown>((v) => typeof v === "function"),
+  z.custom<(...args: unknown[]) => unknown>(
+    (v) =>
+      typeof v === "function" ||
+      v instanceof ALambda ||
+      v instanceof ANativeProcedure ||
+      v instanceof ARosettaProcedure,
+  ),
 );
 
 // ---------------------------------------------------------------------------
