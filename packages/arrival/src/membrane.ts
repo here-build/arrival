@@ -34,7 +34,6 @@ import { Macro } from "./eval/Macro.js";
 import { AExact } from "./values/primitives/AExact.js";
 import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
-import { LAMBDA } from "./well-known-symbols.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme } from "./rosetta.js";
@@ -84,12 +83,17 @@ export { markInteropBoundary as markAsSandboxBoundary } from "./interop-access.j
 /**
  * The closed union of "already scheme, don't re-wrap" types: every wrapper class,
  * native scheme type, special-form head (Macro/Syntax/Keyword), env, promise, and
- * a branded scheme lambda (a `Function` carrying the LAMBDA brand). A SUPERSET of
+ * a bare `Function` (the quarantined `env.defineRosetta` legacy authoring arm — see
+ * capability.ts — still binds a bare host function into value space). A SUPERSET of
  * the value-intent `SchemeValue` union — the JS→Scheme boundary legitimately
  * admits CONTROL forms that are never values (Macro/Syntax/LambdaContext/
- * SchemeEnvironment, a bare branded `Function`). That's why `BoxedSchemeValue`
+ * SchemeEnvironment, a bare `Function`). That's why `BoxedSchemeValue`
  * isn't assignable to `SchemeValue`, and why the membrane keeps its own boundary
  * type instead of widening the value union.
+ *
+ * (The `[LAMBDA]`-branded scheme-lambda case this union/predicate once carried is
+ * RETIRED — reverse-membrane-for-callables.md §3 step 1: every scheme lambda is a
+ * real `ALambda` now, caught by the `instanceof AValue` case below.)
  */
 export type BoxedSchemeValue =
   | ANil
@@ -153,9 +157,6 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     case value instanceof Syntax:
     case value instanceof LambdaContext:
     case value instanceof SchemeEnvironment:
-
-    // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
-    case typeof value === "function" && LAMBDA in value:
       return true;
 
     default:

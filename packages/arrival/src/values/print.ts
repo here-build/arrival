@@ -3,10 +3,11 @@
 // drift (this replaces both printer.ts's get_instances map AND APair.ts's local stringifyValue).
 //
 // This module is a LEAF: it holds only the dispatch plus the NON-AValue residual — raw JS functions
-// (a lambda/native), raw JS bottoms, and foreign objects — the three things that aren't boxed Scheme
-// values and therefore can't carry a print method. It imports nothing class-specific, so any value
-// class can import `printValue` for its child recursion without a cycle.
-import { LAMBDA } from "../well-known-symbols.js";
+// (the quarantined `env.defineRosetta` legacy authoring arm's bare-fn output — a real scheme
+// lambda is an ALambda now, answering `arrival/print` directly, reverse-membrane-for-callables.md
+// §3 step 1), raw JS bottoms, and foreign objects — things that aren't boxed Scheme values and
+// therefore can't carry a print method. It imports nothing class-specific, so any value class can
+// import `printValue` for its child recursion without a cycle.
 
 interface Printable {
   "arrival/print"(): string;
@@ -44,18 +45,18 @@ function printForeign(value: unknown): string {
   return String(value);
 }
 
-// A raw JS procedure (a Scheme lambda carries the LAMBDA brand; a native is a bare function) —
-// every procedure renders as `#<procedure:name>` or `#<procedure>`, no native/lambda split.
+// A raw JS procedure reaching here is the quarantined `env.defineRosetta` legacy authoring
+// arm's bare-fn output — every scheme-authored lambda is an ALambda now, answering
+// `arrival/print` directly (isPrintable catches it before this fn ever runs). Renders as
+// `#<procedure:name>` or `#<procedure>`.
 function functionRepr(fn: object): string {
   const f = fn as { __name__?: string | symbol; name?: string };
   if (f.__name__ != null) {
     const name =
-      typeof f.__name__ === "symbol"
-        ? f.__name__.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1")
-        : f.__name__;
+      typeof f.__name__ === "symbol" ? f.__name__.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1") : f.__name__;
     return `#<procedure:${name}>`;
   }
-  if (f.name && !(LAMBDA in fn)) {
+  if (f.name) {
     return `#<procedure:${f.name.trim()}>`;
   }
   return "#<procedure>";

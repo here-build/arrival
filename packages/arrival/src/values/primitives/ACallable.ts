@@ -52,6 +52,14 @@ export type CallableImpl = (args: SchemeValue[], runCtx: RunContext) => CallResu
 // is a no-op that preserves reference identity, and equality is reference identity.
 const callableEquals = (self: object, other: unknown): boolean => other === self;
 
+// `arrival/print` display name (reverse-membrane-for-callables.md §5 item 7 — repr parity is
+// what tests trip on first when a producer flips from a bare fn to a callable value). Mirrors
+// print.ts's `functionRepr` symbol-cleanup: a gensym'd `__name__`/`name` prints its readable
+// description, not the raw `Symbol(...)` wrapper.
+function displayName(name: string | symbol): string {
+  return typeof name === "symbol" ? name.toString().replace(/^Symbol\((?:#:)?([^)]+)\)$/, "$1") : name;
+}
+
 /** A scheme lambda: a body + the lexical scope captured at definition. The evaluator injects
  *  the `runner` closure (value→eval cycle avoidance, the same trick `Macro` uses) — this class
  *  names no evaluator symbol. `scope` is the captured Resolver, typed opaque here and tightened
@@ -85,6 +93,9 @@ export class ALambda extends AValue {
 
   ["arrival/toJS"](): unknown {
     return `#<lambda ${String(this.name)}>`;
+  }
+  ["arrival/print"](): string {
+    return `#<procedure:${displayName(this.__name__ ?? this.name)}>`;
   }
   withProvenance(): SchemeValue {
     return this;
@@ -121,6 +132,9 @@ export class ANativeProcedure extends AValue {
 
   ["arrival/toJS"](): unknown {
     return `#<procedure ${String(this.name)}>`;
+  }
+  ["arrival/print"](): string {
+    return `#<procedure:${displayName(this.name)}>`;
   }
 
   withProvenance(): SchemeValue {
@@ -168,6 +182,9 @@ export class ARosettaProcedure extends AValue {
 
   ["arrival/toJS"](): unknown {
     return `#<procedure ${String(this.name)}>`;
+  }
+  ["arrival/print"](): string {
+    return `#<procedure:${displayName(this.name)}>`;
   }
   withProvenance(): SchemeValue {
     return this;

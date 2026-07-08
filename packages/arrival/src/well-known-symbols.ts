@@ -32,12 +32,16 @@
  */
 export const CLASS = "arrival/class";
 
-/**
- * Marks a JS function as a Scheme lambda (`true`). Set by the evaluator when it
- * wraps/creates lambdas; read INLINE (`typeof fn === "function" && LAMBDA in fn`)
- * by the membrane's isSchemeValue and the printer's procedure repr.
- */
-export const LAMBDA = Symbol.for("arrival/lambda");
+// LAMBDA (`Symbol.for("arrival/lambda")`) is RETIRED (2026-07-09, reverse-membrane-for-
+// callables.md §3 step 1). It marked a bare JS function as a Scheme lambda; named-let's
+// `loopFn` was its last live producer (`evalLambda` had already migrated to minting a real
+// `ALambda` value). With named-let converted to an `ALambda` too, the brand had zero
+// producers — deleted along with its readers: membrane.ts's `isSchemeValue` arm,
+// rosetta.ts's `jsToScheme` fast-path (the `is_lambda(value)` ALambda-instance check already
+// covers every real scheme lambda), and print.ts's `functionRepr` LAMBDA-guard. A bare JS
+// function reaching value space is still possible (the quarantined `env.defineRosetta`
+// legacy authoring arm, capability.ts) but it is never scheme-lambda-shaped, so nothing lost
+// a producer/consumer pair to retire.
 
 /**
  * Marks a value as quoted data (`(quote …)` output) so the evaluator treats a

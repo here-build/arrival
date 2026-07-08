@@ -32,7 +32,7 @@ import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
-import { LAMBDA } from "../well-known-symbols.js";
+import { ALambda } from "../values/primitives/ACallable.js";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -130,35 +130,29 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   });
 
   // ── THE LAMBDA-BRAND DISTINCTION (the require return-marshal leak) ────────────
-  // A Scheme LAMBDA is represented internally as a JS function carrying the well-known
-  // LAMBDA brand (`Symbol.for("arrival/lambda")`, set by the evaluator on every closure —
-  // evaluator.ts `lambda[LAMBDA] = true`). It is ALREADY a scheme value, not host data
-  // crossing the boundary, so `jsToScheme` must pass it through BY IDENTITY. Without this,
-  // a `require`d file resolving as `{ kind: "eval", forms }` to a scheme lambda (the
-  // `.hbs`/`.prompt` CALLABLE RULE shape) gets VOIDED on its way back out through
-  // `require`'s own rosetta return-marshal — the "require-returns-lambda voids" bug.
-  // The membrane's law is unchanged: an UNBRANDED (borrowed host) function still voids.
+  // A Scheme lambda used to be represented internally as a JS function carrying the
+  // well-known LAMBDA brand (`Symbol.for("arrival/lambda")`, set by the evaluator on every
+  // closure). It was ALREADY a scheme value, not host data crossing the boundary, so
+  // `jsToScheme` had to pass it through BY IDENTITY — without that, a `require`d file
+  // resolving as `{ kind: "eval", forms }` to a scheme lambda (the `.hbs`/`.prompt`
+  // CALLABLE RULE shape) got VOIDED on its way back out through `require`'s own rosetta
+  // return-marshal (the "require-returns-lambda voids" bug).
   //
-  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] P1's own "Revealed by" line
-  // names this exact test as evidence of a JS artifact (a bare function, LAMBDA-branded or
-  // not) living in value space without lineage — still true, but the B1-B3 reverse-membrane
-  // landing (cxr pilot + capability.ts binder cut + region discipline, all landed 2026-07-09)
-  // does NOT retire it: `evalLambda` mints a proper `ALambda` now (evaluator.ts:1506, caught
-  // by jsToScheme's earlier generic `instanceof AValue` branch, never reaching this LAMBDA-tag
-  // check at all), but named-let's `loopFn` (evaluator.ts:1860, `loopFn[LAMBDA] = true`) is
-  // STILL a bare JS function — the proposal's "Step 1 — named-let → ALambda"
-  // (reverse-membrane-for-callables.md §3) has not landed. `loopFn` is the LAMBDA brand's
-  // sole remaining live producer (confirmed: only other reader/writer sites are
-  // `wrapLambda`/`wrapLambdaArgs`, which re-wrap an already-branded fn, not new producers).
-  // Real gate: named-let → ALambda (step 1) — an independent, still-open migration item, not
-  // covered by B4's scope (B2/B3) and not the same gate as the McpEnvCapability/step-6 chain
-  // the evaluator.spec.ts bare-fn tests cite.
-  it("a LAMBDA-branded function passes through jsToScheme by identity (it IS a scheme value)", () => {
-    const lam = Object.assign(() => 42, { [LAMBDA]: true });
+  // [RETIRED 2026-07-09, reverse-membrane-for-callables.md §3 step 1] Every scheme lambda
+  // — including named-let's loop binding, the LAMBDA brand's last live producer per the B4
+  // audit — is a real `ALambda` value now (evaluator.ts's `evalLet`/`evalLambda`). The
+  // LAMBDA brand had zero producers left and was deleted (well-known-symbols.ts, plus its
+  // membrane.ts `isSchemeValue`/rosetta.ts `jsToScheme`/print.ts `functionRepr` readers).
+  // The identity-pass-through law still holds — it's now unconditional on `instanceof
+  // AValue` (jsToScheme's very first case), not a brand check — pinned below against a real
+  // `ALambda`. The membrane's OTHER law is unchanged: an unbranded bare host function still
+  // voids (also pinned below).
+  it("a real ALambda passes through jsToScheme by identity (it IS a scheme value)", () => {
+    const lam = new ALambda({ name: "test-lambda", arity: { min: 0, max: 0 }, scope: undefined, runner: () => theVoid });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
   });
 
-  it("an UNBRANDED function still voids through jsToScheme (borrowed host callback, by design)", () => {
+  it("a bare host function still voids through jsToScheme (borrowed host callback, by design)", () => {
     expect(jsToScheme(CONSTANT_CTX, () => 42)).toBe(theVoid);
   });
 

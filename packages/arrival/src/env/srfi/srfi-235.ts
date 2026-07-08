@@ -8,7 +8,16 @@
 //   • constantly  — SRFI-235: the K combinator (ignore args, return the constant).
 //   • always      — arrival's historical name for `constantly`, kept as an alias.
 //   • curry       — NOT SRFI-235, but combinator kin; arrival's arity-aware partial
-//                   application, kept NATIVE (the arity detection can't be pure scheme).
+//                   application. DISSOLVED (reverse-membrane-for-callables.md §2/§3 step 2,
+//                   2026-07-09) from a native JS partial-application closure into a pure
+//                   recursive scheme combinator (below, in the prelude) plus one native,
+//                   `procedure-min-arity` — the stated reason curry was native ("arity
+//                   detection can't be pure scheme") no longer held: `ACallable.arity` is a
+//                   designed introspection surface, and the old JS impl already just read
+//                   `fn.arity.min` off it. A scheme `lambda` gets the reverse membrane for
+//                   free — `evalLambda` mints a real ALambda (ctx/trampoline/dynamic-call-site
+//                   provenance, an honest `arrival/print` repr) — where the old bare JS arrow
+//                   closure was exactly the bare-fn-into-value-space leak the membrane forbids.
 //
 // NAMING HAZARD: SRFI-235's own `always` is a DIFFERENT procedure. Arrival's `always`
 // has always meant `constantly`, so the spec-faithful name is `constantly` and `always`
@@ -16,9 +25,9 @@
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CallCtx, makeCallCtx } from "../../common/symbols/_bake.js";
 import { is_callable_value } from "../../values/value-guards.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 export default new EnvCapability("scheme/srfi-235", {
   prelude: `
@@ -35,51 +44,32 @@ export default new EnvCapability("scheme/srfi-235", {
 ;; always — arrival's historical name for constantly. Kept as an alias for back-compat
 ;; (and the type-lens probe that references \`always\` by name). NOT SRFI-235's own \`always\`.
 (define always constantly)
+
+;; curry — arrival's arity-aware partial application (NOT SRFI-235 itself, combinator kin).
+;; Accumulates \`args\` across successive calls until \`(length args)\` reaches fn's minimum
+;; arity (\`procedure-min-arity\` — the one native this needs; arity introspection off
+;; ACallable.arity isn't expressible in pure scheme), then applies. The not-yet-enough-args
+;; branch returns a \`lambda\` — a real ALambda minted through evalLambda, so every recursive
+;; partial application is a first-class scheme value with the reverse membrane's guarantees
+;; (ctx, trampoline, print repr), not a bare JS closure escaping into value space.
+(define (curry fn . args)
+  (if (>= (length args) (procedure-min-arity fn))
+      (apply fn args)
+      (lambda more (apply curry fn (append args more)))))
 `,
   symbols: {
-    // `curry` — arrival's arity-aware partial application (the shared utils/functional
-    // curry: it auto-applies once \`fn.length\` args have arrived). Combinator kin to the
-    // prelude above, but kept NATIVE because the arity detection can't be expressed in
-    // pure scheme.
-    //
-    // `fn` is the fixed HEAD; the leading args being partially applied are the variadic
-    // TAIL (`inputRest`) — mirrors apply's head/rest split. The head is the established
-    // callable-schema convention (z.custom<(...args) => T>(), matching vector-map/
-    // vector-for-each/apply's own callable slots), and the rest is `z.value` — real scheme
-    // terms flowing through a native call, not representation-blind.
-    curry: symbol.native`curry: partially apply fn to leading args, returning a function of the rest`(
-      {
-        input: [z.lambda],
-        inputRest: z.value,
-        output: [z.lambda],
-        /*
-        * TODO: wire proper curry type; need declaration area for types:
-        *
-        type Curry<T extends (...args: any[]) => any> =
-          T extends (...args: infer Args) => infer R
-              ? Args extends []
-                  ? T
-                  : Args extends [infer FirstArg, ...infer RestArgs]
-                      ? RestArgs extends []
-                          ? T
-                          : (arg: FirstArg) => Curry<(...args: RestArgs) => R>
-                      : never
-              : never;
-        */
-        type: "(fn: (...args: unknown[]) => unknown, ...args: unknown[]) => (...args: unknown[]) => unknown",
-      },
-      // `fn` is a scheme callable VALUE (ALambda/ANativeProcedure/ARosettaProcedure), not a bare
-      // JS function — invoking it directly (`fn(...)`) throws. Route through `applyCallback`,
-      // the one invocation seam, and read the needed arity off the callable's own `.arity.min`
-      // (a bare JS host fn falls back to `.length`). `this.runCtx` per the native convention
-      // (capability.ts's native bind: `hostImpl.apply(makeCallCtx(runCtx), args)`).
-      function curry(this: CallCtx, fn: unknown, ...args: unknown[]): unknown {
-        const runCtx = this.runCtx;
-        const needed = is_callable_value(fn) ? fn.arity.min : (fn as (...a: unknown[]) => unknown).length;
-        return needed > args.length
-          ? (...curriedArgs: unknown[]) => curry.call(makeCallCtx(runCtx), fn, ...args, ...curriedArgs)
-          : applyCallback(fn, args, runCtx);
-      } as unknown as (fn: (...a: unknown[]) => unknown, ...args: unknown[]) => (...a: unknown[]) => unknown,
-    ),
+    // `procedure-min-arity` — curry's one remaining native: pure arity introspection off
+    // `ACallable.arity` (a callable value) or the JS `.length` fallback (a bare legacy fn,
+    // e.g. the quarantined `env.defineRosetta` authoring arm). No recursion, no invocation —
+    // just a read, so this needs no `this: CallCtx` / runCtx thread the way curry's old JS
+    // impl did to re-enter itself.
+    "procedure-min-arity":
+      symbol.native`procedure-min-arity: the minimum argument count fn accepts (arity introspection for scheme-authored combinators like curry)`(
+        { input: [z.lambda], output: [z.exact] },
+        (fn: unknown): AExact => {
+          const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
+          return new AExact(CONSTANT_CTX, BigInt(min));
+        },
+      ),
   },
 });

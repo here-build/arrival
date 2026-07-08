@@ -21,8 +21,7 @@ import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
-import { LAMBDA } from "./well-known-symbols.js";
-import { is_callable_value, is_lambda } from "./values/value-guards.js";
+import { is_callable_value } from "./values/value-guards.js";
 import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 import {
   closeRegionScope,
@@ -359,14 +358,11 @@ export function jsToScheme(
     return theVoid;
   }
 
-  // A Scheme LAMBDA is a plain JS function carrying the well-known LAMBDA brand
-  // (set by the evaluator on every closure — well-known-symbols.ts). It's already
-  // a scheme value, not host data, so it passes through untouched. Without this
-  // check, a `require`d `.prompt`/`.hbs` CALLABLE-RULE lambda gets voided the
-  // moment it flows back through `require`'s own rosetta wrapper.
-  if ((tag === "function" && LAMBDA in value) || is_lambda(value)) {
-    return value;
-  }
+  // A Scheme lambda is an ALambda VALUE (reverse-membrane-for-callables.md §3 step 1: the
+  // legacy `[LAMBDA]`-branded bare-fn producer, named-let's loopFn, is gone — every scheme
+  // lambda is an ALambda now, an `AValue` subclass caught by the `instanceof AValue` branch
+  // above, which returns before reaching this point). A `require`d `.prompt`/`.hbs`
+  // CALLABLE-RULE lambda round-trips through that branch, not this one.
 
   // A borrowed JS function is not a Scheme value — exposing it as callable would
   // let Scheme escape the sandbox into uncontrolled JS — so it voids, loudly.

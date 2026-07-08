@@ -370,15 +370,13 @@ export const bytevector = named(
 
 /** Raw predicate for a callable — a callable VALUE (ALambda/ANativeProcedure/
  *  ARosettaProcedure, the post-B2 shape every builtin binds as) or a plain JS function.
- *  [RETAGGED 2026-07-09, B4 — was "dies when B4 retires the legacy arm"] B4 (2026-07-09)
- *  audited this: the bare-fn arm does NOT retire yet — it has THREE independent live
- *  producers, none touched by the B1-B3 reverse-membrane landing (cxr pilot + capability.ts
- *  binder cut + region discipline): (1) `env.defineRosetta`'s legacy form / McpEnvCapability's
- *  whole inline-annotation authoring shape (gate: McpEnvCapability annotation-lifting,
- *  undone); (2) named-let's `loopFn` (evaluator.ts:1860, still `[LAMBDA]`-branded, not an
- *  ALambda — gate: reverse-membrane-for-callables.md §3 "Step 1", undone); (3) `curry`'s
- *  returned partial-application closure (env/srfi/srfi-235.ts, still a bare JS arrow — gate:
- *  §3 "Step 2", undone). Narrows to the ACallable union alone only once all three land. */
+ *  [RETAGGED 2026-07-09] B4 (2026-07-09) audited this with THREE independent live bare-fn
+ *  producers; reverse-membrane-for-callables.md §3 "Step 1" (named-let → ALambda) and "Step 2"
+ *  (curry → prelude + `procedure-min-arity` native) both landed the same day, retiring two of
+ *  the three. The one survivor is `env.defineRosetta`'s legacy form / McpEnvCapability's whole
+ *  inline-annotation authoring shape (gate: McpEnvCapability annotation-lifting, undone —
+ *  a separate migration, not part of this proposal). Narrows to the ACallable union alone only
+ *  once that lands too. */
 export const lambda = named(
   "lambda",
   z.custom<(...args: unknown[]) => unknown>(
