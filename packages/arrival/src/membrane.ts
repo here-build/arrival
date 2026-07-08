@@ -139,10 +139,10 @@ export type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataVie
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
     // R3 (RULINGS.md): recognition is `instanceof AValue` — every wrapper/native
-    // Scheme term, including ANil, Keyword, AVoid, AHalfBaked, and the callable
+    // Scheme term, including ANil, Keyword, AVoid, and the callable
     // primitives, derives from AValue. This is structural, not enumerative: a new
     // AValue subclass is recognized for free, closing the class of "omitted from
-    // the switch" gaps (AVoid, AHalfBaked) that a hand-maintained case list invites.
+    // the switch" gaps (AVoid was one) that a hand-maintained case list invites.
     case value instanceof AValue:
 
     // The few non-AValue control forms that legitimately cross as

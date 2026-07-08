@@ -35,12 +35,11 @@ import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { EnvCapability } from "../../common/capability.js";
-import { AHalfBaked, is_half_baked } from "../../values/primitives/AHalfBaked.js";
-import { SPECULATE } from "../../well-known-symbols.js";
 import { call_function } from "../../eval/call-function.js";
 import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
@@ -135,26 +134,27 @@ function nonListAppendOperandMessage(item: SchemeValue): string {
   return `append: every argument but the last must be a proper list, got a ${noun} — append only splices list spines, not this carrier`;
 }
 
-// `length` carries the Tier-2 speculation marker: the evaluator's dispatch choke
-// leaves a still-filling collection's HalfBaked UNFORCED for ops whose impl has
-// [SPECULATE]=true, so length reads the lazy cardinality interval itself instead
-// of a settled value (see evaluator.ts dispatch).
-const lengthImpl = (obj: unknown): SchemeValue => {
+const lengthImpl = (obj: unknown): AExact | AInexact => {
   // R7RS length is an exact integer — box to AExact, matching string-length.
   if (obj == null) return new AExact(CONSTANT_CTX, 0n);
-  // Tier 2 speculation: length of a still-filling collection is its narrowing
-  // cardinality INTERVAL, surfaced as a number-domain HalfBaked the comparison ops
-  // read for early collapse (reached only when speculation is on).
-  if (is_half_baked(obj)) {
-    return obj.toCardinalityNumber();
-  }
   // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count
   // carries the ELEMENTS' unioned provenance and levies the circular-list check. TOTALIC:
   // a receiver with no length algebra is a type error, never a silent 0. A non-term
   // carrier with a bare `.length` (a membrane-wrapped JS array) falls back to that property.
   const m = (obj as Record<string, unknown>)[tf("length")];
   if (typeof m === "function") {
-    return (m as () => SchemeValue).call(obj);
+    const result: unknown = m.call(obj);
+    // The protocol's own declared shape (`AValue | number`, AValue.ts) is wider than what
+    // any known implementor actually produces for a COUNT: a raw JS number on the
+    // empty-provenance fast path (`withInputProvenance` skips boxing when the receiver
+    // carries no provenance to stamp), else an AExact via `fromJs`'s number arm — never an
+    // AInexact/ABool/etc. Box the raw-number arm here so `length`'s own contract can
+    // honestly narrow to z.schemeNumber instead of the fully-permissive z.value (the
+    // permissive schema existed only because Tier-2 speculation could also hand back a
+    // live AHalfBaked carrier — see docs/working-proposals/halfbaked-existence-review.md).
+    if (typeof result === "number") return new AExact(CONSTANT_CTX, BigInt(result));
+    invariant(result instanceof AExact || result instanceof AInexact, "length: a term's own length must be a count");
+    return result;
   }
   if (typeof obj === "object" && "length" in obj) {
     const len = obj.length;
@@ -162,12 +162,9 @@ const lengthImpl = (obj: unknown): SchemeValue => {
   }
   throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
 };
-(lengthImpl as { [SPECULATE]?: boolean })[SPECULATE] = true;
 
 // Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements
-// across the lists, truncating to the shortest. Speculation rides here too
-// (cardBounds [1,1], the count is exact up front), carrying early-collapse through
-// a multi-list map.
+// across the lists, truncating to the shortest.
 function multiListMap(
   fn: AProcedure,
   lists: readonly AListAlike[],
@@ -185,10 +182,6 @@ function multiListMap(
         { runCtx },
       ),
     );
-  }
-  if (runCtx?.speculate && results.some(is_promise)) {
-    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
   }
   if (results.some(is_promise)) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
@@ -229,16 +222,6 @@ function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Pr
   }
 
   const hasPromises = results.some(is_promise);
-  // Tier-2 speculation: map's count is exact up front (one output per input →
-  // bounds [1,1]), so its HalfBaked interval is already a point — length is
-  // decidable immediately while values still resolve.
-  // Speculation is run-constant; read it off the operand (lists[0] is a non-nil pair here,
-  // so it carries the run's RunContext). for-each discards this result, so the HalfBaked vs
-  // eager-list choice is inert for correctness — behavior-shape preserved.
-  if (hasPromises && ctxOf(lists[0]).speculate) {
-    const slots = results.map((r) => Promise.resolve(r).then((v) => [v as SchemeValue]));
-    return AHalfBaked.collection(ctxOf(lists[0]), slots, () => [1, 1]);
-  }
   if (hasPromises) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
       APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
@@ -250,9 +233,9 @@ function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Pr
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
-    // map (Pair preserves boxes + speculates [1,1]; Vector strips boxes, eager) — the term owns the
+    // map (Pair preserves boxes; Vector strips boxes) — the term owns the
     // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
-    map: symbol.sequence`map: fn over one list (its own term map — box discipline + speculation) or a zip over several`(
+    map: symbol.sequence`map: fn over one list (its own term map — box discipline) or a zip over several`(
       // fn is the fixed HEAD; the further lists/vectors are the variadic TAIL —
       // `symbol.sequence`'s factory type has no Rest generic, so a hand-authored
       // z.tuple(fixed, rest) is the only available shape (matches srfi-1.ts's filter).
@@ -349,10 +332,13 @@ export default new EnvCapability("scheme/lists", {
     "set-cdr!": symbol.notImplemented`set-cdr!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "append!": symbol.notImplemented`append!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (append, which builds a fresh list)`,
 
-    // R7RS 6.4 — length is the speculation-marked impl declared at module scope above
-    // (the inline arrow form cannot carry the [SPECULATE] symbol the dispatch choke reads).
+    // R7RS 6.4 — length is the impl declared at module scope above. Output narrows to
+    // z.schemeNumber (was z.value only because a still-filling collection's Tier-2
+    // speculation could return a live AHalfBaked carrier instead of a settled number —
+    // see docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL): length now
+    // always returns a settled AExact/AInexact.
     length: symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.value], output: [z.schemeNumber] },
       lengthImpl,
     ),
 

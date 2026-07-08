@@ -32,8 +32,6 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
 import { AJSObject } from "../../values/primitives/AJSObject.js";
-import { is_half_baked } from "../../values/primitives/AHalfBaked.js";
-import { exec } from "../../eval/generator-exec.js";
 import type { SchemeValue } from "../../values/types.js";
 import { CLASS } from "../../well-known-symbols.js";
 
@@ -712,60 +710,10 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
   });
 });
 
-describe("egress of deferred carriers", () => {
-  // Absorbs deferred-value-egress.test.ts's todos + flips its green leak (manifest B).
-  // All three rows gate on the SAME migration (force-on-egress); the ledger names the
-  // top-level escape explicitly ("live AHalfBaked escapes exec under speculate") — the
-  // deep/ctx rows below are the identical gap observed at greater structural depth, so
-  // they cite the same ledger id.
-
-  // @ledger: live AHalfBaked escapes exec under speculate
-  it.fails("[it.fails until force-on-egress] a live AHalfBaked never escapes exec, speculate on or off", async () => {
-    const [result] = await exec("(filter (lambda (x) (> x 0)) (list 1 -2 3))", { speculate: true });
-    expect(is_half_baked(result)).toBe(false);
-  });
-
-  // @ledger: live AHalfBaked escapes exec under speculate
-  it.fails("force-on-egress is deep: a carrier nested in a returned pair/vector is materialized", async () => {
-    // quasiquote builds its result pair directly (`new APair(...)` in evalQuasiquote /
-    // processQuasiquote, evaluator.ts) rather than through a procedure call — so it
-    // bypasses the force-on-unknown-boundary chokepoint entirely (that chokepoint only
-    // forces a HalfBaked ARG immediately before a real `fn.apply`, evaluator.ts:3090).
-    // A HalfBaked produced by the unquoted `filter` call rides straight into the built
-    // pair unforced.
-    //
-    // The unquoted expression is the `filter` call directly — NOT a `let`-bound name.
-    // Binding it via `let` first routes the value through `Environment.set` →
-    // `membrane.fromJS`, which (a SEPARATE, real gap, ledgered as "isSchemeValue omits
-    // AHalfBaked — Environment.set re-wraps live carriers") silently re-wraps the live
-    // carrier in an `AJSObject`, confounding this row's own assertion. Reported
-    // alongside this suite's other findings; not itself asserted by any row here (no
-    // it.fails cites it) — the ledger row exists as an index entry for this documented
-    // gap ahead of a dedicated test.
-    const [result] = await exec(
-      "`(wrapped ,(filter (lambda (x) (> x 0)) (list 1 -2 3)))",
-      { speculate: true },
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exploratory egress
-    // inspection of a not-yet-materialized structure; the acceptance shape isn't typed yet.
-    const nested = (result as any).cdr.car;
-    expect(is_half_baked(nested)).toBe(false);
-  });
-
-  // @ledger: live AHalfBaked escapes exec under speculate
-  it.fails("a forced-at-egress carrier's elements carry the producing run's ctx", async () => {
-    const [result] = await exec(
-      "`#(wrapped ,(filter (lambda (x) (> x 0)) (list 1 -2 3)))",
-      { speculate: true },
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
-    const nested = (result as any).__vector__[1];
-    // Desired end-state: force-on-egress already materialized `nested` into a Pair whose
-    // elements carry THIS run's ctx (speculate:true). Today `nested` is still a live,
-    // unforced AHalfBaked carrying the LIST LITERAL's ctx (CONSTANT_CTX, speculate:false)
-    // rather than the run's — confirmed even after a manual `.force()`, so this is not
-    // just "unforced", the ctx plumbing itself doesn't carry the producing run through.
-    expect(is_half_baked(nested)).toBe(false);
-    expect(nested.ctx.speculate).toBe(true);
-  });
-});
+// "egress of deferred carriers" (the force-on-egress contract for a live AHalfBaked
+// crossing exec's boundary) retired: AHalfBaked itself dissolved — VERDICT KILL, zero
+// production reachability, superseded by R2/C3 struct-fact wires. See
+// docs/working-proposals/halfbaked-existence-review.md. The three `it.fails` rows this
+// block carried ("live AHalfBaked escapes exec under speculate", ledger GAPS) are gone
+// because the gap became UNREACHABLE, not fixed — no carrier can exist anymore, so
+// there is nothing left for force-on-egress to force. See REMOVAL-MANIFEST.md.

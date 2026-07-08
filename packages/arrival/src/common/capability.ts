@@ -23,7 +23,6 @@ import { Keyword } from "../values/Keyword.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { CallCtx, makeCallCtx } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
-import { SPECULATE } from "../well-known-symbols.js";
 import invariant from "tiny-invariant";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
@@ -243,10 +242,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   contract: def,
                   impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
                 });
-                // Preserve the markers the call-head force-skip (`[SPECULATE]`) and the lineage
-                // classifier (`.fanout`) read OFF THE BOUND VALUE, now the ANativeProcedure.
-                const markers = def.impl as { [SPECULATE]?: boolean; fanout?: boolean };
-                if (markers[SPECULATE]) (proc as { [SPECULATE]?: boolean })[SPECULATE] = true;
+                // Preserve the marker the lineage classifier (`.fanout`) reads OFF THE BOUND
+                // VALUE, now the ANativeProcedure.
+                const markers = def.impl as { fanout?: boolean };
                 if (markers.fanout) (proc as { fanout?: boolean }).fanout = true;
                 bindTarget(def).set(verb, proc);
                 break;

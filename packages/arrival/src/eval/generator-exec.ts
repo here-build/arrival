@@ -184,14 +184,6 @@ export interface ExecOptions {
    */
   heapBudget?: number;
   /**
-   * Opt into Tier-2 speculative evaluation (latency-only; Scheme-invisible).
-   * When true, producers (filter/map) may emit a lazy `HalfBaked` carrier so
-   * control-flow over a still-filling promise fan can collapse early. With the
-   * flag off, evaluation is byte-identical to the eager path. See
-   * docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
-   */
-  speculate?: boolean;
-  /**
    * Interpreter-level NIL-TOLERANCE mode. When `true`, projection ops
    * (`car`/`cdr` and friends) applied to `null`/nil THROW instead of resolving
    * tolerantly to `nil`. Default (`undefined`/`false`) is TOLERANT — today's
@@ -271,7 +263,7 @@ export interface ExecState {
    * that env's exec frame.
    */
   readonly scope: LexicalScope;
-  /** The per-run hermetic handle (strict / heap meter / signal / speculate). */
+  /** The per-run hermetic handle (strict / heap meter / signal). */
   readonly runCtx: RunContext;
 }
 
@@ -298,7 +290,6 @@ export async function execState(
     signal,
     budgetMs,
     heapBudget,
-    speculate,
     strict,
     freezeRosettaReturns,
     skipBootstrapWait,
@@ -353,7 +344,7 @@ export async function execState(
   // The per-run context (the hermetic handle; see RunContext) carries strict + the heap
   // meter; `exec` also installs the meter on the env node below (where `to_array`/
   // fl-interop find it by parent-walk) until those readers move to `runCtx` directly.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, speculate, freezeRosettaReturns, signal });
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal });
   // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
   // up its base-linked chain — byte-identical (zero change for arrival-chain/inhuman). `env`
@@ -405,7 +396,6 @@ export async function execState(
               tap,
               nodeFilter,
               signal,
-              speculate,
               // Default false ⇒ today's tolerant nil-projection. No consumer reads
               // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
               strict: strict ?? false,
@@ -490,7 +480,7 @@ export async function parse(code: string, _env?: Environment, source?: string): 
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, speculate, skipBootstrapWait }: ExecOptions = {},
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
 
@@ -508,7 +498,7 @@ export async function execExpr(
   // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME abort
   // signal `ctx.signal` already carries here, and the handler-stack WeakMap (exceptions.ts)
   // stops falling back to the shared CONSTANT_CTX bucket for every require'd module.
-  const runCtx = makeRunContext({ speculate, signal });
+  const runCtx = makeRunContext({ signal });
 
   try {
     // A top-level form evaluates to a value, never a bare expander — seal it.
@@ -521,7 +511,6 @@ export async function execExpr(
           tap,
           nodeFilter,
           signal,
-          speculate,
           runCtx,
         }),
         { signal, budgetMs },

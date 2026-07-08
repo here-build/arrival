@@ -19,7 +19,6 @@ import type { AVector } from "./primitives/AVector.js";
 import type { ABytevector } from "./primitives/ABytevector.js";
 import type { ACharacter } from "./primitives/ACharacter.js";
 import type { AVoid } from "./primitives/AVoid.js";
-import type { AHalfBaked } from "./primitives/AHalfBaked.js";
 import type { AJSArray } from "./primitives/AJSArray.js";
 import type { AJSObject } from "./primitives/AJSObject.js";
 import type { ADict } from "./primitives/ADict.js";
@@ -98,7 +97,6 @@ export type SchemeValue =
   | ABytevector
   | ACharacter
   | AVoid
-  | AHalfBaked
   | AJSArray
   | AJSObject
   | ADict

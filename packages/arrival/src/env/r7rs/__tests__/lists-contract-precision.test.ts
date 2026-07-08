@@ -89,6 +89,18 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(false); // a Pair is not an array, was true before
   });
 
+  // INVERTED (docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL): output was
+  // pinned z.value ONLY because a still-filling collection's Tier-2 speculation could hand back
+  // a live AHalfBaked carrier instead of a settled number — the carrier is gone, so the
+  // permissive schema was never really "genuinely representation-blind," it was a residue of a
+  // dead feature. Now a genuine zod refinement: a raw non-number no longer slips through.
+  it("length: output narrows z.value → z.schemeNumber — the HalfBaked carrier return died with AHalfBaked itself, so length always returns a settled AExact/AInexact", () => {
+    const def = nativeDef("length");
+    expect(def.in.safeParse([properList(1, 2)]).success).toBe(true);
+    expect(def.out.safeParse([exact(2)]).success).toBe(true);
+    expect(def.out.safeParse(["not-a-number"]).success).toBe(false); // was true before the fix (z.value)
+    expect(def.out.safeParse([{ garbage: true }]).success).toBe(false); // was true before the fix (z.value)
+  });
 });
 
 describe("scheme/lists Contract precision — STATIC-only fixes (z.value carries no refinement; documented, not runtime-provable — see lists.test-d.ts for the real proof)", () => {
@@ -176,12 +188,6 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
     const def = nativeDef("list");
     expect(def.in.safeParse([exact(1), exact(2), exact(3)]).success).toBe(true);
     expect(def.in.safeParse([]).success).toBe(true); // 0-arg list is legal
-  });
-
-  it("length: already z.value/z.value — output MUST stay z.value (not narrowed to z.schemeNumber), because a still-filling collection's Tier-2 speculation returns an AHalfBaked, not an AExact/AInexact", () => {
-    const def = nativeDef("length");
-    expect(def.in.safeParse([properList(1, 2)]).success).toBe(true);
-    expect(def.out.safeParse([exact(2)]).success).toBe(true);
   });
 
   it("append/reverse: untouched — already at their honest precision ceiling (append/list are legitimately fully-variadic-over-SchemeValue; reverse's own impl has NO array branch — pair|nil only)", () => {

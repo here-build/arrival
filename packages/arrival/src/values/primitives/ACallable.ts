@@ -4,7 +4,7 @@
 // Every arrival callable becomes an AValue with an EXPLICIT `run(args, runCtx)` surface,
 // replacing the `this = { ctx }` smuggling convention that crashed at every non-evaluator
 // call site (`APair.map` doing `fn(x)`, the membrane, direct JS). `runCtx` is the ONLY
-// threaded context (strict / heapMeter / speculate) — it is run-level and cannot be
+// threaded context (strict / heapMeter) — it is run-level and cannot be
 // recovered from operands (a quoted literal carries CONSTANT_CTX). Provenance is NOT
 // threaded: it rides the values and is minted only at the rosetta membrane, as `union(args)`.
 //

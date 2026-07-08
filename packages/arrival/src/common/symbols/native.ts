@@ -29,7 +29,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     impl: Impl<I, O, Rest, "scheme">,
   ): NativeSymbolDef => {
     // `fanout: true` → stamp the bound fn (capability binds def.impl raw; the lineage classifier
-    // reads `.fanout` off env.get(op) — the SPECULATE shape, minus the Symbol).
+    // reads `.fanout` off env.get(op)).
     if (contract.fanout) (impl as { fanout?: boolean }).fanout = true;
     return {
       kind: "native",

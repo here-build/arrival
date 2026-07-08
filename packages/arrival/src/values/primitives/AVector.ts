@@ -6,7 +6,7 @@
  * AVector.
  *
  * DISAMBIGUATION (boxing plan §1): a raw JS `Array` is heavily overloaded — evaluateArgs' args
- * carrier, Values, HalfBaked, syntax-rules ellipsis machinery, and JS-array-as-list at the
+ * carrier, Values, syntax-rules ellipsis machinery, and JS-array-as-list at the
  * membrane are ALL raw arrays and are NOT vectors. Only vector literals / make-vector / vector
  * builtins mint AVector. Being its own class leaves `Array.isArray` sites unaffected — never
  * widen them to accept it.

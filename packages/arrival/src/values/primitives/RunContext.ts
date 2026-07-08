@@ -39,10 +39,6 @@ export interface RunContext {
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (the default — only sandbox/agent runs opt in). */
   readonly heapMeter: HeapMeter | undefined;
-  /** Tier-2 speculative evaluation: fan-out ops (filter/map) may emit a lazy AHalfBaked
-   *  collection instead of awaiting the whole promise fan, so a monotone outer can early-collapse.
-   *  (Was the `_speculate` apply-boundary holder; read off `operand.ctx`/`runCtx` instead.) */
-  readonly speculate: boolean;
   /** Freeze the borrowed JS source inside AJSObject/AJSArray the first time Scheme reads it, so a
    *  rosetta return (or any borrowed value) can't be mutated by the host afterward — prevention by
    *  construction, replacing the dev-only purity ASSERT. `false` opts out (host keeps it mutable). */
@@ -60,7 +56,6 @@ export function makeRunContext(
   opts: {
     strict?: boolean;
     heapBudget?: number;
-    speculate?: boolean;
     freezeRosettaReturns?: boolean;
     signal?: AbortSignal;
   } = {},
@@ -68,7 +63,6 @@ export function makeRunContext(
   return {
     strict: opts.strict ?? false,
     heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
-    speculate: opts.speculate ?? false,
     freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
     signal: opts.signal,
   };
@@ -84,7 +78,6 @@ export function makeRunContext(
 export const CONSTANT_CTX: RunContext = Object.freeze({
   strict: false,
   heapMeter: undefined,
-  speculate: false,
   freezeRosettaReturns: true,
   signal: undefined,
 });

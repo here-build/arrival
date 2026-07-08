@@ -51,7 +51,10 @@ const GAPS: readonly LedgerRow[] = [
   // is JS-side data, not membrane residue.
   { id: "A13 count-cone over-attribution", gate: "G2", replacedBy: "provenance/conservation" },
   { id: "exact/list JSON.stringify throws (BigInt backing)", gate: "numeric-json design", replacedBy: "membrane/crossing" },
-  { id: "live AHalfBaked escapes exec under speculate", gate: "force-on-egress", replacedBy: "membrane/crossing egress" },
+  // "live AHalfBaked escapes exec under speculate" RETIRED (halfbaked-existence-review.md,
+  // VERDICT KILL): AHalfBaked itself dissolved — the gap became UNREACHABLE, not fixed (no
+  // carrier can exist anymore, so force-on-egress has nothing left to force). See
+  // docs/test-suite-v2/REMOVAL-MANIFEST.md for the survivor row.
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
   // ── added by the two-tier-exec-api R8 mint sweep (step 2) ─────────────────────────

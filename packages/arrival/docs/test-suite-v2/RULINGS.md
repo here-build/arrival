@@ -34,6 +34,13 @@ full value primitive. Review its reason-to-exist; IF it stays, `arrival/toJS` on
 becomes a **MaybePromise resolving when the value bakes** — not a marker, not a throw.
 The `{__halfBaked__}` marker shape dies either way.
 
+**RESOLVED — VERDICT KILL** (docs/working-proposals/halfbaked-existence-review.md, 2026-07-09):
+zero production reachability (the flag was set only by the feature's own tests), and R2/C3's
+struct-fact wires supersede it as the principled version of the same idea. `AHalfBaked`
+dissolved; the `{__halfBaked__}` marker died with it. The motivating program
+(`(if (>= (length (filter pred items)) 2) …)` deciding early) moved into
+execution-plan-wireframe.md as an acceptance criterion for struct-fact wires.
+
 ## R5 — Cones: both queries + the execution-plan wireframe (major design item)
 Both reads are required: "why is this an input" (minimal cone) and "what changes if I adjust
 this output" (full/sealing cone) — two queries over one representation. AND the target

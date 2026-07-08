@@ -38,7 +38,6 @@ import type { InvocationLike } from "../rosetta.js";
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
 // instead of a raw `typeof`, which collapses every boxed value to "object".
 import { type } from "../utils/typecheck.js";
-import { AHalfBaked, is_half_baked } from "../values/primitives/AHalfBaked.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "./Resolver.js";
@@ -46,7 +45,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
-import { DATA, LAMBDA, LOCATION, SPECULATE } from "../well-known-symbols.js";
+import { DATA, LAMBDA, LOCATION } from "../well-known-symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
@@ -184,36 +183,23 @@ export interface EvalContext {
    */
   tail?: boolean;
   /**
-   * Speculative-evaluation flag (Tier 2 — see
-   * `docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md`).
-   * When false/absent (the default) the evaluator is byte-identical to today:
-   * collection operators resolve their promise fans eagerly to a `Pair`. When
-   * true, `filter`/`map`/`list` may return a `HalfBaked` lazy carrier so that
-   * `length` + comparison + `if` can collapse control flow early, before the fan
-   * fully settles. The carrier is forced at any operator that does not understand
-   * it (force-on-unknown-boundary), so speculation-off ≡ speculation-on for every
-   * observable channel — this flag only changes *latency*, never values or
-   * effects. Propagated structurally like `tail`.
-   */
-  speculate?: boolean;
-  /**
    * Interpreter-level NIL-TOLERANCE mode (carried from `ExecOptions.strict`).
    * When `true`, projection ops (`car`/`cdr` and friends) applied to `null`/nil
    * THROW instead of resolving tolerantly to `nil`. Absent/`false` ⇒ TOLERANT,
-   * today's behavior. Propagated structurally like `tail`/`speculate` (the
+   * today's behavior. Propagated structurally like `tail` (the
    * `{ ...ctx }` spreads carry it into every child context).
    *
    * Carried on `ctx.runCtx.strict`; numeric's loose comparators read it off the
    * reconstructed `this.ctx.runCtx` (the retired `_currentStrict` holder's replacement).
-   * Optional (like `speculate`) so the few `EvalContext` literals that omit the run-level
-   * options stay valid; the sole origin is `exec()` in generator-exec.ts.
+   * Optional so the few `EvalContext` literals that omit the run-level options stay
+   * valid; the sole origin is `exec()` in generator-exec.ts.
    */
   strict?: boolean;
   /**
    * The per-run context (minted by `exec()`; see `values/primitives/RunContext`).
-   * Carries hermetic run-state — strict mode, speculation, the heap meter — as DATA
+   * Carries hermetic run-state — strict mode, the heap meter — as DATA
    * threaded through evaluation; this is the sole live channel for that state (the
-   * old `_currentStrict`/`_speculate` module holders are retired, readers consult
+   * old `_currentStrict` module holder is retired, readers consult
    * `ctx.runCtx` / the operand ctx instead). Propagated structurally like `strict`
    * (the `{ ...ctx }` spreads).
    */
@@ -244,13 +230,6 @@ export interface RunOptions {
    * with, `signal` (whichever fires first wins).
    */
   budgetMs?: number;
-  /**
-   * Opt into Tier 2 speculative evaluation for this run (see `EvalContext.speculate`).
-   * Default false = byte-identical to today. Set on the root `EvalContext` and
-   * propagated structurally; consumed by the collection operators + comparison
-   * membrane. Latency-only: never changes values or fired effects.
-   */
-  speculate?: boolean;
 }
 
 /**
@@ -296,9 +275,9 @@ let _dynamicCallSite: Invocation | undefined = undefined;
  */
 let _canBounce = false;
 
-// `_speculate`/`_currentStrict` module holders are retired — speculation/strict are
-// run-CONSTANT (RunContext), so readers consult `ctx.speculate`/`ctx.runCtx.strict`
-// directly; both were pure RunContext duplicates. `_currentRunEnv` STAYS: it is the
+// `_currentStrict` module holder is retired — strict mode is run-CONSTANT
+// (RunContext), so readers consult `ctx.runCtx.strict` directly; it was a pure
+// RunContext duplicate. `_currentRunEnv` STAYS: it is the
 // rosetta MEMBRANE's env back-channel (llm-plane-arrival-env/prompt.ts evaluates an
 // `s/…` schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx
 // carries no env).
@@ -414,16 +393,6 @@ function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALam
 }
 
 /** Interface for functions created by lambda */
-/**
- * Marker for builtins that understand a `HalfBaked` arg and must NOT have it
- * forced at the dispatch choke (Tier 2 speculation). Set on `length` (reads the
- * cardinality interval) and the comparison ops (return an early-decision promise).
- * Every other callable receives forced, settled values — force-on-unknown-boundary.
- */
-interface SpeculationAware {
-  [SPECULATE]?: boolean;
-}
-
 interface LambdaFunction {
   [LAMBDA]?: boolean;
   __name__?: string;
@@ -3097,33 +3066,14 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   }
 
   // Check what kind of callable we have. A callable VALUE (ANativeProcedure — a first-class
-  // AValue, not a bare fn) enters the same block: it shares the arg-eval / HalfBaked-force /
-  // bounce plumbing, and only the invocation primitive below branches (its apply term vs
-  // Reflect.apply). The SPECULATE / LAMBDA markers are copied onto the value so the force-skip
-  // and _canBounce checks read them uniformly.
+  // AValue, not a bare fn) enters the same block: it shares the arg-eval / bounce plumbing,
+  // and only the invocation primitive below branches (its apply term vs Reflect.apply). The
+  // LAMBDA marker is copied onto the value so the `_canBounce` check reads it uniformly.
   if ((is_function(fn) || is_callable_value(fn) || is_applyable(fn)) && !is_macro(fn)) {
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
     // evaluateArgs's generator return type is `unknown` at this yield site; narrow.
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");
     const args = argsResult;
-
-    // ── Force-on-unknown-boundary (Tier 2 speculative evaluation) ──────────
-    // A `HalfBaked` lazy carrier reaches a builtin's JS body directly via
-    // `fn.apply` below — `evaluateArgs` only awaits real thenables, and a
-    // HalfBaked is not one (`is_promise` is false on it). Any operator that does
-    // NOT understand the carrier must receive its settled value, so here we
-    // FORCE every HalfBaked arg unless the callable opted in (`__speculate__` —
-    // set on `length` and the comparison ops, which read the interval instead).
-    // This is the single chokepoint the force-on-unknown-boundary contract rides
-    // on. Gated on `ctx.speculate`, so default-off runs pay nothing and no
-    // HalfBaked can even exist (producers are gated on the same flag).
-    if (ctx.speculate && (fn as SpeculationAware)[SPECULATE] !== true) {
-      for (let i = 0; i < args.length; i++) {
-        if (is_half_baked(args[i])) {
-          args[i] = yield (args[i] as AHalfBaked).force();
-        }
-      }
-    }
 
     // Thread the dynamic call site so user lambdas invoked synchronously
     // from native JS (e.g. map/filter) pick up THIS Pair's invocation as
@@ -3150,7 +3100,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     _canBounce = (fn as LambdaFunction)[LAMBDA] === true || is_lambda(fn);
     const __savedRunEnv = _currentRunEnv;
     // The rosetta membrane's env back-channel (llm-plane-arrival-env/prompt.ts reads
-    // `currentRunEnv()` under a ctx-less `apply`). The meter/strict/speculate run-state that
+    // `currentRunEnv()` under a ctx-less `apply`). The meter/strict run-state that
     // once also rode holders here now travels on `ctx.runCtx` / the operand ctx.
     _currentRunEnv = ctxResolver(ctx).env;
     const wrappedArgs = wrapLambdaArgs(args, dynSite);

@@ -162,7 +162,7 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
 // derive from the single `lte`; a chain `(< a b c)` holds iff each adjacent pair
 // does. The per-type order lives in the entity's instance, so the string<? /
 // char<? families are type-agnostic chains over it — adding a new ordered type
-// needs no new comparison builtin. Numeric operands take the numeric/speculative
+// needs no new comparison builtin. Numeric operands take the numeric
 // path (numeric.ts's `wrapOrd` — carved out of bridge.ts's former `wrapOperator`) —
 // the FL check is one inexpensive property read.
 export interface AOrd {

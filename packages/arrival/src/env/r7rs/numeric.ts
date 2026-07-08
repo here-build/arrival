@@ -14,9 +14,12 @@
  *      ONLY under non-empty provenance — the boolean landmine the
  *      boolean-landmine-regression test pins);
  *   2. coercion + error-naming — `coerceNumeric` each arg, naming the bad index;
- *   3. codec marshalling — per-arg `match`+`toJS` decode → `fn` → `out.fromJS`;
- *   4. Tier-2 speculation — the five comparison ops read a HalfBaked cardinality
- *      interval for early collapse; everything else forces it (the dispatch choke).
+ *   3. codec marshalling — per-arg `match`+`toJS` decode → `fn` → `out.fromJS`.
+ *
+ * (Tier-2 speculative evaluation — a HalfBaked cardinality-interval early-collapse read
+ * on the five comparison ops — was ejected; see
+ * docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL: zero production
+ * reachability, superseded by R2/C3 struct-fact wires.)
  *
  * The few codecs the numeric ops actually use (most are the identity `SchemeNum`)
  * are carved here too — membrane's `Codec` family is deleted in the teardown.
@@ -30,14 +33,12 @@ import invariant from "tiny-invariant";
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { SPECULATE } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { AHalfBaked, type Interval, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { Values } from "../../values/primitives/Values.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
 import {
@@ -197,7 +198,7 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
 
 /**
  * Build the `(...args) => unknown` builtin for one numeric op — identical to
- * `wrapOperator(ops.X)`. See the file header for the four reproduced concerns.
+ * `wrapOperator(ops.X)`. See the file header for the three reproduced concerns.
  */
 function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => unknown {
   // The synchronous numeric core: provenance + coerce-with-naming + marshalled call.
@@ -225,19 +226,8 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
   };
 
   const fn = function (...args: unknown[]): unknown {
-    // Tier-2 speculative evaluation — a HalfBaked reaches here ONLY for the marked
-    // comparison ops (the dispatch choke forces it for everything else). Decide early
-    // against a narrowing interval, or force the carrier(s) and run the normal path.
-    if (args.some(is_half_baked)) {
-      const decided = SPECULATIVE_OPS.has(name) ? speculativeCompare(name, args) : undefined;
-      if (decided !== undefined) return decided;
-      return Promise.all(args.map((a) => (is_half_baked(a) ? a.force() : a))).then(applyNumeric);
-    }
     return applyNumeric(args);
   };
-  if (SPECULATIVE_OPS.has(name)) {
-    (fn as { [SPECULATE]?: boolean })[SPECULATE] = true;
-  }
   Object.defineProperty(fn, "name", { value: name });
   return fn;
 }
@@ -267,73 +257,6 @@ function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean):
   return fn;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Tier-2 speculative comparison against a HalfBaked cardinality interval.
-// Carved verbatim from bridge.ts. See
-// docs/package-specific/arrival-scheme/speculative-evaluation-promise-functor-2026-06-05.md.
-// ════════════════════════════════════════════════════════════════════════════
-
-/** The comparison ops that can decide early against a narrowing interval. */
-const SPECULATIVE_OPS = new Set(["=", "<", ">", "<=", ">="]);
-
-/** `(op k hb)` ⟺ `(reflect[op] hb k)` — used to normalize the HalfBaked to the left. */
-const REFLECT: Record<string, string> = { ">=": "<=", "<=": ">=", ">": "<", "<": ">", "=": "=" };
-
-/**
- * The early-decision verdict for `(op interval k)`: returns a definite boolean the
- * instant the interval is decisive, or `undefined` to keep waiting. Sound by
- * construction — every branch only fires when the interval ENTIRELY lies on one
- * side of `k`, so the answer cannot change as the interval narrows further.
- */
-function verdictFor(op: string, k: number): ((iv: Interval) => boolean | undefined) | undefined {
-  switch (op) {
-    case ">=":
-      return (iv) => (iv.lo >= k ? true : iv.hi < k ? false : undefined);
-    case ">":
-      return (iv) => (iv.lo > k ? true : iv.hi <= k ? false : undefined);
-    case "<=":
-      return (iv) => (iv.hi <= k ? true : iv.lo > k ? false : undefined);
-    case "<":
-      return (iv) => (iv.hi < k ? true : iv.lo >= k ? false : undefined);
-    case "=":
-      return (iv) => (iv.lo === iv.hi && iv.lo === k ? true : iv.hi < k || iv.lo > k ? false : undefined);
-    default:
-      return undefined;
-  }
-}
-
-/** Best-effort numeric extraction of the concrete operand; undefined ⇒ can't speculate. */
-function toNumber(v: unknown): number | undefined {
-  if (typeof v === "number") return v;
-  if (typeof v === "bigint") return Number(v);
-  if (v instanceof AValue && typeof (v as { valueOf?: () => unknown }).valueOf === "function") {
-    const n = Number((v as { valueOf: () => unknown }).valueOf());
-    return Number.isNaN(n) ? undefined : n;
-  }
-  return undefined;
-}
-
-/**
- * Try to decide a binary comparison where exactly one operand is a number-domain
- * `HalfBaked` (a narrowing cardinality interval) and the other is a concrete number.
- * Returns an early-decision `Promise<boolean>` (provenance-stamped to match the eager
- * path), or `undefined` when speculation doesn't apply.
- */
-function speculativeCompare(name: string, args: unknown[]): unknown | undefined {
-  if (args.length !== 2) return undefined;
-  const [a, b] = args;
-  const aHB = is_half_baked(a);
-  const bHB = is_half_baked(b);
-  if (aHB === bHB) return undefined; // need exactly one HalfBaked operand
-  const hb = (aHB ? a : b) as AHalfBaked;
-  const k = toNumber(aHB ? b : a);
-  if (k === undefined) return undefined;
-  // Normalize so the interval is on the left of the operator.
-  const verdict = verdictFor(aHB ? name : REFLECT[name], k);
-  if (!verdict) return undefined;
-  // R8 mint — always boxed (mintVerdict), matching applyNumeric's uniform exit.
-  return hb.decide(verdict).then((bool) => mintVerdict(args, bool));
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // Operator implementations — carved VERBATIM from operators/numeric.ts. Each `fn`
@@ -740,7 +663,7 @@ const bitwiseIorOp = nativeNumericOp("bitwise-ior", bitwiseIorSpec);
 const bitwiseAndOp = nativeNumericOp("bitwise-and", bitwiseAndSpec);
 const bitwiseNotOp = nativeNumericOp("bitwise-not", bitwiseNotSpec);
 
-// The numeric comparison cores (provenance + speculation), wrapped by `wrapOrd`
+// The numeric comparison cores (provenance), wrapped by `wrapOrd`
 // (FL-Ord fallback) and `looseCompare` (nil-tolerant overlay) below.
 const ltSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: ltFn };
 const gtSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: gtFn };
@@ -756,14 +679,14 @@ const gteOp = nativeNumericOp(">=", gteSpec);
 // Comparison overlay — carved VERBATIM from bridge.ts. `wrapOrd` adds the FL-Ord
 // fallback (non-numeric ordered entities: strings/chars/DateTime/…); `looseCompare`
 // adds the nil-tolerant inference-plane overlay + the strict-mode gate. Numbers fall
-// through to the numeric/speculative core.
+// through to the numeric core.
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
  * Wrap a NUMERIC operator with the FL-Ord fallback. FL-Ord only intercepts
  * NON-NUMERIC ordered entities; a number falls through to `numeric(...)` (ORD_REL is a
  * TOTAL-order shortcut that is WRONG for the partial numeric order, and the numeric op
- * carries provenance + the speculative early-collapse the FL branch can't).
+ * carries provenance the FL branch can't).
  */
 function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
   const rel = ORD_REL[sym];
@@ -785,8 +708,6 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
     }
     return numeric(...args);
   };
-  // Preserve the speculation marker + name so the evaluator's speculative-eval path engages.
-  (fn as { [SPECULATE]?: boolean })[SPECULATE] = (numeric as { [SPECULATE]?: boolean })[SPECULATE];
   Object.defineProperty(fn, "name", { value: sym });
   return fn;
 }
@@ -857,7 +778,6 @@ function looseCompare(sym, core) {
     }
     return core(...args);
   };
-  if (SPECULATIVE_OPS.has(sym)) fn[SPECULATE] = true;
   Object.defineProperty(fn, "name", { value: sym });
   return fn;
 }

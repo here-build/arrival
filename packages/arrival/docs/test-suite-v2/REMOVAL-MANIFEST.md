@@ -20,6 +20,9 @@ because nothing true was enforced.
 | `rosetta-environment.test.ts` | legacy defineRosetta exercises + conversion round-trips | conversions → `membrane/crossing.law.test.ts` tables; defineRosetta rows → `ledger/` `[INVERTS: reverse-membrane]` until the legacy arm dies, then gone |
 | `equality-representation.test.ts` | representation-blind equality (transitional tolerance) | ONE table in `laws/equality.law.test.ts` with per-row `[INVERTS: bare-value-purge]` tags; post-purge the rows flip to strict-door throws |
 | `dataflow-thesis-probes.test.ts` | falsification probes for undecided design (R5) | `ledger/` as it.todo gated on the R5 ruling — a probe of an undecided question is a staged spec, not a green test |
+| `half-baked.test.ts` | AHalfBaked carrier mechanics in isolation (interval narrowing, early decide, force/refine fold) | gone: AHalfBaked itself dissolved (halfbaked-existence-review.md, VERDICT KILL — zero production reachability, superseded by R2/C3 struct-fact wires); the motivating program moved to execution-plan-wireframe.md §8 as a struct-fact-wire acceptance criterion |
+| `speculative-eval.test.ts` | Tier-2 speculation end-to-end oracle (equivalence + early-collapse-vs-hang) | gone: the equivalence floor became vacuous once the producer wiring died — speculate-on and speculate-off are now the SAME code path by construction, not by proof |
+| `deferred-value-egress.test.ts` | force-on-egress hazard characterization (a live AHalfBaked crossing exec's boundary) | gone: same VERDICT KILL as above — no carrier can exist, so there is nothing left to force at egress |
 
 ## B. Blocks/rows removed from surviving files
 
@@ -44,6 +47,7 @@ because nothing true was enforced.
 | rosetta-pure-marker inline-assembled Classifier consumer | pure/pipe classification semantics | `provenance/` law rows + a P14 staging ledger naming the production wiring gate |
 | lists-contract "is_pair-shadow swap byte-identical" spot-checks | helper-equivalence impl-pin | gone (cyclic-list-ops + chibi cover the behavior) |
 | curly-infix flag-on suite (~40) | SRFI-105 semantics behind an unwired flag | R6 RULED: n-expressions force-eliminated — the reader's curly-infix MODE is deleted; `{a * b}` gets an explicit BAN door (educational, points at dict-literal grammar + sugarcoat); suite shrinks to ban-door + dict-grammar rows in `doors/`; neoteric syntax lives in arrival-sugarcoat only |
+| crossing.law "egress of deferred carriers" block (3 `it.fails`) | the force-on-egress contract for a live AHalfBaked crossing exec's boundary | gone: AHalfBaked dissolved (halfbaked-existence-review.md, VERDICT KILL) — the gap became UNREACHABLE, not fixed (no carrier can exist, so there is nothing left to force); ledger GAPS row "live AHalfBaked escapes exec under speculate" retired to a comment |
 
 ## C. Retagged in place (not removed — expiry-tagged)
 
@@ -60,6 +64,6 @@ env-pack (C3 vs Python MRO), name-escape, query.test.ts, prelude/diagnose, let-b
 cond-case-do door suites, syntax-rules trio, parser.test, sandbox-boundary, both
 polyglot-rich-errors suites, all contract-precision suites, the algebra law-harness files,
 purity-doors, provenance-algebra.property, tap.spec, collapse-provenance,
-provenance-deep-stamp, attestation, half-baked, abort, escaped-symbols, srfi-13/28,
+provenance-deep-stamp, attestation, abort, escaped-symbols, srfi-13/28,
 comparison-divergence, boolean-landmine (verified non-inverting), lineage suite (staged via
 G-gates), scheme-zod suites minus the flagged rows.

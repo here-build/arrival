@@ -10,7 +10,6 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
-import { AHalfBaked } from "../values/primitives/AHalfBaked.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
@@ -31,7 +30,7 @@ import { tf } from "../values/tagless-final.js";
 // mutually-cyclic structures terminate.
 //
 // RED-FIRST expectation BEFORE the impl:
-//   G1 — partial: Pair / HalfBaked / membrane wrappers lack EQ.
+//   G1 — partial: Pair / membrane wrappers lack EQ.
 //   G2 — red: Pair has no EQ at all; the seen-threaded direct call is absent.
 //   G3 — GREEN-now (investigated): the fresh-seen stack-blow is LATENT, masked
 //        by structuralEqual's inline Vector block; G3 is the regression guard
@@ -82,7 +81,6 @@ function representativeValues(): { name: string; value: AValue }[] {
     { name: "SchemeSymbol", value: new ASymbol(CONSTANT_CTX, "sym") },
     { name: "SchemeVector", value: new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]) },
     { name: "SchemeBytevector", value: new ABytevector(CONSTANT_CTX, [1, 2, 3]) },
-    { name: "HalfBaked", value: AHalfBaked.collection(CONSTANT_CTX, [Promise.resolve([])], () => [0, 1]) },
     { name: "SchemeJSObject", value: new AJSObject(CONSTANT_CTX, { a: 1 }) },
   ];
   return reps;

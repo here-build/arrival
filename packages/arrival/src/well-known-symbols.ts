@@ -40,13 +40,6 @@ export const CLASS = "arrival/class";
 export const LAMBDA = Symbol.for("arrival/lambda");
 
 /**
- * Marks a builtin that understands a `HalfBaked` arg and must NOT have it
- * forced at the dispatch choke (Tier-2 speculation). Set on `length` and the
- * comparison ops; read by the speculative-eval path in the evaluator.
- */
-export const SPECULATE = Symbol.for("arrival/speculate");
-
-/**
  * Marks a value as quoted data (`(quote …)` output) so the evaluator treats a
  * Pair/symbol/array as a literal rather than a form to evaluate.
  */

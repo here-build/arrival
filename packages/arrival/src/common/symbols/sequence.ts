@@ -34,8 +34,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // (the same erasure boundary rosetta.ts's `rawImpl` crosses). By construction, the sliced
       // args array always matches `DecodedArgs<I,"scheme">`.
       // Stamp fanout on the bound fn only when the contract declares it: cell-less packs bind
-      // `def.run` raw, so the lineage classifier reads `.fanout` off `env.get(op)` directly
-      // (the SPECULATE shape, minus the Symbol).
+      // `def.run` raw, so the lineage classifier reads `.fanout` off `env.get(op)` directly.
       run: Object.assign(
         function (this: CallCtx, ...args: unknown[]) {
           return impl(args as DecodedArgs<I, "scheme">, this.runCtx);

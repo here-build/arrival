@@ -181,9 +181,9 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly pure?: boolean;
   /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map) — one whose
    *  lineage classifies to a per-element fan template. `bakeNative`/`bakeSequence` stamp a plain
-   *  `.fanout = true` on the bound fn; the lineage classifier reads it off `env.get(op)` (the
-   *  `SPECULATE` shape, minus the Symbol). Declared here on the contract, not in a name-list —
-   *  so fan-ness follows the binding (alias-correct), not a string match. */
+   *  `.fanout = true` on the bound fn; the lineage classifier reads it off `env.get(op)`.
+   *  Declared here on the contract, not in a name-list — so fan-ness follows the binding
+   *  (alias-correct), not a string match. */
   readonly fanout?: boolean;
   /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol ASSEMBLY-TIME-ONLY: it binds into
    *  the assembly's phase-gated prelude scope (kernel.ts `assembleEnv` — a per-assembly Map

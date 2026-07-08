@@ -23,7 +23,6 @@ import { type SourceLocation } from "../../errors.js";
 import { is_false, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
-import { AHalfBaked } from "./AHalfBaked.js";
 // Circular import (benign — same pattern AVector/AJSArray already document): collapseProvenance
 // deep-walks APair among other carriers, so provenance-collapse.ts imports APair back. Both
 // directions are referenced only inside function bodies (concatPair/cdr here; the walk closure
@@ -553,7 +552,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ["arrival/tagless-final/map"](
     fn: (x: APairAsListValue<Car, Cdr>) => MaybePromise<SchemeValue>,
     runCtx?: RunContext,
-  ): MaybePromise<AListAlike | AHalfBaked> {
+  ): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
     // Spine-walk surfacing elements as `unknown` — the file's canonical convention
     // (`to_array(): unknown[]`, lineage.ts list-walks): a list element's union
@@ -570,16 +569,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // `this = { ctx: { runCtx } }` — fixes the `this=undefined` crash a bare `fn(x)` caused when
     // the callback (e.g. `cadr`, a rosetta) reads `this.ctx`.
     const results = elements.map((x) => applyCallback(fn, [x], runCtx));
-    if (runCtx?.speculate && results.some(is_promise)) {
-      // map's count is known exactly up front (one output per input → bounds [1,1]), so its
-      // HalfBaked interval is already a POINT — `length` is decidable immediately while the
-      // values still resolve, carrying speculation through a map between a filter and a length check.
-      const slots = results.map(
-        (r): Promise<SchemeValue[]> =>
-          is_promise(r) ? (r as Promise<unknown>).then((v) => [v as SchemeValue]) : Promise.resolve([r as SchemeValue]),
-      );
-      return AHalfBaked.collection(this.ctx, slots, () => [1, 1]);
-    }
     // R2/C2 (docs/test-suite-v2/RULINGS.md R2, naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
     // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
@@ -601,16 +590,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // builtin: Scheme-truthy (`!is_false`) AND nil dropped; a RegExp arg adapts via
   // `String(x).match`, a fn passes through. `pred` is awaited per element (concurrent fan — LIPS
   // lambdas return Promises); kept elements re-cons shallow via Pair.fromArray(_, false), so
-  // element boxes survive and the container box drops. When SPECULATING (`runCtx.speculate`)
-  // and the fan holds promises, emit a lazy AHalfBaked collection instead of awaiting: each slot
-  // resolves independently to its contribution ([] dropped, [x] kept), so a monotone length
-  // check (`(>= (length …) k)`) can collapse the instant `k` is reached, fan still pending.
-  // Supersedes the old stdlib `filter` builtin dispatch — the term owns the algebra AND its
-  // speculation strategy.
+  // element boxes survive and the container box drops. Supersedes the old stdlib `filter`
+  // builtin dispatch — the term owns the algebra.
   ["arrival/tagless-final/filter"](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
     runCtx?: RunContext,
-  ): MaybePromise<AListAlike | AHalfBaked> {
+  ): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
     const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
     const elements: SchemeValue[] = [];
@@ -624,13 +609,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.ctx`-reading callee.
     const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
-    if (runCtx?.speculate && verdicts.some(is_promise)) {
-      const slots = verdicts.map((r, i): Promise<SchemeValue[]> => {
-        const contribute = (verdict: unknown): SchemeValue[] => (kept(verdict) ? [elements[i]] : []);
-        return is_promise(r) ? (r as Promise<unknown>).then(contribute) : Promise.resolve(contribute(r));
-      });
-      return AHalfBaked.collection(this.ctx, slots, () => [0, 1]);
-    }
     // R2/C2 (RULINGS.md R2): filter is LENGTH-CHANGING — the container's own grouping/
     // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
     // container's own top-level stamp and (b) the decision lineage that changed the
