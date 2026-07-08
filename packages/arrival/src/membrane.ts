@@ -48,7 +48,7 @@ import {
 import { InteropAccessError } from "./errors.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
-import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./values/primitives/ACallable.js";
+import { type ACallable } from "./values/primitives/ACallable.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
 // AJSObject/AJSArray live in primitives/ with the rest of the term family; they
@@ -138,48 +138,24 @@ export type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataVie
  */
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
-    case value instanceof ANil:
-      return true;
-    case value === null || value === undefined:
-    case typeof value !== "object" && typeof value !== "function":
-      return false;
+    // R3 (RULINGS.md): recognition is `instanceof AValue` — every wrapper/native
+    // Scheme term, including ANil, Keyword, AVoid, AHalfBaked, and the callable
+    // primitives, derives from AValue. This is structural, not enumerative: a new
+    // AValue subclass is recognized for free, closing the class of "omitted from
+    // the switch" gaps (AVoid, AHalfBaked) that a hand-maintained case list invites.
+    case value instanceof AValue:
 
-    // Every wrapper subtype must be listed here — an omitted one mis-routes back
-    // through fromJS and gets re-boxed as a plain AJSObject instead of passing
-    // through untouched (the hazard the symmetry test pins).
-    case value instanceof AJSObject:
-    case value instanceof AJSArray:
-    case value instanceof ADict:
-
-    // Native Scheme types
-    case value instanceof APair:
-    case value instanceof ASymbol:
-    case value instanceof AString:
-    case value instanceof ABytevector:
-    case value instanceof AVector:
-    case value instanceof ACharacter:
-    case value instanceof AExact:
-    case value instanceof AInexact:
-    case value instanceof ABool:
+    // The few non-AValue control forms that legitimately cross as
+    // "already scheme, don't re-wrap" (BoxedSchemeValue is a superset of
+    // SchemeValue precisely for these — see the type's doc comment above).
     case value instanceof SchemePromise:
     case value instanceof Macro:
     case value instanceof Syntax:
     case value instanceof LambdaContext:
     case value instanceof SchemeEnvironment:
 
-    // Kernel keyword marker — a first-class special form (lambda/define/let/…),
-    // bound + resolved like any value so the form is aliasable; never wrapped.
-    case value instanceof Keyword:
-
     // Scheme lambda: a function carrying the well-known LAMBDA brand (set by the evaluator).
     case typeof value === "function" && LAMBDA in value:
-
-    // Callable-as-value primitives — ALambda/ANativeProcedure/ARosettaProcedure are
-    // AValues, not foreign objects: pass through untouched, else they'd fall to the
-    // fromJS `else` branch and materialize as an uncallable AJSObject dict.
-    case value instanceof ALambda:
-    case value instanceof ANativeProcedure:
-    case value instanceof ARosettaProcedure:
       return true;
 
     default:

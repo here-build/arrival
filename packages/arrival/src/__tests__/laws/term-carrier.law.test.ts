@@ -33,9 +33,11 @@
  *
  * KNOWN VIOLATIONS get `it.fails` with a `// @ledger: <id>` line citing
  * `src/__tests__/ledger/index.law.test.ts`'s GAPS table (enforced by that
- * file's own walker meta-test). Two DR4-shaped cells cite
- * "DR4 vector-map re-box mints empty provenance" (map×AVector, map×AJSArray —
- * AJSArray's map DELEGATES to AVector's, so it is the identical root cause).
+ * file's own walker meta-test). FIXED: the two DR4-shaped cells (map×AVector,
+ * map×AJSArray — AJSArray's map DELEGATES to AVector's, so it was the identical
+ * root cause) used to cite "DR4 vector-map re-box mints empty provenance" —
+ * conservation repair made AVector's map box-preserving (mirrors APair's map,
+ * P8), so both cells are now plain `it()` — GAPS row retired.
  *
  * TICKETED FINDINGS (this audit's ledger-reconciliation pass gave each its own
  * GAPS row and flipped the cells from plain `it()` to `it.fails` — same
@@ -44,14 +46,14 @@
  *     (env/r7rs/equality.ts) — contradicts the term's declared "element-unioning"
  *     discipline for EVERY carrier (booleans never carry provenance in this
  *     codebase today). @ledger: "equal? verdict is empty-provenance flyweight".
- *   - `concat` has no real dispatch path for AJSArray (no
- *     `arrival/tagless-final/concat` method, no dedicated verb): the only
- *     available verb (`append`) silently returns the SECOND operand unchanged,
- *     discarding the first — a P5 "fails loudly" violation, not a clean door.
- *     @ledger: "append silently discards non-pair first operand". (ADict's cells
- *     are NOT part of this gap — its value/boxes/provenance assertions only pin
- *     b's side, ambiguous-by-fixture per the concat case's own comments, and are
- *     currently green.)
+ *   - FIXED: `concat` had no real dispatch path for AJSArray/ADict (neither has an
+ *     `arrival/tagless-final/concat` method or a dedicated verb): the only available
+ *     verb (`append`) used to silently return the SECOND operand unchanged, discarding
+ *     the first — a P5 "fails loudly" violation, not a clean door. `append`'s door fix
+ *     (env/r7rs/lists.ts) now throws for a non-pair/non-nil, non-last operand, naming
+ *     the carrier-appropriate verb; both carriers' concat cells are asserted as
+ *     `unsupported by design` doors above (formerly ledgered as "append silently
+ *     discards non-pair first operand" — GAPS row retired).
  *   - AVector/AJSArray/ADict's own `arrival/toJS` leaves elements still boxed
  *     ("convert lazily") instead of a fully-recursive unwrap.
  *     @ledger: "container toJS leaves boxed element residue".
@@ -138,10 +140,9 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           expect(toPlain(result)).toEqual(toPlain(value));
         });
 
-        // AVector/AJSArray hit the SAME cross-out root cause (AJSArray.map delegates to
-        // AVector's own tagless-final map) — DR4: the generic map term crosses out to the
-        // auto-wrapping AJSArray, stripping each element's box at the raw layer.
-        const dr4 = carrier.carrier === "AVector" || carrier.carrier === "AJSArray";
+        // AVector/AJSArray used to hit the SAME cross-out root cause (AJSArray.map delegates
+        // to AVector's own tagless-final map) — DR4 (FIXED, conservation repair): map is now
+        // box-preserving on every carrier (P8), so no carrier-specific branching is needed.
         const boxesBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(map (lambda (x) x) c)`);
@@ -156,15 +157,8 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
         };
-        if (dr4) {
-          // @ledger: DR4 vector-map re-box mints empty provenance
-          it.fails(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
-          // @ledger: DR4 vector-map re-box mints empty provenance
-          it.fails("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
-        } else {
-          it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
-          it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
-        }
+        it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
+        it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
         break;
       }
 
@@ -243,14 +237,12 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
 
       case "arrival/tagless-final/concat": {
         // Carrier-appropriate verb (see the file-header note) — APair/AVector/AString/
-        // ABytevector each have a real, correctly-dispatching verb. AJSArray has NEITHER a
-        // concat method NOR a dedicated verb (see carriers.ts's note): the only verb reachable
-        // at all (`append`, verbs[0]) is exercised, and is currently WRONG for a POSITIONAL
-        // carrier — it silently drops the first operand instead of concatenating (a P5
-        // "fails loudly" violation). ADict is exercised the same way, but its "value" cell is
-        // NOT asserted as strongly: both mint3 instances share the SAME 3 fold-names, so a
-        // genuine key-overriding merge (b wins on collision) is INDISTINGUISHABLE from the
-        // "b unchanged" bug with this fixture — only b's ids are asserted there.
+        // ABytevector each have a real, correctly-dispatching verb. AJSArray and ADict have
+        // NEITHER a concat method NOR a dedicated verb (see carriers.ts's note): the only
+        // verb reachable at all (`append`, verbs[0]) used to silently discard the first
+        // operand for a non-pair carrier (a P5 "fails loudly" violation) — append's door fix
+        // (lists.ts) closes this uniformly for every non-pair/non-nil, non-last operand, so
+        // both carriers now throw a teaching door instead of misbehaving.
         const concatVerb: Record<CarrierRow["carrier"], string> = {
           APair: "append",
           AVector: "vector-append",
@@ -261,21 +253,19 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         };
         const verb = concatVerb[carrier.carrier];
         const isString = carrier.carrier === "AString";
-        const isDict = carrier.carrier === "ADict";
-        const brokenPositional = carrier.carrier === "AJSArray";
+        const noDedicatedConcatVerb = carrier.carrier === "AJSArray" || carrier.carrier === "ADict";
 
-        const valueTitle = brokenPositional
-          ? "value [KNOWN-UNTICKETED GAP, left red per task brief]: concat should carry BOTH operands' elements"
-          : isDict
-            ? "value: concat's result is at least b's dict (key-collision makes a-preservation unobservable with same-keyed fixtures)"
-            : "value: concat carries both operands' elements, in order";
+        if (noDedicatedConcatVerb) {
+          it(`unsupported by design — doors with: no dedicated concat verb for this carrier; append's P5 door refuses a non-pair, non-last operand rather than silently discarding it`, async () => {
+            const { env, a, b } = await mint3Pair(carrier);
+            await expect(run2(env, a, b, `(${verb} c1 c2)`)).rejects.toThrow();
+          });
+          break;
+        }
+
         const valueBody = async () => {
           const { env, a, b } = await mint3Pair(carrier);
           const result = await run2(env, a, b, `(${verb} c1 c2)`);
-          if (isDict) {
-            expect(toPlain(result)).toEqual(toPlain(b));
-            return;
-          }
           const plainA = toPlain(a);
           const plainB = toPlain(b);
           const expected = isString ? `${plainA}${plainB}` : [...(plainA as unknown[]), ...(plainB as unknown[])];
@@ -287,11 +277,6 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = await run2(env, a, b, `(${verb} c1 c2)`);
           const boxesA = elementBoxes(a);
           const boxesB = elementBoxes(b);
-          if (isDict) {
-            // Key-collision ambiguity (see value cell above) — only b's boxes are unambiguous.
-            expect(elementBoxes(result)).toEqual(boxesB);
-            return;
-          }
           if (boxesA !== null && boxesB !== null) {
             expect(elementBoxes(result)).toEqual([...boxesA, ...boxesB]);
           } else {
@@ -306,27 +291,12 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const { env, a, b, idsA, idsB } = await mint3Pair(carrier);
           const result = await run2(env, a, b, `(${verb} c1 c2)`);
           const deep = deepIds(result);
-          const expectedIds = isDict ? idsB : [...idsA, ...idsB];
-          for (const id of expectedIds) expect(deep.has(id)).toBe(true);
+          for (const id of [...idsA, ...idsB]) expect(deep.has(id)).toBe(true);
         };
 
-        // AJSArray has no real dispatch path for this term (see file header) — the only
-        // reachable verb silently drops the first operand instead of concatenating, a P5
-        // "fails loudly" violation, not a clean door. ADict's cells above are NOT gated
-        // here: its value/boxes/provenance assertions only pin b's side (ambiguous by
-        // fixture, see the isDict branches above), which is currently green.
-        if (brokenPositional) {
-          // @ledger: append silently discards non-pair first operand
-          it.fails(valueTitle, valueBody);
-          // @ledger: append silently discards non-pair first operand
-          it.fails(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
-          // @ledger: append silently discards non-pair first operand
-          it.fails("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
-        } else {
-          it(valueTitle, valueBody);
-          it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
-          it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
-        }
+        it("value: concat carries both operands' elements, in order", valueBody);
+        it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, boxesBody);
+        it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", provBody);
         break;
       }
 

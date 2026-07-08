@@ -26,13 +26,6 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./AValue.js";
 import { ANil, nil } from "./ANil.js";
 import { fromJs } from "./boxing.js";
-// The membrane's JS→Scheme boxing fn — used by the cross-out Functor `map` to re-present the
-// stripped-raw results as a lazy auto-wrapping AJSArray (raw `.source` inside, each element
-// boxed on access). Imported via this hoisted `export function` (not `import { AJSArray }`
-// directly) to avoid a cycle: AJSArray extends AVector, so a direct import would hit `Class
-// extends value undefined` at this module's eval — same cycle-avoidance AJSArray itself uses
-// for `jsToScheme`.
-import { jsToScheme } from "../../rosetta.js";
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
@@ -150,23 +143,15 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
-  // Functor `map` crosses OUT to a foreign Functor: each mapped element is stripped to its raw
-  // JS value (DR4 strip — AString/AExact/ASymbol/ANil → string/number/string/null), then the
-  // stripped array is re-presented as an AJSArray "impersonator": raw values live in `.source`
-  // (reachable for a genuinely-foreign Functor), while Scheme-level access re-boxes each element
-  // ON DEMAND (AJSArray's vector-ref runs jsToScheme per element). That dual nature reconciles
-  // the cross-out with the Functor identity law `map(id) ≡ id` — `(vector-ref (map id v) i)`
-  // yields the element's box again. Deliberately softer than APair's box-PRESERVING map (a Pair
-  // never crosses out). `fn` is awaited per element. (vector-map, the N-ary builtin, is a
-  // separate non-Functor op.)
-  //
-  // Return type is the honest `SchemeValue` union (crosses OUT, not an AVector) — jsToScheme
-  // boxes the raw array into an AJSArray; typed `any` (rosetta legacy debt), annotated to the
-  // honest union.
+  // Functor `map` — PRESERVES every mapped element's box, rebuilding a FRESH AVector (DR4 fix:
+  // mirrors APair's box-preserving map, P8 "one algebra, every carrier" — a term's box
+  // discipline cannot vary by carrier). Results are kept RAW (no box-stripping), same
+  // convention as APair's map. `fn` is awaited per element. (vector-map, the N-ary builtin, is
+  // a separate non-Functor op.)
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
-  ): SchemeValue | Promise<SchemeValue> {
+  ): AVector | Promise<AVector> {
     // STRICT divergence: generic `map` is a LIST op in R7RS — a vector is not a list. Loose
     // mode tolerates it (the term answers map); strict flags it non-portable. `vector-map` is
     // the faithful vector op (a SEPARATE builtin, NOT this method → never gated).
@@ -178,19 +163,11 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
     if (results.some(is_promise)) {
-      return (promise_all(results) as Promise<SchemeValue[]>).then((resolved): SchemeValue => {
-        const boxed: SchemeValue = jsToScheme(
-          this.ctx,
-          resolved.map((v) => unwrapForeign(v)),
-        );
-        return boxed;
-      });
+      return (promise_all(results) as Promise<SchemeValue[]>).then(
+        (resolved): AVector => new AVector(this.ctx, resolved),
+      );
     }
-    const boxed: SchemeValue = jsToScheme(
-      this.ctx,
-      results.map((v) => unwrapForeign(v)),
-    );
-    return boxed;
+    return new AVector(this.ctx, results as SchemeValue[]);
   }
 
   // Filterable — keeps elements satisfying the predicate into a fresh vector, PRESERVING every
@@ -292,21 +269,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   [Symbol.iterator](): Iterator<SchemeValue> {
     return this.__vector__[Symbol.iterator]();
   }
-}
-
-// Box-strip for a vector crossing OUT to a foreign Functor (the DR4 strip): unwraps an internal
-// box to its raw JS value so the foreign Functor stores JS-natives, not arrival internals. A
-// non-box passes through unchanged. Constructor-name dispatch (not `instanceof`) keeps this off
-// the value-class import graph, like `[TO_JS]` above.
-function unwrapForeign(v: unknown): unknown {
-  if (v == null || typeof v !== "object") return v;
-  const box = v as { constructor?: { name?: string }; valueOf(): unknown; __string__?: unknown; __name__?: unknown };
-  const name = box.constructor?.name;
-  if (name === "AExact" || name === "AInexact") return box.valueOf();
-  if (name === "AString") return box.__string__;
-  if (name === "ASymbol") return String(box.__name__);
-  if (name === "ANil") return null;
-  return v;
 }
 
 // Producer-minted (#(...) literal / make-vector / vector / vector-copy / list->vector / ...),

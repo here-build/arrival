@@ -14,19 +14,18 @@
  * pattern (a synthetic ctx.currentInvocation, no live model needed).
  *
  * FLAT vs DEEP — why the property below asserts DEEP, not flat: `provOf` reads
- * only a value's OWN `.provenance` Set (the container-level stamp); several
- * container-rebuilding ops (list spine, append, vector-map's cross-out) leave
- * that OWN stamp empty while the ELEMENTS underneath stay individually boxed and
- * stamped (proven empirically: `(cdr (list a b))`'s flat provenance is `[]` but
- * `collapseProvenance` on the same result finds `[200]` — b's own box survived
- * the spine rebuild by reference). Conservation (P10) is a claim about the VALUE
- * DATAFLOW, not about which object happens to carry the top-level Set, so the
- * property below deep-collapses. The four known-violation rows further below
- * are DIFFERENT: they assert the FLAT/element-box convention several sibling
- * ops already honor (`cons` unions onto the container; `vector-filter`/`pair-map`
- * preserve element boxes) — append/cdr/vector-map/A13 are today's genuine
- * outliers from that convention, which is why they are `it.fails`, not folded
- * into the property.
+ * only a value's OWN `.provenance` Set (the container-level stamp); a
+ * container-rebuilding op can in principle leave that OWN stamp empty while the
+ * ELEMENTS underneath stay individually boxed and stamped. Conservation (P10) is
+ * a claim about the VALUE DATAFLOW, not about which object happens to carry the
+ * top-level Set, so the property below deep-collapses. The known-violation rows
+ * further below are DIFFERENT: they assert the FLAT/element-box convention
+ * several sibling ops already honor (`cons` unions onto the container;
+ * `vector-filter`/`pair-map` preserve element boxes). append/cdr/vector-map were
+ * genuine outliers from that convention — FIXED by the conservation repair (now
+ * plain `it`, not `it.fails`: append's rebuilt head and cdr's projected sub-spine
+ * are stamped with the deep-collapsed union of their elements, and AVector's map
+ * is box-preserving). A13 remains a real outlier [GATE: G2], still `it.fails`.
  */
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -332,34 +331,30 @@ describe("conservation — every input id survives to the output or the trace", 
     );
   });
 
-  // §2 — THE FOUR KNOWN-VIOLATION ROWS (manifest B). Each cites its ledger row
+  // §2 — THE KNOWN-VIOLATION ROWS (manifest B). Each cites its ledger row
   // (src/__tests__/ledger/index.law.test.ts) and asserts the CORRECT/target
-  // behavior — the conservation repair flips these `it.fails` to green.
+  // behavior. append/cdr/DR4 were FIXED by the conservation repair (flipped from
+  // `it.fails` to plain `it` — GAPS rows retired); A13 stays `it.fails` [GATE: G2].
   describe("known violations — real gaps, ledgered, flip on the conservation repair", () => {
-    // @ledger: append drops element provenance
-    it.fails(
+    it(
       "(append (list a) (list b)) — the rebuilt spine's OWN (flat) provenance is the union of both elements, matching cons' union-onto-container convention",
       async () => {
-        // MEASURED today: flat provOf is `[]` (the rebuilt cons cells carry no stamp of
-        // their own — golden-prov-arithmetic's "documented asymmetry"), even though the
-        // ORIGINAL element objects survive by reference (collapseProvenance finds
-        // [100,200]). The repair's target is the FLAT convention `cons` already honors
-        // ("(cons a b) — the cons cell carries the UNION of both elements"): append's
-        // result spine should carry that same union directly, not rely on a deep walk.
+        // FIXED (conservation repair): the rebuilt spine's head cell is now stamped with the
+        // deep-collapsed union of both operands' elements (P10), matching the FLAT convention
+        // `cons` already honors ("(cons a b) — the cons cell carries the UNION of both
+        // elements") instead of relying on a deep walk downstream.
         const r = await runRaw(`(append (list a) (list b))`, { a: sStr("a", 100), b: sStr("b", 200) });
         expect(provOf(r)).toEqual([100, 200]);
       },
     );
 
-    // @ledger: cdr spine unstamped
-    it.fails(
+    it(
       "(cdr (list a b)) — the tail spine's OWN (flat) provenance carries b's id, not empty",
       async () => {
-        // MEASURED today: flat provOf is `[]` (the next cons cell in the original spine
-        // was built unstamped) even though b's own box is intact one level down
-        // (collapseProvenance finds [200] — the golden's "cdr of a proper list returns
-        // the SPINE, which carries nothing" asymmetry). Correct behavior: cdr of a
-        // proper list should carry its sub-spine's element ids at the FLAT level too.
+        // FIXED (conservation repair): the projected tail sub-spine is now stamped with the
+        // deep-collapsed union of what it still reaches (P10) — cdr of a proper list carries
+        // its sub-spine's element ids at the FLAT level, matching cdr-of-cons' element
+        // projection instead of dropping to empty.
         const r = await runRaw(`(cdr (list a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
         expect(provOf(r)).toEqual([200]);
       },
@@ -385,16 +380,14 @@ describe("conservation — every input id survives to the output or the trace", 
       },
     );
 
-    // @ledger: DR4 vector-map re-box mints empty provenance
-    it.fails(
+    it(
       "vector-map — mapped elements keep their ORIGINAL boxes, not fresh empty-provenance re-boxes (DR4)",
       async () => {
-        // MEASURED today: `(map id (vector a b))` crosses out to the auto-wrapping
-        // AJSArray (coercion-soundness.test.ts's "RESOLVED: DR4"); accessing elements
-        // back via `.__vector__` re-boxes them, but from the RAW (unprovenanced) source
-        // — `elemProvs` comes back `[[], []]`, not the originals. Correct behavior: an
-        // identity map must preserve each element's OWN box (matching pair-map and
-        // vector-filter, which already do — P8's "one algebra, every carrier").
+        // FIXED (DR4): `(map id (vector a b))` used to cross out to the auto-wrapping
+        // AJSArray, re-boxing elements from the RAW (unprovenanced) source on access —
+        // `elemProvs` came back `[[], []]`. AVector's map is now box-preserving (mirrors
+        // pair-map and vector-filter — P8's "one algebra, every carrier"), rebuilding a
+        // fresh AVector holding the SAME element boxes.
         const r = await runRaw(`(map (lambda (e) e) (vector a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
         const vec = (r as { __vector__?: unknown[] }).__vector__ ?? [];
         expect(vec.map((e) => provOf(e))).toEqual([[100], [200]]);

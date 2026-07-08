@@ -34,6 +34,9 @@ import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { AString } from "../../values/primitives/AString.js";
+import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AHalfBaked, is_half_baked } from "../../values/primitives/AHalfBaked.js";
 import { SPECULATE } from "../../well-known-symbols.js";
@@ -108,6 +111,27 @@ function isProperList(obj: SchemeValue): boolean {
     if (node.have_cycles("cdr")) return false;
     node = node.cdr;
   }
+}
+
+// P5 door for `append`'s non-last operands: every argument but the last must be
+// a proper list (R7RS §6.4) — append walks its car-spine to splice each element,
+// so a non-pair/non-nil operand there can't silently contribute "nothing" or
+// silently become the whole result (the bug this door closes: concatPair's `a`
+// side vanishing when it isn't a Pair). The message names the carrier-specific
+// concatenation verb that actually exists for that value, so the failure teaches
+// the fix instead of just refusing.
+function nonListAppendOperandMessage(item: SchemeValue): string {
+  const noun = type(item);
+  if (item instanceof AVector) {
+    return `append: every argument but the last must be a proper list, got a vector — use \`vector-append\` to concatenate vectors`;
+  }
+  if (item instanceof AString) {
+    return `append: every argument but the last must be a proper list, got a string — use \`string-append\` to concatenate strings`;
+  }
+  if (item instanceof ABytevector) {
+    return `append: every argument but the last must be a proper list, got a bytevector — use \`bytevector-append\` to concatenate bytevectors`;
+  }
+  return `append: every argument but the last must be a proper list, got a ${noun} — append only splices list spines, not this carrier`;
 }
 
 // `length` carries the Tier-2 speculation marker: the evaluator's dispatch choke
@@ -573,10 +597,20 @@ export default new EnvCapability("scheme/lists", {
         const is_list = isProperList;
         const cloned = items.map((item) => (item instanceof APair ? item.clone() : item));
         return cloned.reduce((acc, item, idx) => {
-          // R7RS: last argument can be any value (creates improper list)
+          // R7RS: last argument can be any value (creates improper list). Every
+          // EARLIER argument must be a proper list (nil or a non-circular Pair
+          // spine) — append walks it to splice its elements, so anything else
+          // there is a P5 violation: fail loudly, naming the real verb, instead
+          // of the item silently contributing nothing (or silently becoming the
+          // whole result when it lands as `acc`).
           const isLast = idx === cloned.length - 1;
-          if (!isLast && (item instanceof APair || item instanceof ANil) && !is_list(item)) {
-            throw new Error("append: Invalid argument, value is not a list");
+          if (!isLast && !(item instanceof ANil)) {
+            if (!(item instanceof APair)) {
+              throw new Error(nonListAppendOperandMessage(item));
+            }
+            if (!is_list(item)) {
+              throw new Error("append: Invalid argument, value is not a list");
+            }
           }
           if (acc instanceof ANil) {
             return item instanceof ANil ? nil : item;

@@ -361,16 +361,23 @@ export type AEntity =
 
 /** Parse `"name: human description"` from a tagged-template. Substitutions are
  *  interpolated first (so a `${verb}: …` template works), then split on the FIRST
- *  colon. No colon ⇒ the whole string is the name (doc undefined). */
+ *  ": " (colon-SPACE) — the name/doc separator, per how every `symbol.notImplemented`/
+ *  `symbol.native` template is actually authored ("name: doc"). Splitting on the
+ *  first bare colon instead is wrong for a canonical name that itself CONTAINS a
+ *  colon (SRFI-14's `char-set:whitespace: …`): a bare-colon split truncates the name
+ *  at "char-set", losing "whitespace". A colon inside the name is never followed by
+ *  a space (`char-set:whitespace`, `char-set:alphabetic`) — only the real name/doc
+ *  separator is, so this handles both `name: doc` and `name:with:colons: doc`. No
+ *  ": " ⇒ the whole string is the name (doc undefined). */
 export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
   let raw = "";
   for (let i = 0; i < tpl.length; i++) {
     raw += tpl[i];
     if (i < sub.length) raw += String(sub[i]);
   }
-  const colon = raw.indexOf(":");
-  if (colon === -1) return { name: raw.trim() };
-  return { name: raw.slice(0, colon).trim(), doc: raw.slice(colon + 1).trim() };
+  const sep = raw.indexOf(": ");
+  if (sep === -1) return { name: raw.trim() };
+  return { name: raw.slice(0, sep).trim(), doc: raw.slice(sep + 1).trim() };
 }
 
 /** A zod schema describing a whole args/return VECTOR — its codec sides are array-shaped

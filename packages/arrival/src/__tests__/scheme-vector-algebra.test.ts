@@ -5,20 +5,17 @@
 // Functor transforms are number→number over the elements' numeric value
 // (AExact coerces via valueOf).
 //
-// AVector.map crosses OUT to a foreign Functor — it STRIPS each element to its raw
-// JS value, but re-presents the stripped array as the AUTO-WRAPPING AJSArray (raw
-// inside `.source`, each element boxed BACK via jsToScheme ON ACCESS). So the mapped
-// structure exposes a boxed `__vector__` again, and the Functor identity law
+// AVector.map PRESERVES every mapped element's box, rebuilding a FRESH AVector (DR4
+// fix — mirrors APair's box-preserving map, P8 "one algebra, every carrier"). So the
+// mapped structure exposes a boxed `__vector__`, and the Functor identity law
 // `map(id) ≡ id` holds under the BOXED Setoid: `boxedEq` compares the two structures'
 // materialized boxes element-wise via `structuralEqual` (which dispatches each
-// element's AExact Setoid). The value-based `numeq` escape hatch the old box-strip
-// forced is GONE — the impersonator's box-on-access is what makes the law natural.
+// element's AExact Setoid).
 // (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AVector } from "../values/primitives/AVector.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { structuralEqual } from "../values/structural-equal.js";
 import type { SchemeValue } from "../values/types.js";
@@ -37,13 +34,10 @@ const vec = (ns: number[]): AVector => new AVector(CONSTANT_CTX, ns.map(box));
 // AExact just like a constructed one.
 const numOf = (x: SchemeValue): number => Number(x.valueOf());
 
-// The BOXED Setoid equality for the Functor laws: AVector.map crosses out to the
-// auto-wrapping AJSArray, whose Scheme-level `__vector__` boxes each element back —
-// so both the mapped structure and the source materialize to a vector of boxes. We
-// compare those boxes element-wise via `structuralEqual`, which routes each element
-// through its own Setoid (AExact ≡ AExact). Reads `__vector__`, which AVector and the
-// mapped AJSArray both expose, so the same `eq` serves an unmapped source and a mapped
-// result. (This REPLACES the old value-based `numeq` escape hatch the box-strip forced.)
+// The BOXED Setoid equality for the Functor laws: AVector.map preserves every element's
+// box, rebuilding a fresh AVector — so both the mapped structure and the source expose a
+// boxed `__vector__`. We compare those boxes element-wise via `structuralEqual`, which
+// routes each element through its own Setoid (AExact ≡ AExact).
 const boxedEq = (a: { __vector__: SchemeValue[] }, b: { __vector__: SchemeValue[] }): boolean =>
   a.__vector__.length === b.__vector__.length && a.__vector__.every((x, i) => structuralEqual(x, b.__vector__[i]));
 
@@ -96,17 +90,13 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
     expect(c.__vector__.map(numOf)).toEqual([1, 2, 3]);
   });
 
-  it("map crosses out to the auto-wrapping AJSArray, leaves the source untouched", async () => {
+  it("map preserves element boxes, rebuilding a FRESH AVector (DR4 fix)", async () => {
     const a = vec([1, 2, 3]);
     // The transform returns a boxed element — `map`'s `fn` is honestly typed `SchemeValue →
-    // SchemeValue` (a Scheme transform yields a Scheme value). `map` then crosses that box OUT to
-    // the impersonator AJSArray (raw `.source`), and Scheme-level access boxes each element back.
-    const mapped = (await a[tf("map")]((x: SchemeValue) => box(numOf(x) * 10))) as AJSArray;
-    expect(mapped).toBeInstanceOf(AJSArray);
-    // DR4 cross-out: the raw source holds bare numbers, reachable for a foreign Functor.
-    expect(mapped.source).toEqual([10, 20, 30]);
-    expect(mapped["arrival/toJS"]()).toEqual([10, 20, 30]);
-    // Functor half: Scheme-level access re-boxes each element to an AExact.
+    // SchemeValue` (a Scheme transform yields a Scheme value). `map` preserves that box
+    // directly, rebuilding a fresh AVector (mirrors APair's box-preserving map, P8).
+    const mapped = (await a[tf("map")]((x: SchemeValue) => box(numOf(x) * 10))) as AVector;
+    expect(mapped).toBeInstanceOf(AVector);
     expect(mapped.__vector__.every((e) => e instanceof AExact)).toBe(true);
     expect(mapped.__vector__.map(numOf)).toEqual([10, 20, 30]);
     // The source vector is untouched (a fresh structure was produced).

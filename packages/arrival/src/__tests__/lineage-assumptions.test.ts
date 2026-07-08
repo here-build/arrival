@@ -233,7 +233,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / AJSArray) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
   );
 
-  it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; count/convert ops drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
+  it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; vector-length/vector->list drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     await initBridge();
     const mkVec = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
@@ -252,8 +252,12 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
       // is NOT carried onto the count today (the eager reality the static path
       // must match; G2 forbids "improving" it under the flag).
       vectorLength: await oneShot(`(vector-length xs)`),
-      // Coercing a vector through the generic list `map`+`length` lands on the
-      // same bare-Number shape — pinning that the coercion is lossy identically.
+      // Coercing a vector through the generic list `map`+`length`: FIXED (DR4 conservation
+      // repair) — `map` no longer cross-out-strips to a raw AJSArray, so `length` now finds
+      // every mapped element's box and unions them. This is the A13-shaped over-attribution
+      // (a count's cone is every touched element, not the minimal grouping fact) — the SAME
+      // gap conservation.law.test.ts's "A13 count-cone over-attribution" row pins for the
+      // Pair carrier [GATE: G2], not something this repair minimizes.
       mapLengthCoerce: await oneShot(`(length (map (lambda (e) e) xs))`),
       // vector->list converts the carrier; the collection-level box does not
       // ride onto the resulting Pair today.
@@ -262,8 +266,11 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     expect(golden).toMatchInlineSnapshot(`
       {
         "mapLengthCoerce": {
-          "ctor": "Number",
-          "prov": [],
+          "ctor": "AExact",
+          "prov": [
+            100,
+            101,
+          ],
         },
         "vectorLength": {
           "ctor": "AExact",

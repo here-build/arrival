@@ -40,20 +40,17 @@ const FAMOUS = WELL_KNOWN_SYMBOLS.filter((e) => e.status === "famous");
 // with-open-file (calling WITH an unbound-variable argument evaluates that argument
 // BEFORE the door fires, since doors are procedures, not macros) — zero arguments
 // means nothing is evaluated before the call, so the door always fires cleanly.
-// KNOWN GAP (found by this suite, not by inspection first): `symbol.notImplemented`'s
-// `parseNameDoc` (common/symbols/_bake.ts) splits the tagged template on the FIRST
-// colon to separate `name` from `doc`. That's wrong for any canonical name that
-// itself CONTAINS a colon — SRFI-14's `char-set:whitespace` / `char-set:alphabetic` /
-// `char-set:numeric` (env/srfi/srfi-stubs.ts) are the only three such entries in the
-// registry. `"char-set:whitespace: ${CHAR_SET_REASON}"` splits at the FIRST colon
-// (between "char-set" and ":whitespace"), so `def.name` is truncated to `"char-set"`
-// and the thrown message reads "char-set is not available" — never naming the actual
-// symbol invoked. The env BINDING itself is correct (capability.ts's `env.set(verb,
-// ...)` uses the object key, not `def.name`), so the door still fires and still
-// carries a real reason — only the "(a) names the symbol" half of P5 regresses for
-// these three. Real bug, out of scope to fix here (this task's remit is `doors/`
-// only) — pinned `it.fails` per P15 so a `_bake.ts` fix flips these loudly.
-const COLON_NAME_BUG = new Set(["char-set:whitespace", "char-set:alphabetic", "char-set:numeric"]);
+// FIXED (was a KNOWN GAP, found by this suite): `symbol.notImplemented`'s
+// `parseNameDoc` (common/symbols/_bake.ts) used to split the tagged template on the
+// FIRST bare colon to separate `name` from `doc` — wrong for any canonical name that
+// itself CONTAINS a colon, e.g. SRFI-14's `char-set:whitespace` / `char-set:alphabetic`
+// / `char-set:numeric` (env/srfi/srfi-stubs.ts): `"char-set:whitespace: ${CHAR_SET_REASON}"`
+// split at the colon between "char-set" and ":whitespace", truncating `def.name` to
+// `"char-set"`. `parseNameDoc` now splits on the first ": " (colon-SPACE) instead — a
+// colon inside a canonical name is never itself followed by a space, only the real
+// name/doc separator is — so these three door with their full name, same as every
+// other stubbed entry (formerly ledgered as "weak-door-colon-name-truncation" — GAPS
+// row retired).
 
 describe("F6 doors — every STUBBED well-known symbol doors with teaching (registry-driven)", () => {
   // Anti-vacuity floor (P16/F9): if this ever collapses to 0, `it.each` below
@@ -98,10 +95,7 @@ describe("F6 doors — every STUBBED well-known symbol doors with teaching (regi
     expect(whyMatch![1].trim().length).toBeGreaterThan(15);
   }
 
-  const STUBBED_NAMED_CORRECTLY = STUBBED.filter((e) => !COLON_NAME_BUG.has(e.name));
-  const STUBBED_COLON_NAME_BUG = STUBBED.filter((e) => COLON_NAME_BUG.has(e.name));
-
-  it.each(STUBBED_NAMED_CORRECTLY.map((e): [string, WellKnownSymbolEntry] => [e.name, e]))(
+  it.each(STUBBED.map((e): [string, WellKnownSymbolEntry] => [e.name, e]))(
     "(%s) doors: names the symbol + carries a substantive teaching reason",
     async (name, entry) => {
       const message = await fireDoor(name);
@@ -111,16 +105,6 @@ describe("F6 doors — every STUBBED well-known symbol doors with teaching (regi
       expectSubstantiveWhy(message);
     },
   );
-
-  for (const entry of STUBBED_COLON_NAME_BUG) {
-    // See COLON_NAME_BUG comment above for the full mechanism.
-    // @ledger: weak-door-colon-name-truncation
-    it.fails(`(${entry.name}) doors: names the symbol [KNOWN GAP: parseNameDoc truncates at the name's own colon]`, async () => {
-      const message = await fireDoor(entry.name);
-      expect(message).toContain(entry.name);
-      expectSubstantiveWhy(message);
-    });
-  }
 });
 
 // ============================================================================
@@ -182,45 +166,29 @@ describe("F6 doors — every FAMOUS-but-absent well-known symbol doors via typo 
 describe("F6 doors — registry completeness drift alarms", () => {
   // Mirrors registry.ts's private `canonicalize` (not exported — the transform is a
   // one-line, load-bearing-stable collapse, safe to inline rather than widen the
-  // module's export surface for a test).
-  const canonicalize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // module's export surface for a test). FIXED (was a KNOWN GAP, found by this
+  // suite): `canonicalize` used to strip EVERY non-`[a-z0-9]` character, so (a) a
+  // name built ENTIRELY of punctuation collapsed to the empty string, and (b)
+  // stripping `?`/`-` merged genuinely distinct BOUND symbols that differ only by a
+  // trailing sigil — three collision groups existed in the table: "" ← `->`, `->>`,
+  // `~>`, `~>>`, `@`, `@?`, `<>`; "dict" ← `dict`, `dict?`; "charset" ← `char-set`,
+  // `char-set?`. `canonicalize` now strips ONLY word-separator noise (`-`/`_`/
+  // whitespace) and keeps every other character (including a trailing `?`/`!` sigil
+  // and the punctuation that IS an operator name's whole identity) significant —
+  // `->` → `>`, `->>` → `>>`, `~>`/`~>>`/`@`/`@?`/`<>` unchanged, `dict?`/`char-set?`
+  // stay distinct from `dict`/`char-set` — while still collapsing dash/underscore/
+  // case/spacing variance for word-like names (`string_split`/`STRING-SPLIT`/
+  // `String Split` all still collapse to `stringsplit`). Registry now has zero
+  // canonical collisions (formerly ledgered as "weak-door-canonical-collision" —
+  // GAPS row retired).
+  const canonicalize = (s: string): string => s.toLowerCase().replace(/[-_\s]/g, "");
 
-  // KNOWN GAP (found by this suite): `canonicalize` strips EVERY non-`[a-z0-9]`
-  // character, so (a) a name built ENTIRELY of punctuation collapses to the empty
-  // string, and (b) stripping `?`/`-` merges genuinely distinct BOUND symbols that
-  // differ only by a trailing sigil. Three collision groups exist in the table today
-  // (found by running this exact check, not by inspection first):
-  //   • "" ← `->`, `->>`, `~>`, `~>>`, `@`, `@?`, `<>` (punctuation-only spellings)
-  //   • "dict" ← `dict`, `dict?`
-  //   • "charset" ← `char-set`, `char-set?`
-  // `BY_CANONICAL` (registry.ts) is a plain `Map`, so it silently keeps only the
-  // LAST-inserted entry per colliding key — a canonical-form typo suggestion for one
-  // of these can point at the wrong symbol. All seven+four names are "bound" status
-  // (the collision only degrades the TYPO-suggestion feature, not a live door), so
-  // it's a real but low-severity registry completeness gap — out of scope to fix
-  // here (touch-only `doors/`). Pinned as `it.fails` below so a `canonicalize` fix
-  // (e.g. preserving a trailing `?` as significant) flips it loudly.
-  const KNOWN_CANONICAL_COLLISIONS: ReadonlySet<string> = new Set(["->", "->>", "~>", "~>>", "@", "@?", "<>", "dict", "dict?", "char-set", "char-set?"]);
-
-  it("registry has no duplicate CANONICAL names beyond the known, pinned collisions (drift alarm)", () => {
-    const seen = new Map<string, string>();
-    for (const entry of WELL_KNOWN_SYMBOLS) {
-      if (KNOWN_CANONICAL_COLLISIONS.has(entry.name)) continue; // pinned separately below, not this gate's job
-      const key = canonicalize(entry.name);
-      const prior = seen.get(key);
-      expect(prior, `NEW canonical collision: \`${entry.name}\` collides with \`${prior}\` (both → \`${key}\`)`).toBeUndefined();
-      seen.set(key, entry.name);
-    }
-  });
-
-  // See KNOWN_CANONICAL_COLLISIONS comment above for the full mechanism.
-  // @ledger: weak-door-canonical-collision
-  it.fails("KNOWN GAP: punctuation-only / trailing-sigil names canonically collide (over-aggressive canonicalize)", () => {
+  it("registry has no duplicate CANONICAL names (drift alarm)", () => {
     const seen = new Map<string, string>();
     for (const entry of WELL_KNOWN_SYMBOLS) {
       const key = canonicalize(entry.name);
       const prior = seen.get(key);
-      expect(prior, `\`${entry.name}\` collides canonically with \`${prior}\` (both → \`${key}\`)`).toBeUndefined();
+      expect(prior, `canonical collision: \`${entry.name}\` collides with \`${prior}\` (both → \`${key}\`)`).toBeUndefined();
       seen.set(key, entry.name);
     }
   });

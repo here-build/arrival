@@ -16,9 +16,14 @@
  * over one source (propagate), arithmetic merges of ≥2 sources (union), the
  * string collapse path (string-append / join), and the list element-vs-container
  * projections (car/cdr/cons). A handful of DOCUMENTED-ASYMMETRY captures
- * (string-length drops, cdr-of-list spine, append rebuild) are included because
- * they are load-bearing for byte-equivalence — the static path must reproduce the
- * eager engine's current behavior here, warts and all, or G2 fails.
+ * (string-length drops) are included because they are load-bearing for
+ * byte-equivalence — the static path must reproduce the eager engine's current
+ * behavior here, warts and all, or G2 fails. The cdr-of-list-spine and
+ * append-rebuild asymmetries this file used to pin here were REPAIRED
+ * (docs/test-suite-v2/RULINGS.md R2, conservation.law.test.ts's §2 rows) — cdr's
+ * projected sub-spine and append's rebuilt head now carry the deep-collapsed
+ * union of their elements instead of dropping to empty; see the fixed goldens
+ * below, no longer under "documented asymmetries".
  *
  * Shared provenance helpers (sStr, sNum, run) are imported from the test-helper
  * module so there is ONE definition of each across the whole suite (run wraps the
@@ -276,26 +281,28 @@ describe("GOLDEN — list element-vs-container provenance (car / cdr / cons)", (
       ]
     `);
   });
-});
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENTED ASYMMETRIES — current eager behavior that is NOT obviously "right",
-// captured BECAUSE byte-equivalence (G2, flag-off) must reproduce it exactly. If
-// the static path "fixes" any of these, flag-off has diverged from today and the
-// gate must catch it. (A separate Wave-R gate file pins the flag-on intent.)
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GOLDEN — documented asymmetries the eager path exhibits TODAY", () => {
-  it("(cdr (list a b)) — cdr of a proper list returns the SPINE, which carries nothing", async () => {
-    // The tail is the next cons cell (a Pair), not the element `b`. That cons cell
-    // was built unstamped, so its provenance is empty — unlike (cdr (cons a b)),
-    // where cdr is the element itself. A real element-vs-container asymmetry.
-    expect(await run(`(cdr (list a b))`, strs())).toMatchInlineSnapshot(`[]`);
+  it("(cdr (list a b)) — FIXED (conservation repair): the tail sub-spine carries b's id, not empty", async () => {
+    // The tail is the next cons cell (a Pair), not the element `b` — but that cons cell is now
+    // stamped with the deep-collapsed union of what it still reaches (P10), matching the
+    // element-vs-container convention cons/list already honor at the top level.
+    expect(await run(`(cdr (list a b))`, strs())).toMatchInlineSnapshot(`
+      [
+        200,
+      ]
+    `);
   });
 
-  it("(append (list a) (list b)) — append rebuilds the spine and DROPS element provenance", async () => {
-    // append reconstructs the result spine; the rebuilt cons cells are not stamped
-    // with the elements they carry, so the top-level result provenance is empty.
-    expect(await run(`(append (list a) (list b))`, strs())).toMatchInlineSnapshot(`[]`);
+  it("(append (list a) (list b)) — FIXED (conservation repair): the rebuilt head unions both operands", async () => {
+    // append reconstructs the result spine; the fresh head cell is now stamped with the
+    // deep-collapsed union of both operands' elements (P10), matching cons' union-onto-
+    // container convention instead of dropping to empty.
+    expect(await run(`(append (list a) (list b))`, strs())).toMatchInlineSnapshot(`
+      [
+        100,
+        200,
+      ]
+    `);
   });
 });
 
@@ -305,13 +312,17 @@ describe("GOLDEN — documented asymmetries the eager path exhibits TODAY", () =
 // once `--ir-lineage` lands, each program above re-run under the static tree must
 // reproduce the SAME sorted provenance frozen by the snapshots in this file.
 // Promote to live `expect(staticRun(...)).toEqual(eagerGolden)` when the flag exists.
+//
+// cdr-of-list-spine and append-rebuild used to be pinned here as "documented
+// asymmetries" — REPAIRED (conservation repair, RULINGS.md R2) and moved up into
+// the regular list-provenance describe above; no longer asymmetries.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GATE G2 (equivalence) — static lineage must match these eager goldens [TODO: flag unbuilt]", () => {
   it.todo("flag-on (+ a b) provenance === eager golden (merge union)");
   it.todo("flag-on (* x x) provenance === eager golden (one-source pipe)");
   it.todo("flag-on (string-append a b) provenance === eager golden (collapse path)");
   it.todo("flag-on (car (cons a b)) provenance === eager golden (element projection)");
-  it.todo("flag-on (cdr (list a b)) provenance === eager golden (spine asymmetry preserved)");
-  it.todo("flag-on (append (list a) (list b)) provenance === eager golden (rebuild drop preserved)");
+  it.todo("flag-on (cdr (list a b)) provenance === eager golden (spine union, conservation-repaired)");
+  it.todo("flag-on (append (list a) (list b)) provenance === eager golden (rebuild union, conservation-repaired)");
   it.todo("flag-OFF every program above is BYTE-IDENTICAL to the snapshots in this file");
 });

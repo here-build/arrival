@@ -97,13 +97,13 @@ export class AJSArray extends AValue {
 
   // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
   // Return types MIRROR AVector's concrete returns: honest + precise, never the abstract
-  // `AValue` (not assignable to the `SchemeValue` union the base declares). `map` crosses OUT
-  // to a foreign Functor the same way AVector's own map does (mirrors AVector's return; the
-  // container-preserving ops below still return AVector).
+  // `AValue` (not assignable to the `SchemeValue` union the base declares). `map` is
+  // box-preserving (DR4 fix, P8 "one algebra, every carrier") — it returns a FRESH AVector,
+  // same as AVector's own map; a borrowed array's map is no longer a foreign-Functor cross-out.
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx?: RunContext,
-  ): SchemeValue | Promise<SchemeValue> {
+  ): AVector | Promise<AVector> {
     return this.vec()[tf("map")](fn, runCtx);
   }
 

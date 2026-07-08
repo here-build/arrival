@@ -213,19 +213,13 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
           spy.mockRestore();
         }
       });
-      // isSchemeValue (membrane.ts) omits AVoid from its recognized-wrapper switch, so
-      // `toJS(theVoid)` throws "received a non-scheme value" instead of unwrapping to
-      // `undefined` — every cell below that calls toJS on theVoid hits this same gap.
-      // @ledger: isSchemeValue omits AVoid
-      it.fails(exitTitle, () => {
+      it(exitTitle, () => {
         expect(toJS(theVoid)).toBe(undefined);
       });
-      // @ledger: isSchemeValue omits AVoid
-      it.fails(roundTripTitle, () => {
+      it(roundTripTitle, () => {
         expect(exitJS(fromJS(undefined))).toBe(undefined);
       });
-      // @ledger: isSchemeValue omits AVoid
-      it.fails(provenanceTitle, () => {
+      it(provenanceTitle, () => {
         // theVoid is a shared, data-free singleton (the "unspecified" marker) — jsToScheme
         // returns it unconditionally for every non-portable JS input, never a fresh
         // provenance-stamped clone. There is no payload here for a stamp to attach to.
@@ -273,8 +267,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         }
       });
       // exitForm: "n/a" — no exit cell for this row.
-      // @ledger: isSchemeValue omits AVoid
-      it.fails(roundTripTitle, () => {
+      it(roundTripTitle, () => {
         expect(exitJS(fromJS(Symbol("x")))).toBe(undefined);
       });
       it(provenanceTitle, () => {
@@ -410,8 +403,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it.todo(exitTitle); // [INVERTS: reverse-membrane/P6] — staged on the region-discipline
       // migration (region.law.test.ts owns its acceptance tests); today there is no
       // region-scoped wrapper to test, so filling this now would just re-pin the gap.
-      // @ledger: isSchemeValue omits AVoid
-      it.fails(`${roundTripTitle} — today a borrowed function voids on entry and stays void through exit`, () => {
+      it(`${roundTripTitle} — a borrowed function voids on entry and stays void through exit`, () => {
         expect(exitJS(fromJS(() => 42))).toBe(undefined);
       });
       it(provenanceTitle, () => {

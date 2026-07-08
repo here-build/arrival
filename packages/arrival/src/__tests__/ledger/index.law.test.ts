@@ -32,26 +32,20 @@ interface LedgerRow {
 }
 
 const GAPS: readonly LedgerRow[] = [
-  { id: "append drops element provenance", gate: "conservation-repair", replacedBy: "provenance/conservation" },
-  { id: "cdr spine unstamped", gate: "conservation-repair", replacedBy: "provenance/conservation" },
+  // "append drops element provenance", "cdr spine unstamped", and "DR4 vector-map
+  // re-box mints empty provenance" RETIRED (conservation repair landed): append's
+  // rebuilt head and cdr's projected sub-spine now carry the deep-collapsed union
+  // of their elements (P10), and AVector's map is box-preserving (P8) — see
+  // provenance/conservation.law.test.ts §2 and laws/term-carrier map×AVector/AJSArray,
+  // now plain `it()` rows.
   { id: "A13 count-cone over-attribution", gate: "G2", replacedBy: "provenance/conservation" },
-  { id: "DR4 vector-map re-box mints empty provenance", gate: "conservation-repair", replacedBy: "laws/term-carrier map×AVector" },
   { id: "exact/list JSON.stringify throws (BigInt backing)", gate: "numeric-json design", replacedBy: "membrane/crossing" },
   { id: "live AHalfBaked escapes exec under speculate", gate: "force-on-egress", replacedBy: "membrane/crossing egress" },
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
   // ── added by the 2026-07-08 sunrise honesty/reconciliation pass ──────────────────
-  { id: "isSchemeValue omits AVoid", gate: "membrane-recognition fix (R3 evidence)", replacedBy: "membrane/crossing undefined row" },
-  {
-    id: "isSchemeValue omits AHalfBaked — Environment.set re-wraps live carriers",
-    gate: "membrane-recognition fix (R3 evidence)",
-    replacedBy: "membrane/crossing egress rows",
-  },
-  { id: "append silently discards non-pair first operand", gate: "append P5 door fix", replacedBy: "laws/term-carrier concat cells" },
   { id: "equal? verdict is empty-provenance flyweight", gate: "R8 boolean-provenance ruling", replacedBy: "laws/term-carrier equals cells" },
   { id: "container toJS leaves boxed element residue", gate: "R9 lazy-egress ruling", replacedBy: "laws/term-carrier toJS cells" },
-  { id: "weak-door-colon-name-truncation", gate: "parseNameDoc colon fix", replacedBy: "doors/registry naming cells" },
-  { id: "weak-door-canonical-collision", gate: "canonicalize fix", replacedBy: "doors/registry collision alarm" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [

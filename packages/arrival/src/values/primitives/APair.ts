@@ -25,6 +25,11 @@ import { is_false, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AHalfBaked } from "./AHalfBaked.js";
+// Circular import (benign — same pattern AVector/AJSArray already document): collapseProvenance
+// deep-walks APair among other carriers, so provenance-collapse.ts imports APair back. Both
+// directions are referenced only inside function bodies (concatPair/cdr here; the walk closure
+// there), never at module-eval time, so the cycle never bites.
+import { collapseProvenance } from "../../provenance-collapse.js";
 import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type SchemeValue, } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
@@ -705,7 +710,21 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   ["arrival/tagless-final/cdr"](): Cdr {
-    return withInputProvenance([this.cdr], this.cdr);
+    const cdr = this.cdr;
+    // A projected sub-spine (the tail is itself a Pair) is a REBUILD boundary the same way
+    // append/list's fresh cells are: the sub-spine's own flat stamp was never set when the
+    // outer list was constructed (only the OUTER head got `withInputProvenance`'d), so a bare
+    // `withInputProvenance([cdr], cdr)` finds nothing to union (cdr's own provenance is empty)
+    // and silently returns the unstamped cell — P10's "rebuild therefore drops" bug. The fix:
+    // stamp the returned sub-spine with the DEEP union of what it still reaches (conservation,
+    // R2 naive strategy) — never minted, only the ids already living on its own elements.
+    if (cdr instanceof APair) {
+      const deep = collapseProvenance(cdr);
+      if (deep.size === 0) return cdr;
+      const merged = cdr.provenance.size === 0 ? deep : new Set([...cdr.provenance, ...deep]);
+      return cdr.withProvenance(merged) as Cdr;
+    }
+    return withInputProvenance([cdr], cdr);
   }
 
   // Type predicate — the receiver answers directly (a `symbol.taglessGuard`) instead of the
@@ -786,6 +805,15 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
   let result: AListAlike = b ?? nil;
   for (let i = cars.length; i--; ) {
     result = new APair(ctx, cars[i], result);
+  }
+  // The rebuilt spine's fresh head cell carries NO stamp of its own by construction (same
+  // rebuild-drop shape cdr's fix above addresses) — stamp it with the union of BOTH operands'
+  // deep element provenance (P10 conservation; matches cons/list's convention of unioning onto
+  // the produced cell, generalized past the one-level union since either operand may itself be
+  // an unstamped rebuilt spine).
+  if (result instanceof APair) {
+    const deep = new Set([...collapseProvenance(a), ...collapseProvenance(b)]);
+    if (deep.size > 0) result = result.withProvenance(deep);
   }
   return result as AConcatPair<Car, Cdr>;
 }

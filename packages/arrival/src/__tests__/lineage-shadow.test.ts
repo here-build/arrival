@@ -22,13 +22,17 @@
  * THE PROVABLE SCOPE (empirically determined, see lineage-shadow.ts "BOUNDARIES"):
  * SOURCE-FREE programs over input-leaf bindings, in the VALUE-position shapes where
  * the static cone coincides with the eager stamp — literals, pure pipe/merge
- * arithmetic, the string-collapse path, `cons` union, and `if`/`let`/`cond` whose
- * conservative selector∪arms superset equals the taken-arm eager cone. The
+ * arithmetic, the string-collapse path, `cons`/`append` union, and `if`/`let`/`cond`
+ * whose conservative selector∪arms superset equals the taken-arm eager cone. The
  * by-design divergences (element-projection car/cdr, cardinality-drop string-length,
- * spine-rebuild append, control-flow cond superset, fan-cardinality length-over-map)
- * are deliberately NOT run under the flag — `exec` would throw on them, which is the
- * correct shadow signal that they lie outside the provable set (they are covered as
- * eager goldens in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc).
+ * control-flow cond superset, fan-cardinality length-over-map) are deliberately NOT
+ * run under the flag — `exec` would throw on them, which is the correct shadow
+ * signal that they lie outside the provable set (they are covered as eager goldens
+ * in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc). `append` MOVED
+ * out of this divergence set (conservation repair, docs/test-suite-v2/RULINGS.md
+ * R2): the rebuilt spine's head now carries the deep-collapsed union of both
+ * operands' elements, matching the static classifier's pure-op union exactly — see
+ * the agreement test below, not the boundary describe.
  */
 import { describe, it, expect } from "vitest";
 import invariant from "tiny-invariant";
@@ -151,6 +155,9 @@ describe("SHADOW — string-collapse & cons-union == eager golden", () => {
   it("(cons a b) — the cons cell carries the UNION of both elements", async () => {
     await expectCone(`(cons a b)`, strs(), [100, 200]);
   });
+  it("(append (list a) (list b)) — the rebuilt spine's head unions both operands (conservation repair)", async () => {
+    await expectCone(`(append (list a) (list b))`, strs(), [100, 200]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,10 +274,6 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     // §5.3 element-vs-container projection: the static tree has no projection node
     // (car is treated as a pure op → operand union). Out of v0.1 scope.
     await expect(runFlagged(`(car (cons a b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
-  });
-  it("spine rebuild: (append (list a) (list b)) — static unions {100,200}, eager drops to {}", async () => {
-    // append rebuilds an unstamped spine. Out of v0.1 scope (spine-vs-element).
-    await expect(runFlagged(`(append (list a) (list b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
   });
   it("control-flow superset: (cond ((< v 0) a) (else b)), else taken — static {5,11,22} ⊋ eager {22}", async () => {
     // DR3: the static cond cone is a conservative SUPERSET (it cannot know the

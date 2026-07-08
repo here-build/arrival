@@ -222,12 +222,24 @@ export const WELL_KNOWN_SYMBOLS: readonly WellKnownSymbolEntry[] = [
 
 const BY_NAME: ReadonlyMap<string, WellKnownSymbolEntry> = new Map(WELL_KNOWN_SYMBOLS.map((e) => [e.name, e]));
 
-/** Lowercase + strip everything but letters/digits — collapses dash/underscore/case
- *  variance (`string_split` / `STRING-SPLIT` / `String Split` all collapse to the
- *  same key as `string-split`) so a spelling-convention miss is caught even when
- *  its raw edit distance is > 1. */
+/** Lowercase + strip WORD-SEPARATOR noise only (`-`/`_`/whitespace) — collapses
+ *  dash/underscore/case/spacing variance (`string_split` / `STRING-SPLIT` /
+ *  `String Split` all collapse to the same key as `string-split`) so a
+ *  spelling-convention miss is caught even when its raw edit distance is > 1.
+ *
+ *  Every OTHER character is kept, lowercased but otherwise significant — a
+ *  trailing `?`/`!` is R7RS/Scheme's own predicate/mutator sigil, not separator
+ *  noise (`dict` vs `dict?`, `char-set` vs `char-set?` are genuinely distinct
+ *  bound symbols), and the punctuation-only spellings (`->`, `->>`, `~>`, `~>>`,
+ *  `@`, `@?`, `<>`) are the ENTIRE identity of those names — stripping every
+ *  non-alphanumeric character (the previous rule) collapsed all seven to the
+ *  empty string and merged the two `?`-suffixed pairs, silently keeping only the
+ *  LAST-inserted entry per colliding key in `BY_CANONICAL` below. Stripping only
+ *  the separator characters keeps every one of those distinct (`->` → `>`,
+ *  `->>` → `>>`, `~>` stays `~>`, `~>>` stays `~>>`, `@` stays `@`, `@?` stays
+ *  `@?`, `<>` stays `<>`) while leaving the word-form collapsing intact. */
 function canonicalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return s.toLowerCase().replace(/[-_\s]/g, "");
 }
 
 const BY_CANONICAL: ReadonlyMap<string, WellKnownSymbolEntry> = new Map(WELL_KNOWN_SYMBOLS.map((e) => [canonicalize(e.name), e]));
