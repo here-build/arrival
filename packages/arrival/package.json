@@ -63,6 +63,10 @@
       "types": "./dist/values/attestation.d.ts",
       "default": "./dist/values/attestation.js"
     },
+    "./provenance": {
+      "types": "./dist/provenance/index.d.ts",
+      "default": "./dist/provenance/index.js"
+    },
     "./type-layer": {
       "types": "./dist/type-layer/index.d.ts",
       "default": "./dist/type-layer/index.js"

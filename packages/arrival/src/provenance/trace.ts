@@ -26,31 +26,44 @@
  * `docs/foundations/arrival-scheme/reference/provenance-model.md` — read it before changing
  * `computeProvenance`, the authoritative-set forwarding, or `accessorField`.
  */
-import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type APair, type ASymbol } from "@here.build/arrival";
-import { action, observable } from "mobx";
 import invariant from "tiny-invariant";
-import { AListAlike } from "@here.build/arrival/attestation";
 
-// ── De-MobXed hot machinery ──────────────────────────────────────────────────
+import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { AutoBindings } from "../values/lineage-auto-bindings.js";
+import type { EvalTap } from "../eval/evaluator.js";
+import { APair } from "../values/primitives/APair.js";
+import type { ASymbol } from "../values/primitives/ASymbol.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
+
+// ── De-MobXed hot machinery, and mobx-free core ─────────────────────────────
 // `Invocation` and `NodeRecord` used to be `makeAutoObservable`. On a deep TCO
 // loop the trace mints one Invocation per recursion step — tens of thousands —
 // and a per-object MobX administration (`values_` / the admin symbol) is ~10× the
 // memory of a plain field bag. A 46k-invocation run retained ~186MB of pure admin
 // + O(n²) provenance Sets, GC-thrashing the tab into the "pause won't land, no JS
 // on the stack" freeze. Nothing observes these fields reactively: the chart reads
-// a PLAIN snapshot (`snapshotTrace`) and live-fill is driven solely by the
-// `#entries` observable box (TraceGraph's `reaction(() => trace.entries)`), which
-// `snapshotTrace` runs OUTSIDE of. So the OBJECTS are now plain. The ONE remaining
-// observable is the `#entries` box — its `.set` IS an observed write, so it must
-// stay inside an `action` (strict mode's `enforceActions: "observed"` throws
-// otherwise: "changing (observed) observable values without using an action"). So
-// `enter` keeps its `action` wrapper; the other tap mutators touch only plain
-// fields and stay bare.
+// a PLAIN snapshot (`snapshotTrace`), so the OBJECTS are (and stay) plain.
+//
+// This class now lives in `@here.build/arrival` (core), which must not depend on
+// mobx at all — so even the ONE remaining reactive signal (a monotonic entries
+// counter TraceGraph subscribes to via `reaction(() => trace.entries)`) is gone
+// from here as a mobx primitive. It's split into two overridable SEAMS instead:
+//   - `_entries` / `bumpEntries()` — plain counter storage + a protected mutator
+//     a subclass can override to route the write through a reactive cell.
+//   - `entries` getter — reads `_entries`; a subclass overrides it to read its
+//     own cell instead.
+// `@here.build/arrival-provenance`'s `ObservableEvalTrace` is that subclass: it
+// keeps the `mobx` dependency, overrides `bumpEntries`/`entries` to wrap an
+// `observable.box`, and wraps `enter` in `action(...)` in its constructor
+// (capturing this class's plain `enter` and re-assigning `this.enter` to an
+// action-wrapped call to it) — restoring byte-identical reactive semantics for
+// every existing consumer (the studio's `TraceGraph`, `arrival-chain`'s tests)
+// while this package stays dependency-free.
 
 export type InvocationState = "running" | "resolved" | "rejected";
 
 /** A form's head symbol name (`filter`, `map`, `:verdict`, …), else null. */
-function headNameOf(node: APair): string | null {
+function headNameOf(node: APair<SchemeValue, SchemeValue>): string | null {
   const head = (node as { car: unknown }).car;
   if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
   const name = (head as { __name__: unknown }).__name__;
@@ -60,7 +73,7 @@ function headNameOf(node: APair): string | null {
 /** If a form is a keyword-accessor application `(:field x)`, the bare field name
  *  (`"verdict"`), else null. The head is the keyword SchemeSymbol whose
  *  `__name__` is `":verdict"`; a head of exactly `":"` (no field) is not one. */
-function accessorField(node: APair): string | null {
+function accessorField(node: APair<SchemeValue, SchemeValue>): string | null {
   const head = (node as { car: unknown }).car;
   if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
   const name = (head as { __name__: unknown }).__name__;
@@ -148,7 +161,7 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
 
 export class Invocation {
   readonly id: number;
-  readonly node: APair;
+  readonly node: APair<SchemeValue, SchemeValue>;
   readonly parent: Invocation | null;
   /**
    * Child invocations spawned within this one's evaluation. Populated as
@@ -210,7 +223,7 @@ export class Invocation {
    */
   symbolContributions: Set<ReadonlySet<number>> | null = null;
 
-  constructor(id: number, node: APair, parent: Invocation | null) {
+  constructor(id: number, node: APair<SchemeValue, SchemeValue>, parent: Invocation | null) {
     this.id = id;
     this.node = node;
     this.parent = parent;
@@ -219,21 +232,22 @@ export class Invocation {
   }
 
   /**
-   * Flip {@link isProvenancePoint} as a MobX action (`makeAutoObservable` wraps
-   * prototype methods as actions). The arrival-scheme rosetta wrapper is MobX-free
-   * and duck-types this object as `{ id, isProvenancePoint? }`; it calls this
-   * method to mark a `provenance: true` rosetta's invocation rather than writing
-   * the observable directly — a raw write trips MobX strict-mode, which the studio
-   * enables (node tests don't, which is why this only surfaced in-app).
+   * Flip {@link isProvenancePoint}. Plain field mutation — see the
+   * de-MobXed-hot-machinery note at the top of the file: `Invocation` is a plain
+   * object, not `makeAutoObservable`, so this needs no `action` wrapper (nothing
+   * observes this field). The arrival-scheme rosetta wrapper duck-types this
+   * object as `{ id, isProvenancePoint? }` and calls this method to mark a
+   * `provenance: true` rosetta's invocation, rather than writing the field
+   * directly, purely to keep the write behind a named seam.
    */
   markProvenancePoint(): void {
     this.isProvenancePoint = true;
   }
 
   /**
-   * Bind {@link metadata} as a MobX action (same strict-mode reason as
-   * {@link markProvenancePoint} — the studio enables strict-mode). Called by the
-   * arrival-scheme rosetta wrapper when a fn returns `resultWithProvenance`.
+   * Bind {@link metadata}. Plain field mutation, same reasoning as
+   * {@link markProvenancePoint}. Called by the arrival-scheme rosetta wrapper
+   * when a fn returns `resultWithProvenance`.
    */
   setMetadata(meta: unknown): void {
     this.metadata = meta;
@@ -266,7 +280,7 @@ export class NodeRecord {
 export const DEFAULT_TRACE_CAP = 500_000;
 
 export class EvalTrace implements EvalTap {
-  readonly records = new Map<APair, NodeRecord>();
+  readonly records = new Map<APair<SchemeValue, SchemeValue>, NodeRecord>();
   /**
    * Task-creating invocations indexed by the task they produced. Stamped at
    * upsertTask time by rosettas that have access to currentInvocation. Lets
@@ -321,10 +335,23 @@ export class EvalTrace implements EvalTap {
    * The blueprint uses it to throttle the O(points²) region rebuild to once per
    * animation frame instead of once per streamed value — the difference between a
    * frozen tab and a responsive one on a long run.
+   *
+   * Plain counter storage — this package (`@here.build/arrival`, core) carries no
+   * mobx dependency. SEAM: `arrival-provenance`'s `ObservableEvalTrace` overrides
+   * {@link bumpEntries} and the {@link entries} getter to route the mutation
+   * through an `observable.box` instead, restoring the reactive signal
+   * `TraceGraph`'s `reaction(() => trace.entries)` depends on without this
+   * package needing to know mobx exists.
    */
-  readonly #entries = observable.box(0);
+  protected _entries = 0;
   get entries(): number {
-    return this.#entries.get();
+    return this._entries;
+  }
+
+  /** SEAM: bump {@link _entries}. Plain increment by default — override in a
+   *  subclass to make the write observable (see {@link entries}'s doc). */
+  protected bumpEntries(): void {
+    this._entries++;
   }
 
   /**
@@ -404,11 +431,14 @@ export class EvalTrace implements EvalTap {
     return this.symbolValues.get(inv)?.get(name);
   }
 
-  // `enter` mutates plain fields (records Map + Invocation fields) AND bumps the
-  // `#entries` observable box — the lone reactive signal renderers subscribe to.
-  // Because that box write is an observed-observable mutation, `enter` MUST be an
-  // `action` (strict mode rejects a bare observed write). `exit`/`markProvenancePoint`
-  // touch only plain fields, so they stay bare.
+  // `enter` mutates plain fields (records Map + Invocation fields) and bumps the
+  // entries counter via the {@link bumpEntries} seam — a plain increment here, in
+  // core. `arrival-provenance`'s `ObservableEvalTrace` wraps this whole method in
+  // mobx's `action(...)` (its `bumpEntries` override writes an observable box,
+  // an observed-observable mutation that mobx strict mode requires be inside an
+  // action); this core method itself needs no such wrapper, since it touches
+  // nothing mobx considers observable. `exit`/`markProvenancePoint` similarly
+  // touch only plain fields.
 
   /** Cap on total trace entries (one per invocation — `enter` mints the only `#nextId`). The trace
    *  retains an Invocation PER reduction with its value/children — monotonic, never GC'd — so a long or
@@ -419,7 +449,7 @@ export class EvalTrace implements EvalTap {
    *  Pass an explicit `Infinity` for a deliberately-unbounded full-fidelity capture. */
   constructor(readonly maxEntries: number = DEFAULT_TRACE_CAP) {}
 
-  enter = action((node: AListAlike, parent: unknown, tailPosition?: boolean): Invocation => {
+  enter = (node: AListAlike, parent: unknown, tailPosition?: boolean): Invocation => {
     if (this.#nextId >= this.maxEntries) {
       // "budget exceeded" in the message so run-isolated's detector returns a partial handle.
       throw new Error(
@@ -427,6 +457,11 @@ export class EvalTrace implements EvalTap {
           `trace; bound the loop or raise ARRIVAL_TRACE_MAX.`,
       );
     }
+    // `AListAlike`'s honest shape admits `ANil`, but the evaluator's tap-firing rules
+    // only ever call `enter` on a located Pair (see the file header: "Atoms, bare
+    // symbols, quoted data, and macro-expansion-constructed Pairs... are not
+    // tracked"). Assert the real invariant instead of widening `node`'s type.
+    invariant(node instanceof APair, "EvalTap.enter node must be a Pair");
     const inv = new Invocation(this.#nextId++, node, parent as Invocation | null);
     if (tailPosition) inv.tailPosition = true;
     let rec = this.records.get(node);
@@ -437,9 +472,9 @@ export class EvalTrace implements EvalTap {
     rec.bindings.add(inv);
     this.#invocationLog.push(inv);
     rec.entered += 1;
-    this.#entries.set(this.#entries.get() + 1);
+    this.bumpEntries();
     return inv;
-  });
+  };
 
   exit = (inv: Invocation, result: Parameters<EvalTap["exit"]>[1]): ReturnType<EvalTap["exit"]> => {
     if (!("value" in result)) {

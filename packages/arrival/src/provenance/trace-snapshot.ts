@@ -67,7 +67,9 @@
  * handled, `node` itself can be dropped from the posted payload. The read-site
  * rewrite co-designs with `trace-to-regions.ts`, so it is A2's edit, not A1's.
  */
-import { schemeToJs, type APair } from "@here.build/arrival";
+import { schemeToJs } from "../rosetta.js";
+import type { APair } from "../values/primitives/APair.js";
+import type { SchemeValue } from "../values/types.js";
 
 import { scopeId } from "./scope-id.js";
 import type { EvalTrace, InvocationState } from "./trace.js";
@@ -83,7 +85,7 @@ export interface PlainInv {
    *  cross-snapshot identity, and the symbol-keyed `__location__`. A2 must project it
    *  to a plain shape before `postMessage`. See the structured-clone contract in this
    *  file's header and `__tests__/trace-snapshot-clone.test.ts`. */
-  node: APair;
+  node: APair<SchemeValue, SchemeValue>;
   /** Pre-derived `scopeId(node)` (`head@line:col`) — the clone-safe twin of `node`.
    *  `scopeId` reads the symbol-keyed `__location__` off the live Pair, which
    *  `structuredClone` strips; deriving it here (while the live Pair is in hand)
@@ -130,7 +132,7 @@ export interface PlainTrace {
  *  so the region build can substitute the runtime outcome into a readable decision
  *  pill (`fails is empty → yes`). Bounded — a branch has a few children, not O(n). */
 const BRANCH_HEADS: ReadonlySet<string> = new Set(["if", "cond", "case", "when", "unless"]);
-const headName = (node: APair | undefined): string | undefined => {
+const headName = (node: APair<SchemeValue, SchemeValue> | undefined): string | undefined => {
   const car = (node as { car?: unknown } | undefined)?.car;
   const n = (car as { __name__?: unknown } | undefined)?.__name__;
   return typeof n === "string" ? n : undefined;
