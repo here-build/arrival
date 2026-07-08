@@ -1,0 +1,211 @@
+# Sugarcoat — formal grammar
+
+Normative surface grammar of the Sugarcoat face. The reader of record is
+[`src/sugarcoat-read.ts`](./src/sugarcoat-read.ts); this document states what it accepts, precisely
+enough to derive an editor grammar (TextMate, tree-sitter, CodeMirror mode) without reading the
+implementation. Where the two disagree, the reader wins and this file has a bug.
+
+A ready-made TextMate derivation ships next to this file:
+[`editors/sugarcoat.tmLanguage.json`](./editors/sugarcoat.tmLanguage.json). The full-fidelity
+reference integration (highlighting + LSP over the lens) is `@here.build/arrival-codemirror`.
+
+**Notation** — PEG-style: `←` defines, `/` is *ordered* choice, `*`/`+`/`?` repeat, terminals are
+quoted, `[…]` is a character class. Lexing is maximal-munch. Grammar is three stacked passes, each
+consuming the previous one's output:
+
+```
+text ──(1. layout)──▶ logical-line tree ──(2. tokens)──▶ token stream ──(3. forms)──▶ s-expressions
+```
+
+---
+
+## 1. Layout (I-expressions)
+
+Sugarcoat is indentation-structured. Layout runs *before* tokenization, on physical lines:
+
+```
+Program      ← LogicalLine*
+LogicalLine  ← physical line + continuation lines        ; see coalescing
+```
+
+1. **Comment / blank stripping.** A line whose first non-space character is `;` is trivia
+   (attached to the next form as `lead`); blank lines end nothing and start nothing.
+2. **Bracket-balance coalescing.** A physical line with unbalanced `(` `{` `[` (or an open
+   at-expression body, §5) absorbs following physical lines until balanced — bracket balance beats
+   layout. Inside code context the joined boundary is whitespace; inside an at-expression body the
+   newline is literal content.
+3. **The offside rule.** After coalescing, a logical line's *indent* is its count of leading
+   spaces. A line plus all following lines with strictly greater indent form one group:
+
+```
+Group  ← Line⟨i⟩ Line⟨>i⟩*         ; children = the maximal run of deeper lines
+```
+
+4. **Group → form.**
+   - Line with no children, one datum → that datum.
+   - Line with children (or several datums) → a list: line's datums followed by each child
+     group's forms. `define (f x)` ⏎ `{x + 1}` ⇒ `(define (f x) (+ x 1))`.
+   - **StepLine exception**: a child line whose first token is a method-DOT is not an argument —
+     it is a postfix step folded onto the parent line's value (§4, method chains).
+   - **Let-family regroup**: after grouping, `(let|let*|letrec|letrec*)` whose leading children
+     are binding-shaped pairs re-collects them into the canonical bindings list (the render
+     elides the `(( ))`; the reader restores it).
+
+Indentation is *view-only*: it never reaches the canonical form and is regenerated on render.
+
+## 2. Lexical grammar
+
+Token kinds (the reader's `Tok`): `(` `)` `{` `}` `[` `]` · method-`.` · quote prefix · word ·
+at-expression.
+
+```
+Token      ← Bracket / AtExpr / Quote / String / Word
+Bracket    ← '(' / ')' / '{' / '}' / '[' / ']'          ; each records TIGHT (see below)
+Quote      ← "'" / '`' / ',@' / ','
+String     ← '"' (escape / [^"])* '"'                    ; R7RS string syntax
+Word       ← wchar+                                      ; wchar = not whitespace, not delimiter
+delimiters :  ( ) { } [ ] " ;  and whitespace
+Comment    ← ';' …end-of-line                            ; trivia, carried as lead/trail
+```
+
+**TIGHT.** Every bracket records whether whitespace separated it from the preceding token.
+Load-bearing for capture: `xs.map{…}` (tight `{` = trailing lambda of `.map`) vs `xs.map {…}`
+(loose `{` = sibling operand). Same for `(` after a method word (`fold(knil)`).
+
+**Method-dot split.** Each Word is rewritten once: split at every `.` that is
+(a) not word-initial, (b) single (next char is not `.` — `..`/`...` stay whole), and
+(c) followed by ident-start `[A-Za-z!$%&*/:<=>?^_~]`, not a digit.
+`xs.map` ⇒ `Word(xs) DOT Word(map)`; `0.5`, `.5`, `x.5`, `(a . b)`, `(x ...)` untouched.
+`\.` is a literal dot in a symbol (unescaped in the word, re-escaped on render).
+
+**At-marker.** `@` starts an at-expression **only** as `@word{` / `@{` / `@(` (tight). Bare `@foo`
+is a plain symbol; `(@ x k)` is the dynamic accessor; `,@` is lexed off `,` first.
+
+**Keywords.** `:name` (prefix) is the canonical keyword. `name:` (suffix, line- or arg-leading)
+is the kwarg spelling — see §6.
+
+## 3. Surface forms
+
+`List`, `Quote`, `String`, `Word` datums are R7RS §7.1.2, unchanged. Non-R7RS productions:
+
+```
+Form           ← ColonPair / Expr
+ColonPair      ← KWSUFFIX Expr                    ; leading `name:` — kwarg pair (§6)
+Expr           ← Postfix
+Postfix        ← Primary Step*                    ; steps bind tighter than infix & application
+Step           ← Subscript / Method
+Subscript      ← '[' Index ']'                    ; NOT tight-gated (x[0] ≡ x [0])
+Method         ← DOT Word Args? TrailingLambda?
+Args           ← TIGHT '(' Expr* ')'              ; extra positionals: fold(knil)
+TrailingLambda ← TIGHT '{' (ArrowLambda / Form) '}'
+Primary        ← List / Quote / Curly / AtExpr / String / Word
+Curly          ← '{' Infix⟨0⟩ '}'
+StepLine       ← INDENT DOT Word Args? TrailingLambda?   ; child line starting with DOT (§1.4)
+```
+
+**Method lowering — receiver-last fold.** `recv.op(a₁ … aₖ){Λ}` ⇒ `(op Λ a₁ … aₖ recv)` — the
+receiver seats in the *last* argument slot; a trailing lambda seats first. Chains fold left:
+`x.f.g` ⇒ `(g (f x))`. StepLines produce the identical CST — layout only.
+
+**Index classification** (inside `Subscript`):
+
+```
+Index  ← INT           ; x[0] → (car x), x[1] → (cadr x) … pull-k accessor
+       / INT ':'       ; x[1:] → (cdr x) … drop-k accessor (k ≥ 1)
+       / ':' wchar+    ; x[:k] → (:k x) — static keyword read
+       / String / Word ; x[k], x["k"] → (@ x k) — dynamic key
+```
+
+The `c[ad]+r` family is the accessor codec (`decodeAccessor`/`encodeAccessor`): any composition
+of pulls and drops round-trips to the fused canonical word (`x[0][0]` ⇔ `caar`).
+
+## 4. Curly-infix
+
+`Infix⟨p⟩`: read one operand; while the next token is an operator `g` with `prec(g) ≥ p`, fold a
+maximal same-glyph run (`{a + b + c}` is one n-ary node), operands read at `Infix⟨prec(g)+1⟩`.
+
+| level | canonical | glyph |
+|---|---|---|
+| 5 | `*` `/` `modulo` `quotient` `remainder` | same |
+| 4 | `+` `-` | same |
+| 3 | `<` `>` `<=` `>=` `=` `eq?` `eqv?` `equal?` | `equal?`→`==`, rest same |
+| 2 | `and` | `&&` |
+| 1 | `or` | `\|\|` |
+| 0 | `=>` | `=>` |
+
+The glyph map is injective (`==`→`equal?`, `&&`→`and`, `\|\|`→`or`, all else identity) — equality
+*kind* survives the round-trip. Unknown ops render at level 3.
+
+**Arrow lambda.** At level 0, `{(p₁ … pₖ) => body}` ⇒ `(lambda (p₁ … pₖ) body)`. A TrailingLambda
+body without a top-level `=>` is the implicit-`it` form: `{body}` ⇒ `(lambda (it) body)`.
+
+## 5. At-expressions
+
+```
+AtExpr    ← '@' Head? '{' Body '}'
+Head      ← Word                                 ; @dedent is a reader special-case, not a binding
+Body      ← (Literal / Interp)*
+Interp    ← '@' Ident                            ; stops at '.' — prose periods stay literal
+          / '@' '|' Ident '|'                    ; explicit boundary: @|name|!
+          / '@' '(' Datum ')'                    ; graft a full form
+Literal   ← any char except '@'                  ; quotes & newlines are literal, no escaping
+```
+
+Lowering: headless `@{…}` ⇒ `(str part…)`; `@head{…}` ⇒ `(head part…)`; `@dedent{…}` strips the
+common indent then lowers to `(str …)` (dedent never exists in canonical form). Adjacent string
+literals coalesce on read — which is exactly the render-side representability gate.
+
+The graft body is **classic prefix context**: the parens are the grafted form's own parens
+(`@(+ x 1)` grafts `(+ x 1)`), so `@(x + 1)` grafts a *call of `x`* and `@({x + 1})` grafts a
+call of the sum — no infix, no postfix steps attach to a bare `@id` interp (`@s[:k]` leaves
+`[:k]` as literal prose; write `@(:k s)`).
+
+Inside a body, brace depth is tracked (a balanced `{…}` inside prose is literal); the body may
+span physical lines (§1.2).
+
+## 6. Colon kwargs
+
+`name:` at pair position is the kwarg spelling of the keyword `:name` — but inflation is
+**head-aware**, not lexical: only kwarg-taking heads (`dict`, and names bound to `.prompt`
+requires) inflate `name: v` back to `:name v` on read. Under an unknown head, `name:` stays the
+literal symbol it is in R7RS. (Symmetrically the render only flattens `:name v` pairs under those
+same heads.) An editor grammar can safely highlight every `name:`/`:name` as a keyword — the
+distinction is semantic, not lexical.
+
+## 7. What is deliberately NOT in the grammar
+
+- **No neoteric** `f(x)`/`f[x]` glue-calls (SRFI-105 tier 2) — collides with subscripts and
+  trailing lambdas. A tight `(` binds only after a method-DOT word.
+- **No `$nfx$` / `$bracket-apply$`** — the precedence ladder (§4) and index classification (§3)
+  replace them (departures D2/D3 of the grammar spec).
+- **No `??`** — removed 2026-07-08; `(if x x y)` renders as a plain `if`.
+- **No indentation in the store** — §1 exists only in this face.
+
+## 8. Editor wiring — the minimal token classes
+
+A basic highlighter needs exactly these classes (this is what the shipped TextMate grammar and
+the CodeMirror mode emit):
+
+| class | matches |
+|---|---|
+| comment | `;` to end of line |
+| string | `"…"` |
+| at-head | `@word{`, `@{`, `@dedent{` |
+| at-body | prose inside at-braces (string-ish) |
+| at-interp | `@id`, `@\|id\|`, `@(…)` inside a body |
+| keyword | `:name`, `name:` |
+| method | `.word` after a value |
+| subscript | `[0]`, `[1:]`, `[:key]` |
+| operator | infix glyphs incl. `=>`, `==`, `&&`, `\|\|` |
+| definition | `define`, `lambda`, `let` family, `cond`, `if`, `else` head words |
+| constant | numbers, `#t` `#f`, `#\char` |
+
+Fidelity beyond coloring (fold ranges, structural selection, hover, rename) should not be
+re-derived from this grammar — align spans via `alignSugarcoatClassic` and drive the canonical
+tooling through the lens, the way `arrival-codemirror` does.
+
+## Conformance
+
+The grammar above is exercised by the package tests (`src/__tests__/`) and the round-trip corpus
+in `arrival-chain` (`sugarcoat-read/-render/-save.test.ts`): every construct must satisfy
+`read(render(x)) ≡ x` on the corpus. A grammar change without a corpus change is suspect.

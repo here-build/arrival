@@ -1,27 +1,28 @@
 /**
- * EXPERIMENT (spike) — classic Scheme → sugarcoat-expression RENDERER.
+ * Classic Scheme → sugarcoat-expression RENDERER.
  *
- * The interesting half of a classic↔sugarcoat bifunctor: sugarcoat→classic is a
- * deterministic reader (SRFI-110 unsweeten), but classic→sugarcoat is a *choice* of
- * layout. This is a first HEURISTIC renderer (width-budget + a fixed head-line
- * rule) to SEE how the sugarcoat shape reads on our real .scm — NOT the MDL-optimal
- * version yet. If the shape is promising, the heuristic's failure modes tell us
- * what an MDL layout-cost must capture (the Yelland/optimal-DP step).
+ * The choice-laden half of the classic↔sugarcoat bifunctor: sugarcoat→classic is a
+ * deterministic reader (sugarcoat-read.ts), but classic→sugarcoat is a *choice* of
+ * layout. This renderer is heuristic (width-budget + a fixed "pull first arg if it
+ * fits" head-line rule), not MDL-optimal — soundness comes from the round-trip law
+ * (read ∘ render preserves the AST, enforced by the corpus tests in arrival-chain),
+ * not from layout optimality.
  *
- * Layers rendered (SRFI-105 + SRFI-110):
+ * Layers rendered:
  *   • curly-infix     (- n 1)            → {n - 1}        ; arithmetic/comparison only
  *   • neoteric        (f x y)            → f(x y)         ; optional (reads odd for data/pairs)
  *   • indentation     big forms          → head on a line, children indented
+ *   • at-expressions  (str "a " x)       → @{a @x}        ; prose/template heads
  *   • comments        ;; a line-comment on its OWN line(s) before a datum is that
  *                     datum's `lead`; one on the SAME line just after is its `trail`.
  *                     Both are captured by the parser and re-emitted — comments are
  *                     trivia to the reader, so carrying them stays round-trip-safe.
  *
- * KNOWN v0 LIMITATIONS (deliberate, for the spike):
- *   • head-line rule is fixed ("pull first arg if it fits"), not optimized.
+ * KNOWN LIMITATIONS:
+ *   • head-line rule is fixed, not optimized (an MDL layout-cost pass would replace it).
  *   • dangling comments before a `)` (own line, no datum after) are dropped, and
  *     comments on inline-rendered operands aren't shown (only at formatSugarcoat seams).
- *   • no $ / \\ group markers, no vectors / #\char.
+ *   • no $ / \\ group markers, no vector (#(…)) rendering.
  */
 
 import invariant from "tiny-invariant";
