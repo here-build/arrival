@@ -20,7 +20,13 @@ import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./sch
 import type { AEntity } from "./symbol.js";
 import { PurityError } from "../errors.js";
 import { Keyword } from "../values/Keyword.js";
-import { ANativeProcedure, type CallableImpl } from "../values/primitives/ACallable.js";
+import { ANativeProcedure, ARosettaProcedure, type CallableImpl } from "../values/primitives/ACallable.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
+// The dependency-free ambient leaf (see its header): the evaluator installs the current
+// invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
+// the leaf imports nothing.
+import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
+import type { InvocationLike } from "../rosetta.js";
 import { CallCtx, makeCallCtx } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -289,28 +295,44 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               }
               case "rosetta": {
-                // DELIBERATELY NOT CONVERTED to ARosettaProcedure in the B2 cut: a source
-                // rosetta MINTS its provenance off `this.invocation.currentInvocation`, and
-                // the apply term threads ONLY `runCtx` (run-level state) — the per-call
-                // invocation has no seam through the term yet. Converting here silently
-                // degrades every source rosetta's mint to the input-union fallback
-                // (conservation.law's seal-laundering rows catch it). The invocation-
-                // threading design belongs to the rosetta stage-3 migration (see
-                // reverse-membrane-for-callables.md §7b + ACallable.ts's ARosettaProcedure
-                // doc). Until then: the legacy bare-fn binding, whose evaluator path passes
-                // `makeCallCtx(ctx.runCtx, ctx.currentInvocation)`.
+                // Stage-3 conversion per reverse-membrane-for-callables.md §9, RULED option
+                // (c) materialized: the per-call INVOCATION reaches the wrapper from the
+                // evaluator's ambient dynamic call site — evaluator-owned state, installed
+                // at every apply site (`setDynamicCallSite(ctx.currentInvocation)` around
+                // evalPair / applyArrowProc / wrapLambda dispatch) — never smuggled by this
+                // binder. The adapter reconstructs the wrapper's `CallCtx` from
+                // (runCtx, ambient), so a SOURCE rosetta's fresh-point mint
+                // (`pointProvenance` off the invocation) works through the apply term
+                // exactly as it did through the legacy bare-fn path (which received
+                // `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as `this`). A direct-JS
+                // call with no evaluator frame sees no ambient → the input-union fallback,
+                // byte-identical to legacy. conservation.law's seal-laundering rows gate
+                // this equivalence.
                 //
                 // Bind via `set`, NOT defineRosetta — that would double-wrap the membrane.
-                const runFn = def.run;
-                const rawRun = runFn as (...args: unknown[]) => unknown;
-                const gatedRun =
+                const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
+                // Boundary casts per applyCallback's convention: the wrapper produces
+                // scheme values by construction; the ambient site is opaque by design and
+                // narrows at this one seam (the same shape evaluator.ts's own
+                // `ctx.currentInvocation as InvocationLike | undefined` sites use).
+                const rosettaCtx = (runCtx: RunContext) =>
+                  makeCallCtx(runCtx, currentDynamicCallSite() as InvocationLike | undefined);
+                const impl: CallableImpl =
                   cellList.length === 0
-                    ? runFn
-                    : async function (this: unknown, ...args: unknown[]) {
+                    ? (args, runCtx) => rawRun.apply(rosettaCtx(runCtx), args) as Promise<SchemeValue>
+                    : async (args, runCtx) => {
                         await ensureSpawned();
-                        return rawRun.apply(this, args);
+                        return (await rawRun.apply(rosettaCtx(runCtx), args)) as SchemeValue;
                       };
-                bindTarget(def).set(verb, gatedRun);
+                const proc = new ARosettaProcedure({
+                  name: verb,
+                  // Arity is introspection-only in this cut, same as the sibling kinds.
+                  arity: { min: 0, max: null },
+                  contract: def,
+                  strategy: { pure: def.pure === true },
+                  impl,
+                });
+                bindTarget(def).set(verb, proc);
                 break;
               }
               case "door":

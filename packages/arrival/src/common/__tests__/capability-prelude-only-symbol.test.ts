@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
-import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure, ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import type { PackContext } from "../kernel.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
@@ -53,8 +53,8 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     await cap.lower({}).apply(runtimeEnv, ctx);
 
     expect(runtimeVerbs["prelude-only/verb"]).toBeUndefined(); // NOT on the runtime env
-    const bound = overlayVerbs["prelude-only/verb"] as WithCtxFn;
-    expect(typeof bound).toBe("function"); // IS on the overlay, same bind form (a real callable)
+    const bound = overlayVerbs["prelude-only/verb"];
+    expect(bound).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape (§9 option (c)); // IS on the overlay, same bind form (a real callable)
   });
 
   it("an ORDINARY (non-preludeOnly) rosetta binds onto the runtime env as before — no regression", async () => {
@@ -69,7 +69,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
 
     await cap.lower({}).apply(runtimeEnv, ctx);
 
-    expect(typeof runtimeVerbs["ordinary/verb"]).toBe("function");
+    expect(runtimeVerbs["ordinary/verb"]).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape
     expect(overlayVerbs["ordinary/verb"]).toBeUndefined();
   });
 
@@ -86,7 +86,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
 
     await cap.lower({}).apply(runtimeEnv, { onDispose: () => undefined, order: [] });
 
-    expect(typeof runtimeVerbs["prelude-only/no-overlay"]).toBe("function");
+    expect(runtimeVerbs["prelude-only/no-overlay"]).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape
   });
 
   it("a preludeOnly NATIVE symbol also routes onto ctx.preludeScope (kind-agnostic)", async () => {

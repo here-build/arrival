@@ -23,16 +23,17 @@ import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { CallCtx, makeCallCtx } from "../symbols/_bake.js";
 import type { InvocationLike } from "../../rosetta.js";
-
-type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (this: CallCtx, ...args: Args) => Result;
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
+import { tf } from "../../values/tagless-final.js";
+import type { SchemeValue } from "../../values/types.js";
 
 /** A SchemeEnv that records every `set` binding (native + rosetta SymbolDefs route through set). */
-function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
-  const verbs: Record<string, WithCtxFn> = {};
+function recordingEnv(): { env: SchemeEnv; verbs: Record<string, ARosettaProcedure> } {
+  const verbs: Record<string, ARosettaProcedure> = {};
   const env = {
-    set: (name: string, value: unknown) => void (verbs[name] = value as WithCtxFn),
+    set: (name: string, value: unknown) => void (verbs[name] = value as ARosettaProcedure),
     get: () => undefined,
     defineRosetta: () => undefined,
     inherit: () => env,
@@ -58,24 +59,26 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
   return { invocation, marked: () => didMark };
 }
 
-async function wireRosetta(def: RosettaSymbolDef): Promise<WithCtxFn> {
+async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
   const cap = new EnvCapability("test/rosetta", { symbols: { verb: def } });
   const { env, verbs } = recordingEnv();
   await cap.lower({}).apply(env, undefined as never);
+  expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
   return verbs.verb;
 }
 
-/** Invoke a bound verb the way the REAL evaluator does: `this = CallCtx` (bare-fn dispatch is
- *  `Reflect.apply(fn, makeCallCtx(runCtx, currentInvocation), args)`), never a trailing ctx
- *  ARGUMENT — the wrapper reads `this.runCtx`/`this.invocation` directly. A bare `verb(...)`
- *  call (this test file's old convention) leaves `this` undefined and throws before even
- *  checking whether a ctx was intended. */
+/** Invoke a bound verb the way the REAL evaluator does post-binder-cut: publish the
+ *  invocation on the evaluator-owned ambient dynamic call site, then dispatch the
+ *  apply term with runCtx only — the binder adapter reads the ambient back into the
+ *  wrapper's CallCtx (reverse-membrane-for-callables.md §9, option (c)). */
 function invoke(
-  verb: WithCtxFn,
+  verb: ARosettaProcedure,
   opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
   ...args: unknown[]
 ): unknown {
-  return verb.call(makeCallCtx(opts?.runCtx, opts?.currentInvocation), ...(args as never[]));
+  return withDynamicCallSite(opts?.currentInvocation, () =>
+    verb[tf("apply")](args as SchemeValue[], opts?.runCtx ?? CONSTANT_CTX),
+  );
 }
 
 describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {

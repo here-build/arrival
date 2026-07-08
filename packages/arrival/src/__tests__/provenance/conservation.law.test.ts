@@ -47,7 +47,8 @@ import { EnvCapability } from "../../common/capability.js";
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
-import { CallCtx, makeCallCtx } from "../../common/symbols/_bake.js";
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -277,12 +278,15 @@ function buildProgram(seed: number): { code: string; ids: number[]; binds: Recor
 // drives the REAL `EnvCapability.lower()` rosetta arm, no live model needed).
 // ═══════════════════════════════════════════════════════════════════════════
 
-type WithCtxFn = (this: CallCtx, ...args: unknown[]) => unknown;
-
-function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
-  const verbs: Record<string, WithCtxFn> = {};
+// Post-binder-cut (capability.ts rosetta case → ARosettaProcedure, §9 option (c)) the
+// wired verb is a callable VALUE, invoked through its apply term with the invocation
+// published on the evaluator-owned ambient — this harness mirrors the evaluator's own
+// apply-site shape (`withDynamicCallSite` around the term dispatch), not a hand-built
+// `this`.
+function recordingEnv(): { env: SchemeEnv; verbs: Record<string, ARosettaProcedure> } {
+  const verbs: Record<string, ARosettaProcedure> = {};
   const env = {
-    set: (name: string, value: unknown) => void (verbs[name] = value as WithCtxFn),
+    set: (name: string, value: unknown) => void (verbs[name] = value as ARosettaProcedure),
     get: () => undefined,
     defineRosetta: () => undefined,
     inherit: () => env,
@@ -293,11 +297,12 @@ function recordingEnv(): { env: SchemeEnv; verbs: Record<string, WithCtxFn> } {
   return { env, verbs };
 }
 
-async function wireRosetta(def: RosettaSymbolDef): Promise<WithCtxFn> {
+async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
   const cap = new EnvCapability("test/conservation-rosetta", { symbols: { verb: def } });
   const { env, verbs } = recordingEnv();
   await cap.lower({}).apply(env, undefined as never);
-  return verbs.verb as WithCtxFn;
+  expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
+  return verbs.verb;
 }
 
 function invocationWithId(id: number): { invocation: InvocationLike; marked: () => boolean } {
@@ -314,11 +319,16 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
 }
 
 function invoke(
-  verb: WithCtxFn,
+  verb: ARosettaProcedure,
   opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
   ...args: unknown[]
 ): unknown {
-  return verb.call(makeCallCtx(opts?.runCtx, opts?.currentInvocation), ...(args as never[]));
+  // The evaluator's apply-site shape: publish the invocation on the ambient leaf, then
+  // dispatch the apply term with runCtx only — the binder adapter reads the ambient back
+  // into the wrapper's CallCtx (§9 option (c)).
+  return withDynamicCallSite(opts?.currentInvocation, () =>
+    verb[tf("apply")](args as SchemeValue[], opts?.runCtx ?? CONSTANT_CTX),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
