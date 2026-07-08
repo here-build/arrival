@@ -13,13 +13,10 @@
 // real SLICE (via `buildSlice`): only the top-level forms the effective value depends on, plus
 // the selector. Intra-form minimal slicing (sub-form re-synthesis) is the deferred increment.
 
-import {
-  execGeneratorExpr as execExpr,
-  parseGenerator as parse,
-  AValue,
-  schemeToJs,
-  type EvalContext,
-} from "@here.build/arrival";
+import { execExpr, parse } from "../eval/generator-exec.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { schemeToJs } from "../rosetta.js";
+import type { EvalContext } from "../eval/evaluator.js";
 
 import { buildSlice, writeForm, defineNameOf, lastTopLevelForm } from "./slice.js";
 import type { EvalTrace } from "./trace.js";

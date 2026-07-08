@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { parseGenerator as parse } from "@here.build/arrival";
+import { parse } from "../../eval/generator-exec.js";
 import { scopeId } from "../trace-to-forest.js";
 
 describe("scopeId", () => {

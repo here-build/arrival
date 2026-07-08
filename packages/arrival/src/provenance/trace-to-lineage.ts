@@ -23,8 +23,9 @@
  * ADDITIVE + flag-gated exactly like the carrier: no `AutoBindings` sidecar
  * (`trace.withAutoBindings()`) → an empty graph with a warning, never a throw.
  */
-import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
-import type { Bindings, Classifier, LineageNode } from "@here.build/arrival";
+import { classify, fieldResolve } from "../values/lineage.js";
+import type { Bindings, Classifier, LineageNode } from "../values/lineage.js";
+import { slotsOf } from "../values/lineage-auto-bindings.js";
 
 import { classifierFromTrace, operandsOf, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import type { EvalTrace } from "./trace.js";

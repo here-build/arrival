@@ -32,8 +32,10 @@
  * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
  * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
  */
-import { classify, fieldResolve, slotsOf } from "@here.build/arrival";
-import type { AutoBindings, Bindings, Classifier, LineageNode } from "@here.build/arrival";
+import { classify, fieldResolve } from "../values/lineage.js";
+import type { Bindings, Classifier, LineageNode } from "../values/lineage.js";
+import { slotsOf } from "../values/lineage-auto-bindings.js";
+import type { AutoBindings } from "../values/lineage-auto-bindings.js";
 
 import type { EvalTrace, Invocation } from "./trace.js";
 
