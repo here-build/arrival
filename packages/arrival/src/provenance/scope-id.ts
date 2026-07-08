@@ -53,7 +53,7 @@ export function scopeId(node: unknown): string {
 }
 
 /** Marker substring stamped into a `.prompt`'s generated-lambda source (see
- *  `resolvePrompt` in `arrival-scheme-env-infer/src/prompt.ts`: `parse(…, undefined,
+ *  `resolvePrompt` in `llm-plane-arrival-env/src/prompt.ts`: `parse(…, undefined,
  *  \`dotprompt:${path}\`)`). A `scopeId`/`PlainInv.scope` string containing this
  *  marker was minted on the RESOLVER-GENERATED `(infer/run …)` form inside the
  *  resolved lambda, not on the user's own call site. */

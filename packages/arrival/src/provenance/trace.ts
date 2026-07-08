@@ -29,6 +29,7 @@
 import { AValue, AutoBindings, EMPTY_PROVENANCE, type EvalTap, type APair, type ASymbol } from "@here.build/arrival";
 import { action, observable } from "mobx";
 import invariant from "tiny-invariant";
+import { AListAlike } from "@here.build/arrival/attestation";
 
 // ── De-MobXed hot machinery ──────────────────────────────────────────────────
 // `Invocation` and `NodeRecord` used to be `makeAutoObservable`. On a deep TCO
@@ -418,7 +419,7 @@ export class EvalTrace implements EvalTap {
    *  Pass an explicit `Infinity` for a deliberately-unbounded full-fidelity capture. */
   constructor(readonly maxEntries: number = DEFAULT_TRACE_CAP) {}
 
-  enter = action((node: APair, parent: unknown, tailPosition?: boolean): Invocation => {
+  enter = action((node: AListAlike, parent: unknown, tailPosition?: boolean): Invocation => {
     if (this.#nextId >= this.maxEntries) {
       // "budget exceeded" in the message so run-isolated's detector returns a partial handle.
       throw new Error(
@@ -440,10 +441,7 @@ export class EvalTrace implements EvalTap {
     return inv;
   });
 
-  exit = (
-    inv: Invocation,
-    result: Parameters<EvalTap["exit"]>[1],
-  ): ReturnType<EvalTap["exit"]> => {
+  exit = (inv: Invocation, result: Parameters<EvalTap["exit"]>[1]): ReturnType<EvalTap["exit"]> => {
     if (!("value" in result)) {
       inv.state = "rejected";
       inv.error = result.error;
