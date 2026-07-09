@@ -1,11 +1,15 @@
 /**
- * Module & resolver contracts for the Scheme environment.
+ * Module & resolver contracts — SUPERSEDED, currently unreferenced.
  *
- * Defines the two interfaces the environment layer consumes:
- * - `FallbackResolver` — extensible lazy lookup (keyword accessors, dot
- *   notation, auto-imports) tried when a direct binding lookup misses.
- * - `EnvironmentModule` — a composable unit of bindings + resolver +
- *   bootstrap code, layered into the environment chain.
+ * `Environment.ts` no longer consumes these: its `registerResolver`/
+ * `_lookupWithResolvers` type against `ResolverSpec` (`common/scheme-env.ts`,
+ * whose header notes it "mirrors arrival-scheme's `FallbackResolver`
+ * structurally"), not the `FallbackResolver` below. `EnvironmentModule` (the
+ * composable bindings+resolver+bootstrap layering unit) has no consumer at
+ * all — the env-pack/capability system (`common/kernel.ts` + `common/
+ * capability.ts`) is the layering mechanism in current use. Neither type is
+ * imported anywhere in this package or by a cross-package consumer; kept
+ * only pending an explicit decision to delete.
  */
 
 import type { Environment } from "./Environment.js";
@@ -31,9 +35,10 @@ export interface FallbackResolver {
 
 /**
  * A composable env layer: eager `bindings`, a lazy `resolver`, and post-binding
- * `bootstrap` Scheme, plus the `dependencies` it declares. Per-layer resolution is
- * bindings → resolver → parent (`_lookupWithResolvers`): an explicit binding beats
- * the layer's own catch-all resolver, both beat the dependency below.
+ * `bootstrap` Scheme, plus the `dependencies` it declares. The intended per-layer
+ * resolution order was bindings → resolver → parent: an explicit binding beats
+ * the layer's own catch-all resolver, both beat the dependency below. (Not wired
+ * to any assembler — see file header.)
  */
 export interface EnvironmentModule {
   /** Unique id; used for dependency resolution and debugging. */

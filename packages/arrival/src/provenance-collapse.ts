@@ -15,13 +15,13 @@
 // EXISTING point ids of every reachable `AValue` (never minting fresh ids, so it
 // stays idempotent under loop accumulation). It must be COMPLETE over the
 // structured carriers — a gap is a silent provenance hole:
-//   • `Pair`        — list spines (`car`/`cdr`)
-//   • `SchemeVector`— elements (the vector itself does NOT stamp from its members)
+//   • `APair`       — list spines (`car`/`cdr`)
+//   • `AVector`     — elements (the vector itself does NOT stamp from its members)
 //   • `AJSArray`— the lazy JS-array wrapper's `source` (the wrapper is NOT an
 //                      AValue, so its elements are invisible to a flat union)
 //   • raw JS `Array`— elements
-// A value's OWN provenance is collected for ANY `AValue` (so a bare SchemeString
-// input carries its lineage). Foreign-object (`SchemeJSObject`) MEMBERS are not
+// A value's OWN provenance is collected for ANY `AValue` (so a bare AString
+// input carries its lineage). Foreign-object (`AJSObject`) MEMBERS are not
 // walked — a dict's own point is collected, but stringifying a dict directly is
 // not a wiring path; access a member first.
 

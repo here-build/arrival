@@ -31,7 +31,7 @@ export type { HeapMeter };
 
 /** The containment message. Carries "budget exceeded" so the same classifier that catches the
  *  wall-clock deadline (`/budget exceeded|abort|maximum call stack/i`) treats this as a contained
- *  outcome, not a genuine fault. Thrown as a `SchemeError` by the caller (which already imports it). */
+ *  outcome, not a genuine fault. Thrown as an `ArrivalError` by the caller (which already imports it). */
 export function heapBudgetMessage(max: number): string {
   return (
     `heap budget exceeded (${max} cells) — a run materialized more list cells than its allocation ` +
