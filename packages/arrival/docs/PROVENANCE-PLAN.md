@@ -138,7 +138,12 @@ widening interplay — cone traversal termination (V4) rows exercise here.
 **Q8b — hashes, paths, store, order.** Lands: template-hash + site-hash, ordinal-PATH
 keying, root-binder program order, template-store interface (fake-backed). Depends:
 Q8a. Gate: two hashes + path keying + template-store rows. Risk: low (mechanical
-against spec §5/§1).
+against spec §5/§1). AMENDED (elk-render research,
+docs/working-proposals/inhuman-elk-over-provenance.md): the render join needs the
+REVERSE index — records key on template-hash + ordinal-path, the plane keys on
+site-hash; Q8b's template-store interface must expose ordinal-path → site-hash
+resolution (a derivable index, not new stored state). Cheap here, painful retrofit;
+gate gains a reverse-resolution row.
 
 **Q8c — wireframe struct-fact wires (the one true R2 gap; spec §2 R2 + §6 lattice).**
 Lands: fact-TAGGED value wires (per spec A5: ONE edge species, a tag not a second
