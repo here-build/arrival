@@ -27,31 +27,29 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// Eager-stamp oracle flag — the READ seam (PROVENANCE-PLAN.md Q9; docs/PROVENANCE.md
-// §7 W1 agreement). `withInputProvenance`/`mintVerdict` below are TODAY's production
-// provenance path (eager accumulation on every op) AND, per the plan, the CI oracle
-// `wireframe-agreement.law.test.ts` replays programs against to verify the prospective
-// wireframe's cone agrees. Q20 ("eager-oracle demotion") will consult this flag INSIDE
-// those two functions to compile stamp accumulation out of production hot paths once
-// the wireframe replaces this path as production's source of provenance (Q16-Q19
-// gate that transition) — that WRITE is explicitly Q20's, not this wave's. Q9's job is
-// only this READ-SIDE seam: land the getter/setter now, default eager-ON, so NOTHING
-// about production behavior changes this wave (no call site below consults it yet) —
-// Q20 CI keeps running the agreement corpus with the oracle flipped on regardless of
-// the production default, per the plan's Q20 gate ("oracle mode still runs the
-// agreement corpus in CI").
+// Eager-stamp oracle flag (PROVENANCE-PLAN.md Q9 read seam + Q20a write wiring;
+// docs/PROVENANCE.md §7 W1 agreement). `withInputProvenance`/`mintVerdict` below are
+// TODAY's production provenance path (eager accumulation on every op) AND the CI
+// oracle `wireframe-agreement.law.test.ts` replays programs against. Q20a wired the
+// flag INSIDE `withInputProvenance`: flag OFF skips stamp accumulation (the filter +
+// union-set allocations) on the hot path while R1 boxing discipline stays intact —
+// an opt-OUT for provenance non-consumers with real-time budgets (arrival-sampler's
+// oracle loop, ~513 interpreter calls/decode-step). Default stays TRUE: production
+// provenance still rides this path until Q20b (post Q16/Q19) flips the default and
+// executes the demotion sweep. Flag is module-GLOBAL — right granularity for the
+// sampler's own processes; if a process ever needs stamped and unstamped envs
+// simultaneously, the upgrade path is a RunContext-carried flag, not a second global.
 let eagerProvenanceOracleEnabled = true;
 
-/** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict` accumulation)
- *  live? True today, unconditionally (no call site branches on it yet — Q20 wires that
- *  in when it demotes the oracle out of the production hot path). */
+/** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict`
+ *  accumulation) live? Default true; `withInputProvenance` branches on it (Q20a). */
 export function isEagerProvenanceOracleEnabled(): boolean {
   return eagerProvenanceOracleEnabled;
 }
 
-/** Test-only override (Q20's future production toggle; Q9 lands the seam so the
- *  agreement suite can assert the default and round-trip the flag). Never called from
- *  production code this wave. */
+/** Opt out of eager stamp accumulation process-wide (Q20a). Values still box per R1;
+ *  they carry EMPTY provenance. Intended for provenance non-consumers (sampler
+ *  runners); tests restore the default in afterEach. */
 export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
   eagerProvenanceOracleEnabled = enabled;
 }
@@ -344,6 +342,25 @@ export function isSchemeNumber(value: unknown): boolean {
  * separately sound (`withProvenance` preserves subtype).
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
+  // Q20a: oracle OFF skips accumulation (filter + union allocations), NOT boxing —
+  // R1's boxed-value discipline is semantics; provenance is the payload being skipped.
+  // ctx still propagates from the first AValue operand (heap-metering channel,
+  // independent of provenance) via an allocation-free scan.
+  if (!eagerProvenanceOracleEnabled) {
+    if (result instanceof AValue) return result;
+    const t = typeof result;
+    if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
+      let ctx = CONSTANT_CTX;
+      for (const a of args) {
+        if (a instanceof AValue) {
+          ctx = a.ctx;
+          break;
+        }
+      }
+      return fromJs(ctx, result, EMPTY_PROVENANCE) as T;
+    }
+    return result;
+  }
   const inputs = args.filter((a): a is AValue => a instanceof AValue);
   if (result instanceof AValue) {
     if (inputs.length === 0) return result;
