@@ -14,7 +14,6 @@
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { EnvLookup } from "../EnvLookup.js";
 import { Environment } from "../Environment.js";
 import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";
@@ -271,10 +270,13 @@ interface HygieneScope {
 // holds per-repetition ARRAYS (the (x ...) accumulation) and the `null` sentinel ("matched,
 // zero repetitions") — never arbitrary host data.
 type BindingCell = Record<string | symbol, SchemeValue | SchemeValue[] | null | undefined>;
-// The TEMPLATE layer's value domain: expanded code plus the EnvLookup placeholders the
-// transformer plants (resolved at substitution) — the honest type of everything the
-// transform fns pass around. Collapses back to SchemeValue when expansion completes.
-type TemplateValue = SchemeValue | EnvLookup<SchemeValue>;
+// The TEMPLATE layer's value domain — plain SchemeValue since the EnvLookup deletion:
+// that wrapper (LIPS's `Value`, renamed at the fork) was a truthiness shield letting the
+// ellipsis loops' `!== undefined` productive-iteration tests distinguish a captured
+// JS-falsy value from "produced nothing". Post bare-value-purge the protected case is
+// uninhabited — every template-domain value is a boxed, always-truthy AValue, so
+// `undefined` alone marks an unproductive iteration.
+type TemplateValue = SchemeValue;
 interface MatchBindings {
   "...": { symbols: BindingCell; lists: unknown[] };
   symbols: BindingCell;
@@ -840,8 +842,7 @@ export function transform_syntax({
               if (!(item.car.cdr instanceof ANil)) {
                 next(name, new APair(CONSTANT_CTX, item.car.cdr, item.cdr));
               }
-              // wrap with EnvLookup to handle undefined
-              return new EnvLookup(item.car.car);
+              return item.car.car;
             } else if (item.cdr instanceof ANil) {
               return item.car;
             } else if (expr instanceof APair) {
@@ -953,9 +954,6 @@ export function transform_syntax({
               // undefined can be null caused by null binding
               // on empty ellipsis
               if (car !== undefined) {
-                if (car instanceof EnvLookup) {
-                  car = car.valueOf();
-                }
                 if (is_spread) {
                   result = result instanceof ANil ? (car as SchemeValue) : concatPairLoose(result, car as SchemeValue);
                 } else {
@@ -981,13 +979,10 @@ export function transform_syntax({
             }
             return result;
           } else {
-            let car = transform_ellipsis_expr(first, symbols, {
+            const car = transform_ellipsis_expr(first, symbols, {
               nested: true,
             });
             if (car) {
-              if (car instanceof EnvLookup) {
-                car = car.valueOf();
-              }
               return new APair(CONSTANT_CTX, car, nil);
             }
             return nil;
@@ -1010,11 +1005,8 @@ export function transform_syntax({
             const next = (key: string | symbol, value: unknown) => {
               new_bind[key] = value as SchemeValue;
             };
-            let value = transform_ellipsis_expr(expr, bind, { nested: false }, next);
+            const value = transform_ellipsis_expr(expr, bind, { nested: false }, next);
             if (value !== undefined) {
-              if (value instanceof EnvLookup) {
-                value = value.valueOf();
-              }
               result = new APair(CONSTANT_CTX, value as SchemeValue, result);
             }
             bind = new_bind;
