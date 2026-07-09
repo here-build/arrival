@@ -49,7 +49,10 @@ const GAPS: readonly LedgerRow[] = [
   // membrane/crossing's R9 egress-law block. AJSArray was reframed, not fixed: a
   // borrowed source exits by IDENTITY (design §4), so residue planted in the source
   // is JS-side data, not membrane residue.
-  { id: "A13 count-cone over-attribution", gate: "G2", replacedBy: "provenance/conservation" },
+  // "A13 count-cone over-attribution" RETIRED (c27b2e8b62, C1/C2/C4): length reads the
+  // container's own facts — golden-prov-fan + conservation.law rows flipped GREEN. The
+  // G2 gate is CLOSED; row kept as comment because a stale GAPS entry is silent false
+  // debt (the walker only enforces @ledger on it.fails — grounded-audit find).
   { id: "exact/list JSON.stringify throws (BigInt backing)", gate: "numeric-json design", replacedBy: "membrane/crossing" },
   // "live AHalfBaked escapes exec under speculate" RETIRED (halfbaked-existence-review.md,
   // VERDICT KILL): AHalfBaked itself dissolved — the gap became UNREACHABLE, not fixed (no

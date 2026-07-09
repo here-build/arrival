@@ -353,7 +353,8 @@ describe("conservation — every input id survives to the output or the trace", 
   // §2 — THE KNOWN-VIOLATION ROWS (manifest B). Each cites its ledger row
   // (src/__tests__/ledger/index.law.test.ts) and asserts the CORRECT/target
   // behavior. append/cdr/DR4 were FIXED by the conservation repair (flipped from
-  // `it.fails` to plain `it` — GAPS rows retired); A13 stays `it.fails` [GATE: G2].
+  // `it.fails` to plain `it` — GAPS rows retired); A13 flipped GREEN at c27b2e8b62
+  // (C1/C2/C4 — length reads container facts). G2 gate CLOSED; ledger row retired.
   describe("known violations — real gaps, ledgered, flip on the conservation repair", () => {
     it(
       "(append (list a) (list b)) — the rebuilt spine's OWN (flat) provenance is the union of both elements, matching cons' union-onto-container convention",
