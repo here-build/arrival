@@ -380,6 +380,75 @@ export function withTrackCoordinate<T>(coordinate: TrackCoordinate, sink: TrackE
   }
 }
 
+// ── Q15: silent-region mode (docs/PROVENANCE.md §4 CHOSEN, round 2 A4; §4 V ruling —
+// glass whole-program replay is ALSO a silent region) ─────────────────────────────────
+//
+// "γ runs in a SILENT region: doors and discipline fully active, stream emission OFF."
+// A silent region suppresses ALL emission for its ENTIRE dynamic extent — every
+// `note*`/`flush*` call site below, PLUS `eval/provenance-hooks.ts`'s
+// `notePotentialRosettaExit` (mints) — while B3's doors (`regionEscapeDoor`,
+// `regionIncompleteDoor`) stay fully active: they read `scope.open`/`scope.pending`,
+// which `withRegionCall`/`closeRegionScope` still mutate exactly as before. Silence is
+// an EMISSION concern, never a discipline concern — this file adds a suppression path,
+// it does not touch a single door.
+//
+// DELIBERATELY a SEPARATE ambient from `_trackCoordinate`/`_trackSink` (never a field
+// folded onto `TrackCoordinate`/`RecordCoordinate`, and never carried on `RegionScope`
+// itself): a coordinate is a per-PORT address that gets SWAPPED by a nested
+// `withTrackCoordinate`/`withRecordCoordinate` install — γ replaying a nested wire, or
+// any drill-in that installs its own coordinate deep inside a silent region's dynamic
+// extent. If silence rode ON the coordinate, that swap would silently DROP it, and a
+// mint minted under the nested coordinate could emit again the instant inner code
+// installs its own — exactly the leak Q15's task brief calls out. `_silentRegion` is
+// instead a save/restore ambient that NO coordinate install anywhere ever touches, so a
+// fresh coordinate minted deep inside `withSilentRegion`'s dynamic extent is STILL
+// checked against the outer silence: leak-proof by construction (an orthogonal ambient
+// nothing else can clear), not by caller discipline.
+//
+// There is deliberately NO "un-silence" primitive. The only way `_silentRegion` ever
+// drops back to its prior value is the `withSilentRegion` call that raised it
+// RETURNING (or its promise SETTLING) — so a nested LOUD region opened inside a silent
+// one (no code path here ever sets `_silentRegion = false` on its own initiative) stays
+// silent for its whole life: silence dominates a nested loud region exactly because
+// nothing can clear it from inside.
+//
+// Read directly by `eval/provenance-hooks.ts` (imported from there, not duplicated) —
+// safe in that direction: `provenance-hooks.ts` already transitively depends on this
+// module today (`provenance-hooks.ts` → `rosetta.js` → `region-scope.ts`), so a direct
+// import adds no new edge to the graph, let alone a cycle (the cycle this file's header
+// warns about is the REVERSE edge, `region-scope.ts` → `provenance-hooks.ts`, which
+// this section still does not add).
+let _silentRegion = false;
+
+/** Is emission currently suppressed by an enclosing silent region? Checked by every
+ *  `note*`/`flush*` call site below AND by `eval/provenance-hooks.ts`'s
+ *  `notePotentialRosettaExit` (mints) — the SAME conjunction `isEmissionEnabled()`
+ *  already established: a single boolean read, checked early, before any other work. */
+export function isSilentRegion(): boolean {
+  return _silentRegion;
+}
+
+/** Run `fn` with silence raised for its ENTIRE dynamic extent — every emission call
+ *  site this scope's discipline reaches (track open/close, host-schedule, and,
+ *  transitively through `eval/provenance-hooks.ts`, mints) no-ops for the duration;
+ *  doors (escape/incomplete) are completely unaffected, since they never read this
+ *  ambient. Async-SETTLE restore (mirrors `withRecordCoordinateAsync`, not the
+ *  sync-only `withTrackCoordinate`): γ's whole multi-tick replay run must stay silent
+ *  until it actually finishes, not just until it first returns a pending Promise.
+ *  Nests correctly with NO special-casing: a `withSilentRegion` called while already
+ *  silent (silent-in-silent, or the "loud-in-silent" case where nothing ever clears
+ *  the ambient in between) saves `true` and restores `true` — the outer region's
+ *  silence is never prematurely lifted by an inner one finishing first. */
+export async function withSilentRegion<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = _silentRegion;
+  _silentRegion = true;
+  try {
+    return await fn();
+  } finally {
+    _silentRegion = saved;
+  }
+}
+
 /** One track event's `RecordId` — claims a FRESH trailing ordinal from
  *  `scope.trackOrdinal` every call (never reused across open/close, and never across
  *  two different tracks). Collision-freedom matters structurally, not just for tidy
@@ -403,6 +472,7 @@ function mintTrackId(scope: RegionScope, coordinate: TrackCoordinate): RecordId 
  *  flag is on AND `scope` was minted with a coordinate/sink installed. */
 function noteTrackOpen(scope: RegionScope): void {
   if (!isEmissionEnabled()) return;
+  if (isSilentRegion()) return; // Q15: silent region — doors stay active, emission doesn't
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;
   const id = mintTrackId(scope, coordinate);
@@ -418,6 +488,7 @@ function noteTrackOpen(scope: RegionScope): void {
  *  conjunction as `noteTrackOpen`. */
 function noteTrackClose(scope: RegionScope): void {
   if (!isEmissionEnabled()) return;
+  if (isSilentRegion()) return; // Q15: silent region — doors stay active, emission doesn't
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;
   const id = mintTrackId(scope, coordinate);
@@ -439,6 +510,7 @@ export function recordHostScheduleVerdict(
   verdict: number,
 ): void {
   if (!isEmissionEnabled()) return;
+  if (isSilentRegion()) return; // Q15: never accumulate under silence — nothing to flush later either
   if (scope.trackCoordinate === undefined || scope.trackSink === undefined) return;
   scope.hostSchedule.push({ left, right, verdict });
 }
@@ -452,6 +524,7 @@ export function recordHostScheduleVerdict(
  *  no-ops (never an empty record on the wire). */
 function flushHostSchedule(scope: RegionScope): void {
   if (!isEmissionEnabled()) return;
+  if (isSilentRegion()) return; // Q15: silent region — doors stay active, emission doesn't
   if (scope.hostSchedule.length === 0) return;
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;

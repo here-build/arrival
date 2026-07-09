@@ -90,3 +90,4 @@ export {
   type PreludeMembership,
 } from "./prelude.js";
 export { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
+export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";

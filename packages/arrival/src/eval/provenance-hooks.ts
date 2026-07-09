@@ -39,6 +39,7 @@ import { emitMint, isEmissionEnabled } from "../provenance/store/emit.js";
 import type { OrdinalPath, RegionEpoch, RegionId, TemplateHash } from "../provenance/store/ids.js";
 import type { PayloadStore, ProvenanceStore } from "../provenance/store/interfaces.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { isSilentRegion } from "../values/primitives/region-scope.js";
 import { schemeToJs } from "../rosetta.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -152,6 +153,15 @@ function payloadOf(value: SchemeValue): { readonly value: unknown; readonly stam
  */
 export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | Promise<SchemeValue>): void {
   if (!isEmissionEnabled()) return;
+  // Q15 (docs/PROVENANCE.md §4 CHOSEN, round 2 A4): a silent region (γ, or a glass
+  // whole-program replay) suppresses this mint too — `isSilentRegion` is a SEPARATE
+  // ambient from `_coordinate`/`_sink` below (owned by `values/primitives/region-
+  // scope.ts`, imported directly rather than duplicated — see that file's own "Q15:
+  // silent-region mode" section for why the direction is cycle-free and why this is
+  // the leak-proof placement: a nested `withRecordCoordinate` install deep inside a
+  // silent region's dynamic extent still finds `isSilentRegion()` true, because
+  // nothing but the enclosing `withSilentRegion` call ever touches it).
+  if (isSilentRegion()) return;
   const coordinate = _coordinate;
   const sink = _sink;
   if (coordinate === undefined || sink === undefined) return;
