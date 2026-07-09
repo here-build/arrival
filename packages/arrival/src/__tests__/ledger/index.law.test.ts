@@ -32,6 +32,27 @@ interface LedgerRow {
 }
 
 const GAPS: readonly LedgerRow[] = [
+  // "W4 accumulation death" (REWORK-DAG.md P10's own exit-gate phrase: "eager mode
+  // demoted to oracle; 186MB failure mode gone (R3 benchmark)") RETIRED at Q20b
+  // (PROVENANCE-PLAN.md; docs/PROVENANCE.md §4 C12): op-helpers.ts's
+  // `eagerProvenanceOracleEnabled` default flipped false → production hot paths
+  // accumulate ZERO stamps unless something explicitly opts in (a test's
+  // beforeAll, the CI agreement oracle, or a replay running inside a silent
+  // region — see op-helpers.ts's `isEagerAccumulationActive`). Two hand-rolled
+  // `unionProvenance` call sites that bypassed `withInputProvenance` entirely
+  // (`env/r7rs/numeric.ts`'s `applyNumeric`/`numberToStringFn` — EVERY arithmetic
+  // op) were gated on the same switch in-step; without that fix arithmetic would
+  // have kept accumulating unconditionally, silently defeating the default flip
+  // for the single highest-traffic operation category. Proven end-to-end (not
+  // just at op-helpers.ts's own boundary) by `laws/oracle-optout.law.test.ts`'s
+  // "W4" row: a real program run through the real interpreter with untouched
+  // default flags carries EMPTY provenance. Never had an `it.fails` row (the
+  // 186MB failure mode was a memory-growth characterization, not a law-test
+  // gap) — recorded here per this ledger's "no ledger gate references a
+  // ruling/migration that has already landed" spirit, so the P10 phrase has a
+  // present-tense home instead of only living in REWORK-DAG.md's superseded
+  // P-track.
+  //
   // "append drops element provenance", "cdr spine unstamped", and "DR4 vector-map
   // re-box mints empty provenance" RETIRED (conservation repair landed): append's
   // rebuilt head and cdr's projected sub-spine now carry the deep-collapsed union

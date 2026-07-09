@@ -47,6 +47,12 @@ import type { EnvCapability } from "../common/capability.js";
 import { nil } from "../values/primitives/ANil.js";
 import { provOf } from "../values/lineage-shadow.js";
 import { tf } from "../values/tagless-final.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: this file calls carrier ops (map/filter/length/sort) directly against
+// pre-stamped fixtures, which route through op-helpers.ts's accumulation — force
+// the oracle ON for the file's lifetime.
+requireEagerOracle();
 
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was

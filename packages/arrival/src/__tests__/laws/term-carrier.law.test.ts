@@ -79,6 +79,11 @@ import type { Environment } from "../../Environment.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { requireEagerOracle } from "../_require-eager-oracle.js";
+
+// Q20b: the container-box law rows run real programs through execState and assert
+// accumulated provenance — force the oracle ON for this file's lifetime.
+requireEagerOracle();
 
 /** Runs `src` against a law env with one container bound as `c`. Boxed-result tier
  *  (execState) — this file asserts box discipline/provenance on the return, a

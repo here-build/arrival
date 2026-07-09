@@ -19,6 +19,11 @@ import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { nil } from "../values/primitives/ANil.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: the string-collapse assertions below (join/string-append via real exec) need
+// the eager oracle forced ON for this file's lifetime.
+requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

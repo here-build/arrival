@@ -12,6 +12,7 @@
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "./primitives/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
+import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "./primitives/region-scope.js";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./primitives/AValue.js";
 import { type ABool, schemeFalse, schemeTrue } from "./primitives/ABool.js";
@@ -27,31 +28,81 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// Eager-stamp oracle flag (PROVENANCE-PLAN.md Q9 read seam + Q20a write wiring;
-// docs/PROVENANCE.md §7 W1 agreement). `withInputProvenance`/`mintVerdict` below are
-// TODAY's production provenance path (eager accumulation on every op) AND the CI
-// oracle `wireframe-agreement.law.test.ts` replays programs against. Q20a wired the
-// flag INSIDE `withInputProvenance`: flag OFF skips stamp accumulation (the filter +
-// union-set allocations) on the hot path while R1 boxing discipline stays intact —
-// an opt-OUT for provenance non-consumers with real-time budgets (arrival-sampler's
-// oracle loop, ~513 interpreter calls/decode-step). Default stays TRUE: production
-// provenance still rides this path until Q20b (post Q16/Q19) flips the default and
-// executes the demotion sweep. Flag is module-GLOBAL — right granularity for the
-// sampler's own processes; if a process ever needs stamped and unstamped envs
-// simultaneously, the upgrade path is a RunContext-carried flag, not a second global.
-let eagerProvenanceOracleEnabled = true;
+// Eager-stamp oracle flag (PROVENANCE-PLAN.md Q9 read seam + Q20a/Q20b write wiring;
+// docs/PROVENANCE.md §4 C12, §7 W1 agreement). `withInputProvenance`/`mintVerdict` below
+// are the accumulation path production ran unconditionally pre-Q20, and that the CI
+// oracle (`wireframe-agreement.law.test.ts`, the Q16 replay laws' recorded-ground-truth
+// side, and every pre-Q20b test written against the old always-on default) still needs
+// on demand. Q20a wired the flag INSIDE `withInputProvenance`: OFF skips stamp
+// accumulation (the filter + union-set allocations) while R1 boxing discipline stays
+// intact. Q20b (this default) FLIPS it: production hot paths no longer accumulate by
+// default — C12's "eager stamp path is a TEST-ONLY oracle... compiled out of production
+// hot paths" is now the actual default, not an opt-out. Flag is module-GLOBAL — right
+// granularity for a whole process (the sampler's own runner, or a test file's
+// beforeAll/afterAll); the upgrade path if a single process ever needs stamped AND
+// unstamped envs simultaneously is a RunContext-carried flag, not a second global.
+let eagerProvenanceOracleEnabled = false;
 
 /** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict`
- *  accumulation) live? Default true; `withInputProvenance` branches on it (Q20a). */
+ *  accumulation) live? Default FALSE since Q20b; `withInputProvenance` branches on it
+ *  (Q20a wiring). Reports the raw AMBIENT flag only — NOT the effective in-γ state
+ *  {@link withInputProvenance} also consults (see its own doc): a caller inside a
+ *  silent region sees `false` here even though accumulation is in fact running for
+ *  that call, because replay-correctness is a property of WHERE the call runs, not of
+ *  this module-global switch. Existing readers (Q9's wireframe-agreement.law.test.ts)
+ *  depend on this function mirroring exactly what `setEagerProvenanceOracleEnabled`
+ *  last wrote — do not fold the OR in here. */
 export function isEagerProvenanceOracleEnabled(): boolean {
   return eagerProvenanceOracleEnabled;
 }
 
-/** Opt out of eager stamp accumulation process-wide (Q20a). Values still box per R1;
- *  they carry EMPTY provenance. Intended for provenance non-consumers (sampler
- *  runners); tests restore the default in afterEach. */
+/** Opt out of (or back into) eager stamp accumulation process-wide (Q20a/Q20b). Values
+ *  still box per R1; OFF means they carry EMPTY provenance (outside a silent region —
+ *  see {@link withInputProvenance}). Intended for provenance non-consumers (sampler
+ *  runners) to opt OUT, and for the CI agreement oracle / pre-Q20b test suites to opt
+ *  back IN for their own lifetime; tests restore the ambient default afterward. */
 export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
   eagerProvenanceOracleEnabled = enabled;
+}
+
+/**
+ * The EFFECTIVE accumulation switch {@link withInputProvenance}/`mintVerdict` actually
+ * branch on: the ambient module flag OR "we are inside a silent region right now"
+ * ({@link isSilentRegion}, `values/primitives/region-scope.ts`, Q15).
+ *
+ * WHY the OR is load-bearing, not a convenience: every γ/replay face
+ * (`provenance/gamma.ts`'s `hermeticApply`/`applyWireInEnv`, and therefore all three of
+ * `provenance/replay.ts`'s drivers) re-executes a wire's body through this SAME
+ * interpreter, wrapped in `withSilentRegion` for its entire dynamic extent. A wire body
+ * is ordinary pure-op composition (`(+ a b)`, `string-append`, …) over ingress values
+ * that were boxed with their RECORDED stamp ids (`replay.ts`'s `boxPayload`) — the
+ * only mechanism that unions those ids through the wire's arithmetic into the egress's
+ * OWN `.provenance` is this file's accumulation. If the ambient production default is
+ * OFF (Q20b) and γ did not force it back on for its own execution, replay would
+ * silently reproduce an EGRESS VALUE with the right JS payload but EMPTY provenance —
+ * correct-looking, wrong lineage — breaking the wire-γ adjunction and the I1/I3 replay
+ * laws (docs/PROVENANCE.md §7) in PRODUCTION, not just in a test. Gating on
+ * `isSilentRegion()` here (rather than γ explicitly flipping the module flag around its
+ * own call) means every replay path is correct BY CONSTRUCTION — there is no second
+ * call site to remember to wrap, and nothing outside a silent region is affected: a
+ * production hot path with the ambient flag OFF and no silent region ambient behaves
+ * exactly as Q20b intends (zero accumulation).
+ *
+ * EXPORTED (not file-private) because the sweep this node's brief required found TWO
+ * hand-rolled `unionProvenance(...)` call sites that never went through
+ * `withInputProvenance` in the first place, and therefore never respected the oracle
+ * flag even under Q20a: `env/r7rs/numeric.ts`'s `nativeNumericOp`/`applyNumeric` (EVERY
+ * arithmetic op — `+`/`-`/`*`/`/`/comparisons/…) and its `numberToStringFn`. Those two
+ * sites now import this function instead of duplicating the OR — see their own
+ * call-site comments. This is the ONE production-correctness gap the sweep found that
+ * was both (a) genuinely load-bearing for Q20b's "production hot paths stop
+ * accumulating" claim (arithmetic is the hot path) and (b) trivially gateable; every
+ * OTHER hand-rolled site the sweep found (`rosetta.ts`'s `argProvenance`,
+ * `common/symbols/rosetta.ts`'s pipe-role mint) is lower-traffic and documented,
+ * unfixed, in the Q20b report instead of touched here.
+ */
+export function isEagerAccumulationActive(): boolean {
+  return eagerProvenanceOracleEnabled || isSilentRegion();
 }
 
 // Allocation cap — DoS defense for size-parameterized constructors
@@ -240,12 +291,40 @@ export function deriveSortCompare(
     // Comparator is a callable VALUE (ANativeProcedure) — invoke through the seam, not bare fn.
     // Sort sync; native cmp returns settled value (lambda cmp → promise, pre-existing limitation).
     const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], CONSTANT_CTX);
+    // Q11b/Q20b: host-schedule wiring (docs/PROVENANCE.md §5 D5; region-scope.ts's own
+    // header names this exact gap as "op-helpers.ts territory, Q20's"). `sort`'s
+    // comparator is the canonical order-dependent selector host — its verdict SEQUENCE
+    // (not any single verdict) is the record (§5 A6: "the sequence IS the record").
+    // `recordHostScheduleVerdict` already no-ops under emission-off/silent-region/no-
+    // coordinate (region-scope.ts's own gates) — the only thing THIS call site adds is
+    // reading the ambient scope and attributing a triple to it. No ambient RegionScope
+    // (today's entire production call graph outside a tracked crossing — see
+    // `currentRegionScope`'s own doc) ⇒ one `undefined` check, zero further cost.
+    //
+    // ELEMENT ORDINALS: `Array.prototype.sort`'s comparator signature carries no
+    // element INDEX, only the two VALUES — true per-element `OrdinalPath`s are not
+    // threadable through it without a deeper host-sort rewrite (out of this node's
+    // scope, per region-scope.ts's own note). Falls back to comparator CALL ORDER as
+    // the ordinal proxy: the n-th comparator invocation this sort performs is recorded
+    // as `([n], [n+1])` — a real, monotonic, per-sort-call attribution (never reused
+    // across two different `deriveSortCompare` calls, since `callOrdinal` is closed
+    // over fresh per call), just not a positional index into the original array. §5 D5
+    // only requires SOME attributable path, not the true element position.
+    let callOrdinal = 0;
     return (a, b) => {
       const v = call(a, b);
-      if (typeof v === "number") return v;
-      if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
+      let verdict: number;
+      if (typeof v === "number") verdict = v;
+      else if (v instanceof AExact || v instanceof AInexact) verdict = Number(v.valueOf());
       // `less?` predicate: truthy ≡ a precedes b.
-      return is_false(v) ? (is_false(call(b, a)) ? 0 : 1) : -1;
+      else verdict = is_false(v) ? (is_false(call(b, a)) ? 0 : 1) : -1;
+
+      const scope = currentRegionScope();
+      if (scope !== undefined) {
+        recordHostScheduleVerdict(scope, [callOrdinal], [callOrdinal + 1], verdict);
+        callOrdinal++;
+      }
+      return verdict;
     };
   }
   return (a, b) => {
@@ -342,11 +421,14 @@ export function isSchemeNumber(value: unknown): boolean {
  * separately sound (`withProvenance` preserves subtype).
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
-  // Q20a: oracle OFF skips accumulation (filter + union allocations), NOT boxing —
-  // R1's boxed-value discipline is semantics; provenance is the payload being skipped.
-  // ctx still propagates from the first AValue operand (heap-metering channel,
-  // independent of provenance) via an allocation-free scan.
-  if (!eagerProvenanceOracleEnabled) {
+  // Q20a/Q20b: oracle inactive skips accumulation (filter + union allocations), NOT
+  // boxing — R1's boxed-value discipline is semantics; provenance is the payload being
+  // skipped. ctx still propagates from the first AValue operand (heap-metering
+  // channel, independent of provenance) via an allocation-free scan. "Inactive" is the
+  // EFFECTIVE switch (ambient flag OR silent-region γ, see `isEagerAccumulationActive`'s
+  // doc) — Q20b's production default is OFF, but a replay running inside a silent
+  // region still accumulates regardless of the ambient default.
+  if (!isEagerAccumulationActive()) {
     if (result instanceof AValue) return result;
     const t = typeof result;
     if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {

@@ -419,31 +419,33 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ORACLE FLAG — the READ seam (op-helpers.ts's `isEagerProvenanceOracleEnabled`/
-  // `setEagerProvenanceOracleEnabled`). Q9's territory is the READ only; the WRITE
+  // `setEagerProvenanceOracleEnabled`). Q9's territory was the READ only; the WRITE
   // (consulting this flag inside `withInputProvenance`/`mintVerdict` to compile
-  // stamp accumulation out of production) is Q20's. This suite (and every row
-  // above) runs the eager oracle UNCONDITIONALLY today — the flag exists so a
-  // future Q20 toggle has something to assert against, not because anything here
-  // branches on it yet.
+  // stamp accumulation out of production) landed at Q20a/Q20b. Q20b FLIPPED the
+  // production default to OFF — this suite's agreement corpus above still runs the
+  // eager oracle, but now via `w1-harness.ts`'s `runEagerCone` FORCING it on
+  // per-call (save/restore around its own `execState`), not via an ambient default.
   // ═══════════════════════════════════════════════════════════════════════════
   describe("oracle flag — the Q20 read seam", () => {
-    it("defaults to eager-ON (production behavior is unchanged this wave)", () => {
-      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+    it("defaults to OFF in production (Q20b) — this suite's corpus above forced it on internally, per-call, via w1-harness.ts's runEagerCone", () => {
+      expect(isEagerProvenanceOracleEnabled()).toBe(false);
     });
 
     it("round-trips via the test-only setter, restored after", () => {
-      expect(isEagerProvenanceOracleEnabled()).toBe(true);
-      setEagerProvenanceOracleEnabled(false);
+      expect(isEagerProvenanceOracleEnabled()).toBe(false);
+      setEagerProvenanceOracleEnabled(true);
       try {
-        expect(isEagerProvenanceOracleEnabled()).toBe(false);
+        expect(isEagerProvenanceOracleEnabled()).toBe(true);
       } finally {
-        setEagerProvenanceOracleEnabled(true); // restore — module-level flag, other tests read it
+        setEagerProvenanceOracleEnabled(false); // restore — module-level flag, other tests read it
       }
-      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+      expect(isEagerProvenanceOracleEnabled()).toBe(false);
     });
 
-    it("the agreement corpus above ran under the flag's default (eager-on) — CI keeps exercising the oracle regardless of any future production default (Q20's own gate: \"oracle mode still runs the agreement corpus in CI\")", () => {
-      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+    it("the agreement corpus above ran under the oracle FORCED ON internally (w1-harness.ts's runEagerCone) — CI keeps exercising the oracle regardless of the production default (Q20b's own gate: \"oracle mode still runs the agreement corpus in CI\")", () => {
+      // Ambient flag is back at the (off) default here — the corpus never touched
+      // it ambiently, it forced it on and restored it, per call, inside runEagerCone.
+      expect(isEagerProvenanceOracleEnabled()).toBe(false);
     });
   });
 });

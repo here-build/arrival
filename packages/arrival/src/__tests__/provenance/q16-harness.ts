@@ -34,6 +34,7 @@ import { FrozenMints } from "../../provenance/replay.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { MintRecord } from "../../provenance/store/records.js";
 import type { SchemeValue } from "../../values/types.js";
+import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 
 // Same stamped-value constructors as w1-harness.ts (local copies, same rationale).
 const stampedStr = (s: string, p: number): SchemeValue => z.string.encode(s).withProvenance(new Set([p]));
@@ -203,12 +204,18 @@ export async function recordRun(
   const env = baseEnv.inherit(`q16-record-${regionId}`);
   for (const [op, shape] of Object.entries(sources)) registry.register(env, op, shape);
 
+  // Q20b: production default is OFF — this run's `eagerCone` (the recorded-run's
+  // ground truth the replay laws compare γ against) needs REAL accumulation, same as
+  // w1-harness.ts's runEagerCone. Force ON for exactly the run's extent.
+  const savedOracle = isEagerProvenanceOracleEnabled();
+  setEagerProvenanceOracleEnabled(true);
   setEmissionEnabled(true);
   let values: readonly SchemeValue[];
   try {
     ({ values } = await execState(code, { env }));
   } finally {
     setEmissionEnabled(false);
+    setEagerProvenanceOracleEnabled(savedOracle);
   }
   const egressBoxed = values[values.length - 1];
 

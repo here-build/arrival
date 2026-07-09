@@ -52,6 +52,12 @@ import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/typ
 import type { SchemeValue } from "../../values/types.js";
 import { recordRun, replayedCone, type RecordedRun } from "./q16-harness.js";
 import { SourceRegistry } from "./w1-harness.js";
+import { requireEagerOracle } from "../_require-eager-oracle.js";
+
+// Q20b: the STAMP-arm rows below call execState directly (not through
+// q16-harness.ts's recordRun, which already saves/restores its own call) — force
+// the oracle ON for this file's lifetime so the untapped eager stamp is live.
+requireEagerOracle();
 
 const ROLES: Record<string, DeclaredRole> = { "fetch-list": "source", "fetch-item": "source", "src-a": "source", "src-b": "source", "emit!": "sink", map: "fan", filter: "fan" };
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };

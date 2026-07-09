@@ -27,7 +27,7 @@ import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../com
 import { EnvCapability } from "../../common/capability.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
-import { AValue, unionProvenance } from "../../values/primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -41,6 +41,7 @@ import {
   ORD_REL,
   nilOrderCompare,
   mintVerdict,
+  isEagerAccumulationActive,
   type AOrd,
 } from "../../values/op-helpers.js";
 import { type } from "../../utils/typecheck.js";
@@ -119,7 +120,17 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
 function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => unknown {
   // provenance + coerce-with-naming + marshalled call.
   const applyNumeric = (callArgs: unknown[]): unknown => {
-    const provenance = unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue));
+    // Q20b sweep finding: this call bypassed `withInputProvenance` entirely (a
+    // hand-rolled `unionProvenance` duplicate predating the oracle flag), so EVERY
+    // arithmetic op (`+`/`-`/`*`/`/`/comparisons/…) kept accumulating provenance
+    // unconditionally even under Q20a's opt-out — the single highest-traffic bypass
+    // the sweep found. Gated on the SAME effective switch `withInputProvenance` uses
+    // (`isEagerAccumulationActive` — ambient flag OR silent-region γ, op-helpers.ts's
+    // own doc) so arithmetic honors the Q20b default AND still accumulates correctly
+    // inside a replay's hermetic re-execution.
+    const provenance = isEagerAccumulationActive()
+      ? unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue))
+      : EMPTY_PROVENANCE;
     let converted: ANumeric[];
     try {
       converted = callArgs.map(coerceNumeric);
@@ -830,7 +841,10 @@ const numberToStringFn = (z: unknown, radix?: unknown): AString => {
     // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
     s = base === 10 ? n.toString() : n.real.toString(base);
   }
-  const provenance = unionProvenance(radixArg === undefined ? [n] : [n, radixArg]);
+  // Q20b sweep finding — same bypass as `applyNumeric` above, gated the same way.
+  const provenance = isEagerAccumulationActive()
+    ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
+    : EMPTY_PROVENANCE;
   return new AString(n.ctx, s, provenance);
 };
 

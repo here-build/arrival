@@ -22,6 +22,11 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import srfi28 from "../env/srfi/srfi-28.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: format's provenance assertions run real programs through exec/execState —
+// force the oracle ON for this file's lifetime.
+requireEagerOracle();
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 

@@ -19,6 +19,12 @@ import type { SchemeValue } from "../values/types.js";
 import { classify, fullCone, type Classifier } from "../values/lineage.js";
 import { provOf } from "../values/lineage-shadow.js";
 import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: this file's local `oneShot` helper calls execState directly (not through
+// _lineage-test-helpers.js's runRaw, which saves/restores its own call) — force
+// the oracle ON for the file's lifetime.
+requireEagerOracle();
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
 // a `defineRosetta` fixture); the shared run/runRaw own a separate counter.

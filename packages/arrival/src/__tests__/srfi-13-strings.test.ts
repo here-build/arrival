@@ -20,6 +20,11 @@ import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: SRFI-13's provenance assertions run real programs — force the oracle ON
+// for this file's lifetime.
+requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

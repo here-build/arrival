@@ -25,6 +25,11 @@ import { describe, it, expect } from "vitest";
 import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, setEmissionEnabled } from "../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import type { RecordId } from "../provenance/store/ids.js";
+import { execState } from "../eval/generator-exec.js";
+import { inferenceEnv } from "../inference-env.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
+import { jsToScheme } from "../rosetta.js";
 
 const REGION = "bench-region";
 const ITERATIONS = 5000;
@@ -105,5 +110,100 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
     } finally {
       setEmissionEnabled(false);
     }
+  });
+});
+
+/**
+ * Q20b — the DEMOTION's own overhead measurement (docs/PROVENANCE-PLAN.md Q20:
+ * "Gate: standing + perf delta recorded"), distinct from Q11a's record-EMISSION
+ * layers above: this measures op-helpers.ts's per-op ACCUMULATION cost (the filter
+ * + union-set allocation `withInputProvenance`/`nativeNumericOp`'s `applyNumeric`
+ * skip when the oracle is inactive) on a real interpreter run — the actual hot
+ * path Q20b's default flip targets, exercised through arithmetic (the highest-
+ * traffic op family per the sweep) and string-append (a genuine multi-arg union).
+ */
+describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON exec throughput", () => {
+  const EXEC_ITERATIONS = 2000;
+  const WARMUP_ITERATIONS = 500;
+
+  async function runExecLoop(iterations: number): Promise<number> {
+    const env = inferenceEnv.inherit(`q20b-bench-${Math.random().toString(36).slice(2)}`);
+    env.set("a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
+    env.set("b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
+    const start = performance.now();
+    for (let i = 0; i < iterations; i++) {
+      await execState(`(string-append "sum=" (number->string (+ a (* b 2) ${i})))`, { env });
+    }
+    return performance.now() - start;
+  }
+
+  // exec() itself (parse + generator-driven eval) dwarfs op-helpers.ts's own
+  // filter+union cost on a 1-2-operand array — an UN-warmed-up single pass mostly
+  // measures V8 JIT warmup order, not the flag. Warm BOTH variants (discarded)
+  // before measuring EITHER, so the recorded numbers isolate the accumulation
+  // delta instead of a cold-start artifact (confirmed empirically: without this,
+  // whichever variant ran SECOND in-process came out ~40% faster regardless of
+  // which flag value it used).
+  it(`exec × ${EXEC_ITERATIONS}, oracle OFF (Q20b production default) vs FORCED ON (CI agreement oracle), both JIT-warmed first`, async () => {
+    setEagerProvenanceOracleEnabled(false);
+    await runExecLoop(WARMUP_ITERATIONS);
+    setEagerProvenanceOracleEnabled(true);
+    await runExecLoop(WARMUP_ITERATIONS);
+
+    setEagerProvenanceOracleEnabled(false);
+    const offElapsed = await runExecLoop(EXEC_ITERATIONS);
+    report("exec, arithmetic+string-append (oracle OFF, Q20b default)", EXEC_ITERATIONS, offElapsed);
+
+    setEagerProvenanceOracleEnabled(true);
+    let onElapsed: number;
+    try {
+      onElapsed = await runExecLoop(EXEC_ITERATIONS);
+    } finally {
+      setEagerProvenanceOracleEnabled(false);
+    }
+    report("exec, arithmetic+string-append (oracle ON, CI agreement mode)", EXEC_ITERATIONS, onElapsed);
+
+    const deltaPct = ((onElapsed - offElapsed) / onElapsed) * 100;
+    console.log(`Q20b demotion delta: OFF is ${deltaPct.toFixed(1)}% faster than ON (${((offElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs vs ${((onElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs per exec() call)`);
+  });
+
+  // The above, isolated: parse+eval overhead per exec() call (~265µs) dwarfs
+  // op-helpers.ts's own filter+union cost on a 1-2-operand array, so the
+  // whole-exec() delta is noise (±2%, confirmed over repeated runs). This row
+  // measures the ISOLATED accumulation cost directly against `withInputProvenance`/
+  // `mintVerdict` — the shape of arrival-sampler's actual hot loop (Q20a's
+  // original motivation: ~513 interpreter calls/decode-step, no re-parse per
+  // call), where the demotion's saving is NOT amortized against parse overhead.
+  it(`withInputProvenance × ${EXEC_ITERATIONS * 10} direct calls, oracle OFF vs FORCED ON (the sampler's actual hot-loop shape)`, () => {
+    const DIRECT_ITERATIONS = EXEC_ITERATIONS * 10;
+    const a = jsToScheme(CONSTANT_CTX, 10, {}, new Set([100]));
+    const b = jsToScheme(CONSTANT_CTX, 20, {}, new Set([200]));
+
+    const runDirectLoop = (iterations: number): number => {
+      const start = performance.now();
+      for (let i = 0; i < iterations; i++) withInputProvenance([a, b], i);
+      return performance.now() - start;
+    };
+
+    setEagerProvenanceOracleEnabled(false);
+    runDirectLoop(DIRECT_ITERATIONS); // warmup
+    setEagerProvenanceOracleEnabled(true);
+    runDirectLoop(DIRECT_ITERATIONS); // warmup
+
+    setEagerProvenanceOracleEnabled(false);
+    const offElapsed = runDirectLoop(DIRECT_ITERATIONS);
+    report("withInputProvenance direct (oracle OFF, Q20b default)", DIRECT_ITERATIONS, offElapsed);
+
+    setEagerProvenanceOracleEnabled(true);
+    let onElapsed: number;
+    try {
+      onElapsed = runDirectLoop(DIRECT_ITERATIONS);
+    } finally {
+      setEagerProvenanceOracleEnabled(false);
+    }
+    report("withInputProvenance direct (oracle ON, CI agreement mode)", DIRECT_ITERATIONS, onElapsed);
+
+    const deltaPct = ((onElapsed - offElapsed) / onElapsed) * 100;
+    console.log(`Q20b demotion delta (isolated, sampler-shaped): OFF is ${deltaPct.toFixed(1)}% faster than ON`);
   });
 });

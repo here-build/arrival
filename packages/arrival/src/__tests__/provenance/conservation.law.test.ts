@@ -53,6 +53,12 @@ import { nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 import { run, runRaw, sNum, sStr } from "../_lineage-test-helpers.js";
+import { requireEagerOracle } from "../_require-eager-oracle.js";
+
+// Q20b: the container-box rows below call carrier methods (map/sort/filter)
+// directly, not through runRaw/_lineage-test-helpers.js's own save/restore — force
+// the oracle ON for this file's lifetime.
+requireEagerOracle();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROPERTY GENERATOR — small typed Scheme-program grammar (§1 of the task).

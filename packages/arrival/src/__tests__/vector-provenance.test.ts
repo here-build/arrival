@@ -12,6 +12,12 @@ import type { EnvCapability } from "../common/capability.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: every assertion below calls a raw native op fn directly — still routes
+// through op-helpers.ts's withInputProvenance internally, so it needs the oracle
+// forced ON for this file's lifetime.
+requireEagerOracle();
 
 await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was

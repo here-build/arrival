@@ -28,6 +28,7 @@ import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
+import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
  *  encode + withProvenance, not a direct AString construction. */
@@ -52,6 +53,12 @@ let seq = 0;
  * COMPLEX tier (`execState`, not `exec`) — this whole file exists to read
  * provenance/box discipline off the result (`provOf`, `deepIds`, `collapseProvenance`),
  * a boxed-state concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit.
+ *
+ * Q20b: production default is OFF; every caller of this helper is an eager-oracle
+ * GOLDEN (golden-prov-*, lineage-*, conservation.law.test.ts) that needs REAL
+ * accumulation to freeze anything meaningful. Forces the oracle ON for exactly this
+ * run's extent, save/restoring the ambient value (not a hardcoded default) so nested
+ * or interleaved use is safe.
  */
 export async function runRaw(
   src: string,
@@ -62,8 +69,14 @@ export async function runRaw(
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   setup?.(env);
   for (const [k, v] of Object.entries(binds)) env.set(k, jsToScheme(CONSTANT_CTX, v));
-  const [r] = (await execState(src, { env })).values;
-  return r;
+  const savedOracle = isEagerProvenanceOracleEnabled();
+  setEagerProvenanceOracleEnabled(true);
+  try {
+    const [r] = (await execState(src, { env })).values;
+    return r;
+  } finally {
+    setEagerProvenanceOracleEnabled(savedOracle);
+  }
 }
 
 /** Run a program and return the sorted provenance of its result (`provOf ∘ runRaw`).

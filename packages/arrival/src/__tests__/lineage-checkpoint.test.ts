@@ -21,6 +21,11 @@ import { APair } from "../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage.js";
 import { provOf } from "../values/lineage-shadow.js";
 import { sStr } from "./_lineage-test-helpers.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: this file's local helpers (`eagerProvSize` et al.) call execState
+// directly — force the oracle ON for the file's lifetime.
+requireEagerOracle();
 
 const C: Classifier = {
   roleOf: (op) =>

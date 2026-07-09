@@ -53,6 +53,13 @@ import type { SchemeValue } from "../values/types.js";
 import { classify, fullCone } from "../values/lineage.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
+import { requireEagerOracle } from "./_require-eager-oracle.js";
+
+// Q20b: shadow mode compares the static classifier against the UNTAPPED EAGER
+// stamp (mechanism 1) — the whole point of this file. Force the oracle ON for its
+// lifetime, or every eager cone below comes back empty and every "agrees with the
+// golden" assertion silently degrades into "both sides are []".
+requireEagerOracle();
 
 let seq = 0;
 

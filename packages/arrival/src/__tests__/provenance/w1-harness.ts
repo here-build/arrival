@@ -43,6 +43,8 @@ import { AValue } from "../../values/primitives/AValue.js";
 import * as z from "../../common/scheme-zod.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
+import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
+import type { SchemeValue } from "../../values/types.js";
 
 // ── stamped-value constructors (mirrors _lineage-test-helpers.ts's sStr/sNum — a
 // local copy so this harness has no test-file-to-test-file import; same shapes). ──
@@ -124,7 +126,17 @@ export async function runEagerCone(
 ): Promise<Set<string>> {
   const env = baseEnv.inherit(`w1-agreement-${Math.random().toString(36).slice(2)}`);
   for (const [op, shape] of Object.entries(sources)) registry.register(env, op, shape);
-  const { values } = await execState(code, { env });
+  // Q20b: production default is OFF — the EAGER ORACLE side of the W1 agreement needs
+  // REAL accumulation to produce a cone at all. Force ON for exactly this run,
+  // save/restoring the ambient value (never a hardcoded default).
+  const savedOracle = isEagerProvenanceOracleEnabled();
+  setEagerProvenanceOracleEnabled(true);
+  let values: readonly SchemeValue[];
+  try {
+    ({ values } = await execState(code, { env }));
+  } finally {
+    setEagerProvenanceOracleEnabled(savedOracle);
+  }
   const last = values[values.length - 1];
   const ids = collapseProvenance(last);
   return registry.opsOf(ids);
