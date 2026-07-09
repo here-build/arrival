@@ -107,7 +107,8 @@
     "test:watch": "vitest",
     "test-d": "vitest run --config vitest.typecheck.config.ts",
     "benchmarks": "vitest run --config vitest.benchmarks.config.ts",
-    "typecheck": "tsc --noEmit && vitest run --config vitest.typecheck.config.ts"
+    "typecheck": "tsc --noEmit && vitest run --config vitest.typecheck.config.ts",
+    "workerd": "vitest run --config vitest.workerd.config.ts"
   },
   "dependencies": {
     "@here.build/arrival-env": "workspace:^",
@@ -123,6 +124,8 @@
     "tslib": "2.8.1"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.13.2",
+    "@cloudflare/workers-types": "4.20250803.0",
     "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
@@ -131,6 +134,7 @@
     "globals": "17.3.0",
     "prettier": "3.8.1",
     "typescript": "6.0.2",
-    "vitest": "4.1.0"
+    "vitest": "4.1.0",
+    "wrangler": "4.89.0"
   }
 }
