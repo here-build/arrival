@@ -227,11 +227,11 @@ describe("jsToScheme → schemeToJs round-trip", () => {
     expect(result).toEqual({ outer: { inner: 42 } });
   });
 
-  // null → nil (rosetta.ts:160). The reverse direction is schemeToJs(nil) which
-  // is the `value === nil` early return (rosetta.ts:70) — returns the nil
-  // SINGLETON, not `null`. Documented divergence: rosetta does not invert
-  // the null⇄nil contract symmetrically.
-  it.fails("null round-trips to null (currently jsToScheme(CONSTANT_CTX, null) → nil, schemeToJs(nil) → nil singleton)", () => {
+  // null → nil (jsToScheme), and schemeToJs(nil) → null: the reverse now
+  // delegates to arrival/toJS (ANil's toJS returns null), closing the round
+  // trip exactly. The old rosetta-surface asymmetry (nil singleton, not null)
+  // is gone — the lazy membrane-accessor rework, 2026-07-09.
+  it("null round-trips to null (jsToScheme null → nil, schemeToJs nil → null)", () => {
     expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
   });
 });

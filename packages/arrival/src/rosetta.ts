@@ -9,20 +9,15 @@ import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./va
 import { fromJs } from "./values/primitives/boxing.js";
 import { type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
-import { ABool } from "./values/primitives/ABool.js";
-import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
-import { ADict } from "./values/primitives/ADict.js";
 import { AExact } from "./values/primitives/AExact.js";
-import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { AString } from "./values/primitives/AString.js";
-import { ACharacter } from "./values/primitives/ACharacter.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 import { type AUnwrap, type AWrap, type SchemeBounceMarker, type SchemeValue } from "./values/types.js";
@@ -142,7 +137,12 @@ function isBounceMarker(x: unknown): x is SchemeBounceMarker {
   return typeof x === "object" && x !== null && (x as Partial<SchemeBounceMarker>).__bounce === true;
 }
 
-function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
+/** A callable's JS projection IS the region wrapper (not a print string).
+ *  Called from schemeToJsImpl's own is_callable_value branch AND exported for
+ *  membrane.toJS()'s matching special-case (which is where a plain `toJS`/exec
+ *  simple-tier exit routes a callable) — kept out of ACallable's `arrival/toJS`
+ *  so that class need not import rosetta.ts (scheme-zod init cycle). */
+export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
   const cached = scope.cache.get(value);
   if (cached) return cached;
@@ -184,114 +184,71 @@ export function schemeToJsUnrecognizedDoor(value: object): Error {
 /**
  * The recursive body behind `schemeToJs`. `unknown`-typed, not `any`: the
  * recursion crosses through raw JS intermediates a single generic parameter
- * can't describe end-to-end (an AJSObject's borrowed `.source`, an AJSArray
- * element, a plain object's own field) — see `schemeToJs`'s doc for the one
- * narrowing this buys back at the public boundary.
+ * can't describe end-to-end (a raw arg array's element, a plain object's own
+ * field) — see `schemeToJs`'s doc for the one narrowing this buys back at the
+ * public boundary.
+ *
+ * LAZY, not materializing: every boxed shape delegates to its own
+ * `arrival/toJS` term (one protocol, class-owned — P7). Containers therefore
+ * egress as the R9 lazy readonly proxies (AVector/APair → readonly array,
+ * ADict → readonly recursive object proxy; egress-proxy.ts), borrowed
+ * AJSObject/AJSArray unwrap to their `source` IDENTITY (the A3 borrowed-
+ * identity law: boxes a fixture planted in a borrowed source are JS-side
+ * data the membrane must not rewrite), and callables become inverse-rosetta
+ * region wrappers. The former ~90-line eager `instanceof` chain — a second,
+ * parallel statement of the toJS protocol that deep-copied every container —
+ * is dissolved. What remains HERE is only the rosetta-specific surface the
+ * protocol doesn't know: the `forceBigInt` option, elementwise crossing of
+ * RAW JS containers (rosetta arg/result marshalling can hand a raw array or
+ * plain object whose ELEMENTS are boxed — trace/MCP serialization included),
+ * the sequence-op-term preserve, the FFI allow-list, and the P5 door.
  */
 function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
-  // `instanceof ANil` not `=== nil`: `nil.withProvenance(p)` mints fresh Nil
-  // clones — reference equality would miss them and leak the clone to the caller.
-  if (value == null || value instanceof ANil) return value;
+  // null/undefined echo back unchanged (matching AUnwrap's non-SchemeValue arm).
+  if (value == null) return value;
 
-  if (Array.isArray(value)) {
-    return value.map((record) => schemeToJsImpl(record, options));
-  }
-
-  // Unwrap to raw JS shapes — otherwise a boxed value leaks its internal
-  // {kind,__vector__/__bytevector__,provenance} shape to JS callers (MCP/trace
-  // serialization path).
-  if (value instanceof AVector) {
-    return value.__vector__.map((record) => schemeToJsImpl(record, options));
-  }
-  if (value instanceof ABytevector) {
-    return value.__bytevector__;
-  }
-
-  if (value instanceof AExact) {
-    const val = value.valueOf();
-    if (options.forceBigInt) {
+  // Rosetta-only numeric option — decided BEFORE protocol dispatch, because it
+  // overrides AExact's own `arrival/toJS` (safe-range number-else-bigint) and
+  // applies to raw numbers too.
+  if (options.forceBigInt) {
+    if (value instanceof AExact) {
+      const val = value.valueOf();
       return typeof val === "bigint" ? val : BigInt(Math.round(val as number));
     }
-    if (value.denom === 1n) {
-      if (value.num >= BigInt(Number.MIN_SAFE_INTEGER) && value.num <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(value.num);
-      }
-      return value.num;
-    }
-    return val;
-  }
-
-  if (value instanceof AInexact) {
-    // Always a JS float — reals-only, complex axis omitted.
-    return value.real;
-  }
-
-  if (value instanceof AJSObject) {
-    return schemeToJsImpl(value.source, options);
-  }
-
-  // ADict's own toJs stays shallow; this is the one place owning the recursive
-  // JS-primitive projection for every boxed type.
-  if (value instanceof ADict) {
-    const out: Record<string, unknown> = {};
-    for (const k of value.keys()) out[k] = schemeToJsImpl(value.get(k), options);
-    return out;
-  }
-
-  if (value instanceof AJSArray) {
-    return value.source.map((el: unknown) => schemeToJsImpl(el, options));
+    if (typeof value === "number") return BigInt(value);
   }
 
   // A scheme callable crossing OUT becomes a region-scoped JS wrapper — the
-  // reverse-membrane crossing (§4/§7c). One branch before generic object
-  // handling: an ACallable would otherwise fall through as an uncallable
-  // opaque object (the exact bug this migration fixes — see the working
-  // proposal's "New finding" on an ALambda reaching host impls uncallable).
+  // reverse-membrane crossing (§4/§7c). Checked BEFORE the generic protocol
+  // dispatch (a callable IS an AValue) so this rosetta face threads its
+  // OPTIONS into the wrapper's re-entry marshalling; the protocol's own
+  // `arrival/toJS` on ACallable (options-less, used by plain `toJS`/exec)
+  // builds the same wrapper with defaults.
   if (is_callable_value(value)) {
     return callableToHostFn(value, options);
   }
 
-  if (value instanceof ABool) {
-    return value.value;
+  // Every other boxed shape: ONE protocol dispatch via the class's own
+  // `arrival/toJS` term (NOT membrane.toJS — that would close a module-init
+  // cycle rosetta→membrane→evaluator that leaves scheme-zod's z.instanceof
+  // codecs capturing undefined classes). Scalars unwrap (ABool → boolean,
+  // AString → string, ACharacter → char, AExact/AInexact → number/bigint,
+  // ANil → null), containers egress as the R9 lazy readonly proxies
+  // (egress-proxy.ts's chokepoint keeps same-box → same-proxy), borrowed
+  // wrappers return their source identity, ABytevector its raw Uint8Array.
+  // (Callables were already handled above; a control form like Macro/Syntax
+  // is never a value and cannot reach schemeToJs.)
+  if (value instanceof AValue) {
+    return value["arrival/toJS"]();
   }
 
-  // instanceof, not the old `"__string__" in value` duck-check (P5/P7): a
-  // foreign object that merely happens to carry a same-named field no longer
-  // impersonates a scheme string.
-  if (value instanceof AString) {
-    return value.__string__;
+  // RAW containers (never boxed): rosetta arg/result marshalling and the
+  // trace/MCP serialization path hand raw arrays/objects whose ELEMENTS may be
+  // boxed — cross elementwise so no AValue leaks into JSON.
+  if (Array.isArray(value)) {
+    return value.map((record) => schemeToJsImpl(record, options));
   }
-
-  // instanceof — ACharacter had NO branch at all before this migration; it
-  // fell through to the terminal passthrough and leaked the raw ACharacter to
-  // the JS caller (inventoried live against the full suite: 72 hits, always
-  // this shape — see the AUnwrap/kill-inventory notes). `.__char__` mirrors
-  // the class's own `arrival/toJS` protocol method (ACharacter.ts) — the same
-  // answer, spelled out here rather than dispatched, matching this file's
-  // existing per-branch style (AVector/AExact/… don't dispatch either).
-  if (value instanceof ACharacter) {
-    return value.__char__;
-  }
-
-  // instanceof, not the old `isLipsPair` duck-check (P5/P7): a foreign object
-  // shaped like `{car, cdr}` no longer impersonates a scheme pair.
-  // Lisp treats empty-list and nil as the same entity: if cdr eventually
-  // resolves to nil while materializing an array, that's the array's tail.
-  if (value instanceof APair) {
-    const head = schemeToJsImpl(value.car, options);
-    const tail = schemeToJsImpl(value.cdr, options) ?? [];
-    if (Array.isArray(tail)) {
-      return [head, ...tail];
-    } else if (tail instanceof ANil) {
-      // Class check, not `=== nil`: a provenance-bearing Nil clone must still
-      // terminate the list, or the tail leaks as `[head, <Nil-clone>]`.
-      return [head];
-    } else {
-      return [head, tail];
-    }
-  }
-
-  if (value && typeof value === "object") {
+  if (typeof value === "object") {
     if (Object.getPrototypeOf(value) === Object.getPrototypeOf({}) || Object.getPrototypeOf(value) === null) {
       // `Object.entries` drops symbol-keyed properties (opaque/private backing data
       // crossing the membrane) — enumerate string keys then own symbols so both survive.
@@ -303,8 +260,8 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
       }
       return out;
     }
-    // Check for sequence-op terms before converting to a plain object — a value
-    // carrying its own map/filter/reduce is a structure to preserve, not unwrap.
+    // A raw value carrying its own map/filter/reduce terms is a structure to
+    // preserve, not unwrap (sequence-op contract objects).
     if (
       (value as Record<PropertyKey, unknown>)[tf("map")] !== undefined ||
       (value as Record<PropertyKey, unknown>)[tf("filter")] !== undefined ||
@@ -312,15 +269,6 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     ) {
       return value;
     }
-
-    // todo traverse enumerable fields?
-  }
-
-  if (typeof value === "number" && options.forceBigInt) {
-    return BigInt(value);
-  }
-
-  if (value !== null && typeof value === "object") {
     // Raw FFI passthrough — never boxed, caller's responsibility (mirrors
     // jsToScheme's own "Exotic objects (Promise, Buffer, …)" carve-out on the
     // inbound side): binary/async values that cross without ever having been

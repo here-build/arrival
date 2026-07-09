@@ -27,7 +27,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
-import { hasMember, isSchemeValue, readMember, toJS } from "../../membrane.js";
+import { isSchemeValue, toJS } from "../../membrane.js";
 import { schemeToJs } from "../../rosetta.js";
 import listsCap from "../../env/r7rs/lists.js";
 import type { EnvCapability } from "../../common/capability.js";
@@ -82,9 +82,12 @@ describe("membrane.ts — `=== nil` identity-equality sites", () => {
 });
 
 describe("rosetta.ts — `=== nil` identity-equality sites", () => {
-  // @ledger: nil-clone schemeToJs entry loses identity
-  it.fails("schemeToJs(nil-clone) — should return null/undefined (rosetta.ts:70)", () => {
+  // Both exit as JS `null` now — schemeToJs delegates to arrival/toJS (the lazy
+  // membrane-accessor rework, 2026-07-09); ANil's toJS returns null whether the
+  // clone carries provenance or not, so the singleton and a clone agree.
+  it("schemeToJs(nil-clone) — returns null, same as the singleton (via arrival/toJS)", () => {
     const singletonResult = schemeToJs(nil);
+    expect(singletonResult).toBeNull();
     expect(schemeToJs(cloneNil())).toEqual(singletonResult);
   });
 
@@ -159,16 +162,8 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
   });
 });
 
-describe("membrane.ts readMember/hasMember — `=== nil` identity-equality sites", () => {
-  it("'@' obj nil-clone — returns nil, not String(Nil) lookup (membrane.ts readMember)", () => {
-    const accessor = readMember as (obj: unknown, key: unknown) => unknown;
-    const result = accessor({ "()": "PHANTOM" }, cloneNil());
-    expect(result instanceof ANil).toBe(true);
-  });
-
-  it("'@?' obj nil-clone — returns false, not has(\"()\") (membrane.ts hasMember)", () => {
-    const accessor = hasMember as (obj: unknown, key: unknown) => boolean;
-    const result = accessor({ "()": "PHANTOM" }, cloneNil());
-    expect(result).toBe(false);
-  });
-});
+// (The membrane.ts readMember/hasMember `=== nil` face tests were removed with
+//  the faces themselves — the lazy membrane-accessor rework, 2026-07-09. The
+//  nil-clone-as-KEY guard survives in env/polyglot.ts's normalizeMemberKey
+//  (`rawKey instanceof ANil → null`), exercised at the surface by dict.test /
+//  polyglot suites through the @/@? verbs.)

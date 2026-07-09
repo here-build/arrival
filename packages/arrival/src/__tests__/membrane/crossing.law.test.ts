@@ -210,12 +210,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it(exitTitle, () => {
         expect(toJS(nil)).toBe(null);
       });
-      // membrane's own fromJS/toJS round-trip fine (both reuse the `nil` singleton); the
-      // asymmetry lives in the ROSETTA surface: jsToScheme(null) → nil, but
-      // schemeToJs(nil) → the nil SINGLETON, not `null` (membrane-symmetry.test.ts pins
-      // the same gap).
-      // @ledger: null↔nil round-trip asymmetry
-      it.fails(roundTripTitle, () => {
+      // Round-trip is now EXACT: schemeToJs delegates to arrival/toJS (the lazy
+      // membrane-accessor rework, 2026-07-09), so schemeToJs(nil) → JS `null`
+      // like toJS(nil), and jsToScheme(null) → nil closes the loop. The old
+      // rosetta-surface asymmetry (schemeToJs(nil) → the nil singleton) is gone.
+      it(roundTripTitle, () => {
         expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
       });
       it(provenanceTitle, () => {

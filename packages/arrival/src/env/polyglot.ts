@@ -32,23 +32,38 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
-import { hasMember, memberKeys, readMember } from "../membrane.js";
 import { schemeBool } from "../values/op-helpers.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { type SchemeValue } from "../values/types.js";
+import { type AValue } from "../values/primitives/AValue.js";
 
-// IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator via
-// SchemePromise) that can be MID-INITIALIZATION when this capability's spec object is
-// evaluated — the assembly path imports it via `base-packs → polyglot → membrane →
-// evaluator → …`, a cycle. Reading `readMember` at module-eval time would freeze the
-// TDZ `undefined` into the spec. So defer every membrane read to APPLY time: `symbols`
-// uses the builder form. (The tagless member-access rework moved the DISPATCH onto the
-// value classes, but the FACES still live in membrane.ts — the cycle, and therefore
-// this deferral, is membrane→evaluator's, not the dispatch's. Verified 2026-07-09.)
+// The `@`/`@?`/`@keys` verbs ARE the member-access protocol's face now: key
+// normalization + direct dispatch onto the receiver's own
+// `arrival/tagless-final/get|has|keys` terms (ADict structurally, AJSObject/
+// AJSArray through the interop read policy over their borrowed source).
+// membrane.ts's readMember/hasMember/memberKeys faces are dissolved — the verbs
+// were their only production consumer, so the indirection carried nothing.
+// ABSENCE IS THE SEMANTICS: a term-less receiver (scheme leaf, raw FFI value,
+// function) answers nil/false/() — never a value's internal provenance/kind.
+// (The old membrane import + its TDZ-deferral comment died with the faces; the
+// `symbols` builder form is kept as harmless convention.)
+
+/** The ONE home of member-key normalization (`@`/`@?` + the `:key` accessor's
+ *  string route): valueOf-unwrap a boxed key, refuse nil/null keys, stringify,
+ *  strip the leading `:` accessor sigil. Receivers fold the RESULT (ADict's
+ *  `foldKeyName` handles the SchemeValue route the keyword accessor takes). */
+function normalizeMemberKey(key: unknown): string | null {
+  const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
+  if (rawKey == null || rawKey instanceof ANil) return null;
+  let keyStr = String(rawKey);
+  if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
+  return keyStr;
+}
 
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
@@ -372,29 +387,46 @@ export default new EnvCapability("scheme/polyglot", {
   // carries `apply` — so this pack contributes no resolvers, only symbols.
   symbols: () => ({
     // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
-    // the faces (`readMember`/`hasMember`/`memberKeys`, membrane.ts) normalize the key and
-    // dispatch to the receiver's own `arrival/tagless-final/get|has|keys` terms (ADict/
-    // AJSObject/AJSArray); a term-less receiver answers nil/false/[] — absence IS the
-    // semantics. Each op below has a single, unconditional real OUTPUT type, so the output
-    // sides are typed precisely, not left blind.
+    // the verbs normalize the key (normalizeMemberKey, above) and dispatch DIRECTLY to
+    // the receiver's own `arrival/tagless-final/get|has|keys` terms (ADict/AJSObject/
+    // AJSArray); a term-less receiver answers nil/false/() — absence IS the semantics.
+    // Each op below has a single, unconditional real OUTPUT type, so the output sides
+    // are typed precisely, not left blind.
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
-      // `readMember` always returns a real scheme value (nil / a boxed read / an AJSArray-
-      // wrapped array) — never something OUTSIDE SchemeValue. `z.value` is the identity term
-      // for "a polymorphic accessor's operand" (scheme-zod.ts's own worked example).
+      // The get term always returns a real scheme value (nil / a boxed read / an
+      // AJSArray-wrapped array) — never something OUTSIDE SchemeValue. `z.value` is the
+      // identity term for "a polymorphic accessor's operand" (scheme-zod.ts's own
+      // worked example).
       { input: [z.value, z.value], output: [z.value] },
-      readMember,
+      (obj: unknown, key: unknown): SchemeValue => {
+        if (obj == null) return nil;
+        const keyStr = normalizeMemberKey(key);
+        if (keyStr === null) return nil;
+        const getter = (obj as Partial<AValue>)["arrival/tagless-final/get"];
+        return typeof getter === "function" ? getter.call(obj, keyStr) : nil;
+      },
     ),
     "@?": symbol.native`@?: #t iff obj has the member key`(
-      // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the raw
-      // JS boolean `hasMember` returns is a membrane-layer detail).
+      // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the
+      // raw JS boolean the has term returns is a protocol-layer detail).
       { input: [z.value, z.value], output: [z.boolean] },
-      (obj: unknown, key: unknown) => schemeBool(hasMember(obj, key)),
+      (obj: unknown, key: unknown) => {
+        if (obj == null) return schemeBool(false);
+        const keyStr = normalizeMemberKey(key);
+        if (keyStr === null) return schemeBool(false);
+        const has = (obj as Partial<AValue>)["arrival/tagless-final/has"];
+        return schemeBool(typeof has === "function" ? has.call(obj, keyStr) : false);
+      },
     ),
     "@keys": symbol.native`@keys: the own member keys of obj`(
-      // `memberKeys` returns raw JS strings; the scheme face boxes each to AString
+      // The keys term returns raw JS strings; the scheme face boxes each to AString
       // (z.array(z.string)'s scheme side — Face split).
       { input: [z.value], output: [z.array(z.string)] },
-      (obj: unknown) => memberKeys(obj).map((k) => new AString(CONSTANT_CTX, k)),
+      (obj: unknown) => {
+        const keys = obj != null ? (obj as Partial<AValue>)["arrival/tagless-final/keys"] : undefined;
+        const names = typeof keys === "function" ? keys.call(obj) : [];
+        return names.map((k) => new AString(CONSTANT_CTX, k));
+      },
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
     // build an open-key map from interleaved `:key value` pairs. A keyword in arg

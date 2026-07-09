@@ -195,7 +195,7 @@ function literalIndex(x: unknown): number | null {
  * `accessorField` (65-70) for the keyword head, generalized to the four accessor
  * shapes consumers pin (v0.2 §"The carrier"):
  *   - `(:foo x)`        keyword head — a SchemeSymbol `__name__` ":foo" (len>1) → {field:"foo"}
- *   - `(@ x :foo)`      membrane.readMember — key is the 2nd operand (`:foo` symbol or "foo" string)
+ *   - `(@ x :foo)`      the get term (env/polyglot @) — key is the 2nd operand (`:foo` symbol or "foo" string)
  *   - `(car x)`         pair head → {car:true}
  *   - `(vector-ref x i)` / `(list-ref x i)` with a LITERAL int i → {index:i}
  * The emitted node is uniform regardless of which surface produced it; the

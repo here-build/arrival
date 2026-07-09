@@ -92,7 +92,14 @@ export class ALambda extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
-    return `#<lambda ${String(this.name)}>`;
+    // Fallback display only. A callable's real JS projection is the reverse-
+    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
+    // special-case is_callable_value BEFORE this protocol method (so exec()
+    // can return an ALambda/AProcedure as a callable host fn). This method is
+    // reached only when a callable is protocol-dispatched OUTSIDE those exits
+    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
+    // scheme-zod init cycle (see the makeCallCtx import note above).
+    return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {
     return `#<procedure:${displayName(this.__name__ ?? this.name)}>`;
@@ -131,6 +138,13 @@ export class ANativeProcedure extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
+    // Fallback display only. A callable's real JS projection is the reverse-
+    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
+    // special-case is_callable_value BEFORE this protocol method (so exec()
+    // can return an ALambda/AProcedure as a callable host fn). This method is
+    // reached only when a callable is protocol-dispatched OUTSIDE those exits
+    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
+    // scheme-zod init cycle (see the makeCallCtx import note above).
     return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {
@@ -181,6 +195,13 @@ export class ARosettaProcedure extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
+    // Fallback display only. A callable's real JS projection is the reverse-
+    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
+    // special-case is_callable_value BEFORE this protocol method (so exec()
+    // can return an ALambda/AProcedure as a callable host fn). This method is
+    // reached only when a callable is protocol-dispatched OUTSIDE those exits
+    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
+    // scheme-zod init cycle (see the makeCallCtx import note above).
     return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {

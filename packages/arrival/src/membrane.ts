@@ -4,8 +4,9 @@
  * - fromJS/toJS: general JS↔Scheme value crossing. Thin wrappers (cljs-bean style)
  *   for objects/functions; WeakMap identity cache (Miller/Van Cutsem); primitives
  *   pass through unwrapped.
- * - readMember/hasMember/memberKeys: the interop read protocol backing `@`/`@?`/
- *   `@keys` and the `:key` accessor.
+ * - Member access (`@`/`@?`/`@keys`, the `:key` accessor) lives on the values
+ *   themselves (`arrival/tagless-final/get|has|keys`) — env/polyglot.ts's verbs
+ *   dispatch directly; no membrane face remains.
  *
  * (The former Codec/Operator FFI layer is dissolved; numeric marshalling now lives
  * in the `scheme/numeric` pack via `symbol.native`.)
@@ -37,12 +38,12 @@ import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
-import { jsToScheme } from "./rosetta.js";
-import { InteropAccessError } from "./errors.js";
+import { jsToScheme, callableToHostFn } from "./rosetta.js";
+import { is_callable_value } from "./values/value-guards.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
 import { type ACallable } from "./values/primitives/ACallable.js";
-import { ANil, nil } from "./values/primitives/ANil.js";
+import { ANil } from "./values/primitives/ANil.js";
 import { Keyword } from "./values/Keyword.js";
 // AJSObject/AJSArray live in primitives/ with the rest of the term family; they
 // import fromJS/jsToScheme directly (benign cycle, hoisted fn decls) — see
@@ -52,18 +53,10 @@ import { AJSObject } from "./values/primitives/AJSObject.js";
 import { ADict } from "./values/primitives/ADict.js";
 import { ACharacter } from "./values/primitives/ACharacter.js";
 
-export {
-  INTEROP_BOUNDARY,
-  accessMember,
-  accessHas,
-  accessSet,
-  NOT_FOUND,
-  markInteropBoundary,
-} from "./interop-access.js";
-export { InteropAccessError } from "./errors.js";
-// Deprecated pre-rename alias, kept until stdlib importers codemod off the
-// sandbox→interop naming.
-export { markInteropBoundary as markAsSandboxBoundary } from "./interop-access.js";
+// (The interop-access re-export block died with the accessor faces: the read
+// policy's imports live only in the borrowed classes now, and the public
+// surface — arrival/markInteropPrivate/markInteropBoundary — ships from the
+// index barrel directly off interop-access.js.)
 
 
 // ============================================================================
@@ -248,58 +241,21 @@ export function toJS(value: SchemeValue) {
     isSchemeValue(value),
     "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS value is already JS. Pass it through directly.",
   );
+  // A scheme callable exits as its reverse-membrane region wrapper (so exec()'s
+  // simple tier can return an ALambda/AProcedure as a callable host fn), NOT its
+  // print-string `arrival/toJS`. Special-cased here rather than in ACallable's
+  // own term because that class must not import rosetta.ts (scheme-zod init
+  // cycle — see ACallable's makeCallCtx note); membrane already carries the
+  // rosetta cycle safely (jsToScheme above). schemeToJs applies the same
+  // is_callable_value check before its own protocol dispatch.
+  if (is_callable_value(value)) return callableToHostFn(value, {});
   return value["arrival/toJS"]();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Polyglot member access — the interop read protocol (Graal InteropLibrary).
-//
-// arrival is a polyglot runtime, not a host with a fenced guest: a value is a
-// value whichever language minted it. readMember/hasMember/memberKeys are the
-// FACE of the protocol — key normalization + tagless dispatch — backing the
-// `@`/`@?`/`@keys` surface and the `:key` accessor: one protocol, two syntaxes.
-//
-// The protocol itself lives ON the values (tagless algebra, AValue.ts): a
-// member-carrying term implements `arrival/tagless-final/get|has|keys` — ADict
-// structurally, AJSObject/AJSArray through the interop read policy
-// (interop-access.ts) over their borrowed source. ABSENCE IS THE SEMANTICS: a
-// scheme leaf, a raw FFI passthrough, a function — no terms, no members; the
-// face answers nil/false/[], never a value's internal provenance/kind fields.
-// (Meta-members and `@arrival.private` are blocked inside the borrowed terms'
-// policy, same as Graal hides a meta-object from a peer language.)
-//
-// The former central `instanceof` dispatch (+ its raw-object branch and the
-// derive-ctx-from-container hack) is dissolved — the S1 throwing-door probe
-// proved the raw path uninhabited across the whole suite: post-A4 only boxed
-// values circulate, so the face never sees a bare object/array.
-
-/** `readMember(obj, key)` — read a member off any polyglot value. Missing/blocked/
- *  member-less receiver → nil. */
-export function readMember(obj: unknown, key: unknown): SchemeValue {
-  if (obj == null) return nil;
-  const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
-  if (rawKey == null || rawKey instanceof ANil) return nil;
-  // keyword-style member: a leading `:` is the accessor sigil, not part of the name.
-  let keyStr = String(rawKey);
-  if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
-  const getter = (obj as Partial<AValue>)["arrival/tagless-final/get"];
-  return typeof getter === "function" ? getter.call(obj, keyStr) : nil;
-}
-
-/** `hasMember(obj, key)` — does the polyglot value expose this member? */
-export function hasMember(obj: unknown, key: unknown): boolean {
-  if (obj == null) return false;
-  const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
-  if (rawKey == null || rawKey instanceof ANil) return false;
-  let keyStr = String(rawKey);
-  if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
-  const has = (obj as Partial<AValue>)["arrival/tagless-final/has"];
-  return typeof has === "function" ? has.call(obj, keyStr) : false;
-}
-
-/** `memberKeys(obj)` — the polyglot value's own member names. */
-export function memberKeys(obj: unknown): string[] {
-  if (obj == null) return [];
-  const keys = (obj as Partial<AValue>)["arrival/tagless-final/keys"];
-  return typeof keys === "function" ? keys.call(obj) : [];
-}
+// Polyglot member access lives ON the values (tagless algebra, AValue.ts):
+// `arrival/tagless-final/get|has|keys` — ADict structurally, AJSObject/AJSArray
+// through the interop read policy (interop-access.ts) over their borrowed
+// source. The former membrane faces (readMember/hasMember/memberKeys) are
+// dissolved: env/polyglot.ts's `@`/`@?`/`@keys` verbs — their only production
+// consumer — normalize the key and invoke the terms directly. Absence IS the
+// semantics; nothing membrane-level remains of the read protocol.
