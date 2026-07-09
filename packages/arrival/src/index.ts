@@ -180,6 +180,7 @@ export {
   fieldResolve,
   stepKey,
   sameStep,
+  countOpaqueNodes,
   CLASSIFIED_SPECIAL_FORMS,
   type LineageNode,
   type PathStep,

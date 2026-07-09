@@ -54,6 +54,7 @@ export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<strin
       return out;
     case "pipe":
     case "field":
+    case "transparent": // cone-identical to pipe (§2: neither mints nor stamps) — UNREACHABLE today
       slotsOf(n.child, out);
       return out;
     case "fan":
@@ -66,6 +67,8 @@ export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<strin
       return out;
     case "merge":
     case "opaque":
+    case "sink": // children-array shape, same barrier treatment — UNREACHABLE today
+    case "binder": // children-array shape, same barrier treatment — UNREACHABLE today
       n.children.forEach((ch) => slotsOf(ch, out));
       return out;
   }

@@ -94,6 +94,7 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
       out.add(n.op);
       return;
     case "pipe":
+    case "transparent": // cone-identical to pipe (§2: neither mints nor stamps) — UNREACHABLE today
       collectSlots(n.child, out);
       return;
     case "field":
@@ -108,6 +109,8 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
       return;
     case "merge":
     case "opaque":
+    case "sink": // children-array shape, same barrier treatment — UNREACHABLE today
+    case "binder": // children-array shape, same barrier treatment — UNREACHABLE today
       n.children.forEach((ch) => collectSlots(ch, out));
       return;
     default:

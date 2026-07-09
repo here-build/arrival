@@ -111,7 +111,30 @@ export type LineageNode =
   // if/cond — a value-SELECT over arms gated by a selector (the test cone). The
   // static cone is selector ∪ arms (conservative; the taken arm is a runtime fact).
   | { readonly kind: "mux"; readonly op: string; readonly selector: LineageNode; readonly arms: readonly LineageNode[] }
-  | { readonly kind: "opaque"; readonly op: string; readonly children: readonly LineageNode[] }; // black-box: holistic
+  | { readonly kind: "opaque"; readonly op: string; readonly children: readonly LineageNode[] } // black-box: holistic
+  // GRAPH-LAYER target for docs/PROVENANCE.md §2's declaration-role `sink` lowering
+  // ("a sink is a port with no egress wire"): an effect/output port. `children` are
+  // what fed it — their cone still matters (I1 confinement reads it), but nothing
+  // derives FROM a sink upward, so it contributes no leaf/mint of its own. UNREACHABLE
+  // from classify() today — no declaration marks an op `sink` yet (Q2's role field +
+  // Q3's classifier wiring land that); the kind exists now so Q2/Q3 have a target
+  // (PROVENANCE-PLAN.md Q1).
+  | { readonly kind: "sink"; readonly op: string; readonly children: readonly LineageNode[] }
+  // GRAPH-LAYER target for §2's `transparent` lowering ("a membrane crossing that
+  // neither mints nor stamps"): a pure pass-through port. Single-child, cone-
+  // identical to `pipe` — kept as its own kind because crossing a membrane is a
+  // distinct FACT from a same-world pure op, even though today's cone walk treats it
+  // the same. Same UNREACHABLE-today status as `sink` above.
+  | { readonly kind: "transparent"; readonly op: string; readonly child: LineageNode }
+  // GRAPH-LAYER target for §1's "binders" designated-node category. `cycles` marks
+  // whether THIS binder introduces a back-edge — the declaration-role `loop` lowers
+  // 1:1 to `binder{cycles: true}` (§2); `cycles: false` is the future home for
+  // today's plain/named-let handling (still `opaque` above, pending Q3's classifier
+  // rewrite). `children` covers bindings + body as an inert placeholder — real
+  // backedge topology is Q8a′'s job (PROVENANCE-PLAN.md), not Q1's; this shape is
+  // only the `cycles` marker the spec names, not the graph. Same UNREACHABLE-today
+  // status as `sink`/`transparent`.
+  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] }; // designated binding node, marker-only until Q8a′
 
 /** Static classification of operators — read from the env's binding table in a
  *  real build; passed explicitly here so the spike is deterministic. */
@@ -571,6 +594,10 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       (b[n.op] ?? []).forEach((x) => out.add(x));
       return;
     case "pipe":
+    case "transparent":
+      // `transparent` mints/stamps nothing (§2) — cone-identical to `pipe`'s single-
+      // child forward. UNREACHABLE today (Q1 type-target only); this arm is what Q3's
+      // classifier will exercise once it emits the kind.
       walk(n.child, b, out, opts); // a pure pipe adds nothing of its own; preserves both knobs
       return;
     case "field":
@@ -591,8 +618,10 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       return;
     case "merge":
     case "opaque":
-      // Both are DEMAND BARRIERS — walk each child with the demand DROPPED (full
-      // cone), keeping countOnly — for DISTINCT reasons:
+    case "sink":
+    case "binder":
+      // Both original members are DEMAND BARRIERS — walk each child with the demand
+      // DROPPED (full cone), keeping countOnly — for DISTINCT reasons:
       //   - merge: a fan-in to a FRESH value (`(+ a b)`, a constructed dict). A field
       //     demand CANNOT be statically attributed to one child (no genesis labels
       //     yet); the merge itself IS the producer, not its children. Re-projecting
@@ -601,6 +630,10 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       //     is opaque to whether/how the demanded field survives it, so every child's
       //     full cone is taken. Do not narrow this: there is no visible structure to
       //     justify it, so it would be unsound.
+      // `sink`/`binder` share the same children-array shape and the same conservative
+      // barrier is sound for both (UNREACHABLE today — Q1 type-target only): a sink's
+      // children are what fed it (barrier, since nothing derives further from a sink
+      // anyway); a binder's children are bindings+body pending Q8a′'s real topology.
       for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":
@@ -707,4 +740,43 @@ export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
   }
   // Not a member-read: the whole value's cone is the base, with no projected key.
   return { base: fullCone(n, b), key: null };
+}
+
+/**
+ * V3 OPAQUE QUARANTINE — the MACHINERY (PROVENANCE-PLAN.md Q1; PROVENANCE.md §2:
+ * "`opaque` as a citizen — it is a quarantined escape hatch; corpus count is a
+ * shrink-only drift alarm baselined AFTER W0"). Counts every `opaque` node in a
+ * classified tree, exhaustively — a POPULATION count, not a reachability walk
+ * (unlike `walk()`/`fullCone`, this visits fan templates and every branch, since the
+ * alarm cares how many opaque escape hatches exist, not which are cone-reachable
+ * from a given binding). A future corpus-level caller sums this over many
+ * `classify()` results to produce the baseline the it.todo alarm row pins — that
+ * baseline is a post-Q6 artifact (span propagation changes what is opaque) and is
+ * NOT pinned here; this function is only the counted walk itself.
+ */
+export function countOpaqueNodes(n: LineageNode): number {
+  switch (n.kind) {
+    case "literal":
+    case "leaf":
+    case "source":
+      return 0;
+    case "pipe":
+    case "transparent":
+    case "field":
+      return countOpaqueNodes(n.child);
+    case "fan":
+      return countOpaqueNodes(n.source) + (n.template ? countOpaqueNodes(n.template) : 0);
+    case "mux":
+      return countOpaqueNodes(n.selector) + n.arms.reduce((sum, arm) => sum + countOpaqueNodes(arm), 0);
+    case "merge":
+    case "sink":
+    case "binder":
+      return n.children.reduce((sum, ch) => sum + countOpaqueNodes(ch), 0);
+    case "opaque":
+      return 1 + n.children.reduce((sum, ch) => sum + countOpaqueNodes(ch), 0);
+    default:
+      // Same exhaustiveness contract as walk(): a new LineageNode kind without a
+      // count arm fails to compile here rather than silently under-counting.
+      assertNever(n);
+  }
 }

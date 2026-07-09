@@ -1,0 +1,77 @@
+/**
+ * LAW (staged) — V3 opaque quarantine drift alarm (docs/PROVENANCE.md §2: "`opaque`
+ * as a citizen — it is a quarantined escape hatch; corpus count is a shrink-only
+ * drift alarm baselined AFTER W0"; docs/PROVENANCE-PLAN.md Q1: "opaque quarantine
+ * drift alarm — MACHINERY only; the baseline NUMBER is a post-Q6 artifact, never
+ * pinned here").
+ *
+ * This file lands the MACHINERY Q1 owes: a counted walk over a `classify()` corpus,
+ * exposed as a testable function (`countOpaqueNodes`, `values/lineage.ts`), plus this
+ * staged `it.todo` alarm row. It intentionally does NOT pin a baseline number — W0
+ * (span propagation through syntax-rules, Q6) changes what the classifier sees as
+ * opaque (hygiene-expanded forms it currently cannot model), so any number pinned
+ * before Q6 lands would be stale on arrival.
+ *
+ * PRE-LANDING NOTE for future Sonnets: this is a narrow slice of what
+ * `PROVENANCE-PLAN.md`'s Q5 will build (`src/__tests__/laws/provenance-roles.law.test.ts`,
+ * housing the full V1/V2/V3/V4 role-vocabulary rows). Q5 has NOT landed — this file
+ * covers only V3's counted-walk machinery, scoped to Q1. Q5 may fold this row into
+ * its stub file directly rather than duplicating it; do not read this file's
+ * existence as Q5 having landed.
+ */
+import { describe, expect, it } from "vitest";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { classify, countOpaqueNodes, type Classifier } from "../../values/lineage.js";
+
+// Mirrors lineage-spike.test.ts's spike classifier — a minimal, deterministic
+// Classifier sufficient to exercise the corpus below (not the real env-backed one;
+// Q3 replaces this with declaration-driven classification).
+const C: Classifier = {
+  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length", "not"].includes(op),
+  isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
+  isFan: (op) => ["map", "filter"].includes(op),
+  isOpaque: (op) => ["ext-call"].includes(op),
+};
+
+/** A tiny corpus mixing zero-opaque, single-opaque, and nested-opaque forms — enough
+ *  to exercise the counted walk's recursion (mux/fan/merge descent) without needing
+ *  the full §7 generator corpus (that's Q9's job, over the extended class list). */
+const CORPUS: readonly string[] = [
+  `(+ 1 2)`, // no opaque
+  `(infer p)`, // a source mint, no opaque
+  `(ext-call a b)`, // one opaque, holistic over two leaves
+  `(if (ext-call a) (+ 1 2) (ext-call b c))`, // two opaque nodes, one per mux arm
+  `(let loop ((a v1)) a)`, // named-let — opaque today (pending Q3's binder rewrite)
+];
+
+/** classify() every corpus member and sum `countOpaqueNodes` — the machinery a future
+ *  baseline assertion (post-Q6) will call directly. Exposed as its own function (not
+ *  inlined into the `it`) so Q6+ can import and assert against it without re-deriving
+ *  the corpus-walk shape. */
+async function countOpaqueOverCorpus(corpus: readonly string[]): Promise<number> {
+  await initBridge();
+  let total = 0;
+  for (const src of corpus) {
+    const [ast] = await parse(src, inferenceEnv);
+    total += countOpaqueNodes(classify(ast, C));
+  }
+  return total;
+}
+
+describe("V3 opaque quarantine — counted-walk machinery (Q1)", () => {
+  it("countOpaqueNodes walks a classified tree without throwing, over a mixed corpus", async () => {
+    // Sanity, not a baseline: proves the machinery is wired end-to-end (parse →
+    // classify → count) and returns a plain non-negative integer. The exact number
+    // is NOT asserted here — see the it.todo below for why.
+    const total = await countOpaqueOverCorpus(CORPUS);
+    expect(Number.isInteger(total)).toBe(true);
+    expect(total).toBeGreaterThanOrEqual(0);
+  });
+
+  // @ledger: opaque quarantine baseline pinned pre-Q6
+  it.todo(
+    "the corpus opaque count is baselined AFTER Q6 (span propagation) lands, then only shrinks (drift alarm)",
+  );
+});
