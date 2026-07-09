@@ -18,12 +18,19 @@
 // THE CONTRACT per root:
 //   `global_env` — the native root. Write window: phase 1 only; nothing writes
 //   here afterwards (no production `.set` on it exists outside assembly).
-//   `user_env`  — the interaction scope and the DEFAULT env for bare
-//   `exec(code)`: top-level user defines accumulate on this SHARED frame by
-//   design (REPL semantics). Hermetic callers never see that bleed — they pass
-//   `{ env }` or `{ capabilities }` (the latter assembles onto a FRESH
-//   `user_env.inherit(...)` child per call). The provenance spec's hermetic
-//   replay envs likewise assemble fresh and never touch this shared frame.
+//   `user_env`  — the top of the DEFAULT capability base for bare `exec(code)`.
+//   Write window: phase 2 (the BAKE) only. At the end of `ensureBaseAssembled`
+//   the base SEALS into a frozen `CompiledResolutionChain` (ENV T2,
+//   environment-resolution-chain.md §§1–2) — the artifact every default-path
+//   exec resolves builtins through; the sealed artifact has no write surface,
+//   so the write window is a structural fact, not a convention. Top-level user
+//   defines accumulate on the mutable SESSION FRAME above the chain
+//   (generator-exec's realm-cached `defaultLexicalRoot` — REPL semantics
+//   preserved exactly), never on this frame. Hermetic callers pass `{ env }`
+//   (glass — live walk, unbaked by definition) or `{ capabilities }` (assembles
+//   + seals a FRESH `user_env.inherit(...)` child per call). The provenance
+//   spec's hermetic replay envs likewise assemble fresh and never touch this
+//   shared frame.
 //
 // The third root, `inferenceEnv` (exported as `sandboxedEnv`), lives in
 // inference-env.ts: a structurally empty child of `user_env` giving the

@@ -1,0 +1,224 @@
+/**
+ * CompiledResolutionChain — the SEALED, ambient form of a baked capability base
+ * (ENV T2, docs/working-proposals/environment-resolution-chain.md §§1–2).
+ *
+ * Assembly (the BAKE) writes onto a live env chain: packs bind natives in C3 order,
+ * preludes evaluate against the chain-so-far, `preludeOnly` bindings ride the kernel's
+ * bake-scoped overlay (dropped at seal — kernel.ts). At the SEAL, this module compiles
+ * that chain into a frozen artifact:
+ *
+ *   Today's per-layer semantics is own-bindings → own-resolvers (registration order) →
+ *   parent — a PRECEDENCE CONTRACT (Environment.ts). Flattening the layer chain yields
+ *   `[map_L0, r_L0…, map_L1, r_L1…, …]`; because the bake froze every map, adjacent maps
+ *   with no resolver between them MERGE at seal into one flat Map (child-wins union) —
+ *   sound by immutability, order-preserving by construction. A resolver in layer Lᵢ
+ *   splits the merge exactly at its position.
+ *
+ *   DEGENERATE case (zero live resolvers — today's in-repo reality: no pack declares
+ *   `spec.resolvers`, and the kernel's prelude overlay unregisters at seal): the whole
+ *   chain compiles to ONE flat Map and `lookup` is a single `Map.get` — faster than the
+ *   per-layer `Object.hasOwn` walk + resolver loop + recursion it replaces.
+ *
+ * WRITE-WINDOW: the artifact has no write surface — post-seal writes to the underlying
+ * env are outside the contract (the design's ruling, §1). REPL accumulation rides the
+ * mutable session frame ABOVE the chain (generator-exec's `defaultLexicalRoot`), never
+ * the ambient artifact. GLASS callers (custom `{ env }`) keep the live env walk by
+ * definition — glass envs don't bake; this module never sees them.
+ *
+ * CONTENT ADDRESS (§1): `hash` is a deterministic composition of the merged vocabulary
+ * (sorted names) + resolver ids/purity in step position — the coarse program+epoch
+ * identity the PROVENANCE track's "baked-env hash" slot consumes. Binding-VALUE hashing
+ * (natives are JS-backed) is DEFERRED per the design's open question 1 (needs V's ruling
+ * on cross-deploy chain reuse); two deploys with the same vocabulary shape currently
+ * share a hash.
+ */
+import { type Environment, type EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+
+/**
+ * A resolver step in the compiled chain — the genuine runtime middleware contract
+ * (design §2). `pure` is a DECLARED flag (P16 honesty — the alarm catches
+ * contradictions, not lies): `pure: true` promises name-stable results (same name ⇒
+ * same value forever), which licenses memoization through this step; default `false`
+ * (safe — a dynamic middleware may start answering tomorrow).
+ */
+export class CompiledResolver {
+  /** Promotion memo for PURE hits (design §2b) — consulted before THIS STEP, never
+   *  before the whole chain: an EARLIER impure resolver may start answering a name
+   *  tomorrow and must keep winning, so the memo may only shortcut the step it
+   *  promotes for. Sound because every step BEFORE this one is a frozen map or its
+   *  own (re-probed) resolver. Preserves the identity contract: `(eq? x x)` holds
+   *  for a synthesized callable across lookups (the cxrCache shape, generalized).
+   *  Lives on the step, GC'd with the chain — never on frames. */
+  private readonly memo: Map<string | symbol, EnvironmentValue> | undefined;
+
+  constructor(
+    readonly id: string,
+    readonly resolve: (name: string) => unknown,
+    readonly pure: boolean,
+  ) {
+    this.memo = pure ? new Map() : undefined;
+  }
+
+  /** The step probe the chain walk calls: memo (pure only) → resolve → promote. */
+  probe(name: string | symbol): EnvironmentValue | undefined {
+    const promoted = this.memo?.get(name);
+    if (promoted !== undefined) return promoted;
+    const hit = this.resolve(String(name));
+    if (hit === undefined) return undefined;
+    this.memo?.set(name, hit as EnvironmentValue);
+    return hit as EnvironmentValue;
+  }
+}
+
+/** One chain step: a merged frozen map, or an interleaved resolver probe. */
+export type ResolutionStep = ReadonlyMap<string | symbol, EnvironmentValue> | CompiledResolver;
+
+export class CompiledResolutionChain {
+  /** Maps pre-merged at seal, resolvers in their C3-position (design §2). */
+  readonly steps: readonly ResolutionStep[];
+  /** Content address (see the module header — vocabulary-shape identity, value hashing deferred). */
+  readonly hash: string;
+  /** The merged STATIC vocabulary (MCP discovery / allBoundNames) — resolver-synthesized
+   *  names are not enumerable and deliberately absent. */
+  readonly names: ReadonlySet<string | symbol>;
+
+  /** Set iff the chain is the degenerate zero-resolver form — `lookup` = one `Map.get`. */
+  private readonly flat: ReadonlyMap<string | symbol, EnvironmentValue> | undefined;
+  /** Negative miss-cache (memoizing "unbound") — sound iff EVERY resolver is pure,
+   *  computed once at seal (design §2c): one impure resolver disables it globally (a
+   *  dynamic middleware may start answering tomorrow). Omitted in the zero-resolver
+   *  form (a flat-map miss is already one `Map.get`). Lives ON the chain (realm-shared,
+   *  GC'd with it), never on frames. */
+  private readonly misses: Set<string | symbol> | undefined;
+
+  constructor(steps: readonly ResolutionStep[]) {
+    this.steps = steps;
+    const names = new Set<string | symbol>();
+    let resolverCount = 0;
+    let allPure = true;
+    for (const step of steps) {
+      if (step instanceof CompiledResolver) {
+        resolverCount++;
+        allPure &&= step.pure;
+      } else {
+        for (const key of step.keys()) names.add(key);
+      }
+    }
+    this.names = names;
+    const [first] = steps;
+    const degenerate = resolverCount === 0 && steps.length === 1 && !(first instanceof CompiledResolver);
+    this.flat = degenerate ? first : undefined;
+    this.misses = resolverCount > 0 && allPure ? new Set() : undefined;
+    this.hash = hashSteps(steps);
+  }
+
+  /** The composed base lookup — `undefined` on a miss, no synth (the keyword/cxr synth
+   *  layer stays in Resolver.resolve, ABOVE this — design §2 "synth stays in Resolver"). */
+  lookup(name: string | symbol): EnvironmentValue | undefined {
+    const flat = this.flat;
+    if (flat !== undefined) return flat.get(name); // the degenerate fast path: ONE Map.get
+    if (this.misses?.has(name)) return undefined;
+    for (const step of this.steps) {
+      const hit = step instanceof CompiledResolver ? step.probe(name) : step.get(name);
+      if (hit !== undefined) return hit;
+    }
+    this.misses?.add(name);
+    return undefined;
+  }
+
+  toString(): string {
+    return `#<compiled-resolution-chain:${this.hash}:${this.steps.length} step(s)>`;
+  }
+}
+
+/** Canonical name form for the content address: strings as-is, symbols marked. */
+function canonicalName(key: string | symbol): string {
+  return typeof key === "string" ? key : `#sym:${String(key.description ?? "")}`;
+}
+
+/** Locale-independent, code-unit-wise comparator — the content address must be
+ *  byte-stable across realms and locales (localeCompare is neither). */
+function byCodeUnit(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/** FNV-1a over the canonical step composition — deterministic, realm-independent. */
+function hashSteps(steps: readonly ResolutionStep[]): string {
+  const parts: string[] = ["crc-v0"];
+  for (const step of steps) {
+    if (step instanceof CompiledResolver) {
+      parts.push(`resolver:${step.id}:${step.pure}`);
+    } else {
+      parts.push(`map:${[...step.keys()].map(canonicalName).toSorted(byCodeUnit).join(",")}`);
+    }
+  }
+  const canonical = parts.join("|");
+  let h = 0x81_1c_9d_c5;
+  for (let i = 0; i < canonical.length; i++) {
+    h ^= canonical.codePointAt(i) ?? 0;
+    h = Math.imul(h, 0x01_00_01_93);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * Compile a sealed env chain into its ambient artifact. Walks `base → … → root`
+ * child-first; per layer, own bindings precede own resolvers precede the parent —
+ * the exact precedence contract the live walk implements (Environment.ts), so the
+ * module-composition ordering pins bind this step order by construction.
+ */
+export function compileResolutionChain(base: Environment): CompiledResolutionChain {
+  const steps: ResolutionStep[] = [];
+  /** Layers whose maps are pending merge (child-first). */
+  let pending: Environment[] = [];
+
+  const flushMerged = (): void => {
+    if (pending.length === 0) return;
+    const merged = new Map<string | symbol, EnvironmentValue>();
+    // Deepest layer first so a CLOSER layer's entry overwrites — child-wins union (§2).
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const record = pending[i].__env__;
+      for (const key of Object.keys(record)) merged.set(key, record[key]);
+      for (const sym of Object.getOwnPropertySymbols(record)) merged.set(sym, record[sym]);
+    }
+    pending = [];
+    // An empty span between two resolvers contributes nothing — skip it (but keep the
+    // one map of an empty zero-resolver chain, so `flat` always exists in that form).
+    if (merged.size === 0 && steps.length > 0) return;
+    steps.push(merged);
+  };
+
+  for (let layer: Environment | null = base; layer !== null; layer = layer.__parent__) {
+    pending.push(layer);
+    const specs = layer instanceof ResolvingEnvironment ? layer.resolverSpecs() : [];
+    if (specs.length > 0) {
+      flushMerged(); // this layer's own bindings precede its resolvers
+      for (const spec of specs) {
+        steps.push(new CompiledResolver(spec.id, (name) => spec.resolve(name), spec.pure === true));
+      }
+    }
+  }
+  flushMerged();
+  if (steps.length === 0) steps.push(new Map());
+
+  return new CompiledResolutionChain(steps);
+}
+
+// ── The seal registry ────────────────────────────────────────────────────────────────
+//
+// ONE chain per baked base (realm-shared memo, GC'd with the env). Assembly call sites
+// (generator-exec's `ensureBaseAssembled` / `assembleCapabilityBase`) call this at bake
+// end — the explicit SEAL; `Capabilities.assembled` calls it too, so an assembled base
+// reaching the exec seam by any route resolves through the same artifact.
+const sealedChains = new WeakMap<Environment, CompiledResolutionChain>();
+
+export function sealResolutionChain(base: Environment): CompiledResolutionChain {
+  let chain = sealedChains.get(base);
+  if (chain === undefined) {
+    chain = compileResolutionChain(base);
+    sealedChains.set(base, chain);
+  }
+  return chain;
+}

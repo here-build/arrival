@@ -257,6 +257,23 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
     return this;
   }
 
+  /** Remove a registered resolver by id — the kernel's SEAL hook (ENV T2, design §1):
+   *  the bake-scoped `preludeOnly` overlay registers for the C3 loop's duration and
+   *  unregisters here, so no spent machinery survives assembly on any env. No-op for
+   *  an unknown id. */
+  unregisterResolver(id: string): this {
+    const at = this.__resolvers__.findIndex((r) => r.id === id);
+    if (at !== -1) this.__resolvers__.splice(at, 1);
+    return this;
+  }
+
+  /** Seal-time read for the chain compiler (eval/CompiledResolutionChain.ts): the
+   *  registered resolver specs in registration (= C3 apply) order. Live view — the
+   *  compiler snapshots position at seal; callers must not mutate. */
+  resolverSpecs(): readonly ResolverSpec[] {
+    return this.__resolvers__;
+  }
+
   /**
    * The full direct-bindings → resolvers → parent precedence contract (unchanged from
    * pre-T1 `Environment`): a module's explicit binding wins over its own lazy resolver

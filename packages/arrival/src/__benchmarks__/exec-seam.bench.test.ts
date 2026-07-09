@@ -31,6 +31,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { exec, execExpr, parse } from "../eval/generator-exec.js";
 import run, { evaluate } from "../eval/evaluator.js";
 import { Resolver } from "../eval/Resolver.js";
+import { Capabilities } from "../eval/Capabilities.js";
+import { user_env } from "../env-roots.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
 import { freshEnv } from "../__tests__/_fresh-env.js";
 import type { Environment } from "../Environment.js";
@@ -83,6 +85,40 @@ describe("exec seam overhead — one evaluator, three measurement layers", () =>
       expect((result as { valueOf(): unknown }).valueOf()).toBe(15);
     }
     report("run(evaluate(ast))", ITERATIONS, performance.now() - start);
+  });
+
+  // ── THE CUT PATH (ENV T2, docs/working-proposals/environment-resolution-chain.md §2) ──
+  // The layers above run GLASS ({ env }): the resolver wraps the custom env's live
+  // `__parent__` walk, which the compiled resolution chain deliberately does not touch.
+  // The chain's promised win is the DEFAULT (cut) path — `Capabilities.assembled(user_env)`
+  // — where zero live resolvers must compile to ONE flat Map.get. These two layers
+  // measure that seam: the full default exec, and the bare capability lookup itself.
+
+  it("layer 1-cut — exec(source) DEFAULT path: assembled base (the compiled-chain seam)", async () => {
+    await exec(SOURCE); // warm the realm bootstrap outside the measured loop
+    const start = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) {
+      const [result] = await exec(SOURCE);
+      expect(result).toBe(15);
+    }
+    report("exec(source) — default/cut", ITERATIONS, performance.now() - start);
+  });
+
+  it("layer 0-cut — Capabilities.assembled(user_env).lookup: the raw capability-half lookup", async () => {
+    await exec(SOURCE); // bootstrap
+    const caps = Capabilities.assembled(user_env);
+    // Mixed workload: a base-leaf hit (`cons`, owned on user_env), a root hit (`+`,
+    // owned on global_env), and a guaranteed miss (undefined) — the three lookup outcomes.
+    const NAMES = ["+", "cons", "definitely-unbound-benchmark-name"] as const;
+    const LOOKUPS = 199_998; // divisible by 3 — exact ⅔ hit count below
+    const start = performance.now();
+    let hits = 0;
+    for (let i = 0; i < LOOKUPS; i++) {
+      if (caps.lookup(NAMES[i % 3]) !== undefined) hits++;
+    }
+    const elapsed = performance.now() - start;
+    expect(hits).toBe((LOOKUPS / 3) * 2);
+    report("capabilities.lookup (÷3 hit/hit/miss)", LOOKUPS, elapsed);
   });
 
   it("deeply nested expression, layer 1 vs layer 3 (same shape as the old file's nested-expr case)", async () => {

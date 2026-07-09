@@ -38,11 +38,11 @@ export interface PackContext<E = unknown> {
   readonly order: readonly string[];
   /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env.
    *
-   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own phase-gated Map shim (see the
-   *  block comment above `assembleEnv`). Resolvable only while the assembly's prelude phase is
-   *  open; gone the moment the C3 loop ends — including for closures a prelude defined (a closure
-   *  walks the live chain at call time, and the resolver answers nothing post-assembly). That IS
-   *  the `preludeOnly` contract: assembly-time-only, not run-within-prelude-scope.
+   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own bake-scoped overlay (see the
+   *  block comment above `assembleEnv`). Resolvable only while the assembly's C3 loop (the bake)
+   *  is open; DROPPED at seal — including for closures a prelude defined (a closure walks the
+   *  live chain at call time, and the overlay is gone post-assembly). That IS the `preludeOnly`
+   *  contract: assembly-time-only, not run-within-prelude-scope.
    *
    *  MID-RUN (`RuntimeAssembler.require`, §1.4): caller-supplied — a discarded child `C'` of
    *  the live env (arrival-scheme-env-loader's `arrivalLoaderCapability`, `require/extension`'s
@@ -229,65 +229,82 @@ function makeCtx<E>(
   return { ctx, runDisposers };
 }
 
-// ── The kernel-internal, phase-gated prelude scope (bootstrap assembly) ─────────────────────
+// ── The kernel-internal, BAKE-SCOPED prelude overlay (bootstrap assembly) ────────────────────
 //
-// The kernel owns `preludeOnly` binding + resolution per-assembly, with no env re-parenting:
+// ENV T2 (docs/working-proposals/environment-resolution-chain.md §1): assembly IS the bake —
+// the one-time phase that evaluates capability preambles against the chain-so-far. The kernel
+// owns `preludeOnly` binding + resolution per-assembly, with no env re-parenting:
 //
 //   • bindings land in a per-assembly `Map` behind `ctx.preludeScope` (a `.set`-only shim —
 //     capability.ts's bindTarget only writes);
-//   • a resolver registered ON THE BASE ENV answers lookups from that Map, gated on the
-//     assembly's `phase.prelude` flag. Resolvers are consulted at every layer of a chain walk
+//   • a resolver registered ON THE BASE ENV answers lookups from that Map for the duration of
+//     the C3 loop ONLY. Resolvers are consulted at every layer of a chain walk
 //     (`Environment._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
 //     evaluated against R — or any child scope chaining through the base — resolves the symbol
 //     exactly like the old overlay-parent did;
-//   • the flag flips false after the C3 loop (success OR failure), so post-assembly the name is
-//     a plain unbound-variable everywhere — INCLUDING from prelude-defined closures, which walk
-//     the live chain at call time. `preludeOnly` therefore means ASSEMBLY-TIME-ONLY. This is the
-//     contract, not a gap: a prelude that must bridge a preludeOnly value to runtime captures the
-//     VALUE at assembly time (`(define x (the-prelude-verb …))`), never the verb.
+//   • at the SEAL (the `finally` — success OR failure) the overlay is DROPPED: the resolver is
+//     unregistered wherever the base supports it (`ResolvingEnvironment` does), so no spent
+//     machinery survives assembly on any env — T1's "dead weight bounded by assemblies-per-env"
+//     ceases to exist. A structural host offering `registerResolver` but no `unregisterResolver`
+//     keeps the sealed-flag fallback (the resolver stays registered but answers nothing) —
+//     same contract, old residue. Post-seal the name is a plain unbound-variable everywhere —
+//     INCLUDING from prelude-defined closures, which walk the live chain at call time.
+//     `preludeOnly` therefore means ASSEMBLY-TIME-ONLY. This is the contract, not a gap: a
+//     prelude that must bridge a preludeOnly value to runtime captures the VALUE at assembly
+//     time (`(define x (the-prelude-verb …))`), never the verb.
 //
 // Everything is a per-assembly closure (concurrent assemblies never share state); only the id
-// uniquifier below is module-level, so two assemblies over the SAME base register distinct
-// resolver ids (Environment.registerResolver dedups by id). A spent resolver stays registered
-// but answers `undefined` forever — dead weight bounded by assemblies-per-env (one for
-// long-lived bases; fresh per-run children are GC'd whole).
+// uniquifier below is module-level, so two overlapping assemblies over the SAME base register
+// distinct resolver ids (Environment.registerResolver dedups by id).
 
 /** The structural face of a resolver-capable base (mirrors scheme-env.ts's `SchemeEnv.
  *  registerResolver`/`ResolverSpec` WITHOUT importing them — the kernel stays env-agnostic;
- *  a non-scheme `E` simply never gets the resolver and Map-bound symbols stay unreachable). */
+ *  a non-scheme `E` simply never gets the resolver and Map-bound symbols stay unreachable).
+ *  `unregisterResolver` is optional: present ⇒ the bake overlay is removed at seal (zero
+ *  residue); absent ⇒ the sealed-flag fallback silences it instead. */
 interface ResolverHostLike {
   registerResolver(resolver: { readonly id: string; resolve(name: string): unknown }): unknown;
+  unregisterResolver?(id: string): unknown;
 }
 const isResolverHost = (base: unknown): base is ResolverHostLike =>
   typeof (base as { registerResolver?: unknown } | null | undefined)?.registerResolver === "function";
 
-let preludeResolverSeq = 0;
+let bakeOverlaySeq = 0;
 
 /**
- * Assemble `base` into a capability-scoped env by resolving the pack DAG. Async by construction.
- * Applies each pack once in C3 order (least-precedence first ⇒ last-write-wins matches C3). On any
- * apply failure, runs disposers collected so far (LIFO) and rejects — no half-built env escapes.
+ * Assemble `base` into a capability-scoped env by resolving the pack DAG — the BAKE phase
+ * (ENV T2, design §1). Async by construction. Applies each pack once in C3 order
+ * (least-precedence first ⇒ last-write-wins matches C3). On any apply failure, runs disposers
+ * collected so far (LIFO) and rejects — no half-built env escapes.
  *
- * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, phase-gated prelude scope (see the
- * block comment above). Mid-run application (`RuntimeAssembler.require`) keeps its caller-supplied
- * `preludeScope`/`preludeEvalScope` override (§1.4) — that path applies onto a LIVE env, where the
- * discarded-child topology is the safe one.
+ * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, bake-scoped prelude overlay
+ * (see the block comment above), dropped at seal. Mid-run application
+ * (`RuntimeAssembler.require`) keeps its caller-supplied `preludeScope`/`preludeEvalScope`
+ * override (§1.4) — that path applies onto a LIVE env, where the discarded-child topology is
+ * the safe one.
+ *
+ * The kernel stays env-agnostic, so the SEALED ARTIFACT — the `CompiledResolutionChain`
+ * (eval/CompiledResolutionChain.ts) — is compiled by the scheme-side assembly call sites
+ * (generator-exec's `ensureBaseAssembled`/`assembleCapabilityBase` call
+ * `sealResolutionChain(base)` right after this resolves).
  */
 export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Promise<AssembledEnv<E>> {
   const { order, byName } = linearize(roots);
-  // Per-assembly closure: the Map + phase flag live and die with THIS call.
-  const phase = { prelude: true };
+  // Per-assembly closure: the overlay Map + sealed flag live and die with THIS call.
+  let sealed = false;
   const preludeMap = new Map<string, unknown>();
-  let resolverRegistered = false;
+  let overlayHost: ResolverHostLike | undefined;
+  let overlayId: string | undefined;
   const preludeScope: PreludeBindTarget = {
     set: (name, value) => {
-      // Register the resolver lazily, on the FIRST preludeOnly binding — an assembly with none
-      // (the overwhelmingly common case) leaves the base env untouched.
-      if (!resolverRegistered && isResolverHost(base)) {
-        resolverRegistered = true;
-        base.registerResolver({
-          id: `kernel/prelude-scope#${preludeResolverSeq++}`,
-          resolve: (name) => (phase.prelude ? preludeMap.get(name) : undefined),
+      // Register the overlay resolver lazily, on the FIRST preludeOnly binding — an assembly
+      // with none (the overwhelmingly common case) leaves the base env untouched.
+      if (overlayId === undefined && isResolverHost(base)) {
+        overlayHost = base;
+        overlayId = `kernel/bake-overlay#${bakeOverlaySeq++}`;
+        overlayHost.registerResolver({
+          id: overlayId,
+          resolve: (lookupName) => (sealed ? undefined : preludeMap.get(lookupName)),
         });
       }
       preludeMap.set(name, value);
@@ -307,9 +324,12 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
       }
     }
   } finally {
-    // The seal: after the C3 loop (success or failure), preludeOnly symbols are unreachable —
-    // the resolver answers nothing, and there is no overlay frame to leak.
-    phase.prelude = false;
+    // THE SEAL (design §1): after the C3 loop (success or failure) the bake-scoped overlay
+    // is dropped — preludeOnly symbols are unreachable, and where the base supports
+    // unregistration no resolver remains registered at all (zero residue).
+    sealed = true;
+    if (overlayId !== undefined) overlayHost?.unregisterResolver?.(overlayId);
+    preludeMap.clear();
   }
   return { env: base, order, dispose: runDisposers };
 }

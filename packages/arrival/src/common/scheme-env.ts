@@ -45,6 +45,13 @@ export interface RosettaSpec {
 export interface ResolverSpec {
   readonly id: string;
   resolve(name: string): unknown | undefined;
+  /** DECLARED purity (ENV T2, environment-resolution-chain.md §2 — P16 honesty: the
+   *  alarm catches contradictions, not lies): `true` promises NAME-STABLE results (same
+   *  name ⇒ same value forever), which licenses the compiled resolution chain to
+   *  memoize hits through this step — and, iff EVERY resolver in a chain is pure, to
+   *  cache misses ("unbound") too. Absent/`false` (the safe default): nothing is cached
+   *  through this step — a dynamic middleware may start answering tomorrow. */
+  readonly pure?: boolean;
 }
 
 /** The minimal surface a scheme-env pack touches. arrival-scheme's `Environment`
@@ -56,6 +63,11 @@ export interface SchemeEnv {
   inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). */
   registerResolver(resolver: ResolverSpec): void;
+  /** OPTIONAL: remove a registered resolver by id — the kernel's bake-SEAL hook (ENV
+   *  T2, design §1). A host that implements it gets zero-residue assembly (the
+   *  `preludeOnly` overlay resolver is unregistered at seal); a host without it keeps
+   *  the sealed-flag fallback (the resolver stays registered but answers nothing). */
+  unregisterResolver?(id: string): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
    *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope
    *  names (e.g. inspecting a freshly-`inherit`ed child) reads this directly. */
