@@ -38,6 +38,9 @@ export function formatLocation(loc: SourceLocation): string {
 
 /** Thrown for unterminated expressions (unclosed strings, parentheses, etc). */
 export class Unterminated extends Error {
+  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
+  static [CLASS] = "unterminated";
+
   location?: SourceLocation;
   /** Stable spec-taxonomy id — the grammar conformance corpus (spec/corpus/) matches
    *  error CLASSES on this, not on prose. */
@@ -51,6 +54,9 @@ export class Unterminated extends Error {
 }
 
 export class ParseError extends Error {
+  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
+  static [CLASS] = "parse-error";
+
   location?: SourceLocation;
   /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the grammar conformance corpus
    *  (spec/corpus/) matches error CLASSES on this, not on prose, so messages stay
@@ -66,6 +72,9 @@ export class ParseError extends Error {
 }
 
 export class EvalError extends Error {
+  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
+  static [CLASS] = "eval-error";
+
   location?: SourceLocation;
   code?: unknown;
 
@@ -230,6 +239,9 @@ export class InteropAccessError extends Error {
 
 /** R7RS error object — errors created by the `error` procedure. */
 export class R7RSError extends Error {
+  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError above. */
+  static [CLASS] = "r7rs-error";
+
   readonly irritants: unknown[];
   readonly name: string = "R7RSError";
 

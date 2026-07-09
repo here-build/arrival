@@ -1,10 +1,15 @@
 import { theVoid } from "./AVoid.js";
+import { CLASS } from "../../well-known-symbols.js";
 import type { SchemeValue } from "../types.js";
 
 // The carrier for `(values …)`: a distinct wrapper, not a plain value, so a
 // multiple-values return is distinguishable from a single value that happens
 // to be a collection.
 export class Values {
+  /** Type identity for CLASS-brand readers (`type()` in utils/typecheck): Values sits
+   *  outside the AValue hierarchy, so without a brand it needed a bespoke arm there. */
+  static [CLASS] = "values";
+
   __values__: SchemeValue[];
 
   // Use Values.from() — it unwraps 0/1-element cases this constructor cannot.

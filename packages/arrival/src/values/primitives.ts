@@ -103,10 +103,6 @@ export const parsable_contants = {
 };
 export const directives = ["#!fold-case", "#!no-fold-case"];
 export const hash_literals = ["#t", "#f"];
-export const type_constants = new Map([
-  [Number.NaN, "NaN"],
-  [null, "null"],
-]);
 // ----------------------------------------------------------------------
 // Hidden props
 // ----------------------------------------------------------------------

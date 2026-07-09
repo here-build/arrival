@@ -1,20 +1,68 @@
-import { EOF } from "../values/primitives/EOF.js";
-import { is_function, is_iterator } from "../values/value-guards.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { APair } from "../values/primitives/APair.js";
-import { type_constants } from "../values/primitives.js";
+import { is_function } from "../values/value-guards.js";
 import { CLASS } from "../well-known-symbols.js";
-// NOTE: Macro/Syntax intentionally NOT imported — evaluator-world classes; importing them here
-// created an ESM init cycle (Macro → typecheck → Syntax-extends-Macro) resolved only by load-order
-// luck. Their `typeOf` is derived from the `constructor.__class__` brand fallback below ("macro" /
-// "syntax"), keeping this module a leaf the value kernel can depend on.
-import { ANil } from "../values/primitives/ANil.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import { Values } from "../values/primitives/Values.js";
-import invariant from "tiny-invariant";
+
+/**
+ * `type()` — the human-facing type NAME of any value, for error messages and the one
+ * macro-literal dispatch site (eval/syntax-rules `same_atom`).
+ *
+ * THE BRAND IS THE TYPE (P7 key taxonomy): every arrival class carries
+ * `static [CLASS] = "<name>"` (`CLASS` = the string key `"arrival/class"`), and this
+ * module is a thin reader over that brand — no central instanceof switch. The old
+ * `typeMapping` table was 50% pure shadows of the brand and 50% classes that simply
+ * lacked one (EOF, Values, the reader/eval error classes — all branded now).
+ *
+ * This makes the module a true LEAF: no imports from values/primitives or eval — which
+ * also dissolves the historical Macro/Syntax ESM-init-cycle hazard this file used to
+ * document (their brands are read the same way as everyone's; nothing is imported).
+ *
+ * Deliberate treatments (design decisions, 2026-07-09 tagless rework):
+ * - `null` guard stays first: `null.constructor` throws; `"null"` predates the guard.
+ * - raw JS `NaN` reports `"NaN"`; a BOXED AInexact holding NaN reports `"number"` like
+ *   any inexact. Asymmetry kept: the raw NaN name flags an unboxed JS value leaking
+ *   into a message — renaming boxed NaN would hide that signal.
+ * - raw `Array`/`RegExp` are FOREIGN natives (cannot carry a brand): the only two
+ *   instanceof arms left, at the boundary where they belong. Raw arrays report
+ *   `"array"` — deliberately distinct from AJSArray's `"js-array"` brand (borrowed vs
+ *   raw is a real difference at a membrane).
+ * - anything object-shaped with neither brand nor native arm reports
+ *   `foreign:<CtorName>` — an honest, greppable marker that an unbranded foreign class
+ *   instance reached a type message (the old tail lowercased the constructor name,
+ *   silently minting unbounded vocabulary like "r7rserror"; those classes are branded
+ *   now).
+ * - plain objects (ctor === Object) and anonymous classes report `"object"`. The old
+ *   LIPS-era duck-branches for plain-object iterables ("iterator"/"async-iterator")
+ *   are deleted: no consumer ever branched on those strings (verified — the only
+ *   producer was this file).
+ * - `"native-symbol"` arm deleted: `typeof Symbol() === "symbol"` never enters the
+ *   object branch; the arm was unreachable (verified — nothing boxes symbols via
+ *   `Object()`).
+ * - callers may still override for pedagogy (evaluator's not-callable door reports
+ *   dict-SHAPED AJSObjects as "dict" — a door-specific teaching choice, not a brand).
+ *
+ * Adjacent vocabularies that are deliberately NOT this one: scheme-zod's `named()`
+ * codec names (a third namespace by design, see its header) and polyglot's in-scheme
+ * `%dict-guard` phrases. Do not unify.
+ */
+export function type(obj: unknown): string {
+  if (obj === null) return "null";
+  if (typeof obj === "number") return Number.isNaN(obj) ? "NaN" : "number";
+  if (typeof obj === "bigint") return "number";
+  if (obj === undefined) return "void";
+  if (typeof obj !== "object") return typeof obj; // string/boolean/function/symbol — raw JS
+
+  // The brand read — same idiom as value-guards' is_macro_value.
+  const ctor = (obj as { constructor?: { [CLASS]?: unknown; name?: string } }).constructor;
+  const brand = ctor?.[CLASS];
+  if (typeof brand === "string") return brand;
+
+  // Foreign natives — cannot carry a brand; named at the boundary.
+  if (Array.isArray(obj)) return "array";
+  if (obj instanceof RegExp) return "regex";
+
+  const name = ctor?.name;
+  if (!name || name === "Object") return "object";
+  return `foreign:${name}`;
+}
 
 export function typeErrorMessage(fn: unknown, got: string, expected: unknown, position: number | null = null) {
   let postfix = fn ? ` in expression \`${fn}\`` : "";
@@ -36,87 +84,4 @@ export function typeErrorMessage(fn: unknown, got: string, expected: unknown, po
     }
   }
   return `Expecting ${expected} got ${got}${postfix}`;
-}
-
-// Values that have a valueOf method (most Scheme values).
-type Valuable = { valueOf(): unknown };
-
-export function typecheck(fn: Valuable, arg: unknown, expected: Valuable | Function, position: number | null = null) {
-  const fnStr = fn.valueOf();
-  const arg_type = type(arg).toLowerCase();
-  if (is_function(expected)) {
-    invariant(expected(arg), typeErrorMessage(fnStr, arg_type, expected, position));
-    return;
-  }
-  let match = false;
-  let exp: unknown = expected;
-  if (exp instanceof APair) {
-    exp = exp.to_array();
-  }
-  if (Array.isArray(exp)) {
-    exp = exp.map((x: Valuable) => x.valueOf());
-  }
-  if (Array.isArray(exp)) {
-    const expArr = exp.map((x: Valuable) => String(x.valueOf()).toLowerCase());
-    if (expArr.includes(arg_type)) {
-      match = true;
-    }
-  } else {
-    exp = String((exp as Valuable).valueOf()).toLowerCase();
-  }
-  invariant(match || arg_type === exp, typeErrorMessage(fnStr, arg_type, exp, position));
-}
-
-export function type(obj): string {
-  const t = type_constants.get(obj);
-  if (t) {
-    return t;
-  }
-  if (typeof obj === "object") {
-    // Check for number types first (no common base class)
-    if (obj instanceof AExact || obj instanceof AInexact) {
-      return "number";
-    }
-    const typeMapping = {
-      pair: APair,
-      symbol: ASymbol,
-      array: Array,
-      nil: ANil,
-      character: ACharacter,
-      values: Values,
-      regex: RegExp,
-      eof: EOF,
-      string: AString,
-      "native-symbol": Symbol,
-    };
-    for (const [key, value] of Object.entries(typeMapping)) {
-      if (obj instanceof value) {
-        return key;
-      }
-    }
-    if (obj.constructor) {
-      if (obj.constructor[CLASS]) {
-        return obj.constructor[CLASS];
-      }
-      if (obj.constructor === Object) {
-        if (is_iterator(obj, Symbol.iterator)) {
-          return "iterator";
-        }
-        if (is_iterator(obj, Symbol.asyncIterator)) {
-          return "async-iterator";
-        }
-      }
-      if (obj.constructor.name === "") {
-        return "object";
-      }
-      return obj.constructor.name.toLowerCase();
-    }
-  }
-  if (obj === undefined) {
-    return "void";
-  }
-  if (typeof obj === "bigint") {
-    return "number";
-  }
-  return typeof obj;
 }
