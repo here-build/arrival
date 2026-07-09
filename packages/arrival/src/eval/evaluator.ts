@@ -59,7 +59,7 @@ import { AString } from "../values/primitives/AString.js";
 // AJSObject here is the `{…}` dict-literal NODE face — its detection (isDictLiteral) and
 // the DictLiteralNode type are the class's own algebra; the import is cycle-safe
 // (AJSObject leans only on value leaves + the hoisted jsToScheme).
-import { AJSObject, type DictLiteralNode } from "../values/primitives/AJSObject.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 // The reader's dict grammar — quasiquote re-instantiates READER literals, so the
 // evaluator legitimately reaches into the reader layer for the re-mint.
@@ -2738,33 +2738,13 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // ============================================================================
 // The reader mints literal NODES (a frozen `evalElements` AVector / a `dictForms`
 // AJSObject) so `quote` yields them unchanged as data. In CODE position their
-// elements EVALUATE (Clojure semantics): the node lowers ONCE (cached) to the
-// equivalent `(vector …)` / `(dict …)` application, which is then evaluated — so
-// the semantics are BY CONSTRUCTION the documented equivalences
+// elements EVALUATE (Clojure semantics): the node's own `arrival/tagless-final/lower`
+// term (AVector.ts / AJSObject.ts) lowers ONCE (cached on the term, keyed by node
+// identity) to the equivalent `(vector …)` / `(dict …)` application, which is then
+// evaluated — so the semantics are BY CONSTRUCTION the documented equivalences
 // (`{:k v}` ≡ `(dict :k v)`), including membrane marshaling, heap charging and
-// provenance. `#(…)` literals carry no flag and keep their R7RS
-// self-evaluating-constant semantics.
-
-// The lowering always prepends a head symbol (`vector`/`dict`) to `forms`, so the built
-// spine is provably non-empty — genuinely `APair<SchemeValue, SchemeValue>`, never `ANil`.
-// `AListAlike` was an over-wide return type; narrowed here to match what's actually built
-// (see the `as APair<SchemeValue, SchemeValue>` cast below, justified by that same
-// non-empty-array guarantee).
-const LOWERED_LITERALS = new WeakMap<AVector | AJSObject, APair<SchemeValue, SchemeValue>>();
-
-function loweredCollectionLiteral(node: AVector | DictLiteralNode): APair<SchemeValue, SchemeValue> {
-  let lowered = LOWERED_LITERALS.get(node);
-  if (lowered === undefined) {
-    const [head, forms] =
-      node instanceof AVector ? (["vector", node.__vector__] as const) : (["dict", node.dictForms] as const);
-    lowered = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, head), ...forms], false) as APair<
-      SchemeValue,
-      SchemeValue
-    >;
-    LOWERED_LITERALS.set(node, lowered);
-  }
-  return lowered;
-}
+// provenance. `#(…)` literals carry no flag and a non-literal AJSObject has no
+// `dictForms`; both answer null from `lower()` and keep self-evaluating semantics.
 
 /**
  * Post-substitution key fold for a quasiquote-instantiated `{…}` template
@@ -2854,13 +2834,19 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerato
   }
 
   // `[…]` / `{…}` collection literals evaluate their elements in code position
-  // (Clojure semantics) via the cached `(vector …)` / `(dict …)` lowering above.
-  // Under `quote` these nodes never reach here — evalQuote returns them as data.
-  if (code instanceof AVector && code.evalElements) {
-    return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
-  }
-  if (AJSObject.isDictLiteral(code)) {
-    return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
+  // (Clojure semantics): the term's own `lower()` (arrival/tagless-final/lower)
+  // answers the cached `(vector …)` / `(dict …)` application when `code` IS a
+  // reader literal currently in lowering position; every other value (a plain
+  // constructed vector/dict, an R7RS `#(…)` constant, anything without the term
+  // at all) answers null/undefined and falls through to ordinary evaluation
+  // below. Under `quote` these nodes never reach here — evalQuote returns them
+  // as data.
+  const lowered = code[tf("lower")]?.();
+  // `instanceof APair` both discriminates null/undefined (no lowering) AND narrows the
+  // wide `SchemeValue | null` term-return to what `evaluatePair` requires — a lowering
+  // is always a non-empty `(head …)` application, never anything else.
+  if (lowered instanceof APair) {
+    return yield* evaluatePair(lowered, ctx);
   }
 
   // Non-pair (atoms) evaluate to themselves

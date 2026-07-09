@@ -107,6 +107,16 @@ export abstract class AValue {
   abstract ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean;
   /** Order — the ≤ of an Ord type (numbers, strings, chars, symbols, bytevectors). */
   ["arrival/tagless-final/lte"]?(other: unknown): boolean;
+  /** Code-position lowering — a reader-minted literal node that has Clojure-style
+   *  CODE-position element-evaluation semantics (a `[…]` vector / `{…}` dict literal)
+   *  answers the `(vector …)` / `(dict …)` application it lowers to ONCE (cached on
+   *  the term, keyed by node identity); the lowering is then evaluated through the
+   *  normal apply path, so membrane marshaling / heap charging / provenance ride
+   *  unchanged. A value with no such lowering — or a literal node NOT currently in
+   *  lowering position (an R7RS `#(…)` constant; a membrane-boxed, non-literal
+   *  AJSObject) — answers null: self-evaluating, no lowering. See
+   *  eval/evaluator.ts "code-position lowering" for the datum-path dispatch. */
+  ["arrival/tagless-final/lower"]?(): SchemeValue | null;
   /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
   /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */

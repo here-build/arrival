@@ -24,6 +24,8 @@ import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
 import { jsToScheme } from "../../rosetta.js";
+import { APair } from "./APair.js";
+import { ASymbol } from "./ASymbol.js";
 
 /**
  * Entry cache keyed by wrapper identity. WeakMap, not an instance field: keeps the cache off
@@ -32,6 +34,13 @@ import { jsToScheme } from "../../rosetta.js";
  * GC-correct — cache entry disappears with the wrapper.
  */
 const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
+
+/** Code-position lowering cache (arrival/tagless-final/lower) for `{…}` dict-literal
+ *  nodes — the `(dict …)` application built once per node and re-answered on every
+ *  subsequent eval of the SAME node. Same rationale as `entryCaches` above (WeakMap,
+ *  not an instance field): keeps the cache off the wrapper's own properties and off
+ *  the `#`-private-slot tslib helper. GC-correct — entry disappears with the node. */
+const loweredLiterals = new WeakMap<AJSObject, APair<SchemeValue, SchemeValue>>();
 
 /** The borrowed-wrapper member-name fold: a face-normalized string passes through; a
  *  SchemeValue key (keyword symbol, boxed string) unwraps via valueOf with the `:`
@@ -95,6 +104,28 @@ export class AJSObject extends AValue {
     // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node.
     if (this.dictForms !== undefined) w.dictForms = this.dictForms;
     return w;
+  }
+
+  // Code-position lowering (eval/evaluator.ts "code-position lowering"): a `{…}` reader
+  // dict-literal node (`dictForms` present) lowers ONCE, cached, to the equivalent
+  // `(dict …)` application — CODE position gets Clojure-style element evaluation BY
+  // CONSTRUCTION (the lowering is then evaluated through the ordinary apply path, so
+  // membrane marshaling / heap charging / provenance all ride unchanged). A plain,
+  // non-literal AJSObject (a membrane-boxed wrapper — `dictForms` absent) answers null:
+  // self-evaluating, no lowering.
+  ["arrival/tagless-final/lower"](): APair<SchemeValue, SchemeValue> | null {
+    if (this.dictForms === undefined) return null;
+    let lowered = loweredLiterals.get(this);
+    if (lowered === undefined) {
+      // Same non-empty-spine guarantee as AVector's twin (a `dict` head is always
+      // prepended) — narrowed here to match what's actually built.
+      lowered = APair.fromArray(this.ctx, [new ASymbol(this.ctx, "dict"), ...this.dictForms], false) as APair<
+        SchemeValue,
+        SchemeValue
+      >;
+      loweredLiterals.set(this, lowered);
+    }
+    return lowered;
   }
 
   /**

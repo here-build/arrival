@@ -33,6 +33,16 @@ import type { SchemeValue } from "../types.js";
 // op-helpers imports AVector back, but both directions are referenced only inside function
 // bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
+import { APair } from "./APair.js";
+import { ASymbol } from "./ASymbol.js";
+
+/** Code-position lowering cache (arrival/tagless-final/lower) for `[…]` literal nodes — the
+ *  `(vector …)` application built once per node and re-answered on every subsequent eval of
+ *  the SAME node (shared AST — a `[…]` literal inside a loop body must not re-cons the spine
+ *  every iteration). WeakMap, not an instance field: keeps the cache off the vector's own
+ *  payload (mirrors AJSObject's `entryCaches`) and off the `#`-private-slot tslib helper this
+ *  workspace's `importHelpers: true` needs. GC-correct — entry disappears with the node. */
+const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();
 
 export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   static [CLASS] = "vector";
@@ -94,6 +104,29 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
     v.evalElements = this.evalElements;
     return v;
+  }
+
+  // Code-position lowering (eval/evaluator.ts "code-position lowering"): a `[…]` reader
+  // literal (`evalElements`) lowers ONCE, cached, to the equivalent `(vector …)` application
+  // — CODE position gets Clojure-style element evaluation BY CONSTRUCTION (the lowering is
+  // then evaluated through the ordinary apply path, so membrane marshaling / heap charging /
+  // provenance all ride unchanged). `#(…)` R7RS constants and constructed vectors
+  // (`evalElements === false`) answer null: self-evaluating, no lowering.
+  ["arrival/tagless-final/lower"](): APair<SchemeValue, SchemeValue> | null {
+    if (!this.evalElements) return null;
+    let lowered = LOWERED_LITERAL.get(this);
+    if (lowered === undefined) {
+      // The lowering always prepends the `vector` head symbol to the elements, so the built
+      // spine is provably non-empty — genuinely `APair<SchemeValue, SchemeValue>`, never
+      // `ANil`; `fromArray`'s return stays wide (`AListAlike<T> | unknown[]`) for the general
+      // case, narrowed here to match what's actually built.
+      lowered = APair.fromArray(this.ctx, [new ASymbol(this.ctx, "vector"), ...this.__vector__], false) as APair<
+        SchemeValue,
+        SchemeValue
+      >;
+      LOWERED_LITERAL.set(this, lowered);
+    }
+    return lowered;
   }
 
   // Setoid — structural element-wise equality, threading the harness's shared `seen`.
