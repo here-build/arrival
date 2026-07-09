@@ -20,6 +20,7 @@
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
 import invariant from "tiny-invariant";
+import { DefaultedWeakMap } from "@here.build/collections";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
 import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
@@ -181,11 +182,15 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
 }
 
 /**
- * WeakMap cache: same JS object always → same wrapper (AJSArray for arrays,
- * AJSObject for plain objects). Typed to that pair so the cached read returns a
- * `FromJSResult` member honestly, no cast.
+ * DefaultedWeakMap (@here.build/collections): same JS object always → same wrapper
+ * (AJSArray for arrays, AJSObject for plain objects) — a single homogeneous factory
+ * dispatching purely on `Array.isArray(key)`, so `fromJS`'s two call sites collapse
+ * the old get-check-set dance into one `.get(key)`. Typed to that pair so the cached
+ * read returns a `FromJSResult` member honestly, no cast.
  */
-const jsToWrapper = new WeakMap<object, AJSArray | AJSObject>();
+const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
+  Array.isArray(key) ? new AJSArray(CONSTANT_CTX, key) : new AJSObject(CONSTANT_CTX, key),
+);
 
 // ============================================================================
 // SANDBOX BOUNDARIES — SchemeJSObject, SchemeJSFunction
@@ -213,26 +218,26 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   // R7RS vector); binary stays raw (FFI identity, membrane.spec pins it); Promise stays raw (the
   // evaluator trampoline awaits it); plain object → lazy AJSObject materializing fields on access.
   if (Array.isArray(value)) {
-    // Cached so the same JS array → same wrapper (`eq?` stability).
-    const cached = jsToWrapper.get(value);
-    if (cached) return cached;
-    const wrapper: AJSArray = new AJSArray(CONSTANT_CTX, value);
-    jsToWrapper.set(value, wrapper);
-    return wrapper;
+    // Cached so the same JS array → same wrapper (`eq?` stability). Both arms of
+    // `jsToWrapper`'s union satisfy `FromJSResult`, so no narrowing is needed here —
+    // the factory's own `Array.isArray` dispatch is what actually picks the class.
+    return jsToWrapper.get(value);
   }
   if (isBytevectorLike(value)) return value;
   if (value instanceof Promise) return value;
   if (value !== null && typeof value === "object") {
-    const cached = jsToWrapper.get(value as object);
-    if (cached) return cached;
-    const wrapper: AJSObject = new AJSObject(CONSTANT_CTX, value as object);
-    jsToWrapper.set(value as object, wrapper);
-    return wrapper;
+    return jsToWrapper.get(value as object);
   }
 
   // Leaves go through jsToScheme: primitives box, null→nil, undefined/function/unique-symbol→
   // #void+warn, Symbol.for→:keyword. A borrowed JS function is #void, not callable — not portable.
-  return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE);
+  // Cast, not a narrowing gap: jsToScheme's honest `AWrap<T>` (values/types.ts) is exactly
+  // this leaf case (the array/bytevector/Promise/object arms above already returned), but TS
+  // can't thread that proof through the `[T] extends [AValue] ? never : T` conditional
+  // parameter across the if-chain above. `FromJSResult` (this file's own doc comment) is
+  // already the named, bounded superset of `AWrap<T>`'s leaf outputs — the widen is this
+  // boundary's own seam, not a hidden unsoundness.
+  return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE) as FromJSResult;
 }
 
 /** Exit point for Scheme → JS boundary crossing. STRICT: only interpreter-minted

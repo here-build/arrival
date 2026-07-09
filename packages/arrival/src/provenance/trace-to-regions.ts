@@ -53,6 +53,7 @@ import { userCallSite } from "./scope-id.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
 import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import type { EvalTrace, Invocation } from "./trace.js";
+import type { SchemeValue } from "../values/types.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT
  *  (docs/package-specific/arrival-provenance/provenance-region-model-plan-2026-06-02.md, Stage 2).
@@ -621,8 +622,12 @@ export interface RegionWalkCtx {
   pointIds: ReadonlySet<number>;
   valueById: (id: number) => unknown;
   /** Live value of an invocation id (for decision-operand provenance) — the snapshot
-   *  drops plumbing values, so the decision path reads the live trace. */
-  liveValueById: (id: number) => unknown;
+   *  drops plumbing values, so the decision path reads the live trace. `SchemeValue |
+   *  undefined`, not `unknown`: this is the RAW pre-`schemeToJs` value (see `valueById`
+   *  above for the already-lowered sibling), and `Invocation.value` (trace.ts) is honestly
+   *  typed that way — matching it here is what lets every `schemeToJs(liveValueById(...))`
+   *  caller satisfy schemeToJs's own honest bound without a cast. */
+  liveValueById: (id: number) => SchemeValue | undefined;
   /** Live INVOCATION provenance of an id — the snapshot zeroes plumbing provenance, and the
    *  pruner frees most of it mid-run, but a `filter`'s direct children are prune-exempt (see
    *  `EvalTrace#pruneChildProvenance`): each per-element pred application's set names the
@@ -1299,7 +1304,11 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
 
   // Live-value accessor for decision-operand substitution (memoized; pays the
   // MobX/`schemeToJs` cost only for operands a decision actually references).
-  const liveById = new Map<number, { value: unknown }>();
+  // `Map<number, Invocation>`, not the old `{ value: unknown }` — `liveById` holds the
+  // live invocations themselves (every reader below wants a DIFFERENT field off them:
+  // `.value`, `.provenance`, `.children`/`.isProvenancePoint`), so the honest declared
+  // type is the real one, not a value-only projection two other readers had to cast past.
+  const liveById = new Map<number, Invocation>();
   for (const rec of trace.records.values()) for (const inv of rec.bindings) liveById.set(inv.id, inv);
   const valCache = new Map<number, unknown>();
   const valueById = (id: number): unknown => {
@@ -1308,23 +1317,22 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     valCache.set(id, v);
     return v;
   };
-  const liveValueById = (id: number): unknown => liveById.get(id)?.value;
-  const liveProvenanceById = (id: number): Iterable<number> => (liveById.get(id) as { provenance?: Iterable<number> } | undefined)?.provenance ?? [];
+  const liveValueById = (id: number): SchemeValue | undefined => liveById.get(id)?.value;
+  const liveProvenanceById = (id: number): Iterable<number> => liveById.get(id)?.provenance ?? [];
   // The topmost provenance points in an invocation's live subtree (do NOT descend past a
   // point — we want the immediate inference origins feeding the operand). Recovers a
   // pluck-off-infer's provenance structurally after `pruneChildProvenance` nulled the
   // stamped value (see `RegionWalkCtx.livePointsUnder`).
-  type LiveNode = { id: number; isProvenancePoint?: boolean; children?: readonly LiveNode[] };
   const livePointsUnder = (id: number): number[] => {
-    const root = liveById.get(id) as LiveNode | undefined;
+    const root = liveById.get(id);
     if (!root) return [];
     const out: number[] = [];
-    const stack: LiveNode[] = [...(root.children ?? [])];
+    const stack: Invocation[] = [...root.children];
     while (stack.length > 0) {
       const n = stack.pop()!;
       if (n.isProvenancePoint) {
         if (pointIds.has(n.id)) out.push(n.id);
-      } else stack.push(...(n.children ?? []));
+      } else stack.push(...n.children);
     }
     return out;
   };
@@ -1358,8 +1366,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     // scoped to the live invocation's subtree. Sidecar-less traces leave it unset.
     boundPointsOf: auto
       ? (id, name) => {
-          // `liveById` is typed for the value accessor but holds the live invocations.
-          const live = liveById.get(id) as Invocation | undefined;
+          const live = liveById.get(id);
           return live ? (scopedBindings(auto, subtreeIds(live), [name])[name] ?? []) : [];
         }
       : undefined,

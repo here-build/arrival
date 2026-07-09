@@ -32,11 +32,12 @@ import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 
 /**
- * Box a raw JS leaf — or an already-boxed AValue, `schemeToJs`'s fallthrough for a
- * type it doesn't explicitly unwrap (ACharacter has no branch in `schemeToJs`, so a
- * `(src #\a)` call's arg reaches `src`'s fn STILL BOXED) — with a FRESH single-id
- * provenance set. One point minted per `src` call (P11), regardless of the carrier's
- * element type (numbers for the numeric carriers, characters for AString).
+ * Box a raw JS leaf — or (the only path `src` actually takes, see below) an
+ * already-boxed AValue — with a FRESH single-id provenance set. One point minted
+ * per `src` call (P11), regardless of the carrier's element type (numbers for the
+ * numeric carriers, characters for AString). The number/string/boolean arms are a
+ * defensive fallback, not a live path: `src` is bound bare (not a rosetta), so its
+ * arg always arrives still-boxed — see `withLawEnv`'s doc for why that's load-bearing.
  */
 function stampFresh(raw: unknown, id: number): AValue {
   if (raw instanceof AValue) return raw.withProvenance(new Set([id])) as AValue;
@@ -55,30 +56,37 @@ export interface LawEnv {
 
 /**
  * A fresh capability env armed with the two harness-only bindings every carrier's
- * `mint3` snippet needs:
+ * `mint3` snippet needs — `src` and `borrow-array` — NEITHER a rosetta, both bound
+ * bare via `env.set`, for the SAME reason: a rosetta's `schemeToJs` would strip
+ * each arg's box before `fn` ever saw it (see rosetta.ts), which is fine for a
+ * function that genuinely wants JS-side values but wrong for one that needs to
+ * re-stamp the ORIGINAL boxed value's exact type/identity. A bare JS function is
+ * dispatched by the evaluator's plain-function call path (`Reflect.apply(fn,
+ * callCtx, wrappedArgs)`, eval/evaluator.ts) with the already-evaluated,
+ * ALREADY-BOXED scheme args — untouched by any membrane unwrap.
  *
  *  - `src`: a Rosetta-IN SOURCE minting one fresh provenance point per call (P11),
- *    independent of argument type.
- *  - `borrow-array`: NOT a rosetta (a rosetta's `schemeToJs` would strip each arg's
- *    box before `fn` ever saw it — see rosetta.ts). A bare JS function bound via
- *    `env.set`, dispatched by the evaluator's plain-function call path
- *    (`Reflect.apply(fn, callCtx, wrappedArgs)`, eval/evaluator.ts) with the
- *    already-evaluated, ALREADY-BOXED scheme args — untouched by any membrane
- *    unwrap. Handing that raw JS array straight to `fromJS` (membrane.ts) is
- *    exactly the "fromJS on a JS array of boxed elements" idiom: `fromJS`'s array
- *    branch (`new AJSArray(CONSTANT_CTX, value)`) keeps the array's members
- *    exactly as given — each `src`-minted box survives, unlike a rosetta crossing.
+ *    independent of argument type. `schemeToJs`'s honest per-type unwrapping
+ *    (rosetta.ts — e.g. ACharacter → a bare JS string) is a ONE-WAY projection
+ *    (P9): re-boxing a bare string can't recover whether it started life as an
+ *    AString or an ACharacter, so a rosetta-wrapped `src` couldn't round-trip a
+ *    character carrier's elements. Binding bare sidesteps the unwrap entirely —
+ *    `stampFresh`'s `raw instanceof AValue` arm always fires, preserving the
+ *    original element's exact class.
+ *  - `borrow-array`: handing the raw JS array of already-boxed args straight to
+ *    `fromJS` (membrane.ts) is exactly the "fromJS on a JS array of boxed
+ *    elements" idiom: `fromJS`'s array branch (`new AJSArray(CONSTANT_CTX,
+ *    value)`) keeps the array's members exactly as given — each `src`-minted box
+ *    survives.
  */
 export async function withLawEnv(): Promise<LawEnv> {
   const env = await freshEnv();
   const mintedIds: number[] = [];
   let seq = 0;
-  env.defineRosetta("src", {
-    fn: (raw: unknown) => {
-      const id = ++seq;
-      mintedIds.push(id);
-      return stampFresh(raw, id);
-    },
+  env.set("src", (raw: unknown) => {
+    const id = ++seq;
+    mintedIds.push(id);
+    return stampFresh(raw, id);
   });
   env.set("borrow-array", (...args: SchemeValue[]) => fromJS(args));
   return { env, mintedIds };

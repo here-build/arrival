@@ -170,7 +170,11 @@ export class Invocation {
    */
   readonly children: Invocation[] = [];
   state: InvocationState = "running";
-  value: unknown = undefined;
+  // `SchemeValue | undefined`, not `unknown`: every assignment (below, `exit`'s
+  // `result.value: SchemeValue` and the `withProvenance` restamp) is provably one — `unknown`
+  // under-described the runtime truth (P3, docs/PRINCIPLES.md) and forced every
+  // `schemeToJs(inv.value)` reader to widen its own input past schemeToJs's honest bound.
+  value: SchemeValue | undefined = undefined;
   error: unknown = undefined;
   /**
    * Dataflow provenance: the set of provenance-point invocation ids whose

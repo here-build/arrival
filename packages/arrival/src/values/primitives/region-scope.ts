@@ -65,7 +65,18 @@ export interface RegionScope {
    *  twice through this SAME scope gets back the SAME JS function. A WeakMap
    *  keyed by the callable value itself, owned by the scope — a fresh scope
    *  starts with a fresh, empty cache, so two invocations of the same symbol
-   *  each get their own wrapper (never `===` across scopes). */
+   *  each get their own wrapper (never `===` across scopes).
+   *
+   *  Deliberately a plain `WeakMap`, not `DefaultedWeakMap` (@here.build/collections):
+   *  TWO independent call sites build wrappers over this SAME cache with DIFFERENT
+   *  factories — rosetta.ts's `callableToHostFn` (the untyped passthrough) and
+   *  scheme-zod.ts's `z.procedure` decode (the typed `input`/`output`-marshaling
+   *  wrapper). `DefaultedWeakMap` binds ONE factory at construction; forcing this
+   *  cache into it would make whichever caller reaches an unset key FIRST silently
+   *  win for the OTHER caller too (losing the typed marshaling, or vice versa) — a
+   *  real behavior change, not a get-check-set collapse. The manual get-check-set
+   *  idiom stays because the "value recipe" is genuinely per-call-site here, not
+   *  derivable from the key alone. */
   readonly cache: WeakMap<object, (...args: unknown[]) => unknown>;
 }
 

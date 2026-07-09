@@ -113,6 +113,87 @@ export type SchemeValue =
   // (which type-imports SchemeValue from here) a pure compile-time cycle.
   | ACallable;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AWrap<T> / AUnwrap<T> — the honest jsToScheme/schemeToJs membrane types
+// (rosetta.ts). Same tuple-wrapped conditional discipline as AListAlike above
+// (the AListAlike TS2589 lesson): a NAKED `T extends X ? A : B` DISTRIBUTES
+// over a union T, so wrapping every test as `[T] extends [X]` keeps T opaque
+// through the whole chain instead of exploding into a union of per-member
+// results when T is itself wide. Both directions short-circuit on the WIDEST
+// possible input first — AWrap's JS-side maximal is `unknown` (an untyped/
+// effectively-`any` caller); AUnwrap's Scheme-side maximal is `SchemeValue`
+// itself (a caller holding the full union, e.g. a generic recursive helper) —
+// collapsing to the honest wide answer (`SchemeValue` / `unknown`) rather than
+// letting the chain distribute into an unreadable union of every arm.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `jsToScheme<T>(ctx, value: T, …)`'s honest return type — the AValue shape a
+ * JS value of static type T boxes into. Mirrors jsToScheme's own runtime
+ * instanceof/typeof chain arm-for-arm (rosetta.ts) — a new arm in one must
+ * gain the other, or the type stops telling the truth about the impl (P3).
+ */
+export type AWrap<T> = [unknown] extends [T]
+  ? SchemeValue
+  : [T] extends [AValue]
+    ? T
+    : [T] extends [null]
+      ? ANil
+      : [T] extends [undefined]
+        ? AVoid
+        : [T] extends [boolean]
+          ? ABool
+          : [T] extends [bigint]
+            ? AExact
+            : [T] extends [number]
+              ? AExact | AInexact
+              : [T] extends [string]
+                ? AString
+                : [T] extends [readonly unknown[]]
+                  ? AJSArray // AJSArray isn't element-generic — this is as deep as it compiles.
+                  : [T] extends [symbol]
+                    ? ASymbol | AVoid // registered (Symbol.for) → ASymbol; unique → AVoid, jsToScheme's own split.
+                    : [T] extends [Function]
+                      ? AVoid // a bare JS function has no portable Scheme value — warns + voids.
+                      : [T] extends [object]
+                        ? AJSObject
+                        : SchemeValue;
+
+/**
+ * `schemeToJs<T>(value: T, …)`'s honest return type — the JS shape a Scheme
+ * value of static type T unwraps into. Mirrors schemeToJs's own instanceof
+ * chain arm-for-arm (rosetta.ts) — a new arm in one must gain the other.
+ */
+export type AUnwrap<T extends SchemeValue> = [SchemeValue] extends [T]
+  ? unknown
+  : [T] extends [ABool]
+    ? boolean
+    : [T] extends [AExact]
+      ? number | bigint
+      : [T] extends [AInexact]
+        ? number
+        : [T] extends [AString]
+          ? string
+          : [T] extends [ACharacter]
+            ? string
+            : [T] extends [ANil]
+              ? null
+              : [T] extends [AVoid]
+                ? undefined
+                : [T] extends [AVector<infer E extends SchemeValue>]
+                  ? AUnwrap<E>[]
+                  : [T] extends [APair<any, any>]
+                    ? unknown[] // one-way list→array projection (P9) — never a recursive element type.
+                    : [T] extends [ADict]
+                      ? Record<string, unknown>
+                      : [T] extends [AJSArray]
+                        ? readonly unknown[] // AJSArray's own `.source` type.
+                        : [T] extends [AJSObject]
+                          ? object // AJSObject's own `.source` type.
+                          : [T] extends [ACallable]
+                            ? (...args: unknown[]) => Promise<unknown> // the reverse-membrane region wrapper.
+                            : unknown;
+
 // A Scheme lambda value: its body may return a value synchronously, a bounce
 // token (under the trampoline's bounce protocol), or a Promise (JS-host entry
 // path). The trampolined/async return is the honest truth of a lambda's call;

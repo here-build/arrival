@@ -349,24 +349,23 @@ export class TraceRegionFold {
       this.#valCache.set(id, v);
       return v;
     };
-    const liveValueById = (id: number): unknown => this.#liveById.get(id)?.value;
+    const liveValueById = (id: number): SchemeValue | undefined => this.#liveById.get(id)?.value;
     // Mirror of from-scratch `liveProvenanceById` — the prune-exempt filter-child sets the
     // filter-predicate decision reads. MUST match the one-shot exactly (parity).
-    const liveProvenanceById = (id: number): Iterable<number> => (this.#liveById.get(id) as { provenance?: Iterable<number> } | undefined)?.provenance ?? [];
+    const liveProvenanceById = (id: number): Iterable<number> => this.#liveById.get(id)?.provenance ?? [];
     // Mirror of from-scratch `livePointsUnder` (trace-to-regions): the topmost provenance
     // points in an invocation's live subtree, for pluck-off-infer decision operands whose
     // stamped value was GC-pruned. MUST match the one-shot exactly or the parity test trips.
-    type LiveNode = { id: number; isProvenancePoint?: boolean; children?: readonly LiveNode[] };
     const livePointsUnder = (id: number): number[] => {
-      const root = this.#liveById.get(id) as LiveNode | undefined;
+      const root = this.#liveById.get(id);
       if (!root) return [];
       const out: number[] = [];
-      const stack: LiveNode[] = [...(root.children ?? [])];
+      const stack: Invocation[] = [...root.children];
       while (stack.length > 0) {
         const n = stack.pop()!;
         if (n.isProvenancePoint) {
           if (this.#pointIds.has(n.id)) out.push(n.id);
-        } else stack.push(...(n.children ?? []));
+        } else stack.push(...n.children);
       }
       return out;
     };

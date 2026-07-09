@@ -29,10 +29,25 @@
  * materialization dispatch) and the interop error — never membrane/env/bridge.
  */
 import { AValue } from "./primitives/AValue.js";
-import { InteropAccessError } from "../interop-access.js";
+import { InteropAccessError } from "../errors.js";
 
 /** Singleton tracker: same box → same proxy, forever. Module-level, mirrors
- *  membrane.ts's `jsToWrapper` (the entry-side twin of this exit-side cache). */
+ *  membrane.ts's `jsToWrapper` (the entry-side twin of this exit-side cache).
+ *
+ *  Deliberately a plain `WeakMap`, not `DefaultedWeakMap` (@here.build/collections),
+ *  unlike `jsToWrapper`'s conversion: `jsToWrapper` dispatches its ONE factory purely
+ *  off the key's own shape (`Array.isArray`), so binding it once at construction is
+ *  exactly right. Here the "recipe" — `shape` and `reader` — is supplied PER CALL by
+ *  `egressContainerProxy`'s three callers (AVector/APair/ADict's own `arrival/toJS`),
+ *  not derivable from `box` alone without importing all three concrete container
+ *  classes into this deliberately leaf module (see the file header: "imports only the
+ *  AValue base... never membrane/env/bridge") — that coupling is exactly what the
+ *  leaf-module boundary exists to avoid. A single bound factory can't accept a
+ *  per-call reader, so the get-check-set idiom stays. (Ordering is NOT the blocker:
+ *  `reader.keys()`/`.read()` never materialize elements during construction — see
+ *  `EgressReader`'s doc — so a DefaultedWeakMap-style "set after the factory returns"
+ *  would preserve the "register before any element materializes" invariant fine; the
+ *  factory-arity mismatch is the actual reason this one stays manual.) */
 const egressProxies = new WeakMap<AValue, object>();
 
 /** Shallow read model a container hands to its proxy: `keys()` enumerates the own

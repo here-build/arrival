@@ -17,6 +17,7 @@ import { execExpr, parse } from "../eval/generator-exec.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../rosetta.js";
 import type { EvalContext } from "../eval/evaluator.js";
+import type { SchemeValue } from "../values/types.js";
 
 import { buildSlice, writeForm, defineNameOf, lastTopLevelForm } from "./slice.js";
 import type { EvalTrace } from "./trace.js";
@@ -81,7 +82,12 @@ export function buildUneval(opts: {
   const resultExpr = outputForm === undefined ? "result" : (outputName ?? writeForm(outputForm));
 
   return {
-    result: schemeToJs(result, {}),
+    // `result`/`v` (below) are declared `unknown` at this public boundary (this file's own
+    // `env.set("result", result as never)` already casts the same value to bind it into the
+    // interpreter's env — it must genuinely be a SchemeValue to be usable there), so the
+    // schemeToJs cast here documents the same pre-existing contract rather than widening
+    // schemeToJs's own honest input bound.
+    result: schemeToJs(result as SchemeValue | undefined, {}),
     meta: { forms: forms.length },
     uneval: async (selector: string): Promise<Uneval> => {
       // Bind the run's output as `result`, then evaluate the selector as ONE more tapped step —
@@ -102,7 +108,14 @@ export function buildUneval(opts: {
       const slice = buildSlice(trace, outputForm);
       const tail = `(let ((result ${resultExpr})) ${selector.trim()})`;
       const program = slice.program ? `${slice.program}\n${tail}` : tail;
-      return { value: schemeToJs(v, {}), provenance, program, points: slice.points, scopeIds: slice.scopeIds };
+      // `v` is the tapped step's result — same evaluator-output contract as `result` above.
+      return {
+        value: schemeToJs(v as SchemeValue | undefined, {}),
+        provenance,
+        program,
+        points: slice.points,
+        scopeIds: slice.scopeIds,
+      };
     },
   };
 }

@@ -27,6 +27,7 @@ import invariant from "tiny-invariant";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
 import type { EvalTrace } from "./trace.js";
+import type { SchemeValue } from "../values/types.js";
 
 /**
  * The wire-format version. Bump ONLY on a breaking change to the artifact shape
@@ -57,9 +58,19 @@ export interface TraceArtifact {
 function lowerRegion(region: Region): Region {
   switch (region.kind) {
     case "leaf":
-      return { ...region, meta: schemeToJs(region.meta), value: schemeToJs(region.value) };
+      // `region.meta`/`.value` are declared `unknown` on the wire `Region` type (it also
+      // describes the POST-lowering shape this same function produces) — but per this
+      // file's header, at THIS call they still hold the RAW scheme values `trace-to-
+      // regions.ts` stored verbatim (`value: inv.value`). The cast documents that
+      // pre-lowering contract; schemeToJs's own idempotence (this fn's doc) keeps a
+      // stray already-lowered re-entry safe regardless.
+      return {
+        ...region,
+        meta: schemeToJs(region.meta as SchemeValue | undefined),
+        value: schemeToJs(region.value as SchemeValue | undefined),
+      };
     case "output":
-      return { ...region, value: schemeToJs(region.value) };
+      return { ...region, value: schemeToJs(region.value as SchemeValue | undefined) };
     case "fanout":
       return { ...region, iterations: region.iterations.map((body) => body.map(lowerRegion)) };
     case "decision":
