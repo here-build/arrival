@@ -2603,8 +2603,15 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const clause = clauseNode.car;
     if (clause instanceof APair) {
       const clauseHead = clause.car;
+      // `.literal()` (not symbol_name) — same reason evalCond/evalCase match `else`/`=>`
+      // by `.literal()`: a syntax-rules template expanding to `(try … (catch (e) …))`
+      // hygiene-renames the auxiliary `catch`/`finally` identifiers to gensyms (they are
+      // free template identifiers, not pattern variables), and `symbol_name()` reads the
+      // renamed gensym's JS-Symbol description ("#:catch"), never "catch". `.literal()`
+      // reads the ORIGINAL source name the hygiene renamer stamped on the gensym, so
+      // catch/finally survive hygiene exactly like else/=> do.
       if (clauseHead instanceof ASymbol) {
-        const name = symbol_name(clauseHead);
+        const name = clauseHead.literal();
         if (name === "catch") {
           catchClause = clause;
         } else if (name === "finally") {
@@ -2972,17 +2979,35 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
 
   // Special-form dispatch. VALUE-FIRST for keywords: a head resolving to a Keyword marker
   // dispatches the kernel handler by the marker's NAME, so special-ness travels with the
-  // VALUE — aliasable via `(define => lambda)`. ANY OTHER head keeps the ORIGINAL
-  // name-match-before-env-lookup, so not-yet-keyworded forms — including those that ALSO
-  // carry a define-macro env binding (cond/when) — behave exactly as before. TRANSITIONAL:
-  // collapses to pure value-first once every special form is a keyword marker.
+  // VALUE — aliasable via `(define => lambda)`. EVERY entry in SPECIAL_FORMS is now a
+  // `symbol.keyword` binding (core.ts) — the let*/letrec/letrec*/and/or hygiene batch plus
+  // its define-macro/do/while/try follow-up completed the set — so this is no longer a
+  // migration-in-progress fallback for un-keyworded forms. It stays for two INDEPENDENT,
+  // VERIFIED-LIVE reasons (instrumented + run against the full suite + 651-row chibi
+  // conformance corpus; zero incidental fallback hits, two real ones):
+  //   1. BOOTSTRAP ORDERING — a capability's OWN `prelude` scheme (e.g. core.ts's
+  //      `(define true #t) …`) evaluates before that capability's OWN `symbols` keyword
+  //      bindings are resolvable through this resolver (phase-gated prelude scope, see
+  //      kernel.ts's `assembleEnv`), so `define`'s very first uses — bootstrapping `true`/
+  //      `false`/`NaN`/`single` in core.ts, and equivalently for every other BASE_PACKS
+  //      prelude — hit this string-keyed fallback with `resolved === undefined`. Confirmed
+  //      empirically: a temporary trace fired repeatedly during realm bootstrap even though
+  //      `define` IS keyword-bound, because the keyword isn't visible yet at that instant.
+  //   2. LEXICAL SHADOWING — `(let ((if 5)) (if))` resolves `if` to the shadowing value (an
+  //      AExact, not a Keyword), and this fallback still matches "if" BY NAME and dispatches
+  //      `evalIf` regardless — the documented, not-yet-fixed gap kernel-keyword-dispatch.
+  //      test.ts calls out ("lexical shadowing of a keyword is NOT yet covered"). Confirmed
+  //      empirically the same way. Removing the fallback would flip this to (correct, R7RS-
+  //      faithful) un-specialing — a real behavior change, not covered by any test today —
+  //      so it is left alone here; fixing it is the deferred "macro-cut pass" this comment
+  //      block already named before this fix, now precisely scoped to shadowing only.
+  // Resolve via the RAW binding key (`first.__name__`) — the SAME key env_get uses — so a
+  // hygiene-renamed gensym head resolves identically. A gensym's __name__ is a JS symbol
+  // whose string DESCRIPTION (what symbol_name returns) differs from the symbol key the
+  // hygiene engine bound it under; looking up by the description missed, fell through to
+  // application, and tried to CALL the resolved Keyword. symbol_name (the string) stays the
+  // SPECIAL_FORMS fallback key for a non-keyword-resolving head (bootstrap / shadowing above).
   if (first instanceof ASymbol) {
-    // Resolve via the RAW binding key (`first.__name__`) — the SAME key env_get uses — so a
-    // hygiene-renamed gensym head resolves identically. A gensym's __name__ is a JS symbol
-    // whose string DESCRIPTION (what symbol_name returns) differs from the symbol key the
-    // hygiene engine bound it under; looking up by the description missed, fell through to
-    // application, and tried to CALL the resolved Keyword. symbol_name (the string) stays the
-    // SPECIAL_FORMS fallback key for a non-keyworded head (special forms are string-keyed).
     const resolved = ctxResolver(ctx).lookup(first.__name__);
     const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {

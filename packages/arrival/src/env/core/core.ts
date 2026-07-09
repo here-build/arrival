@@ -42,8 +42,13 @@ export default new EnvCapability("scheme/core", {
     // and / or now follow, keyworded for the same hygiene reason: a syntax-rules template
     // expanding to one of these (e.g. test-numeric-syntax's `(let* (…) …)`) renames the head
     // to a gensym, and only a keyworded form has an env value for rename() to copy onto it.
+    // define-macro / do / while / try complete the set (bug batch 2 follow-up) — every
+    // SPECIAL_FORMS entry (evaluator.ts) is now a keyword marker, so a hygiene-renamed head
+    // can never miss dispatch for lack of a copyable env value. See
+    // __tests__/do-while-try-define-macro-hygiene.test.ts for the macro-expansion coverage.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
+    "define-macro": symbol.keyword`define-macro: define a fexpr-style unhygienic macro`,
     let: symbol.keyword`let: bind locals over a body`,
     "let*": symbol.keyword`let*: bind locals sequentially, each seeing the prior bindings`,
     letrec: symbol.keyword`letrec: bind locals that may reference each other (mutual recursion)`,
@@ -58,6 +63,9 @@ export default new EnvCapability("scheme/core", {
     case: symbol.keyword`case: dispatch on a key via eqv? datum lists`,
     when: symbol.keyword`when: evaluate the body when the test passes`,
     unless: symbol.keyword`unless: evaluate the body when the test fails`,
+    do: symbol.keyword`do: iterate stepped bindings until the test clause is true`,
+    while: symbol.keyword`while: iterate the body while the test evaluates truthy`,
+    try: symbol.keyword`try: body with an optional catch/finally handler`,
     // Contract mirrors gensym's real signature so the raw function binds cast-free:
     // the optional name hint is a raw symbol NAME (string/symbol/number), an ASymbol
     // wrapper, or null — NOT a boxed SchemeValue (gensym predates the union and threads
