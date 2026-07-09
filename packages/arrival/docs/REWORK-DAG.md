@@ -155,3 +155,80 @@ rows cite unflipped `[INVERTS:]` tags).
   tests: record it in [`POST-MIGRATION.md`](POST-MIGRATION.md) and KEEP GOING. Only the
   core package's standing gates block a commit. Fixing downstream is a separate
   post-migration phase, sequenced after Z.
+
+---
+
+# Phase 2 — the provenance two-layer (P-track)
+
+*Post-Z execution plan for the design quartet: `provenance-vocabulary-v2.md`,
+`callback-track-graphs.md`, `execution-plan-wireframe.md`, `provenance-lineage.md`
+(all in repo-root `docs/working-proposals/`). Discipline unchanged: stubs before
+machinery (the v2-suite method), standing gates on every commit, agents never commit.
+Adopted vocabulary per the lineage doc: prospective (wireframe) / retrospective (port
+records), backward/forward slice (cones), confinement (I1), coeffect-shaped ingress.*
+
+## The invariant inventory
+
+**Vocabulary/declaration layer**
+- **V1 — declaration completeness**: every symbol declaration carries a provenance role;
+  a role contradicting the contract shape throws the drift-alarm door at assembly.
+- **V2 — declaration-driven classification**: the static classifier consumes ONLY
+  declared roles + special forms — `isRosettaIn` heuristics and `.fanout` duck-reads
+  have zero call sites.
+- **V3 — opaque quarantine**: `opaque` node count over the conformance corpus is a
+  pinned drift alarm; the number only decreases.
+- **V4 — loop kind**: named-let/do classify `loop`; cone traversal terminates (widening).
+
+**Prospective layer (wireframe)**
+- **W0 — span totality**: every post-expansion Pair carries a span (syntax-rules
+  propagates spans through rename — rides the hygiene machinery).
+- **W1 — agreement**: eager-stamp cone == wireframe cone on F2-generated programs (the
+  free oracle; P0's coherence law).
+- **W2 — collapse losslessness (slice ⊣ replay)**: replaying any collapsed segment under
+  a tap reproduces eager-mode interior stamps exactly; the minimal (backward) cone is the
+  least ingress set that still replays the demanded output part — the Perera–Acar–Cheney
+  Galois adjunction imported as our law.
+- **W3 — port completeness**: every mint / mux decision / fan instantiation / ingress
+  binding appears exactly once in the retrospective stream.
+
+**Replay layer**
+- **R1 — replay stability**: replay at any later time equals the original (sealed
+  ingress; tracks' I2 generalized to all segments).
+- **R2 — demand monotonicity**: cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole).
+- **R3 — storage bound**: plan O(program) + records O(ports) — `__benchmarks__`, not a
+  gate.
+
+**Track layer** — T1–T6 = callback-track-graphs I1–I6 (confinement containment, preamble
+consumption, separation, completion, exterior collapse, identity-only bridges) + **T7**
+stream laws (fold-reconstruction, monotonicity = the completion door in stream form).
+
+## Law suites (stubs land FIRST, it.todo/it.fails, tables per family)
+
+| Suite | Pins | Lands at |
+|---|---|---|
+| `laws/provenance-roles.law.test.ts` | V1/V2 grid (role × declaration kind), drift-alarm doors, V3 alarm, V4 | P5 (stubs) → green through P1–P4 |
+| `provenance/wireframe-agreement.law.test.ts` | W1 via F2 generator vs eager oracle | P5 → green at P7 |
+| `provenance/replay.law.test.ts` | W2 adjunction, R1 stability (randomized replay points), R2 monotonicity | P5 → green at P9 |
+| `provenance/track-cone.law.test.ts` | T1 containment per composition operator (parallel/chained/terminal; effect = ∅ cone), T3 separation | P5 → green at P8 |
+| `provenance/track-stream.law.test.ts` | T7 fold-reconstruction over generated regions + monotonicity over scheduler permutations | P5 → green at P8 |
+| `membrane/region.law.test.ts` (extend) | escape taxonomy exhaustive per operator (T1's door side) | extends B3's 7 rows |
+| `ledger/` rows | every stub gated: names its P-node | with P5 |
+
+## Node table
+
+| # | Task | Agent | Depends | Exit gate |
+|---|---|---|---|---|
+| **P1** | Vocabulary kinds in `src/values/lineage.ts`: `sink`/`transparent`/`loop`; `opaque` quarantine alarm | Sonnet | — | kinds exist; V3 alarm pinned |
+| **P2** | Declaration `provenance` role field replaces `fanout`/`pure` booleans (each has 2 readers); drift-alarm door | Sonnet | P1 | V1 green; booleans gone |
+| **P3** | Classifier declaration-driven; named-let/do → `loop` | Sonnet | P2 | V2/V4 green; `isRosettaIn` deleted |
+| **P4** | Contract extraction: z.lambda position+return → callback role (element/selector/decision/effect); fold declares acc chain | Sonnet | P2 | roles derived; extraction disagree = drift door |
+| **P5** | STUBS: all five law suites + ledger rows land it.todo/it.fails against the docs | Sonnet fleet | P1 (naming) | walker green; every stub cites its P-node |
+| **P6** | W0 span propagation through syntax-rules rename (hygiene machinery carries spans) | **Fable** | — | W0 green on conformance corpus |
+| **P7** | W1 wireframe builder — classify() generalized whole-program per C3 §2 | **Fable** design done → Sonnet build | P3, P6 | W1 agreement green on F2 corpus |
+| **P8** | W2 retrospective stream: flag-gated port-record sidecar + track open/close events (B3 counters already count them — emit) | Sonnet | P7 | W3 completeness; track-cone + track-stream suites green |
+| **P9** | Replay engine: segment re-execution under tap; drill-in = the walk; two UX modes (pure replay / replay-between-records for effect tracks) | **Fable** (adjunction correctness) | P8 | W2/R1/R2 green |
+| **P10** | W3 dual-run soak (eager vs stream per-consumer) → W4 accumulation death | Sonnet | P9 | eager mode demoted to oracle; 186MB failure mode gone (R3 benchmark) |
+| **P11** | inhuman progress consumer: pure fold over the port stream (product side, out of arrival) | product track | P8 | UI reads stream only |
+
+Critical path: **P1 → P2 → P3 → P7 → P8 → P9 → P10**, with P6 parallel from day one
+(the one Fable-tier prerequisite with no dependencies) and P5 stubs immediately after P1.
