@@ -39,6 +39,9 @@ import {
   withDynamicCallSite,
   type Invocation,
 } from "./dynamic-call-site.js";
+// Q11a (docs/PROVENANCE-PLAN.md) — the retrospective-stream emission hook. Flag-gated
+// OFF by default; see provenance-hooks.ts's header for the full port-site rationale.
+import { notePotentialRosettaExit } from "./provenance-hooks.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
 // uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
 // the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
@@ -3115,6 +3118,15 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       }
       return yield { call: result.generator, frame, tail: true };
     }
+
+    // Q11a (docs/PROVENANCE-PLAN.md) — the retrospective-stream emission hook, flag-
+    // gated OFF by default (see provenance-hooks.ts's header for why this is the port
+    // site: no rosetta brand exists to switch on here, so the hook itself re-checks
+    // `ctx.currentInvocation.isProvenancePoint` — the eager oracle's own mint signal —
+    // after settlement, and no-ops immediately unless a coordinate/sink is installed).
+    // Detached from `result`: never wraps, replaces, or awaits it, so this call is a
+    // single boolean read (provably inert) whenever the flag is off.
+    notePotentialRosettaExit(ctx.currentInvocation, result);
 
     if (is_promise(result)) {
       return yield result;

@@ -1,39 +1,95 @@
 /**
- * LAW (staged) — W3 port completeness, stream fold + monotonicity + fold-as-recovery,
- * the I4 async-completion door (docs/PROVENANCE.md §3 I2/I4, §5 "The retrospective
- * stream", §7 law table; docs/PROVENANCE-PLAN.md Q5's stub-file mapping table).
+ * LAW — W3 port completeness (GREEN at Q11a); stream fold + monotonicity +
+ * fold-as-recovery, the I4 async-completion door remain STAGED (docs/PROVENANCE.md
+ * §3 I2/I4, §5 "The retrospective stream", §7 law table; docs/PROVENANCE-PLAN.md Q5's
+ * stub-file mapping table).
  *
- * Q5 CREATES this file as pure `it.todo` staged spec. W3 flips at Q11a (real emission
- * hooks); stream fold/monotonicity/fold-as-recovery and the I4 door both flip at Q13
- * (event-sourced regions + flush — §5 C1: "the SAME fold reconstructs region state on
- * DO wake... T7's fold law is not just a test invariant, it is the recovery mechanism";
- * §3 I4's completion rule is asserted at Q13 specifically because that is where region-
- * close semantics live, per PROVENANCE-PLAN.md's own node table).
- *
- * Q10's store seam (`src/provenance/store/{interfaces,fakes,ids,records}.ts`) is
- * ALREADY COMMITTED and is exactly what these rows will drive once un-stubbed:
- * `ProvenanceStore.append`/`readStream` for the fold laws, `ProvenanceStoreFake`'s
- * fault-injection knobs (`setWriteFailure`) for the durability-barrier row, and the
- * `AggregatableRecordKind`/`AggregationRun` shapes (`records.ts`) for the fold-as-
- * recovery row. Not imported here — none of these rows can express a real assertion
- * until Q11a/Q13 wire real emission through those interfaces; importing them now would
- * be an unused, undead import.
+ * Q5 CREATED this file as pure `it.todo` staged spec. W3 flips HERE, at Q11a (real
+ * emission hooks: `src/provenance/store/emit.ts`'s `emitMint`/`emitMuxDecision`/
+ * `emitFanInstantiation`/`emitIngressBinding`, exercised through the store fakes with
+ * fault injection — the SAME idempotent-upsert contract `store/__tests__/emit.test.ts`
+ * drives in more detail; these two rows are the LAW-FILE-HOMED assertion of that same
+ * property, per Q5's mapping table). Stream fold/monotonicity/fold-as-recovery and the
+ * I4 door still flip at Q13 (event-sourced regions + flush — §5 C1: "the SAME fold
+ * reconstructs region state on DO wake... T7's fold law is not just a test invariant,
+ * it is the recovery mechanism"; §3 I4's completion rule is asserted at Q13
+ * specifically because that is where region-close semantics live, per
+ * PROVENANCE-PLAN.md's own node table) — those five rows stay `it.todo` below.
  */
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, setEmissionEnabled } from "../../provenance/store/emit.js";
+import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../../provenance/store/fakes.js";
+import type { RecordId } from "../../provenance/store/ids.js";
 
 describe("W3 port completeness (§7; PROVENANCE-PLAN.md Q11a)", () => {
-  // @ledger: Q11a
-  it.todo(
+  const REGION = "w3-region";
+
+  // @ledger: Q11a — LANDED
+  it(
     "every mint/decision/instantiation/ingress-binding record is emitted EXACTLY ONCE " +
       "PER RECORD ID — idempotent under request retry/re-emission (a repeated real " +
       "emission call for the same logical event never duplicates in the stream)",
+    async () => {
+      setEmissionEnabled(true);
+      try {
+        const store = new ProvenanceStoreFake();
+        const payloads = new PayloadStoreFake();
+        const mintId: RecordId = { templateHash: "mint", ordinalPath: [0], regionEpoch: "e0" };
+        const muxId: RecordId = { templateHash: "mux", ordinalPath: [1], regionEpoch: "e0" };
+        const fanId: RecordId = { templateHash: "fan", ordinalPath: [2], regionEpoch: "e0" };
+        const ingressId: RecordId = { templateHash: "ingress", ordinalPath: [3], regionEpoch: "e0" };
+
+        // Each kind's emission function called TWICE with the identical RecordId — a
+        // re-emission (the retry shape), never a fresh id per call.
+        for (let i = 0; i < 2; i++) {
+          await emitMint({ store, payloads, regionId: REGION, id: mintId, value: "v", stampIds: [1] });
+          await emitMuxDecision({ store, regionId: REGION, id: muxId, arm: 0 });
+          await emitFanInstantiation({ store, regionId: REGION, id: fanId });
+          await emitIngressBinding({ store, regionId: REGION, id: ingressId });
+        }
+
+        const stream = await store.readStream(REGION);
+        expect(stream).toHaveLength(4); // one record per DISTINCT id — never per emit call
+      } finally {
+        setEmissionEnabled(false);
+      }
+    },
   );
 
-  // @ledger: Q11a
-  it.todo(
+  // @ledger: Q11a — LANDED
+  it(
     "W3's exactly-once is exactly-once PER ID, not per write attempt — a CF request " +
       "retry that re-emits the identical record overwrites in place (§5 C2/D1's " +
       "idempotent-upsert contract, exercised through real emission, not just the fake)",
+    async () => {
+      setEmissionEnabled(true);
+      try {
+        const store = new ProvenanceStoreFake();
+        const payloads = new PayloadStoreFake();
+        const id: RecordId = { templateHash: "mint-retry", ordinalPath: [0], regionEpoch: "e0" };
+
+        // The FIRST attempt fails mid-write (the CF-request-retry shape §5 C3 names) —
+        // nothing lands.
+        store.setWriteFailure(true);
+        await expect(
+          emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] }),
+        ).rejects.toBeInstanceOf(ProvenanceWriteFailure);
+        expect(await store.readStream(REGION)).toHaveLength(0);
+
+        // The RETRY (clearing the fault, re-emitting the identical logical event)
+        // succeeds — and a THIRD re-emission after that still overwrites in place,
+        // never duplicates.
+        store.setWriteFailure(false);
+        await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
+        await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
+
+        const stream = await store.readStream(REGION);
+        expect(stream).toHaveLength(1); // exactly once, per id — not per write attempt
+      } finally {
+        setEmissionEnabled(false);
+      }
+    },
   );
 });
 

@@ -63,3 +63,17 @@ export {
   TemplateNotFound,
   TemplateStoreFake,
 } from "./fakes.js";
+
+// Q11a — record emission core (flag-gated sidecar). See emit.ts's own header for the
+// territory note (mint/mux-decision/fan-instantiation/ingress-binding only; track-open/
+// track-close/host-schedule stay Q11b's).
+export {
+  DEFAULT_SEMANTICS_EPOCH,
+  emitFanInstantiation,
+  emitIngressBinding,
+  emitMint,
+  emitMuxDecision,
+  ensureStreamHeader,
+  isEmissionEnabled,
+  setEmissionEnabled,
+} from "./emit.js";
