@@ -196,7 +196,7 @@ export interface EvalContext {
    * `{ ...ctx }` spreads carry it into every child context).
    *
    * Carried on `ctx.runCtx.strict`; numeric's loose comparators read it off the
-   * reconstructed `this.ctx.runCtx` (the retired `_currentStrict` holder's replacement).
+   * flat `this.runCtx` (the retired `_currentStrict` holder's replacement).
    * Optional so the few `EvalContext` literals that omit the run-level options stay
    * valid; the sole origin is `exec()` in generator-exec.ts.
    */

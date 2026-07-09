@@ -716,7 +716,7 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 // ── Loose (nil-tolerant) comparison overlay ──────────────────────────────────────
 // The base comparisons throw on a nil operand (coerceNumeric rejects it). The
 // inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom.
-// Under strict mode (RunContext.strict, read off the reconstructed `this.ctx.runCtx`) loose
+// Under strict mode (RunContext.strict, read off the flat `this.runCtx`) loose
 // is gated off — an all-constant comparison like `(= '() '())` carries no operand to thread
 // strict, so the run ctx (not the operands) is the only honest source.
 const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";

@@ -564,8 +564,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     // Routed through the invocation seam (not a bare `fn(x)`): it dispatches the callee's apply
     // term when it's a callable VALUE and otherwise invokes a host fn with an explicit
-    // `this = { ctx: { runCtx } }` — fixes the `this=undefined` crash a bare `fn(x)` caused when
-    // the callback (e.g. `cadr`, a rosetta) reads `this.ctx`.
+    // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
+    // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
     const results = elements.map((x) => applyCallback(fn, [x], runCtx));
     // R2/C2 (docs/test-suite-v2/RULINGS.md R2, naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
@@ -604,7 +604,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       node = node.cdr;
     }
     // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
-    // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.ctx`-reading callee.
+    // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
     const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
     // R2/C2 (RULINGS.md R2): filter is LENGTH-CHANGING — the container's own grouping/

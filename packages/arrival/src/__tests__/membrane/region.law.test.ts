@@ -20,6 +20,7 @@ import { schemeToJs } from "../../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
 import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
+import type { CallCtx } from "../../values/primitives/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
 import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
@@ -104,15 +105,15 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     let result: unknown;
     const env = inferenceEnv.inherit("region-law-trace-nesting");
     env.defineRosetta("region-law-capture", {
-      // `this.ctx.currentInvocation` is createRosettaWrapper's own receiver shape
-      // (rosetta.ts:`fn.apply({ ctx: { runCtx, currentInvocation, argProvenance } }, …)`)
-      // — the SAME invocation the region scope opened against (`scope.dynSite`).
+      // `this.invocation.currentInvocation` is createRosettaWrapper's own receiver
+      // shape (rosetta.ts:`fn.apply(makeCallCtx(runCtx, inv, argProvenance), …)`) —
+      // the SAME invocation the region scope opened against (`scope.dynSite`).
       // Calling the wrapper HERE, inside `fn`, awaited before `fn` itself returns,
       // keeps the re-entry INSIDE the exporting invocation's open scope window —
       // the region-bound contract this row is testing, not a post-return escape
       // (that's row 1's job).
-      async fn(this: { ctx: { currentInvocation?: unknown } }, lambdaWrapper: unknown) {
-        capturedInv = this.ctx.currentInvocation as Invocation | undefined;
+      async fn(this: CallCtx, lambdaWrapper: unknown) {
+        capturedInv = this.invocation.currentInvocation as Invocation | undefined;
         capturedWrapper = lambdaWrapper as (...a: unknown[]) => Promise<unknown>;
         before = trace.invocationLog.length;
         result = await capturedWrapper(41);

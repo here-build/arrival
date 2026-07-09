@@ -46,18 +46,18 @@ import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
 // A non-portable JS value (function/undefined/unique symbol) crossing into Scheme has
 // no faithful representation and materializes to #void — warnMembrane makes that edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import type { CallCtx } from "./values/primitives/CallCtx.js";
+import { makeCallCtx, type CallCtx } from "./values/primitives/CallCtx.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
   forceBigInt?: boolean;
   returnEither?: boolean;
   /**
-   * When true, attaches `ctx.argProvenance` — one DEEP provenance set per scheme
-   * arg (union of every AValue reachable inside it). Needed because a `(list a b c)`
-   * carries no provenance on its own spine, only its elements do — a shallow
-   * `arg.provenance` read would miss per-element origins. Computed before
-   * schemeToJs strips AValue identity.
+   * When true, attaches `this.argProvenance` (flat `CallCtx`, not a nested `ctx.…`) —
+   * one DEEP provenance set per scheme arg (union of every AValue reachable inside it).
+   * Needed because a `(list a b c)` carries no provenance on its own spine, only its
+   * elements do — a shallow `arg.provenance` read would miss per-element origins.
+   * Computed before schemeToJs strips AValue identity.
    */
   argProvenance?: boolean;
 }
@@ -562,8 +562,8 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     // its producer, recovering per-field origins the union can no longer distinguish.
     const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
-    // `this?.` throughout: tests call the wrapper directly via `.call({ ctx: {} }, …)`,
-    // not only through `makeCallCtx` dispatch, so `this` may be any object or absent.
+    // `this?.` throughout: tests call the wrapper directly via `.call({}, …)`, not only
+    // through `makeCallCtx` dispatch, so `this` may be any object or absent.
     const runCtx = this?.runCtx ?? CONSTANT_CTX;
     const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
     // Region discipline (§7c): this ONE call — from here to `fn.apply` settling —
@@ -576,7 +576,7 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
       let rawResult: unknown;
       try {
         rawResult = await fn.apply(
-          { ctx: { runCtx, currentInvocation: inv, argProvenance } },
+          makeCallCtx(runCtx, inv, argProvenance),
           withRegionScope(scope, () => schemeArgs.map((arg) => schemeToJs(arg, options))),
         );
       } finally {

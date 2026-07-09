@@ -15,22 +15,33 @@ import { type InvocationLike } from "../../rosetta.js";
 
 /**
  * The ONE `this` every callable body sees — the dispatch-level receiver AND the
- * per-verb invocation context, fused (docs/working-proposals/callctx-unification.md).
+ * per-verb invocation context, fused (docs/working-proposals/callctx-unification.md,
+ * docs/working-proposals/rosetta-ctx-single-channel.md R-CTX-1).
  * `runCtx` is never optional (the constructor bakes in the `CONSTANT_CTX` default), so a
  * verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
  * provenance carrier (genuinely call-varying, unlike `runCtx` — never lives on RunContext).
- * Flat, not lazy getters: `runCtx` is already a cheap frozen per-run object and `invocation`
- * is a one-field carrier, so there's nothing expensive to defer.
+ * `argProvenance` is the opt-in per-arg DEEP provenance vector (rosetta.ts's
+ * `RosettaOptions.argProvenance`, aligned to the call's scheme args) — folded flat onto
+ * this same `this` instead of a second nested `{ ctx: { … } }` nesting one level down;
+ * absent for every dispatch path that doesn't request it. Flat, not lazy getters: `runCtx`
+ * is already a cheap frozen per-run object and `invocation`/`argProvenance` are cheap
+ * carriers, so there's nothing expensive to defer.
  */
 export interface CallCtx {
   readonly runCtx: RunContext;
   readonly invocation: { currentInvocation: unknown };
+  readonly argProvenance?: readonly ReadonlySet<number>[];
 }
 
 /** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
  *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
  *  dispatch site (evaluator bare-fn call-head, `applyCallback`'s bare-fn fallback, the native
- *  bind in `capability.ts`) calls this instead of hand-building the shape. */
-export function makeCallCtx(runCtx: RunContext = CONSTANT_CTX, currentInvocation?: InvocationLike): CallCtx {
-  return { runCtx, invocation: { currentInvocation } };
+ *  bind in `capability.ts`, `createRosettaWrapper`'s impl invocation) calls this instead of
+ *  hand-building the shape. */
+export function makeCallCtx(
+  runCtx: RunContext = CONSTANT_CTX,
+  currentInvocation?: InvocationLike,
+  argProvenance?: readonly ReadonlySet<number>[],
+): CallCtx {
+  return { runCtx, invocation: { currentInvocation }, argProvenance };
 }
