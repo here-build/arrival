@@ -325,7 +325,10 @@ architecture existed):
    tracks and loop iterations stack behind their template edge; aggregation count =
    z-depth without materialization); level-of-detail = the demand lattice; zooming into
    a z-layer = γ. Live materialization = the plane animated by the retrospective
-   stream — overview, provenance map, and progress are ONE surface.
+   stream — overview, provenance map, and progress are ONE surface. Scope split
+   (final adjudication): the RENDERING is DEFERRED (P11, product track); what the
+   implementation plan builds is the DATA MODEL the render reads — template graph +
+   ordinal z-space + RLE depth — nothing more.
 
 **CHOSEN — demand lattice**: value / count / field-k. Cone(count) ⊆ cone(value);
 struct-fact wires answer count-demand without touching elements.
@@ -344,21 +347,27 @@ stratum-1 question with stratum-3 material; that is why they go unused.
 
 ## 7. Laws (the test spec — stubs land before machinery)
 
-| Law | Statement | Gate |
+Gate homes are the implementation plan's Q-nodes (`PROVENANCE-PLAN.md`; final
+adjudication re-homed the flip column from coarse P-gates).
+
+| Law | Statement | Flips at |
 |---|---|---|
-| wire-locality | FV(wire body) ⊆ params ∪ prelude-names, at emission | assembly |
-| wire-γ | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope | P9 |
-| replay-nondeterminism | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated | P9 |
-| W1 agreement | eager-oracle cone == wireframe cone, generated corpus | P7 |
-| W3 port completeness | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission | P8 |
-| track containment (stamp) | I1 over stamp sets vs oracle | P8 |
-| track containment (replay) | I1 under replay | P9 |
-| track separation | zero inter-track edges except declared acc chain | P8 |
-| stream fold + monotonicity | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake (C1 — the law is the recovery mechanism) | P8 |
-| pure-mux derivation | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (A2's soundness) | P9 |
-| tier honesty | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed | P9 |
-| loop-unroll | widened vs exact-via-count cones | staged it.todo |
-| memory retention | sealed-value growth measured against Appendix A budget | rides the R3 gate |
+| wire-locality | FV(wire body) ⊆ params ∪ prelude-names, at emission | Q8a (assembly-time check) |
+| wire-γ | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope | Q16 |
+| replay-nondeterminism | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated | Q16 |
+| W1 agreement | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the m3 trade: exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires | Q9 |
+| W3 port completeness | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission | Q11a |
+| track containment (stamp) | I1 over stamp sets vs oracle | Q9 |
+| track containment (replay) | I1 under replay | Q16 |
+| track separation | zero inter-track edges except declared acc chain | Q16 |
+| stream fold + monotonicity | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake (C1 — the law is the recovery mechanism) | Q13 |
+| pure-mux derivation | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (A2's soundness) | Q16 |
+| effect-track replay-between-records | pure stretches applied, recorded port events interleaved verbatim (§4 CHOSEN) | Q16 (sub-gate) |
+| tier honesty | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed | Q17 |
+| R2 demand monotonicity | cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole); count-demand traverses fact wires only (§6 lattice) | Q17 (machinery at Q8c) |
+| I5 exterior collapse | a region is ONE wireframe node from G | Q8a |
+| loop-unroll | widened vs exact-via-count cones | staged it.todo (ledger-visible through Q21) |
+| memory retention | sealed-value growth measured against Appendix A budget | Q19 (rides the R3 gate) |
 
 **CHOSEN — generator corpus classes** (the panel's F2-too-pure finding): interior
 sources · nested regions (map-in-map, map-in-fold) · first-class HOFs · structured
