@@ -234,8 +234,10 @@ export class Resolver {
     return this.env.get(name, { throwError: false });
   }
 
-  /** Bind a name in the innermost frame (let/lambda/letrec/define). ≡ `env.set`. */
-  define(name: BindingName, value: EnvironmentValue | number | bigint): void {
+  /** Bind a name in the innermost frame (let/lambda/letrec/define). ≡ `env.set`. Storage-membrane
+   *  face (T0b): `EnvironmentValue` ONLY — a caller with a raw number/bigint boxes at ITS OWN
+   *  boundary (fromJS/jsToScheme) before calling this, same door as `Environment.set`. */
+  define(name: BindingName, value: EnvironmentValue): void {
     this.env.set(name, value);
   }
 

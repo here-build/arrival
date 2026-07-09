@@ -1,12 +1,9 @@
 import { CLASS } from "./well-known-symbols.js";
-import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
 import { type ResolverSpec, type SchemeEnv } from "./common/scheme-env.js";
 import type { EOF } from "./values/primitives/EOF.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import type { Macro } from "./eval/Macro.js";
-import { AExact } from "./values/primitives/AExact.js";
-import { AInexact } from "./values/primitives/AInexact.js";
 import type { AProcedure, SchemeValue } from "./values/types.js";
 import { createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 import type { Syntax } from "./eval/Syntax.js";
@@ -15,7 +12,6 @@ import { fromJS, isSchemeValue } from "./membrane.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
-import { HeapMeter } from "./heap-budget.js";
 
 // -------------------------------------------------------------------------
 // :: Type definitions for Environment bindings
@@ -40,8 +36,8 @@ function ownProps(obj: object): (string | symbol)[] {
 
 /**
  * The low-level lexical FRAME-STORAGE primitive: a `__name__`/`__env__` binding
- * record with a `__parent__` link and its own fallback resolvers, plus a run-scoped
- * heap meter. One `__parent__`-linked chain is a scope.
+ * record with a `__parent__` link and its own fallback resolvers. One
+ * `__parent__`-linked chain is a scope.
  *
  * It is the storage the evaluator's resolution model wraps — NOT the model itself:
  *   - {@link LexicalScope} (eval/LexicalScope.ts) wraps an Environment as the
@@ -61,13 +57,6 @@ function ownProps(obj: object): (string | symbol)[] {
 export class Environment implements SchemeEnv {
   static [CLASS] = "environment";
   private readonly __resolvers__: ResolverSpec[] = [];
-  /**
-   * Per-run allocation meter (`heap-budget.ts`). Installed by `exec` on the run's top env
-   * when a `heapBudget` is requested; found by `to_array` walking the parent chain from the
-   * calling scope. Absent ⇒ no allocation bound. Run-scoped not chained-and-shared: the
-   * nearest one up the chain wins, so concurrent runs meter independently.
-   */
-  __heapMeter__?: HeapMeter;
 
   // -------------------------------------------------------------------------
   // :: Fallback Resolver Management
@@ -160,6 +149,19 @@ export class Environment implements SchemeEnv {
     return this.inherit(name, env.__env__);
   }
 
+  /**
+   * T0b NOTE (not extracted here — T3 territory): `get()`'s `patch_value(directValue)` call
+   * below is the SAME storage-membrane class of work as `set()`'s (former) auto-boxing —
+   * every read gets coerced (pair → `quote(mark_cycles(...))`, else `box(value)`) on the way
+   * out, mirroring the box-on-the-way-in `set()` used to do. Unlike `set()`'s boxing, this
+   * coercion isn't a narrow-the-signature fix: it runs on the READ path for every lookup hit
+   * (own bindings, resolver hits, and parent-chain hits alike), so moving it to "the caller's
+   * boundary" isn't a single call-site rewrite — it would need every `get()`/`lookupSettled()`/
+   * `_lookupWithResolvers` consumer to apply its own patch, or a wrapping read-membrane type
+   * (`Frame`/`BakedBase` per the decomposition options doc, Option A/C) that owns "coerce on
+   * read" as a declared responsibility instead of a per-call incidental. That's the T1/T3
+   * territory (frames vs. baked roots as distinct types), not a T0 no-regret move.
+   */
   get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue | undefined {
     // `:key` keyword accessors aren't special-cased here: a `:`-prefixed symbol is never
     // a binding, so it falls through to `_lookupWithResolvers` where the polyglot
@@ -184,22 +186,17 @@ export class Environment implements SchemeEnv {
     return undefined;
   }
 
-  set(name: BindingName, value: EnvironmentValue | number | bigint): this {
+  /**
+   * Storage-membrane face (T0b, docs/working-proposals/environment-decomposition-options.md
+   * bucket 4): `set()` accepts `EnvironmentValue` ONLY — an honest signature. A caller that
+   * used to pass a raw JS `number`/`bigint` and rely on Environment auto-boxing it into
+   * AExact/AInexact must now box at ITS OWN boundary before calling `set` (via `fromJS`/
+   * `jsToScheme` per context) — storage is inside the membrane, not a second door into it.
+   */
+  set(name: BindingName, value: EnvironmentValue): this {
     let storedValue: EnvironmentValue;
 
-    // Numbers convert to AExact/AInexact for typed numeric ops
-    if (typeof value === "number") {
-      if (Number.isNaN(value)) {
-        storedValue = new AInexact(CONSTANT_CTX, value);
-      } else {
-        storedValue = Number.isSafeInteger(value)
-          ? new AExact(CONSTANT_CTX, BigInt(value))
-          : new AInexact(CONSTANT_CTX, value);
-      }
-    } else if (typeof value === "bigint") {
-      storedValue = new AExact(CONSTANT_CTX, value);
-    }
-    else if (isSchemeValue(value)) {
+    if (isSchemeValue(value)) {
       storedValue = value;
     }
     // Bare-value purge (A4/P4): a raw JS boolean/string/symbol used to pass through

@@ -338,13 +338,11 @@ export async function execState(
   // (all top-level forms share one deadline) — a sandbox program that splits a
   // hang across several forms is still bounded. Recompute the remaining budget
   // per form from a single start so we don't reset the clock between forms.
-  // Install the per-run allocation meter on the run's top env AFTER parse/init (so bootstrap + parse
-  // allocations don't count against the user program), spanning the WHOLE exec like the wall-clock
-  // budget. Save/restore the prior meter so a nested exec on the same env can't clobber the outer
-  // one. `to_array` finds it by walking the parent chain from the calling scope.
-  // The per-run context (the hermetic handle; see RunContext) carries strict + the heap
-  // meter; `exec` also installs the meter on the env node below (where `to_array`/
-  // fl-interop find it by parent-walk) until those readers move to `runCtx` directly.
+  // The per-run allocation meter is minted HERE, once, on `runCtx` — RunContext is its
+  // ONLY owner (no env-node courier copy: see the heapMeter-ownership tranche). It spans
+  // the WHOLE exec like the wall-clock budget; every value built during this run carries
+  // this SAME runCtx (`operand.ctx.heapMeter`), which `to_array`/the sequence-op dispatch
+  // charge against directly — no parent-chain walk, no install/restore dance.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal });
   // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
@@ -366,65 +364,55 @@ export async function execState(
     runResolver = new Resolver(lexicalRoot, capabilityBase);
   }
   // The run's exec frame = the resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
-  // Defines land here, the evaluator's `ctx.env` is here, and the heap meter installs here —
-  // found by `findHeapMeter` walking the parent chain from a nested `_currentRunEnv`.
-  const execEnv = runResolver.env;
-  const priorMeter = execEnv.__heapMeter__;
-  // Point the env-node meter at the SAME object runCtx holds, so the N2 flip to
-  // `operand.ctx.heapMeter` reads the live meter with no behavior change.
-  if (runCtx.heapMeter !== undefined) execEnv.__heapMeter__ = runCtx.heapMeter;
-
+  // Defines land here and the evaluator's `ctx.env` is here; the heap meter lives on
+  // `runCtx` only (above), not on this frame.
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
-  try {
-    for (let i = 0; i < parsed.length; i++) {
-      const expr = parsed[i];
-      const remaining =
-        budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      // Preserve the audit-#42 wrapOperator contract: run() wraps every non-ArrivalError
-      // — including the TypeError wrapOperator throws to name operator + arg types — in
-      // an ArrivalError, masking both the TypeError class and its membrane cause. Surface
-      // the original TypeError so the user-visible error shape survives.
-      let result: SchemeValue;
-      try {
-        // A top-level form evaluates to a value, never a bare expander — seal it.
-        result = expectValue(
-          await run(
-            evaluate(expr, {
-              resolver: runResolver,
-              dynamic_env,
-              use_dynamic,
-              tap,
-              nodeFilter,
-              signal,
-              // Default false ⇒ today's tolerant nil-projection. No consumer reads
-              // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
-              strict: strict ?? false,
-              // The per-run handle, threaded as data (unread scaffold; N2 reads it).
-              runCtx,
-            }),
-            { signal, budgetMs: remaining },
-          ),
-        );
-      } catch (e) {
-        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause))
-          throw e.cause;
-        throw e;
-      }
-      results.push(result);
-
-      // SHADOW MODE slice 3 — the assert. Compare the static fullCone against this
-      // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
-      // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
-      // keyword-projection form abstains (returns a skip reason we discard — it is
-      // outside the classifier's model, so shadow does not assert it). Behind the
-      // flag — never runs flag-OFF.
-      if (irLineage && shadowSkeletons) {
-        assertShadowCone(shadowSkeletons[i], expr, result, actualEnv, String(expr));
-      }
+  for (let i = 0; i < parsed.length; i++) {
+    const expr = parsed[i];
+    const remaining =
+      budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
+    // Preserve the audit-#42 wrapOperator contract: run() wraps every non-ArrivalError
+    // — including the TypeError wrapOperator throws to name operator + arg types — in
+    // an ArrivalError, masking both the TypeError class and its membrane cause. Surface
+    // the original TypeError so the user-visible error shape survives.
+    let result: SchemeValue;
+    try {
+      // A top-level form evaluates to a value, never a bare expander — seal it.
+      result = expectValue(
+        await run(
+          evaluate(expr, {
+            resolver: runResolver,
+            dynamic_env,
+            use_dynamic,
+            tap,
+            nodeFilter,
+            signal,
+            // Default false ⇒ today's tolerant nil-projection. No consumer reads
+            // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
+            strict: strict ?? false,
+            // The per-run handle, threaded as data (unread scaffold; N2 reads it).
+            runCtx,
+          }),
+          { signal, budgetMs: remaining },
+        ),
+      );
+    } catch (e) {
+      if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause))
+        throw e.cause;
+      throw e;
     }
-  } finally {
-    if (heapBudget !== undefined) execEnv.__heapMeter__ = priorMeter;
+    results.push(result);
+
+    // SHADOW MODE slice 3 — the assert. Compare the static fullCone against this
+    // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
+    // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
+    // keyword-projection form abstains (returns a skip reason we discard — it is
+    // outside the classifier's model, so shadow does not assert it). Behind the
+    // flag — never runs flag-OFF.
+    if (irLineage && shadowSkeletons) {
+      assertShadowCone(shadowSkeletons[i], expr, result, actualEnv, String(expr));
+    }
   }
 
   return { values: results, scope: runResolver.scope, runCtx };

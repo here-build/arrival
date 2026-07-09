@@ -59,7 +59,7 @@ export { AVector } from "./values/primitives/AVector.js";
 // `is_callable_value` is its guard.
 export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 export { is_callable_value } from "./values/value-guards.js";
-export { CONSTANT_CTX, makeRunContext, type RunContext } from "./values/primitives/RunContext.js";
+export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./values/primitives/RunContext.js";
 // `SchemeValue` — the honest union of every value the interpreter can hold; a cross-package
 // AST-walking consumer (mcp-substrate's statement-facts.ts) names this type in its own
 // signatures when walking a real parsed form, not a plain-object `Node` shape.
@@ -158,10 +158,6 @@ export * as z from "./common/scheme-zod.js";
 // DiscoveryTool slices REPL top-level statements by token start-offsets — the reader is the one
 // place that lexes Scheme faithfully, so it must consume the offsets rather than re-scan.
 export { tokenize } from "./reader/tokenize.js";
-
-// The ONE way to make an env allocation-bounded — every eval loop that owns an env (Project.run, the
-// studio kernel) installs the meter through this, so "bounded" is a single named act, not ad-hoc.
-export { installHeapMeter, findHeapMeter, type HeapMeter } from "./heap-budget.js";
 
 // The public bare `exec`/`parse` resolve to the stack-safe, budget-bounded GENERATOR
 // path — an explicit named export wins over a star-exported name of the same name.

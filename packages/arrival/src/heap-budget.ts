@@ -11,47 +11,23 @@
 // EvalTrace entry cap: we bound cumulative work, not live heap.
 //
 // WHERE the charge happens: two chokepoints, both counting by input element BEFORE the op runs —
-// `to_array` (stdlib.ts, the eager list->array path used by append/join/reverse/…) and the
-// sequence-op dispatch in `env/fl-interop.ts` (`chargeSequenceHeap`, covering filter/map/reduce,
-// which walk the spine/array directly via each term's own arrival/tagless-final method). The
-// dispatch-level charge is necessary because value terms must stay evaluator-free (no currentRunEnv
-// import; the meter is run-scoped env state, not a value-algebra concern) — `to_array` alone can't
-// see ops that bypass it.
+// `to_array` (env/pack-helpers.ts, the eager list->array path used by append/join/reverse/…) and
+// the sequence-op dispatch (covering filter/map/reduce, which walk the spine/array directly via
+// each term's own arrival/tagless-final method). The dispatch-level charge is necessary because
+// value terms must stay evaluator-free (no currentRunEnv import; the meter is run-scoped context
+// state, not a value-algebra concern) — `to_array` alone can't see ops that bypass it.
 //
-// The meter lives on the RUN's environment (installed by `exec`), found by walking the parent chain
-// from the run-scoped `currentRunEnv()` — so it is run-scoped and safe against async interleaving of
-// concurrent runs (each run's builtins resolve their own env's meter), with no module-level ambient state.
+// OWNERSHIP: the meter lives on `RunContext.heapMeter` ONLY, minted once per `exec()` (see
+// `makeRunContext`). Every value built during that run carries the SAME RunContext reference
+// (`AValue.ctx` — see `ctxOf`), so a charge site reads `ctxOf(operand).heapMeter` (or the `runCtx`
+// it's threaded through a CallCtx) directly — no env-node courier, no parent-chain walk. This is
+// run-scoped and safe against async interleaving of concurrent runs by construction: each run's
+// values carry their own run's RunContext, never a shared module-level ambient meter.
 
-import type { Environment } from "./Environment.js";
-import type { RunContext } from "./values/primitives/RunContext.js";
+import type { RunContext, HeapMeter } from "./values/primitives/RunContext.js";
 import { ArrivalError } from "./errors.js";
 
-/** A run's cumulative allocation meter. `used` counts elements materialized through `to_array` OR
- *  the fl-interop sequence-op dispatch (the two collection-op chokepoints); once it passes `max` the
- *  run is contained. */
-export interface HeapMeter {
-  used: number;
-  max: number;
-}
-
-/** The ONE way an env becomes allocation-bounded: install a fresh meter capped at `max`. Every eval
- *  loop that owns an env (Project.run, the studio kernel) calls THIS — so "this env is bounded" is a
- *  single, named, reviewable act, never an ad-hoc `env.__heapMeter__ = …` re-decided per site. The
- *  meter is found by `to_array` walking the parent chain, so a child scope inherits its parent's
- *  bound; installing on a fresh run/cell scope is what gives that scope its OWN bound. */
-export function installHeapMeter(env: Environment, max: number): void {
-  env.__heapMeter__ = { used: 0, max };
-}
-
-/** Walk the env parent chain for the nearest installed meter (nearest = this run's). O(depth), called
- *  once per `to_array` / sequence-op-dispatch pass (not per element). Returns undefined when no budget
- *  was requested. */
-export function findHeapMeter(env: Environment | null): HeapMeter | undefined {
-  for (let e = env; e; e = e.__parent__) {
-    if (e.__heapMeter__ !== undefined) return e.__heapMeter__;
-  }
-  return undefined;
-}
+export type { HeapMeter };
 
 /** The containment message. Carries "budget exceeded" so the same classifier that catches the
  *  wall-clock deadline (`/budget exceeded|abort|maximum call stack/i`) treats this as a contained
