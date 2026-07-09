@@ -1,22 +1,27 @@
-// env-registries — side-tables ABOUT the rosettas/docs registered on an env, kept
-// OUT of the scope-node (`Environment`): these aren't lexical scope (bindings +
-// `__parent__` + lookup), they're run-scoped metadata external tools harvest.
-// Holding them here, keyed by the env they were registered on, keeps the
+// env-registries — side-table ABOUT the rosettas registered on an env, kept
+// OUT of the scope-node (`Environment`): this isn't lexical scope (bindings +
+// `__parent__` + lookup), it's run-scoped metadata external tools harvest.
+// Holding it here, keyed by the env it was registered on, keeps the
 // scope-node minimal while preserving the per-env locality consumers depend on.
 //
 // WHY env-KEYED (WeakMap<Environment, …>), not one flat global:
-//   • docs + rosetta-types are read PER-ENV — the type-lens harvester spreads ONE
+//   • rosetta-types are read PER-ENV — the type-lens harvester spreads ONE
 //     env's type entries (`[...rosettaTypesOf(env)]`); a sibling env's rosettas must
 //     NOT leak in. A flat global would conflate every env built in the process.
-//   • rosetta-PURITY is read CHAINED — the lineage classifier walks `__parent__`
-//     asking each env's pure-set (a parent's pure rosetta is seen by a child). A
-//     WeakMap keyed per-env, queried per step of the existing parent-walk, reproduces
-//     that exactly; a flat global would also (accidentally) answer for unrelated envs.
 //   • WeakMap ⇒ a side-table entry GCs with its env — no lifetime coupling, no leak.
 //
-// Accessors get-or-create the per-env container, so a writer
-// (`defineRosetta`/`set`-with-doc) and a membership-only reader share one path; an
+// The accessor gets-or-creates the per-env container, so a writer
+// (`defineRosetta` carrying a `type`) and a membership-only reader share one path; an
 // empty container created by a read is inert (membership = false) and GC-eligible.
+//
+// HISTORY (rosetta-registry dissolution, docs/working-proposals/rosetta-registry-dissolution.md):
+// a sibling `rosettaPureOf` purity registry used to live here — the static lineage
+// classifier's chain-walked source-vs-pipe side-table. Q2/Q3 (PROVENANCE-PLAN.md)
+// replaced that read with the declared `.provenanceRole` stamped on the bound value
+// (`values/lineage-classifier-from-env.ts`), leaving the registry write-only; it is
+// deleted. `pure: true` on a legacy `defineRosetta` config remains LIVE at runtime —
+// it gates `mintsPoint` inside `createRosettaWrapper` (rosetta.ts) — but no static
+// side-table records it any more.
 
 import type { Environment } from "./Environment.js";
 
@@ -39,23 +44,4 @@ export function rosettaTypesOf(env: Environment): Map<string, string> {
     rosettaTypesByEnv.set(env, m);
   }
   return m;
-}
-
-// -------------------------------------------------------------------------
-// :: Rosetta purity roles — the lineage-classifier HARVEST surface. The set of
-// :: rosetta names registered `pure: true` (provenance PIPES, not sources). Read
-// :: CHAINED by the classifier's parent-walk.
-// -------------------------------------------------------------------------
-const rosettaPureByEnv = new WeakMap<Environment, Set<string>>();
-
-/** This env's pure-rosetta set (names that PROPAGATE provenance rather than mint).
- *  The lineage classifier walks `__parent__` asking `rosettaPureOf(e).has(op)` at
- *  each step — so purity declared on a parent is seen by a child, as before. */
-export function rosettaPureOf(env: Environment): Set<string> {
-  let s = rosettaPureByEnv.get(env);
-  if (s === undefined) {
-    s = new Set();
-    rosettaPureByEnv.set(env, s);
-  }
-  return s;
 }

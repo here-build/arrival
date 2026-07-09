@@ -155,8 +155,10 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     //
     // `pure?` is NOT gone. `RosettaFunction.pure`/`RosettaSpec.pure` (src/rosetta.ts,
     // src/common/scheme-env.ts) are still a LIVE, accepted declaration surface:
-    // `Environment.defineRosetta()` reads `config.pure` and records the name in the
-    // `rosettaPureOf` per-env registry (src/Environment.ts). `common/capability.ts`'s
+    // `createRosettaWrapper` reads `config.pure` as the runtime mint gate
+    // (`mintsPoint = pure !== true`). (The static-side `rosettaPureOf` per-env
+    // registry it also used to feed is DELETED — write-only after Q2/Q3, see
+    // docs/working-proposals/rosetta-registry-dissolution.md.) `common/capability.ts`'s
     // own `SymbolDeclaration` doc names this explicitly as a permanent (not
     // migration-remnant) arm: "Gone from `foundations/arrival/**` itself, but
     // load-bearing OUTSIDE it: McpEnvCapability's whole inline-annotation design …

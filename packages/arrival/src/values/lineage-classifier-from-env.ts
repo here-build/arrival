@@ -17,7 +17,9 @@
  *    anything actually registered. This was the load-bearing heuristic docs/
  *    PROVENANCE.md §2 excludes by name; `roleOf` reading `.provenanceRole` directly
  *    is the declared fact it stood in for.
- *  - `isPureRosettaInChain` / the `rosettaPureOf` per-env purity-registry walk — a
+ *  - `isPureRosettaInChain` / the `rosettaPureOf` per-env purity-registry walk (the
+ *    registry itself is since DELETED from env-registries.ts — it had become
+ *    write-only; see docs/working-proposals/rosetta-registry-dissolution.md) — a
  *    SECOND signal that used to override the (heuristic) `sources` set for the one
  *    baked-declaration path (`&& !pure`). Q2 resolves `pure: true` to a single
  *    `provenance: "pipe"` role at bake time, so there is nothing left for a second

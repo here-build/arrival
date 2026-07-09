@@ -10,7 +10,7 @@ import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { patch_value } from "./reader/values-repr.js";
-import { rosettaPureOf, rosettaTypesOf } from "./env-registries.js";
+import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
 
 // -------------------------------------------------------------------------
@@ -84,8 +84,12 @@ export class Environment {
   defineRosetta(name: string, config: RosettaFunction): void {
     const wrapper = createRosettaWrapper(config);
     this.set(name, wrapper);
+    // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
+    // `mintsPoint = pure !== true`) — no static side-table records it any more; the
+    // static classifier reads the declared `.provenanceRole` off baked bound values
+    // instead (values/lineage-classifier-from-env.ts, Q3). Legacy-registered names
+    // carry no role and fall to the classifier's `undefined` default.
     if (config.type !== undefined) rosettaTypesOf(this).set(name, config.type);
-    if (config.pure) rosettaPureOf(this).add(name);
   }
 
   list(): (string | symbol)[] {

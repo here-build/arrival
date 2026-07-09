@@ -79,11 +79,12 @@ export { EOF as EOF } from "./values/primitives/EOF.js";
 // Environment is INTERNAL-ONLY — the concrete scope-node is not part of the public
 // surface (consumers type against the structural `SchemeEnv` below).
 
-// Invocation-context metadata registries (docs / rosetta-type / rosetta-purity side-tables),
-// held off the scope-node, keyed by env. `rosettaTypesOf` is the type-lens harvest seam —
-// studio derives its lens roster from `[...rosettaTypesOf(env)]`. `rosettaPureOf` rounds
-// out the pair for external readers.
-export { rosettaTypesOf, rosettaPureOf } from "./env-registries.js";
+// Invocation-context metadata registry (the rosetta-type side-table), held off the
+// scope-node, keyed by env. `rosettaTypesOf` is the type-lens harvest seam — studio
+// derives its lens roster from `[...rosettaTypesOf(env)]`. (The sibling `rosettaPureOf`
+// purity registry is DELETED — write-only after Q2/Q3 moved the static classifier onto
+// the declared `.provenanceRole`; see docs/working-proposals/rosetta-registry-dissolution.md.)
+export { rosettaTypesOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `Environment` class) — re-surfaced from `./common/scheme-env.ts` (also

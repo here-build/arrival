@@ -61,13 +61,15 @@ export interface SchemeEnv {
   get(name: string, options?: { throwError?: boolean }): unknown;
   defineRosetta(name: string, config: RosettaSpec): void;
   inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
-  /** Register a catchall resolver (fires on a name the env did not bind). */
+  /** Register a catchall resolver (fires on a name the env did not bind). This is the
+   *  APPLY-TIME landing door for a capability's declared `resolvers` (CapabilitySpec.
+   *  resolvers → capability.ts's apply) and the kernel's bake overlay — assembly-time
+   *  producers only. There is deliberately NO `unregisterResolver` on this contract:
+   *  resolver REMOVAL is not a pack-facing operation. The kernel's bake-SEAL hook
+   *  (ENV T2, design §1) reaches it structurally (`ResolverHostLike`, kernel.ts) on
+   *  hosts that offer it — `ResolvingEnvironment` does — and falls back to the
+   *  sealed-flag silencer on hosts that don't. */
   registerResolver(resolver: ResolverSpec): void;
-  /** OPTIONAL: remove a registered resolver by id — the kernel's bake-SEAL hook (ENV
-   *  T2, design §1). A host that implements it gets zero-residue assembly (the
-   *  `preludeOnly` overlay resolver is unregistered at seal); a host without it keeps
-   *  the sealed-flag fallback (the resolver stays registered but answers nothing). */
-  unregisterResolver?(id: string): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
    *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope
    *  names (e.g. inspecting a freshly-`inherit`ed child) reads this directly. */
