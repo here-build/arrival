@@ -189,6 +189,19 @@ spawned it; eviction mid-drill-in aborts the query and retry re-replays. EXCLUDE
 recording replays into the production stream (observer effect — drill-in would pollute
 the provenance it inspects, and pay a DO write per click).
 
+**CHOSEN (V ruling, 2026-07-09) — GLASS envs replay by cached membrane behavior +
+whole-program re-run**: a glass (live host-provided) env's reads are membrane
+penetrations — recorded with payloads like any source, under PROMISED-BEHAVIOR
+semantics: the recorded answer is authoritative even where live glass would answer
+differently now (the frozen-payload rule, uniformly applied). Drill-in on a live studio
+run is IN SCOPE, served by the time-space trade at whole-program scale: re-run the
+ENTIRE program with penetration playback, materializing only the demanded provenanced
+lens outputs — no partial-segment machinery for glass runs, no snapshot-bake artifact
+(the penetration stream IS the lazy snapshot of exactly what was read).
+- EXCLUDED: recorded-only LIMIT for glass runs (would gut drill-in exactly where the
+  product lives); eager glass-env snapshotting (violates the storage thesis; reads
+  capture lazily by occurring).
+
 **CHOSEN (round 2, C5; round 3 epoch clause) — γ is offloadable**: a wire (template
 hash) + frozen ingress payloads are serializable by construction, so replay MAY execute
 in a stateless Worker outside the DO — the DO serves records, workers serve drill-ins.
@@ -200,6 +213,18 @@ ruling buys; interactive drill-in never blocks the DO event loop.
 interpreter version (semantics epoch). Replay requires a matching epoch, or a sampled
 wire-γ verification pass against recorded egresses before answers are trusted.
 EXCLUDED: silent cross-version replay (a newer evaluator can lie politely).
+
+**CHOSEN (V ruling, 2026-07-09) — identity is TELEOLOGICAL, not logged**: replay
+fidelity rests on the STATIC nature of the environment plus COMPLETE membrane-penetration
+capture — "if we store all the membrane penetrations, the behavior itself will be
+identical" is the core claim; behavioral identity, never node-pointer identity. The
+chain/env hash is therefore coarse (program + semantics epoch) — an addressing
+convenience, not a soundness mechanism.
+- EXCLUDED: per-pack impl hashing / BEAM-style hot-reload version arbitration (we are
+  not BEAM; the env is static within a deployment and the epoch pins the interpreter;
+  penetration completeness carries the rest).
+- Corollary: `require` was already ruled a membrane penetration (VFS reads recorded like
+  fetch/db) — this row generalizes that doctrine to ALL identity questions.
 
 **CHOSEN (round 2, §B arithmetic; scoped round 3, m2) — replay memo**: a size-capped LRU
 keyed (template-hash, ingress-hash) → egress, living in the replay worker (ephemeral,
