@@ -1,18 +1,38 @@
-// The native root environments, created EMPTY here as a cycle-neutral leaf.
+// The native root environments — created EMPTY here as a cycle-neutral leaf
+// (this module imports ONLY Environment; like boot.ts it has no arrival-internal
+// cycle). Population is owned entirely by `ensureBaseAssembled`
+// (eval/generator-exec.ts), lazily on first exec, realm-cached: no module-load
+// side effects, so the package keeps `sideEffects: false`.
 //
-// `global_env` is arrival's native root; `user_env` is the interaction scope
-// (`global_env.inherit("user-env")`) where top-level `exec` runs by default. They
-// live HERE — not in the stdlib monolith — so the evaluator entry
-// (eval/generator-exec.ts) and the bridge can source the root WITHOUT importing
-// stdlib. stdlib imports these back and POPULATES global_env with its native
-// builtins at module load (`Object.assign` onto `__env__`); the bridge bootstrap
-// (`initBridge`) then layers the assembled packs + wrapped numeric ops on top.
+// WHY TWO ROOTS — the two-phase bootstrap:
+//   phase 1: NATIVE_PACKS (TS-implemented builtins — numeric core, lists,
+//            strings, equality, error-object predicates, …) assemble onto
+//            `global_env` via assembleEnv;
+//   phase 2: BASE_PACKS (the `.scm`-defined stdlib — core/macros/polyglot/
+//            r7rs/srfi preludes) assemble onto `user_env`. Their preludes CALL
+//            natives (`+`, `string-length`, …), which resolve child→parent
+//            (`user_env → global_env`), so phase 1 must be live first.
+// One root cannot host both: a `.scm` prelude evaluating onto the same frame
+// its dependencies are still being assembled into would race the phase order.
 //
-// Creation and population are split so the root's IDENTITY is a leaf while its
-// binding set is unchanged — the constructor stores `__env__` and runs no logic,
-// so an empty root + post-hoc `Object.assign` is byte-identical to the old
-// `new Environment("global", {...})`. This module imports ONLY Environment; like
-// boot.ts it is a true leaf with no arrival-internal cycle.
+// THE CONTRACT per root:
+//   `global_env` — the native root. Write window: phase 1 only; nothing writes
+//   here afterwards (no production `.set` on it exists outside assembly).
+//   `user_env`  — the interaction scope and the DEFAULT env for bare
+//   `exec(code)`: top-level user defines accumulate on this SHARED frame by
+//   design (REPL semantics). Hermetic callers never see that bleed — they pass
+//   `{ env }` or `{ capabilities }` (the latter assembles onto a FRESH
+//   `user_env.inherit(...)` child per call). The provenance spec's hermetic
+//   replay envs likewise assemble fresh and never touch this shared frame.
+//
+// The third root, `inferenceEnv` (exported as `sandboxedEnv`), lives in
+// inference-env.ts: a structurally empty child of `user_env` giving the
+// inference plane a stable identity boundary — model-authored definitions land
+// in children of it, never on the shared interaction scope.
+//
+// Naming: snake_case `global_env`/`user_env` is LIPS heritage; the barrel
+// re-exports `user_env as env` and keeps both spellings public — renaming is
+// downstream churn with zero semantic gain, so the heritage names stay.
 import { Environment } from "./Environment.js";
 
 export const global_env = new Environment("global", {}, undefined);
