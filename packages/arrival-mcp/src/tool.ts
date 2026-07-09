@@ -13,7 +13,7 @@ export const tool = (tpl: TemplateStringsArray, ...sub: (string | number)[]) => 
     const O extends VectorSpec,
     M extends Record<string, any> = Record<string, any>,
   >(
-    contract: Contract</*todo: map S to I*/, O, undefined> & {
+    contract: Contract<[] /* todo: map S to I */, O, undefined> & {
       shape: S,
       dynamicDescription?: () => string;
     },
