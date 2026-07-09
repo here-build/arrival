@@ -87,16 +87,36 @@ export type WireframeNode =
       /** Q4's contract-extracted callback roles for the HOST verb, when supplied. */
       readonly callbackRoles?: CallbackRoles;
     }
-  /** Loop/recursive binder (named-let / do / declared `loop` role). First landing
-   *  records the designated node ONLY — backedge wiring and interior topology are
-   *  Q8a′ (PROVENANCE-PLAN.md), hence `deferred`. */
+  /** Loop/recursive binder (named-let / do / declared `loop` role). Q8a′
+   *  (PROVENANCE-PLAN.md) lands the INTERIOR: the loop body's own PRIVATE
+   *  wireframe graph, built the same way a fan's `template` is (Q8a's I5 pattern
+   *  — its own `GraphBuilder`, never spliced into the enclosing graph). `params`
+   *  are the loop variables — per-iteration LEAF slots inside `interior`, NOT
+   *  program ingress from the enclosing graph's point of view: the binder NODE's
+   *  own ingress wires (`arg0..argN`, ordinary wires from the ENCLOSING graph)
+   *  carry only the INITIAL values; every subsequent iteration rebinds `params`
+   *  from a `recur` node's ingress inside `interior` — the BACKEDGE. A declared-
+   *  `loop`-role op with no known recursive shape (dead code today — no live
+   *  declaration uses the role, `values/lineage.ts`'s `DeclaredRole` doc) gets
+   *  `params: []` and an empty `interior`: no recursive structure to wireframe,
+   *  so its operands wire as ordinary ingress instead (`buildArgNode`'s path). */
   | {
       readonly kind: "binder";
       readonly op: string;
       readonly span: string;
       readonly cycles: boolean;
-      readonly deferred: "Q8a′";
+      readonly params: readonly string[];
+      readonly interior: WireframeGraph;
     }
+  /** A loop's tail-recursive CONTINUATION — named-let's `(loop args…)` call
+   *  inside its own body, or `do`'s implicit per-iteration step re-entry (Q8a′,
+   *  §1: "loop variables wired from the body's recur-position egress back to
+   *  the binder's params"). Exists ONLY inside a `binder.interior` graph — never
+   *  `WireframeGraph.egress` (a recur is the BACKEDGE, not a value escaping the
+   *  loop). Ingress wires (`arg0..argN`) are POSITIONAL with the ENCLOSING
+   *  binder's `params`: `argK` is the value `params[K]` rebinds to next
+   *  iteration. */
+  | { readonly kind: "recur"; readonly span: string }
   /** Call site of a port-reaching top-level define — references its template
    *  subgraph in `WireframeProgram.templates` by name (§1). */
   | { readonly kind: "template-ref"; readonly name: string; readonly span: string }

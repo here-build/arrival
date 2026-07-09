@@ -14,6 +14,7 @@ import type { Classifier, DeclaredRole } from "../../values/lineage.js";
 import { buildWireframe } from "../wireframe/builder.js";
 import type { Wire, WireframeGraph, WireframeProgram } from "../wireframe/types.js";
 import { freeVars } from "../wireframe/free-vars.js";
+import { reachableNodes } from "../wireframe/loops.js";
 import { WireLocalityError } from "../../errors.js";
 
 // Declared roles (Q3's shape — synthetic here; production reads `.provenanceRole`).
@@ -224,28 +225,111 @@ describe("Q8a builder core — fans are region hosts (§3 I5)", () => {
   });
 });
 
-describe("Q8a builder core — loop-shaped binders are DESIGNATED, interiors deferred (Q8a′)", () => {
-  it("named let → binder{cycles} node, deferred", async () => {
+describe("Q8a′ builder core — loop-shaped binders get REAL backedge-wired interiors", () => {
+  it("named let → binder{cycles} node with a real interior — no interior deferred", async () => {
     const p = await wf("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
     const binder = p.main.nodes.find((n) => n.kind === "binder");
     if (binder?.kind !== "binder") throw new Error("expected a binder node");
     expect(binder.cycles).toBe(true);
     expect(binder.op).toBe("named-let");
-    expect(binder.deferred).toBe("Q8a′");
+    expect(binder.params).toEqual(["i"]);
+    // selector `(> i 3)` is pure → collapses (§1 A2, no mux node); the interior
+    // holds exactly the backedge (`recur`, the `(loop (+ i 1))` arm) and the
+    // terminal out-port (the `i` arm) — no half-wired/deferred placeholder.
+    expect(binder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur"]);
+    expect(binder.interior.egress).not.toBeNull();
   });
 
-  it("do → binder{cycles} node, deferred", async () => {
+  it("do → binder{cycles} node with a real interior — the step expression is the backedge", async () => {
     const p = await wf("(do ((i 0 (+ i 1))) ((> i 3) i))");
     const binder = p.main.nodes.find((n) => n.kind === "binder");
     if (binder?.kind !== "binder") throw new Error("expected a binder node");
     expect(binder.op).toBe("do");
-    expect(binder.deferred).toBe("Q8a′");
+    expect(binder.params).toEqual(["i"]);
+    expect(binder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur"]);
+    expect(binder.interior.egress).not.toBeNull();
   });
 
-  // @ledger-adjacent staging: Q8a′ (PROVENANCE-PLAN.md wave 6) — NOT this landing.
-  it.todo("Q8a′: binder backedge wiring — loop interiors wireframe with per-iteration template referents");
-  it.todo("Q8a′: a port inside a loop body is wireframed through the binder's interior graph");
-  it.todo("Q8a′: V4 cone-traversal termination rows exercise over real backedge topology");
+  it("Q8a′: binder backedge wiring — loop interiors wireframe with per-iteration template referents", async () => {
+    const p = await wf("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    if (binder?.kind !== "binder") throw new Error("expected a binder node");
+
+    // The binder's OWN ingress (in the ENCLOSING graph): the INITIAL value
+    // only — the loop variable is NOT program ingress from G's point of view.
+    const binderIdx = p.main.nodes.indexOf(binder);
+    const initWire = p.main.wires.find((w) => w.consumer.node === binderIdx && w.consumer.slot === "arg0");
+    expect(initWire?.source).toBe("(lambda () 0)");
+
+    // Inside the interior: the recur node's arg0 is the NEXT-iteration value,
+    // computed from the CURRENT iteration's `i` — the backedge, not a fresh
+    // program ingress.
+    const recurIdx = binder.interior.nodes.findIndex((n) => n.kind === "recur");
+    expect(recurIdx).toBeGreaterThanOrEqual(0);
+    const recurWire = binder.interior.wires.find((w) => w.consumer.node === recurIdx && w.consumer.slot === "arg0");
+    expect(recurWire?.source).toBe("(lambda (i) (+ i 1))");
+    expect(recurWire?.params).toEqual(["i"]);
+  });
+
+  it("Q8a′: a port inside a loop body is wireframed through the binder's interior graph", async () => {
+    const p = await wf("(emit! (let loop ((i 0)) (if (> i 3) (fetch-item i) (loop (+ i 1)))))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    if (binder?.kind !== "binder") throw new Error("expected a binder node");
+    // The terminal arm's port lands as a designated node INSIDE the private
+    // interior — never spliced into the enclosing graph `p.main` (I5's
+    // discipline, extended to loop interiors).
+    expect(binder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur", "source"]);
+    expect(p.main.nodes.some((n) => n.kind === "source")).toBe(false);
+
+    // A `do` loop's step position is equally wireframed — the step IS the
+    // backedge's own ingress wire, so a source in step position lands there,
+    // alongside `do`'s own `recur` node (the step-triggered backedge).
+    const doProgram = await wf("(emit! (do ((i 0 (fetch-item i))) ((> i 3) i)))");
+    const doBinder = doProgram.main.nodes.find((n) => n.kind === "binder");
+    if (doBinder?.kind !== "binder") throw new Error("expected a binder node");
+    expect(doBinder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur", "source"]);
+  });
+
+  it("Q8a′: V4 cone-traversal termination rows exercise over real backedge topology", async () => {
+    const p = await wf("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    if (binder?.kind !== "binder") throw new Error("expected a binder node");
+
+    // A REAL loop interior — today a DAG, terminates trivially, but exercised
+    // through the SAME guarded walk the synthetic case below stresses.
+    const outIdx = binder.interior.egress;
+    expect(outIdx).not.toBeNull();
+    const reached = reachableNodes(binder.interior, outIdx as number);
+    expect(reached.size).toBeGreaterThan(0);
+
+    // A SYNTHETIC index-level cycle — two nodes whose wires reference each
+    // other — the honest proof the guard is load-bearing: an UNGUARDED
+    // version of this exact walk would never return on this input.
+    const cyclic: WireframeGraph = {
+      nodes: [
+        { kind: "recur", span: "a" },
+        { kind: "recur", span: "b" },
+      ],
+      wires: [
+        {
+          source: "(lambda (x) x)",
+          params: ["x"],
+          paramRefs: [{ kind: "node", name: "x", node: 1 }],
+          span: "w0",
+          consumer: { node: 0, slot: "arg0" },
+        },
+        {
+          source: "(lambda (x) x)",
+          params: ["x"],
+          paramRefs: [{ kind: "node", name: "x", node: 0 }],
+          span: "w1",
+          consumer: { node: 1, slot: "arg0" },
+        },
+      ],
+      egress: null,
+    };
+    expect(reachableNodes(cyclic, 0)).toEqual(new Set([0, 1]));
+  });
 });
 
 describe("Q8a builder core — dropped top-level forms and program order (§1 D6)", () => {

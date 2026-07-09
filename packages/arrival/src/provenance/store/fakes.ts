@@ -9,9 +9,20 @@
  * settlement is modeled with an injected virtual clock (`PayloadStoreFake.step`) —
  * a test controls exactly when simulated time advances, never a race.
  */
-import { recordIdKey, type PayloadHash, type RegionId, type RegionSeq } from "./ids.js";
-import type { Payload, PayloadRecord, PayloadStore, ProvenanceStore, PayloadTier, StreamHeader } from "./interfaces.js";
+import { ordinalPathKey, recordIdKey, type PayloadHash, type RegionId, type RegionSeq } from "./ids.js";
+import type { OrdinalPath, SiteHash, TemplateHash } from "./ids.js";
+import type {
+  Payload,
+  PayloadRecord,
+  PayloadStore,
+  ProvenanceStore,
+  PayloadTier,
+  StoredTemplate,
+  StreamHeader,
+  TemplateStore,
+} from "./interfaces.js";
 import type { ProvenanceRecord } from "./records.js";
+import type { WireframeGraph } from "../wireframe/types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProvenanceStore fake
@@ -243,5 +254,52 @@ export class PayloadStoreFake implements PayloadStore {
    *  eviction = drop all in-memory state" knob, at the payload-store grain. */
   async evictAll(): Promise<void> {
     for (const hash of this.payloads.keys()) await this.evict(hash);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TemplateStore fake (Q8b)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Thrown by `getTemplate` for a hash this store never saw — `PayloadNotFound`'s
+ *  template-store analogue (never fabricate a miss as an empty template). */
+export class TemplateNotFound extends Error {
+  constructor(hash: TemplateHash) {
+    super(`TemplateStoreFake: no template ever put under hash ${JSON.stringify(hash)}`);
+    this.name = "TemplateNotFound";
+  }
+}
+
+/** In-memory `TemplateStore`: a `Map<TemplateHash, WireframeGraph>` for the shared
+ *  template pool (§5 C4), plus a nested `Map<TemplateHash, Map<pathKey, SiteHash>>`
+ *  for the Q8b-amendment reverse index — DERIVABLE data (a caller-computed record,
+ *  never invented by this store), kept as an ordinary in-memory map since a fake
+ *  needs no persistence story beyond "the harness decision"'s default-CI shape. */
+export class TemplateStoreFake implements TemplateStore {
+  private readonly templates = new Map<TemplateHash, WireframeGraph>();
+  private readonly siteIndex = new Map<TemplateHash, Map<string, SiteHash>>();
+
+  async putTemplate(entry: StoredTemplate): Promise<void> {
+    // §5 C4: idempotent upsert by hash — same contract shape as PayloadStore.put.
+    this.templates.set(entry.templateHash, entry.graph);
+  }
+
+  async getTemplate(hash: TemplateHash): Promise<WireframeGraph> {
+    const graph = this.templates.get(hash);
+    if (graph === undefined) throw new TemplateNotFound(hash);
+    return graph;
+  }
+
+  async registerSite(hash: TemplateHash, path: OrdinalPath, site: SiteHash): Promise<void> {
+    let byPath = this.siteIndex.get(hash);
+    if (byPath === undefined) {
+      byPath = new Map();
+      this.siteIndex.set(hash, byPath);
+    }
+    byPath.set(ordinalPathKey(path), site);
+  }
+
+  async resolveSite(hash: TemplateHash, path: OrdinalPath): Promise<SiteHash | undefined> {
+    return this.siteIndex.get(hash)?.get(ordinalPathKey(path));
   }
 }

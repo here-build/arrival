@@ -2,9 +2,29 @@
 // interface-first (PROVENANCE-PLAN.md's harness decision). LEAF module — nothing in
 // `src/eval`/`src/values` imports this yet; emission (Q11a/Q11b), tiering policy/
 // envelope (Q14), and the workerd adapter (Q19) build ON this, not the reverse.
+// Q8b ADDS one inward dependency: `TemplateStore`'s shape names `WireframeGraph`
+// (`../wireframe/types.js`) — one-directional (wireframe never imports store), so
+// this is still a leaf from `src/eval`/`src/values`'s point of view.
 
-export type { OrdinalPath, PayloadHash, RecordId, RegionEpoch, RegionId, RegionSeq, TemplateHash } from "./ids.js";
-export { recordIdKey } from "./ids.js";
+export type {
+  OrdinalPath,
+  PayloadHash,
+  RecordId,
+  RegionEpoch,
+  RegionId,
+  RegionSeq,
+  SiteHash,
+  TemplateHash,
+} from "./ids.js";
+export {
+  appendOrdinal,
+  compareOrdinalPaths,
+  ordinalPathKey,
+  parentOrdinalPath,
+  recordIdKey,
+  ROOT_ORDINAL_PATH,
+  trailingOrdinal,
+} from "./ids.js";
 
 export type {
   AggregatableRecordKind,
@@ -29,7 +49,9 @@ export type {
   PayloadStore,
   PayloadTier,
   ProvenanceStore,
+  StoredTemplate,
   StreamHeader,
+  TemplateStore,
 } from "./interfaces.js";
 
 export {
@@ -38,4 +60,6 @@ export {
   PayloadWriteFailure,
   ProvenanceStoreFake,
   ProvenanceWriteFailure,
+  TemplateNotFound,
+  TemplateStoreFake,
 } from "./fakes.js";

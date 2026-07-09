@@ -40,11 +40,19 @@
  * field-ports exist (I5 LIMIT: field-demand at a region boundary answers by
  * REPLAY, not by records).
  *
- * FIRST-LANDING SCOPE (plan: "loop-free + fan acceptable"):
- *   - binder{cycles} nodes (named-let / do / declared `loop`) are DESIGNATED but
- *     DEFERRED — the node exists, its interior/backedge wiring is Q8a′; a port
- *     inside a deferred loop body is not yet wireframed (loop-heavy programs gate
- *     on Q8a′ BEFORE emission, per the plan's hard-gate note).
+ * LOOP WIREFRAMING (Q8a′, PROVENANCE-PLAN.md wave 6; `wireframe/loops.ts`):
+ *   - binder{cycles} nodes (named-let / do) get a REAL private interior — the
+ *     loop body's own `GraphBuilder` (Q8a's I5 pattern), never spliced into the
+ *     enclosing graph. A call to the loop's own name (named-let) or the step
+ *     expressions (`do`) are the BACKEDGE (a `recur` node) — they feed the
+ *     NEXT iteration's `params`, never a value escaping the loop; the binder
+ *     node's OWN ingress wires carry only the INITIAL values. A port inside a
+ *     loop body wireframes through the interior exactly like any other cut.
+ *     `buildNamedLetBinder`/`buildDoBinder`/`addRecur` below; `wireframe/
+ *     loops.ts` supplies `do`'s pure binding-shape parser + a visited-set-
+ *     guarded reachability walk (V4's termination discipline). A declared-
+ *     `loop`-role op with no known recursive shape (dead code today) gets an
+ *     empty interior — no recursive structure to invent.
  *   - A local closure (`letrec`-bound lambda) wrapping a port under-designates a
  *     mux whose selector calls it (classify never expands call sites into callee
  *     bodies): the port itself is still cut to a node, so replay stays sound (the
@@ -63,6 +71,7 @@ import { classifyProgramPrelude, buildPreludeSource, reachesPort } from "../prel
 import { defineNameOf } from "../slice.js";
 import { scopeId } from "../scope-id.js";
 import { unevalWire } from "../uneval.js";
+import { parseDoBindings, parseDoClause } from "./loops.js";
 import type {
   DefineTemplate,
   Wire,
@@ -102,6 +111,14 @@ interface BuildCtx {
 interface WalkEnv {
   readonly subst: Subst;
   readonly frames: readonly WireFrame[];
+  /** The CURRENT (innermost) loop's recur name, when walking inside a binder's
+   *  `interior` graph; `undefined` outside any loop body (Q8a′, §1: "loop
+   *  variables wired from the body's recur-position egress"). A call to this
+   *  name is the BACKEDGE — intercepted in `walkForCuts` before the normal
+   *  materialNames/role dispatch, never falling through as an ordinary
+   *  application. Does NOT cross an I5 region boundary (a fan's own `template`
+   *  interior starts a fresh env with no `recur` — see `buildFan`). */
+  readonly recur?: { readonly name: string };
 }
 
 // ── local surface helpers (lineage.ts keeps its own private copies; same shapes) ──
@@ -135,6 +152,10 @@ function lambdaParams(formals: unknown): string[] {
 }
 
 const LEAF = (slot: string): LineageNode => ({ kind: "leaf", slot });
+
+/** The empty wireframe graph — used for a declared-`loop`-role op with no known
+ *  recursive shape (dead code today; see the `role === "loop"` arm below). */
+const EMPTY_GRAPH: WireframeGraph = { nodes: [], wires: [], egress: null };
 
 /** `(let ((a e)…) …)` binding entries as {name, rhs} pairs. */
 function letEntries(bindings: unknown): WireFrameEntry[] {
@@ -282,8 +303,9 @@ class GraphBuilder {
             this.walkLet(expr, form as "let" | "let*" | "letrec" | "letrec*", env);
             return;
           case "do":
-            // Iterative loop — designated binder{cycles}; interior is Q8a′'s.
-            this.cuts.set(expr, this.buildBinder(expr, "do"));
+            // Iterative loop — designated binder{cycles}, Q8a′: a real backedge-
+            // wired interior (the step expressions are the backedge).
+            this.cuts.set(expr, this.buildDoBinder(expr, env));
             return;
           case "begin":
           case "and":
@@ -295,7 +317,7 @@ class GraphBuilder {
             if (!(rest instanceof APair)) return;
             const extended = new Map(env.subst);
             for (const p of lambdaParams(rest.car)) extended.set(p, LEAF(p));
-            const inner: WalkEnv = { subst: extended, frames: env.frames };
+            const inner: WalkEnv = { subst: extended, frames: env.frames, recur: env.recur };
             for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, inner);
             return;
           }
@@ -305,7 +327,7 @@ class GraphBuilder {
             if (!(rest instanceof APair)) return;
             const extended = new Map(env.subst);
             if (rest.car instanceof APair) for (const p of lambdaParams(rest.car.cdr)) extended.set(p, LEAF(p));
-            const inner: WalkEnv = { subst: extended, frames: env.frames };
+            const inner: WalkEnv = { subst: extended, frames: env.frames, recur: env.recur };
             for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, inner);
             return;
           }
@@ -330,6 +352,13 @@ class GraphBuilder {
 
     const op = opName(head);
     if (!env.subst.has(op)) {
+      // Q8a′ — a call to the ENCLOSING loop's own recur name: the BACKEDGE, never
+      // a port-reaching define/role dispatch. Checked first (shadowing is already
+      // handled by the `env.subst.has(op)` guard above).
+      if (env.recur !== undefined && op === env.recur.name) {
+        this.cuts.set(expr, this.buildArgNode({ kind: "recur", span: scopeId(expr) }, expr, env));
+        return;
+      }
       // A call to a port-reaching top-level define — its call sites reference its
       // template subgraph (§1).
       if (this.bctx.materialNames.has(op)) {
@@ -347,9 +376,22 @@ class GraphBuilder {
         case "fan":
           this.cuts.set(expr, this.buildFan(expr, op, env));
           return;
-        case "loop":
-          this.cuts.set(expr, this.buildBinder(expr, op));
+        case "loop": {
+          // A declared-`loop` op with no known recursive shape (dead code
+          // today — no live declaration uses this role, values/lineage.ts's
+          // DeclaredRole doc): designate the node with an EMPTY interior;
+          // operands wire as ordinary ingress (buildArgNode's path) — inventing
+          // iteration semantics for a combinator with none observed is not this
+          // landing's job (named-let/do, which DO have known shapes, get real
+          // interiors via buildNamedLetBinder/buildDoBinder above).
+          const id = this.buildArgNode(
+            { kind: "binder", op, span: scopeId(expr), cycles: true, params: [], interior: EMPTY_GRAPH },
+            expr,
+            env,
+          );
+          this.cuts.set(expr, id);
           return;
+        }
         default:
           break; // pipe / undefined — pure application, wire material
       }
@@ -383,13 +425,14 @@ class GraphBuilder {
 
   /** let-family: TRANSPARENT to designation (mirrors `classifyLet`) — walk RHSs,
    *  thread the substitution per kind, extend the frame stack for the body. A named
-   *  let is a recursive binder → designated, deferred to Q8a′. */
+   *  let is a recursive binder → designated, with a REAL backedge-wired interior
+   *  (Q8a′, `buildNamedLetBinder`). */
   private walkLet(expr: APair<SchemeValue, SchemeValue>, kind: "let" | "let*" | "letrec" | "letrec*", env: WalkEnv): void {
     const rest = expr.cdr;
     if (!(rest instanceof APair)) return;
     if (rest.car instanceof ASymbol) {
-      // named let — binder{cycles:true}
-      this.cuts.set(expr, this.buildBinder(expr, "named-let"));
+      // named let — binder{cycles:true}, Q8a′: a real backedge-wired interior.
+      this.cuts.set(expr, this.buildNamedLetBinder(expr, rest, env));
       return;
     }
     const entries = letEntries(rest.car);
@@ -401,7 +444,7 @@ class GraphBuilder {
       // under the earlier entries (frame + subst); a parallel let's RHSs see the
       // outer scope only.
       const rhsEnv: WalkEnv = sequential
-        ? { subst: extended, frames: [...env.frames, { kind, entries: [...partial] }] }
+        ? { subst: extended, frames: [...env.frames, { kind, entries: [...partial] }], recur: env.recur }
         : env;
       this.walkForCuts(entry.rhs, rhsEnv);
       const rhsSubst = sequential ? extended : env.subst;
@@ -412,7 +455,7 @@ class GraphBuilder {
       extended.set(entry.name, rhsNode);
       partial.push(entry);
     }
-    const bodyEnv: WalkEnv = { subst: extended, frames: [...env.frames, { kind, entries }] };
+    const bodyEnv: WalkEnv = { subst: extended, frames: [...env.frames, { kind, entries }], recur: env.recur };
     for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, bodyEnv);
   }
 
@@ -511,11 +554,109 @@ class GraphBuilder {
     return id;
   }
 
-  /** A loop-shaped binder — designated NOW, wired at Q8a′ (backedge topology).
-   *  Deliberately NO interior walk: half-wired loop interiors would present loop
-   *  variables as program ingress; the plan gates emission on Q8a′ instead. */
-  private buildBinder(expr: unknown, op: string): number {
-    return this.addNode({ kind: "binder", op, span: scopeId(expr), cycles: true, deferred: "Q8a′" });
+  /** Named let → `binder{cycles}` with a REAL interior (Q8a′, §1: "loop
+   *  variables wired from the body's recur-position egress back to the
+   *  binder's params"). `(let loop ((v init)…) body…)`: the body wireframes
+   *  as the loop's own PRIVATE graph (Q8a's I5 pattern — its own
+   *  `GraphBuilder`, never spliced into `this`), `v…` bound as per-iteration
+   *  LEAF slots (extending the OUTER subst, exactly like `buildFan`'s
+   *  `intSubst` — a captured outer binding must stay visible for selector-
+   *  cone reachability, e.g. a captured threshold that's itself a source);
+   *  a call to `loop` anywhere in the body is the BACKEDGE (a `recur` node,
+   *  intercepted in `walkForCuts`), never a value escaping the loop. The
+   *  INIT values are ORDINARY ingress wires from the OUTER scope — a named
+   *  let's bindings, like a plain let's, evaluate in the enclosing scope. */
+  private buildNamedLetBinder(
+    expr: APair<SchemeValue, SchemeValue>,
+    rest: APair<SchemeValue, SchemeValue>,
+    env: WalkEnv,
+  ): number {
+    const loopName = opName(rest.car);
+    const afterName = rest.cdr;
+    const entries = afterName instanceof APair ? letEntries(afterName.car) : [];
+    const bodyForms = afterName instanceof APair ? chainOf(afterName.cdr) : [];
+    const params = entries.map((e) => e.name);
+
+    const interior = new GraphBuilder(this.bctx);
+    const intSubst = new Map(env.subst);
+    for (const p of params) intSubst.set(p, LEAF(p));
+    const intEnv: WalkEnv = { subst: intSubst, frames: [], recur: { name: loopName } };
+    for (const dropped of bodyForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
+    if (bodyForms.length > 0) interior.emitEgress(bodyForms[bodyForms.length - 1], intEnv);
+
+    const id = this.addNode({
+      kind: "binder",
+      op: "named-let",
+      span: scopeId(expr),
+      cycles: true,
+      params,
+      interior: interior.finish(),
+    });
+    entries.forEach((e, i) => this.emitWire(e.rhs, { node: id, slot: `arg${i}` }, env));
+    return id;
+  }
+
+  /** `do` → `binder{cycles}` with a REAL interior (Q8a′). `(do ((var init
+   *  step?)…) (test result…) body…)`: `var…` bound as per-iteration LEAF
+   *  slots (extending the outer subst, same rationale as named-let above);
+   *  `body…` walks value-dropped (side effects only — its ports still land,
+   *  §1 D6-style); `test` likewise value-dropped: its ports still land (I1
+   *  confinement reads their cone regardless), though no wire consumes a
+   *  VALUE from it — `do` isn't shaped as an `if`, so no mux models the
+   *  continue/stop choice here. Accepted precision LIMIT, not a correctness
+   *  gap: the plan's hard-gate concern is a template referent existing
+   *  before emission, not the continue/stop decision's runtime-recordability
+   *  (that is exactly the kind of precision Q9's agreement corpus re-audits).
+   *  The step expressions are the BACKEDGE (one `recur` node — R7RS: an
+   *  omitted step defaults to the var's own current binding, carried over
+   *  unchanged; `parseDoBindings` already encodes that default). `result…`
+   *  is the TERMINAL egress — the value(s) when the loop stops. */
+  private buildDoBinder(expr: APair<SchemeValue, SchemeValue>, env: WalkEnv): number {
+    const rest = expr.cdr;
+    const bindings = rest instanceof APair ? parseDoBindings(rest.car) : [];
+    const afterBindings = rest instanceof APair ? rest.cdr : undefined;
+    const clause = afterBindings instanceof APair ? parseDoClause(afterBindings.car) : parseDoClause(undefined);
+    const bodyForms = afterBindings instanceof APair ? chainOf(afterBindings.cdr) : [];
+    const params = bindings.map((b) => b.name);
+
+    const interior = new GraphBuilder(this.bctx);
+    const intSubst = new Map(env.subst);
+    for (const p of params) intSubst.set(p, LEAF(p));
+    const intEnv: WalkEnv = { subst: intSubst, frames: [] };
+    for (const cmd of bodyForms) interior.walkDropped(cmd, intEnv);
+    if (clause.test !== undefined) interior.walkDropped(clause.test, intEnv);
+    interior.addRecur(
+      scopeId(expr),
+      bindings.map((b) => b.step),
+      intEnv,
+    );
+    if (clause.resultForms.length > 0) {
+      for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
+      interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], intEnv);
+    }
+
+    const id = this.addNode({
+      kind: "binder",
+      op: "do",
+      span: scopeId(expr),
+      cycles: true,
+      params,
+      interior: interior.finish(),
+    });
+    bindings.forEach((b, i) => this.emitWire(b.init, { node: id, slot: `arg${i}` }, env));
+    return id;
+  }
+
+  /** The loop's BACKEDGE (Q8a′): a `recur` node whose ingress wires
+   *  (`arg0..argN`, positional with the ENCLOSING binder's `params`) are the
+   *  next-iteration values — never `this.egress` (a recur never escapes the
+   *  loop). `do`'s recur has no syntactic call site (unlike named-let's
+   *  `(loop args…)`, intercepted in `walkForCuts`), so `buildDoBinder` calls
+   *  this directly with the step expressions. */
+  private addRecur(span: string, args: readonly unknown[], env: WalkEnv): number {
+    const id = this.addNode({ kind: "recur", span });
+    args.forEach((a, i) => this.emitWire(a, { node: id, slot: `arg${i}` }, env));
+    return id;
   }
 }
 

@@ -33,8 +33,9 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { classify, type Classifier } from "../../values/lineage.js";
+import { classify, fullCone, countCone, fieldCone, type Classifier } from "../../values/lineage.js";
 import { classifierFromEnv } from "../../values/lineage-classifier-from-env.js";
+import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod.js";
 import { declaresAccChain, symbol, withCallbackRoles, type AEntity, type CallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -305,18 +306,65 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
 });
 
 describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVENANCE-PLAN.md Q8a′)", () => {
-  // @ledger: Q8a′
-  it.todo(
+  // @ledger: Q8a′ — LANDED
+  it(
     "fullCone/countCone/fieldCone over a `binder{cycles: true}` node TERMINATES — a " +
       "cyclic loop-carried dependency never sends the walker into unbounded recursion " +
       "(the widening interplay Q8a′'s risk register names explicitly)",
+    async () => {
+      await initBridge();
+      const C: Classifier = { roleOf: (op) => (op === "src" ? "source" : undefined) };
+      // A nested named-let (loop-in-loop, the outer's recur called from inside the
+      // inner's arm) — deep and finite, but exactly the shape the risk register
+      // worries about. `walk()`'s own header already argues WHY this terminates:
+      // classify() never expands a call site into its callee's body, so no
+      // `LineageNode` object can reach itself through `.children`/`.child` — a
+      // `binder` is exactly as acyclic as `merge`/`opaque`'s children array. This
+      // row exercises that argument against a REAL nested-loop tree rather than
+      // taking the file's own reasoning on faith.
+      const [ast] = await parse(
+        `(let outer ((i 0))
+           (if (> i 3)
+               i
+               (let inner ((j 0))
+                 (if (> j 3)
+                     (outer (+ i 1))
+                     (inner (+ j (src)))))))`,
+        inferenceEnv,
+      );
+      const node = classify(ast, C);
+      expect(node.kind).toBe("binder");
+      const bindings = { src: [1, 2, 3] };
+      // Returning AT ALL (rather than hanging / stack-overflowing) is the
+      // termination assertion; the concrete ids pin it's not a vacuous no-op walk.
+      expect(fullCone(node, bindings)).toEqual([1, 2, 3]);
+      expect(countCone(node, bindings)).toEqual([1, 2, 3]);
+      // A field demand crossing a `binder` is a DEMAND BARRIER (walk()'s shared
+      // merge/opaque/sink/binder case) — the full cone, same as fullCone above,
+      // not an empty prune.
+      expect(fieldCone(node, bindings, { field: "whatever" })).toEqual([1, 2, 3]);
+    },
   );
 
-  // @ledger: Q8a′
-  it.todo(
+  // @ledger: Q8a′ — LANDED
+  it(
     "loop wireframing lands template referents BEFORE emission can key records against " +
       "them — a loop-heavy program never emits a record with no template (Q8a′ is a " +
       "HARD gate before Q11a for exactly this reason)",
+    async () => {
+      await initBridge();
+      const forms = await parse("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))", inferenceEnv);
+      const C: Classifier = { roleOf: (op) => (op === "emit!" ? "sink" : undefined) };
+      const p = buildWireframe(forms, { classifier: C, isBaseName: (n) => ["+", ">"].includes(n) });
+      const binder = p.main.nodes.find((n) => n.kind === "binder");
+      expect(binder).toBeDefined();
+      if (binder?.kind !== "binder") throw new Error("expected a binder node");
+      // The TEMPLATE REFERENT exists — a private interior graph with real nodes,
+      // never a deferred stub — at BUILD time, before any record (Q11a, not yet
+      // landed) could key against it.
+      expect(binder.interior.nodes.length).toBeGreaterThan(0);
+      expect(binder.params).toEqual(["i"]);
+    },
   );
 });
 

@@ -7,8 +7,9 @@
  * A workerd adapter proving these same contracts against real DO/R2 is Q19's concern,
  * not this node's.
  */
-import type { PayloadHash, RegionId, RegionSeq } from "./ids.js";
+import type { OrdinalPath, PayloadHash, RegionId, RegionSeq, SiteHash, TemplateHash } from "./ids.js";
 import type { ProvenanceRecord } from "./records.js";
+import type { WireframeGraph } from "../wireframe/types.js";
 
 /** §5 C6: "the stream header records the interpreter version (semantics epoch)."
  *  One header per region's stream, written once at region-open; Q18's offload
@@ -106,4 +107,54 @@ export interface PayloadStore {
    *  identity + stamps retained." Models both real eviction policy (memory pressure)
    *  and the fault-injection "forced eviction" knob the law tests drive. */
   evict(hash: PayloadHash): Promise<void>;
+}
+
+/** §5 C4: "the template store is shared and immutable: wire templates + prelude live
+ *  in a cross-DO store (KV/R2) keyed by template-hash." One `StoredTemplate` per
+ *  `WireframeGraph` the wireframe builder emits (`WireframeProgram.main`, one per
+ *  `DefineTemplate`, or a fan node's private `template` interior) — `templateHash` is
+ *  `wireframe/hash.ts`'s `hashGraph(graph)`, so a re-`put` of a structurally-identical
+ *  graph is a same-hash no-op, matching "identical across every DO running the
+ *  program version." */
+export interface StoredTemplate {
+  readonly templateHash: TemplateHash;
+  readonly graph: WireframeGraph;
+}
+
+/** Q8b's TEMPLATE STORE port — the DO-storage-shaped seam `hashGraph`/`siteHash`
+ *  (`wireframe/hash.ts`) feed. Docs/PROVENANCE-PLAN.md Q8b's AMENDMENT (elk-render
+ *  research, `docs/working-proposals/inhuman-elk-over-provenance.md`): "records key on
+ *  template-hash + ordinal-path, the plane keys on site-hash... the template-store
+ *  interface must expose ordinal-path → site-hash resolution (a DERIVABLE index, not
+ *  new stored state)." `registerSite`/`resolveSite` are that reverse index: DERIVABLE
+ *  because a `siteHash` is a pure function of (`templateHash`, instantiation span) —
+ *  this store never invents one, it only remembers what a caller (the wireframe
+ *  builder, which still holds live spans before `hashGraph` strips them) already
+ *  computed, so the mapping could always be recomputed from the wireframe + its
+ *  original spans rather than needing independent versioning. */
+export interface TemplateStore {
+  /** Persist a template's graph, keyed by its own hash. Idempotent by hash — same
+   *  contract shape as `PayloadStore.put`: a re-`put` of the SAME hash is assumed
+   *  identical content, never a duplicate. */
+  putTemplate(entry: StoredTemplate): Promise<void>;
+
+  /** Read a template's graph by hash. Throws if never `put` — `PayloadStore.get`'s
+   *  convention (never fabricate a miss as an empty/absent template). */
+  getTemplate(hash: TemplateHash): Promise<WireframeGraph>;
+
+  /** Register ONE occurrence's reverse-index row: this `(templateHash, ordinalPath)`
+   *  coordinate renders at this `SiteHash`. Called once per static site the builder
+   *  discovers — potentially MANY per `templateHash` (dedup means one template may be
+   *  instantiated at several sites; §5 D3: "the same expression at two program sites
+   *  shares storage"... "the two sites render as two wires"). Idempotent — the same
+   *  triple re-registered is a no-op; a DIFFERENT site registered under an
+   *  already-registered `(hash, path)` pair overwrites (last-registered wins, mirroring
+   *  every other upsert-by-key contract in this store family). */
+  registerSite(hash: TemplateHash, path: OrdinalPath, site: SiteHash): Promise<void>;
+
+  /** The reverse index itself: resolve a record's `(templateHash, ordinalPath)`
+   *  coordinate to the `SiteHash` the plane renders it at. `undefined` if no site was
+   *  ever registered for that exact pair (a caller never wired `registerSite` through
+   *  for it, or the coordinate doesn't correspond to any real designated node). */
+  resolveSite(hash: TemplateHash, path: OrdinalPath): Promise<SiteHash | undefined>;
 }
