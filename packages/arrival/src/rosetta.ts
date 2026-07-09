@@ -116,10 +116,6 @@ export interface InvocationLike {
   setMetadata?(meta: unknown): void;
 }
 
-export interface CtxWithInvocation {
-  currentInvocation?: InvocationLike;
-}
-
 /**
  * The reverse-membrane wrapper (docs/working-proposals/
  * reverse-membrane-for-callables.md §4/§7c): a scheme callable crossing
@@ -516,28 +512,6 @@ export function jsToScheme<T>(
 ): AWrap<T> {
   return jsToSchemeImpl(ctx, value, options, provenance, seen) as AWrap<T>;
 }
-
-/**
- * Duck-types the evaluator-appended trailing arg as an EvalContext.
- *
- * Every rosetta wrapper receives ctx from the evaluator and must strip it —
- * but direct test calls (no evaluator) may pass a real scheme value as the
- * last arg, and stripping unconditionally would eat it. So strip only when
- * the trailing arg LOOKS like a context.
- *
- * Unambiguous because: by the time a wrapper runs under the evaluator, scheme
- * DATA args are already evaluated (AValue subclasses, SchemeJSObject, raw
- * arrays/primitives) — a genuine EvalContext is the only raw plain object
- * carrying `resolver`/`currentInvocation`/`tap`/`signal` that reaches here.
- * `resolver` alone suffices (set on every EvalContext the evaluator threads);
- * the others are a belt-and-braces OR for future ctx shapes.
- */
-export const looksLikeEvalContext = (x: unknown): x is Record<string, unknown> & Partial<CtxWithInvocation> =>
-  x != null &&
-  typeof x === "object" &&
-  !(x instanceof AValue) &&
-  !Array.isArray(x) &&
-  ("resolver" in x || "currentInvocation" in x || "tap" in x || "signal" in x);
 
 export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {
   // `pure: true` propagates inputs' provenance and mints nothing — sound only if the
