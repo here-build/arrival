@@ -18,7 +18,7 @@ import * as z from "../../common/scheme-zod.js";
 import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { nil, type ANil } from "../../values/primitives/ANil.js";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
@@ -36,13 +36,17 @@ import { CallCtx } from "../../common/symbols/_bake.js";
 // RunContext itself (its fields are constant-per-run; the stack varies by call
 // depth) — the WeakMap is the correct split, not a workaround.
 //
-// FALLBACK: a genuinely direct, non-evaluator invocation (no ctx at all — e.g. a
-// raw unit test) falls through to the shared `CONSTANT_CTX` bucket. `execExpr`
-// (required `.scm` module evaluation) mints its own `runCtx`, so required modules
-// get the same per-run isolation as top-level `exec()` calls.
+// `execExpr` (required `.scm` module evaluation) mints its own `runCtx`, so required
+// modules get the same per-run isolation as top-level `exec()` calls.
+//
+// R-CTX-3 (rosetta-ctx-single-channel.md): `this` is mandatory on a native impl too — the
+// ONLY dispatch path to these natives is the evaluator's call-head resolving `%current-
+// handlers`/`%set-handlers!` and hitting `capability.ts`'s native binder, which ALWAYS
+// constructs a real CallCtx via `makeCallCtx(runCtx)` before invoking. No silent
+// CONSTANT_CTX fallback: a missing ctx here would mean the binder itself broke.
 const handlerStacks = new WeakMap<RunContext, unknown>();
 
-const runKeyOf = (ctx: CallCtx | undefined): RunContext => ctx?.runCtx ?? CONSTANT_CTX;
+const runKeyOf = (ctx: CallCtx): RunContext => ctx.runCtx;
 
 export default new EnvCapability("scheme/r7rs/exceptions", {
   symbols: {

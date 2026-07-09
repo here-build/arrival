@@ -24,6 +24,7 @@ import { tf } from "../values/tagless-final.js";
 import { AListAlike } from "../values/types.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { testCallCtx } from "../common/symbol.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
  *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk.
@@ -69,9 +70,9 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
 
 describe("bakeRosetta return walk (stamp site 1)", () => {
   it("attests a scalar return; a boolean return is a fresh attested clone, never the flyweight", async () => {
-    expect(isAttested(await source(() => 42).run())).toBe(true);
-    expect(isAttested(await source(() => "hi").run())).toBe(true);
-    const bool = await source(() => true).run();
+    expect(isAttested(await source(() => 42).run.call(testCallCtx()))).toBe(true);
+    expect(isAttested(await source(() => "hi").run.call(testCallCtx()))).toBe(true);
+    const bool = await source(() => true).run.call(testCallCtx());
     expect(isAttested(bool)).toBe(true);
     expect(bool).not.toBe(schemeTrue);
     expect(isAttested(schemeTrue)).toBe(false); // no program-wide leak
@@ -82,12 +83,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
       { input: [], output: [z.number], pure: true },
       () => 42,
     );
-    expect(isAttested(await pureDef.run())).toBe(false);
+    expect(isAttested(await pureDef.run.call(testCallCtx()))).toBe(false);
   });
 
   it("attests a dict return's wrapper; entries inherit through get, cache-stable", async () => {
     const def = source(() => ({ a: 1, nested: { x: 2 }, tags: [7, 8] }));
-    const out = (await def.run()) as AJSObject;
+    const out = (await def.run.call(testCallCtx())) as AJSObject;
     expect(out).toBeInstanceOf(AJSObject);
     expect(isAttested(out)).toBe(true);
 
@@ -110,7 +111,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("a missing key plucks the SHARED nil — never attested", async () => {
     const def = source(() => ({ a: 1 }));
-    const out = (await def.run()) as AJSObject;
+    const out = (await def.run.call(testCallCtx())) as AJSObject;
     const missing = out.get("missing");
     expect(missing).toBeInstanceOf(ANil);
     expect(isAttested(missing)).toBe(false);
@@ -118,7 +119,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("AJSArray materialization inherits: every materialized element box is attested", async () => {
     const def = source(() => [1, 2, 3]);
-    const out = (await def.run()) as AJSArray;
+    const out = (await def.run.call(testCallCtx())) as AJSArray;
     expect(out).toBeInstanceOf(AJSArray);
     expect(isAttested(out)).toBe(true);
     for (const el of out.__vector__) expect(isAttested(el)).toBe(true);
@@ -128,7 +129,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
     // execState (COMPLEX tier): `echo.run` is a rosetta expecting a real boxed
     // AValue input (RULINGS.md R1) — `exec`'s plain-JS exit would fail its decode.
     const [pair] = (await execState("'(1 2 3)")).values;
-    const out = (await echo.run(pair)) as APair<any, any>;
+    const out = (await echo.run.call(testCallCtx(), pair)) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
     expect(isAttested(out.car)).toBe(true);
@@ -138,7 +139,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("attests a vector's stored elements", async () => {
     const [vec] = (await execState("#(1 2)")).values;
-    const out = (await echo.run(vec)) as AVector;
+    const out = (await echo.run.call(testCallCtx(), vec)) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);
     for (const el of out.__vector__) expect(isAttested(el)).toBe(true);

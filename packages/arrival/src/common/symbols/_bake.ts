@@ -50,7 +50,7 @@
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
-import { type CallCtx, makeCallCtx } from "../../values/primitives/CallCtx.js";
+import { type CallCtx, makeCallCtx, missingCallCtxDoor, testCallCtx } from "../../values/primitives/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
 
@@ -203,7 +203,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
 // permanently undefined depending on which path entered it first. Re-exported here (not just
 // imported above) so existing `_bake.js` importers are unaffected.
 export type { CallCtx };
-export { makeCallCtx };
+export { makeCallCtx, testCallCtx, missingCallCtxDoor };
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred

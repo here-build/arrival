@@ -45,3 +45,43 @@ export function makeCallCtx(
 ): CallCtx {
   return { runCtx, invocation: { currentInvocation }, argProvenance };
 }
+
+/**
+ * The sanctioned DIRECT-CALL idiom (R-CTX-4,
+ * docs/working-proposals/rosetta-ctx-single-channel.md): tests and host code invoking a
+ * verb impl/wrapper outside a real dispatch (`run.call(testCallCtx(), …args)`) build a
+ * REAL `CallCtx` instead of leaning on `this` optionality — the optionality R-CTX-3 kills.
+ * A thin wrapper over `makeCallCtx(CONSTANT_CTX, …)`: `CONSTANT_CTX` survives ONLY inside
+ * this explicit constructor (or `makeCallCtx()`'s own default), never as an implicit
+ * fallback threaded through a verb's `this?.` read. `overrides` lets a call site supply a
+ * real `InvocationLike` (to exercise provenance minting) or a non-default `RunContext`
+ * without hand-building the whole `{runCtx, invocation: {…}}` shape.
+ */
+export function testCallCtx(overrides?: {
+  runCtx?: RunContext;
+  currentInvocation?: InvocationLike;
+  argProvenance?: readonly ReadonlySet<number>[];
+}): CallCtx {
+  return makeCallCtx(overrides?.runCtx ?? CONSTANT_CTX, overrides?.currentInvocation, overrides?.argProvenance);
+}
+
+/**
+ * Runtime door (P5, docs/PRINCIPLES.md) for a verb invoked without a real `CallCtx` as
+ * `this` — the exact silent-degrade class that hid the B2-rosetta mint regression until
+ * `conservation.law` caught it (R-CTX-3, docs/working-proposals/rosetta-ctx-single-channel.md).
+ * Every real dispatch path (the evaluator's apply arms, the four binder adapters in
+ * `capability.ts`) constructs a `CallCtx` via `makeCallCtx` before invoking; a direct JS/test
+ * call must do the same instead of relying on a `this?.` fallback to `CONSTANT_CTX` — use
+ * `testCallCtx()` (or `makeCallCtx(...)` directly) as the explicit `.call`/`.apply` receiver.
+ */
+export function missingCallCtxDoor(verbName?: string): Error {
+  return new Error(
+    `${verbName ?? "a verb"} was invoked without a CallCtx \`this\` — every real dispatch path (the ` +
+      "evaluator's apply arms, the four binder adapters) constructs one via makeCallCtx before " +
+      "invoking; a direct call must too. Use testCallCtx() (or makeCallCtx(...) directly) as the " +
+      "explicit receiver, e.g. `run.call(testCallCtx(), …args)` — never a bare call or an ad hoc " +
+      "`{}`/`def` `this`. A silent CONSTANT_CTX fallback here is exactly what hid the B2-rosetta " +
+      "mint regression until conservation.law caught it " +
+      "(docs/working-proposals/rosetta-ctx-single-channel.md R-CTX-3).",
+  );
+}

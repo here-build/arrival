@@ -23,7 +23,7 @@ import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { symbol } from "../symbol.js";
+import { symbol, testCallCtx } from "../symbol.js";
 import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
@@ -34,7 +34,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run(new AString(CONSTANT_CTX, "h"));
+    const out = await def.run.call(testCallCtx(), new AString(CONSTANT_CTX, "h"));
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
@@ -43,7 +43,8 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run(
+    const out = await def.run.call(
+      testCallCtx(),
       new AString(CONSTANT_CTX, "h"),
       new AInexact(CONSTANT_CTX, 1),
       new AInexact(CONSTANT_CTX, 2),
@@ -56,7 +57,8 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run(
+    const out = await def.run.call(
+      testCallCtx(),
       new AString(CONSTANT_CTX, "h"),
       new AInexact(CONSTANT_CTX, 1),
       new AInexact(CONSTANT_CTX, 2),

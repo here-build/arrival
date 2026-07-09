@@ -6,7 +6,6 @@ import * as z from "../scheme-zod.js";
 import { ZodType } from "zod";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { jsToScheme, type InvocationLike } from "../../rosetta.js";
 import {
   type BakeRuntimeOpts,
@@ -15,6 +14,7 @@ import {
   type Contract,
   type Impl,
   isSingleOutput,
+  missingCallCtxDoor,
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
@@ -55,6 +55,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
     // provenance mint at the end.
     const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
+      // R-CTX-3 (rosetta-ctx-single-channel.md): `this` is mandatory — every real dispatch
+      // path (evaluator apply, the four binder adapters) constructs a real CallCtx via
+      // makeCallCtx; a direct call must too (the sanctioned `testCallCtx()` idiom, R-CTX-4).
+      // The old "UNIT (direct def.run(...))" idiom — calling bare so `this` was `def` itself —
+      // dies here: it satisfied neither shape, only ever worked because of `this?.` optionality.
+      if (this == null || this.runCtx == null || this.invocation == null) throw missingCallCtxDoor(name);
       // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
       // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
       // when no invocation is in ctx (direct-JS calls) is this input union — exactly
@@ -101,10 +107,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    `pure: true`). With no invocation in ctx (direct-JS) a source also falls back to the
       //    input union. ★The forward-vs-mint choice is provenance-load-bearing: a pure rosetta
       //    that minted would fabricate a fresh origin (the seal-laundering class of bug).
-      // `this?.` (not just `this.invocation?.`): the established "UNIT (direct def.run(...))"
-      // test convention (kwargs-runtime.test.ts et al.) calls `def.run(...)` bare, so `this` is
-      // `def` itself (no `.invocation` field at all) — not a real dispatch-built `CallCtx`.
-      const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
+      const inv = this.invocation.currentInvocation as InvocationLike | undefined;
       let resultProvenance = inputProvenance;
       if (!pure && inv && typeof inv.id === "number") {
         if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
@@ -133,7 +136,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       if (singleOut) {
         // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
         const encoded = z.encode(outSchema, [result])[0];
-        const boxed: unknown = jsToScheme(this?.runCtx ?? CONSTANT_CTX, encoded, {}, resultProvenance);
+        const boxed: unknown = jsToScheme(this.runCtx, encoded, {}, resultProvenance);
         return pure ? boxed : attestDeep(freshIfSingleton(boxed));
       }
       // multiple-values / array-ish output: the impl returned the values-vector already (an array
@@ -141,7 +144,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
       const encoded = z.encode(outSchema, result as readonly unknown[]);
       return encoded.map((v) => {
-        const boxed: unknown = jsToScheme(this?.runCtx ?? CONSTANT_CTX, v, {}, resultProvenance);
+        const boxed: unknown = jsToScheme(this.runCtx, v, {}, resultProvenance);
         return pure ? boxed : attestDeep(freshIfSingleton(boxed));
       });
     };

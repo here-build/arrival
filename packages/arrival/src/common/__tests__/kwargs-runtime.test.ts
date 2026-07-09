@@ -28,7 +28,7 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol } from "../symbol.js";
+import { symbol, testCallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
 
@@ -44,7 +44,13 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run(pluck("a"), new AString(CONSTANT_CTX, "Ada"), pluck("b"), new AExact(CONSTANT_CTX, 5n));
+    const out = await def.run.call(
+      testCallCtx(),
+      pluck("a"),
+      new AString(CONSTANT_CTX, "Ada"),
+      pluck("b"),
+      new AExact(CONSTANT_CTX, 5n),
+    );
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
@@ -53,7 +59,13 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run(pluck("b"), new AExact(CONSTANT_CTX, 5n), pluck("a"), new AString(CONSTANT_CTX, "Ada"));
+    const out = await def.run.call(
+      testCallCtx(),
+      pluck("b"),
+      new AExact(CONSTANT_CTX, 5n),
+      pluck("a"),
+      new AString(CONSTANT_CTX, "Ada"),
+    );
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");

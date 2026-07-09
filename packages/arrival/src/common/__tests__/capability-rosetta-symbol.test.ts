@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../values/primitives/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
-import { symbol, type RosettaSymbolDef } from "../symbol.js";
+import { symbol, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import { AString } from "../../values/primitives/AString.js";

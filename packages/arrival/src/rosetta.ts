@@ -7,7 +7,7 @@
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 import { fromJs } from "./values/primitives/boxing.js";
-import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
+import { type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
@@ -46,7 +46,7 @@ import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
 // A non-portable JS value (function/undefined/unique symbol) crossing into Scheme has
 // no faithful representation and materializes to #void — warnMembrane makes that edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import { makeCallCtx, type CallCtx } from "./values/primitives/CallCtx.js";
+import { makeCallCtx, missingCallCtxDoor, type CallCtx } from "./values/primitives/CallCtx.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
@@ -536,10 +536,15 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     // its producer, recovering per-field origins the union can no longer distinguish.
     const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
-    // `this?.` throughout: tests call the wrapper directly via `.call({}, …)`, not only
-    // through `makeCallCtx` dispatch, so `this` may be any object or absent.
-    const runCtx = this?.runCtx ?? CONSTANT_CTX;
-    const inv = this?.invocation?.currentInvocation as InvocationLike | undefined;
+    // R-CTX-3 (rosetta-ctx-single-channel.md): `this` is mandatory — every real dispatch
+    // path (evaluator apply, the four binder adapters) constructs a real CallCtx via
+    // makeCallCtx; a direct call must too (the sanctioned `testCallCtx()` idiom, R-CTX-4).
+    // A missing/malformed `this` hits the taught door below instead of silently degrading
+    // to CONSTANT_CTX — that silent fallback is exactly what hid the B2-rosetta mint
+    // regression until conservation.law caught it.
+    if (this == null || this.runCtx == null || this.invocation == null) throw missingCallCtxDoor("rosettaWrapper");
+    const runCtx = this.runCtx;
+    const inv = this.invocation.currentInvocation as InvocationLike | undefined;
     // Region discipline (§7c): this ONE call — from here to `fn.apply` settling —
     // is the "symbol invocation" any scheme callable among `schemeArgs` gets
     // region-bound to. Opened before marshaling (a callable arg's wrapper is

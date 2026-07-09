@@ -52,7 +52,7 @@ export type {
   BakeRuntimeOpts,
   CallCtx,
 } from "./symbols/_bake.js";
-export { makeCallCtx } from "./symbols/_bake.js";
+export { makeCallCtx, testCallCtx, missingCallCtxDoor } from "./symbols/_bake.js";
 
 // Re-export the generic form for convenience when using metadata.
 export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";

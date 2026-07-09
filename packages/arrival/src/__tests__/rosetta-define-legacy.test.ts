@@ -25,7 +25,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { inferenceEnv } from "../inference-env.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
-import { makeCallCtx } from "../common/symbols/_bake.js";
+import { testCallCtx } from "../common/symbols/_bake.js";
 import { exec } from "../eval/generator-exec.js";
 
 // Helper to unwrap exec results
@@ -114,7 +114,7 @@ describe("Rosetta Environment", () => {
       const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
       const rosettaFn = inferenceEnv.get("extract-values");
       invariant(isCallable(rosettaFn), "extract-values must resolve to a callable rosetta wrapper");
-      const result = await rosettaFn.call(makeCallCtx(), lipsData);
+      const result = await rosettaFn.call(testCallCtx(), lipsData);
 
       console.log("Complex data result:", result);
 
@@ -150,7 +150,7 @@ describe("Rosetta Environment", () => {
       // Args cross the membrane as Scheme values: the wrapper runs schemeToJs on each
       // before invoking the underlying fn, so the property/value strings are boxed AStrings.
       const result = await filterFn.call(
-        makeCallCtx(),
+        testCallCtx(),
         lipsNodes,
         new AString(CONSTANT_CTX, "overflow"),
         new AString(CONSTANT_CTX, "hidden"),
@@ -189,7 +189,7 @@ describe("Rosetta Environment", () => {
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const statsFn = inferenceEnv.get("css-property-stats");
       invariant(isCallable(statsFn), "css-property-stats must resolve to a callable rosetta wrapper");
-      const result = await statsFn.call(makeCallCtx(), lipsNodes);
+      const result = await statsFn.call(testCallCtx(), lipsNodes);
 
       console.log("CSS stats result:", result);
 
@@ -198,6 +198,35 @@ describe("Rosetta Environment", () => {
       expect(jsResult["overflow:visible"]).toBe(1);
       expect(jsResult["display:block"]).toBe(2);
       expect(jsResult["display:flex"]).toBe(1);
+    });
+  });
+
+  // R-CTX-3 (docs/working-proposals/rosetta-ctx-single-channel.md): `createRosettaWrapper`'s
+  // `this: CallCtx` is mandatory too — a missing/malformed `this` on the LEGACY defineRosetta
+  // arm hits the same taught door as the `symbol.rosetta` arm, never a silent CONSTANT_CTX.
+  describe("createRosettaWrapper — mandatory `this: CallCtx`", () => {
+    it("a bare call (no `.call` receiver) doors instead of silently defaulting", async () => {
+      inferenceEnv.defineRosetta("door-probe", { fn: (n: number) => n * 2 });
+      const wrapper = inferenceEnv.get("door-probe");
+      invariant(isCallable(wrapper), "door-probe must resolve to a callable rosetta wrapper");
+      // `Reflect.apply` (typed `(target: Function, thisArgument: any, …) => any`) invokes past
+      // the now-correct static `this: CallCtx` requirement WITHOUT `as any`/`as unknown` — a
+      // real caller hitting this is exactly a bare `verb(...)` call (no `.call`), so `this` is
+      // `undefined` (strict mode).
+      await expect(Reflect.apply(wrapper, undefined, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow(
+        /invoked without a CallCtx `this`/,
+      );
+    });
+
+    it("an ad hoc `{}` receiver doors the same way", async () => {
+      inferenceEnv.defineRosetta("door-probe-2", { fn: (n: number) => n * 2 });
+      const wrapper = inferenceEnv.get("door-probe-2");
+      invariant(isCallable(wrapper), "door-probe-2 must resolve to a callable rosetta wrapper");
+      // `{}` is exactly the ad hoc shape R-CTX-4 retires — proves the runtime door still
+      // catches a malformed receiver.
+      await expect(Reflect.apply(wrapper, {}, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow(
+        /invoked without a CallCtx `this`/,
+      );
     });
   });
 });
