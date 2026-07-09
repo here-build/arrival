@@ -6,7 +6,7 @@ import * as z from "../scheme-zod.js";
 import { ZodType } from "zod";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
-import { jsToScheme, type InvocationLike } from "../../rosetta.js";
+import { jsToScheme } from "../../rosetta.js";
 import {
   assertProvenanceRoleShape,
   extractCallbackRoles,
@@ -16,7 +16,6 @@ import {
   type Contract,
   type Impl,
   isSingleOutput,
-  missingCallCtxDoor,
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
@@ -64,12 +63,10 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
     // provenance mint at the end.
     const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
-      // R-CTX-3 (rosetta-ctx-single-channel.md): `this` is mandatory — every real dispatch
-      // path (evaluator apply, the four binder adapters) constructs a real CallCtx via
-      // makeCallCtx; a direct call must too (the sanctioned `testCallCtx()` idiom, R-CTX-4).
-      // The old "UNIT (direct def.run(...))" idiom — calling bare so `this` was `def` itself —
-      // dies here: it satisfied neither shape, only ever worked because of `this?.` optionality.
-      if (this == null || this.runCtx == null || this.invocation == null) throw missingCallCtxDoor(name);
+      // R-CTX-3: `this` IS the CallCtx — the type parameter forces it at every call site
+      // (unbound call = compile error); makeCallCtx/testCallCtx never yield nullable
+      // fields, so no runtime door (retired 2026-07-10; the old "direct def.run(...)"
+      // idiom died with the ctx tranches).
       // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
       // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
       // when no invocation is in ctx (direct-JS calls) is this input union — exactly
@@ -116,7 +113,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    legacy `pure: true`). With no invocation in ctx (direct-JS) a source also falls back
       //    to the input union. ★The forward-vs-mint choice is provenance-load-bearing: a "pipe"
       //    rosetta that minted would fabricate a fresh origin (the seal-laundering class of bug).
-      const inv = this.invocation.currentInvocation as InvocationLike | undefined;
+      const inv = this.invocation.currentInvocation;
       let resultProvenance = inputProvenance;
       if (!forwards && inv && typeof inv.id === "number") {
         if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();

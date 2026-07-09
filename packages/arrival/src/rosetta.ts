@@ -34,7 +34,7 @@ import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
 // Non-portable JS value (function/undefined/unique symbol) crossing to Scheme: no faithful repr → #void; warnMembrane makes edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import { makeCallCtx, missingCallCtxDoor, type CallCtx } from "./values/primitives/CallCtx.js";
+import { makeCallCtx, type CallCtx } from "./values/primitives/CallCtx.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
@@ -311,10 +311,13 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     // Per-arg deep provenance (opt-in), aligned to schemeArgs — lets consumer fn (e.g. `.prompt` building `inputsProvenance[field]`) attribute each input to producer, recovering per-field origins union can't distinguish.
     const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
-    // R-CTX-3 (rosetta-ctx-single-channel.md): `this` mandatory — every real dispatch path (evaluator apply, four binder adapters) constructs real CallCtx via makeCallCtx; direct call must too (sanctioned `testCallCtx()` idiom, R-CTX-4). Missing/malformed `this` hits taught door below vs silently degrading to CONSTANT_CTX — that silent fallback hid B2-rosetta mint regression until conservation.law caught it.
-    if (this == null || this.runCtx == null || this.invocation == null) throw missingCallCtxDoor("rosettaWrapper");
-    const runCtx = this.runCtx;
-    const inv = this.invocation.currentInvocation as InvocationLike | undefined;
+    // R-CTX-3 (rosetta-ctx-single-channel.md): `this` IS the CallCtx — the type parameter
+    // forces it at every call site (unbound call = compile error); makeCallCtx/testCallCtx
+    // are the only constructors and never yield nullable fields, so no runtime door exists
+    // (the R-CTX-3 migration door retired 2026-07-10 once the null case went uninhabited).
+    // Destructured ONCE; the body below is `this`-free.
+    const { runCtx, invocation } = this;
+    const inv = invocation.currentInvocation;
     // Region discipline (§7c): this ONE call — here to `fn.apply` settling — is "symbol invocation" any scheme callable among `schemeArgs` region-binds to. Opened before marshaling (callable arg wrapper minted DURING `schemeToJs`, reads ambient scope), closed when `fn` settles (rule 2: throws if reverse call still pending).
     const scope = openRegionScope({ runCtx, dynSite: inv });
     try {

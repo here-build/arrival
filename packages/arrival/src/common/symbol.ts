@@ -57,7 +57,7 @@ export type {
   BakeRuntimeOpts,
   CallCtx,
 } from "./symbols/_bake.js";
-export { makeCallCtx, testCallCtx, missingCallCtxDoor } from "./symbols/_bake.js";
+export { makeCallCtx, testCallCtx } from "./symbols/_bake.js";
 
 // Q4 callback-role machinery (docs/PROVENANCE.md §2): `withCallbackRoles` is the
 // declaration channel for the contract-less kinds (tagless/tagless-guard — reduce's

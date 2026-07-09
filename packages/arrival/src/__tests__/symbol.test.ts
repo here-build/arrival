@@ -117,31 +117,27 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
   });
 });
 
-describe("`this: CallCtx` is mandatory (R-CTX-3) — a missing/malformed `this` hits a taught door, never CONSTANT_CTX", () => {
-  it("a bare `def.run(...)` call (no receiver) doors instead of silently defaulting", async () => {
+describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silently CONSTANT_CTX", () => {
+  // The R-CTX-3 migration door retired 2026-07-10 (V's strictness sweep): `this: CallCtx`
+  // is enforced STATICALLY (an unbound call is a compile error at every typed call site),
+  // and makeCallCtx/testCallCtx never yield nullable fields. What these rows now pin is
+  // the surviving INVARIANT — JS-level misuse (Reflect.apply past the types) still throws
+  // LOUDLY instead of silently degrading to CONSTANT_CTX (the silent fallback hid the
+  // B2-rosetta mint regression until conservation.law caught it).
+  it("a bare `def.run(...)` call (no receiver) throws instead of silently defaulting", async () => {
     const def = symbol.rosetta`strlen: length of a string`(
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    // The old "UNIT (direct def.run(...))" idiom: no `.call`, so `this` is `undefined`
-    // (strict mode) — this dies with R-CTX-3, replaced by `run.call(testCallCtx(), …)`.
-    // `Reflect.apply` (typed `(target: Function, thisArgument: any, …) => any`) invokes
-    // past the now-correct static `this: CallCtx` requirement WITHOUT `as any`/`as unknown`
-    // — the same primitive the real dispatch chokepoints use for the opposite (sanctioned)
-    // direction — to prove the RUNTIME door fires for a genuinely missing receiver.
-    await expect(Reflect.apply(def.run, undefined, [new AString(CONSTANT_CTX, "hello")])).rejects.toThrow(
-      /invoked without a CallCtx `this`/,
-    );
+    await expect(Reflect.apply(def.run, undefined, [new AString(CONSTANT_CTX, "hello")])).rejects.toThrow();
   });
 
-  it("an ad hoc `{}` receiver (missing runCtx/invocation) doors the same way", async () => {
+  it("an ad hoc `{}` receiver (missing runCtx/invocation) throws the same way", async () => {
     const def = symbol.rosetta`strlen: length of a string`(
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    await expect(Reflect.apply(def.run, {}, [new AString(CONSTANT_CTX, "hello")])).rejects.toThrow(
-      /invoked without a CallCtx `this`/,
-    );
+    await expect(Reflect.apply(def.run, {}, [new AString(CONSTANT_CTX, "hello")])).rejects.toThrow();
   });
 
   it("testCallCtx() is a real CallCtx — the sanctioned idiom never doors", async () => {

@@ -29,7 +29,7 @@ import { type InvocationLike } from "../../rosetta.js";
  */
 export interface CallCtx {
   readonly runCtx: RunContext;
-  readonly invocation: { currentInvocation: unknown };
+  readonly invocation: { currentInvocation: InvocationLike | undefined };
   readonly argProvenance?: readonly ReadonlySet<number>[];
 }
 
@@ -65,23 +65,9 @@ export function testCallCtx(overrides?: {
   return makeCallCtx(overrides?.runCtx ?? CONSTANT_CTX, overrides?.currentInvocation, overrides?.argProvenance);
 }
 
-/**
- * Runtime door (P5, docs/PRINCIPLES.md) for a verb invoked without a real `CallCtx` as
- * `this` — the exact silent-degrade class that hid the B2-rosetta mint regression until
- * `conservation.law` caught it (R-CTX-3, docs/working-proposals/rosetta-ctx-single-channel.md).
- * Every real dispatch path (the evaluator's apply arms, the four binder adapters in
- * `capability.ts`) constructs a `CallCtx` via `makeCallCtx` before invoking; a direct JS/test
- * call must do the same instead of relying on a `this?.` fallback to `CONSTANT_CTX` — use
- * `testCallCtx()` (or `makeCallCtx(...)` directly) as the explicit `.call`/`.apply` receiver.
- */
-export function missingCallCtxDoor(verbName?: string): Error {
-  return new Error(
-    `${verbName ?? "a verb"} was invoked without a CallCtx \`this\` — every real dispatch path (the ` +
-      "evaluator's apply arms, the four binder adapters) constructs one via makeCallCtx before " +
-      "invoking; a direct call must too. Use testCallCtx() (or makeCallCtx(...) directly) as the " +
-      "explicit receiver, e.g. `run.call(testCallCtx(), …args)` — never a bare call or an ad hoc " +
-      "`{}`/`def` `this`. A silent CONSTANT_CTX fallback here is exactly what hid the B2-rosetta " +
-      "mint regression until conservation.law caught it " +
-      "(docs/working-proposals/rosetta-ctx-single-channel.md R-CTX-3).",
-  );
-}
+// `missingCallCtxDoor` (the R-CTX-3 migration door) is DELETED (2026-07-10, V): with the
+// ctx tranches complete, every dispatch path constructs a full CallCtx via makeCallCtx
+// (which never yields nullable fields) and direct calls use testCallCtx() — the null-this
+// case is uninhabited, and `this: CallCtx` on the wrapper signatures makes an unbound call
+// a COMPILE error at every typed call site. A runtime check for a statically-excluded
+// state is the dishonesty (honest-types rule), not the safety.

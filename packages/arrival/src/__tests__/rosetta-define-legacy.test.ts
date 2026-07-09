@@ -201,32 +201,22 @@ describe("Rosetta Environment", () => {
     });
   });
 
-  // R-CTX-3 (docs/working-proposals/rosetta-ctx-single-channel.md): `createRosettaWrapper`'s
-  // `this: CallCtx` is mandatory too — a missing/malformed `this` on the LEGACY defineRosetta
-  // arm hits the same taught door as the `symbol.rosetta` arm, never a silent CONSTANT_CTX.
+  // R-CTX-3: `this: CallCtx` is enforced STATICALLY since the migration door retired
+  // (2026-07-10, V's strictness sweep). These rows pin the surviving invariant: JS-level
+  // misuse (Reflect.apply past the types) throws LOUDLY, never silently CONSTANT_CTX.
   describe("createRosettaWrapper — mandatory `this: CallCtx`", () => {
-    it("a bare call (no `.call` receiver) doors instead of silently defaulting", async () => {
+    it("a bare call (no `.call` receiver) throws instead of silently defaulting", async () => {
       inferenceEnv.defineRosetta("door-probe", { fn: (n: number) => n * 2 });
       const wrapper = inferenceEnv.get("door-probe");
       invariant(isCallable(wrapper), "door-probe must resolve to a callable rosetta wrapper");
-      // `Reflect.apply` (typed `(target: Function, thisArgument: any, …) => any`) invokes past
-      // the now-correct static `this: CallCtx` requirement WITHOUT `as any`/`as unknown` — a
-      // real caller hitting this is exactly a bare `verb(...)` call (no `.call`), so `this` is
-      // `undefined` (strict mode).
-      await expect(Reflect.apply(wrapper, undefined, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow(
-        /invoked without a CallCtx `this`/,
-      );
+      await expect(Reflect.apply(wrapper, undefined, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow();
     });
 
-    it("an ad hoc `{}` receiver doors the same way", async () => {
+    it("an ad hoc `{}` receiver throws the same way", async () => {
       inferenceEnv.defineRosetta("door-probe-2", { fn: (n: number) => n * 2 });
       const wrapper = inferenceEnv.get("door-probe-2");
       invariant(isCallable(wrapper), "door-probe-2 must resolve to a callable rosetta wrapper");
-      // `{}` is exactly the ad hoc shape R-CTX-4 retires — proves the runtime door still
-      // catches a malformed receiver.
-      await expect(Reflect.apply(wrapper, {}, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow(
-        /invoked without a CallCtx `this`/,
-      );
+      await expect(Reflect.apply(wrapper, {}, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow();
     });
   });
 });
