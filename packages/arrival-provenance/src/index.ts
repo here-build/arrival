@@ -32,4 +32,6 @@ export {
 } from "@here.build/arrival/provenance";
 // Plain (serializable) trace snapshot + structural clone — consumed by trace
 // tooling and tests that round-trip a trace without the mobx-reactive class.
-export { snapshotTrace, type PlainTrace, type PlainInv } from "./trace-snapshot.js";
+// (`snapshotTrace` accepts core's plain `EvalTrace`; this package's
+// `ObservableEvalTrace` is a subclass, so passing either works.)
+export { snapshotTrace, type PlainTrace, type PlainInv } from "@here.build/arrival/provenance";
