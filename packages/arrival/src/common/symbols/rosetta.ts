@@ -38,6 +38,17 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     const singleOut = isSingleOutput(contract.output);
+    // `value` OUTPUT slots are the declared NO-TRANSFORM escape hatch ("impl returns raw,
+    // does its own conversion" — z.value's own doc): running them through `z.encode` would
+    // apply the scheme-side check to the RAW return BEFORE step 4's jsToScheme ever boxes
+    // it, rejecting every impl that returns a plain JS object (the llm/mcp DerivableEntity
+    // family — the (infer …) outage this flag fixes). Boxing IS their validation now: the
+    // inbound-claims registry (rosetta.ts) totalizes the crossing (exotics borrow loudly,
+    // bare promises door). Computed at bake, per slot, tuple-shaped outputs only — a
+    // variadic array-ish output keeps the plain encode (no live `value` variadic exists).
+    const escapeSlots: readonly boolean[] = Array.isArray(contract.output)
+      ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "value")
+      : [];
     // Resolve the declared role (default "source" — see Contract.provenance): "pipe" is a
     // TRANSFORM (forwards input provenance); "source" (default) MINTS. Migrated from the
     // retired `pure: true` boolean (PROVENANCE-PLAN.md Q2) — `pure === true` ⇒ "pipe",
@@ -140,14 +151,20 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    empty-provenance fast path, and the program-wide singletons must never attest.)
       if (singleOut) {
         // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
-        const encoded = z.encode(outSchema, [result])[0];
+        // A `value` slot skips the codec entirely (see escapeSlots above).
+        const encoded = escapeSlots[0] ? result : z.encode(outSchema, [result])[0];
         const boxed: unknown = jsToScheme(this.runCtx, encoded, {}, resultProvenance);
         return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
       }
       // multiple-values / array-ish output: the impl returned the values-vector already (an array
       // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
       // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
-      const encoded = z.encode(outSchema, result as readonly unknown[]);
+      const resultVector = result as readonly unknown[];
+      const encoded = escapeSlots.some(Boolean)
+        ? resultVector.map((v, i) =>
+            escapeSlots[i] ? v : z.encode(normalizeVector([contract.output[i] as never]), [v])[0],
+          )
+        : z.encode(outSchema, resultVector);
       return encoded.map((v) => {
         const boxed: unknown = jsToScheme(this.runCtx, v, {}, resultProvenance);
         return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
