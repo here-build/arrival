@@ -5,7 +5,6 @@ import {
   accessMember,
   accessHas,
   accessKeys,
-  accessSet,
   NOT_FOUND,
   markInteropBoundary,
   isInteropBoundary,
@@ -141,31 +140,8 @@ describe("Sandbox Boundary", () => {
     });
   });
 
-  describe("sandboxedSet", () => {
-    it("sets own properties", () => {
-      const obj: any = {};
-      accessSet(obj, "name", "Alice");
-      expect(obj.name).toBe("Alice");
-    });
-
-    it("shadows inherited properties by creating own property", () => {
-      const obj: any = {};
-      accessSet(obj, "toString", "my toString");
-      expect(obj.toString).toBe("my toString");
-      expect(Object.hasOwn(obj, "toString")).toBe(true);
-    });
-
-    it("throws for blocked property names", () => {
-      const obj: any = {};
-      expect(() => accessSet(obj, "constructor", "value")).toThrow(InteropAccessError);
-      expect(() => accessSet(obj, "__proto__", "value")).toThrow(InteropAccessError);
-    });
-
-    it("throws for null/undefined", () => {
-      expect(() => accessSet(null, "key", "value")).toThrow(TypeError);
-      expect(() => accessSet(undefined, "key", "value")).toThrow(TypeError);
-    });
-  });
+  // `accessSet` (the interop WRITE face) was deleted 2026-07-10 — a mutation
+  // face violates total immutability and had zero production callers.
 
 
   describe("markAsSandboxBoundary", () => {
@@ -282,10 +258,6 @@ describe("Sandbox Boundary", () => {
       expect(accessHas(obj, Symbol.toPrimitive)).toBe(false);
     });
 
-    it("sandboxedSet blocks well-known symbols", () => {
-      const obj: any = {};
-      expect(() => accessSet(obj, Symbol.toPrimitive, () => 42)).toThrow(InteropAccessError);
-    });
   });
 
   describe("Additional boundary prototypes", () => {

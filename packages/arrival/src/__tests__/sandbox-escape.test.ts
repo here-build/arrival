@@ -27,7 +27,6 @@ import { inferenceEnv } from "../inference-env.js";
 import {
   INTEROP_BOUNDARY,
   accessMember,
-  accessSet,
   isInteropBoundary,
 } from "../interop-access.js";
 import { InteropAccessError } from "../errors.js";
@@ -469,12 +468,12 @@ describe("registry poisoning vectors", () => {
 // CRITICAL: write-side prototype pollution (S6)
 // ============================================================================
 //
-// Audit finding (S6): the READ side (accessMember) is boundary-guarded, but
-// the WRITE side was RAW. Two holes:
-//   - sandbox-boundary.ts accessSet: `data[keyStr] = value` walks the proto
-//     chain and fires inherited setters → defineProperty installs OWN only.
-//   - SchemeSymbol.ts `SchemeSymbol.list` was a plain `{}` (inherits Object.proto),
-//     so `(string->symbol "__proto__")` could pollute Object.prototype.
+// Audit finding (S6), historical: the READ side (accessMember) is
+// boundary-guarded; the WRITE side (`accessSet`) was raw, then hardened, then
+// DELETED outright (2026-07-10, V: a mutation face on interop violates total
+// immutability — the mutator family is teaching-doored, a JS-side setter
+// bypassing that discipline had zero production callers). The symbol-intern
+// pollution half of S6 remains live below.
 // ============================================================================
 
 describe("CRITICAL: write-side prototype pollution (S6)", () => {
@@ -492,31 +491,6 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     // key is an ordinary Map entry that can't reach Object.prototype, so the former
     // null-prototype Record guard is unnecessary. Minting still works + round-trips.
     expect(String(new ASymbol(CONSTANT_CTX, "__proto__"))).toBe("__proto__");
-  });
-
-  it("sandboxedSet('__proto__', ...) is rejected as a blocked key", async () => {
-    const target: Record<string, unknown> = {};
-    expect(() => accessSet(target, "__proto__", { evil: true })).toThrow(InteropAccessError);
-    expect(() => accessSet(target, "constructor", 1)).toThrow(InteropAccessError);
-    expect(() => accessSet(target, "prototype", 1)).toThrow(InteropAccessError);
-  });
-
-  it("sandboxedSet installs an OWN data property without firing inherited setters", async () => {
-    let setterFired = false;
-    // A poisoned setter on a prototype must NOT fire on assignment.
-    const proto = {};
-    Object.defineProperty(proto, "danger", {
-      set() {
-        setterFired = true;
-      },
-      configurable: true,
-    });
-    const target: Record<string, unknown> = Object.create(proto);
-    accessSet(target, "danger", 42);
-    expect(setterFired).toBe(false);
-    // The value landed as an OWN data property on the target.
-    expect(Object.prototype.hasOwnProperty.call(target, "danger")).toBe(true);
-    expect(target.danger).toBe(42);
   });
 
   it("SANDBOX_BOUNDARY sentinel is not forgeable from the global Symbol registry", async () => {

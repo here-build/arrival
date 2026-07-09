@@ -455,32 +455,4 @@ export function accessKeys(data: unknown): string[] {
   return Object.keys(Object(data));
 }
 
-/**
- * Interop member mutation.
- * Always sets an own property (shadows inherited ones if present).
- */
-export function accessSet(data: unknown, key: string | symbol, value: unknown): void {
-  TypeError.invariant(data !== null && data !== undefined, "Cannot set property on null/undefined");
-  const keyStr = typeof key === "symbol" ? key : String(key);
-
-  if (isBlockedPropertyName(keyStr)) {
-    throw new InteropAccessError(
-      `Cannot set '${String(keyStr)}' - blocked for security`,
-      keyStr,
-      "blocked-property",
-    );
-  }
-
-  // Bracket assignment (`data[keyStr] = value`) WALKS the prototype chain and
-  // fires inherited setters — so a poisoned `Object.prototype` setter or a
-  // `__proto__` assignment escapes the membrane. `defineProperty` installs an
-  // OWN data property unconditionally: no proto-chain walk, no setter invoked,
-  // genuinely "own property only" as the contract claims.
-  Object.defineProperty(data as object, keyStr, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
-}
 
