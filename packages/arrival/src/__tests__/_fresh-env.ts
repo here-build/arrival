@@ -14,7 +14,7 @@
 // Decoupled from the dissolving `../stdlib` surface on purpose: it sources
 // global_env from the env-roots leaf, BASE_PACKS from base-packs, and the
 // assembler from common/kernel — the stable homes that survive stdlib's deletion.
-import type { Environment } from "../Environment.js";
+import type { Environment, ResolvingEnvironment } from "../Environment.js";
 import { global_env } from "../env-roots.js";
 import { assembleEnv } from "../common/kernel.js";
 import { BASE_PACKS } from "../env/base-packs.js";
@@ -31,8 +31,14 @@ const evalScheme = (env: unknown, src: unknown): unknown =>
 let counter = 0;
 
 /** A fresh, fully-assembled capability env: the static native root + a private
- *  BASE_PACKS scheme layer. Await once per test (or per file). */
-export async function freshEnv(): Promise<Environment> {
+ *  BASE_PACKS scheme layer. Await once per test (or per file).
+ *
+ *  ENV T1: `global_env` is a `ResolvingEnvironment` (the baked-root specialization —
+ *  Environment.ts) and `.inherit()` is overridden to preserve that subtype, so `base`
+ *  really is one at runtime; the return type says so honestly (callers that `apply()` a
+ *  capability directly onto this env, e.g. input-rest-runtime.test.ts, need `registerResolver`
+ *  to type-check without a cast). */
+export async function freshEnv(): Promise<ResolvingEnvironment> {
   // Ensure the shared native foundation — GLOBAL_NATIVE_PACKS plus the stdlib inline
   // builtins not yet migrated to packs — is live on global_env (idempotent).
   await initBridge();

@@ -18,7 +18,8 @@ import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv } from "../common/kernel.js";
 import type { EnvCapability } from "../common/capability.js";
-import type { EvalSchemeInto } from "../common/scheme-env.js";
+import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
+import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone } from "../values/lineage-shadow.js";
@@ -74,25 +75,33 @@ export function ensureBaseAssembled(): Promise<void> {
     // declare `sideEffects: false`.
     const { NATIVE_PACKS } = await import("../env/native-packs.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");
-    const evalScheme: EvalSchemeInto = (env, src) =>
-      exec(src as string, { env: env as Environment, skipBootstrapWait: true });
     await assembleEnv(
       global_env,
       NATIVE_PACKS.map((pack) => pack.lower()),
     );
     await assembleEnv(
       user_env,
-      BASE_PACKS.map((pack) => pack.lower({ evalScheme })),
+      BASE_PACKS.map((pack) => pack.lower({ evalScheme: preludeExec })),
     );
   })());
 }
 
-// Capability prelude's evalScheme (injected during `exec({ capabilities })`
-// assembly). Mirrors ensureBaseAssembled's / _fresh-env's evalScheme.
-// skipBootstrapWait: assembly happens AFTER exec's own bootstrap gate, so
-// the prelude eval must not re-await the (already-settled) bootstrap promise.
-const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
-  exec(src as string, { env: env as Environment, skipBootstrapWait: true });
+// The ONE prelude evalScheme (injected into base-pack assembly above AND `exec({
+// capabilities })` assembly below). `skipBootstrapWait`: those execs ARE / follow the
+// bootstrap, so they must not (re-)await the bootstrap promise (deadlock / redundant).
+//
+// ENV T1 narrowing: `env` arrives as the structural `SchemeEnv` the pack machinery is
+// typed against, but every assembly this module drives targets a concrete env (the
+// env-roots `ResolvingEnvironment`s or an `.inherit()` child of one), and `exec`'s
+// `{ env }` option takes the concrete class. Plain `Environment` no longer implements
+// `SchemeEnv` (registerResolver lives on `ResolvingEnvironment` — see Environment.ts),
+// so the old direct `as Environment` lost its type overlap; narrow HONESTLY on the
+// runtime fact (instanceof) instead of a blind double-cast.
+const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
+  invariant(env instanceof Environment, "prelude evalScheme: expected a concrete Environment");
+  return exec(src, { env, skipBootstrapWait: true });
+};
+const capabilityEvalScheme: EvalSchemeInto = preludeExec;
 
 /**
  * Build capability base for `exec({ capabilities })`: fresh `user_env` child
@@ -482,7 +491,7 @@ export async function parse(code: string, _env?: Environment, source?: string): 
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, skipBootstrapWait }: ExecOptions = {},
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
 
@@ -500,8 +509,10 @@ export async function execExpr(
   // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME
   // abort signal `ctx.signal` already carries, and the handler-stack WeakMap
   // (exceptions.ts) stops falling back to the shared CONSTANT_CTX bucket for
-  // every require'd module.
-  const runCtx = makeRunContext({ signal });
+  // every require'd module. `heapBudget` bounds THIS expression's allocations
+  // (a per-form meter; a cumulative multi-form bound needs a shared RunContext,
+  // which no caller can inject yet — the ledgered runProgram gap).
+  const runCtx = makeRunContext({ signal, heapBudget });
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.

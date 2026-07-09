@@ -20,10 +20,17 @@
  * assembled-base sentinel, not resolver yield/chain-order semantics. No public-altitude
  * survivor exists, so this file stays — parallel to `parser.test.ts`'s honest framing of
  * bypassing `exec()` for a fast internal-module unit floor.
+ *
+ * ENV T1 (2026-07-09, docs/working-proposals/environment-resolution-chain.md §T1): resolvers
+ * relocated from every `Environment` frame onto `ResolvingEnvironment` only (the baked-root
+ * specialization — see env-roots.ts). The rows below are UNCHANGED — same ordering contract,
+ * same assertions — construction just targets `ResolvingEnvironment` at the two/three layers
+ * that register resolvers, matching production (`global_env`/`user_env` are the real
+ * `ResolvingEnvironment` instances these tests model).
  */
 
 import { describe, expect, it } from "vitest";
-import { Environment } from "../Environment.js";
+import { Environment, ResolvingEnvironment } from "../Environment.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -53,7 +60,7 @@ describe("Environment Module Composition", () => {
         },
       };
 
-      const env = new Environment("test", {}, null);
+      const env = new ResolvingEnvironment("test", {}, null);
       env.registerResolver(resolver1);
       env.registerResolver(resolver2);
 
@@ -67,7 +74,7 @@ describe("Environment Module Composition", () => {
         resolve: (name) => (name === "null-value" ? null : undefined),
       };
 
-      const env = new Environment("test", {}, null);
+      const env = new ResolvingEnvironment("test", {}, null);
       env.registerResolver(resolver);
 
       // null is a valid return value, should not continue searching
@@ -80,13 +87,13 @@ describe("Environment Module Composition", () => {
       // Bindings are boxed SchemeValues (an env binds AExact, not a raw JS number);
       // the resolver returns below stay raw — _lookupWithResolvers is contract'd to
       // pass a resolver hit (typed `unknown`) straight through.
-      const env = new Environment("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
+      const env = new ResolvingEnvironment("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
       env.registerResolver({
         id: "parent-resolver",
         resolve: (name) => (name === "y" ? 2 : undefined),
       });
 
-      const child = new Environment("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
+      const child = new ResolvingEnvironment("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
       child.registerResolver({
         id: "child-resolver",
         resolve: (name) => (name === "w" ? 4 : undefined),

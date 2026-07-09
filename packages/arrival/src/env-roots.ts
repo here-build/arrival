@@ -33,7 +33,14 @@
 // Naming: snake_case `global_env`/`user_env` is LIPS heritage; the barrel
 // re-exports `user_env as env` and keeps both spellings public — renaming is
 // downstream churn with zero semantic gain, so the heritage names stay.
-import { Environment } from "./Environment.js";
+//
+// ENV T1 (docs/working-proposals/environment-resolution-chain.md §T1): both roots are
+// `ResolvingEnvironment` — the baked-capability specialization that carries fallback
+// resolvers (env-agnostic packs/kernel machinery register onto these two, never onto a
+// plain lexical frame). `user_env`'s `.inherit()` call below resolves to the overridden,
+// subtype-preserving method, so it comes out `ResolvingEnvironment` too, with zero extra
+// ceremony here.
+import { ResolvingEnvironment } from "./Environment.js";
 
-export const global_env = new Environment("global", {}, undefined);
+export const global_env = new ResolvingEnvironment("global", {}, undefined);
 export const user_env = global_env.inherit("user-env");

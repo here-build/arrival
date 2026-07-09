@@ -17,7 +17,7 @@
 // existing suite for that byte-identical-when-absent coverage; this file is additive-only.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { Environment } from "../../Environment.js";
+import type { ResolvingEnvironment } from "../../Environment.js";
 import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -69,7 +69,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
 });
 
 describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) through a real env + exec)", () => {
-  let env: Environment;
+  let env: ResolvingEnvironment;
   beforeAll(async () => {
     env = await freshEnv();
     const headtail = symbol.rosetta`headtail: report head + tail`(

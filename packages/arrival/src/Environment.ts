@@ -36,8 +36,7 @@ function ownProps(obj: object): (string | symbol)[] {
 
 /**
  * The low-level lexical FRAME-STORAGE primitive: a `__name__`/`__env__` binding
- * record with a `__parent__` link and its own fallback resolvers. One
- * `__parent__`-linked chain is a scope.
+ * record with a `__parent__` link. One `__parent__`-linked chain is a scope.
  *
  * It is the storage the evaluator's resolution model wraps — NOT the model itself:
  *   - {@link LexicalScope} (eval/LexicalScope.ts) wraps an Environment as the
@@ -48,19 +47,29 @@ function ownProps(obj: object): (string | symbol)[] {
  *     capabilities.lookup` — and is the single object the evaluator threads
  *     (`EvalContext.resolver`). `resolver.env` is the underlying lexical frame.
  *
+ * ENV T1 (docs/working-proposals/environment-resolution-chain.md §T1, Option C
+ * extraction 1 of docs/working-proposals/environment-decomposition-options.md):
+ * fallback resolvers used to live on EVERY Environment instance, even though only
+ * the baked capability roots (`global_env`/`user_env`, env-roots.ts) ever have any
+ * registered in production — every let/lambda/letrec frame carried a dead-weight
+ * `__resolvers__: []` and paid an empty loop on every lookup miss. Resolvers now
+ * live ONLY on {@link ResolvingEnvironment} (below); a plain `Environment` frame's
+ * `_lookupWithResolvers` is own-bindings → parent, no middle leg. Polymorphic
+ * dispatch means a plain lexical frame chaining up to a `ResolvingEnvironment` root
+ * (`__parent__`-linked) still consults that root's resolvers correctly — the walk
+ * is unchanged end-to-end, only the per-frame cost of frames that never had
+ * resolvers to begin with. GLASS mode (a caller-supplied custom env chain) is
+ * unaffected: it keeps the exact walk it always had, resolver-capable at whichever
+ * layer was constructed as `ResolvingEnvironment`.
+ *
  * INTERNAL-ONLY: not on the public surface (see index.ts). Cross-package consumers
  * type against the structural `SchemeEnv` contract (common/scheme-env.ts), never
  * this concrete class — so the name "Environment" is an impl detail under the
  * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
  * (which {@link LexicalScope} owns) or "Frame".
  */
-export class Environment implements SchemeEnv {
+export class Environment {
   static [CLASS] = "environment";
-  private readonly __resolvers__: ResolverSpec[] = [];
-
-  // -------------------------------------------------------------------------
-  // :: Fallback Resolver Management
-  // -------------------------------------------------------------------------
 
   constructor(
     // `string | symbol`: a merge-frame's identity IS `Symbol.for("merge")`
@@ -71,21 +80,6 @@ export class Environment implements SchemeEnv {
     public __env__: Record<string | symbol, EnvironmentValue> = {},
     public __parent__: Environment | null = null,
   ) {}
-
-  /** Register a fallback resolver. Resolvers are tried in order when normal lookup fails. */
-  registerResolver(resolver: ResolverSpec): this {
-    // Fail LOUD on a malformed resolver — a silent push would only surface later as a
-    // "cannot read 'resolve'" crash at lookup time (symptom of a module-eval-time TDZ
-    // capture, see polyglot.ts).
-    invariant(
-      resolver != null && typeof resolver.resolve === "function" && typeof resolver.id === "string",
-      "registerResolver: resolver must have a string id and a resolve() function",
-    );
-    if (!this.__resolvers__.some((r) => r.id === resolver.id)) {
-      this.__resolvers__.push(resolver);
-    }
-    return this;
-  }
 
   defineRosetta(name: string, config: RosettaFunction): void {
     const wrapper = createRosettaWrapper(config);
@@ -119,23 +113,14 @@ export class Environment implements SchemeEnv {
   }
 
   /**
-   * Resolve a name within one env layer before yielding to its parent. The
-   * direct-bindings → resolvers → parent ordering is a precedence contract, not an
-   * optimization: a module's explicit binding must WIN over its own lazy resolver
-   * (a pinned override can't be undone by a catch-all fallback in the same layer),
-   * and BOTH must win over the parent (a closer module shadows a deeper dependency).
-   * A resolver returns `undefined` to mean "not mine, keep looking" — never a found nil.
+   * Resolve a name within one env layer before yielding to its parent. Own bindings win
+   * over the parent (a closer module shadows a deeper dependency) — the resolver leg
+   * that used to sit between them lives only on {@link ResolvingEnvironment} now (ENV T1);
+   * a plain frame is own → parent, full stop.
    */
   _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
     if (Object.hasOwn(this.__env__, name as string)) {
       return this.__env__[name as string];
-    }
-
-    for (const resolver of this.__resolvers__) {
-      const result = resolver.resolve(String(name));
-      if (result !== undefined) {
-        return result as EnvironmentValue;
-      }
     }
 
     return this.__parent__?._lookupWithResolvers(name);
@@ -230,5 +215,76 @@ export class Environment implements SchemeEnv {
 
   has(name: string): boolean {
     return Object.hasOwn(this.__env__, name);
+  }
+}
+
+/**
+ * ENV T1 extraction (docs/working-proposals/environment-resolution-chain.md §T1):
+ * the BAKED-ROOT specialization of {@link Environment} — the only place fallback
+ * resolvers live. Exactly the two production producer classes register here (see the
+ * design doc §0): the kernel's phase-gated prelude-scope resolver
+ * (`common/kernel.ts`'s `assembleEnv`, via the `registerResolver` duck-type probe) and
+ * pack-declared `EnvCapability.resolvers` (`common/capability.ts:383`). Both apply
+ * targets are, and must stay, `ResolvingEnvironment` instances: `env-roots.ts`'s
+ * `global_env`/`user_env`, and any env built by `.inherit()`ing off one of those (e.g.
+ * `generator-exec.ts`'s per-call `exec-capabilities` base) — `inherit()` is overridden
+ * below to keep that subtype, so a capability-augmented base built on top of `user_env`
+ * stays resolver-capable without the caller doing anything special.
+ *
+ * Plain lexical frames (let/lambda/letrec/… — `Environment.inherit`, `defaultLexicalRoot`)
+ * are deliberately NOT `ResolvingEnvironment`: per the design's ambient/lexical boundary,
+ * only the baked capability base is "ambient" middleware territory; the lexical chain a
+ * program introduces is cut from it. A GLASS caller (custom `{ env }`) that wants a layer
+ * of its own chain to answer via resolver must build that layer as a `ResolvingEnvironment`
+ * explicitly — the current walk otherwise stays byte-identical (a resolver-less layer in a
+ * glass chain just falls straight through to its parent, same as any other name miss).
+ */
+export class ResolvingEnvironment extends Environment implements SchemeEnv {
+  private readonly __resolvers__: ResolverSpec[] = [];
+
+  /** Register a fallback resolver. Resolvers are tried in order when normal lookup fails. */
+  registerResolver(resolver: ResolverSpec): this {
+    // Fail LOUD on a malformed resolver — a silent push would only surface later as a
+    // "cannot read 'resolve'" crash at lookup time (symptom of a module-eval-time TDZ
+    // capture, see polyglot.ts).
+    invariant(
+      resolver != null && typeof resolver.resolve === "function" && typeof resolver.id === "string",
+      "registerResolver: resolver must have a string id and a resolve() function",
+    );
+    if (!this.__resolvers__.some((r) => r.id === resolver.id)) {
+      this.__resolvers__.push(resolver);
+    }
+    return this;
+  }
+
+  /**
+   * The full direct-bindings → resolvers → parent precedence contract (unchanged from
+   * pre-T1 `Environment`): a module's explicit binding wins over its own lazy resolver
+   * (a pinned override can't be undone by a catch-all fallback in the same layer), and
+   * BOTH win over the parent (a closer module shadows a deeper dependency). A resolver
+   * returns `undefined` to mean "not mine, keep looking" — never a found nil.
+   */
+  override _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
+    if (Object.hasOwn(this.__env__, name as string)) {
+      return this.__env__[name as string];
+    }
+
+    for (const resolver of this.__resolvers__) {
+      const result = resolver.resolve(String(name));
+      if (result !== undefined) {
+        return result as EnvironmentValue;
+      }
+    }
+
+    return this.__parent__?._lookupWithResolvers(name);
+  }
+
+  /** Covariant override: a `ResolvingEnvironment`'s child stays resolver-capable (e.g. the
+   *  per-call `exec-capabilities` base built by `.inherit()`ing off `user_env`). */
+  override inherit(
+    name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
+    obj: Record<string, EnvironmentValue> = {},
+  ): ResolvingEnvironment {
+    return new ResolvingEnvironment(name, obj, this);
   }
 }
