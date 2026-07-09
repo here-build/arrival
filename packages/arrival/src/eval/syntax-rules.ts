@@ -72,6 +72,35 @@ function concatPairLoose(a: SchemeValue, b: SchemeValue): SchemeValue {
   return result;
 }
 
+/** W0 span propagation (PROVENANCE.md §7 span-totality; plan Q6). Expansion-
+ *  constructed Pairs carry the TEMPLATE's span: same template node → same span on
+ *  every instantiation — exactly the template/instance keying the wireframe (Q8a)
+ *  needs, and drill-in points at the form as WRITTEN (in the macro). Pattern-variable
+ *  substitutions are call-site Pairs by reference and keep their own call-site spans
+ *  untouched. Upgrade path (deferred): an expansion-chain slot recording the call
+ *  site per expansion, when a consumer needs both readings at once. Only stamps
+ *  Pairs that would otherwise be span-less — never overwrites. */
+function carrySpan<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
+  if (fresh instanceof APair && fresh.getLocation() === undefined && template instanceof APair) {
+    const loc = template.getLocation();
+    if (loc !== undefined) fresh.setLocation(loc);
+  }
+  return fresh;
+}
+
+/** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated
+ *  cdr-chain cell, not just the head — repetition output is a list of cells all
+ *  minted in one call. Car sub-structures are either template reconstructions
+ *  (already stamped at their own sites) or call-site fragments (own spans). */
+function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
+  let node: unknown = fresh;
+  while (node instanceof APair) {
+    carrySpan(node, template);
+    node = node.cdr;
+  }
+  return fresh;
+}
+
 // ----------------------------------------------------------------------
 // ----------------------------------------------------------------------
 const recur_guard = -10_000;
@@ -154,10 +183,13 @@ export function macro_expand(): SchemeFunction {
       invariant(node instanceof APair, `macroexpand: let binding list expected pair got ${type(node)}`);
       const pair = node.car;
       invariant(pair instanceof APair, `macroexpand: let binding expected pair got ${type(pair)}`);
-      return new APair(
-        CONSTANT_CTX,
-        new APair(CONSTANT_CTX, pair.car, await traverse(pair.cdr, n ?? -1, env)),
-        await expand_let_binding(node.cdr),
+      return carrySpan(
+        new APair(
+          CONSTANT_CTX,
+          carrySpan(new APair(CONSTANT_CTX, pair.car, await traverse(pair.cdr, n ?? -1, env)), pair),
+          await expand_let_binding(node.cdr),
+        ),
+        node,
       );
     }
 
@@ -182,10 +214,9 @@ export function macro_expand(): SchemeFunction {
             bindings = proc_bindings(nodeCdr.car);
             second = nodeCdr.car;
           }
-          return new APair(
-            CONSTANT_CTX,
-            node.car,
-            new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)),
+          return carrySpan(
+            new APair(CONSTANT_CTX, node.car, carrySpan(new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)), nodeCdr)),
+            node,
           );
         } else if (is_macro(name, value)) {
           // Split by the transformer's HONEST return shape (no flag toggles it):
@@ -236,7 +267,7 @@ export function macro_expand(): SchemeFunction {
       if (cdr instanceof APair) {
         cdr = await traverse(cdr, n, env);
       }
-      return new APair(CONSTANT_CTX, car, cdr);
+      return carrySpan(new APair(CONSTANT_CTX, car, cdr), node instanceof APair ? node : nil);
     }
 
     invariant(code instanceof APair, `macroexpand: expected a form got ${type(code)}`);
@@ -666,7 +697,7 @@ export function restore_data_gensyms(node, gensyms) {
         else if (lit === "unquote" || lit === "unquote-splicing") childData = false;
       }
       // head resolves in the CURRENT context (it is the operator); operands take childData.
-      return new APair(CONSTANT_CTX, walk(head, data), walk(n.cdr, childData));
+      return carrySpan(new APair(CONSTANT_CTX, walk(head, data), walk(n.cdr, childData)), n);
     }
     return n;
   }
@@ -835,7 +866,7 @@ export function transform_syntax({
               // concatPair. Discriminating on `car` keeps a pair from ever
               // reaching `.concat` (which APair does not have → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
-                return concatPairLoose(item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue);
+                return carrySpanSpine(concatPairLoose(item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue), expr);
               }
               return item.car;
             } else if (item.car instanceof APair) {
@@ -858,10 +889,13 @@ export function transform_syntax({
         }
       }
 
-      return new APair(
-        CONSTANT_CTX,
-        transform_ellipsis_expr(first, bindings, state, next) as SchemeValue,
-        transform_ellipsis_expr(expr.cdr, bindings, state, next) as SchemeValue,
+      return carrySpan(
+        new APair(
+          CONSTANT_CTX,
+          transform_ellipsis_expr(first, bindings, state, next) as SchemeValue,
+          transform_ellipsis_expr(expr.cdr, bindings, state, next) as SchemeValue,
+        ),
+        expr,
       );
     }
     return expr;
@@ -902,7 +936,7 @@ export function transform_syntax({
       // <template> in its car. Guard it before reading `.car` — a bare
       // `(...)` would leave `first.cdr` as nil, whose `.car` is undefined.
       if (!disabled && first instanceof APair && ASymbol.is(first.car, ellipsis_symbol) && first.cdr instanceof APair) {
-        return new APair(CONSTANT_CTX, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil);
+        return carrySpan(new APair(CONSTANT_CTX, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil), expr);
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
@@ -934,7 +968,7 @@ export function transform_syntax({
           let new_expr = first;
           if (is_spread) {
             // TODO: array
-            new_expr = new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil));
+            new_expr = carrySpan(new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil)), expr);
           }
           let result: SchemeValue;
           if (keys.length > 0) {
@@ -955,15 +989,15 @@ export function transform_syntax({
               // on empty ellipsis
               if (car !== undefined) {
                 if (is_spread) {
-                  result = result instanceof ANil ? (car as SchemeValue) : concatPairLoose(result, car as SchemeValue);
+                  result = result instanceof ANil ? (car as SchemeValue) : carrySpanSpine(concatPairLoose(result, car as SchemeValue), expr);
                 } else {
-                  result = new APair(CONSTANT_CTX, car as SchemeValue, result);
+                  result = carrySpan(new APair(CONSTANT_CTX, car as SchemeValue, result), expr);
                 }
               }
               bind = new_bind;
             }
             if (result instanceof APair && !is_spread) {
-              result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
+              result = carrySpanSpine(APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false), expr);
             }
             // case of (list) ... (rest code)
 
@@ -983,7 +1017,7 @@ export function transform_syntax({
               nested: true,
             });
             if (car) {
-              return new APair(CONSTANT_CTX, car, nil);
+              return carrySpan(new APair(CONSTANT_CTX, car, nil), expr);
             }
             return nil;
           }
@@ -1007,12 +1041,12 @@ export function transform_syntax({
             };
             const value = transform_ellipsis_expr(expr, bind, { nested: false }, next);
             if (value !== undefined) {
-              result = new APair(CONSTANT_CTX, value as SchemeValue, result);
+              result = carrySpan(new APair(CONSTANT_CTX, value as SchemeValue, result), expr);
             }
             bind = new_bind;
           }
           if (result instanceof APair) {
-            result = APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false);
+            result = carrySpanSpine(APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false), expr);
           }
           // case if (x ... y ...) second spread is not processed
           // and (??? . x) last symbol
@@ -1023,7 +1057,7 @@ export function transform_syntax({
             if (is_null) {
               return node;
             }
-            result = result instanceof ANil ? node : concatPairLoose(result as SchemeValue, node);
+            result = result instanceof ANil ? node : carrySpanSpine(concatPairLoose(result as SchemeValue, node), expr);
           }
           return result;
         }
@@ -1039,22 +1073,28 @@ export function transform_syntax({
         const exprCdr = expr.cdr;
         rest =
           exprCdr.car instanceof ASymbol
-            ? new APair(
-                CONSTANT_CTX,
-                traverse(exprCdr.car, { disabled }),
-                exprCdr.cdr instanceof APair
-                  ? new APair(
-                      CONSTANT_CTX,
-                      exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.car : nil,
-                      traverse(exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.cdr : nil, { disabled }),
-                    )
-                  : nil,
+            ? carrySpan(
+                new APair(
+                  CONSTANT_CTX,
+                  traverse(exprCdr.car, { disabled }),
+                  exprCdr.cdr instanceof APair
+                    ? carrySpan(
+                        new APair(
+                          CONSTANT_CTX,
+                          exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.car : nil,
+                          traverse(exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.cdr : nil, { disabled }),
+                        ),
+                        exprCdr.cdr,
+                      )
+                    : nil,
+                ),
+                exprCdr,
               )
-            : new APair(CONSTANT_CTX, exprCdr.car, traverse(exprCdr.cdr, { disabled }));
+            : carrySpan(new APair(CONSTANT_CTX, exprCdr.car, traverse(exprCdr.cdr, { disabled })), exprCdr);
       } else {
         rest = expr instanceof APair ? traverse(expr.cdr, { disabled }) : nil;
       }
-      return new APair(CONSTANT_CTX, head, rest);
+      return carrySpan(new APair(CONSTANT_CTX, head, rest), expr);
     }
     if (expr instanceof ASymbol) {
       if (disabled && ASymbol.is(expr, ellipsis_symbol)) {
