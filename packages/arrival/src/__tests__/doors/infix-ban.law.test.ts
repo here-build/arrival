@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import { Parser } from "../../reader/Parser.js";
 import { EOF } from "../../values/primitives/EOF.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { ADict } from "../../values/primitives/ADict.js";
 import type { SchemeValue } from "../../values/types.js";
 
 async function readOne(src: string, options?: ConstructorParameters<typeof Parser>[0]): Promise<SchemeValue> {
@@ -100,7 +100,7 @@ describe("F6 doors — R6 infix-ban (`{a * b}`-shaped forms, table-driven)", () 
 describe("dict-literal grammar — what `{…}` actually parses (R6 survivors)", () => {
   it("a well-formed dict literal parses as a dict node", async () => {
     const datum = await readOne("{:a 1 :b 2}");
-    expect(AJSObject.isDictLiteral(datum)).toBe(true);
+    expect(ADict.isDictLiteral(datum)).toBe(true);
   });
 
   it("bare-symbol key doors as E-DICT-BAD-KEY (2-element shape, not infix-banned — index 1 isn't a symbol)", async () => {
@@ -121,7 +121,7 @@ describe("dict-literal grammar — what `{…}` actually parses (R6 survivors)",
 
   it("suffix-colon keys still flip to the keyword twin", async () => {
     const datum = await readOne("{flight_number: 42}");
-    expect(AJSObject.isDictLiteral(datum)).toBe(true);
+    expect(ADict.isDictLiteral(datum)).toBe(true);
   });
 
   it("string keys with three odd string elements door as E-DICT-ODD-ARITY, not infix-banned (index 1 is a string, not a symbol)", async () => {
@@ -132,6 +132,6 @@ describe("dict-literal grammar — what `{…}` actually parses (R6 survivors)",
   it("`[…]` is unaffected — still a vector literal", async () => {
     const datum = await readOne("[1 2]");
     // Not a dict node, and not banned; the shape check is scoped to `{}` only.
-    expect(AJSObject.isDictLiteral(datum)).toBe(false);
+    expect(ADict.isDictLiteral(datum)).toBe(false);
   });
 });

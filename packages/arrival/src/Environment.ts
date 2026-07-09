@@ -11,7 +11,7 @@ import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
 import { patch_value } from "./reader/values-repr.js";
 import { rosettaTypesOf } from "./env-registries.js";
-import { unboundVariableError } from "./env/polyglot-rich-errors/registry.js";
+import { unboundVariableError } from "./unbound-variable.js";
 
 // -------------------------------------------------------------------------
 // :: Type definitions for Environment bindings
@@ -170,7 +170,11 @@ export class Environment {
     }
 
     if (throwError) {
-      throw unboundVariableError(name.toString());
+      // The PLAIN unbound wall + typo suggestions from THIS chain's actual vocabulary —
+      // no curated name tables in the env (teaching about well-known-but-absent names is
+      // declared capability data now: the `symbol.notImplemented` doors in env/*-stubs /
+      // r7rs/host / srfi-1, which this walk resolves like any binding; see unbound-variable.ts).
+      throw unboundVariableError(name.toString(), this.allBoundNames());
     }
     return undefined;
   }

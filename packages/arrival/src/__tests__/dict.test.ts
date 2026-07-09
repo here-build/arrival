@@ -53,7 +53,7 @@ describe("dict? predicate", () => {
     expect(await truthy("(dict? (dict))")).toBe("yes");
   });
 
-  it("#t for a {...} reader dict-literal (quoted, the AJSObject dictForms node)", async () => {
+  it("#t for a {...} reader dict-literal (quoted, the ADict literalForms node)", async () => {
     expect(await truthy("(dict? '{:a 1})")).toBe("yes");
   });
 

@@ -1,0 +1,167 @@
+// F6 — Doors (docs/test-suite-v2/DESIGN.md §F6, P5 errors-as-doors). DECLARATION-DRIVEN:
+// every row below comes from the BASE_PACKS capability declarations themselves — the
+// `symbol.notImplemented` doors each pack authors (env/r7rs/host.ts, env/srfi/srfi-stubs.ts,
+// env/polyglot-stubs.ts, srfi-1's `fold`, …). Nothing here is hand-enumerated, and there is
+// no side registry to drift from: the DECLARATIONS are the registry (the Environment-
+// despecialization ruling that dissolved env/polyglot-rich-errors/registry.ts — teaching
+// about well-known-but-absent names is capability DATA resolving through the ordinary
+// chain, not a curated table inside the error path).
+//
+// Two laws, one subject (the declared doors), sharing this file per DESIGN.md's "law
+// files … contain ONE law (possibly many rows)" — the one law is "a declared door
+// behaves as declared," tested from two angles:
+//   1. every declared door FIRES AT APPLY: calling it throws the PurityError teaching
+//      door, naming the symbol and carrying a substantive reason (production default
+//      env — every pack ships in BASE_PACKS).
+//   2. the door-fires-at-APPLY semantic, pinned from the other side: a BARE REFERENCE
+//      to a door name RESOLVES (the door is a bound value — `(bound? 'x)`-style probes
+//      see it as present); only invocation throws. A door value that throws on USE is
+//      more honest than a lookup-time throw: resolution answers "does this name exist
+//      here" (yes, as a declared omission), application answers "can it do work" (no —
+//      and here is why).
+// Plus the completeness floor: no duplicate door declarations across packs, and the
+// grids are not silently vacuous (P16 anti-vacuity).
+//
+// Predecessor files this REPLACES: `registry.law.test.ts` (this file, renamed — was
+// registry-table-driven), `polyglot-rich-errors-stubs.test.ts` + the stubbed half of
+// `polyglot-rich-errors-typo.test.ts` (retired with the registry). The TYPO-enrichment
+// laws live in the sibling `vocabulary-suggestions.law.test.ts` — a different law
+// (suggestions derive from the chain's live vocabulary), different subject.
+
+import { describe, expect, it } from "vitest";
+import { exec } from "../../index.js";
+import { PurityError } from "../../errors.js";
+import { BASE_PACKS } from "../../env/base-packs.js";
+
+/** Every `symbol.notImplemented` door declared by a BASE_PACKS capability, as
+ *  {name, reason, pack} with the pack's `symbolPrefix` applied (none of today's base
+ *  packs set one, but the read honors the declaration shape). Builder-form `symbols`
+ *  (a per-activation function) can't be enumerated statically and is skipped — no
+ *  base pack uses it; if one ever does, the anti-vacuity floor below still holds for
+ *  the static population. */
+function declaredDoors(): { name: string; reason: string; pack: string }[] {
+  const doors: { name: string; reason: string; pack: string }[] = [];
+  for (const cap of BASE_PACKS) {
+    const symbols = cap.spec.symbols;
+    if (symbols === undefined || typeof symbols === "function") continue;
+    const prefix = cap.spec.symbolPrefix ?? "";
+    for (const [key, def] of Object.entries(symbols)) {
+      if (typeof def === "object" && def !== null && "kind" in def && def.kind === "door") {
+        doors.push({ name: `${prefix}${key}`, reason: def.reason, pack: cap.name });
+      }
+    }
+  }
+  return doors;
+}
+
+const DOORS = declaredDoors();
+
+// ============================================================================
+// 1. Every declared door FIRES AT APPLY with teaching
+// ============================================================================
+//
+// Call shape: `(<name>)` — ZERO arguments, uniformly, for every entry regardless of
+// the symbol's real arity. Deliberate: per capability.ts's "door" binding
+// (`env.set(verb, () => { throw new PurityError(...) })`), the door is a closure that
+// throws UNCONDITIONALLY, before any argument is even looked at — JS doesn't enforce
+// arity on a plain function, so calling with 0 args never reaches a "wrong number of
+// arguments" problem, and nothing is evaluated before the call (calling WITH an
+// unbound-variable argument would evaluate that argument BEFORE the door fires, since
+// doors are procedures, not macros).
+
+describe("F6 doors — every DECLARED notImplemented door fires at apply with teaching (declaration-driven)", () => {
+  // Anti-vacuity floor (P16/F9): if this ever collapses to 0, `it.each` below
+  // silently runs zero tests and the suite stays green while testing nothing.
+  it("BASE_PACKS declares at least one door (anti-vacuity floor)", () => {
+    expect(DOORS.length).toBeGreaterThan(0);
+  });
+
+  /** Shared body: fires `(<name>)`, confirms a PurityError door, returns the message. */
+  async function fireDoor(name: string): Promise<string> {
+    let caught: unknown;
+    try {
+      await exec(`(${name})`);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught, `expected (${name}) to throw`).toBeDefined();
+    const direct = caught instanceof PurityError;
+    const viaCause = (caught as { cause?: unknown })?.cause instanceof PurityError;
+    const message = (caught as Error)?.message ?? String(caught);
+    expect(direct || viaCause, `expected a PurityError door for \`${name}\`, got: ${message}`).toBe(true);
+    return message;
+  }
+
+  /** (b) carries a substantive reason, not just the bare wall — the structural "Why:"
+   *  marker is the door template's own teaching hinge (present iff a `def.reason` was
+   *  supplied, which `symbol.notImplemented` always requires). Structural + length
+   *  check rather than a byte-match against the declared reason: stays true regardless
+   *  of phrasing, still fails loudly if a door's reason ever regresses to empty/near-empty. */
+  function expectSubstantiveWhy(message: string): void {
+    const whyMatch = message.match(/\bWhy:\s*(.+)$/s);
+    expect(whyMatch, `expected a "Why:" reason clause in: ${message}`).not.toBeNull();
+    expect(whyMatch![1].trim().length).toBeGreaterThan(15);
+  }
+
+  it.each(DOORS.map((d): [string, { name: string; reason: string; pack: string }] => [`${d.name} (${d.pack})`, d]))(
+    "(%s) doors: names the symbol + carries a substantive teaching reason",
+    async (_label, door) => {
+      const message = await fireDoor(door.name);
+      // (a) names the symbol — capability.ts's door template is `${def.name} is not
+      // available.\n  Why: ${def.reason}`, so the canonical name always leads the message.
+      expect(message).toContain(door.name);
+      expectSubstantiveWhy(message);
+    },
+  );
+});
+
+// ============================================================================
+// 2. The door-fires-at-APPLY semantic (the `(bound? 'stub-name)` ruling, pinned)
+// ============================================================================
+describe("F6 doors — a door RESOLVES at lookup and fires only at apply", () => {
+  it("a bare reference to a door name resolves to a value — no unbound throw, no door fire", async () => {
+    // Three doors from three different packs (cross-dialect / R7RS host / the srfi-1
+    // fold gap) — the semantic is capability.ts's ONE door binding, not per-pack.
+    // Probe shape: `(begin <name> #t)` — evaluates the bare reference (resolution
+    // would throw here if the door fired at lookup) WITHOUT returning the door
+    // closure through exec's toJS exit membrane (a door binds as a raw JS closure,
+    // which the Scheme→JS exit rightly refuses to export as a program result).
+    for (const name of ["println", "open-input-file", "fold"]) {
+      // exec returns the program's values-list — `#t` seals to `[true]`.
+      await expect(exec(`(begin ${name} #t)`), `expected bare \`${name}\` to resolve`).resolves.toEqual([true]);
+    }
+  });
+
+  it("the same names throw the teaching door when APPLIED", async () => {
+    for (const name of ["println", "open-input-file", "fold"]) {
+      await expect(exec(`(${name})`)).rejects.toThrow(/is not available/);
+    }
+  });
+
+  it("the moved/new entries still teach: srfi-1's `fold` names both bound alternatives", async () => {
+    // `fold` was the registry's one famous-but-absent row; it is a DECLARED door now
+    // (env/srfi/srfi-1.ts) — the EXACT name teaches at apply, where the old table only
+    // ever enriched a near-typo of it.
+    await expect(exec("(fold + 0 (list 1 2 3))")).rejects.toThrow(/use reduce .*or fold-right/);
+  });
+});
+
+// ============================================================================
+// 3. Completeness drift alarms (P16's sanctioned pins)
+// ============================================================================
+describe("F6 doors — declaration completeness drift alarms", () => {
+  it("no duplicate door declarations across packs (a name doors in exactly one pack)", () => {
+    const seen = new Map<string, string>();
+    for (const door of DOORS) {
+      const prior = seen.get(door.name);
+      expect(prior, `door \`${door.name}\` declared by both \`${prior}\` and \`${door.pack}\``).toBeUndefined();
+      seen.set(door.name, door.pack);
+    }
+  });
+
+  it("every door carries a non-empty declared reason (the redirect doors exist to give)", () => {
+    for (const door of DOORS) {
+      expect(door.reason.trim().length, `\`${door.name}\` (${door.pack}) has no substantive reason`).toBeGreaterThan(15);
+    }
+  });
+});

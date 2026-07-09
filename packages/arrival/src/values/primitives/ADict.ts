@@ -11,13 +11,24 @@
  * back onto one canonical key object, since `Map`'s own key equality is reference
  * identity.
  *
+ * ALSO the `{…}` reader-literal carrier — the datum face of a dict literal IS an
+ * ADict (docs/working-proposals/dict-literal-true-shape.md), the same in-class
+ * pattern AVector uses for `[…]` (`evalElements` + payload-of-forms): a reader-
+ * minted node carries `literalForms` (the flat validated form sequence, keys
+ * included, unquote-form keys ONLY living here since they have no static entry)
+ * and answers the cached `(dict …)` application from `arrival/tagless-final/lower`
+ * in code position; under `quote` the node is itself the readable datum — a real
+ * ADict whose static-key entries are the raw, unevaluated forms.
+ *
  * AJSObject is untouched and keeps its actual job: boxing objects that are
- * genuinely foreign, with no prior Scheme lineage to lose.
+ * genuinely foreign, with no prior Scheme lineage to lose — it has exited the
+ * dict-literal syntax business entirely.
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
+import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
 import { AString } from "./AString.js";
@@ -31,7 +42,23 @@ import { isSettleChain, settleEntry } from "./pending-entry.js";
 // pending entry), never at module eval.
 import { jsToScheme } from "../../rosetta.js";
 
+/** Code-position lowering cache (arrival/tagless-final/lower) for `{…}` dict-literal
+ *  nodes — the `(dict …)` application built once per node and re-answered on every
+ *  subsequent eval of the SAME node (shared AST — a `{…}` literal inside a loop body
+ *  must not re-cons the spine every iteration). WeakMap, not an instance field: keeps
+ *  the cache off the dict's own payload (mirrors AVector's `LOWERED_LITERAL`) and off
+ *  the `#`-private-slot tslib helper this workspace's `importHelpers: true` needs.
+ *  GC-correct — entry disappears with the node. Moved here verbatim from AJSObject.ts
+ *  (the old `loweredLiterals`) per the true-shape migration. */
+const LOWERED_LITERAL = new WeakMap<ADict, APair<SchemeValue, SchemeValue>>();
+
 export type DictKey = ASymbol | AString | ACharacter;
+
+/** A reader-minted `{…}` dict-literal node: an ADict whose `literalForms` is
+ *  present. Named type for consumers that need to spell the narrowed shape (the
+ *  grammar's own return type, cross-package AST walkers) — `ADict.isDictLiteral`
+ *  is the runtime guard that produces it. */
+export type DictLiteralNode = ADict & { literalForms: readonly SchemeValue[] };
 
 /** A key's fold-name — the string identity `:a` and `"a"` share. Not a validating
  *  parse: `pairs` must already carry a `DictKey`; this only strips a keyword's `:`.
@@ -60,6 +87,29 @@ export function isDictShaped(source: unknown): boolean {
 export class ADict extends AValue {
   static [CLASS] = "dict";
   readonly kind = "dict" as const;
+
+  /** `{…}` reader-literal marker: the FLAT, validated form sequence the reader parsed
+   *  (keys then values, alternating — an unquote-form key lives ONLY here, since it
+   *  has no static entry in `byKey`). Present ⇒ this node is a reader-minted dict
+   *  literal: `quote` yields it unchanged as data (the static-key entries below ARE
+   *  the raw, unevaluated forms — `(@ '{a: (f x)} :a)` reads back the form); in CODE
+   *  position the evaluator lowers it once (cached, `arrival/tagless-final/lower`) to
+   *  the equivalent `(dict …)` application. Absent on a `dict`-constructed or
+   *  quasiquote-folded runtime dict. Mirrors AVector's `evalElements` flag idiom
+   *  exactly, sans boolean (a dict's "code needs evaluating" signal doubles as the
+   *  forms payload, since — unlike a vector — the literal's UNQUOTE-KEY forms have no
+   *  home in the static entries at all). Reader-minted only; set post-construction
+   *  (mirrors `evalElements`, never a constructor param — the existing `pairs`-based
+   *  constructor stays the one calling convention every producer already uses). */
+  literalForms?: readonly SchemeValue[];
+
+  /** The class's own dict-literal detection — the dual data/code nature is ADict's
+   *  self-knowledge (mirrors `AVector.isVector`'s flag-idiom, not a free function's).
+   *  Dispatch: the evaluator's quasiquote walk and code-position lowering both key off
+   *  this; everything else treats the node as the plain data dict its face presents. */
+  static isDictLiteral(v: unknown): v is DictLiteralNode {
+    return v instanceof ADict && v.literalForms !== undefined;
+  }
 
   /** The canonical store — key OBJECTS, not folded strings. Entries and keys are
    *  already-evaluated SchemeValues, so there is normally nothing to box; a
@@ -145,7 +195,36 @@ export class ADict extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ADict {
-    return new ADict(this.ctx, [...this.byKey.entries()], p);
+    const d = new ADict(this.ctx, [...this.byKey.entries()], p);
+    // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node
+    // (mirrors AVector.withProvenance re-stamping `evalElements`).
+    d.literalForms = this.literalForms;
+    return d;
+  }
+
+  // Code-position lowering (eval/evaluator.ts "code-position lowering"): a `{…}`
+  // reader dict-literal node (`literalForms` present) lowers ONCE, cached, to the
+  // equivalent `(dict …)` application — CODE position gets Clojure-style element
+  // evaluation BY CONSTRUCTION (the lowering is then evaluated through the ordinary
+  // apply path, so membrane marshaling / heap charging / provenance all ride
+  // unchanged). A plain, non-literal ADict (`dict`-constructed or quasiquote-folded —
+  // `literalForms` absent) answers null: self-evaluating, no lowering. Moved here
+  // verbatim from AJSObject.ts's `arrival/tagless-final/lower` per the true-shape
+  // migration (docs/working-proposals/dict-literal-true-shape.md) — same WeakMap
+  // cache pattern as AVector's twin.
+  ["arrival/tagless-final/lower"](): APair<SchemeValue, SchemeValue> | null {
+    if (this.literalForms === undefined) return null;
+    let lowered = LOWERED_LITERAL.get(this);
+    if (lowered === undefined) {
+      // Same non-empty-spine guarantee as AVector's twin (a `dict` head is always
+      // prepended) — narrowed here to match what's actually built.
+      lowered = APair.fromArray(this.ctx, [new ASymbol(this.ctx, "dict"), ...this.literalForms], false) as APair<
+        SchemeValue,
+        SchemeValue
+      >;
+      LOWERED_LITERAL.set(this, lowered);
+    }
+    return lowered;
   }
 
   /** R9 lazy egress: folded plain string keys, values unwrapping through their own

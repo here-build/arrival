@@ -12,7 +12,7 @@
 // NOT re-parse (`exec("'hi'")` threw `expecting datum after '''`). See the positive
 // test below.
 
-import { exec, sandboxedEnv } from "@here.build/arrival";
+import { exec, execState, sandboxedEnv } from "@here.build/arrival";
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_OBSERVATION_MAX_TOTAL_CHARS, renderObservation } from "../render-observation.js";
@@ -76,8 +76,11 @@ describe("renderObservation — real arrival exec() results", () => {
 
   it("renders nested values head-recursively at any depth (values-wrapped lists still bracket)", async () => {
     const env = freshEnv();
-    const [value] = await run(env, "(partition odd? '(1 2 3 4))");
-    expect(renderObservation(value)).toBe("(values\n  [1 3]\n  [2 4])");
+    // The Values BOX is a tooling read — R1's two-tier rule routes it to execState
+    // (exec's plain-JS exit unwraps multiple values to a JS ARRAY by convention —
+    // the arrival membrane's Values arm — so values-ness is only observable boxed).
+    const state = await execState("(partition odd? '(1 2 3 4))", { env: env as ExecEnv });
+    expect(renderObservation(state.values[0])).toBe("(values\n  [1 3]\n  [2 4])");
   });
 });
 

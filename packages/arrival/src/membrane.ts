@@ -23,6 +23,7 @@ import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js
 import invariant from "tiny-invariant";
 import { DefaultedWeakMap } from "@here.build/collections";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
+import { Values } from "./values/primitives/Values.js";
 import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
@@ -237,6 +238,13 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
  *  the exit came through this function or a direct protocol call, so a second
  *  membrane-side check would be redundant. */
 export function toJS(value: SchemeValue) {
+  // Multiple values exit as a JS ARRAY of unwrapped elements — the same convention
+  // the baked rosetta encoder uses ("the multiple-values case is a RAW JS ARRAY").
+  // Values sits outside the AValue hierarchy, so without this arm exec() on any
+  // values-returning program ((partition …), (exact-integer-sqrt …)) died on the
+  // R1 strict-exit invariant below — an R1 gap found by mcp-substrate's
+  // render-observation suite the day after the flip.
+  if (value instanceof Values) return value.__values__.map((v) => toJS(v));
   invariant(
     isSchemeValue(value),
     "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS value is already JS. Pass it through directly.",

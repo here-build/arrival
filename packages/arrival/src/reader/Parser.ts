@@ -408,7 +408,7 @@ export class Parser {
    * SUFFIX-KEYWORD FLIP: a symbol key with a single trailing colon is an explicit
    * declaration and flips to the keyword — `{flight_number: "X"}` ≡ `{:flight_number "X"}`.
    * The flipped key REPLACES the original in the element sequence so every downstream
-   * face (code-position `(dict …)` lowering, quasiquote, the quoted-data AJSObject face)
+   * face (code-position `(dict …)` lowering, quasiquote, the quoted-data ADict face)
    * sees one canonical spelling. Bare symbols (`{x 1}`) stay E-DICT-BAD-KEY (could be an
    * intended reference). Key rule is position-scoped: `foo:` outside `{}` stays a plain
    * symbol.

@@ -29,6 +29,15 @@ const IO_REASON =
 const SYSTEM_REASON =
   "the system interface is omitted from arrival by design — clock, environment, command line and exit are ambient and non-deterministic, with no construction-site to root a value's lineage at; pass any context you need in explicitly";
 
+// §6.13.1 — the FILE operations (call-with-input-file … open-output-file), relocated
+// here from env/srfi/srfi-stubs.ts (the registry-dissolution sweep: each stub beside
+// its family — these are R7RS-small §6.13.1 verbs, so they belong with the §6.13 port
+// doors below, not in the SRFI section). Same omission, one step earlier: the PORT
+// these openers would produce doesn't exist. Unlike IO_REASON's "return the value"
+// redirect, files have a real route — the filesystem TOOLS.
+const FILE_PORT_REASON =
+  'no file ports in this sandbox — files arrive through tools, not streams; call the filesystem tool bound in this environment (e.g. (filesystem/read_file :path "...")) and use the returned value directly';
+
 export default new EnvCapability("scheme/r7rs/host", {
   symbols: {
     "current-output-port": symbol.notImplemented`current-output-port: ${IO_REASON}`,
@@ -45,6 +54,12 @@ export default new EnvCapability("scheme/r7rs/host", {
     newline: symbol.notImplemented`newline: ${IO_REASON}`,
     "eof-object": symbol.notImplemented`eof-object: ${IO_REASON}`,
     "eof-object?": symbol.notImplemented`eof-object?: ${IO_REASON}`,
+    "call-with-input-file": symbol.notImplemented`call-with-input-file: ${FILE_PORT_REASON}`,
+    "call-with-output-file": symbol.notImplemented`call-with-output-file: ${FILE_PORT_REASON}`,
+    "with-input-from-file": symbol.notImplemented`with-input-from-file: ${FILE_PORT_REASON}`,
+    "with-output-to-file": symbol.notImplemented`with-output-to-file: ${FILE_PORT_REASON}`,
+    "open-input-file": symbol.notImplemented`open-input-file: ${FILE_PORT_REASON}`,
+    "open-output-file": symbol.notImplemented`open-output-file: ${FILE_PORT_REASON}`,
     "current-second": symbol.notImplemented`current-second: ${SYSTEM_REASON}`,
     "current-jiffy": symbol.notImplemented`current-jiffy: ${SYSTEM_REASON}`,
     "jiffies-per-second": symbol.notImplemented`jiffies-per-second: ${SYSTEM_REASON}`,

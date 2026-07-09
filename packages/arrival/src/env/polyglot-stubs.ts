@@ -1,21 +1,24 @@
-// @here.build/arrival/env/polyglot-rich-errors/stubs — the CROSS-DIALECT
-// teaching-stub half of the `polyglot-rich-errors` sub-capability, sibling in
-// spirit to `env/srfi/srfi-stubs.ts` but a DIFFERENT population:
+// @here.build/arrival/env/polyglot-stubs — the CROSS-DIALECT teaching-stub pack,
+// sibling in spirit to `env/srfi/srfi-stubs.ts` but a DIFFERENT population:
 //
-//   srfi-stubs.ts          — SRFI/R7RS symbols the SPEC defines that arrival omits.
-//   polyglot-rich-errors/  — symbols from OTHER dialects (Common Lisp / Racket /
-//   stubs.ts (this file)     Clojure) with no SRFI/R7RS lineage at all, that a model
-//                             trained across the whole Lisp family predictably reaches
-//                             for anyway. Keep the two populations separate: a symbol
-//                             belongs here iff no SRFI number covers it.
+//   srfi/srfi-stubs.ts     — SRFI symbols the SPEC defines that arrival omits.
+//   r7rs/host.ts           — the R7RS §6.13/§6.14 host-interface omission doors.
+//   polyglot-stubs.ts      — symbols from OTHER dialects (Common Lisp / Racket /
+//   (this file)              Clojure) with no SRFI/R7RS lineage at all, that a model
+//                            trained across the whole Lisp family predictably reaches
+//                            for anyway. A symbol belongs here iff no SRFI number /
+//                            R7RS section covers it.
 //
-// `polyglot-rich-errors` owns TWO things (see `./index.ts`): this file (the
-// well-known-but-unimplemented STUB doors, below) and `./registry.ts` (the
-// well-known-symbol TYPO enrichment — "did you mean `reduce`?" for an unbound
-// name that is a close typo of a famous cross-dialect symbol, whether that
-// symbol is bound elsewhere, stubbed here, or famous-but-absent). `env/polyglot.ts`
-// holds the actual pure IMPLEMENTATIONS (str/mapcar/get-in/…); this sub-capability
-// holds the ERROR intelligence around the whole cross-dialect surface.
+// LINEAGE: formerly `env/polyglot-rich-errors/stubs.ts`, half of a sub-capability
+// whose other half was a STATIC well-known-symbol table (`registry.ts`) feeding the
+// unbound-variable error path. That table is DISSOLVED (the Environment-
+// despecialization arc, docs/working-proposals/environment-is-capability-composition.md):
+// teaching about well-known-but-absent names is exactly these declared
+// `symbol.notImplemented` doors resolving through the ordinary chain, and typo
+// suggestions now derive from the chain's ACTUAL vocabulary (src/unbound-variable.ts)
+// — which includes these doors, so declaring a stub makes it typo-suggestible for
+// free. `env/polyglot.ts` holds the actual pure IMPLEMENTATIONS (str/mapcar/get-in/…);
+// this pack holds the cross-dialect omission doors.
 //
 // Every symbol here is genuinely NOT a pure-function candidate — IO, in-place
 // mutation, a macro too dialect-specific to generalize, or a hash-table type this
@@ -27,7 +30,7 @@
 // pack is only for the remainder: door the fact, the reason, and (where an honest
 // one exists) the exact bound alternative.
 //
-// Five families:
+// Six families:
 //   1. type-of (CL)        — no reflective type function; granular predicates instead.
 //   2. <>                   — SRFI-26 cut placeholder / SQL not-equal, never a bare value.
 //   3. hash-table constructors/accessors (Racket/CL spellings not already in
@@ -41,13 +44,16 @@
 //      in-place mutation this pure sandbox forbids, or a binding-form macro
 //      shaped enough around its own dialect that a compositional redirect would
 //      be a bigger invention than a teaching door.
+//   6. with-open-file (CL) — the Common-Lisp file macro, relocated here when the
+//      R7RS file openers moved from srfi-stubs.ts to r7rs/host.ts ("each entry
+//      beside its family"): the CL-ism has no SRFI/R7RS lineage, so its home is this pack.
 //
 // SCOPE: registered as its own BASE_PACKS entry in base-packs.ts (NOT folded into
 // allSrfi — it isn't a SRFI), so every env that inherits sandboxedEnv doors these
 // symbols, same as srfi-stubs.ts.
 
-import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import { symbol } from "../common/symbol.js";
 
 // ── 3. Hash-table spellings not already doored by srfi-stubs.ts ─────────────
 // Mirrors srfi-stubs.ts's HASH_TABLE_REASON verbatim (same design omission —
@@ -60,7 +66,7 @@ const HASH_LIBRARY_REASON =
 const IO_REASON =
   "output is omitted from arrival by design — ambient IO has no construction-site to root a value's lineage at, the same reason random/date are omitted (see srfi-stubs.ts); return the value instead of printing it, it flows to the caller directly";
 
-export default new EnvCapability("scheme/polyglot-rich-errors", {
+export default new EnvCapability("scheme/polyglot-stubs", {
   symbols: {
     // 1. Common Lisp type-of
     "type-of": symbol.notImplemented`type-of: type-of is not implemented — this runtime has no single reflective type-of-object function (Common Lisp CLHS); use the granular type predicates instead: pair?, string?, number?, symbol?, boolean?, vector?, dict?, procedure?, null?`,
@@ -89,5 +95,10 @@ export default new EnvCapability("scheme/polyglot-rich-errors", {
     nreverse: symbol.notImplemented`nreverse: nreverse is not implemented — it reverses a list destructively (in place); reverse (R7RS) is bound and returns a fresh reversed list instead`,
     "for/list": symbol.notImplemented`for/list: for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead`,
     "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot.ts's frequencies/group-by for worked examples)`,
+
+    // 6. with-open-file (Common Lisp) — same design omission as r7rs/host.ts's port
+    // doors and its §6.13.1 file-opener family (files arrive through TOOLS, not
+    // streams); this spelling lives here because it is the CL macro, not an R7RS verb.
+    "with-open-file": symbol.notImplemented`with-open-file: no file ports in this sandbox — files arrive through tools, not streams; call the filesystem tool bound in this environment (e.g. (filesystem/read_file :path "...")) and use the returned value directly`,
   },
 });

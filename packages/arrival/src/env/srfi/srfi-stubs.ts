@@ -7,15 +7,17 @@
 // the REASON, and the EXACT alternative bound in this environment — turning the
 // wall into a route back to the real dataflow.
 //
-// Eight families, grouped internally:
+// Seven families, grouped internally (family 2 — the R7RS §6.13.1 file openers +
+// the CL-ism with-open-file — MOVED in the registry-dissolution sweep: the R7RS
+// verbs to `r7rs/host.ts` beside the §6.13 port doors they belong with, the CL-ism
+// to `env/polyglot-stubs.ts`; each stub beside its family pack):
 //   1. SRFI-69/125 hash tables → dicts are native & immutable ({…} / (dict …)).
-//   2. file ports (+ the CL-ism with-open-file) → files arrive through TOOLS.
 //   3. SRFI-27 random → ambient non-determinism has no place in a pure sandbox.
 //   4. SRFI-14 char-sets → the string library takes a char or one-arg predicate.
 //   5. SRFI-19 time/date → the clock is ambient; timestamps arrive in tool results.
 //   6. SRFI-13 string-filter → not shipped; build it from filter + string<->list.
 //   7. SRFI-113 sets (list->set, set-contains?) → no set type exists to redirect to.
-//   8. string ports (call-with-input-string) → also omitted, same as host.ts's ports.
+//   8. string ports (call-with-input-string, SRFI-6) → omitted, same as host.ts's ports.
 //
 // SCOPE / COMPROMISES (honest deltas):
 //   • Registered — this pack IS assembled by default: `srfi/index.ts` folds it into
@@ -31,10 +33,9 @@
 //     bug batch precisely because these colon-named doors were truncating to
 //     `char-set`; `def.name` now reports the full `char-set:whitespace`.)
 //
-// No file-port symbol here is stubbed by `r7rs/host.ts`: host.ts doors the port
-// PRIMITIVES (current-*-port, read/write/display, open-*-string, eof-object) and
-// the §6.14 system verbs, but never the FILE openers below — so this pack adds,
-// never double-binds.
+// No symbol here is stubbed by `r7rs/host.ts`: host.ts doors the R7RS §6.13/§6.14
+// host interface (port primitives, the §6.13.1 file openers, system verbs); this
+// pack doors only SRFI-numbered omissions — so the two add, never double-bind.
 
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
@@ -46,10 +47,6 @@ import { symbol } from "../../common/symbol.js";
 // accumulation as a FRESH dict rebuilt from tool results.
 const HASH_TABLE_REASON =
   "hash tables are not implemented — dicts are native and immutable here: build with {:key value ...} or (dict :key value ...), read with (:key d) or (@ d :key), enumerate keys with (@keys d); for iteration fold over (@keys d), and rebuild a fresh dict instead of mutating one in place";
-
-// ── 2. File ports (+ the Common-Lisp `with-open-file`) ────────────────────────
-const FILE_PORT_REASON =
-  "no file ports in this sandbox — files arrive through tools, not streams; call the filesystem tool bound in this environment (e.g. (filesystem/read_file :path \"...\")) and use the returned value directly";
 
 // ── 3. SRFI-27 random ─────────────────────────────────────────────────────────
 // Mirrors host.ts's SYSTEM_REASON tone: ambient non-determinism has no lineage root.
@@ -109,14 +106,7 @@ export default new EnvCapability("scheme/srfi-stubs", {
     "hash-table-exists?": symbol.notImplemented`hash-table-exists?: ${HASH_TABLE_REASON}`,
     "hash-table-contains?": symbol.notImplemented`hash-table-contains?: ${HASH_TABLE_REASON}`,
 
-    // 2. File ports (host.ts stubs the port primitives; these file openers are new)
-    "call-with-input-file": symbol.notImplemented`call-with-input-file: ${FILE_PORT_REASON}`,
-    "call-with-output-file": symbol.notImplemented`call-with-output-file: ${FILE_PORT_REASON}`,
-    "with-input-from-file": symbol.notImplemented`with-input-from-file: ${FILE_PORT_REASON}`,
-    "with-output-to-file": symbol.notImplemented`with-output-to-file: ${FILE_PORT_REASON}`,
-    "open-input-file": symbol.notImplemented`open-input-file: ${FILE_PORT_REASON}`,
-    "open-output-file": symbol.notImplemented`open-output-file: ${FILE_PORT_REASON}`,
-    "with-open-file": symbol.notImplemented`with-open-file: ${FILE_PORT_REASON}`,
+    // (2. File ports — moved: R7RS §6.13.1 openers → r7rs/host.ts, with-open-file → polyglot-stubs.ts)
 
     // 3. SRFI-27 random
     "random-integer": symbol.notImplemented`random-integer: ${RANDOM_REASON}`,

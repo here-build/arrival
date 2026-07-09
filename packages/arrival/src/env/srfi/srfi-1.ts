@@ -102,6 +102,14 @@ export default new EnvCapability("scheme/srfi-1", {
       symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
       ["accumulator"],
     ),
+    // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
+    // (above) IS the left fold here, same fn(element, acc) convention with an explicit
+    // seed, and `fold-right` (prelude below) covers the right-associative shape. A
+    // teaching door beside its family (errors-as-doors), not a silent absence — formerly
+    // the one "famous-but-absent" row of the dissolved polyglot-rich-errors registry,
+    // now DECLARED capability data resolving through the ordinary chain (which also
+    // makes it typo-suggestible for free — see src/unbound-variable.ts).
+    fold: symbol.notImplemented`fold: SRFI-1's bare fold is not bound under this name — use reduce (left fold, fn(element, acc) convention, explicit seed) or fold-right (right-associative); both are bound here`,
     find: symbol.native`find: first list element matching the predicate, else nil`(
       {
         input: [z.lambda, z.union([z.pair, z.nil])],

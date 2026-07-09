@@ -203,7 +203,7 @@ export default new EnvCapability("scheme/equality", {
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
-    // it — a genuine gap, not a design omission (see `env/polyglot-rich-errors/stubs.ts`'s
+    // it — a genuine gap, not a design omission (see `env/polyglot-stubs.ts`'s
     // header for that distinction). A native dict is an `ADict` instance
     // (native-dict-provenance.md); the fallback below still recognizes a genuinely
     // foreign `AJSObject` (a borrowed JS object — arrays box separately as `AJSArray`,

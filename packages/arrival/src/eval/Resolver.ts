@@ -29,7 +29,7 @@ import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
-import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
+import { unboundVariableError } from "../unbound-variable.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -96,12 +96,19 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
  * unbound-variable door. (`ASymbol.object`, the gensym property-path carrier the
  * dropped branch also read, had zero producers monorepo-wide.)
  */
-function resolveSynth(name: string | symbol): EnvironmentValue | undefined {
+function resolveSynth(
+  name: string | symbol,
+  vocabulary: () => Iterable<string | symbol>,
+): EnvironmentValue | undefined {
   if (typeof name === "string") {
     const cxr = cxrUnfold(name);
     if (cxr !== undefined) return cxr;
   }
-  throw unboundVariableError(String(name));
+  // The PLAIN unbound wall + typo suggestions from the caller's ACTUAL vocabulary (a
+  // thunk — enumerated only on the throwing path, never for a cxr hit). No curated
+  // name tables here: well-known-but-absent names are declared `symbol.notImplemented`
+  // doors that the ordinary lookup above already found (see unbound-variable.ts).
+  throw unboundVariableError(String(name), vocabulary());
 }
 
 /**
@@ -126,7 +133,7 @@ export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | unde
     return value;
   }
 
-  return resolveSynth(name);
+  return resolveSynth(name, () => env.allBoundNames());
 }
 
 /**
@@ -198,7 +205,20 @@ export class Resolver {
       this.scope.lookup(n) ?? this.capabilities.lookup(n);
     const value = lookup(name);
     if (value !== undefined) return value;
-    return resolveSynth(name);
+    return resolveSynth(name, () => this.allBoundNames());
+  }
+
+  /**
+   * Every name this resolver's composed walk could have found — the lexical chain's
+   * bindings plus the capability base's enumerable vocabulary (assembled: the sealed
+   * chain's merged static names; resolver-synthesized names are absent by design),
+   * de-duplicated. The typo-suggestion source for {@link resolveSynth}'s unbound
+   * throw; glass mode double-covers the one shared chain and dedups to it.
+   */
+  allBoundNames(): (string | symbol)[] {
+    const names = new Set<string | symbol>(this.scope.env.allBoundNames());
+    for (const name of this.capabilities.allBoundNames()) names.add(name);
+    return [...names];
   }
 
   /**

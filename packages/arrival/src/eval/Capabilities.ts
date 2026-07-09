@@ -72,6 +72,14 @@ export class Capabilities {
     return this.chain === undefined ? this.env._lookupWithResolvers(name) : this.chain.lookup(name);
   }
 
+  /** The base's enumerable VOCABULARY — assembled: the sealed chain's merged static
+   *  `names` (resolver-synthesized names deliberately absent, per the chain's own
+   *  contract); glass: the live `__parent__`-chain enumeration. The typo-suggestion
+   *  source for the Resolver's unbound-variable throw. */
+  allBoundNames(): Iterable<string | symbol> {
+    return this.chain === undefined ? this.env.allBoundNames() : this.chain.names;
+  }
+
   /** The capability base = the chain root (`global_env`), found structurally as the
    *  parent-less top of this scope's chain rather than by an env-roots import (which would
    *  cycle through the early-loaded eval modules). The hygiene literal check compares a

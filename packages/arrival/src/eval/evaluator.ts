@@ -26,7 +26,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { Environment, type EnvironmentValue } from "../Environment.js";
-import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
+import { unboundVariableError } from "../unbound-variable.js";
 import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
@@ -59,9 +59,10 @@ import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
 import { AString } from "../values/primitives/AString.js";
-// AJSObject here is the `{…}` dict-literal NODE face — its detection (isDictLiteral) and
-// the DictLiteralNode type are the class's own algebra; the import is cycle-safe
-// (AJSObject leans only on value leaves + the hoisted jsToScheme).
+// AJSObject here is ONLY the genuinely-foreign borrowed-JS wrapper face (notCallableError's
+// dict-shaped-borrow check below) — it exited the dict-literal syntax business entirely
+// (docs/working-proposals/dict-literal-true-shape.md). The `{…}` dict-literal NODE face —
+// its detection (isDictLiteral) and the DictLiteralNode type — is ADict's own algebra now.
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 // The reader's dict grammar — quasiquote re-instantiates READER literals, so the
@@ -563,7 +564,9 @@ function resolvedBindingOrThrow(binding: EnvironmentValue | undefined, sym: ASym
     // Structurally unreachable via the ordinary `Resolver.resolve` call path (it
     // throws `unboundVariableError` itself before ever returning `undefined` —
     // see `eval/Resolver.ts#resolveSynth`), but kept as a defensive throw for any
-    // other caller of this narrowing fn; same rich-error hook for consistency.
+    // other caller of this narrowing fn. No vocabulary passed — this branch has no
+    // resolver in reach, so it stays the plain wall (suggestions live at the real
+    // throw sites, which enumerate the chain they actually missed against).
     throw unboundVariableError(symbol_name(sym));
   }
   if (binding instanceof Environment) {
@@ -1194,9 +1197,9 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // template is FINAL data — fold it to a plain dict (post-substitution key
   // validation + Clojure-faithful loud duplicates); deeper levels rebuild a literal
   // node carrying the processed forms so nested quasiquotes keep their shape.
-  if (AJSObject.isDictLiteral(expr)) {
+  if (ADict.isDictLiteral(expr)) {
     const processed: SchemeValue[] = [];
-    for (const form of expr.dictForms) {
+    for (const form of expr.literalForms) {
       let p = yield { call: processQuasiquote(form, ctx, level) };
       if (is_promise(p)) {
         p = yield p;
@@ -2739,15 +2742,15 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // ============================================================================
 // `[…]` / `{…}` collection literals — code-position lowering
 // ============================================================================
-// The reader mints literal NODES (a frozen `evalElements` AVector / a `dictForms`
-// AJSObject) so `quote` yields them unchanged as data. In CODE position their
+// The reader mints literal NODES (a frozen `evalElements` AVector / a `literalForms`
+// ADict) so `quote` yields them unchanged as data. In CODE position their
 // elements EVALUATE (Clojure semantics): the node's own `arrival/tagless-final/lower`
-// term (AVector.ts / AJSObject.ts) lowers ONCE (cached on the term, keyed by node
+// term (AVector.ts / ADict.ts) lowers ONCE (cached on the term, keyed by node
 // identity) to the equivalent `(vector …)` / `(dict …)` application, which is then
 // evaluated — so the semantics are BY CONSTRUCTION the documented equivalences
 // (`{:k v}` ≡ `(dict :k v)`), including membrane marshaling, heap charging and
-// provenance. `#(…)` literals carry no flag and a non-literal AJSObject has no
-// `dictForms`; both answer null from `lower()` and keep self-evaluating semantics.
+// provenance. `#(…)` literals carry no flag and a non-literal ADict has no
+// `literalForms`; both answer null from `lower()` and keep self-evaluating semantics.
 
 /**
  * Post-substitution key fold for a quasiquote-instantiated `{…}` template

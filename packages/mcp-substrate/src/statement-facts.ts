@@ -10,12 +10,11 @@
 //
 // This module only *reads* the value tree; it never allocates in the execution heap.
 
-// `AJSObject` (the `{...}` dict-literal wrapper) is exported from arrival's barrel under the
-// alias `AObject` (`export { AJSObject as AObject } from "./values/primitives/AJSObject.js"` —
-// the same dual-name convention as `ACharacter`/`AChar`). Re-aliased back to `AJSObject` locally
-// for readability — it is the identical class either way, so every `instanceof` check below is
-// unaffected.
-import { AObject as AJSObject, ANil, APair, ASymbol, AVector, type SchemeValue } from "@here.build/arrival";
+// `ADict` is the `{...}` dict-literal NODE face (docs/working-proposals/dict-literal-true-shape.md)
+// — a reader-minted `{...}` literal is a real ADict carrying `literalForms`, the exact twin of
+// AVector's `evalElements` + payload-of-forms. AJSObject (the borrowed-foreign-JS wrapper) never
+// appears in a parsed-but-unevaluated statement AST, so it has no business in this walk.
+import { ADict, ANil, APair, ASymbol, AVector, type SchemeValue } from "@here.build/arrival";
 
 export interface StatementFacts {
   /** True iff this statement's own top-level form is `(define ...)` — a bare SHAPE check.
@@ -57,9 +56,9 @@ const EMPTY_FACTS: StatementFacts = {
 // boolean, a procedure — is a LEAF. `()` is `ANil`, the real nil singleton, NOT the old plain-
 // tree's `{list: []}` — it is structural (nothing to walk, but not an "atom" for the bracket-
 // binding shape discriminator below either).
-type Structural = APair | AVector | AJSObject | ANil;
+type Structural = APair | AVector | ADict | ANil;
 const isStructural = (n: SchemeValue | undefined): n is Structural =>
-  n instanceof APair || n instanceof AVector || n instanceof AJSObject || n instanceof ANil;
+  n instanceof APair || n instanceof AVector || n instanceof ADict || n instanceof ANil;
 
 /** A symbol's name, or `undefined` for anything else (including a gensym, whose `__name__` is
  *  an ES6 `symbol`, not a string — this dialect's reader never produces one, but a defensive
@@ -274,8 +273,8 @@ function walk(node: SchemeValue | undefined, depth: number, acc: WalkAccumulator
     for (const el of node.__vector__) walk(el, depth + 1, acc, seen);
     return;
   }
-  if (node instanceof AJSObject) {
-    for (const el of node.dictForms ?? []) walk(el, depth + 1, acc, seen);
+  if (node instanceof ADict) {
+    for (const el of node.literalForms ?? []) walk(el, depth + 1, acc, seen);
     return;
   }
   if (node instanceof ANil) return; // the empty list — nothing to walk

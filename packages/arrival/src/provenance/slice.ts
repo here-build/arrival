@@ -37,10 +37,16 @@ const isSymbol = (v: unknown): v is DuckSymbol => kindOf(v) === "symbol";
 const symName = (s: DuckSymbol): string =>
   typeof s.__name__ === "string" ? s.__name__ : (s.__name__.description ?? String(s.__name__));
 
+/** Duck shape of an ADict (values/primitives/ADict.ts) — kept duck-typed like every other
+ *  kind here (this module never imports value classes, only discriminates on `.kind`).
+ *  `literalForms` present ⇒ the node is a reader-minted `{…}` dict literal — the exact
+ *  twin of a vector's `evalElements` flag (see the "vector" case below). */
+type DuckDict = { literalForms?: readonly unknown[]; keys(): string[]; get(name: string): unknown };
+
 /** Re-serialize a homoiconic form to RE-PARSEABLE Scheme — total over the datum algebra. The
  *  shared value serializer is display-only (drops string quotes; renders boxed vectors as
  *  `[object Object]`), so a rendered slice wouldn't round-trip. Strings are JSON.stringify'd;
- *  vectors/bytevectors get their reader syntax; symbol/char/number/bool/nil round-trip via their
+ *  vectors/bytevectors/dicts get their reader syntax; symbol/char/number/bool/nil round-trip via their
  *  own `toString`; anything NON-serializable (a procedure, a host object) THROWS — a slice must
  *  never silently emit `[object Object]` and re-parse to a different datum. */
 export function writeForm(node: unknown): string {
@@ -111,7 +117,33 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
     case "vector": {
       invariant(!seen.has(node), CYCLE);
       seen.add(node);
-      return `#(${(node as { __vector__: unknown[] }).__vector__.map((el) => writeDatum(el, seen, sub)).join(" ")})`;
+      const body = (node as { __vector__: unknown[] }).__vector__.map((el) => writeDatum(el, seen, sub)).join(" ");
+      // `evalElements` (AVector.ts) marks a `[…]` reader literal — re-emit its OWN read
+      // syntax, not the R7RS `#(…)` constant syntax; the two re-parse to different
+      // datum kinds under `quote` (a `[…]` re-read STAYS a `[…]` node), so silently
+      // downgrading to `#(…)` here would be a silent semantics change on re-parse
+      // (the sibling bug this fix closes alongside the "dict" case below — both are
+      // the SAME family of gap: a reader-literal flag the old code forgot to re-emit).
+      return (node as { evalElements?: boolean }).evalElements === true ? `[${body}]` : `#(${body})`;
+    }
+    case "dict": {
+      invariant(!seen.has(node), CYCLE);
+      seen.add(node);
+      const dict = node as DuckDict;
+      // `literalForms` present ⇒ a `{…}` reader literal: re-emit the flat validated
+      // form sequence verbatim — an EXACT round-trip, unquote-form keys included
+      // (`{,k 1 :b 2}` re-reads to the identical template; there is no static entry
+      // for an unquote key, so the entry-map path below could never reproduce it).
+      if (dict.literalForms !== undefined) {
+        return `{${dict.literalForms.map((el) => writeDatum(el, seen, sub)).join(" ")}}`;
+      }
+      // Plain runtime dict (`dict`-constructed or quasiquote-folded): serialize each
+      // entry as `name: value` (the suffix-colon key spelling — Parser.ts's
+      // `make_dict_literal` flips it back to the `:name` keyword canonical form on
+      // re-read), recursing into each value; a non-datum value still hits the loud
+      // default throw below, as it must.
+      const parts = dict.keys().map((name) => `${name}: ${writeDatum(dict.get(name), seen, sub)}`);
+      return `{${parts.join(" ")}}`;
     }
     case "bytevector":
       return `#u8(${[...(node as { __bytevector__: Uint8Array }).__bytevector__].join(" ")})`;

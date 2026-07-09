@@ -2,10 +2,13 @@
 // predicates + the node minting. Reader-layer by nature (Parser validates with these and
 // mints here; the infix ban door and the evaluator's quasiquote re-instantiation are the
 // other mouths). The NODE ITSELF — its type, its detection, its dual data/code nature —
-// is AJSObject's own algebra: see `AJSObject.isDictLiteral` / `DictLiteralNode`
-// (values/primitives/AJSObject.ts), where the `dictForms` field lives.
+// is ADict's own algebra: see `ADict.isDictLiteral` / `DictLiteralNode`
+// (values/primitives/ADict.ts), where the `literalForms` field lives
+// (docs/working-proposals/dict-literal-true-shape.md — the datum face of `{…}` is an
+// ADict, the same in-class pattern AVector uses for `[…]`; AJSObject exited the
+// dict-literal syntax business entirely).
 //
-// The dual nature (why the node is an AJSObject and not a distinct AST kind):
+// The dual nature (why the node is an ADict and not a distinct AST kind):
 //   - CODE position: the evaluator lowers the node ONCE (cached) to the equivalent
 //     `(dict …)` application — `{:k v}` ≡ `(dict :k v)` BY CONSTRUCTION, so evaluation,
 //     membrane marshaling, heap charging and provenance all ride the normal apply path.
@@ -18,7 +21,7 @@
 // Keys are read-time-static (`:keyword` / `"string"`, both folding to the same string
 // key) or unquote forms (quasiquote-substituted keys, validated post-substitution).
 // See docs/working-proposals/arrival-curly-vector-literals.md.
-import { AJSObject, type DictLiteralNode } from "../values/primitives/AJSObject.js";
+import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/ADict.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
@@ -67,18 +70,24 @@ export function isUnquoteForm(datum: SchemeValue): boolean {
 /**
  * Mint the dict-literal node from an already-VALIDATED flat form sequence (the reader
  * owns validation — arity, key admissibility, static-duplicate — because the errors
- * need ParseError + source location). The AJSObject face maps each STATIC key to its
- * raw value form (null-prototype source, so a `:__proto__` key is a plain data entry,
- * never prototype surgery); unquote-form keys have no static entry — they exist only
- * in `dictForms` until quasiquote substitutes them.
+ * need ParseError + source location). The ADict face maps each STATIC key — kept as
+ * the real key DATUM object (`:a`'s ASymbol, `"a"`'s AString — real provenance, not a
+ * folded string), a strictly better key face than a null-proto record — to its raw
+ * VALUE form (unevaluated); unquote-form keys have no static entry — they exist only
+ * in `literalForms` until quasiquote substitutes them. `pairs`' fold-names are unique
+ * by construction here: the Parser's `make_dict_literal` already threw
+ * E-DICT-DUP-KEY on any static-key collision before this ever runs, so ADict's own
+ * constructor invariant (no duplicate fold-name) is trivially satisfied.
  */
 export function makeDictLiteralNode(forms: readonly SchemeValue[]): DictLiteralNode {
-  const source: Record<string, SchemeValue> = Object.create(null);
+  const pairs: Array<readonly [DictKey, SchemeValue]> = [];
   for (let i = 0; i + 1 < forms.length; i += 2) {
-    const key = staticDictKey(forms[i]);
-    if (key !== null) source[key] = forms[i + 1];
+    const keyDatum = forms[i];
+    if ((keyDatum instanceof ASymbol || keyDatum instanceof AString) && staticDictKey(keyDatum) !== null) {
+      pairs.push([keyDatum, forms[i + 1]]);
+    }
   }
-  const node = new AJSObject(CONSTANT_CTX, source) as DictLiteralNode;
-  node.dictForms = forms;
+  const node = new ADict(CONSTANT_CTX, pairs) as DictLiteralNode;
+  node.literalForms = forms;
   return node;
 }

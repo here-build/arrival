@@ -52,6 +52,11 @@ export { APair } from "./values/primitives/APair.js";
 // needs `instanceof AVector` to distinguish a `[...]` literal from an ordinary cons list,
 // same as `APair`/`ANil`/`AString`/`ASymbol` are exported for.
 export { AVector } from "./values/primitives/AVector.js";
+// `ADict` — the native open-key map AND the `{...}` dict-literal NODE face
+// (docs/working-proposals/dict-literal-true-shape.md). Same cross-package AST-walking
+// need as `AVector` above (mcp-substrate's statement-facts.ts distinguishes a `{...}`
+// literal via `instanceof ADict` + `literalForms`).
+export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 // The ONE invocation seam for any JS site calling a scheme callable: dispatches a
 // callable VALUE's apply term, else a bare fn with a defined `this`. External packages
 // resolving a verb off an env (e.g. the env-loader's require registry calling `ext/*/resolve`)
