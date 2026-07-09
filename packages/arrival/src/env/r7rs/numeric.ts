@@ -2,17 +2,17 @@
  * Numeric core pack — the carved-out home of the R7RS numeric primitives.
  *
  * This is the dissolution of the legacy `Operator`/`Codec`/`wrappedOps` model
- * (membrane.ts + operators/numeric.ts + bridge.ts's `wrapOperator`). Each op is
- * bound via `symbol.native` under a LOOSE types-only contract — the impl IS the
- * binding, exactly as `wrappedOps` bound it (capability.ts `case "native"` →
- * `env.set(verb, def.impl)`), so the runtime behavior is byte-identical to
- * `wrapOperator(ops.X)`.
+ * (membrane.ts + operators/numeric.ts + the long-dead bridge.ts's `wrapOperator` —
+ * bridge itself dissolved at 2bfefd7455; the historical names below are lineage,
+ * not live citations). Each op is bound via `symbol.native` under a LOOSE
+ * types-only contract — the impl IS the binding (capability.ts `case "native"`
+ * binds it as an ANativeProcedure).
  *
- * `nativeNumericOp` reproduces `wrapOperator` (bridge.ts) ⊕ `Operator.call`
- * (membrane.ts) inline:
- *   1. provenance — union the AValue inputs; stamp the result (boxing a bare bool
- *      ONLY under non-empty provenance — the boolean landmine the
- *      boolean-landmine-regression test pins);
+ * `nativeNumericOp` is the numeric pack's per-op wrapper (historically
+ * `wrapOperator ⊕ Operator.call`, both dead), three concerns inline:
+ *   1. provenance — union the AValue inputs; stamp the result; boolean verdicts
+ *      via the R8 mint (`mintVerdict` — flyweight when provenance-free, fresh
+ *      stamped ABool when lineage rides);
  *   2. coercion + error-naming — `coerceNumeric` each arg, naming the bad index;
  *   3. codec marshalling — per-arg `match`+`toJS` decode → `fn` → `out.fromJS`.
  *
@@ -155,8 +155,10 @@ const Bool: NCodec<boolean, boolean> = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// nativeNumericOp — `wrapOperator` (bridge.ts) ⊕ `Operator.call` (membrane.ts),
-// reproduced byte-for-byte so the carve is behavior-preserving.
+// nativeNumericOp — the pack's per-op wrapper. (Historically a byte-for-byte
+// reproduction of bridge.ts's `wrapOperator` ⊕ membrane's `Operator.call`;
+// both ancestors are deleted — bridge at 2bfefd7455 — and this is now the
+// only implementation, evolved past them: R8 mintVerdict, A4 always-box.)
 // ════════════════════════════════════════════════════════════════════════════
 
 interface NumSpec {

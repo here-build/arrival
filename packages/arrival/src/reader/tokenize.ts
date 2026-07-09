@@ -2,8 +2,7 @@
 // Lifted out of stdlib.ts (the LIPS monolith) into a reader leaf. It depends only on the
 // Lexer + eof + AString, so it sits cycle-neutral below the monolith (Lexer does not import
 // stdlib). `tokenize` is the one public entry; `tokens`/`strip_s_comments` are its private
-// helpers. stdlib imports `tokenize` back for its single native-lambda literal; the reader's
-// own consumers (utils/balanced) import it from here directly.
+// helpers.
 import { Lexer } from "./Lexer.js";
 import { eof } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";
