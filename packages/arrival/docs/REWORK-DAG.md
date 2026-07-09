@@ -160,9 +160,8 @@ rows cite unflipped `[INVERTS:]` tags).
 
 # Phase 2 — the provenance two-layer (P-track)
 
-*Post-Z execution plan for the design quartet: `provenance-vocabulary-v2.md`,
-`callback-track-graphs.md`, `execution-plan-wireframe.md`, `provenance-lineage.md`
-(all in repo-root `docs/working-proposals/`). Discipline unchanged: stubs before
+*Post-Z execution plan. THE NORMATIVE SPEC IS [`PROVENANCE.md`](PROVENANCE.md) (fused,
+ratified 2026-07-09) — the working proposals it fuses remain design history. Discipline unchanged: stubs before
 machinery (the v2-suite method), standing gates on every commit, agents never commit.
 Adopted vocabulary per the lineage doc: prospective (wireframe) / retrospective (port
 records), backward/forward slice (cones), confinement (I1), coeffect-shaped ingress.*
