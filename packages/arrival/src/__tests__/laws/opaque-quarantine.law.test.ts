@@ -26,13 +26,18 @@ import { inferenceEnv } from "../../inference-env.js";
 import { classify, countOpaqueNodes, type Classifier } from "../../values/lineage.js";
 
 // Mirrors lineage-spike.test.ts's spike classifier — a minimal, deterministic
-// Classifier sufficient to exercise the corpus below (not the real env-backed one;
-// Q3 replaces this with declaration-driven classification).
+// Classifier sufficient to exercise the corpus below (not the real env-backed one).
+// Q3 (PROVENANCE-PLAN.md) landed declaration-driven classification: `roleOf` is the
+// one read `classify()` consults now (docs/PROVENANCE.md §2's lowering table).
 const C: Classifier = {
-  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length", "not"].includes(op),
-  isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
-  isFan: (op) => ["map", "filter"].includes(op),
-  isOpaque: (op) => ["ext-call"].includes(op),
+  roleOf: (op) =>
+    ["infer", "fetch", "db-read"].includes(op)
+      ? "source"
+      : ["map", "filter"].includes(op)
+        ? "fan"
+        : ["ext-call"].includes(op)
+          ? "opaque"
+          : undefined, // +, -, *, /, <, >, =, car, cdr, cons, list, length, not — pure fallthrough
 };
 
 /** A tiny corpus mixing zero-opaque, single-opaque, and nested-opaque forms — enough
@@ -43,7 +48,7 @@ const CORPUS: readonly string[] = [
   `(infer p)`, // a source mint, no opaque
   `(ext-call a b)`, // one opaque, holistic over two leaves
   `(if (ext-call a) (+ 1 2) (ext-call b c))`, // two opaque nodes, one per mux arm
-  `(let loop ((a v1)) a)`, // named-let — opaque today (pending Q3's binder rewrite)
+  `(let loop ((a v1)) a)`, // named-let — NO LONGER opaque as of Q3 (binder{cycles:true}; V2 row)
 ];
 
 /** classify() every corpus member and sum `countOpaqueNodes` — the machinery a future
@@ -70,8 +75,17 @@ describe("V3 opaque quarantine — counted-walk machinery (Q1)", () => {
     expect(total).toBeGreaterThanOrEqual(0);
   });
 
-  // @ledger: opaque quarantine baseline pinned pre-Q6
-  it.todo(
-    "the corpus opaque count is baselined AFTER Q6 (span propagation) lands, then only shrinks (drift alarm)",
-  );
+  // @ledger: opaque quarantine baseline PINNED (Q3, post-Q6 spans + declaration-driven
+  // classification — the exact point docs/PROVENANCE.md §2 names: "baselined AFTER
+  // W0" (Q6 landed spans) and now also post-Q3 (named-let no longer inflates the
+  // count). SHRINK-ONLY from here: a future landing may only lower this ceiling
+  // (more classifier coverage retiring opaque escape hatches); a rise is the drift
+  // alarm firing. Composition under test: corpus → classify → countOpaqueNodes.
+  it("the corpus opaque count is a SHRINK-ONLY drift alarm, baselined post-Q6+Q3", async () => {
+    const total = await countOpaqueOverCorpus(CORPUS);
+    // Baseline 3, pinned 2026-07-09: only the three `ext-call` occurrences remain
+    // opaque (one in row 3, two in row 4's mux arms) — row 5's named-let no longer
+    // contributes (Q3 reclassifies it as `binder{cycles:true}`, not opaque).
+    expect(total).toBeLessThanOrEqual(3);
+  });
 });

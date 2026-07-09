@@ -115,34 +115,47 @@ export type LineageNode =
   // GRAPH-LAYER target for docs/PROVENANCE.md §2's declaration-role `sink` lowering
   // ("a sink is a port with no egress wire"): an effect/output port. `children` are
   // what fed it — their cone still matters (I1 confinement reads it), but nothing
-  // derives FROM a sink upward, so it contributes no leaf/mint of its own. UNREACHABLE
-  // from classify() today — no declaration marks an op `sink` yet (Q2's role field +
-  // Q3's classifier wiring land that); the kind exists now so Q2/Q3 have a target
-  // (PROVENANCE-PLAN.md Q1).
+  // derives FROM a sink upward, so it contributes no leaf/mint of its own. REACHABLE
+  // as of Q3's declaration-driven classifier (a declared `sink` role lowers here —
+  // classifyWith's role dispatch); no live declaration uses the role yet (_bake.ts),
+  // so the arm is exercised by classify() but not yet by any real symbol.
   | { readonly kind: "sink"; readonly op: string; readonly children: readonly LineageNode[] }
   // GRAPH-LAYER target for §2's `transparent` lowering ("a membrane crossing that
   // neither mints nor stamps"): a pure pass-through port. Single-child, cone-
   // identical to `pipe` — kept as its own kind because crossing a membrane is a
   // distinct FACT from a same-world pure op, even though today's cone walk treats it
-  // the same. Same UNREACHABLE-today status as `sink` above.
+  // the same. Same REACHABLE-as-of-Q3 status as `sink` above.
   | { readonly kind: "transparent"; readonly op: string; readonly child: LineageNode }
   // GRAPH-LAYER target for §1's "binders" designated-node category. `cycles` marks
   // whether THIS binder introduces a back-edge — the declaration-role `loop` lowers
-  // 1:1 to `binder{cycles: true}` (§2); `cycles: false` is the future home for
-  // today's plain/named-let handling (still `opaque` above, pending Q3's classifier
-  // rewrite). `children` covers bindings + body as an inert placeholder — real
-  // backedge topology is Q8a′'s job (PROVENANCE-PLAN.md), not Q1's; this shape is
-  // only the `cycles` marker the spec names, not the graph. Same UNREACHABLE-today
-  // status as `sink`/`transparent`.
-  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] }; // designated binding node, marker-only until Q8a′
+  // 1:1 to `binder{cycles: true}` (§2), and (Q3) named-let/`do` now build this shape
+  // directly (`classifyLet`'s named-let branch, `classifyDo`) rather than falling to
+  // `opaque`. `cycles: false` stays the future home for a NON-recursive binder shape
+  // no form builds yet. `children` covers bindings + body as a flat conservative-
+  // barrier array (walk()'s shared merge/opaque/sink/binder case) — real backedge
+  // TOPOLOGY (per-iteration attribution) is Q8a′'s job, not this landing's; this
+  // shape is the `cycles` marker the spec names, not yet the graph.
+  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] }; // designated binding node; real topology pending Q8a′
 
-/** Static classification of operators — read from the env's binding table in a
- *  real build; passed explicitly here so the spike is deterministic. */
+/** docs/PROVENANCE.md §2's declared-role vocabulary, restated here as a LOCAL literal
+ *  union (not imported from `common/symbols/_bake.ts`'s `ProvenanceRole`) so this module
+ *  stays dependency-light (value-guards + primitives only, no `common/` coupling, no
+ *  cycle risk) — the two enumerate the SAME spec vocabulary and must stay in lock-step. */
+export type DeclaredRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
+
+/**
+ * Static classification of operators, READ FROM THE DECLARATION — never guessed from
+ * the op's name or duck-read off an ad-hoc property (PROVENANCE-PLAN.md Q3;
+ * docs/PROVENANCE.md §2 EXCLUDED "heuristic classification (`isRosettaIn`, `.fanout`
+ * stamped on bound functions for duck-reading)"). `roleOf` is the ONE read: a
+ * production classifier answers it from the env-bound callable's `.provenanceRole`
+ * (`values/lineage-classifier-from-env.ts`) or an equivalent declaration registry —
+ * `undefined` means "no declared role" (unbound name, a plain user-defined Scheme
+ * lambda, or an unmodeled special-form head — see the file header's `case`/`while`/
+ * `quasiquote` note), which classify() treats identically to an explicit `"pipe"`.
+ */
 export interface Classifier {
-  isPure(op: string): boolean; // +, *, <, car, list … — propagate, never mint
-  isRosettaIn(op: string): boolean; // infer, fetch, db-read … — MINT a leaf
-  isFan(op: string): boolean; // map, filter — a uniform per-element pipe template
-  isOpaque(op: string): boolean; // membrane / foreign call — irreducible black box
+  roleOf(op: string): DeclaredRole | undefined;
 }
 
 function opName(x: unknown): string {
@@ -158,11 +171,16 @@ function opName(x: unknown): string {
  * these: classify handles them, they are in scope, not opaque macros. `quote`/
  * `lambda` produce a literal but are still "handled".
  *
- * NOT exhaustive over SPECIAL_FORMS: forms classify does not model (case / do /
+ * NOT exhaustive over SPECIAL_FORMS: forms classify does not model (case /
  * while / quasiquote / …) fall through to the application path and are mis-modeled
  * by shape — safe only because the shadow skips them as macro-heads. Keep this set
  * and the switch in classifyWith in lock-step (a head here without a switch arm
- * over-asserts; a switch arm without an entry here over-skips). */
+ * over-asserts; a switch arm without an entry here over-skips).
+ *
+ * `do` joined this set at Q3 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §2's `loop`
+ * role): an iterative loop classifies as `binder{cycles:true}` — the same shape a
+ * named `let` now gets (see `classifyLet`'s named-let branch) — via `classifyDo`
+ * below, replacing the pre-Q3 mis-modeled-by-shape fallthrough. */
 export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "if",
   "cond",
@@ -177,6 +195,7 @@ export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "or",
   "lambda",
   "quote",
+  "do",
 ]);
 
 /** Surface-form heads dispatched by SPECIAL_FORMS, recognised by name. */
@@ -373,6 +392,8 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
         return { kind: "literal" };
       case "quote":
         return { kind: "literal" }; // (quote datum) is a self-evaluating constant
+      case "do":
+        return classifyDo(rest, c, subst);
       default:
         break; // not a special form → fall through to application
     }
@@ -410,16 +431,18 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     return { kind: "field", op, step: projected.step, child };
   }
 
-  if (c.isRosettaIn(op)) return { kind: "source", op }; // provenance is BORN here
+  // ── DECLARATION-DRIVEN DISPATCH (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md §2's
+  // lowering table) — the ONE read is `c.roleOf(op)`; no name list, no duck-read off
+  // a bound function's ad-hoc property. `undefined` (unbound / a plain user lambda /
+  // an unmodeled special-form head) falls through with `"pipe"` to the same default
+  // as an explicit pipe declaration — see `Classifier`'s doc. ──
+  const role = c.roleOf(op);
 
-  if (c.isOpaque(op)) {
-    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
-    return { kind: "opaque", op, children };
-  }
+  if (role === "source") return { kind: "source", op }; // provenance is BORN here
 
-  if (c.isFan(op)) {
-    // (map f xs) / (filter p xs) — f introduces provenance iff it is itself a
-    // Rosetta-in source. `lengthPreserving` distinguishes map (true) from filter
+  if (role === "fan") {
+    // (map f xs) / (filter p xs) — f introduces provenance iff IT is itself
+    // declared a source. `lengthPreserving` distinguishes map (true) from filter
     // (false) for the count-cone prune in walk().
     const fn = args[0];
     const fanOp = opName(fn);
@@ -434,14 +457,50 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     return {
       kind: "fan",
       op: fanOp,
-      introduces: c.isRosettaIn(fanOp),
+      introduces: c.roleOf(fanOp) === "source",
       lengthPreserving,
       source: classifyWith(args[1], c, subst),
       ...(template !== undefined ? { template } : {}),
     };
   }
 
-  // pure op: classify operands, keep the provenance-bearing ones, cut by arity.
+  if (role === "sink") {
+    // §2: "a sink is a port with no egress wire" — an effect/output port. Its
+    // operands still matter (I1 confinement reads their cone), but nothing derives
+    // FROM a sink upward, so it contributes no leaf/mint of its own (mirrors opaque's
+    // children-array shape, walk()'s shared barrier treatment).
+    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    return { kind: "sink", op, children };
+  }
+
+  if (role === "transparent") {
+    // §2: "a membrane crossing that neither mints nor stamps" — cone-identical to a
+    // pipe's single-child forward (walk()'s `transparent`/`pipe` share arm), but a
+    // DISTINCT graph fact (a real membrane crossing happened here). Combine operands
+    // exactly like a pure op would (the pipe-vs-merge arity cut), then tag the result
+    // as a genuine crossing rather than silently reusing the `pipe` kind.
+    const combined = combine(op, args.map((a) => classifyWith(a, c, subst)));
+    return isProvBearing(combined) ? { kind: "transparent", op, child: combined } : combined;
+  }
+
+  if (role === "loop") {
+    // A declared-loop OP (not yet exercised by any real declaration — see
+    // common/symbols/_bake.ts's ProvenanceRole doc; `do`/named-let below are the
+    // special-form route to the same graph shape) lowers to the same
+    // `binder{cycles:true}` §2 names for `loop`.
+    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    return { kind: "binder", op, cycles: true, children };
+  }
+
+  if (role === "opaque") {
+    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    return { kind: "opaque", op, children };
+  }
+
+  // role === "pipe" or undefined (no declared role — an unbound name, a plain
+  // user-defined Scheme lambda, or an unmodeled special-form head): the
+  // pure-application default. Classify operands, keep the provenance-bearing
+  // ones, cut by arity.
   return combine(
     op,
     args.map((a) => classifyWith(a, c, subst)),
@@ -515,18 +574,23 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
  * substitution mapping each bound symbol to classify(its RHS); the result equals
  * the inlined form. `let*`/`letrec` (sequential=true) thread substitutions
  * left-to-right (later RHSs see earlier bindings). A *named* let is recursive —
- * not transparently inlineable — so it stays opaque over its RHSs + body.
+ * not transparently inlineable — so (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md
+ * §2's `loop` role) it classifies as a `binder{cycles:true}` over its RHSs + body,
+ * the same shape `classifyDo` builds for `do` — replacing the pre-Q3 `opaque`
+ * fallback (a named recursive loop is a recognized STRUCTURE, not a black box;
+ * the V2 law row `laws/provenance-roles.law.test.ts` pins this).
  */
 function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boolean): LineageNode {
   if (!(rest instanceof APair)) return { kind: "literal" };
 
-  // Named let: (let name (bindings) body…) — recursion ⇒ opaque (not inlineable).
+  // Named let: (let name (bindings) body…) — recursion ⇒ a cyclic binder (not
+  // transparently inlineable, but a genuine loop shape, not opaque).
   if (rest.car instanceof ASymbol) {
     const afterName = rest.cdr;
     if (!(afterName instanceof APair)) return { kind: "literal" };
     const rhss = letBindingValues(afterName.car).map((v) => classifyWith(v, c, subst));
     const body = classifyBegin(afterName.cdr, c, subst);
-    return { kind: "opaque", op: "named-let", children: [...rhss, body].filter(isProvBearing) };
+    return { kind: "binder", op: "named-let", cycles: true, children: [...rhss, body].filter(isProvBearing) };
   }
 
   const bindings = rest.car;
@@ -560,6 +624,57 @@ function letBindingValues(bindings: unknown): unknown[] {
     n = n.cdr;
   }
   return out;
+}
+
+/**
+ * `(do ((var init step) …) (test result…) body…)` — an ITERATIVE loop whose `step`
+ * expressions read the PRIOR iteration's bound vars (a genuine back-edge), so it
+ * classifies as `binder{cycles:true}` (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md
+ * §2's `loop` role) — the same shape a named `let` gets. CONSERVATIVE BARRIER, same
+ * rationale as named-let/merge/opaque (walk()'s shared barrier case): classify every
+ * init/step/test/result/body sub-expression and union them as children — no attempt
+ * at per-iteration attribution (real backedge topology is Q8a′'s job, not this).
+ *
+ * Walks the RAW surface pairs directly (mirrors `letBindingValues`), NOT the
+ * evaluator's `normalizeBindings`/`normalizeClause` (evaluator.ts) — those live in
+ * the eval layer and additionally accept a bracket-clause surface (R9,
+ * `[i 0 (+ i 1)]`) this static walk does not special-case; a bracket-vector test
+ * clause or binding list is a known gap (same category as the file header's
+ * `case`/`while`/`quasiquote`, untested by any corpus today).
+ */
+function classifyDo(rest: unknown, c: Classifier, subst: Subst): LineageNode {
+  if (!(rest instanceof APair)) return { kind: "literal" };
+  const children: LineageNode[] = [];
+
+  // ((var init step?) …) — classify every init/step expression present.
+  let bindNode: unknown = rest.car;
+  while (bindNode instanceof APair) {
+    const binding = bindNode.car;
+    bindNode = bindNode.cdr;
+    if (!(binding instanceof APair)) continue;
+    let exprNode: unknown = binding.cdr; // skip the var name itself
+    while (exprNode instanceof APair) {
+      children.push(classifyWith(exprNode.car, c, subst));
+      exprNode = exprNode.cdr;
+    }
+  }
+
+  // (test result…) body… — the test/result clause, then the per-iteration commands.
+  const afterBindings = rest.cdr;
+  if (afterBindings instanceof APair) {
+    let clauseNode: unknown = afterBindings.car;
+    while (clauseNode instanceof APair) {
+      children.push(classifyWith(clauseNode.car, c, subst));
+      clauseNode = clauseNode.cdr;
+    }
+    let bodyNode: unknown = afterBindings.cdr;
+    while (bodyNode instanceof APair) {
+      children.push(classifyWith(bodyNode.car, c, subst));
+      bodyNode = bodyNode.cdr;
+    }
+  }
+
+  return { kind: "binder", op: "do", cycles: true, children: children.filter(isProvBearing) };
 }
 
 /** `(begin e…)` — pass-through of the LAST expression (earlier values dropped). */
@@ -596,8 +711,9 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
     case "pipe":
     case "transparent":
       // `transparent` mints/stamps nothing (§2) — cone-identical to `pipe`'s single-
-      // child forward. UNREACHABLE today (Q1 type-target only); this arm is what Q3's
-      // classifier will exercise once it emits the kind.
+      // child forward. REACHABLE as of Q3 (a declared `transparent` role lowers here —
+      // see classifyWith's role dispatch); no declaration uses it yet (_bake.ts), but
+      // the arm is exercised structurally by classify() now, not merely type-target.
       walk(n.child, b, out, opts); // a pure pipe adds nothing of its own; preserves both knobs
       return;
     case "field":
@@ -631,9 +747,22 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       //     full cone is taken. Do not narrow this: there is no visible structure to
       //     justify it, so it would be unsound.
       // `sink`/`binder` share the same children-array shape and the same conservative
-      // barrier is sound for both (UNREACHABLE today — Q1 type-target only): a sink's
-      // children are what fed it (barrier, since nothing derives further from a sink
-      // anyway); a binder's children are bindings+body pending Q8a′'s real topology.
+      // barrier is sound for both: a sink's children are what fed it (barrier, since
+      // nothing derives further from a sink anyway); a binder's children are
+      // bindings+body, a flat array with no real backedge topology yet (Q8a′'s job).
+      //
+      // TERMINATION over `binder{cycles:true}` (V4, `laws/provenance-roles.law.test.ts`
+      // — flips at Q8a′, not here): `cycles` is a SEMANTIC marker on the loop's runtime
+      // behavior, not a structural back-reference in this tree. classify() only ever
+      // builds a `LineageNode` by finite structural recursion DOWNWARD over a finite
+      // parsed AST (classifyLet's named-let branch, classifyDo above) — it never
+      // expands a call site into its callee's body, so no `LineageNode` object can
+      // reach itself through `.children`/`.child`. `binder.children` is exactly as
+      // acyclic as `merge.children`/`opaque.children` today; this walk terminates by
+      // the SAME structural induction as every other kind, with no visit-set needed.
+      // A visit-set guard becomes the honest minimal form ONLY once Q8a′ gives a
+      // binder REAL backedge topology (a graph, not a tree) — do not add one here
+      // pre-emptively; it would guard against a cycle this layer cannot produce.
       for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":

@@ -17,6 +17,7 @@ import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv } from "../common/kernel.js";
+import { sealResolutionChain } from "./CompiledResolutionChain.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
@@ -83,6 +84,15 @@ export function ensureBaseAssembled(): Promise<void> {
       user_env,
       BASE_PACKS.map((pack) => pack.lower({ evalScheme: preludeExec })),
     );
+    // THE SEAL (ENV T2, environment-resolution-chain.md §§1–2): the bake ends here — the
+    // shared ambient base compiles into its frozen CompiledResolutionChain (zero live
+    // resolvers ⇒ one flat Map), which every default-path exec resolves through via
+    // `Capabilities.assembled(user_env)` (same memoized artifact). Post-seal the ambient
+    // artifact has no write surface; REPL accumulation rides the mutable session frame
+    // ABOVE it (`defaultLexicalRoot`), and glass callers keep their live env walk. The
+    // chain's `hash` is the content-address hook the PROVENANCE track's "baked-env hash"
+    // slot consumes.
+    sealResolutionChain(user_env);
   })());
 }
 
@@ -113,7 +123,7 @@ const capabilityEvalScheme: EvalSchemeInto = preludeExec;
  *
  * `config` is the ONE shared bag (see ExecOptions.config) handed to every
  * capability's `lower()` — each validates its own slice; `assembleEnv` supplies
- * the phase-gated prelude scope, so `preludeOnly` symbols work with no extra wiring.
+ * the bake-scoped prelude overlay, so `preludeOnly` symbols work with no extra wiring.
  */
 async function assembleCapabilityBase(capabilities: readonly EnvCapability[], config?: object): Promise<Environment> {
   const base = user_env.inherit("exec-capabilities");
@@ -121,6 +131,9 @@ async function assembleCapabilityBase(capabilities: readonly EnvCapability[], co
     base,
     capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme, config })),
   );
+  // Seal the per-call baked base (ENV T2) — `Capabilities.assembled(base)` below reuses
+  // this artifact (memoized per env), so the run resolves through the frozen chain.
+  sealResolutionChain(base);
   return base;
 }
 
@@ -343,12 +356,13 @@ export async function execState(
   // SHADOW MODE slice 2 — classify@load. Build one static lineage skeleton per
   // parsed form, BEFORE evaluation. Pure (classify runs no eval); gated entirely
   // behind the flag so flag-OFF is byte-identical. Classifier is env-derived
-  // (classifierFromEnv); `irLineageSources` defaults empty ⇒ source-free provable
-  // scope (see ExecOptions.irLineageSources). Skeletons align by index with
-  // `parsed`, consumed at the per-form assert hook below.
+  // (classifierFromEnv reads each op's declared `.provenanceRole` directly off the
+  // env — Q3, PROVENANCE-PLAN.md; no caller-supplied source list any more, see
+  // lineage-classifier-from-env.ts). Skeletons align by index with `parsed`,
+  // consumed at the per-form assert hook below.
   let shadowSkeletons: LineageNode[] | undefined;
   if (irLineage) {
-    const classifier = classifierFromEnv(actualEnv, new Set(irLineageSources));
+    const classifier = classifierFromEnv(actualEnv);
     shadowSkeletons = parsed.map((form) => classify(form, classifier));
   }
 

@@ -1,70 +1,54 @@
 /**
- * Slice 1 of wiring the static lineage classifier (W3, the serial spine of the
- * static-lineage migration — docs/working-proposals/provenance-static-lineage-
- * finalization-v0.1-2026-06-19.md). Derives a `Classifier` (the op-taxonomy that
- * `classify()` in ./lineage.ts consults) from a live `Environment`, replacing the
- * hand-built test classifiers (lineage-spike.test.ts, rosetta-pure-marker.test.ts).
+ * Q3 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §2 EXCLUDED "heuristic classification —
+ * every static interpreter reads the declared field"): builds a `Classifier` for
+ * `classify()` (./lineage.ts) from a live `Environment` by reading the ONE declared
+ * `provenance` role stamped onto each bound callable (`.provenanceRole`,
+ * `common/capability.ts` — resolved from `Contract.provenance` at bake time,
+ * `common/symbols/_bake.ts`). No name list, no purity-chain probe, no duck-read.
  *
- * Lives apart from lineage.ts so that module stays dependency-light (value-guards
- * only); this one imports Environment.
+ * `env.get(op)` already walks the `__parent__` chain (Environment.ts's
+ * `_lookupWithResolvers`), so a role declared on a parent env is visible to a child
+ * for free — the classifier does not re-implement chain-walking.
  *
- * THE PREDICATES, and how much each is genuinely env-derived:
- *  - isRosettaIn (THE load-bearing cut — `classify` keys source-vs-pure on it):
- *    a Rosetta source MINTS provenance. The env has NO registry of source names
- *    today — the pure registry (`rosettaPureOf`) records the PURE ones, and `infer`
- *    registers via a wrapper (infer-kernel) leaving no env-queryable mint marker.
- *    So sources are passed in EXPLICITLY (the documented seam); a pure rosetta is
- *    never a source even if mis-listed (the `&& !pure` guard). Closing this seam
- *    needs an env `__rosettaSources__` populated in `defineRosetta` when a rosetta
- *    carries the mint marker — then `sources` derives instead of being passed.
- *    Until then, explicit-and-honest beats a hidden stale list.
- *  - isOpaque: always false — the `SchemeJSFunction` membrane/foreign-call wrapper
- *    it once classified is retired (a borrowed JS function crosses the membrane as
- *    #void, never a callable head), so no env binding is structurally opaque. The
- *    `opaque` lineage kind still arises from named-let recursion and test classifiers.
- *  - isFan: read off the bound value — `env.get(op).provenanceRole === "fan"`. Fan ops
- *    (map/filter/vector-map) declare `provenance: "fan"` on their symbol-def contract
- *    (docs/PROVENANCE.md §2, PROVENANCE-PLAN.md Q2 — migrated from the retired
- *    `fanout: true` boolean); capability.ts stamps the RESOLVED role onto the bound
- *    callable as `.provenanceRole`. Fan-ness FOLLOWS THE BINDING (alias-correct — an
- *    alias of `map` is still fan, a shadowing local `map` is not), not a name list.
- *    Q3 retires this duck-read entirely in favor of consuming declared roles directly
- *    (PROVENANCE-PLAN.md Q3 — "isRosettaIn heuristic + `.fanout` duck-reads deleted");
- *    this one-liner is Q2's minimal update to keep the classifier working meanwhile.
- *  - isPure: provided for interface completeness, but `classify()` does not
- *    currently consult it — an op that is not source/opaque/fan falls through to
- *    the pure-application path (combine) regardless. Rosetta-only: the pure
- *    registry (rosettaPureOf) is the whole story — no curated native-builtin list
- *    to go stale.
+ * RETIRED HEURISTICS (Q2 landed the declared-role field; this file is the consumer
+ * migration — do not resurrect any of these):
+ *  - the explicit `sources: ReadonlySet<string>` parameter this function used to take
+ *    — a CALLER-SUPPLIED name list standing in for "which ops mint," independent of
+ *    anything actually registered. This was the load-bearing heuristic docs/
+ *    PROVENANCE.md §2 excludes by name; `roleOf` reading `.provenanceRole` directly
+ *    is the declared fact it stood in for.
+ *  - `isPureRosettaInChain` / the `rosettaPureOf` per-env purity-registry walk — a
+ *    SECOND signal that used to override the (heuristic) `sources` set for the one
+ *    baked-declaration path (`&& !pure`). Q2 resolves `pure: true` to a single
+ *    `provenance: "pipe"` role at bake time, so there is nothing left for a second
+ *    runtime check to override — reading `.provenanceRole` once is the whole answer
+ *    for every symbol declared through `symbol.native`/`symbol.rosetta`/
+ *    `symbol.sequence`/`symbol.tagless`/`symbol.tagless-guard`. (The legacy dynamic
+ *    `Environment.defineRosetta`/`RosettaFunction.pure` runtime API is a SEPARATE,
+ *    not-yet-migrated registration path outside Q2/Q3's declared-role vocabulary —
+ *    ops registered that way carry no `.provenanceRole` and fall through to this
+ *    classifier's `undefined` default, same as any other undeclared name.)
+ *  - the `.fanout`/`isFan` duck-read off a bound function's ad-hoc property —
+ *    folded into the same uniform `.provenanceRole` read as every other role.
+ *  - `isOpaque`'s constant `false` — not a heuristic (nothing WAS structurally
+ *    opaque once the foreign-call wrapper class retired), but a parked boolean-
+ *    predicate arm; opaque is now a genuine declared-role outcome like any other,
+ *    so the constant is gone along with the whole 4-predicate `Classifier` shape.
+ *  - `isPure` — already documented as inert (`classify()` never consulted it); gone
+ *    with the rest of the retired shape.
+ *
+ * An unbound / undeclared op name (including a plain user-defined Scheme lambda, or
+ * a name registered only via the legacy `defineRosetta` path) resolves to
+ * `undefined` — classify()'s default arm treats it as a pure/pipe application,
+ * exactly the fallback a shadowing local binding or an unmodeled special-form head
+ * already got before this rewrite.
  */
 import { Environment } from "../Environment.js";
-import { rosettaPureOf } from "../env-registries.js";
-import type { Classifier } from "./lineage.js";
+import type { Classifier, DeclaredRole } from "./lineage.js";
 
-/** True iff `op` is a pure rosetta registered anywhere up the env chain
- *  (the pure registry is per-env; this walk supplies the chaining — env-registries.ts). */
-function isPureRosettaInChain(env: Environment, op: string): boolean {
-  for (let e: Environment | null = env; e; e = e.__parent__) {
-    if (rosettaPureOf(e).has(op)) return true;
-  }
-  return false;
-}
-
-/**
- * Build a `Classifier` for `classify()` from a live env. `sources` is the set of
- * Rosetta-in (mint) op names — the explicit seam described in the file header.
- */
-export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>): Classifier {
+export function classifierFromEnv(env: Environment): Classifier {
   return {
-    isPure: (op) => isPureRosettaInChain(env, op),
-    // A source mints iff it is a declared source AND not a pure transform.
-    isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
-    // Fan-ness follows the BINDING: capability.ts stamps `.provenanceRole` on the bound value
-    // from the def's declared `provenance: "fan"` (map/filter/vector-map). Non-throwing
-    // lookup — the classifier sees arbitrary op names, an unbound one is simply not fan.
-    isFan: (op) =>
-      (env.get(op, { throwError: false }) as { provenanceRole?: string } | undefined)?.provenanceRole === "fan",
-    // See the file header: no env binding is structurally opaque anymore.
-    isOpaque: () => false,
+    roleOf: (op) =>
+      (env.get(op, { throwError: false }) as { provenanceRole?: DeclaredRole } | undefined)?.provenanceRole,
   };
 }

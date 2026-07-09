@@ -166,14 +166,18 @@ function headSymbol(node: unknown): string | null {
 const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
 
 /**
- * A `Classifier` derived from the TRACE — no env, no hardcoded source list. The source ops
- * (`isRosettaIn`) are exactly the head-symbols of the run's provenance-point invocations: post
- * the points-by-default flip a rosetta mints iff it is a point, so the trace's points ARE the
- * sources that actually fired (http/sql/db included; new sources automatic). `classify` never
- * consults `isPure`, and `isOpaque` does not change which `field` nodes `collectFieldNodes` finds
- * (a member-read is recognized before the opaque cut, and opaque + pure both descend children) —
- * so both are trivial. This is what lets the dag self-serve the carrier — the only `:fields` source
- * now that the mint is retired — with nothing wired in (the env source-registry seam never closed).
+ * A `Classifier` derived from the TRACE — no env, no caller-supplied source list. The source ops
+ * (`roleOf(op) === "source"`) are exactly the head-symbols of the run's provenance-point
+ * invocations: post the points-by-default flip a rosetta mints iff it is a point, so the trace's
+ * points ARE the sources that actually fired (http/sql/db included; new sources automatic) — this
+ * is a fact READ OFF THE TRACE (what actually crossed the membrane at runtime), not the retired
+ * caller-injected heuristic docs/PROVENANCE.md §2 excludes (`values/lineage-classifier-from-env.ts`
+ * reads the same declaration-driven spirit off the env instead). `classify` never consults a
+ * `pure` predicate, and `opaque` does not change which `field` nodes `collectFieldNodes` finds
+ * (a member-read is recognized before the opaque cut, and opaque + pipe/undefined both descend
+ * children) — so this classifier never needs to answer either. This is what lets the dag self-serve
+ * the carrier — the only `:fields` source now that the mint is retired — with nothing wired in
+ * (the env source-registry seam never closed).
  */
 export function classifierFromTrace(trace: EvalTrace): Classifier {
   const sources = new Set<string>();
@@ -183,10 +187,7 @@ export function classifierFromTrace(trace: EvalTrace): Classifier {
     if (head !== null) sources.add(head);
   }
   return {
-    isPure: () => false, // classify() does not consult isPure — pure ops fall through to combine
-    isRosettaIn: (op) => sources.has(op),
-    isFan: (op) => FAN_OPS.has(op),
-    isOpaque: () => false, // irrelevant to which field nodes collectFieldNodes collects
+    roleOf: (op) => (sources.has(op) ? "source" : FAN_OPS.has(op) ? "fan" : undefined),
   };
 }
 
