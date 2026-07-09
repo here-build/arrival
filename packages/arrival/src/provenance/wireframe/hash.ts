@@ -8,9 +8,20 @@
  *     arms, fan shape incl. its private `template` interior recursively, binder cycles,
  *     template-ref name, port direction) and every wire's emitted TEXT (`source`,
  *     `params`, `paramRefs`' kind+name+referenced-node-INDEX, `consumer`'s node-index+
- *     slot) plus the graph's `egress` index. OUT of scope: every node's/wire's `span`
- *     (scopeId) — the one field §5 D3 names as excluded ("NOT scopeIds/spans, those
- *     are position").
+ *     slot, its Q8c `fact` tag when present) plus the graph's `egress` index. OUT of
+ *     scope: every node's/wire's `span` (scopeId) — the one field §5 D3 names as
+ *     excluded ("NOT scopeIds/spans, those are position").
+ *
+ *   - Q8c TOUCH (flagged prominently per that wave's task instructions: this file is
+ *     Q8b's, no sibling owns it this wave): `canonicalWire` below folds in `wire.fact`.
+ *     The tag is CONTENT, not decoration — A5's struct-fact tag changes what a wire
+ *     PROVES about its param (a count-demand may route through it; an untagged twin
+ *     may not), and it is not always reconstructable from `source` text alone (two
+ *     builder CONFIGURATIONS — different `materialNames`/`isBaseName` — could in
+ *     principle serialize the same literal text with different tags; `builder.ts`'s
+ *     `factTagOf` guards make this unlikely in practice, but the hash should not rely
+ *     on that). Two wires identical in source/params/refs/consumer but differently
+ *     tagged must not collide.
  *   - `siteHash` (spans KEPT — plane identity; "the two sites render as two wires"):
  *     `templateHash` combined with the INSTANTIATION site's own span — the call site
  *     of a `template-ref`, the fan node's own site for its private template, or (for a
@@ -87,6 +98,9 @@ function canonicalWire(wire: Wire): string {
     `params:${wire.params.join(",")}`,
     `refs:${refs}`,
     `into:${wire.consumer.node}:${wire.consumer.slot}`,
+    // Q8c: the struct-fact tag is CONTENT (see this file's header) — folded in so a
+    // tagged wire never collides with an untagged twin that happens to share text.
+    `fact:${wire.fact ? wire.fact.verb : ""}`,
   ].join("/");
 }
 

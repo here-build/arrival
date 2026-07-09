@@ -60,7 +60,20 @@
  *     agreement corpus.
  *   - A sink cut in non-tail `begin` position leaves the wire a sequencing
  *     reference to the sink node (D6 territory) — tolerated, not modeled.
- *   - Hash/path keying is Q8b; struct-fact wires are Q8c.
+ *   - Hash/path keying is Q8b.
+ *
+ * STRUCT-FACT WIRES (Q8c, PROVENANCE-PLAN.md wave 7; docs/PROVENANCE.md §2 R2 + A5,
+ * §6 demand lattice): `factTagOf` below tags an `emitWire` output whose ENTIRE closed
+ * body is a single structural-fact read — `(length p)` / `(vector-length p)` /
+ * `(string-length p)`, unshadowed, never a wireframe-material call, resolving to the
+ * hermetic BASE primitive — mirroring the values-layer TERM name (P8: ONE term,
+ * `arrival/tagless-final/length`, for all three surface spellings) rather than a
+ * per-surface-verb vocabulary. Per A5: "struct-fact wires are value wires carrying a
+ * fact TAG, not a second edge species" — NO new node kind, NO new wire species; the
+ * tag lives on `Wire.fact` (types.ts) and is additive (an untagged wire is byte-
+ * identical to before this landing). The count-demand CONSUMER of the tag —
+ * `reachableNodesForDemand`'s `"count"` grade, routing through fact wires only and
+ * never an element wire — lives in `wireframe/loops.ts`.
  */
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -76,12 +89,20 @@ import type {
   DefineTemplate,
   Wire,
   WireConsumer,
+  WireFact,
   WireFrame,
   WireFrameEntry,
   WireframeGraph,
   WireframeNode,
   WireframeProgram,
 } from "./types.js";
+
+/** Q8c (§2 R2 + A5) — the DECLARED-TERM vocabulary of surface ops whose contract reads
+ *  ONLY a container's structural fact, never its element union. Mirrors
+ *  `values/__tests__/laws/_tables/terms.ts`'s `arrival/tagless-final/length` verbs
+ *  EXACTLY (`length`/`vector-length`/`string-length` — ONE term, P8) — every spelling
+ *  here tags the SAME `verb: "length"` (`factTagOf` below), never a per-spelling tag. */
+const FACT_VERBS: ReadonlySet<string> = new Set(["length", "vector-length", "string-length"]);
 
 export interface WireframeBuildOptions {
   /** Q3's declaration-driven classifier — the ONE role read (`.provenanceRole`). */
@@ -235,7 +256,30 @@ class GraphBuilder {
       materialNames: this.bctx.materialNames,
       isBaseName: this.bctx.isBaseName,
     });
-    this.wires.push({ ...emitted, consumer });
+    const fact = this.factTagOf(expr, env);
+    this.wires.push({ ...emitted, consumer, ...(fact !== undefined ? { fact } : {}) });
+  }
+
+  /** Q8c (§2 A5) — tag a wire whose ENTIRE closed body is a single structural-fact
+   *  read: `(length p)` / `(vector-length p)` / `(string-length p)`. Guards, in the
+   *  same teaching order `unevalWire`'s free-variable partition uses:
+   *   - `env.subst.has(op)` — a LOCAL binding shadows the name (a let/lambda param
+   *     literally called `length`); never tag a shadowed call.
+   *   - `materialNames.has(op)` — a port-reaching top-level define named `length`
+   *     is wireframe MATERIAL (cut to a template-ref node by `walkForCuts` before
+   *     `emitWire` ever sees this `expr` as call material) — never the base primitive.
+   *   - `!isBaseName(op)` — anything not resolving to the hermetic base env (a plain
+   *     unbound/user name shaped like a base op) is not the DECLARED term.
+   *  Deliberately narrow to the TOP-LEVEL application only — `(+ 1 (length xs))` is
+   *  NOT tagged (its wire computes more than the fact) — so the tag's promise stays
+   *  exact for `loops.ts`'s count-demand router. */
+  private factTagOf(expr: unknown, env: WalkEnv): WireFact | undefined {
+    if (!(expr instanceof APair) || !(expr.car instanceof ASymbol)) return undefined;
+    const op = opName(expr.car);
+    if (env.subst.has(op) || !FACT_VERBS.has(op)) return undefined;
+    if (this.bctx.materialNames.has(op) || !this.bctx.isBaseName(op)) return undefined;
+    if (operands(expr as APair<SchemeValue, SchemeValue>).length !== 1) return undefined;
+    return { kind: "fact", verb: "length" };
   }
 
   /** Selector-cone reachability (Q8a amendment 1) — see the file header. */

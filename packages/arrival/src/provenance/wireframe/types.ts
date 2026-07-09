@@ -39,6 +39,19 @@ export type WireParam =
   | { readonly kind: "slot"; readonly name: string }
   | { readonly kind: "node"; readonly name: string; readonly node: number };
 
+/** Q8c (docs/PROVENANCE.md §2 R2 + A5; §6 demand lattice) — a struct-fact TAG on a
+ *  value wire. Per A5's clarification: "struct-fact wires are value wires carrying a
+ *  fact TAG, not a second edge species" — ONE wire kind, this is metadata on it, never
+ *  a parallel node/wire shape. `verb` names the DECLARED TERM the fact mirrors
+ *  (`values/__tests__/laws/_tables/terms.ts`'s `arrival/tagless-final/length` — ONE
+ *  term for the surface spellings `length`/`vector-length`/`string-length`, P8:
+ *  declared once per term, never a per-surface-verb vocabulary — so every spelling
+ *  tags the SAME `verb: "length"`). */
+export interface WireFact {
+  readonly kind: "fact";
+  readonly verb: "length";
+}
+
 /** A wire as `unevalWire` emits it: the closed lambda (source text — Pairs-with-spans
  *  under `parse`, the tagless algebra under evaluation; the evaluator is the iso) plus
  *  its parameter list and dataflow referents. γ = `(apply wire ingress)` (§4). */
@@ -50,6 +63,12 @@ export interface EmittedWire {
   readonly paramRefs: readonly WireParam[];
   /** `scopeId` of the wire body's surface form (site identity; hashes are Q8b). */
   readonly span: string;
+  /** Q8c: present iff the wire's ENTIRE closed body is a single structural-fact read
+   *  over one operand (`builder.ts`'s `factTagOf`) — absent otherwise (an ordinary
+   *  value wire, the overwhelming majority). Optional so every existing wire literal
+   *  in tests/fixtures stays valid without amendment (additive per Q8c's territory
+   *  discipline: untagged wires are byte-stable). */
+  readonly fact?: WireFact;
 }
 
 /** An emitted wire PLACED in a graph — it feeds exactly one node input. */

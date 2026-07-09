@@ -11,8 +11,32 @@
  * γ's replayed cone) flips at Q16, once replay itself exists. Collapsing them into one
  * describe block would hide that a Q9-only landing genuinely earns the stamp arm
  * without earning the replay arm.
+ *
+ * Q8c ADDENDUM: the R2 demand-monotonicity describe block below gained ONE live `it()`
+ * (not `it.todo`) alongside its three untouched Q17-ledgered stubs — the MACHINERY
+ * (`wireframe/loops.ts`'s `reachableNodesForDemand`, `wireframe/builder.ts`'s
+ * `factTagOf`) lands at Q8c per the plan's own gate text ("a count-demand cone touches
+ * ZERO element wires — asserted"), while the full LAW (checked against the eager
+ * oracle / replay, once those exist for R2 specifically) still flips at Q17. The
+ * concrete corpus lives in `provenance/__tests__/wireframe-fact-wires.test.ts`; the row
+ * here is a SHORT confirming assertion, not a duplicate of that corpus.
  */
-import { describe, it } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import { buildWireframe } from "../../provenance/wireframe/builder.js";
+import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
+
+const ROLES: Record<string, DeclaredRole> = { "fetch-list": "source", "emit!": "sink", map: "fan", filter: "fan" };
+const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
+const BASE = new Set(["car", "length"]);
+const isBaseName = (n: string): boolean => BASE.has(n);
+
+beforeAll(async () => {
+  await initBridge();
+});
 
 describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
   // @ledger: Q9
@@ -77,4 +101,19 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
       "\"struct-fact wires answer count-demand without touching elements\"; the routing " +
       "machinery lands at Q8c, this law itself flips at Q17 once query maturity lands)",
   );
+
+  // @ledger: Q8c — the ROUTING MACHINERY (not the full LAW — see the file header
+  // addendum). Full corpus in wireframe-fact-wires.test.ts; this row is the gate text
+  // itself, asserted directly: "a count-demand cone touches ZERO element wires."
+  it("Q8c machinery gate: a count-demand cone touches zero element wires", async () => {
+    const forms = await parse("(emit! (length (map f (fetch-list))) (car (filter g xs)))", inferenceEnv);
+    const p = buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
+    const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
+    const elementFanIdx = p.main.nodes.findIndex((n) => n.kind === "fan" && n.lengthPreserving === false);
+    expect(sinkIdx).toBeGreaterThanOrEqual(0);
+    expect(elementFanIdx).toBeGreaterThanOrEqual(0);
+    const countCone = reachableNodesForDemand(p.main, sinkIdx, "count");
+    expect(countCone.has(elementFanIdx)).toBe(false); // the ONLY node reachable through
+    // an element wire (the sink's OTHER arg, `(car (filter …))`) — excluded.
+  });
 });
