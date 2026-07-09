@@ -56,11 +56,14 @@ import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
 import { AString } from "../values/primitives/AString.js";
-// AJSObject here is the `{…}` dict-literal NODE face (values/dict-literal.ts) — the
-// import is cycle-safe (AJSObject leans only on value leaves + the hoisted jsToScheme).
-import { AJSObject } from "../values/primitives/AJSObject.js";
+// AJSObject here is the `{…}` dict-literal NODE face — its detection (isDictLiteral) and
+// the DictLiteralNode type are the class's own algebra; the import is cycle-safe
+// (AJSObject leans only on value leaves + the hoisted jsToScheme).
+import { AJSObject, type DictLiteralNode } from "../values/primitives/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
-import { type DictLiteralNode, isDictLiteralNode, makeDictLiteralNode } from "../values/dict-literal.js";
+// The reader's dict grammar — quasiquote re-instantiates READER literals, so the
+// evaluator legitimately reaches into the reader layer for the re-mint.
+import { makeDictLiteralNode } from "../reader/dict-grammar.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -1188,7 +1191,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // template is FINAL data — fold it to a plain dict (post-substitution key
   // validation + Clojure-faithful loud duplicates); deeper levels rebuild a literal
   // node carrying the processed forms so nested quasiquotes keep their shape.
-  if (isDictLiteralNode(expr)) {
+  if (AJSObject.isDictLiteral(expr)) {
     const processed: SchemeValue[] = [];
     for (const form of expr.dictForms) {
       let p = yield { call: processQuasiquote(form, ctx, level) };
@@ -2846,7 +2849,7 @@ export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerato
   if (code instanceof AVector && code.evalElements) {
     return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
   }
-  if (isDictLiteralNode(code)) {
+  if (AJSObject.isDictLiteral(code)) {
     return yield* evaluatePair(loweredCollectionLiteral(code), ctx);
   }
 

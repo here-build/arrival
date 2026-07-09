@@ -1,36 +1,29 @@
-// dict-literal.ts — the `{…}` reader dict-literal NODE, shared between the reader (which
-// mints and validates it) and the evaluator (which lowers it in code position and
-// instantiates it under quasiquote).
+// dict-grammar.ts — the READER grammar of the `{…}` dict literal: key-admissibility
+// predicates + the node minting. Reader-layer by nature (Parser validates with these and
+// mints here; the infix ban door and the evaluator's quasiquote re-instantiation are the
+// other mouths). The NODE ITSELF — its type, its detection, its dual data/code nature —
+// is AJSObject's own algebra: see `AJSObject.isDictLiteral` / `DictLiteralNode`
+// (values/primitives/AJSObject.ts), where the `dictForms` field lives.
 //
-// The node is a plain AJSObject carrying an extra `dictForms` payload (the flat
-// `key value` element sequence as read, values UNEVALUATED) — no new SchemeValue union
-// member. That dual nature implements the "evaluator-evaluated literal datum" semantics:
-//
-//   - CODE position: the evaluator lowers the node to the equivalent `(dict …)`
-//     application (evaluator.ts), so `{:k v}` ≡ `(dict :k v)` BY CONSTRUCTION —
-//     elements evaluate (Clojure semantics, not R7RS constant semantics).
-//   - `quote` context: `evalQuote` returns the node itself — data. Its AJSObject face
-//     presents the STATIC entries (`(@ '{:a (f x)} :a)` reads back the raw form),
-//     which is the Clojure `'{:a (f x)}` shape.
-//   - `quasiquote` context: processQuasiquote processes the forms element-wise
-//     (unquote fires at level 1) and folds to a plain data dict.
+// The dual nature (why the node is an AJSObject and not a distinct AST kind):
+//   - CODE position: the evaluator lowers the node ONCE (cached) to the equivalent
+//     `(dict …)` application — `{:k v}` ≡ `(dict :k v)` BY CONSTRUCTION, so evaluation,
+//     membrane marshaling, heap charging and provenance all ride the normal apply path.
+//   - `quote` context: evalQuote returns the node itself — a first-class READABLE dict
+//     whose values are the raw forms (`(@ '{:a (f x)} :a)` reads back the form). A
+//     distinct syntax-node kind would break exactly this: quote must yield a value.
+//   - `quasiquote` context: processQuasiquote walks the forms element-wise (unquote
+//     fires at level 1) and re-mints via `makeDictLiteralNode`.
 //
 // Keys are read-time-static (`:keyword` / `"string"`, both folding to the same string
 // key) or unquote forms (quasiquote-substituted keys, validated post-substitution).
 // See docs/working-proposals/arrival-curly-vector-literals.md.
-import { AJSObject } from "./primitives/AJSObject.js";
-import { ASymbol } from "./primitives/ASymbol.js";
-import { AString } from "./primitives/AString.js";
-import { APair } from "./primitives/APair.js";
-import { CONSTANT_CTX } from "./primitives/RunContext.js";
-import type { SchemeValue } from "./types.js";
-
-/** The reader-minted dict-literal node: an AJSObject whose `dictForms` is present. */
-export type DictLiteralNode = AJSObject & { dictForms: readonly SchemeValue[] };
-
-export function isDictLiteralNode(v: unknown): v is DictLiteralNode {
-  return v instanceof AJSObject && v.dictForms !== undefined;
-}
+import { AJSObject, type DictLiteralNode } from "../values/primitives/AJSObject.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AString } from "../values/primitives/AString.js";
+import { APair } from "../values/primitives/APair.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import type { SchemeValue } from "../values/types.js";
 
 /** The STATIC string key of a key-position datum, or null if it isn't one.
  *  `:keyword` symbols fold to their bare name (the same `:`-strip `dict` performs);

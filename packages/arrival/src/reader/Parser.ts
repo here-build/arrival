@@ -34,7 +34,7 @@ import { parse_argument } from "../utils/parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
-import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "../values/dict-literal.js";
+import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "./dict-grammar.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";

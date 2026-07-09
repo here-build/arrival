@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { execState } from "../eval/generator-exec.js";
 import { parse } from "../reader/parse.js";
-import { isDictLiteralNode } from "../values/dict-literal.js";
+import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ADict } from "../values/primitives/ADict.js";
@@ -43,7 +43,7 @@ function loadCases(file: string): CorpusCase[] {
  *  would render an embedded literal node through its own print protocol, which is the
  *  VALUE face, not the canonical AST face). */
 function renderAst(v: unknown): string {
-  if (isDictLiteralNode(v)) {
+  if (AJSObject.isDictLiteral(v)) {
     return `{${v.dictForms.map(renderAst).join(" ")}}`;
   }
   if (v instanceof AVector) {

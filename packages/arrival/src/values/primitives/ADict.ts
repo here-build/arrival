@@ -29,7 +29,7 @@ export type DictKey = ASymbol | AString | ACharacter;
 
 /** A key's fold-name — the string identity `:a` and `"a"` share. Not a validating
  *  parse: `pairs` must already carry a `DictKey`; this only strips a keyword's `:`.
- *  Exported so the few other key-name folds in the codebase (dict-literal.ts's
+ *  Exported so the few other key-name folds in the codebase (reader/dict-grammar.ts's
  *  `staticDictKey`, evaluator.ts's `foldSubstitutedDictKey`) can call this instead of
  *  reimplementing the same strip, where their own shape already narrowed to a DictKey. */
 export function foldKeyName(key: DictKey): string {

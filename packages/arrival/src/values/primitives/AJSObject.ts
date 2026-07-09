@@ -42,6 +42,11 @@ const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
  *
  * All property access is sandboxed — see interop-access.ts for the security model.
  */
+/** A reader-minted `{…}` dict-literal node: an AJSObject whose `dictForms` is present.
+ *  The type lives HERE because the dual data/code nature is the class's own affordance;
+ *  the grammar and minting live in reader/dict-grammar.ts. */
+export type DictLiteralNode = AJSObject & { dictForms: readonly SchemeValue[] };
+
 export class AJSObject extends AValue {
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
@@ -49,8 +54,16 @@ export class AJSObject extends AValue {
   /** `{…}` reader dict-literal payload: keys read as `:keyword` symbols/strings/unquote forms,
    *  values UNEVALUATED. Present ⇒ node is a reader-minted dict literal (evaluator lowers to
    *  `(dict …)` in code position; under `quote`, the node is the datum itself). Absent on a
-   *  membrane-boxed wrapper. See values/dict-literal.ts. */
+   *  membrane-boxed wrapper. Grammar + minting live in reader/dict-grammar.ts; the node's
+   *  detection is this class's own algebra (`AJSObject.isDictLiteral` below). */
   dictForms?: readonly SchemeValue[];
+
+  /** The class's own dict-literal detection — the dual data/code nature is AJSObject
+   *  self-knowledge, not a free function's. Dispatch: the evaluator lowers these in code
+   *  position; everything else treats them as the plain data dict their face presents. */
+  static isDictLiteral(v: unknown): v is DictLiteralNode {
+    return v instanceof AJSObject && v.dictForms !== undefined;
+  }
 
   constructor(
     ctx: RunContext,
