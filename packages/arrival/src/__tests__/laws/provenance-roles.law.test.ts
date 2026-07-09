@@ -33,11 +33,18 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { classify, fullCone, countCone, fieldCone, type Classifier } from "../../values/lineage.js";
+import { classify, fullCone, countCone, fieldCone, type Classifier, type DeclaredRole } from "../../values/lineage.js";
 import { classifierFromEnv } from "../../values/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod.js";
-import { declaresAccChain, symbol, withCallbackRoles, type AEntity, type CallbackRoles } from "../../common/symbol.js";
+import {
+  declaresAccChain,
+  symbol,
+  withCallbackRoles,
+  type AEntity,
+  type CallbackRoles,
+  type ProvenanceRole,
+} from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
 import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
@@ -60,41 +67,271 @@ function rolesOf(pack: { spec: { symbols?: unknown } }, name: string): CallbackR
 }
 
 describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol declaration)", () => {
-  // @ledger: Q2
-  it.todo(
+  // @ledger: Q2 — FLIPPED (Q21 audit F1)
+  it(
     "every symbol declaration carries exactly one `provenance` role from " +
       "{pipe, fan, source, sink, transparent, loop, opaque} — pipe default for " +
       "native/sequence/tagless kinds, source default for rosetta",
+    async () => {
+      await initBridge();
+
+      // KIND DEFAULTS — no `provenance` in the contract; the factory resolves the
+      // kind's default before the def is returned (`contract.provenance ?? "pipe"` /
+      // `?? "source"` in native.ts/rosetta.ts/sequence.ts; tagless.ts/taglessGuard.ts
+      // hardcode "pipe" — no `Contract` channel exists to override it at all).
+      expect(symbol.native`v1-default-native: `({ input: [z.value], output: [z.value] }, (v) => v).provenance).toBe(
+        "pipe",
+      );
+      expect(
+        symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s).provenance,
+      ).toBe("source");
+      expect(
+        symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0])
+          .provenance,
+      ).toBe("pipe");
+      expect(symbol.tagless`v1-default-tagless: `.provenance).toBe("pipe");
+      expect(symbol.taglessGuard`v1-default-taglessguard: `.provenance).toBe("pipe");
+
+      // THE SEVEN-ROLE VOCABULARY — every member is a real, declarable role;
+      // exercised where `assertProvenanceRoleShape` (_bake.ts) constrains the shape
+      // (sink/transparent need a truly zero-item output vector; fan needs a
+      // z.lambda input arm — the two SHAPE-decidable checks) and freely where it
+      // doesn't (pipe/source/loop/opaque carry no shape constraint at all).
+      expect(
+        symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v)
+          .provenance,
+      ).toBe("pipe");
+      expect(
+        symbol.native`v1-role-fan: `(
+          { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+          (f, v) => v,
+        ).provenance,
+      ).toBe("fan");
+      expect(
+        symbol.rosetta`v1-role-source: `({ input: [z.string], output: [z.string], provenance: "source" }, (s) => s)
+          .provenance,
+      ).toBe("source");
+      expect(
+        symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v)
+          .provenance,
+      ).toBe("loop");
+      expect(
+        symbol.native`v1-role-opaque: `({ input: [z.value], output: [z.value], provenance: "opaque" }, (v) => v)
+          .provenance,
+      ).toBe("opaque");
+      expect(
+        symbol.native`v1-role-sink: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []).provenance,
+      ).toBe("sink");
+      expect(
+        symbol.native`v1-role-transparent: `(
+          { input: [z.value], output: [], provenance: "transparent" },
+          (): [] => [],
+        ).provenance,
+      ).toBe("transparent");
+
+      // TYPE-LEVEL: `Contract.provenance` types as `ProvenanceRole | undefined` — a
+      // string outside the seven-member union is a COMPILE error, never a runtime
+      // guess. Left commented (a live `@ts-expect-error` line would itself need to
+      // stay a type error forever to keep passing, which is more fragile than the
+      // comment) — the type declaration below is the load-bearing proof:
+      // symbol.native`v1-role-bogus: `({ input: [z.value], output: [z.value], provenance: "bogus" }, (v) => v);
+      //                                                                        ^ not assignable to ProvenanceRole
+      const _exhaustive: ProvenanceRole[] = ["pipe", "fan", "source", "sink", "transparent", "loop", "opaque"];
+      expect(_exhaustive).toHaveLength(7);
+    },
   );
 
-  // @ledger: Q2
+  // @ledger: Q2 — RESIDUAL, left it.todo (Q21 audit F1: title asserts more than the
+  // machinery does — see the note below).
   it.todo(
     "the two ad-hoc booleans `fanout?`/`pure?` are GONE, not merely deprecated — " +
       "no declaration surface accepts them any more (§2 EXCLUDED: \"degenerate two-word " +
       "fragment of this vocabulary; each had exactly two readers\")",
+    // RESIDUAL FINDING (do not flip without either (a) retiring the legacy surface
+    // below, or (b) narrowing this row's title to the `symbol.*` declaration surface
+    // it actually verifies):
+    //
+    // `fanout?` is fully gone — no live type anywhere carries that field.
+    //
+    // `pure?` is NOT gone. `RosettaFunction.pure`/`RosettaSpec.pure` (src/rosetta.ts,
+    // src/common/scheme-env.ts) are still a LIVE, accepted declaration surface:
+    // `Environment.defineRosetta()` reads `config.pure` and records the name in the
+    // `rosettaPureOf` per-env registry (src/Environment.ts). `common/capability.ts`'s
+    // own `SymbolDeclaration` doc names this explicitly as a permanent (not
+    // migration-remnant) arm: "Gone from `foundations/arrival/**` itself, but
+    // load-bearing OUTSIDE it: McpEnvCapability's whole inline-annotation design …
+    // and every downstream capability (here.build's saas/server/{arrival,mcp}",
+    // inhuman's saas/mcp, the sift-submission forensics catalog) still authors verbs
+    // this way." `values/lineage-classifier-from-env.ts`'s own header independently
+    // confirms: "The legacy dynamic `Environment.defineRosetta`/`RosettaFunction.pure`
+    // runtime API is a SEPARATE, not-yet-migrated registration path outside Q2/Q3's
+    // declared-role vocabulary — ops registered that way carry no `.provenanceRole`."
+    //
+    // So the row is TRUE for the `symbol.*` (Q2) baked-declaration surface within
+    // this package's own env packs, and FALSE as a whole-codebase claim ("no
+    // declaration surface accepts them any more"). Writing a test against the
+    // narrower, actually-landed claim would silently launder the wider claim the
+    // title makes — reported instead per the task's residual-finding instruction.
   );
 
-  // @ledger: Q2
-  it.todo(
+  // @ledger: Q2 — FLIPPED (Q21 audit F1)
+  it(
     "declaration-completeness: every bound symbol that reaches the classifier has a " +
       "declared role — an undeclared symbol is a build-time error, never a silent " +
       "default-to-opaque",
+    async () => {
+      await initBridge();
+
+      // The baked TYPE makes omission impossible: every callable-kind def
+      // (`NativeSymbolDef`/`RosettaSymbolDef`/`SequenceSymbolDef`/`TaglessSymbolDef`/
+      // `TaglessGuardSymbolDef`) declares `readonly provenance: ProvenanceRole` —
+      // non-optional — and every factory resolves the kind default BEFORE returning
+      // the def (see the previous row). There is no path to a baked value with a
+      // missing role: "build-time error" cashes out as "the type does not admit the
+      // omission," never a runtime silent default — and never, in particular, a
+      // silent default TO `"opaque"` (which is its own explicit role, reached only
+      // when actually declared).
+      const defs: { provenance: ProvenanceRole }[] = [
+        symbol.native`v1-complete-native: `({ input: [z.value], output: [z.value] }, (v) => v),
+        symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s),
+        symbol.sequence`v1-complete-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
+        symbol.tagless`v1-complete-tagless: `,
+        symbol.taglessGuard`v1-complete-taglessguard: `,
+      ];
+      for (const def of defs) {
+        expect(typeof def.provenance).toBe("string");
+        expect(def.provenance).not.toBe("opaque");
+      }
+
+      // Live classifier read: an UNDECLARED op (`roleOf` answers `undefined` — an
+      // unbound name, or a plain user-defined Scheme lambda) resolves through
+      // `classify()` to the exact SAME node KIND as an explicitly declared `pipe`
+      // role — `lineage.ts`'s `classifyWith` shares ONE arm for "role === pipe or
+      // undefined" (see its own comment there). Never a silent fall to `opaque`,
+      // which is its own separate branch reached only when `roleOf` explicitly
+      // answers `"opaque"`.
+      const C: Classifier = { roleOf: (op) => (op === "declared-pipe" ? "pipe" : undefined) };
+      const [undeclaredAst] = await parse(`(totally-undeclared-op x)`, inferenceEnv);
+      const [declaredPipeAst] = await parse(`(declared-pipe x)`, inferenceEnv);
+      const undeclaredNode = classify(undeclaredAst, C);
+      const declaredNode = classify(declaredPipeAst, C);
+      expect(undeclaredNode.kind).not.toBe("opaque");
+      expect(undeclaredNode.kind).toBe(declaredNode.kind);
+    },
   );
 
-  // @ledger: Q2
-  it.todo(
+  // @ledger: Q2 — FLIPPED (Q21 audit F1)
+  it(
     "drift-alarm door (assembly-time): a declared role inconsistent with its contract " +
       "shape (e.g. declared `pipe` but the z.lambda position/return shape implies `fan`) " +
       "trips the door at assembly time — CONTRADICTIONS only, never silent (§2 LIMIT: " +
       "\"catches CONTRADICTIONS, not lies: a JS body that fans while declared pipe is " +
       "consistent-but-wrong; contract shape cannot see JS bodies\")",
+    () => {
+      // The TWO shape-decidable contradictions `assertProvenanceRoleShape` actually
+      // checks (_bake.ts) — both fire at BAKE (assembly) time, before any call site
+      // exists:
+      //
+      // 1. sink/transparent claim "no egress wire" — a contract whose normalized
+      //    output vector carries a real return schema contradicts that.
+      expect(() =>
+        symbol.native`v1-drift-sink-egress: sink declaring a real return`(
+          { input: [z.value], output: [z.value], provenance: "sink" },
+          (v) => v,
+        ),
+      ).toThrow(ProvenanceRoleShapeError);
+      expect(() =>
+        symbol.native`v1-drift-transparent-egress: transparent declaring a real return`(
+          { input: [z.value], output: [z.value], provenance: "transparent" },
+          (v) => v,
+        ),
+      ).toThrow(ProvenanceRoleShapeError);
+      // Consistent counterpart — a truly zero-item output vector passes.
+      expect(
+        symbol.native`v1-drift-sink-ok: sink with no egress wire`(
+          { input: [z.value], output: [], provenance: "sink" },
+          (): [] => [],
+        ).provenance,
+      ).toBe("sink");
+
+      // 2. `fan` claims "apply this proc across elements" — a contract whose input
+      //    vector has no z.lambda arm has no proc to apply.
+      expect(() =>
+        symbol.native`v1-drift-fan-no-lambda: fan with no proc to apply`(
+          { input: [z.value], output: [z.value], provenance: "fan" },
+          (v) => v,
+        ),
+      ).toThrow(ProvenanceRoleShapeError);
+      // Consistent counterpart — a lambda arm present passes.
+      expect(
+        symbol.native`v1-drift-fan-ok: fan with a proc to apply`(
+          { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+          (f, v) => v,
+        ).provenance,
+      ).toBe("fan");
+
+      // The row's own parenthetical example — "declared `pipe` but the z.lambda
+      // position … shape implies `fan`" — is EXACTLY the case the cited §2 LIMIT
+      // rules out: a contract carrying a z.lambda arm declared `pipe` (sort/find/
+      // member-shaped — a real callback present, host role legitimately pipe) does
+      // NOT trip the door. The alarm has only the two checks above; there is no
+      // third "shape looks fan-ish" guess for a `pipe` declaration to contradict.
+      // Verified below as a NON-throw — the machinery is not bent to make it throw.
+      expect(() =>
+        symbol.native`v1-drift-pipe-with-lambda: pipe host, real lambda arg — not a contradiction`(
+          { input: [z.lambda, z.value], output: [z.value], provenance: "pipe" },
+          (f, v) => v,
+        ),
+      ).not.toThrow();
+    },
   );
 
-  // @ledger: Q2
-  it.todo(
+  // @ledger: Q2 — FLIPPED (Q21 audit F1)
+  it(
     "declaration kinds LOWER 1:1 to graph node kinds (one vocabulary, two layers): " +
       "`loop` → `binder{cycles}`; `sink`/`transparent` are declaration-layer facts " +
       "lowering to graph shapes, never a second parallel vocabulary (§2 EXCLUDED, panel C11)",
+    async () => {
+      await initBridge();
+      const C: Classifier = {
+        roleOf: (op) =>
+          op === "declared-loop"
+            ? "loop"
+            : op === "declared-sink"
+              ? "sink"
+              : op === "declared-transparent"
+                ? "transparent"
+                : undefined,
+      };
+
+      const [loopAst] = await parse(`(declared-loop x)`, inferenceEnv);
+      const loopNode = classify(loopAst, C);
+      expect(loopNode.kind).toBe("binder");
+      if (loopNode.kind === "binder") expect(loopNode.cycles).toBe(true);
+
+      const [sinkAst] = await parse(`(declared-sink x)`, inferenceEnv);
+      expect(classify(sinkAst, C).kind).toBe("sink");
+
+      const [transparentAst] = await parse(`(declared-transparent x)`, inferenceEnv);
+      expect(classify(transparentAst, C).kind).toBe("transparent");
+
+      // ONE vocabulary, not two: `DeclaredRole` (lineage.ts) and `ProvenanceRole`
+      // (_bake.ts) are the SAME seven-member string union, declared independently
+      // (lineage.ts stays dependency-light — no `common/` coupling) but required by
+      // both files' own header comments to stay in lock-step. This line compiles
+      // iff the two unions have identical membership — a drift would be a `tsc`
+      // error here, not a runtime surprise.
+      const roles: readonly (DeclaredRole & ProvenanceRole)[] = [
+        "pipe",
+        "fan",
+        "source",
+        "sink",
+        "transparent",
+        "loop",
+        "opaque",
+      ];
+      expect(roles).toHaveLength(7);
+    },
   );
 });
 
