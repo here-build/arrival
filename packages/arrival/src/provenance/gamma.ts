@@ -28,8 +28,10 @@
  */
 import invariant from "tiny-invariant";
 
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
+import type { Environment } from "../Environment.js";
+import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../values/primitives/region-scope.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import type { EmittedWire } from "./wireframe/types.js";
@@ -70,6 +72,34 @@ export interface HermeticApplyOptions {
  */
 export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown> {
   const { wire, ingress, basePacks, prelude, config } = opts;
+  assertIngressCovers(wire, ingress);
+  return withSilentRegion(async () => {
+    const env = await hermeticEnv(basePacks, prelude, ingress, config);
+    // Apply the wire's lambda to its OWN params, by name — `ingress` already bound
+    // each one in the frame `hermeticEnv` just built (step 5), so this is a plain
+    // application over already-resolved names: the exact idiom
+    // `wireframe-agreement.law.test.ts` proved (`` `(${w.source} 41)` ``), generalized
+    // from a hardcoded literal to the wire's own declared param list.
+    const [egress] = await exec(wireApplication(wire), { env, skipBootstrapWait: true });
+    return egress;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q16 extension — the BOXED γ face + the composition seam replay.ts drives.
+//
+// `hermeticApply` above peels (exec's `toJS` contract) because a wire-γ EGRESS
+// compares against a recorded payload VALUE. Q16's containment/separation laws
+// (docs/PROVENANCE.md §3 I1/I3 "under replay") additionally need the replayed
+// value's PROVENANCE — the stamp set the boxed egress carries — which peeling
+// destroys. `applyWireInEnv` is the same application idiom returning the boxed
+// `SchemeValue`, factored against a caller-supplied env so a graph replay
+// (replay.ts) can assemble ONE hermetic base per graph and γ many wires against
+// per-wire ingress frames, instead of re-assembling+re-sealing per wire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The teaching door `hermeticApply` always had, shared with the Q16 faces. */
+function assertIngressCovers(wire: EmittedWire, ingress: IngressBindings): void {
   for (const name of wire.params) {
     invariant(
       Object.hasOwn(ingress, name),
@@ -78,15 +108,44 @@ export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown
         "the applied lambda hits an unbound variable deep inside exec instead of this door.",
     );
   }
+}
+
+/** The textual-application idiom, shared by every γ face. */
+function wireApplication(wire: EmittedWire): string {
+  return wire.params.length > 0 ? `(${wire.source} ${wire.params.join(" ")})` : `(${wire.source})`;
+}
+
+/**
+ * γ against a PREBUILT hermetic base, returning the BOXED egress (provenance
+ * intact). The caller owns BOTH halves `hermeticApply` bundles:
+ *   - the silent region (§4 A4) — a graph replay wraps its WHOLE walk in ONE
+ *     `withSilentRegion`, not one per wire;
+ *   - the base env — built once per graph via `hermeticEnv(basePacks, prelude)`
+ *     (empty ingress); each call here binds this wire's ingress in a FRESH frame
+ *     inherited above it, so wires never see each other's bindings.
+ */
+export async function applyWireInEnv(
+  base: Environment,
+  wire: EmittedWire,
+  ingress: IngressBindings,
+): Promise<SchemeValue> {
+  assertIngressCovers(wire, ingress);
+  const frame = base.inherit(`gamma-wire-${wire.span}`);
+  for (const [name, value] of Object.entries(ingress)) frame.set(name, value);
+  const state = await execState(wireApplication(wire), { env: frame, skipBootstrapWait: true });
+  const boxed = state.values.at(-1);
+  invariant(boxed !== undefined, "applyWireInEnv: a wire application evaluates exactly one form — exec returned none");
+  return boxed;
+}
+
+/** `hermeticApply`'s boxed sibling: same env assembly, same silent region, but the
+ *  egress keeps its box (and therefore its stamp set) — the shape the I1/I3 replay
+ *  laws compare cones over. Peeling the result of this function with `schemeToJs`
+ *  yields the same comparison surface `hermeticApply` returns via exec's `toJS`. */
+export async function hermeticApplyBoxed(opts: HermeticApplyOptions): Promise<SchemeValue> {
+  const { wire, ingress, basePacks, prelude, config } = opts;
   return withSilentRegion(async () => {
-    const env = await hermeticEnv(basePacks, prelude, ingress, config);
-    // Apply the wire's lambda to its OWN params, by name — `ingress` already bound
-    // each one in the frame `hermeticEnv` just built (step 5), so this is a plain
-    // application over already-resolved names: the exact idiom
-    // `wireframe-agreement.law.test.ts` proved (`` `(${w.source} 41)` ``), generalized
-    // from a hardcoded literal to the wire's own declared param list.
-    const application = wire.params.length > 0 ? `(${wire.source} ${wire.params.join(" ")})` : `(${wire.source})`;
-    const [egress] = await exec(application, { env, skipBootstrapWait: true });
-    return egress;
+    const base = await hermeticEnv(basePacks, prelude, {}, config);
+    return applyWireInEnv(base, wire, ingress);
   });
 }

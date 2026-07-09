@@ -19,8 +19,9 @@
  *      glass machinery (penetration caching / playback) is later product work — this
  *      row pins only the discipline the task brief calls out.
  *
- * Q16 proves the adjunction laws (wire-γ etc.) over `hermeticApply`; nothing here
- * attempts that — see `replay.law.test.ts`'s own `it.todo` staging for those.
+ * Q16 proved the adjunction laws (wire-γ etc.) over `hermeticApply` — see
+ * `replay.law.test.ts` (flipped) and `provenance/replay.ts`; nothing here attempts
+ * those, this file stays the Q15 smoke/discipline suite.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
