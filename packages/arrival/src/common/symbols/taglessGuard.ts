@@ -33,5 +33,6 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): Tagl
     const verdict = await fn.call(receiver, ...leading, runCtx);
     return mintVerdict([receiver, ...leading], typeof verdict === "boolean" ? verdict : Boolean(verdict));
   };
-  return { kind: "tagless-guard", name, doc, in: z.array(z.value), out: z.value, run };
+  // No `Contract` param here (see `TaglessGuardSymbolDef.provenance`'s doc) — always "pipe".
+  return { kind: "tagless-guard", name, doc, in: z.array(z.value), out: z.value, run, provenance: "pipe" };
 }

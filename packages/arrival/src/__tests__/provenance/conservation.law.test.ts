@@ -503,7 +503,7 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
     // Mirrors capability-rosetta-symbol.test.ts's "pure: true FORWARDS input provenance
     // even WITH a ctx invocation" — restated here as the F2 mint-at-edge law's own row.
     const def = symbol.rosetta`echo: identity string`(
-      { input: [z.string], output: [z.string], pure: true },
+      { input: [z.string], output: [z.string], provenance: "pipe" },
       (s: string) => s,
     );
     const verb = await wireRosetta(def);

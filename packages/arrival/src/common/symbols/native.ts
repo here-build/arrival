@@ -6,6 +6,7 @@
 // wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
 
 import {
+  assertProvenanceRoleShape,
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
@@ -28,20 +29,25 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest, "scheme">,
   ): NativeSymbolDef => {
-    // `fanout: true` → stamp `def.impl` (capability wraps it into an ANativeProcedure and copies
-    // the marker onto that bound value; the lineage classifier reads `.fanout` off env.get(op)).
-    if (contract.fanout) (impl as { fanout?: boolean }).fanout = true;
+    const inSchema = normalizeInputVector(contract.input, contract.inputRest);
+    const outSchema = normalizeVector(contract.output);
+    // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
+    // stamps this onto the bound ANativeProcedure (`provenanceRole`) so the lineage classifier
+    // reads it off `env.get(op)`, replacing the retired `fanout: true` → `.fanout` duck-read.
+    const provenance = contract.provenance ?? "pipe";
+    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
     return {
       kind: "native",
       name,
       doc,
-      in: normalizeInputVector(contract.input, contract.inputRest),
-      out: normalizeVector(contract.output),
+      in: inSchema,
+      out: outSchema,
       // NO runtime validation, NO codec — the impl works on scheme values directly.
       // "zod for types purely": the schemas live on the def for inference + the harvest.
       impl,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
+      provenance,
     };
   };
 }

@@ -27,7 +27,7 @@ import type { RunContext } from "../values/primitives/RunContext.js";
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { InvocationLike } from "../rosetta.js";
-import { CallCtx, makeCallCtx } from "./symbols/_bake.js";
+import { CallCtx, makeCallCtx, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 
@@ -248,10 +248,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   contract: def,
                   impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
                 });
-                // Preserve the marker the lineage classifier (`.fanout`) reads OFF THE BOUND
-                // VALUE, now the ANativeProcedure.
-                const markers = def.impl as { fanout?: boolean };
-                if (markers.fanout) (proc as { fanout?: boolean }).fanout = true;
+                // Stamp the RESOLVED provenance role onto the bound value (docs/PROVENANCE.md
+                // §2, PROVENANCE-PLAN.md Q2) — the lineage classifier reads it OFF THE BOUND
+                // VALUE via `env.get(op)`, replacing the retired `.fanout` boolean this same
+                // seam used to copy.
+                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -286,11 +287,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   contract: def,
                   impl,
                 });
-                // Preserve the marker the lineage classifier reads OFF THE BOUND VALUE
-                // (sequence.ts stamps `.fanout` on `def.run`; the classifier now finds it
-                // on the bound ANativeProcedure instead).
-                const markers = def.run as { fanout?: boolean };
-                if (markers.fanout) (proc as { fanout?: boolean }).fanout = true;
+                // Stamp the RESOLVED provenance role (all three kinds now carry `.provenance`
+                // on the def itself — sequence()/tagless()/taglessGuard() resolve it at bake
+                // time) onto the bound value, same seam as the native case above.
+                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -329,9 +329,14 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   // Arity is introspection-only in this cut, same as the sibling kinds.
                   arity: { min: 0, max: null },
                   contract: def,
-                  strategy: { pure: def.pure === true },
+                  // Retired the `{ pure: boolean }` shape (PROVENANCE-PLAN.md Q2) — `strategy`
+                  // is opaque (`unknown`, "until stage 3") anyway; carries the resolved role now.
+                  strategy: { provenance: def.provenance },
                   impl,
                 });
+                // Same stamp as the native/sequence cases — the classifier reads it off the
+                // bound value uniformly across every callable kind.
+                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 bindTarget(def).set(verb, proc);
                 break;
               }

@@ -226,7 +226,7 @@ export default new EnvCapability("scheme/lists", {
       {
         input: z.tuple([z.lambda], z.value),
         output: [z.value],
-        fanout: true,
+        provenance: "fan",
         type: "<R>(fn: (...args: unknown[]) => R, ...lists: unknown[]) => R[]",
       },
       (args, runCtx) => {

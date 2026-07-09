@@ -205,7 +205,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     // NOT pointProvenance(42), and the invocation is NOT marked a point. (Minting here would
     // fabricate a fresh origin — the seal-laundering class of bug `pure` exists to prevent.)
     const def = symbol.rosetta`echo: identity string`(
-      { input: [z.string], output: [z.string], pure: true },
+      { input: [z.string], output: [z.string], provenance: "pipe" },
       (s) => s,
     );
     const verb = await wireRosetta(def);

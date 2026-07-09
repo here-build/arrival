@@ -8,6 +8,7 @@ import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme, type InvocationLike } from "../../rosetta.js";
 import {
+  assertProvenanceRoleShape,
   type BakeRuntimeOpts,
   CallCtx,
   collectKwargsObject,
@@ -37,9 +38,13 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     const singleOut = isSingleOutput(contract.output);
-    // `pure: true` → TRANSFORM (forward input provenance); default → SOURCE (mint). Strict
-    // `=== true` so only an explicit opt-out forwards (undefined/false stay sources).
-    const pure = contract.pure === true;
+    // Resolve the declared role (default "source" — see Contract.provenance): "pipe" is a
+    // TRANSFORM (forwards input provenance); "source" (default) MINTS. Migrated from the
+    // retired `pure: true` boolean (PROVENANCE-PLAN.md Q2) — `pure === true` ⇒ "pipe",
+    // undefined/false ⇒ "source", so `forwards` below is BYTE-IDENTICAL to the old `pure`.
+    const provenance = contract.provenance ?? "source";
+    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    const forwards = provenance === "pipe";
     // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
     // for the trust model + future use; see the decode note below for why it currently
     // can't be a no-op for the codec family. Default from bake opts.
@@ -101,15 +106,15 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
       const result = await rawImpl.call(this, ...decodedArgs);
 
-      // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A SOURCE rosetta (default)
-      //    MINTS a fresh point off ctx.currentInvocation; a PURE rosetta (`pure: true`) is a
-      //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta
-      //    `pure: true`). With no invocation in ctx (direct-JS) a source also falls back to the
-      //    input union. ★The forward-vs-mint choice is provenance-load-bearing: a pure rosetta
-      //    that minted would fabricate a fresh origin (the seal-laundering class of bug).
+      // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta
+      //    (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
+      //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta's
+      //    legacy `pure: true`). With no invocation in ctx (direct-JS) a source also falls back
+      //    to the input union. ★The forward-vs-mint choice is provenance-load-bearing: a "pipe"
+      //    rosetta that minted would fabricate a fresh origin (the seal-laundering class of bug).
       const inv = this.invocation.currentInvocation as InvocationLike | undefined;
       let resultProvenance = inputProvenance;
-      if (!pure && inv && typeof inv.id === "number") {
+      if (!forwards && inv && typeof inv.id === "number") {
         if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
         else inv.isProvenancePoint = true;
         resultProvenance = pointProvenance(inv.id);
@@ -125,19 +130,18 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    multiple-values case is a RAW JS ARRAY (the scheme values-vector) — stamp each
       //    ELEMENT and keep the JS array, because jsToScheme over a JS array would (correctly,
       //    for data) build a Pair-chain, which is the WRONG shape for a values-vector.
-      //    ATTESTATION (values/attestation.ts) rides the SAME walk position: a SOURCE
-      //    rosetta's return is machine-made (a tool result), so its spine + leaves are
-      //    deep-attested — `car`/`vector-ref`/plucks on it hand back already-attested
-      //    boxes at the manifold boundary. A PURE rosetta is a transform: its return
-      //    keeps only what the impl itself chose to attest (the manifold's `s/*`
-      //    validators attest their identity-returns this way).
-      //    (`freshIfSingleton` first: `fromJs` reuses the shared #t/#f flyweights on the
+      //    ATTESTATION (values/attestation.ts) rides the SAME walk position: a "source" rosetta's
+      //    return is machine-made (a tool result), so its spine + leaves are deep-attested —
+      //    `car`/`vector-ref`/plucks on it hand back already-attested boxes at the manifold
+      //    boundary. A "pipe" rosetta is a transform: its return keeps only what the impl itself
+      //    chose to attest (the manifold's `s/*` validators attest their identity-returns this
+      //    way). (`freshIfSingleton` first: `fromJs` reuses the shared #t/#f flyweights on the
       //    empty-provenance fast path, and the program-wide singletons must never attest.)
       if (singleOut) {
         // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
         const encoded = z.encode(outSchema, [result])[0];
         const boxed: unknown = jsToScheme(this.runCtx, encoded, {}, resultProvenance);
-        return pure ? boxed : attestDeep(freshIfSingleton(boxed));
+        return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
       }
       // multiple-values / array-ish output: the impl returned the values-vector already (an array
       // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
@@ -145,7 +149,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       const encoded = z.encode(outSchema, result as readonly unknown[]);
       return encoded.map((v) => {
         const boxed: unknown = jsToScheme(this.runCtx, v, {}, resultProvenance);
-        return pure ? boxed : attestDeep(freshIfSingleton(boxed));
+        return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
       });
     };
 
@@ -157,7 +161,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       out: outSchema,
       impl,
       run,
-      pure,
+      provenance,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
     };

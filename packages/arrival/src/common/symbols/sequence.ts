@@ -2,6 +2,7 @@
 // types live in ./_bake.js.
 
 import {
+  assertProvenanceRoleShape,
   CallCtx,
   type Contract,
   DecodedArgs,
@@ -24,25 +25,28 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
   ): SequenceSymbolDef => {
+    const inSchema = normalizeVector(contract.input);
+    const outSchema = normalizeVector(contract.output);
+    // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
+    // reads it straight off this def (`def.provenance`) and stamps it onto the bound
+    // ANativeProcedure (`provenanceRole`), replacing the retired `.fanout` marker that used
+    // to ride the `run` fn itself.
+    const provenance = contract.provenance ?? "pipe";
+    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
     return {
       kind: "sequence",
       name,
       doc,
-      in: normalizeVector(contract.input),
-      out: normalizeVector(contract.output),
+      in: inSchema,
+      out: outSchema,
       // Erased to the def's stored shape — SequenceSymbolDef.run is deliberately non-generic
       // (the same erasure boundary rosetta.ts's `rawImpl` crosses). By construction, the sliced
       // args array always matches `DecodedArgs<I,"scheme">`.
-      // Stamp fanout on the returned `run` fn only when the contract declares it: capability.ts
-      // wraps `run` into a bound ANativeProcedure and copies this marker onto it, so the
-      // lineage classifier reads `.fanout` off `env.get(op)` from that bound value.
-      run: Object.assign(
-        function (this: CallCtx, ...args: unknown[]) {
-          return impl(args as DecodedArgs<I, "scheme">, this.runCtx);
-        },
-        contract.fanout ? { fanout: true } : {},
-      ) as SequenceSymbolDef["run"],
+      run: function (this: CallCtx, ...args: unknown[]) {
+        return impl(args as DecodedArgs<I, "scheme">, this.runCtx);
+      } as SequenceSymbolDef["run"],
       type: contract.type,
+      provenance,
     };
   };
 }

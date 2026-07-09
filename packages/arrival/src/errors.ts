@@ -220,6 +220,33 @@ export function strictGate(
 }
 
 // -------------------------------------------------------------------------
+// :: ProvenanceRoleShapeError — declared `provenance` role vs contract SHAPE.
+//
+// docs/PROVENANCE.md §2's drift alarm (PROVENANCE-PLAN.md Q2): a symbol declares a
+// `provenance` role (spec's declaration vocabulary — pipe/fan/source/sink/transparent/
+// loop/opaque) that its OWN contract's normalized in/out vectors structurally disprove.
+// Thrown at ASSEMBLY (bake time — `common/symbols/{native,rosetta,sequence}.ts`, via
+// `assertProvenanceRoleShape` in `_bake.ts`), never at call time. LIMIT, stated at
+// every throw site: shape catches CONTRADICTIONS, not LIES — a JS body that fans while
+// declared `pipe` is consistent-but-wrong and invisible to shape (spec §2's own words).
+// -------------------------------------------------------------------------
+export class ProvenanceRoleShapeError extends ArrivalError {
+  static [CLASS] = "provenance-role-shape-error";
+  public readonly name = "ProvenanceRoleShapeError";
+
+  constructor(
+    /** The declaring symbol's name — routing/telemetry key. */
+    public readonly op: string,
+    /** The declared role that contradicts the contract. */
+    public readonly role: string,
+    /** The teaching explanation of WHY the contract's shape disproves the role. */
+    public readonly rule: string,
+  ) {
+    super(`${op}: declared provenance role "${role}" contradicts its own contract — ${rule}`);
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: InteropAccessError — a Scheme access that would cross an interop boundary.
 // -------------------------------------------------------------------------
 export class InteropAccessError extends Error {

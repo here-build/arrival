@@ -28,7 +28,8 @@
 //                    off `this: CallCtx` (`this.runCtx.signal`, `this.invocation.currentInvocation`).
 //                    PROVENANCE MINTING RESOLVED: evaluator appends ctx; wrapper reads this.invocation
 //                    .currentInvocation and mints/deep-stamps exactly as createRosettaWrapper does
-//                    (non-pure rosetta AEntity = a source). withContext / argProvenance knobs DROPPED here.
+//                    (a `source`-role rosetta AEntity mints; `pipe` forwards — see `ProvenanceRole`
+//                    below, PROVENANCE-PLAN.md Q2). withContext / argProvenance knobs DROPPED here.
 //
 //   symbol.notImplemented  no contract/impl, just `name: reason`. bake → door:
 //                    { kind: "door", name, reason } (the %purity-door story).
@@ -40,6 +41,7 @@ import { type RunContext } from "../../values/primitives/RunContext.js";
 import { type CallCtx, makeCallCtx, missingCallCtxDoor, testCallCtx } from "../../values/primitives/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
+import { ProvenanceRoleShapeError } from "../../errors.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -124,14 +126,24 @@ export type DecodedArgsWithRest<
       : never
     : never
   : Rest extends Record<string, z.ZodTypeAny>
-    // kwargs: plain shape record `Rest` types the impl to ONE trailing arg — the decoded
-    // kwargs OBJECT (each field projected through the face), a single object param NOT a spread.
-    // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
-    // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of it.
-    // Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
-    // so it never matches `extends z.ZodTypeAny`.
-    ? [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
+    ? // kwargs: plain shape record `Rest` types the impl to ONE trailing arg — the decoded
+      // kwargs OBJECT (each field projected through the face), a single object param NOT a spread.
+      // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
+      // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of it.
+      // Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
+      // so it never matches `extends z.ZodTypeAny`.
+      [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
     : DecodedArgs<I, F>;
+
+/** docs/PROVENANCE.md §2's declared-role vocabulary, data in string key space (P7) — the
+ *  ONE field every symbol declaration carries instead of the retired `pure?`/`fanout?`
+ *  booleans (PROVENANCE-PLAN.md Q2). `pipe`/`fan`/`source` are LIVE today (declaration
+ *  defaults + the migrated booleans, below); `sink`/`transparent`/`loop`/`opaque` are
+ *  GRAPH-LAYER targets no declaration marks yet (Q1's `src/values/lineage.ts` node kinds
+ *  exist for them; Q3 wires the classifier to consume them) — the union names the full
+ *  spec vocabulary now so `Contract.provenance`'s type is stable across Q2/Q3/Q4, not
+ *  narrowed to "whatever's reachable today". */
+export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
 
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
@@ -153,15 +165,20 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  the harvest: `native()`/`rosetta()`/`sequence()` carry it through; `signatureOf` prefers
    *  it over computing from `in`/`out`. Absent ⇒ byte-identical to zod-derived signature. */
   readonly type?: string;
-  /** ROSETTA-ONLY. `pure: true` makes the rosetta a TRANSFORM, not a source: it FORWARDS the
-   *  union of its inputs' provenance instead of minting a fresh point at the call site. Strict
-   *  `=== true` — undefined/false = source (default, mints). Ignored by `symbol.native`. */
-  readonly pure?: boolean;
-  /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map). `native()`/
-   *  `sequence()` stamp a plain `.fanout = true` on the def's impl/run fn; capability.ts copies
-   *  the marker onto the bound ANativeProcedure; lineage classifier reads it off `env.get(op)`.
-   *  On the contract, not in a name-list — fan-ness follows the binding (alias-correct). */
-  readonly fanout?: boolean;
+  /** Declared PROVENANCE ROLE (docs/PROVENANCE.md §2's declaration vocabulary,
+   *  PROVENANCE-PLAN.md Q2) — ONE key-space string per symbol, not a bag of booleans.
+   *  `undefined` here means "this kind's default": `native()`/`sequence()`/`tagless()`/
+   *  `taglessGuard()` default to `"pipe"` (pure pass-through — propagate, never mint);
+   *  `rosetta()` defaults to `"source"` (mint a fresh point). The two ad-hoc booleans this
+   *  field replaces are RETIRED (spec §2 EXCLUDED — "each had exactly two readers"):
+   *  rosetta's old `pure: true` ⇒ `"pipe"` (forwards the input-provenance union instead of
+   *  minting — BYTE-IDENTICAL behavior, rosetta.ts); native/sequence's old `fanout: true` ⇒
+   *  `"fan"`. The RESOLVED role lands on the baked def (`NativeSymbolDef.provenance` etc.);
+   *  capability.ts stamps it onto the bound callable (`provenanceRole`) so the lineage
+   *  classifier reads it off `env.get(op)` — never a duck-read off an ad-hoc property (spec
+   *  §2's EXCLUDED "heuristic classification"). See `assertProvenanceRoleShape` below for the
+   *  two SHAPE-decidable contradictions this field is checked against at bake time. */
+  readonly provenance?: ProvenanceRole;
   /** KIND-AGNOSTIC (native/rosetta). `true` = ASSEMBLY-TIME-ONLY: binds into the assembly's
    *  phase-gated prelude scope (kernel.ts `assembleEnv` — per-assembly Map answered by a resolver
    *  on the base env during the C3 loop), never into the runtime env. Callable from any later-
@@ -216,6 +233,9 @@ export interface NativeSymbolDef {
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
+  /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
+   *  Non-optional: `native()` always resolves the default before baking. */
+  readonly provenance: ProvenanceRole;
 }
 
 /** A rosetta symbol: impl in JS-land. `in`/`out` are codec schemas; `run` is the
@@ -241,8 +261,11 @@ export interface RosettaSymbolDef<
    *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
    *  see `rosetta()` factory's `run` wrapper in rosetta.ts). */
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
-  /** `true` = transform (forwards input provenance); default/false = source (mints). */
-  readonly pure?: boolean;
+  /** RESOLVED provenance role (`contract.provenance ?? "source"` — see `Contract.provenance`).
+   *  `"pipe"` = transform (forwards input provenance); `"source"` (default) mints. Non-optional:
+   *  `rosetta()` always resolves the default before baking. Replaces the retired `pure?: boolean`
+   *  (PROVENANCE-PLAN.md Q2 — `pure: true` migrated to `"pipe"`, byte-identical behavior). */
+  readonly provenance: ProvenanceRole;
   /** See `Contract.type`. */
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
@@ -262,6 +285,9 @@ export interface TaglessSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+  /** Always `"pipe"` — `tagless()` takes no `Contract`, so there is no author override
+   *  channel yet (see `Contract.provenance`'s kind-default table). */
+  readonly provenance: ProvenanceRole;
 }
 
 /** Tagless GUARD — like `symbol.tagless`, but a receiver with no such method yields `#f` (graceful
@@ -275,6 +301,8 @@ export interface TaglessGuardSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+  /** Always `"pipe"` — same rationale as `TaglessSymbolDef.provenance`. */
+  readonly provenance: ProvenanceRole;
 }
 
 /** Ctx-aware op: impl receives scheme args AND the run's RunContext (dual of `symbol.native`,
@@ -290,6 +318,10 @@ export interface SequenceSymbolDef {
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** See `Contract.type`. */
   readonly type?: string;
+  /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
+   *  Non-optional: `sequence()` always resolves the default before baking. Replaces the
+   *  retired `.fanout` stamped onto `run` (PROVENANCE-PLAN.md Q2). */
+  readonly provenance: ProvenanceRole;
 }
 
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
@@ -454,6 +486,81 @@ export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): Ve
  *  values-list); otherwise it returns the values-vector already. */
 export function isSingleOutput(output: VectorSpec): boolean {
   return Array.isArray(output) && output.length === 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3b. The DRIFT ALARM — declared `provenance` role vs contract SHAPE (docs/PROVENANCE.md
+//     §2, PROVENANCE-PLAN.md Q2). Two contradictions are SHAPE-decidable; everything else
+//     needs the JS body, which shape can't see (spec §2's own LIMIT).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Every schema at a NORMALIZED VectorSchema's top level (see `normalizeVector`/
+ *  `normalizeInputVector`) — a `z.tuple`'s items, an array-ish schema's lone element
+ *  (wrapped as a 1-list so both shapes iterate uniformly), or `undefined` for anything else
+ *  (a kwargs `z.object`, a bare non-container schema) — the checks below fall back to their
+ *  own conservative default rather than guess past this. Same zod-4.3.6 `_zod.def` shape
+ *  `type-layer/schema-to-ts.ts`'s `signatureOf` already introspects (verified there); a local
+ *  copy because that module wants a differently-shaped return (printer-facing `TupleDef`/
+ *  `ArrayDef`) and importing it here would pull the harvest/printer world into the bake layer. */
+function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
+  const def = (
+    schema as {
+      _zod?: { def?: { type?: string; items?: readonly z.ZodTypeAny[]; element?: z.ZodTypeAny } };
+    }
+  )._zod?.def;
+  if (def?.type === "tuple") return def.items ?? [];
+  if (def?.type === "array" && def.element) return [def.element];
+  return undefined;
+}
+
+/** DRIFT ALARM (errors-as-doors): throws `ProvenanceRoleShapeError` when a declared
+ *  `provenance` role CONTRADICTS its own contract's shape. Called at ASSEMBLY (bake time —
+ *  `native()`/`rosetta()`/`sequence()`, on the schemas each already normalizes), never at
+ *  call time — a wrong role is a declaration-authoring bug, not a runtime condition.
+ *
+ *  1. `sink`/`transparent` both claim NO real egress ("a sink is a port with no egress
+ *     wire"; "a transparent crossing neither mints nor stamps" a value — lineage.ts) — a
+ *     contract whose normalized OUTPUT vector carries a real return schema contradicts
+ *     either.
+ *  2. `fan` claims "apply this proc across elements" (map/filter/vector-map) — a contract
+ *     whose normalized INPUT vector carries no `z.lambda` arm has no proc to apply.
+ *
+ *  LIMIT (spec §2, restated here — do not extend this function past it): shape catches
+ *  CONTRADICTIONS, not LIES. A JS body that fans while declared `pipe` is
+ *  consistent-but-wrong and invisible to shape; contract shape cannot see JS bodies, and
+ *  arrange-vs-membership is semantic, not structural. Mitigation for that class is the W1
+ *  agreement gate (spec §7) plus the generator corpus, never a shape guess bolted on here. */
+export function assertProvenanceRoleShape(
+  name: string,
+  role: ProvenanceRole,
+  inSchema: z.ZodTypeAny,
+  outSchema: z.ZodTypeAny,
+): void {
+  if (role === "sink" || role === "transparent") {
+    const items = topLevelSchemas(outSchema);
+    const hasEgress = items === undefined ? true : items.length > 0;
+    if (hasEgress) {
+      throw new ProvenanceRoleShapeError(
+        name,
+        role,
+        role === "sink"
+          ? "a sink is a port with no egress wire, but this contract's output vector carries a real return value"
+          : "a transparent crossing neither mints nor stamps a returned value, but this contract's output vector carries one",
+      );
+    }
+  }
+  if (role === "fan") {
+    const items = topLevelSchemas(inSchema);
+    const hasLambda =
+      items === undefined ? z.lookupName(inSchema) === "lambda" : items.some((item) => z.lookupName(item) === "lambda");
+    if (!hasLambda) {
+      throw new ProvenanceRoleShapeError(
+        name,
+        role,
+        "a fan op applies a proc across elements, but this contract's input vector has no z.lambda arm to apply",
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

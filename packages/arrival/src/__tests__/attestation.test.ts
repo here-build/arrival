@@ -80,7 +80,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("a PURE rosetta's return is NOT machine-attested (a transform, not a source)", async () => {
     const pureDef = symbol.rosetta`p: pure transform`(
-      { input: [], output: [z.number], pure: true },
+      { input: [], output: [z.number], provenance: "pipe" },
       () => 42,
     );
     expect(isAttested(await pureDef.run.call(testCallCtx()))).toBe(false);

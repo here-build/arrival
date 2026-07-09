@@ -212,7 +212,7 @@ export default new EnvCapability("scheme/vectors", {
         input: [z.lambda],
         inputRest: z.vector(z.value),
         output: [z.vector(z.value)],
-        fanout: true,
+        provenance: "fan",
         // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])
         // => unknown` (losing the vector rest + vector return). `type` restores the real shape:
         // proc-first, then a `readonly unknown[][]` rest (the same image z.vector(z.value) harvests as

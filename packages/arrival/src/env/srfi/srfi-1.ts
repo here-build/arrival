@@ -70,7 +70,7 @@ export default new EnvCapability("scheme/srfi-1", {
         // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
         // `seq` operand implements and returns a value in THAT SAME representation, so there is
         // no single richer scheme-zod collection type honest for every call site.
-        { input: [z.lambda, z.value], output: [z.value], fanout: true },
+        { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = resolveMethod(seq, tf("filter"));

@@ -31,5 +31,6 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSy
     );
     return await fn.call(receiver, ...leading, runCtx);
   };
-  return { kind: "tagless", name, doc, in: z.array(z.value), out: z.value, run };
+  // No `Contract` param here (see `TaglessSymbolDef.provenance`'s doc) — always "pipe".
+  return { kind: "tagless", name, doc, in: z.array(z.value), out: z.value, run, provenance: "pipe" };
 }

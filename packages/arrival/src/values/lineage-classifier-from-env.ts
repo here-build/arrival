@@ -22,10 +22,15 @@
  *    it once classified is retired (a borrowed JS function crosses the membrane as
  *    #void, never a callable head), so no env binding is structurally opaque. The
  *    `opaque` lineage kind still arises from named-let recursion and test classifiers.
- *  - isFan: read off the bound fn — `env.get(op).fanout`. Fan ops (map/filter/
- *    vector-map) declare `fanout: true` on their symbol-def contract; bake stamps
- *    a plain `.fanout` on the bound fn. Fan-ness FOLLOWS THE BINDING (alias-correct
- *    — an alias of `map` is still fan, a shadowing local `map` is not), not a name list.
+ *  - isFan: read off the bound value — `env.get(op).provenanceRole === "fan"`. Fan ops
+ *    (map/filter/vector-map) declare `provenance: "fan"` on their symbol-def contract
+ *    (docs/PROVENANCE.md §2, PROVENANCE-PLAN.md Q2 — migrated from the retired
+ *    `fanout: true` boolean); capability.ts stamps the RESOLVED role onto the bound
+ *    callable as `.provenanceRole`. Fan-ness FOLLOWS THE BINDING (alias-correct — an
+ *    alias of `map` is still fan, a shadowing local `map` is not), not a name list.
+ *    Q3 retires this duck-read entirely in favor of consuming declared roles directly
+ *    (PROVENANCE-PLAN.md Q3 — "isRosettaIn heuristic + `.fanout` duck-reads deleted");
+ *    this one-liner is Q2's minimal update to keep the classifier working meanwhile.
  *  - isPure: provided for interface completeness, but `classify()` does not
  *    currently consult it — an op that is not source/opaque/fan falls through to
  *    the pure-application path (combine) regardless. Rosetta-only: the pure
@@ -54,10 +59,11 @@ export function classifierFromEnv(env: Environment, sources: ReadonlySet<string>
     isPure: (op) => isPureRosettaInChain(env, op),
     // A source mints iff it is a declared source AND not a pure transform.
     isRosettaIn: (op) => sources.has(op) && !isPureRosettaInChain(env, op),
-    // Fan-ness follows the BINDING: bake stamps `.fanout` on the bound fn when the def's
-    // contract declares `fanout: true` (map/filter/vector-map). Non-throwing lookup — the
-    // classifier sees arbitrary op names, an unbound one is simply not fan.
-    isFan: (op) => (env.get(op, { throwError: false }) as { fanout?: boolean } | undefined)?.fanout === true,
+    // Fan-ness follows the BINDING: capability.ts stamps `.provenanceRole` on the bound value
+    // from the def's declared `provenance: "fan"` (map/filter/vector-map). Non-throwing
+    // lookup — the classifier sees arbitrary op names, an unbound one is simply not fan.
+    isFan: (op) =>
+      (env.get(op, { throwError: false }) as { provenanceRole?: string } | undefined)?.provenanceRole === "fan",
     // See the file header: no env binding is structurally opaque anymore.
     isOpaque: () => false,
   };
