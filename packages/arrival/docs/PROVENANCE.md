@@ -1,5 +1,12 @@
 # Arrival Provenance — Specification
 
+> *"The physical universe was a language with a perfectly ambiguous grammar. Every
+> physical event was an utterance that could be parsed in two entirely different ways,
+> one causal and the other teleological, both valid, neither one disqualifiable no
+> matter how much context was available."* — Ted Chiang, Story of Your Life
+>
+> That sentence is P0. This document is its execution semantics.
+
 *Ratified 2026-07-09 (V + Fable); amended same day after critique rounds 2 and 3
 against the deployment target. Normative fusion of the design arc — supersedes, for
 normative content, the working proposals it fuses (`execution-plan-wireframe.md`,
