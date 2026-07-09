@@ -81,3 +81,11 @@ export {
   type Slice,
 } from "./slice.js";
 export { buildUneval, type Uneval, type UnevalContainer } from "./uneval.js";
+export {
+  classifyProgramPrelude,
+  assertPreludeEligible,
+  buildPreludeSource,
+  reachesPort,
+  type PreludeMembership,
+} from "./prelude.js";
+export { hermeticEnv, type IngressBindings } from "./hermetic-env.js";

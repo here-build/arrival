@@ -22,6 +22,12 @@
  *   shape), declaration override where shape underdetermines, the drift-door extension,
  *   and the fold acc-chain marker.
  * V4 (Q8a′) — cone-traversal termination over cyclic `binder{cycles}` (loop) nodes.
+ * Q7 (Q7) — program-prelude PURE-only membership: the REJECTED half of the plan's
+ *   "BOTH directions" gate (a fetch-wrapping helper, direct AND transitive, refused
+ *   membership with a teaching door). The positive half (a pure helper referenced by
+ *   name stays prelude-side, resolved through the sealed chain) lives in the sibling
+ *   `provenance/wireframe-agreement.law.test.ts` (closer to that file's assembler/
+ *   chain-resolution concerns).
  */
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
@@ -32,7 +38,8 @@ import { classifierFromEnv } from "../../values/lineage-classifier-from-env.js";
 import * as z from "../../common/scheme-zod.js";
 import { declaresAccChain, symbol, withCallbackRoles, type AEntity, type CallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { ProvenanceRoleShapeError } from "../../errors.js";
+import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
+import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
 import { freshEnv } from "../_fresh-env.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
 import srfi1 from "../../env/srfi/srfi-1.js";
@@ -310,5 +317,53 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
     "loop wireframing lands template referents BEFORE emission can key records against " +
       "them — a loop-heavy program never emits a record with no template (Q8a′ is a " +
       "HARD gate before Q11a for exactly this reason)",
+  );
+});
+
+describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (§1 CHOSEN round 2 A3, narrowed round 3 M1; PROVENANCE-PLAN.md Q7)", () => {
+  // @ledger: Q7 — LANDED
+  it(
+    "a define wrapping a fetch-role (source) rosetta is refused prelude membership — " +
+      "directly (its own body crosses the port) AND transitively (a caller that never " +
+      "touches the port itself, but REFERENCES the port-reaching helper by name, is " +
+      "itself port-reaching — §1's fixpoint over the top-level call graph) — " +
+      "`assertPreludeEligible` throws a teaching door naming the port (errors-as-doors; " +
+      "§1 EXCLUDED \"port-reaching defines in the prelude — name indirection would " +
+      "smuggle sources into 'pure' wire bodies\")",
+    async () => {
+      await initBridge();
+      const C: Classifier = { roleOf: (op) => (op === "fetch-thing" ? "source" : undefined) };
+      const forms = await parse(
+        `(define (helper) (fetch-thing "https://example.invalid"))
+         (define (caller) (helper))
+         (define (uninvolved) 42)`,
+        inferenceEnv,
+      );
+      const membership = classifyProgramPrelude(forms, C);
+
+      // Direct: helper's own body crosses the declared source port.
+      expect(membership.wireframe.has("helper")).toBe(true);
+      expect(membership.pure.has("helper")).toBe(false);
+      // Transitive: caller's body only references `helper` by name (classify() alone
+      // cannot see through the call — the gap this module's fixpoint closes).
+      expect(membership.wireframe.has("caller")).toBe(true);
+      expect(membership.pure.has("caller")).toBe(false);
+      // A genuinely unrelated define stays pure — the rejection doesn't over-taint.
+      expect(membership.pure.has("uninvolved")).toBe(true);
+      expect(membership.wireframe.has("uninvolved")).toBe(false);
+
+      for (const name of ["helper", "caller"]) {
+        let caught: unknown;
+        try {
+          assertPreludeEligible(name, membership);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeInstanceOf(PreludeMembershipError);
+        expect((caught as PreludeMembershipError).message).toMatch(/port/i);
+      }
+      // The eligible one throws nothing.
+      expect(() => assertPreludeEligible("uninvolved", membership)).not.toThrow();
+    },
   );
 });

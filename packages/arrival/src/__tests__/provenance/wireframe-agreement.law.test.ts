@@ -12,8 +12,24 @@
  *     precision trade (flips at Q9).
  *   - I5 ext. collapse — a region is ONE node from G (flips at Q8a; the PLAN's own
  *     mapping table stages this row `it.todo` explicitly, independent of Q9).
+ *
+ * Q7 (LANDED) adds its own describe block below — the PRECURSOR half of
+ * wire-locality's "pure prelude helper references it BY NAME" row (still `it.todo`,
+ * tagged Q8a, above: that row needs `uneval`'s actual wire-lambda FV check, which
+ * doesn't exist yet). Q7 asserts the same fact one layer down, where it's already
+ * true today: the partition (`provenance/prelude.ts`) keeps a referenced pure helper
+ * prelude-side, and the hermetic assembler (`provenance/hermetic-env.ts`) lands it as
+ * an ordinary binding the caller resolves through the SEALED chain — never anything
+ * resembling a captured payload.
  */
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { initBridge } from "../../index.js";
+import { parse, exec } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import type { Classifier } from "../../values/lineage.js";
+import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
+import { hermeticEnv } from "../../provenance/hermetic-env.js";
+import { schemeToJs } from "../../rosetta.js";
 
 describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda)", () => {
   // @ledger: Q8a
@@ -79,5 +95,38 @@ describe("I5 — exterior collapse (§3: a region is ONE node from G)", () => {
   it.todo(
     "field-demand at a region boundary answers by REPLAY, not by records — region " +
       "field-ports are DEFERRED until a workload demands them (§3 I5 LIMIT)",
+  );
+});
+
+describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive direction (§1 CHOSEN; PROVENANCE-PLAN.md Q7)", () => {
+  // @ledger: Q7 — LANDED
+  it(
+    "a pure helper referenced by name from another define stays a REFERENCE: the " +
+      "partition keeps BOTH prelude-side (neither is wireframe material), and the " +
+      "hermetic assembler lands the joined prelude source as ordinary bindings the " +
+      "calling define resolves through the SEALED chain at ordinary lookup — never as " +
+      "an ingress payload (`hermeticEnv` is called with an EMPTY ingress bag below)",
+    async () => {
+      await initBridge();
+      const C: Classifier = { roleOf: () => undefined }; // no declared ports anywhere
+      const forms = await parse(
+        `(define (helper x) (+ x 1))
+         (define (caller y) (helper y))`,
+        inferenceEnv,
+      );
+      const membership = classifyProgramPrelude(forms, C);
+      expect(membership.pure.has("helper")).toBe(true);
+      expect(membership.pure.has("caller")).toBe(true);
+      expect(membership.wireframe.size).toBe(0);
+
+      const prelude = buildPreludeSource(forms, membership);
+      const env = await hermeticEnv([], prelude);
+      const [result] = await exec("(caller 41)", { env, skipBootstrapWait: true });
+      expect(schemeToJs(result)).toBe(42);
+
+      // `helper` is a REAL bound name resolved through the sealed base chain — not
+      // something the (empty) ingress bag carried.
+      expect(env.get("helper", { throwError: false })).toBeDefined();
+    },
   );
 });

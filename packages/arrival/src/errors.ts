@@ -362,6 +362,32 @@ export class ResourceNotLiveError extends Error {
 }
 
 // -------------------------------------------------------------------------
+// :: PreludeMembershipError — a port-reaching define asked for prelude membership.
+//
+// docs/PROVENANCE.md §1 (round 2 A3, narrowed round 3 M1): prelude membership is
+// PURE-ONLY — a top-level define whose body transitively reaches a port (directly, or
+// through a reference to another port-reaching define — PROVENANCE-PLAN.md Q7's
+// fixpoint) is wireframe material, never prelude. Thrown by
+// `provenance/prelude.ts`'s `assertPreludeEligible` — errors-as-doors: names WHY, never
+// a bare rejection. §1 EXCLUDED: "port-reaching defines in the prelude (name
+// indirection would smuggle sources into 'pure' wire bodies — γ would re-invoke them on
+// replay, re-opening the R1 hole the frozen-payload ruling closed)".
+// -------------------------------------------------------------------------
+export class PreludeMembershipError extends ArrivalError {
+  static [CLASS] = "prelude-membership-error";
+  public readonly name = "PreludeMembershipError";
+
+  constructor(
+    /** The define's name — routing/telemetry key. */
+    public readonly define: string,
+    /** The teaching explanation of WHY it reaches a port (direct or transitive). */
+    public readonly reason: string,
+  ) {
+    super(`"${define}" is not prelude-eligible — ${reason}`);
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: ProvenanceShadowDivergence — static fullCone vs the eager stamp disagree (a named bug).
 // -------------------------------------------------------------------------
 export class ProvenanceShadowDivergence extends Error {
