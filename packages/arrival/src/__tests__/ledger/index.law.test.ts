@@ -136,12 +136,12 @@ const GAPS: readonly LedgerRow[] = [
   // test.ts's do-loop row, now a plain `it()`.
   {
     id: "first-class source reference bypasses role dispatch (A21 HOF hole)",
-    gate: "Q8c/Q9-follow-up builder fix (NEW finding — walkForCuts only designates a node at an application HEAD position; a declared-role name passed as a bare VALUE, or a HOF parameter later called, is invisible to string-based role dispatch — docs/PROVENANCE.md §2's own LIMIT note: \"the drift alarm catches CONTRADICTIONS, not lies... mitigation is the W1 agreement gate\")",
+    gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c/Q16/Q17 all landed without touching it; needs a design ruling on how a first-class reference to a declared-role name is REPRESENTED, not a mechanical builder patch. Q9 finding — walkForCuts only designates a node at an application HEAD position; a declared-role name passed as a bare VALUE, or a HOF parameter later called, is invisible to string-based role dispatch — docs/PROVENANCE.md §2's own LIMIT note: \"the drift alarm catches CONTRADICTIONS, not lies... mitigation is the W1 agreement gate\")",
     replacedBy: "provenance/wireframe-agreement.law.test.ts's first-class-HOF row, once first-class references to declared-role names get SOME representation (even a conservative opaque/quarantine one) instead of silently falling to ordinary ingress",
   },
   {
     id: "field-shaped pure ops not projection-aware (car/cons sibling leak)",
-    gate: "Q8c/Q9-follow-up builder fix (NEW finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",
+    gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c built fact wires and Q17 flipped demand-monotonicity WITHOUT a `field` WireframeNode; whether one is added, and where it cuts, is a design ruling. Q9 finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",
     replacedBy: "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe",
   },
 ] as const;
@@ -189,10 +189,10 @@ const INVERSIONS: readonly LedgerRow[] = [
 /**
  * STAGED — §7 spec-law rows that are LEDGER-ONLY at Q5 (docs/PROVENANCE-PLAN.md: "Two
  * rows are LEDGER-ONLY, not stub files — they get an `@ledger` row citing their
- * flipping step but no law-test body yet"). Neither row below has an `it.todo`/
- * `it.fails` call anywhere in the six new Q5 stub files (`laws/provenance-roles`,
+ * flipping step but no law-test body yet"). The surviving row below has no `it.todo`/
+ * `it.fails` call anywhere in the six Q5 stub files (`laws/provenance-roles`,
  * `provenance/{wireframe-agreement,replay,track-cone,track-stream}`,
- * `doors/tier-honesty`) — this index entry IS their only test-suite presence today.
+ * `doors/tier-honesty`) — this index entry IS its only test-suite presence today.
  * Distinct from GAPS/INVERSIONS (which index real `it.fails` rows the walker below
  * cross-references): a STAGED row is neither a documented gap nor a deliberate
  * inversion, it's a §7 law the plan has explicitly deferred giving a body to.
@@ -200,14 +200,16 @@ const INVERSIONS: readonly LedgerRow[] = [
 const STAGED: readonly LedgerRow[] = [
   {
     id: "loop-unroll",
-    gate: "Q21 (docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19; staged it.todo, ledger-visible through Q21 per PROVENANCE-PLAN.md's reconciliation audit)",
-    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once the plan stages its body",
+    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (Q21 audit 2026-07-10: the row SURVIVED the reconciliation audit per PROVENANCE-PLAN.md Q21's explicit requirement, never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19. Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
+    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body",
   },
-  {
-    id: "memory retention",
-    gate: "Q19 (docs/PROVENANCE.md §7: \"sealed-value growth measured against Appendix A budget\" — rides the R3 hard gate)",
-    replacedBy: "a benchmark assertion in `__benchmarks__/provenance-budget*`, never a law-test row (PROVENANCE-PLAN.md Q5: \"a benchmark assertion, not a law-test row\")",
-  },
+  // "memory retention" RETIRED at Q21 (audit 2026-07-10): its gate — Q19, the R3 hard
+  // gate — LANDED (e8c5a37ea6). The staged substance ("sealed-value growth measured
+  // against Appendix A budget — a benchmark assertion, not a law-test row") now EXISTS
+  // as `__benchmarks__/provenance-budget.bench.test.ts`'s C1 conjunct (store accounting
+  // vs the 128MB budget + raw process.memoryUsage ceiling) with the workerd C2 conjunct
+  // covering real-eviction reconstruction. Same discipline as the A13 retirement above:
+  // a STAGED row whose gate has landed is silent false debt, so it becomes a comment.
 ] as const;
 
 // The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's

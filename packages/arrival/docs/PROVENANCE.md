@@ -14,7 +14,9 @@ normative content, the working proposals it fuses (`execution-plan-wireframe.md`
 `provenance-design-challenges.md`, all in repo-root `docs/working-proposals/`; those
 remain as design history and evidence). Language: **CHOSEN** (normative) ·
 **EXCLUDED (because …)** · **DEFERRED (until …)** · **LIMIT** (accepted, documented).
-Implementation sequencing: Q-track in `PROVENANCE-PLAN.md`.*
+Implementation sequencing: Q-track in `PROVENANCE-PLAN.md` — EXECUTED TO COMPLETION
+(Q1–Q21 landed on main, 2026-07-09/10; per-node commits, the CHOSEN→law cross-check,
+and open findings live in that file's "Q21 audit" section).*
 
 **Deployment target (normative):** provenance cheap enough that a ~1000-SLOC arrival
 program runs WITH full provenance inside one Cloudflare Durable Object (128MB isolate,
