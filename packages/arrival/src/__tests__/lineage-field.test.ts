@@ -36,12 +36,16 @@ import {
 } from "../values/lineage.js";
 
 const C: Classifier = {
-  // `dict` is treated as a pure constructor here so the fan×lens body classifies.
-  isPure: (op) =>
-    ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length", "not", "dict"].includes(op),
-  isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
-  isFan: (op) => ["map", "filter", "vector-map"].includes(op),
-  isOpaque: (op) => ["ext-call"].includes(op),
+  // `dict` carries no declared role here — falls through to the pure-application
+  // default, so the fan×lens body classifies as a constructor merge.
+  roleOf: (op) =>
+    ["infer", "fetch", "db-read"].includes(op)
+      ? "source"
+      : ["map", "filter", "vector-map"].includes(op)
+        ? "fan"
+        : ["ext-call"].includes(op)
+          ? "opaque"
+          : undefined,
 };
 
 async function skeleton(src: string): Promise<LineageNode> {

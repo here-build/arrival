@@ -23,10 +23,14 @@ import { provOf } from "../values/lineage-shadow.js";
 import { sStr } from "./_lineage-test-helpers.js";
 
 const C: Classifier = {
-  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length"].includes(op),
-  isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
-  isFan: (op) => ["map", "filter"].includes(op),
-  isOpaque: (op) => ["ext-call"].includes(op),
+  roleOf: (op) =>
+    ["infer", "fetch", "db-read"].includes(op)
+      ? "source"
+      : ["map", "filter"].includes(op)
+        ? "fan"
+        : ["ext-call"].includes(op)
+          ? "opaque"
+          : undefined,
 };
 
 function countNodes(n: LineageNode): number {

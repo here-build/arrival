@@ -38,12 +38,14 @@ describe("rosetta pure marker", () => {
     env.defineRosetta("dedent", { fn: (s: string) => s, pure: true });
     env.defineRosetta("infer-x", { fn: (p: unknown) => p });
 
-    // The op-taxonomy reads the env's pure registry — exactly how the real classifier will.
+    // The op-taxonomy reads the env's pure registry directly — this hand-rolled
+    // classifier is the LEGACY `env.defineRosetta`/`rosettaPureOf` read this file is
+    // about (see the file's staging note); the CANONICAL production classifier
+    // (`values/lineage-classifier-from-env.ts`, Q3) instead reads the declared
+    // `.provenanceRole` stamped by the BAKED `symbol.rosetta` declaration path
+    // (`common/capability.ts`) — the two registration paths are still separate.
     const C: Classifier = {
-      isPure: (op) => rosettaPureOf(env).has(op) || ["string-append", "+"].includes(op),
-      isRosettaIn: (op) => !rosettaPureOf(env).has(op) && ["infer-x", "infer"].includes(op),
-      isFan: () => false,
-      isOpaque: () => false,
+      roleOf: (op) => (rosettaPureOf(env).has(op) ? "pipe" : ["infer-x", "infer"].includes(op) ? "source" : undefined),
     };
 
     const dedented = classify((await parse(`(dedent s)`, env))[0], C);

@@ -134,10 +134,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   it("A4-classifier: classify() handles `let`/`if` (special forms), not just applications", async () => {
     await initBridge();
     const C: Classifier = {
-      isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "length"].includes(op),
-      isRosettaIn: () => false,
-      isFan: (op) => ["map", "filter"].includes(op),
-      isOpaque: () => false,
+      roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
     };
     const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
       const [ast] = await parse(src, inferenceEnv);
@@ -153,7 +150,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
 
   it("A21: classify() runs on the SURFACE ast — this engine dispatches special forms directly (no macro-expansion)", async () => {
     await initBridge();
-    const C: Classifier = { isPure: (op) => ["*", "+"].includes(op), isRosettaIn: () => false, isFan: () => false, isOpaque: () => false };
+    const C: Classifier = { roleOf: () => undefined };
     // The evaluator's SPECIAL_FORMS dispatches `let` directly, so the parsed AST
     // head is still the literal `let` symbol (NOT desugared to a lambda
     // application). classify() handles that surface shape rather than requiring a

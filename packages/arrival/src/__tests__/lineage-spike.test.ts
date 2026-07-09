@@ -13,10 +13,14 @@ import { inferenceEnv } from "../inference-env.js";
 import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../values/lineage.js";
 
 const C: Classifier = {
-  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length", "not"].includes(op),
-  isRosettaIn: (op) => ["infer", "fetch", "db-read"].includes(op),
-  isFan: (op) => ["map", "filter"].includes(op),
-  isOpaque: (op) => ["ext-call"].includes(op),
+  roleOf: (op) =>
+    ["infer", "fetch", "db-read"].includes(op)
+      ? "source"
+      : ["map", "filter"].includes(op)
+        ? "fan"
+        : ["ext-call"].includes(op)
+          ? "opaque"
+          : undefined, // +, -, *, /, <, >, =, car, cdr, cons, list, length, not — no declared role, pure fallthrough
 };
 
 async function skeleton(src: string): Promise<LineageNode> {
@@ -266,11 +270,15 @@ describe("lineage spike — quote / when / unless / letrec(*) classify correctly
   });
 });
 
-describe("lineage spike — a NAMED let is recursive ⇒ opaque (not transparently inlineable)", () => {
-  it("(let loop ((a v1)) a) → opaque over its RHSs + body (the named-let branch)", async () => {
+describe("lineage spike — a NAMED let is recursive ⇒ a cyclic binder, not opaque (Q3)", () => {
+  it("(let loop ((a v1)) a) → binder{cycles:true} over its RHSs + body (the named-let branch)", async () => {
+    // Pre-Q3 this classified as `opaque`; PROVENANCE-PLAN.md Q3 / docs/PROVENANCE.md
+    // §2's `loop` role reclassifies named-let as a recognized cyclic-binder STRUCTURE,
+    // not a black box — see `laws/provenance-roles.law.test.ts`'s V2 row.
     const n = await skeleton(`(let loop ((a v1)) a)`);
-    expect(n.kind).toBe("opaque");
-    if (n.kind !== "opaque") return;
+    expect(n.kind).toBe("binder");
+    if (n.kind !== "binder") return;
     expect(n.op).toBe("named-let");
+    expect(n.cycles).toBe(true);
   });
 });

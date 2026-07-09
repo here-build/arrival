@@ -40,10 +40,7 @@ import { sNum, run } from "./_lineage-test-helpers.js";
 /** STATIC classifier for the gate checks below — the control forms here use only
  *  arithmetic/comparison pures (no Rosetta-in, no fans). */
 const C: Classifier = {
-  isPure: (op) => ["+", "-", "*", "/", "<", ">", "=", "car", "cdr", "cons", "list", "length"].includes(op),
-  isRosettaIn: () => false,
-  isFan: (op) => ["map", "filter"].includes(op),
-  isOpaque: () => false,
+  roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
 };
 
 /** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */

@@ -90,7 +90,7 @@ async function shadow(src: string, binds: Record<string, SchemeValue>): Promise<
 
   // Out-of-band recompute for a call-site-visible assertion against the golden ids.
   const [ast] = await parse(src, env);
-  const skel = classify(ast, classifierFromEnv(env, new Set()));
+  const skel = classify(ast, classifierFromEnv(env));
   const staticCone = fullCone(skel, bindingsForSkeleton(skel, env));
   return { staticCone, eager };
 }
@@ -245,7 +245,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
     const [result] = (await execState(`(map (lambda (e) e) xs)`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager spine
     const [ast] = await parse(`(map (lambda (e) e) xs)`, env);
-    const skel = classify(ast, classifierFromEnv(env, new Set()));
+    const skel = classify(ast, classifierFromEnv(env));
     expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]); // static spine — agree
   });
 });
@@ -267,7 +267,7 @@ describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE
     const [result] = (await execState(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager — C4 fix
     const [ast] = await parse(`(length (map (lambda (e) e) xs))`, env);
-    const skel = classify(ast, classifierFromEnv(env, new Set()));
+    const skel = classify(ast, classifierFromEnv(env));
     expect(fullCone(skel, bindingsForSkeleton(skel, env))).toEqual([]); // static — unchanged, agrees
   });
 });
