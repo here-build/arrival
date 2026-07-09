@@ -36,9 +36,11 @@ export function is_promise(o: unknown): o is Promise<unknown> {
 }
 
 // ----------------------------------------------------------------------
-// A procedure: a JS function (a Scheme lambda carries the LAMBDA brand; native builtins / rosettas
-// are bare functions) or a macro. There is no borrowed-JS-function wrapper — the membrane
-// materializes a borrowed JS function to #void (uncallable).
+// A procedure: a JS function (native builtins / rosettas are bare functions; a Scheme
+// lambda is a real ALambda value — see is_callable_value — not a branded bare function,
+// the LAMBDA Symbol.for brand was retired, see well-known-symbols.ts) or a macro. There
+// is no borrowed-JS-function wrapper — the membrane materializes a borrowed JS function
+// to #void (uncallable).
 export function is_callable(o: unknown): boolean {
   return is_function(o) || is_macro(o) || is_callable_value(o);
 }

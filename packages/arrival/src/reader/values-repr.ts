@@ -1,7 +1,7 @@
-// Value/symbol representation helpers, shared by the stdlib forms, the
-// genMacroWrapper bridge, and the macro engine (syntax-rules.ts). Kept as a
-// sibling LEAF so the macro engine doesn't back-edge into the stdlib — the
-// cycle this split exists to prevent.
+// Value/symbol representation helpers — consumed by Environment.ts (`patch_value`'s
+// member-read settling), ASymbol.ts, the scheme/core pack (env/core/core.ts, `gensym`),
+// and the macro engine (syntax-rules.ts). Kept as a sibling LEAF so the macro engine
+// doesn't back-edge into those higher modules — the cycle this split exists to prevent.
 //
 // `is_promise` comes from guards.ts (a *false leaf*: it carries a pre-existing
 // transitive path to Environment), type-only at this edge so no runtime cycle.
@@ -126,8 +126,8 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // Lifts a raw JS primitive to its Scheme value-type so member reads return
 // Scheme-typed values, not bare JS. Only strings/bigints/numbers need boxing;
 // objects/arrays are handled by the membrane at access time and pass through.
-// Lives here (not stdlib) so `patch_value` and Environment's member walk can
-// reach it without importing the stdlib monolith.
+// Lives here (a reader leaf) so `patch_value` — and Environment.get, which calls
+// it — can reach it without a dependency on the eval layer.
 // ----------------------------------------------------------------------
 export function box(object: unknown): SchemeValue {
   switch (typeof object) {
@@ -148,8 +148,8 @@ export function box(object: unknown): SchemeValue {
 // ----------------------------------------------------------------------
 // Settles a value read out of a binding/member before handing back to Scheme:
 // a Pair is cycle-marked then quoted (so the evaluator treats it as data, not
-// a call); everything else is boxed. Lives here so Environment.get can reach
-// it without importing stdlib.
+// a call); everything else is boxed. Lives here (a reader leaf) so Environment.get
+// can reach it without a dependency on the eval layer.
 // ----------------------------------------------------------------------
 export function patch_value(value: unknown): SchemeValue {
   if (value instanceof APair) {

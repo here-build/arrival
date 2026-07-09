@@ -330,7 +330,7 @@ export function parse_symbol(arg: string): ASymbol {
 // Hoisted to module scope so every `+inf.0` / `-inf.0` / `+nan.0` in source shares ONE instance.
 // These MUST stay boxed SchemeInexact, not raw JS numbers: a bare primitive leaks an un-AValue past
 // the parser and breaks every downstream consumer that assumes numerics are SchemeExact/SchemeInexact
-// (`is_inexact`, the bridge's wrapOperator, the L2+ provenance algebra).
+// (`is_inexact`, the numeric operator wrapping in env/r7rs/numeric.ts, the L2+ provenance algebra).
 const nan = new AInexact(CONSTANT_CTX, Number.NaN);
 const posInf = new AInexact(CONSTANT_CTX, Number.POSITIVE_INFINITY);
 const negInf = new AInexact(CONSTANT_CTX, Number.NEGATIVE_INFINITY);

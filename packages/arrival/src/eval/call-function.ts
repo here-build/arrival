@@ -1,18 +1,19 @@
 // ----------------------------------------------------------------------
-// Function application chokepoint — extracted from lips.ts.
+// Function application chokepoint.
 //
 // `call_function` applies a Scheme function value (a native builtin OR a
 // generator-lambda) with a fresh call frame. Crucially it does NOT touch the
 // legacy evaluator: a generator-lambda, when applied here via `fn.apply`,
 // returns `run(evalBegin(body))` itself (evaluator.ts — the `_canBounce`
 // === false branch), so the generator drives the body. This is why the HOFs
-// (map/filter/fold) work through `call_function` today.
+// (map/filter/fold) work through `call_function` today — env/r7rs/lists.ts
+// is the live consumer.
 //
 // `resolve_promises` collapses a tree of promises into a single promise (or
 // returns the argument untouched when there are none).
 //
 // Both are self-contained (Environment frame + LambdaContext + value kernel),
-// so the stdlib and the reader can import the applier without importing lips.ts.
+// so a stdlib pack can import the applier without pulling in the evaluator.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";

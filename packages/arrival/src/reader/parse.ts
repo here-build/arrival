@@ -10,8 +10,7 @@ import type { SchemeValue } from "../values/types.js";
 // fresh one via `Parser.parse(arg)`.
 type ParseInput = string | AString | Parser;
 
-// `_parse` is the async datum generator; `parse` collects it into an array. stdlib's
-// bootstrap still consumes the generator form for one native-lambda literal.
+// `_parse` is the async datum generator; `parse` collects it into an array.
 export async function* _parse(arg: ParseInput, source?: string, strict = false) {
   let parser;
   if (arg instanceof Parser) {

@@ -300,13 +300,13 @@ export interface RunOptions {
 let _currentRunEnv: Environment | undefined = undefined;
 
 /** The run's current env at apply time. Read by `to_array`'s heap-meter lookup
- *  (stdlib.ts) in place of the erased env-as-`this`. */
+ *  (env/pack-helpers.ts) in place of the erased env-as-`this`. */
 export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda VALUE passed as
  * an arg. Native HOFs like reduce/fold/find recurse via promise chains
- * (`maybeThen(fn(acc, x)).then(recurse)` in the stdlib HOFs), so iteration
+ * (`maybeThen(fn(acc, x)).then(recurse)` in env/srfi/srfi-1.ts's HOFs), so iteration
  * N+1 fires from a microtask AFTER the outer evaluatePair's finally has
  * restored the holder. Without per-call re-install, the lambda body for
  * iteration ≥1 would inherit the WRONG dynamic parent.
@@ -2671,10 +2671,13 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // path re-presents to an `R7RSError` carrying only the message — the one Error
         // subtype the SchemeValue union admits as a value.
         //
-        // `R7RSError` is loaded LAZILY: a static top-of-module import would pull
-        // bridge's eager `set_interaction_env` into evaluator init and break the
-        // SchemePromise circular-init ordering. By the time a `try` body has thrown,
-        // every module is initialized, so the dynamic import resolves synchronously.
+        // `R7RSError` is loaded via dynamic import here — historically to dodge the
+        // now-deleted bridge.ts's eager `set_interaction_env` at module init, which
+        // broke the SchemePromise circular-init ordering. `../errors.js` is already a
+        // static top-of-module import in this file today (ArrivalError/EvalError/
+        // isHostRuntimeBug above), so that specific hazard no longer applies — this
+        // dynamic import may now be vestigial. By the time a `try` body has thrown,
+        // every module is initialized, so it resolves synchronously either way.
         const { R7RSError } = await import("../errors.js");
         errorValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
         // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
