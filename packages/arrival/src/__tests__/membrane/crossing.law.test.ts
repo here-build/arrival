@@ -415,20 +415,79 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "Promise": {
       it(entryTitle, () => {
+        // fromJS keeps the raw passthrough (the evaluator trampoline awaits it)…
         const p = Promise.resolve(42);
         expect(fromJS(p)).toBe(p);
+        // …but a bare Promise into jsToScheme DOORS (jsToSchemeAsyncDoor): the old
+        // silent exotic passthrough is closed — settle first, or let the holding
+        // structure's entry read settle it lazily (the inbound-registry law owns
+        // the pending-cell rows).
+        expect(() => jsToScheme(CONSTANT_CTX, Promise.resolve(42))).toThrow(/bare Promise cannot cross/);
       });
       // exitForm: "n/a" — a Promise never crosses back out through toJS; the evaluator
       // trampoline awaits it before anything could exit.
-      it(`${roundTripTitle} — identity pass-through is the whole projection`, () => {
+      it(`${roundTripTitle} — fromJS identity pass-through is the whole projection`, () => {
         const p = Promise.resolve(42);
         expect(fromJS(p)).toBe(p);
         expect(isSchemeValue(fromJS(p))).toBe(false);
       });
       it(provenanceTitle, () => {
-        // Never boxed — same FFI-identity shape as the binary types above.
+        // No carrier to stamp: the crossing doors BEFORE any box could carry a
+        // provenance set — loud at the crossing, never a stray stamped leak (P5).
         const p = Promise.resolve(1);
-        expect(jsToScheme(CONSTANT_CTX, p, {}, PROV)).toBe(p);
+        expect(() => jsToScheme(CONSTANT_CTX, p, {}, PROV)).toThrow(/bare Promise cannot cross/);
+      });
+      break;
+    }
+
+    case "exotic object (class instance)": {
+      class Widget {
+        constructor(readonly size: number) {}
+      }
+      it(entryTitle, () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const w = new Widget(7);
+          const entered = jsToScheme(CONSTANT_CTX, w);
+          // The old exotic passthrough leaked `w` RAW into scheme space, silently.
+          // Closed: it borrows as an AJSObject (source kept by reference), loudly.
+          expect(entered).toBeInstanceOf(AJSObject);
+          expect(entered.source).toBe(w);
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(String(spy.mock.calls[0]?.[0])).toMatch(/Widget instance/);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+      it(exitTitle, () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const w = new Widget(7);
+          expect(exitJS(jsToScheme(CONSTANT_CTX, w))).toBe(w);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+      it(roundTripTitle, () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const w = new Widget(7);
+          expect(exitJS(jsToScheme(CONSTANT_CTX, w))).toBe(w);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+      it(provenanceTitle, () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const w = new Widget(7);
+          const stamped = jsToScheme(CONSTANT_CTX, w, {}, PROV);
+          expect(stamped).toBeInstanceOf(AJSObject);
+          expect([...stamped.provenance]).toEqual([...PROV]);
+          expectNoProvenanceProperty(toJS(stamped));
+        } finally {
+          spy.mockRestore();
+        }
       });
       break;
     }
@@ -684,6 +743,22 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
   const title = `throws the teaching door: ${String(v.door)} (P5 — loud at the crossing, never later)`;
 
   switch (v.name) {
+    case "bare Promise into jsToScheme": {
+      it(title, () => {
+        expect(() => jsToScheme(CONSTANT_CTX, Promise.resolve(1))).toThrow(v.door);
+        // A non-plain thenable (async-shaped class instance) doors the same way —
+        // only a PLAIN-prototype thenable stays a dict-shaped borrow (registry order:
+        // the plain-object claim precedes the promise claim).
+        class Deferred {
+          then(res: (x: number) => void): void {
+            res(1);
+          }
+        }
+        expect(() => jsToScheme(CONSTANT_CTX, new Deferred())).toThrow(v.door);
+      });
+      break;
+    }
+
     case "boxed value into fromJS": {
       it(title, () => {
         const exact = new AExact(CONSTANT_CTX, 42n);

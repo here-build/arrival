@@ -129,9 +129,9 @@ export type SchemeValue =
 
 /**
  * `jsToScheme<T>(ctx, value: T, …)`'s honest return type — the AValue shape a
- * JS value of static type T boxes into. Mirrors jsToScheme's own runtime
- * instanceof/typeof chain arm-for-arm (rosetta.ts) — a new arm in one must
- * gain the other, or the type stops telling the truth about the impl (P3).
+ * JS value of static type T boxes into. Mirrors jsToScheme's INBOUND_CLAIMS
+ * registry arm-for-arm (rosetta.ts) — a new claim in one must gain the other,
+ * or the type stops telling the truth about the impl (P3).
  */
 export type AWrap<T> = [unknown] extends [T]
   ? SchemeValue
@@ -149,15 +149,21 @@ export type AWrap<T> = [unknown] extends [T]
               ? AExact | AInexact
               : [T] extends [string]
                 ? AString
-                : [T] extends [readonly unknown[]]
-                  ? AJSArray // AJSArray isn't element-generic — this is as deep as it compiles.
-                  : [T] extends [symbol]
-                    ? ASymbol | AVoid // registered (Symbol.for) → ASymbol; unique → AVoid, jsToScheme's own split.
-                    : [T] extends [Function]
-                      ? AVoid // a bare JS function has no portable Scheme value — warns + voids.
-                      : [T] extends [object]
-                        ? AJSObject
-                        : SchemeValue;
+                : [T] extends [EOF | Values | R7RSError]
+                  ? T // non-AValue scheme orphans — the declared identity claim.
+                  : [T] extends [Uint8Array | ArrayBuffer | DataView]
+                    ? T // binary FFI passthrough (declared named superset) — never boxed, identity.
+                    : [T] extends [Promise<unknown>]
+                      ? never // a bare Promise DOORS at the crossing (jsToSchemeAsyncDoor) — settle it first.
+                      : [T] extends [readonly unknown[]]
+                        ? AJSArray // AJSArray isn't element-generic — this is as deep as it compiles.
+                        : [T] extends [symbol]
+                          ? ASymbol | AVoid // registered (Symbol.for) → ASymbol; unique → AVoid, jsToScheme's own split.
+                          : [T] extends [Function]
+                            ? AVoid // a bare JS function has no portable Scheme value — warns + voids.
+                            : [T] extends [object]
+                              ? AJSObject // plain objects AND residual exotics — both borrow as AJSObject (exotics warn).
+                              : SchemeValue;
 
 /**
  * `schemeToJs<T>(value: T, …)`'s honest return type — the JS shape a Scheme

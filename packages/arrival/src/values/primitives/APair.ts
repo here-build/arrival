@@ -29,6 +29,7 @@ import { promise_all } from "../../utils/promises.js";
 // directions are referenced only inside function bodies (concatPair/cdr here; the walk closure
 // there), never at module-eval time, so the cycle never bites.
 import { collapseProvenance } from "../../provenance-collapse.js";
+import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../egress-proxy.js";
 import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type SchemeValue, } from "../types.js";
 import { AString } from "./AString.js";
@@ -519,6 +520,22 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     if (this[CYCLES] !== undefined) copy[CYCLES] = this[CYCLES];
     if (this[REF] !== undefined) copy[REF] = this[REF];
     return copy;
+  }
+
+  /** Deep re-stamp (the inbound membrane's AValue claim, moved onto the class — see the
+   *  base declaration in AValue.ts). Mints a fresh cell under the CROSSING's ctx whose
+   *  car/cdr re-stamp through the closed child fold — no `unknown` re-entry, no casts
+   *  (the dissolved router arm carried one of the membrane's two sanctioned casts exactly
+   *  because it couldn't see that car/cdr are always SchemeValue). Deliberately does NOT
+   *  copy LOCATION/CYCLES/REF (unlike shallow `withProvenance`) — byte-stable with the
+   *  dissolved jsToSchemeImpl arm, which minted a bare `new APair(ctx, …, p)`. */
+  ["arrival/withProvenanceDeep"](
+    ctx: RunContext,
+    p: ReadonlySet<number>,
+    seen: WeakSet<object> = new WeakSet(),
+  ): APair<SchemeValue, SchemeValue> {
+    seen.add(this);
+    return new APair(ctx, reStampChild(this.car, ctx, p, seen), reStampChild(this.cdr, ctx, p, seen), p);
   }
 
   // ----------------------------------------------------------------------

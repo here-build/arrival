@@ -33,7 +33,15 @@ export const CROSSINGS: readonly CrossingRow[] = [
   { type: "array", entryForm: "borrowed AJSArray (identity-cached)", exitForm: "raw source array", roundTrip: true },
   { type: "plain object", entryForm: "AJSObject (identity-cached, lazy)", exitForm: "raw source object", roundTrip: true },
   { type: "Uint8Array/ArrayBuffer/DataView", entryForm: "raw passthrough (named superset: FFI identity)", exitForm: "raw", roundTrip: true },
-  { type: "Promise", entryForm: "raw passthrough (trampoline awaits)", exitForm: "n/a", roundTrip: false },
+  // Promise: fromJS keeps the raw passthrough (the evaluator trampoline awaits it), but the
+  // jsToScheme registry DOORS a bare Promise (jsToSchemeAsyncDoor) — a Promise VALUE inside a
+  // structure never reaches the router: the holding container settles it lazily on entry read
+  // (pending-entry.ts; the inbound-registry law owns those rows).
+  { type: "Promise", entryForm: "raw at fromJS (trampoline awaits); jsToScheme DOORS — structure entries settle lazily", exitForm: "n/a", roundTrip: false },
+  // Residual exotics (class instance / Map / Date / Error …): formerly a SILENT raw leak
+  // through jsToScheme's exotic passthrough — now a borrowed AJSObject, loudly (warn), with
+  // member reads through the interop policy and source-identity exit.
+  { type: "exotic object (class instance)", entryForm: "borrowed AJSObject (warn — leak closed)", exitForm: "raw source instance", roundTrip: true },
   { type: "function (borrowed)", entryForm: "VOID (refused, warn)", exitForm: "region-scoped wrapper [INVERTS: reverse-membrane/P6]", roundTrip: false },
   { type: "proper list (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },
   { type: "dotted pair (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy, tail folded (R9, one-way, P9)", roundTrip: false },
@@ -49,6 +57,7 @@ export interface ViolationRow {
 }
 
 export const VIOLATIONS: readonly ViolationRow[] = [
+  { name: "bare Promise into jsToScheme", act: "jsToScheme(ctx, Promise.resolve(1))", door: /bare Promise cannot cross/ },
   { name: "boxed value into fromJS", act: "fromJS(new AExact(...))", door: /already-boxed/ },
   { name: "wrapper re-entry into fromJS", act: "fromJS(fromJS({}))", door: /already-boxed/ },
   { name: "raw JS value into toJS", act: "toJS(42 as never)", door: /already JS/ },

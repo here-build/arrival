@@ -10,11 +10,18 @@ export function setMembraneWarnings(enabled: boolean): void {
   membraneWarningsEnabled = enabled;
 }
 
-export function warnMembrane(what: string): void {
+/** `outcome` (optional) overrides the default "materialized to #void" clause — the
+ *  inbound exotic claim (rosetta.ts) crosses a class instance to a borrowed wrapper
+ *  rather than #void and says so; every existing caller keeps the default text
+ *  byte-identical. */
+export function warnMembrane(what: string, outcome?: string): void {
   if (membraneWarningsEnabled) {
     console.warn(
-      `[arrival membrane] ${what} crossed into Scheme and materialized to #void — it has no portable ` +
-        `representation (the interpreter is host-agnostic; JS functions / undefined / unique symbols are not Scheme values).`,
+      `[arrival membrane] ${what} crossed into Scheme and ${
+        outcome ??
+        "materialized to #void — it has no portable " +
+          "representation (the interpreter is host-agnostic; JS functions / undefined / unique symbols are not Scheme values)"
+      }.`,
     );
   }
 }

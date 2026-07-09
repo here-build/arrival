@@ -26,11 +26,22 @@ import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): a hoisted `export function` declaration,
 // called only inside wrapper methods at runtime.
 import { jsToScheme } from "../../rosetta.js";
+import { is_promise } from "../../eval/guards.js";
+import { settleEntry } from "./pending-entry.js";
 import { tf } from "../tagless-final.js";
 import { nil } from "./ANil.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "../../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { foldMemberName } from "./AJSObject.js";
+
+/** Pending-cell cache for Promise-valued reads off the borrowed source (pending-entry.ts):
+ *  number keys are element indices (`vector-ref`), string keys are member names (the
+ *  tagless `get` trio) — two read protocols with historically different boxing, so their
+ *  cells stay keyed apart even when they alias the same slot. WeakMap, not an instance
+ *  field, for the same reasons as AJSObject's `entryCaches` (off the wrapper's own
+ *  properties, no tslib `#`-private helper, GC-correct). Only pending reads land here —
+ *  the sync read paths stay byte-identical (uncached, as before). */
+const pendingCells = new WeakMap<AJSArray, Map<number | string, SchemeValue | Promise<SchemeValue>>>();
 
 /**
  * A borrowed JS array, re-presented as a vector. It is an `AValue` (a sibling of
@@ -179,17 +190,22 @@ export class AJSArray extends AValue {
   // EMPTY provenance (the face's historical choice — element reads via `vector-ref` carry
   // this container's provenance instead; that asymmetry precedes this term and is pinned
   // by the identity/lineage suites).
-  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
+    const name = foldMemberName(key);
     let raw: unknown;
     try {
-      raw = accessMember(this.source, foldMemberName(key));
+      raw = accessMember(this.source, name);
     } catch (e) {
       if (e instanceof InteropAccessError) return nil;
       throw e;
     }
     if (raw === NOT_FOUND) return nil;
     if (Array.isArray(raw)) return new AJSArray(this.ctx, raw);
+    // A Promise-valued member is a lazy pending cell — settled box carries the member
+    // path's historical EMPTY provenance, same as the sync read below.
+    if (is_promise(raw))
+      return this.pendingCell(name, raw, (settled) => jsToScheme(this.ctx, settled, {}, EMPTY_PROVENANCE));
     const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, EMPTY_PROVENANCE);
     return boxed;
   }
@@ -212,15 +228,45 @@ export class AJSArray extends AValue {
   // `any` (rosetta legacy debt) but its contract is a boxed Scheme value → annotate to the
   // honest union so the `SchemeValue` return type-checks without a cast. (`fromJS` would
   // drop provenance instead, via CONSTANT_CTX/EMPTY_PROVENANCE.)
-  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
-    let boxed: SchemeValue = jsToScheme(this.ctx, this.source[k], {}, this.provenance);
-    // Attestation inheritance (stamp site 2): the plucked element box is attested iff
-    // this borrowed container is — same discipline as the provenance threading above
-    // (`freshIfSingleton`: a raw boolean element surfaces as an attested clone, never
-    // the shared flyweight).
-    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
-    return boxed;
+    const raw = this.source[k];
+    // A Promise-valued element is a lazy pending cell (pending-entry.ts): first read
+    // mints one settle chain, settlement caches the box — sync after settlement. The
+    // settled box takes the SAME boxing as the sync path below (container provenance +
+    // attestation inheritance).
+    if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled));
+    return this.boxElement(raw);
+  }
+
+  /** The `vector-ref` boxing discipline (shared by the sync path and the pending cell's
+   *  settlement): jsToScheme carrying THIS container's provenance, attestation
+   *  inheritance (stamp site 2), `freshIfSingleton` so a raw boolean surfaces as an
+   *  attested clone, never the shared flyweight. */
+  private boxElement(raw: unknown): SchemeValue {
+    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
+    return isAttested(this) ? attestDeep(freshIfSingleton(boxed)) : boxed;
+  }
+
+  /** Mint-or-reuse the pending cell for a Promise-valued read (see `pendingCells`):
+   *  the chain itself is cached so concurrent readers share ONE settlement, and the
+   *  settled box overwrites it — sync-after-settled. */
+  private pendingCell(
+    key: number | string,
+    raw: unknown,
+    box: (settled: unknown) => SchemeValue,
+  ): SchemeValue | Promise<SchemeValue> {
+    let cells = pendingCells.get(this);
+    if (cells === undefined) {
+      cells = new Map();
+      pendingCells.set(this, cells);
+    }
+    const hit = cells.get(key);
+    if (hit !== undefined) return hit;
+    const slot = cells;
+    const cell = settleEntry(raw, box, (boxed) => slot.set(key, boxed));
+    slot.set(key, cell);
+    return cell;
   }
 
   // Freezes the borrowed source on first Scheme read so the host can't mutate it afterward —

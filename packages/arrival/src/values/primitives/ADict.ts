@@ -24,6 +24,12 @@ import { AString } from "./AString.js";
 import { nil } from "./ANil.js";
 import { type SchemeValue } from "../types.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
+import { is_promise } from "../../eval/guards.js";
+import { isSettleChain, settleEntry } from "./pending-entry.js";
+// Runtime import cycle (benign — the same shape AJSObject/AJSArray document): jsToScheme
+// is a hoisted `export function`, called only inside `get()` at runtime (settling a
+// pending entry), never at module eval.
+import { jsToScheme } from "../../rosetta.js";
 
 export type DictKey = ASymbol | AString | ACharacter;
 
@@ -55,9 +61,12 @@ export class ADict extends AValue {
   static [CLASS] = "dict";
   readonly kind = "dict" as const;
 
-  /** The canonical store — key OBJECTS, not folded strings. Frozen at construction;
-   *  entries and keys are already-evaluated SchemeValues, so there is nothing to box. */
-  private readonly byKey: ReadonlyMap<DictKey, SchemeValue>;
+  /** The canonical store — key OBJECTS, not folded strings. Entries and keys are
+   *  already-evaluated SchemeValues, so there is normally nothing to box; a
+   *  Promise-valued entry is held INERT as a lazy pending cell (pending-entry.ts) and
+   *  settles in place on first read — the only writes after construction are that
+   *  settlement memoization (chain → settled box), never a semantic mutation. */
+  private readonly byKey: Map<DictKey, SchemeValue | Promise<SchemeValue>>;
 
   /** Fold-name → canonical key object — the fast path every string-keyed reader
    *  (`@`, `dict-ref`) actually uses. */
@@ -67,9 +76,13 @@ export class ADict extends AValue {
    *  producer's own policy, decided before this constructor runs (see
    *  native-dict-provenance.md's Error paths), exactly as it trusts `Record`/array
    *  shape today. */
-  constructor(ctx: RunContext, pairs: ReadonlyArray<readonly [DictKey, SchemeValue]>, provenance = EMPTY_PROVENANCE) {
+  constructor(
+    ctx: RunContext,
+    pairs: ReadonlyArray<readonly [DictKey, SchemeValue | Promise<SchemeValue>]>,
+    provenance = EMPTY_PROVENANCE,
+  ) {
     super(ctx, provenance);
-    const byKey = new Map<DictKey, SchemeValue>();
+    const byKey = new Map<DictKey, SchemeValue | Promise<SchemeValue>>();
     const indexByName: Record<string, DictKey> = Object.create(null);
     for (const [key, value] of pairs) {
       const name = foldKeyName(key);
@@ -86,10 +99,32 @@ export class ADict extends AValue {
 
   /** The only accessor reachable from `@`/`dict-ref` today — those primitives only
    *  ever have a plain string in hand. Missing key → nil, matching AJSObject's
-   *  existing dict-ref convention. */
-  get(name: string): SchemeValue {
+   *  existing dict-ref convention.
+   *
+   *  A Promise-valued entry is a LAZY PENDING CELL: the first read mints one settle
+   *  chain (stored back in the slot, so concurrent readers share it); settlement
+   *  replaces the slot with the settled box — later reads are synchronous. The settled
+   *  value boxes with THIS dict's provenance (raw JS inherits the container's lineage,
+   *  the Option-C discipline; an already-AValue with the same/empty stamp passes by
+   *  identity through jsToScheme's fast path). */
+  get(name: string): SchemeValue | Promise<SchemeValue> {
     const key = this.indexByName[name];
-    return key === undefined ? nil : (this.byKey.get(key) ?? nil);
+    if (key === undefined) return nil;
+    const entry = this.byKey.get(key);
+    if (entry === undefined) return nil;
+    if (is_promise(entry)) {
+      // A re-read during pendency finds the already-minted chain — return it, never
+      // wrap a second one (pending-entry.ts's ONE-settle-chain contract).
+      if (isSettleChain(entry)) return entry;
+      const cell = settleEntry(
+        entry,
+        (settled) => jsToScheme(this.ctx, settled, {}, this.provenance),
+        (boxed) => this.byKey.set(key, boxed),
+      );
+      this.byKey.set(key, cell);
+      return cell;
+    }
+    return entry;
   }
 
   /** Distinguishes "key absent" from "key present, value is legitimately nil" —
@@ -115,11 +150,18 @@ export class ADict extends AValue {
 
   /** R9 lazy egress: folded plain string keys, values unwrapping through their own
    *  `arrival/toJS` on first read — observationally a plain read-only object; same
-   *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). */
+   *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). A
+   *  pending entry egresses as a Promise OF the unwrapped JS value (the settle chain
+   *  continued through the box's own `arrival/toJS`) — the JS consumer awaits it. */
   ["arrival/toJS"](): Record<string, unknown> {
     return egressContainerProxy(this, "object", {
       keys: () => this.keys(),
-      read: (name) => this.get(name),
+      read: (name) => {
+        const entry = this.get(name);
+        return is_promise(entry)
+          ? entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed))
+          : entry;
+      },
     }) as Record<string, unknown>;
   }
 
@@ -151,7 +193,9 @@ export class ADict extends AValue {
   // symbol here; the membrane's `readMember` face hands its normalized string. Either way
   // the RECEIVER folds: a string is already a fold-name, a DictKey folds through
   // `foldKeyName`. `AJSObject`/`AJSArray` implement the same trio over their own reads.
-  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+  // A Promise-valued entry answers its pending cell (Promise of the settled box) — the
+  // async dispatch seams await it; sync after settlement.
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
     return this.get(typeof key === "string" ? key : foldKeyName(key as DictKey));
   }
 

@@ -24,6 +24,8 @@ import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
 import { jsToScheme } from "../../rosetta.js";
+import { is_promise } from "../../eval/guards.js";
+import { settleEntry } from "./pending-entry.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 
@@ -33,7 +35,7 @@ import { ASymbol } from "./ASymbol.js";
  * the tslib helper this workspace's `importHelpers: true` needs for TS `#`-private slots.
  * GC-correct — cache entry disappears with the wrapper.
  */
-const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
+const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue | Promise<SchemeValue>>>();
 
 /** Code-position lowering cache (arrival/tagless-final/lower) for `{…}` dict-literal
  *  nodes — the `(dict …)` application built once per node and re-answered on every
@@ -136,19 +138,32 @@ export class AJSObject extends AValue {
    * Missing key → nil (dict-ref semantics); `accessMember`'s NOT_FOUND (blocked or absent)
    * collapses to the same nil.
    *
+   * A Promise-valued property is a LAZY PENDING CELL (pending-entry.ts): the first read
+   * mints one settle chain (cached, so concurrent readers share it), settlement replaces
+   * the cache slot with the settled box — later reads are synchronous. A raw Promise
+   * never leaks into scheme space from here.
+   *
    * Cycle protection is in `jsToScheme`'s WeakSet: a JS-side cycle surfacing through a
    * property read terminates before re-entering this wrapper.
    */
-  get(key: string | symbol): SchemeValue {
+  get(key: string | symbol): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
     // Symbol keys skip the cache (sandbox already blocks most symbol access) — keeps
-    // the Map<string, SchemeValue> shape clean.
+    // the Map<string, …> shape clean.
     const cacheKey = typeof key === "string" ? key : undefined;
-    let cache = cacheKey !== undefined ? entryCaches.get(this) : undefined;
-    if (cacheKey !== undefined && cache !== undefined) {
-      const cached = cache.get(cacheKey);
+    if (cacheKey !== undefined) {
+      const cached = entryCaches.get(this)?.get(cacheKey);
       if (cached !== undefined) return cached;
     }
+    const writeCache = (entry: SchemeValue | Promise<SchemeValue>): void => {
+      if (cacheKey === undefined) return;
+      let cache = entryCaches.get(this);
+      if (cache === undefined) {
+        cache = new Map();
+        entryCaches.set(this, cache);
+      }
+      cache.set(cacheKey, entry);
+    };
 
     let raw: unknown;
     try {
@@ -167,22 +182,24 @@ export class AJSObject extends AValue {
     // (accessMember already invoked the getter to a value above).
 
     // Box through jsToScheme so primitives become AValue subtypes stamped with this
-    // wrapper's provenance. jsToScheme is typed `any` (legacy debt in rosetta.ts) but its
-    // contract is to return a boxed Scheme value; annotate to the honest union so the
-    // cache store below type-checks without a cast.
-    let boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
-    // Attestation inherits from container (values/attestation.ts stamp site 2).
-    // `freshIfSingleton` first: a raw boolean boxes to the shared #t/#f flyweight on the
-    // empty-provenance path, and singletons never attest — the clone does, and the
-    // per-(wrapper, key) cache keeps it stable.
-    if (isAttested(this)) boxed = attestDeep(freshIfSingleton(boxed));
-    if (cacheKey !== undefined && boxed instanceof AValue) {
-      if (cache === undefined) {
-        cache = new Map();
-        entryCaches.set(this, cache);
-      }
-      cache.set(cacheKey, boxed);
+    // wrapper's provenance; attestation inherits from container (values/attestation.ts
+    // stamp site 2). `freshIfSingleton` first: a raw boolean boxes to the shared #t/#f
+    // flyweight on the empty-provenance path, and singletons never attest — the clone
+    // does, and the per-(wrapper, key) cache keeps it stable.
+    const boxEntry = (settled: unknown): SchemeValue => {
+      const b: SchemeValue = jsToScheme(this.ctx, settled, {}, this.provenance);
+      return isAttested(this) ? attestDeep(freshIfSingleton(b)) : b;
+    };
+
+    // Pending cell: cache the settle chain itself, then overwrite with the settled box.
+    if (is_promise(raw)) {
+      const cell = settleEntry(raw, boxEntry, writeCache);
+      writeCache(cell);
+      return cell;
     }
+
+    const boxed = boxEntry(raw);
+    if (boxed instanceof AValue) writeCache(boxed);
     return boxed;
   }
 
@@ -225,7 +242,9 @@ export class AJSObject extends AValue {
   // `@`/`dict-ref`/`:key` are one protocol, several syntaxes, over the same underlying
   // `.get` — the membrane face (`readMember`) and the keyword accessor both dispatch to
   // this term. The `:`-strip is the receiver's own fold (a keyword symbol arrives raw).
-  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+  // A Promise-valued entry surfaces as its pending cell (Promise of the settled box) —
+  // the evaluator's async seams await it; sync after settlement.
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
     return this.get(foldMemberName(key));
   }
 

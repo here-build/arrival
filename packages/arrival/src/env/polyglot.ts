@@ -394,11 +394,13 @@ export default new EnvCapability("scheme/polyglot", {
     // are typed precisely, not left blind.
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       // The get term always returns a real scheme value (nil / a boxed read / an
-      // AJSArray-wrapped array) — never something OUTSIDE SchemeValue. `z.value` is the
-      // identity term for "a polymorphic accessor's operand" (scheme-zod.ts's own
-      // worked example).
+      // AJSArray-wrapped array) — never something OUTSIDE SchemeValue — or, for a
+      // Promise-valued entry, its lazy pending cell (a Promise OF the settled box —
+      // pending-entry.ts), which the async dispatch wrapper awaits before encoding.
+      // `z.value` is the identity term for "a polymorphic accessor's operand"
+      // (scheme-zod.ts's own worked example).
       { input: [z.value, z.value], output: [z.value] },
-      (obj: unknown, key: unknown): SchemeValue => {
+      (obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> => {
         if (obj == null) return nil;
         const keyStr = normalizeMemberKey(key);
         if (keyStr === null) return nil;

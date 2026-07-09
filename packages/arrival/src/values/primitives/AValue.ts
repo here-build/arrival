@@ -86,6 +86,17 @@ export abstract class AValue {
    *  could be a narrower subtype), and a cast would re-mute the very signal this migration surfaces. */
   abstract withProvenance(p: ReadonlySet<number>): SchemeValue;
 
+  /** DEEP provenance re-stamp — the inbound membrane's re-stamp claim (jsToScheme's AValue
+   *  row), declared beside `arrival/toJS` as a class-owned protocol key (NOT tagless-final:
+   *  it is a membrane crossing, not a scheme-surface op). A SPINE carrier (APair / AVector)
+   *  implements it by minting a fresh spine whose children re-stamp through
+   *  `reStampChild` (deep-restamp.ts); every carrier WITHOUT this term re-stamps shallowly
+   *  via `withProvenance` (borrowed wrappers stay lazy — entries pick the stamp up on
+   *  access). `ctx` is the CROSSING's RunContext (the router's argument, not `this.ctx`) and
+   *  `seen` terminates cyclic spines — both exactly the dissolved jsToSchemeImpl arms'
+   *  behavior (spec §5.3 Interpretation A, byte-stable). */
+  ["arrival/withProvenanceDeep"]?(ctx: RunContext, p: ReadonlySet<number>, seen?: WeakSet<object>): SchemeValue;
+
   // ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
   // Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
   // implements the SUBSET it can handle and omits the rest (the `symbol.taglessGuard` presence
@@ -153,8 +164,11 @@ export abstract class AValue {
    *  implementing this. The key travels either as the caller's own SchemeValue (the keyword
    *  symbol itself — AKeywordSymbol hands itself) or as the face's normalized string; the
    *  RECEIVER decides how to fold/match it. Absence IS the semantics: a value without this
-   *  term has no members (the face answers nil — Graal's "a leaf has no members"). */
-  ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): SchemeValue;
+   *  term has no members (the face answers nil — Graal's "a leaf has no members"). A
+   *  Promise-valued entry answers its lazy pending cell (a Promise of the settled box —
+   *  pending-entry.ts); the async dispatch seams await it, and the read is sync after
+   *  settlement. */
+  ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Member existence — `@?`'s term; same receiver-owned key folding as `get`. */
   ["arrival/tagless-final/has"]?(key: SchemeValue | string): boolean;
   /** Own member names — `@keys`' term (JS-face strings; the polyglot verb boxes each). */
@@ -164,8 +178,9 @@ export abstract class AValue {
   ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
   /** Projection — the tail (same family as `car`). */
   ["arrival/tagless-final/cdr"]?(runCtx?: RunContext): SchemeValue;
-  /** Indexed read — the element at k (vector-shaped terms; a borrowed AJSArray answers too). */
-  ["arrival/tagless-final/vector-ref"]?(k: number): SchemeValue;
+  /** Indexed read — the element at k (vector-shaped terms; a borrowed AJSArray answers too).
+   *  A borrowed array's Promise-valued element answers its lazy pending cell (see `get`). */
+  ["arrival/tagless-final/vector-ref"]?(k: number): SchemeValue | Promise<SchemeValue>;
   /** Semigroup — `this ⋄ other`: container-preserving PURE append (list/vector/bytevector
    *  concat builds a fresh spine, never mutates an operand). */
   ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;

@@ -33,6 +33,7 @@ import type { SchemeValue } from "../types.js";
 // op-helpers imports AVector back, but both directions are referenced only inside function
 // bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
+import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 
@@ -104,6 +105,26 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
     v.evalElements = this.evalElements;
     return v;
+  }
+
+  /** Deep re-stamp (the inbound membrane's AValue claim, moved onto the class — see the
+   *  base declaration in AValue.ts). Fresh vector under the CROSSING's ctx, elements
+   *  re-stamped through the closed child fold — no casts (the dissolved router arm
+   *  carried one of the membrane's two sanctioned casts because it couldn't see that
+   *  `__vector__` is always SchemeValue[]). Deliberately does NOT copy `evalElements`
+   *  (unlike shallow `withProvenance`) — byte-stable with the dissolved jsToSchemeImpl
+   *  arm, which minted a bare `new AVector(ctx, …, p)`. */
+  ["arrival/withProvenanceDeep"](
+    ctx: RunContext,
+    p: ReadonlySet<number>,
+    seen: WeakSet<object> = new WeakSet(),
+  ): AVector {
+    seen.add(this);
+    return new AVector(
+      ctx,
+      this.__vector__.map((el) => reStampChild(el, ctx, p, seen)),
+      p,
+    );
   }
 
   // Code-position lowering (eval/evaluator.ts "code-position lowering"): a `[…]` reader

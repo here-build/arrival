@@ -7,15 +7,16 @@ import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./va
 import { fromJs } from "./values/primitives/boxing.js";
 import { type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
-import { AVector } from "./values/primitives/AVector.js";
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
 import { AExact } from "./values/primitives/AExact.js";
-import { APair } from "./values/primitives/APair.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
-import { AString } from "./values/primitives/AString.js";
+import { EOF } from "./values/primitives/EOF.js";
+import { Values } from "./values/primitives/Values.js";
+import { R7RSError } from "./errors.js";
+import { is_promise } from "./eval/guards.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 import { type AUnwrap, type AWrap, type SchemeBounceMarker, type SchemeValue } from "./values/types.js";
@@ -94,7 +95,10 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
   const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
     withRegionCall(scope, async () => {
       // Args mint under ENCLOSING invocation's runCtx, never CONSTANT_CTX (§7b) — `scope.runCtx` is exactly that (or CONSTANT_CTX for detached fallback).
-      const schemeArgs = jsArgs.map((a) => jsToScheme(scope.runCtx, a, options));
+      // A promise-valued arg settles BEFORE boxing (the reverse membrane is already
+      // async) — the last inbound top-level Promise path, closed; a bare Promise
+      // reaching jsToScheme now doors (jsToSchemeAsyncDoor).
+      const schemeArgs = await Promise.all(jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a, options)));
       // Re-entry trace nests under exporting invocation (§7b "child scope"), via SAME ambient mechanism evaluator HOF-boundary wrappers use — never through callable `this` (§9).
       const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, scope.runCtx));
       invariant(!isBounceMarker(raw), "callableToHostFn: a reverse-membrane call resolved to a bounce token");
@@ -150,8 +154,7 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     if (Object.getPrototypeOf(value) === Object.getPrototypeOf({}) || Object.getPrototypeOf(value) === null) {
       // `Object.entries` drops symbol-keyed props (opaque/private backing data crossing membrane) — enumerate string keys then own symbols so both survive.
       const out: Record<string | symbol, unknown> = {};
-      for (const key of Object.keys(value))
-        out[key] = schemeToJsImpl((value as Record<string, unknown>)[key], options);
+      for (const key of Object.keys(value)) out[key] = schemeToJsImpl((value as Record<string, unknown>)[key], options);
       for (const sym of Object.getOwnPropertySymbols(value)) {
         out[sym] = schemeToJsImpl((value as Record<symbol, unknown>)[sym], options);
       }
@@ -192,110 +195,257 @@ export function schemeToJs<T extends SchemeValue | null | undefined>(
   return schemeToJsImpl(value, options) as T extends SchemeValue ? AUnwrap<T> : T;
 }
 
+/** Teaching door (P5): a bare Promise reaching jsToScheme directly. Every sanctioned
+ *  path settles first — rosetta wrappers await the fn result before crossing, the
+ *  reverse-membrane wrapper settles promise-valued args, and a Promise INSIDE a
+ *  structure never routes here at all (the holding container settles it lazily on
+ *  entry read — pending-entry.ts). A raw Promise inside scheme space would be an
+ *  opaque, unawaitable leak, so the membrane fails loudly at the crossing. Named +
+ *  exported like `schemeToJsUnrecognizedDoor` (the outbound twin). */
+export function jsToSchemeAsyncDoor(): Error {
+  return new Error(
+    "jsToScheme: a bare Promise cannot cross the membrane — await it before crossing " +
+      "(rosetta wrappers already await their fn results), or hand the STRUCTURE holding it " +
+      "to the sandbox and let the entry read settle it lazily (AJSObject/ADict entries and " +
+      "AJSArray elements settle on first access, sync after settlement). A raw Promise in " +
+      "scheme space would be an opaque leak (P5, docs/PRINCIPLES.md).",
+  );
+}
+
 /**
- * JS → Scheme deep-stamping membrane. Single pass: every AValue constructed inherits `provenance`, so downstream extractors (`car`, `cdr`, `dict-ref`, `@`) see element-only lineage carrying rosetta origin id (spec §5.3 Interpretation A) without separate re-stamp per builtin.
- * Plain JS objects → `SchemeJSObject`, entries boxed lazily on `.get(key)` (cache amortizes cost vs full traversal).
- * `seen: WeakSet` terminates JS-side cycles: cyclic ref returned as-is (caller outer Pair/SchemeJSObject already carries provenance, cycle re-enters that wrapper, not infinite spine).
+ * One INBOUND claim — the static-side dual of the outbound `arrival/toJS` terms.
+ * Outbound dispatches on OUR classes, so the term lives on the receiver; inbound
+ * dispatches on JS shapes where no receiver exists yet, so each claim pairs a shape
+ * predicate with its constructor and the router is a fold over the DECLARED list
+ * below. `claims` narrows at runtime; `box` re-asserts the narrowing it needs
+ * (invariant, honest — never a cast).
  */
+export interface InboundClaim {
+  /** Stable name — pinned by the inbound-registry law (membrane/inbound-registry.law.test.ts). */
+  readonly name: string;
+  readonly claims: (value: unknown) => boolean;
+  readonly box: (ctx: RunContext, value: unknown, provenance: ReadonlySet<number>, seen: WeakSet<object>) => unknown;
+}
+
 /**
- * Recursive body behind `jsToScheme`. `unknown`-typed, not `any`: each call descends into DIFFERENT static shape (array element, Pair car/cdr) no single generic describes across recursion — see `jsToScheme` doc for narrowing at public boundary.
+ * THE inbound claim registry — jsToScheme's whole value-kind algebra as one DECLARED,
+ * ORDERED table (first claiming row wins; the order is semantic law, not import
+ * accident, and the registry law test pins it):
+ *
+ *  1. the two host bottoms come first (null → nil; undefined → #void, loudly);
+ *  2. an already-AValue passes by identity on the same/empty-provenance fast path and
+ *     otherwise re-stamps through ITS OWN protocol (`arrival/withProvenanceDeep` on
+ *     spine carriers, shallow `withProvenance` on every other class) — the per-class
+ *     knowledge the old router leaked is back on the classes;
+ *  3. arrays claim BEFORE plain objects (an array is `typeof "object"` too);
+ *  4. a plain-prototype object claims BEFORE the promise row, so a plain THENABLE
+ *     stays a dict-shaped borrow (the historical behavior);
+ *  5. scalars route to the boxer table (boxing.ts — the primitives' claim table);
+ *  6. non-AValue scheme orphans (EOF / Values / R7RSError) pass by identity — they
+ *     ARE scheme values, formerly smuggled through the exotic passthrough;
+ *  7. the binary FFI passthrough is the one DECLARED raw identity (named superset,
+ *     mirrors the outbound allow-list + the F3 crossing row);
+ *  8. a bare Promise DOORS (see jsToSchemeAsyncDoor — container entries settle
+ *     lazily instead);
+ *  9. every remaining object (class instance, Map, Date, Error, …) re-presents as a
+ *     borrowed AJSObject, LOUDLY — the old silent raw-exotic leak is closed; member
+ *     reads keep working through the interop policy, and the wrapper round-trips to
+ *     source identity on exit.
+ *
+ * NOTE the registry-vs-switch history in boxing.ts: what that header rejects is
+ * SELF-REGISTRATION (order by import accident). This is the opposite construction —
+ * one declared table whose order is written down and law-pinned; class knowledge stays
+ * in closures/protocol methods, so no class binding is read at module-eval time (the
+ * benign AJSObject/AJSArray ↔ rosetta cycles stay TDZ-safe).
+ */
+export const INBOUND_CLAIMS: readonly InboundClaim[] = [
+  {
+    // null → nil: the list-end bottom, provenance-stamped when supplied.
+    name: "null → nil",
+    claims: (v) => v === null,
+    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(ctx, p)),
+  },
+  {
+    // undefined has no portable Scheme value (host-agnostic interpreter) → #void, loudly.
+    name: "undefined → #void (warn)",
+    claims: (v) => v === undefined,
+    box: () => {
+      warnMembrane("a JS `undefined`");
+      return theVoid;
+    },
+  },
+  {
+    // Already-AValue: same/empty-provenance identity fast path; otherwise the class's
+    // own re-stamp — deep on spine carriers (APair/AVector's arrival/withProvenanceDeep),
+    // shallow withProvenance everywhere else (borrowed wrappers stay lazy; entries pick
+    // the stamp up on access). Scheme lambdas are ALambda values and round-trip here.
+    name: "AValue → identity / provenance re-stamp (class term)",
+    claims: (v) => v instanceof AValue,
+    box: (ctx, v, p, seen) => {
+      invariant(v instanceof AValue, "inbound claim 'AValue': box called off its predicate");
+      if (p === EMPTY_PROVENANCE || p === v.provenance) return v;
+      const deep = v["arrival/withProvenanceDeep"];
+      return deep === undefined ? v.withProvenance(p) : deep.call(v, ctx, p, seen);
+    },
+  },
+  {
+    // JS array IS an R7RS vector (faithful Rosetta mapping) → borrowed AJSArray, source
+    // kept by reference, elements boxed lazily on access.
+    name: "array → borrowed AJSArray",
+    claims: (v) => Array.isArray(v),
+    box: (ctx, v, p) => {
+      invariant(Array.isArray(v), "inbound claim 'array': box called off its predicate");
+      return new AJSArray(ctx, v, p);
+    },
+  },
+  {
+    // Plain-prototype object → borrowed AJSObject, entries boxed lazily via .get cache.
+    // BEFORE the promise row on purpose: a plain thenable stays a dict-shaped borrow.
+    name: "plain object → borrowed AJSObject",
+    claims: (v) =>
+      typeof v === "object" &&
+      v !== null &&
+      (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null),
+    box: (ctx, v, p) => {
+      invariant(typeof v === "object" && v !== null, "inbound claim 'plain object': box called off its predicate");
+      return new AJSObject(ctx, v, p);
+    },
+  },
+  {
+    // JS primitives → the boxer table (boxing.ts): number/bigint → exact/inexact,
+    // boolean → ABool flyweights, string → AString — never raw, the sandbox only holds
+    // boxed AValues.
+    name: "scalar → boxer table (fromJs)",
+    claims: (v) => {
+      const tag = typeof v;
+      return tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint";
+    },
+    box: (ctx, v, p) => fromJs(ctx, v, p),
+  },
+  {
+    // Registered symbol (`Symbol.for('x')`) has a portable string key → keyword `:x`;
+    // a unique symbol has no portable identity → #void + warn (like a function).
+    name: "symbol → :keyword (registered) / #void (unique, warn)",
+    claims: (v) => typeof v === "symbol",
+    box: (ctx, v, p) => {
+      invariant(typeof v === "symbol", "inbound claim 'symbol': box called off its predicate");
+      const key = Symbol.keyFor(v);
+      if (key !== undefined) return new ASymbol(ctx, `:${key}`, p);
+      warnMembrane("a unique JS symbol");
+      return theVoid;
+    },
+  },
+  {
+    // Borrowed JS function is not a Scheme value — exposing it as callable would let
+    // the sandbox escape into uncontrolled JS — voids, loudly.
+    name: "function → #void (warn)",
+    claims: (v) => typeof v === "function",
+    box: () => {
+      warnMembrane("a JS function");
+      return theVoid;
+    },
+  },
+  {
+    // Non-AValue scheme orphans: already scheme values (types.ts's SchemeValue union),
+    // no provenance slot → identity. Formerly rode the silent exotic passthrough.
+    name: "scheme orphan (EOF/Values/R7RSError) → identity",
+    claims: (v) => v instanceof EOF || v instanceof Values || v instanceof R7RSError,
+    box: (_ctx, v) => v,
+  },
+  {
+    // The one DECLARED raw passthrough (named superset: FFI identity) — mirrors the
+    // outbound allow-list in schemeToJsImpl and the F3 crossing row.
+    name: "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
+    claims: (v) =>
+      v instanceof Uint8Array ||
+      v instanceof ArrayBuffer ||
+      v instanceof DataView ||
+      (typeof Buffer !== "undefined" && v instanceof Buffer),
+    box: (_ctx, v) => v,
+  },
+  {
+    // A bare Promise (or non-plain thenable) doors — see jsToSchemeAsyncDoor. Promise
+    // VALUES inside structures never reach this row: the holding container settles
+    // them lazily on entry read (pending-entry.ts).
+    name: "promise → door (settle first; container entries settle lazily)",
+    claims: (v) => is_promise(v),
+    box: () => {
+      throw jsToSchemeAsyncDoor();
+    },
+  },
+  {
+    // Residual exotics (class instances, Map, Date, Error, …): re-presented as a
+    // borrowed AJSObject, LOUDLY — closes the old silent raw leak. Member reads keep
+    // working through the interop policy; exit round-trips to source identity.
+    name: "exotic object → borrowed AJSObject (warn)",
+    claims: (v) => typeof v === "object" && v !== null,
+    box: (ctx, v, p) => {
+      invariant(typeof v === "object" && v !== null, "inbound claim 'exotic object': box called off its predicate");
+      warnMembrane(
+        `a JS ${v.constructor?.name ?? "<null-proto>"} instance`,
+        "was re-presented as a borrowed js-object wrapper — its members read through the interop policy, and it exits back to JS as the same instance",
+      );
+      return new AJSObject(ctx, v, p);
+    },
+  },
+] as const;
+
+/**
+ * Recursive body behind `jsToScheme` — the ordered fold over INBOUND_CLAIMS (first
+ * claiming row wins; the registry doc above is the law). `unknown`-typed, not `any`:
+ * the fold's output spans boxed values AND the declared raw passthrough — see
+ * `jsToScheme` for the ONE narrowing at the public boundary.
+ *
+ * The `seen` shortcut is router INFRASTRUCTURE, not a claim: a JS-side cycle (or
+ * shared substructure re-encountered during a deep re-stamp) returns as-is — the
+ * caller's outer wrapper already carries the stamp, stopping infinite recursion.
  */
 function jsToSchemeImpl(
   ctx: RunContext,
   value: unknown,
-  options: RosettaOptions,
   provenance: ReadonlySet<number>,
   seen: WeakSet<object>,
 ): unknown {
-  // null → nil. undefined has no portable Scheme value (host-agnostic interpreter) → unspecified value, loudly.
-  if (value === null) {
-    return provenance === EMPTY_PROVENANCE ? nil : new ANil(ctx, provenance);
+  if (typeof value === "object" && value !== null) {
+    if (seen.has(value)) return value;
+    seen.add(value);
   }
-  if (value === undefined) {
-    warnMembrane("a JS `undefined`");
-    return theVoid;
+  for (const claim of INBOUND_CLAIMS) {
+    if (claim.claims(value)) return claim.box(ctx, value, provenance, seen);
   }
-
-  // Cycle in JS-side input — return as-is; caller outer wrapper already carries stamp, stops infinite recursion.
-  if (typeof value === "object" && seen.has(value)) return value;
-  if (typeof value === "object") seen.add(value);
-
-  // Already-AValue: same-provenance fast path preserves identity. Pair/AVector recurse so children inherit new lineage; other leaves → `withProvenance` (SchemeJSObject entries stay lazy via `.get`).
-  if (value instanceof AValue) {
-    if (provenance === EMPTY_PROVENANCE || provenance === value.provenance) return value;
-    if (value instanceof APair) {
-      // ONE internal narrowing (P3), same limit as public wrapper cast: jsToSchemeImpl return is `unknown` (cycle shortcut + exotic passthrough don't produce SchemeValue), but Pair car/cdr always SchemeValue on every other path, APair<Car,Cdr> ctor requires it. Recursive conditional generics can't re-verify through recursion (AWrap/AUnwrap tuple-wrap lesson).
-      return new APair(
-        ctx,
-        jsToSchemeImpl(ctx, value.car, options, provenance, seen) as SchemeValue,
-        jsToSchemeImpl(ctx, value.cdr, options, provenance, seen) as SchemeValue,
-        provenance,
-      );
-    }
-    if (value instanceof AVector) {
-      // Same narrowing as APair arm — vector elements always SchemeValue on every path but two documented exceptions.
-      return new AVector(
-        ctx,
-        value.__vector__.map((el) => jsToSchemeImpl(ctx, el, options, provenance, seen) as SchemeValue),
-        provenance,
-      );
-    }
-    return value.withProvenance(provenance);
-  }
-
-  // JS array → borrowed VECTOR: JS array IS R7RS vector, faithful mapping. AJSArray keeps source ref, boxes elements lazily on access.
-  if (Array.isArray(value)) {
-    return new AJSArray(ctx, value, provenance);
-  }
-
-  // Lazy entries via .get cache.
-  if (
-    typeof value === "object" &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-  ) {
-    return new AJSObject(ctx, value as object, provenance);
-  }
-
-  // JS primitives → boxer registry (number/bigint→exact/inexact, boolean→ABool, string→AString) — never raw, sandbox only holds boxed AValues.
-  const tag = typeof value;
-  if (tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint") {
-    return fromJs(ctx, value, provenance);
-  }
-
-  // Registered JS symbol (`Symbol.for('x')`) has portable string key → keyword `:x`. Unique symbol (`Symbol('x')`) has no portable identity → #void + warn (like function).
-  if (tag === "symbol") {
-    const key = Symbol.keyFor(value as symbol);
-    if (key !== undefined) return new ASymbol(ctx, `:${key}`, provenance);
-    warnMembrane("a unique JS symbol");
-    return theVoid;
-  }
-
-  // Scheme lambda is ALambda VALUE (reverse-membrane-for-callables.md §3 step 1: legacy `[LAMBDA]`-branded bare-fn producer + named-let loopFn gone — every scheme lambda is ALambda, `AValue` subclass caught by `instanceof AValue` branch above, returns before here). `require`d `.prompt`/`.hbs` CALLABLE-RULE lambda round-trips through that branch.
-
-  // Borrowed JS function not a Scheme value — exposing as callable would let Scheme escape sandbox into uncontrolled JS — voids, loudly.
-  if (tag === "function") {
-    warnMembrane("a JS function");
-    return theVoid;
-  }
-
-  // Exotic objects (Promise, Buffer, …): caller's responsibility.
-  return value;
+  // Total by construction: bottoms (rows 1-2) + AValue + object rows + scalar +
+  // symbol + function cover every typeof tag; a miss is a programmer error.
+  invariant(false, `jsToScheme: no inbound claim for typeof "${typeof value}" — the registry must stay total`);
 }
 
 /**
- * JS → Scheme deep-stamping membrane. Single pass: every AValue constructed inherits `provenance`, so downstream extractors (`car`, `cdr`, `dict-ref`, `@`) see element-only lineage carrying rosetta origin id (spec §5.3 Interpretation A) without separate re-stamp per builtin.
- * Plain JS objects → `SchemeJSObject`, entries boxed lazily on `.get(key)` (cache amortizes cost vs full traversal).
- * `seen: WeakSet` terminates JS-side cycles: cyclic ref returned as-is (caller outer Pair/SchemeJSObject already carries provenance, cycle re-enters that wrapper, not infinite spine).
- * Honestly typed via `AWrap<T>` (values/types.ts): caller static JS input type determines exact AValue shape returned. `jsToSchemeImpl` carries recursion (see its doc) — this wrapper is ONE sanctioned narrowing (P3): cast target is exact conditional type contract promises, never `as any`/`as unknown`.
+ * JS → Scheme deep-stamping membrane — the fold over INBOUND_CLAIMS (the declared,
+ * ordered inbound algebra above; the registry doc is the law). Single pass: every AValue
+ * constructed inherits `provenance`, so downstream extractors (`car`, `cdr`, `dict-ref`,
+ * `@`) see element-only lineage carrying the rosetta origin id (spec §5.3 Interpretation
+ * A) without a separate re-stamp per builtin; an already-AValue with a fresh stamp
+ * re-stamps through its OWN protocol (deep on spine carriers via
+ * `arrival/withProvenanceDeep`, shallow elsewhere — borrowed wrappers' entries stay lazy
+ * via `.get`).
+ * `seen: WeakSet` terminates JS-side cycles: a cyclic ref returns as-is (the caller's
+ * outer wrapper already carries the stamp, so the cycle re-enters that wrapper, not an
+ * infinite spine).
+ * `options` is accepted for signature stability but the INBOUND crossing reads none of
+ * it (`forceBigInt` is an outbound concern — it always was; the old impl only threaded
+ * it, never read it).
+ * Honestly typed via `AWrap<T>` (values/types.ts): the caller's static JS input type
+ * determines the exact AValue shape returned. This wrapper is the ONE sanctioned
+ * narrowing (P3): the cast target is the exact conditional type the contract promises,
+ * never `as any`/`as unknown`.
  */
 export function jsToScheme<T>(
   ctx: RunContext,
   value: T,
-  options: RosettaOptions = {},
+  _options: RosettaOptions = {},
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   seen: WeakSet<object> = new WeakSet(),
 ): AWrap<T> {
-  return jsToSchemeImpl(ctx, value, options, provenance, seen) as AWrap<T>;
+  return jsToSchemeImpl(ctx, value, provenance, seen) as AWrap<T>;
 }
 
 export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {
