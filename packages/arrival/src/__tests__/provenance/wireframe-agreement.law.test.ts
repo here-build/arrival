@@ -18,9 +18,10 @@
  * wire-locality's by-name row, asserted one layer down (partition + hermetic
  * assembler); the wire-level half is now asserted directly above it.
  */
+import * as fc from "fast-check";
 import { describe, it, expect, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
-import { parse, exec } from "../../eval/generator-exec.js";
+import { parse, exec, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import type { Classifier, DeclaredRole } from "../../values/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
@@ -31,6 +32,12 @@ import type { WireframeGraph } from "../../provenance/wireframe/types.js";
 import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
 import { schemeToJs } from "../../rosetta.js";
+import { collapseProvenance } from "../../provenance-collapse.js";
+import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
+import { SourceRegistry, runEagerCone, prospectiveSourceCone, type SourceShape } from "./w1-harness.js";
+import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "./w1-corpus.js";
+
+const num: SourceShape = "num";
 
 // ── Q8a harness: a synthetic declared-role classifier (Q3's shape) + a synthetic
 // hermetic-base predicate. Production reads `.provenanceRole` off the sealed chain;
@@ -133,28 +140,307 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   // law family is built around, quoted so no future edit "fixes" the scoping by
   // accident: "Do not \"fix\" this by re-recording — the trade IS the ruling."
 
-  // @ledger: Q9
-  it.todo(
-    "port-coupled decisions and non-mux segments: eager-oracle cone == wireframe cone, " +
-      "EXACT equality, over the generated corpus (§7 generator classes: interior " +
-      "sources, nested regions, first-class HOFs, structured multi-field egress, " +
-      "macro-expanded bodies, deep mux nesting)",
-  );
+  const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
+  const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
+  async function wfCorpus(code: string) {
+    const forms = await parse(code, inferenceEnv);
+    return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
+  }
 
-  // @ledger: Q9
-  it.todo(
-    "pure-mux wires: the RECORD-FREE abstract backward cone of a wire containing a " +
-      "pure mux includes BOTH arms' ingress (the wire's params are its full FV set) — " +
-      "asserted as the ABSTRACT both-arms cone here; exact arm attribution is Q16's " +
-      "pure-mux-derivation law, one γ-step away, NOT this row's job. " +
-      'Do not "fix" this by re-recording — the trade IS the ruling.',
-  );
+  // @ledger: Q9 — FLIPPED. Corpus-driven: every hand-curated row in `w1-corpus.ts`
+  // whose `precision` is "exact" (interior sources, nested regions, structured
+  // multi-field egress, field-access chains that stay single-source, prelude
+  // helpers, port-coupled mux with pure/repeated-source arms, deep mux nesting
+  // where every reachable arm agrees, and loop programs whose source fires on
+  // every iteration unconditionally) — eager-oracle cone === wireframe cone,
+  // EXACT, over BOTH the numeric-id (deep-collapsed) AND the op-name projection.
+  describe.each(W1_CORPUS.filter((e) => e.precision === "exact"))("exact: $klass / $name", (entry) => {
+    it(`${entry.code}`, async () => {
+      const registry = new SourceRegistry();
+      const eager = await runEagerCone(inferenceEnv, entry.code, entry.sources, registry);
+      const program = await wfCorpus(entry.code);
+      const wireframe = prospectiveSourceCone(program);
+      expect([...wireframe].sort()).toEqual([...eager].sort());
+    });
+  });
 
-  // @ledger: Q9
-  it.todo(
-    "a pure-selector mux collapses INTO its wire and carries no decision record of its " +
-      "own — only port-coupled muxes reach the retrospective stream (§1 CHOSEN, A2)",
-  );
+  // @ledger: Q9 — FLIPPED. The pure-mux rows: wireframe cone is a PROPER superset
+  // of eager's (the untaken arm's source is present in wireframe, absent from
+  // eager) — asserted as the ABSTRACT both-arms cone, never "fixed" by shrinking
+  // it to match eager (that IS the m3 trade). Exact arm attribution is Q16's.
+  describe.each(W1_CORPUS.filter((e) => e.precision === "abstract"))("abstract both-arms: $klass / $name", (entry) => {
+    it(`${entry.code}`, async () => {
+      const registry = new SourceRegistry();
+      const eager = await runEagerCone(inferenceEnv, entry.code, entry.sources, registry);
+      const program = await wfCorpus(entry.code);
+      const wireframe = prospectiveSourceCone(program);
+      // eager ⊊ wireframe — a PROPER subset (never fix by re-recording to equality)
+      for (const op of eager) expect(wireframe.has(op), `${op} missing from wireframe cone`).toBe(true);
+      expect(wireframe.size).toBeGreaterThan(eager.size);
+      for (const extra of entry.extraInWireframe ?? []) {
+        expect(wireframe.has(extra), `${extra} should be wireframe-only`).toBe(true);
+        expect(eager.has(extra), `${extra} should be ABSENT from eager (untaken arm)`).toBe(false);
+      }
+    });
+  });
+
+  // @ledger: Q9 — FLIPPED (generative extension). A random left-fold of pipe/merge/
+  // let-transparency over 2-4 sources, mux-free and fan-free by construction —
+  // extends the hand-curated "non-mux segments" rows with fast-check-driven
+  // coverage of the SAME exact-equality claim (fast-check owns the seed/shrink;
+  // `genLinearProgram` is the deterministic renderer, mirroring
+  // conservation.law.test.ts's own mulberry32 pattern).
+  it("property: random non-mux source pipe/merge programs agree exactly, over 30 generated programs", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 0, max: 2 ** 31 - 1 }), async (seed) => {
+        const { code, sources } = genLinearProgram(seed);
+        const sourceShapes: Record<string, SourceShape> = {};
+        for (const s of sources) sourceShapes[s] = "num";
+        const registry = new SourceRegistry();
+        const eager = await runEagerCone(inferenceEnv, code, sourceShapes, registry);
+        const program = await wfCorpus(code);
+        const wireframe = prospectiveSourceCone(program);
+        expect([...wireframe].sort(), `program: ${code}`).toEqual([...eager].sort());
+      }),
+      { numRuns: 30 },
+    );
+  });
+
+  // @ledger: Q9 — FLIPPED. A pure-selector mux collapses INTO its wire — no `mux`
+  // kind node is ever minted for it, and it therefore carries no decision record of
+  // its own; only PORT-COUPLED muxes reach the retrospective stream (§1 CHOSEN, A2).
+  it("a pure-selector mux collapses INTO its wire and carries no decision record of its own — only port-coupled muxes reach the retrospective stream (§1 CHOSEN, A2)", async () => {
+    const program = await wfCorpus(`(if #t (src-a) (src-b))`);
+    expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(false);
+    // the two sources ARE designated nodes (they're Rosetta-IN crossings), just not
+    // gated behind a mux node — confirming the collapse, not a designation failure.
+    expect(program.main.nodes.filter((n) => n.kind === "source")).toHaveLength(2);
+
+    const portCoupled = await wfCorpus(`(if (positive? (src-a)) 1 2)`);
+    expect(portCoupled.main.nodes.some((n) => n.kind === "mux")).toBe(true);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FINDINGS — agreement failures the corpus surfaced. Per the wave's discipline
+  // ("agreement failures are FINDINGS, not bugs to paper over"): each row below
+  // documents an ACTUAL divergence between the eager oracle and the wireframe,
+  // root-caused, with the exact program + expected/got cones. Territory this wave
+  // is test files only (builder.ts/types.ts/uneval.ts are Q8c's) — none of these
+  // are fixed here; each is named for Fable escalation. Three are Q8a's OWN
+  // documented first-landing limits (builder.ts's header comment); two are NEWLY
+  // surfaced by this corpus (named distinctly, not conflated with the three).
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe("KNOWN LIMIT (Q8a, documented) — letrec local-closure mux under-designation", () => {
+    // @ledger: Q9 finding — builder.ts: "A local closure (letrec-bound lambda)
+    // wrapping a port under-designates a mux whose selector calls it (classify
+    // never expands call sites into callee bodies)". Empirically: the selector
+    // `(positive? (get))` cannot see that `get` resolves to a lambda wrapping
+    // `fetch-item`, so `selectorReachesPort` returns false and the WHOLE if
+    // collapses into ONE pure wire (no `mux` node) instead of a port-coupled one.
+    // @ledger: letrec local-closure mux under-designation
+    it.fails(
+      "a letrec-bound closure wrapping a port, called from a mux selector, SHOULD designate a port-coupled `mux` node (the selector genuinely reaches fetch-item transitively) — it does not",
+      async () => {
+        const program = await wfCorpus(
+          `(letrec ((get (lambda () (fetch-item 0)))) (if (positive? (get)) (src-a) (src-b)))`,
+        );
+        expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(true);
+      },
+    );
+
+    // The limit is BENIGN at W1's op-NAME cone granularity specifically: the
+    // pure-mux collapse's OWN "both arms + selector in one wire" shape happens to
+    // still land every reachable source (fetch-item, src-a, src-b) as a node the
+    // single collapsed wire references — so `prospectiveSourceCone` over-includes
+    // exactly like an ordinary pure-mux would (abstract superset), not less than
+    // that. Recorded as a passing row so the benign half stays asserted, not just
+    // claimed in a comment.
+    it("…but the CONE is still a sound (superset) abstract cone — not a silent under-approximation", async () => {
+      const registry = new SourceRegistry();
+      const code = `(letrec ((get (lambda () (fetch-item 0)))) (if (positive? (get)) (src-a) (src-b)))`;
+      const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num, "src-a": num, "src-b": num }, registry);
+      const program = await wfCorpus(code);
+      const wireframe = prospectiveSourceCone(program);
+      for (const op of eager) expect(wireframe.has(op)).toBe(true); // sound superset
+      expect(wireframe.has("src-b")).toBe(true); // the untaken arm still shows up
+    });
+  });
+
+  describe("KNOWN LIMIT (Q8a, documented) — non-tail begin sink sequencing", () => {
+    // @ledger: Q9 finding — builder.ts: "A sink cut in non-tail begin position
+    // leaves the wire a sequencing reference to the sink node (D6 territory) —
+    // tolerated, not modeled." Empirically: `(begin (emit! (src-a)) (src-b))`'s
+    // egress wire is `(begin in0 in1)` where `in0` is a NODE reference to the
+    // sink — reachableNodes cannot distinguish "value consumed" from "value
+    // dropped after a port fired", so it walks INTO the sink's own ingress
+    // (src-a), over-including it. Real `begin` semantics discard the non-tail
+    // value entirely — eager's deep-collapsed result never carries src-a's id.
+    // @ledger: non-tail begin sink sequencing over-includes source
+    it.fails(
+      "(begin (emit! (src-a)) (src-b)): wireframe cone SHOULD equal eager's {src-b} — it over-includes src-a via the dropped sink's ingress",
+      async () => {
+        const ROLES_SINK: Record<string, DeclaredRole> = { ...CORPUS_ROLES, "emit!": "sink" };
+        const classifierWithSink: Classifier = { roleOf: (op) => ROLES_SINK[op] };
+        const forms = await parse(`(begin (emit! (src-a)) (src-b))`, inferenceEnv);
+        const program = buildWireframe(forms, { classifier: classifierWithSink, isBaseName: corpusIsBaseName });
+        const wireframe = prospectiveSourceCone(program);
+
+        const env = inferenceEnv.inherit("w1-begin-finding");
+        env.defineRosetta("emit!", { fn: (x: unknown) => x });
+        const registry = new SourceRegistry();
+        registry.register(env, "src-a", num);
+        registry.register(env, "src-b", num);
+        const { values } = await execState(`(begin (emit! (src-a)) (src-b))`, { env });
+        const eager = registry.opsOf(collapseProvenance(values[values.length - 1]));
+
+        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {src-a, src-b}, eager = {src-b}
+      },
+    );
+  });
+
+  describe("KNOWN LIMIT (Q8a, documented) — cond => receiver approximation", () => {
+    // @ledger: Q9 finding — builder.ts's `buildCondMux`: "A `=>` clause's receiver
+    // is approximated as the arm — its applied-to-test threading is
+    // classifyCond's `combine(\"=>\")`, deferred here." Structurally: the arm wire
+    // closes over the RAW receiver lambda `(lambda (x) …)`, whose own formal `x`
+    // shadows the free-variable it would need if it genuinely modeled "the
+    // receiver APPLIED to the test's value" — so a receiver that returns `x`
+    // unchanged wires as a CLOSED, ZERO-PARAM lambda (the wire believes this arm
+    // has no ingress at all), when the correct modeling would show a dependency on
+    // whatever produced the test's value.
+    // @ledger: cond => receiver approximation loses test-value dependency
+    it.fails(
+      "a `=>` receiver that returns its bound parameter untouched SHOULD wire with a non-empty param list (it depends on the test's value) — it wires as a closed, zero-param lambda",
+      async () => {
+        const forms = await parse(`(cond ((src-a) => (lambda (x) x)) (else (fetch-item 0)))`, inferenceEnv);
+        const program = buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
+        const muxNode = program.main.nodes.findIndex((n) => n.kind === "mux");
+        const armWire = program.main.wires.find((w) => w.consumer.node === muxNode && w.consumer.slot === "arm0");
+        expect(armWire).toBeDefined();
+        expect(armWire?.params.length ?? 0).toBeGreaterThan(0);
+      },
+    );
+  });
+
+  describe("NEW FINDING (Q9) — do-loop result clause never wires back to the recur node", () => {
+    // Root-caused: `buildDoBinder`'s `interior.emitEgress(resultForm, intEnv)` walks
+    // the RESULT clause in the SAME `intEnv` the loop body uses, where each bound
+    // variable (e.g. `acc`) is a per-iteration LEAF SLOT (`intSubst.set(p, LEAF(p))`)
+    // — the result clause therefore wires as a plain SLOT reference to `acc`, with
+    // NO node-kind paramRef to the `recur` node that actually computes next-
+    // iteration's `acc` from the accumulating step expression. Contrast with
+    // named-let: its body's tail position IS the literal `(loop next-args…)` call,
+    // which the cut-and-close algorithm designates as a `recur` NODE referenced
+    // like any other value — so reachability happens to walk through it for free.
+    // `do` has no equivalent syntactic value-position call to lean on, so its
+    // recur node is a dead end for `reachableNodes`: any source that only fires
+    // inside a STEP expression (the whole point of `do`'s accumulation) is
+    // invisible to the prospective cone, even though it demonstrably flows into
+    // the eager result. FINDING, not one of Q8a's three named limits — a distinct,
+    // more consequential gap (do-loop accumulation is unrepresentable in the
+    // prospective cone at all).
+    // @ledger: do-loop result clause unreachable from recur node
+    it.fails(
+      "(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone SHOULD include fetch-item (it demonstrably flows into the eager result) — the do-loop's result clause never wires back through the recur node, so it doesn't",
+      async () => {
+        const code = `(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc))`;
+        const registry = new SourceRegistry();
+        const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
+        const program = await wfCorpus(code);
+        const wireframe = prospectiveSourceCone(program);
+        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {}, eager = {fetch-item}
+      },
+    );
+  });
+
+  describe("NEW FINDING (Q9) — first-class reference to a declared source bypasses string-based role dispatch (the A21 HOF hole)", () => {
+    // Root-caused: `walkForCuts` only designates a node at an APPLICATION HEAD
+    // position (`(op . args)` where `op` is a literal symbol matching a declared
+    // role). `fetch-item` passed as a bare VALUE — never applied at this call site
+    // — is just a leaf symbol; `unevalWire` cannot resolve it against
+    // params/prelude/base, so it falls back to treating it as ORDINARY PROGRAM
+    // INGRESS (a "slot" param, exactly like an unbound top-level variable) — no
+    // WireLocalityError, no designated node, no trace that it names a declared
+    // source at all. `call-source`'s own body (`(f)`, `f` a formal parameter) is
+    // symmetric: string-based role lookup cannot see through the parameter either,
+    // so `call-source` is (wrongly, but silently) judged port-free. Documented in
+    // builder.ts as "classify's A21 HOF hole; conservative wire material" — this
+    // row is the empirical demonstration that the hole is SILENT (no build-time
+    // door), the more consequential half of what docs/PROVENANCE.md §2's LIMIT
+    // note names: "the drift alarm catches CONTRADICTIONS, not lies... arrange-vs-
+    // membership is semantic. Mitigation is the W1 agreement gate" — this IS that
+    // mitigation catching it.
+    // @ledger: first-class source reference bypasses role dispatch (A21 HOF hole)
+    it.fails(
+      "(define (call-source f) (f)) (call-source fetch-item): wireframe cone SHOULD include fetch-item (it fires at runtime) — it is invisible, the whole source reference is unrepresented",
+      async () => {
+        const code = `(define (call-source f) (f)) (call-source fetch-item)`;
+        const registry = new SourceRegistry();
+        const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
+        const program = await wfCorpus(code);
+        const wireframe = prospectiveSourceCone(program);
+        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {}, eager = {fetch-item}
+      },
+    );
+  });
+
+  describe("NEW FINDING (Q9) — field-shaped pure ops (car/cons chains) are not projection-aware, over-including a sibling source", () => {
+    // Root-caused: the builder never constructs a `field` WireframeNode for
+    // `car`/`cdr`/`:field`/`@` — these currently reach `walkForCuts` only via the
+    // ordinary APPLICATION path with an UNDECLARED role (`car`/`cons` are BASE
+    // names, not designated), so `(car (cons A B))` becomes ONE flat pure wire
+    // closing over BOTH A and B's cut references, with no awareness that `car`
+    // structurally discards the cdr side. The REAL `car`/`cons` implementation
+    // (op-helpers.ts convention, conservation.law.test.ts's own pinned behavior:
+    // "car projects the HEAD element only") DOES prune at the value level — the
+    // eager cone genuinely excludes the cdr side's source. This is NOT R2 demand-
+    // monotonicity (Q8c/Q17's deferred field-DEMAND lattice, "answer a query
+    // without materializing") — it is the ordinary FULL/flat cone over-including
+    // a sibling the runtime's OWN accessor semantics provably never touches,
+    // present today because no `field` node exists yet to route the projection.
+    // @ledger: field-shaped pure ops not projection-aware (car/cons sibling leak)
+    it.fails(
+      "(car (cons (fetch-item 0) (src-a))): wireframe cone SHOULD equal eager's {fetch-item} (car projects the head only) — it over-includes src-a, the pruned cdr side",
+      async () => {
+        const code = `(car (cons (fetch-item 0) (src-a)))`;
+        const registry = new SourceRegistry();
+        const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num, "src-a": num }, registry);
+        const program = await wfCorpus(code);
+        const wireframe = prospectiveSourceCone(program);
+        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {fetch-item, src-a}, eager = {fetch-item}
+      },
+    );
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ORACLE FLAG — the READ seam (op-helpers.ts's `isEagerProvenanceOracleEnabled`/
+  // `setEagerProvenanceOracleEnabled`). Q9's territory is the READ only; the WRITE
+  // (consulting this flag inside `withInputProvenance`/`mintVerdict` to compile
+  // stamp accumulation out of production) is Q20's. This suite (and every row
+  // above) runs the eager oracle UNCONDITIONALLY today — the flag exists so a
+  // future Q20 toggle has something to assert against, not because anything here
+  // branches on it yet.
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe("oracle flag — the Q20 read seam", () => {
+    it("defaults to eager-ON (production behavior is unchanged this wave)", () => {
+      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+    });
+
+    it("round-trips via the test-only setter, restored after", () => {
+      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+      setEagerProvenanceOracleEnabled(false);
+      try {
+        expect(isEagerProvenanceOracleEnabled()).toBe(false);
+      } finally {
+        setEagerProvenanceOracleEnabled(true); // restore — module-level flag, other tests read it
+      }
+      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+    });
+
+    it("the agreement corpus above ran under the flag's default (eager-on) — CI keeps exercising the oracle regardless of any future production default (Q20's own gate: \"oracle mode still runs the agreement corpus in CI\")", () => {
+      expect(isEagerProvenanceOracleEnabled()).toBe(true);
+    });
+  });
 });
 
 describe("I5 — exterior collapse (§3: a region is ONE node from G) — FLIPPED at Q8a", () => {

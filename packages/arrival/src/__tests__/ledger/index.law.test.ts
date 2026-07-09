@@ -82,6 +82,44 @@ const GAPS: readonly LedgerRow[] = [
   // test predates the LIPS-legacy dissolution sweep and needs retiring/redirecting, not a
   // reintroduced symbol.
   { id: "list->array phantom symbol", gate: "sunset-suite cleanup pass", replacedBy: "n/a — test retirement, not a feature to land" },
+  // ── Q9 W1 agreement corpus findings (PROVENANCE-PLAN.md Q9; provenance/
+  // wireframe-agreement.law.test.ts's "FINDINGS" section) — surfaced running the
+  // extended generator corpus against BOTH the eager oracle and the wireframe
+  // builder. Territory this wave is test files only (builder.ts/uneval.ts are
+  // Q8c's); each row below is a REAL divergence, root-caused, awaiting a builder-
+  // side fix in a later wave. Three are Q8a's OWN documented first-landing limits
+  // (builder.ts's header comment, named there verbatim); two are newly surfaced by
+  // this corpus and are NOT conflated with the three documented ones.
+  {
+    id: "letrec local-closure mux under-designation",
+    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A local closure (letrec-bound lambda) wrapping a port under-designates a mux whose selector calls it\")",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's letrec-closure-mux row, once selectorReachesPort can see through a letrec-bound closure",
+  },
+  {
+    id: "non-tail begin sink sequencing over-includes source",
+    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A sink cut in non-tail begin position leaves the wire a sequencing reference to the sink node (D6 territory) — tolerated, not modeled\")",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's non-tail-begin row, once reachableNodes (or the builder) stops treating a dropped sink's ingress as reachable from the tail value",
+  },
+  {
+    id: "cond => receiver approximation loses test-value dependency",
+    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts's buildCondMux: \"A `=>` clause's receiver is approximated as the arm — its applied-to-test threading is classifyCond's combine(\\\"=>\\\"), deferred here\")",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure",
+  },
+  {
+    id: "do-loop result clause unreachable from recur node",
+    gate: "Q8c/Q9-follow-up builder fix (NEW finding, not one of Q8a's three documented limits — buildDoBinder's result clause wires the per-iteration LEAF slot directly, with no node-kind paramRef to the recur node that computes it)",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's do-loop row, once the result clause's wire threads through (or the interior otherwise exposes) the recur node's accumulated value",
+  },
+  {
+    id: "first-class source reference bypasses role dispatch (A21 HOF hole)",
+    gate: "Q8c/Q9-follow-up builder fix (NEW finding — walkForCuts only designates a node at an application HEAD position; a declared-role name passed as a bare VALUE, or a HOF parameter later called, is invisible to string-based role dispatch — docs/PROVENANCE.md §2's own LIMIT note: \"the drift alarm catches CONTRADICTIONS, not lies... mitigation is the W1 agreement gate\")",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's first-class-HOF row, once first-class references to declared-role names get SOME representation (even a conservative opaque/quarantine one) instead of silently falling to ordinary ingress",
+  },
+  {
+    id: "field-shaped pure ops not projection-aware (car/cons sibling leak)",
+    gate: "Q8c/Q9-follow-up builder fix (NEW finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe",
+  },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [

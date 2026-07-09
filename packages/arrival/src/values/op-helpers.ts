@@ -27,6 +27,35 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
 import { tf } from "./tagless-final.js";
 
+// Eager-stamp oracle flag — the READ seam (PROVENANCE-PLAN.md Q9; docs/PROVENANCE.md
+// §7 W1 agreement). `withInputProvenance`/`mintVerdict` below are TODAY's production
+// provenance path (eager accumulation on every op) AND, per the plan, the CI oracle
+// `wireframe-agreement.law.test.ts` replays programs against to verify the prospective
+// wireframe's cone agrees. Q20 ("eager-oracle demotion") will consult this flag INSIDE
+// those two functions to compile stamp accumulation out of production hot paths once
+// the wireframe replaces this path as production's source of provenance (Q16-Q19
+// gate that transition) — that WRITE is explicitly Q20's, not this wave's. Q9's job is
+// only this READ-SIDE seam: land the getter/setter now, default eager-ON, so NOTHING
+// about production behavior changes this wave (no call site below consults it yet) —
+// Q20 CI keeps running the agreement corpus with the oracle flipped on regardless of
+// the production default, per the plan's Q20 gate ("oracle mode still runs the
+// agreement corpus in CI").
+let eagerProvenanceOracleEnabled = true;
+
+/** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict` accumulation)
+ *  live? True today, unconditionally (no call site branches on it yet — Q20 wires that
+ *  in when it demotes the oracle out of the production hot path). */
+export function isEagerProvenanceOracleEnabled(): boolean {
+  return eagerProvenanceOracleEnabled;
+}
+
+/** Test-only override (Q20's future production toggle; Q9 lands the seam so the
+ *  agreement suite can assert the default and round-trip the flag). Never called from
+ *  production code this wave. */
+export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
+  eagerProvenanceOracleEnabled = enabled;
+}
+
 // Allocation cap — DoS defense for size-parameterized constructors
 
 // `make-string`/`make-vector`/`make-bytevector` take unbounded `k`. V8's ceiling
