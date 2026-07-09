@@ -322,33 +322,38 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     );
   });
 
-  describe("NEW FINDING (Q9) — do-loop result clause never wires back to the recur node", () => {
-    // Root-caused: `buildDoBinder`'s `interior.emitEgress(resultForm, intEnv)` walks
-    // the RESULT clause in the SAME `intEnv` the loop body uses, where each bound
+  describe("do-loop result clause wires back to the recur node — FLIPPED (Q9 finding 4)", () => {
+    // Was: `buildDoBinder`'s `interior.emitEgress(resultForm, intEnv)` walked the
+    // RESULT clause in the SAME `intEnv` the loop body uses, where each bound
     // variable (e.g. `acc`) is a per-iteration LEAF SLOT (`intSubst.set(p, LEAF(p))`)
-    // — the result clause therefore wires as a plain SLOT reference to `acc`, with
-    // NO node-kind paramRef to the `recur` node that actually computes next-
+    // — the result clause wired as a plain SLOT reference to `acc`, with NO
+    // node-kind paramRef to the `recur` node that actually computes next-
     // iteration's `acc` from the accumulating step expression. Contrast with
     // named-let: its body's tail position IS the literal `(loop next-args…)` call,
     // which the cut-and-close algorithm designates as a `recur` NODE referenced
     // like any other value — so reachability happens to walk through it for free.
     // `do` has no equivalent syntactic value-position call to lean on, so its
-    // recur node is a dead end for `reachableNodes`: any source that only fires
-    // inside a STEP expression (the whole point of `do`'s accumulation) is
+    // recur node was a dead end for `reachableNodes`: any source that only fires
+    // inside a STEP expression (the whole point of `do`'s accumulation) was
     // invisible to the prospective cone, even though it demonstrably flows into
-    // the eager result. FINDING, not one of Q8a's three named limits — a distinct,
-    // more consequential gap (do-loop accumulation is unrepresentable in the
-    // prospective cone at all).
-    // @ledger: do-loop result clause unreachable from recur node
-    it.fails(
-      "(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone SHOULD include fetch-item (it demonstrably flows into the eager result) — the do-loop's result clause never wires back through the recur node, so it doesn't",
+    // the eager result.
+    //
+    // FLIPPED: `buildDoBinder` now walks `result…` under an EXTRA synthetic `let`
+    // frame that rebinds every loop variable to a shared cut sentinel pointed
+    // straight at the `recur` node's id (builder.ts's `buildDoBinder`) — mirroring
+    // `unevalWire`'s own let-frame rewrap, so the egress wire reads
+    // `(let ((i inN) (acc inN)) acc)` with `inN` a NODE paramRef into `recur`,
+    // putting everything the step expressions reach back in the result's cone.
+    // @ledger: do-loop result clause unreachable from recur node — FLIPPED
+    it(
+      "(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone equals eager's {fetch-item} — the result clause now wires back through the recur node",
       async () => {
         const code = `(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc))`;
         const registry = new SourceRegistry();
         const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
         const program = await wfCorpus(code);
         const wireframe = prospectiveSourceCone(program);
-        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {}, eager = {fetch-item}
+        expect([...wireframe].sort()).toEqual([...eager].sort());
       },
     );
   });

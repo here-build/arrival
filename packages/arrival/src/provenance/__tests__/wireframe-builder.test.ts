@@ -290,6 +290,36 @@ describe("Q8a′ builder core — loop-shaped binders get REAL backedge-wired in
     expect(doBinder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur", "source"]);
   });
 
+  it("Q9 finding 4 (FLIPPED): do's result clause wires back through the recur node — the source lives in a STEP expression, not the result form itself", async () => {
+    // `acc` never mentions `fetch-item` directly — the source only fires inside the
+    // STEP expression that computes acc's next-iteration value. Before the fix, the
+    // result clause's `acc` reference resolved to a plain per-iteration LEAF slot
+    // (a "slot" paramRef, no node reference at all); the fix routes it through the
+    // `recur` node's id instead, so reachability from the interior's egress now
+    // walks into the step expression and finds the source.
+    const p = await wf("(emit! (do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    if (binder?.kind !== "binder") throw new Error("expected a binder node");
+    expect(binder.op).toBe("do");
+    const { interior } = binder;
+    const recurIdx = interior.nodes.findIndex((n) => n.kind === "recur");
+    expect(recurIdx).toBeGreaterThanOrEqual(0);
+    const sourceIdx = interior.nodes.findIndex((n) => n.kind === "source");
+    expect(sourceIdx).toBeGreaterThanOrEqual(0);
+
+    // The egress ("out") wire — the result clause's own wire — carries a NODE
+    // paramRef straight into the recur node (not a bare "acc" slot reference).
+    expect(interior.egress).not.toBeNull();
+    const egressWire = interior.wires.find((w) => w.consumer.node === interior.egress && w.consumer.slot === "out");
+    expect(egressWire).toBeDefined();
+    expect(egressWire?.paramRefs.some((r) => r.kind === "node" && r.node === recurIdx)).toBe(true);
+
+    // And the derived reachability cone (Q8a′'s V4 walk) now includes the source
+    // that only fires inside the step expression — the whole point of the fix.
+    const reached = reachableNodes(interior, interior.egress as number);
+    expect(reached.has(sourceIdx)).toBe(true);
+  });
+
   it("Q8a′: V4 cone-traversal termination rows exercise over real backedge topology", async () => {
     const p = await wf("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
     const binder = p.main.nodes.find((n) => n.kind === "binder");

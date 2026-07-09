@@ -105,11 +105,14 @@ const GAPS: readonly LedgerRow[] = [
     gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts's buildCondMux: \"A `=>` clause's receiver is approximated as the arm — its applied-to-test threading is classifyCond's combine(\\\"=>\\\"), deferred here\")",
     replacedBy: "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure",
   },
-  {
-    id: "do-loop result clause unreachable from recur node",
-    gate: "Q8c/Q9-follow-up builder fix (NEW finding, not one of Q8a's three documented limits — buildDoBinder's result clause wires the per-iteration LEAF slot directly, with no node-kind paramRef to the recur node that computes it)",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's do-loop row, once the result clause's wire threads through (or the interior otherwise exposes) the recur node's accumulated value",
-  },
+  // "do-loop result clause unreachable from recur node" RETIRED (Q9 follow-up builder
+  // fix, builder.ts's `buildDoBinder`): the result clause now walks under a synthetic
+  // `let` frame rebinding every loop variable to a cut sentinel pointed at the `recur`
+  // node's id (mirrors `unevalWire`'s own let-frame rewrap) — the egress wire's
+  // paramRefs carry a real node ref into `recur`, so `reachableNodes` walks into
+  // whatever the step expressions reach, same as named-let gets for free from its
+  // literal tail-position recursive call. See provenance/wireframe-agreement.law.
+  // test.ts's do-loop row, now a plain `it()`.
   {
     id: "first-class source reference bypasses role dispatch (A21 HOF hole)",
     gate: "Q8c/Q9-follow-up builder fix (NEW finding — walkForCuts only designates a node at an application HEAD position; a declared-role name passed as a bare VALUE, or a HOF parameter later called, is invisible to string-based role dispatch — docs/PROVENANCE.md §2's own LIMIT note: \"the drift alarm catches CONTRADICTIONS, not lies... mitigation is the W1 agreement gate\")",

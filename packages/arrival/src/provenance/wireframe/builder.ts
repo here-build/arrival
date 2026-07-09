@@ -654,7 +654,24 @@ class GraphBuilder {
    *  The step expressions are the BACKEDGE (one `recur` node — R7RS: an
    *  omitted step defaults to the var's own current binding, carried over
    *  unchanged; `parseDoBindings` already encodes that default). `result…`
-   *  is the TERMINAL egress — the value(s) when the loop stops. */
+   *  is the TERMINAL egress — the value(s) when the loop stops.
+   *
+   *  Q9 finding 4 fix: `result…`'s occurrences of a loop variable name the
+   *  SAME identifier the step clause rebinds every iteration — R7RS reads
+   *  `result…` in a scope where the vars are bound to their LATEST value,
+   *  i.e. whatever the backedge (the `recur` node below) fed them. Named-let
+   *  gets this for free because its tail position IS the literal recursive
+   *  call — the cut-and-close walk designates that call a `recur` NODE, and
+   *  ordinary reachability walks through it. `do` has no such syntactic call
+   *  in result position to intercept, so the equivalent wiring is synthesized
+   *  here: `result…` walks under an EXTRA synthetic `let` frame that rebinds
+   *  every loop variable to one shared cut sentinel pre-registered straight
+   *  to the `recur` node's id — mirroring `unevalWire`'s own let-frame
+   *  rewrap, so e.g. the egress wire reads `(let ((acc in0)) acc)` with
+   *  `in0` a NODE paramRef into `recur`, putting everything the step
+   *  expressions reach back in the result's cone. `body…`/`test` are
+   *  UNCHANGED (still plain per-iteration LEAF slots) — only the result
+   *  clause's variable scope changes. */
   private buildDoBinder(expr: APair<SchemeValue, SchemeValue>, env: WalkEnv): number {
     const rest = expr.cdr;
     const bindings = rest instanceof APair ? parseDoBindings(rest.car) : [];
@@ -669,14 +686,21 @@ class GraphBuilder {
     const intEnv: WalkEnv = { subst: intSubst, frames: [] };
     for (const cmd of bodyForms) interior.walkDropped(cmd, intEnv);
     if (clause.test !== undefined) interior.walkDropped(clause.test, intEnv);
-    interior.addRecur(
+    const recurId = interior.addRecur(
       scopeId(expr),
       bindings.map((b) => b.step),
       intEnv,
     );
     if (clause.resultForms.length > 0) {
-      for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
-      interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], intEnv);
+      const recurSentinel: unknown = {};
+      interior.cuts.set(recurSentinel, recurId);
+      const resultFrame: WireFrame = {
+        kind: "let",
+        entries: bindings.map((b): WireFrameEntry => ({ name: b.name, rhs: recurSentinel })),
+      };
+      const resultEnv: WalkEnv = { subst: intSubst, frames: [resultFrame] };
+      for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, resultEnv);
+      interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], resultEnv);
     }
 
     const id = this.addNode({
