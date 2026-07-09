@@ -248,7 +248,14 @@ inspection, the dominant UI pattern.
 compiled out of production hot paths. EXCLUDED: permanent production dual-run (panel
 C12 — two provenance mechanisms in tension forever is the fragmentation P0 forbids).
 
-## 5. The retrospective stream
+**CHOSEN — replay-level cones include port-coupled CONTROL dependencies** (Q16
+finding 1, law-caught): a port-coupled mux's result carries the SELECTOR's
+provenance, not only the taken arm's — the eager oracle always stamped this, the
+wireframe's backward walk traverses the selector wire, and the replay driver must
+union it too (`replay.ts` `withUnionedProvenance`). All three interpretations agree
+by law (`pure-mux-nested-inside-port-coupled-arm`); a driver that drops control
+dependencies diverges from BOTH other readings — this is a P0 agreement fact, not
+an implementation choice.
 
 **CHOSEN — record kinds and their aggregation applicability** (round 2, A6 — stated per
 kind; the cheapness story must not quietly assume pure loop bodies):
