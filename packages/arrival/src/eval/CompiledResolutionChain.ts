@@ -2,6 +2,16 @@
  * CompiledResolutionChain — the SEALED, ambient form of a baked capability base
  * (ENV T2, docs/working-proposals/environment-resolution-chain.md §§1–2).
  *
+ * ENV T3 (environment-decomposition-options.md, Option A, LANDED): this class **is**
+ * "BakedBase" — the immutable, no-write-surface product of a bake the design's option
+ * space names. No separate `BakedBase` wrapper type was introduced: this artifact
+ * already had zero mutators (frozen maps + resolver steps, `lookup`/`toString` only),
+ * so the type-level distinction from the mutable `Environment` (lexical) frame it seals
+ * FROM was already real — T3's landing is `Capabilities.globalRoot`/`refFrame` (assembled
+ * mode) returning THIS object as the hygiene sentinel, instead of the base-leaf env that
+ * used to stand in for it (see Capabilities.ts).
+ *
+
  * Assembly (the BAKE) writes onto a live env chain: packs bind natives in C3 order,
  * preludes evaluate against the chain-so-far, `preludeOnly` bindings ride the kernel's
  * bake-scoped overlay (dropped at seal — kernel.ts). At the SEAL, this module compiles

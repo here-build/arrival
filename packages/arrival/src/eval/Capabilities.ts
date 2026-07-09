@@ -24,11 +24,15 @@ export class Capabilities {
 
   /**
    * ASSEMBLED mode only — the sealed ambient artifact this base resolves through.
-   * `undefined` ⇒ GLASS (live walk). T3 note (deferred, design §2 "hygiene
-   * sentinel"): once `Frame`/`BakedBase` become distinct types, the chain object
-   * itself becomes the sentinel; under T2's `Environment`-typed surface the base
-   * leaf stays the sentinel (same one-identity-per-baked-base guarantee, pinned
-   * by capabilities-assembled.test.ts).
+   * `undefined` ⇒ GLASS (live walk). ENV T3 (environment-resolution-chain.md §2
+   * "hygiene sentinel", LANDED): this artifact IS `globalRoot`/`refFrame`'s
+   * ASSEMBLED-mode return value now — the "Frame vs BakedBase" type split's one
+   * consequential frontier. `CompiledResolutionChain` **is** BakedBase (design's
+   * options doc, Option A): sealed at bake, no `set`, no write surface — the
+   * write-window is a TYPE fact (BakedBase's type has no mutator), not a
+   * convention. Same one-identity-per-baked-base guarantee as before (pinned by
+   * capabilities-assembled.test.ts), now STRONGER: the sentinel IS the artifact
+   * object itself, not a leaf env that merely stands in for it.
    */
   private readonly chain: CompiledResolutionChain | undefined;
 
@@ -79,25 +83,32 @@ export class Capabilities {
     return e;
   }
 
-  /** The stable "unshadowed base builtin" sentinel hygiene compares `=== globalRoot`.
-   *  ASSEMBLED: the base top (`this.env`, e.g. `user_env`) — ONE identity for any
-   *  base-owned name. GLASS: the structural chain root (`global_env`). */
-  get globalRoot(): Environment {
-    return this.chain === undefined ? this.chainRoot() : this.env;
+  /**
+   * The stable "unshadowed base builtin" sentinel hygiene compares `=== globalRoot`.
+   * ASSEMBLED (ENV T3, LANDED): the sealed `CompiledResolutionChain` itself — the
+   * BakedBase artifact — ONE identity per baked base, no structural chain-walk
+   * needed (stronger than the prior base-leaf-env sentinel it replaces). GLASS: the
+   * structural chain root (`global_env`), unaffected — glass envs don't bake.
+   */
+  get globalRoot(): Environment | CompiledResolutionChain {
+    return this.chain === undefined ? this.chainRoot() : this.chain;
   }
 
-  /** The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED:
-   *  ONE sealed-chain probe (merged maps + resolver steps — a resolver-answered name
-   *  counts as base-owned, exactly like the live `_lookupWithResolvers` probe it
-   *  replaces), so a native owned on the base leaf (`cons` on user_env) AND a builtin on
-   *  global_env both resolve to the one sentinel. GLASS: the own-binding probe on the
-   *  structural chain root. */
-  refFrame(name: string): Environment | undefined {
+  /**
+   * The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED
+   * (ENV T3, LANDED): ONE sealed-chain probe (merged maps + resolver steps — a
+   * resolver-answered name counts as base-owned, exactly like the live
+   * `_lookupWithResolvers` probe it replaces); a hit returns the CHAIN OBJECT itself
+   * (the same one `globalRoot` returns), so a native owned on the base leaf (`cons` on
+   * user_env) AND a builtin on global_env both resolve to the one sentinel. GLASS: the
+   * own-binding probe on the structural chain root (unchanged).
+   */
+  refFrame(name: string): Environment | CompiledResolutionChain | undefined {
     if (this.chain === undefined) {
       const root = this.chainRoot();
       return root.has(name) ? root : undefined;
     }
-    return this.chain.lookup(name) === undefined ? undefined : this.env;
+    return this.chain.lookup(name) === undefined ? undefined : this.chain;
   }
 
   toString(): string {

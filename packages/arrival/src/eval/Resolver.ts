@@ -28,6 +28,7 @@ import { type BindingName, Environment, type EnvironmentValue } from "../Environ
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
+import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import { unboundVariableError } from "../env/polyglot-rich-errors/registry.js";
 import { tf } from "../values/tagless-final.js";
 
@@ -214,12 +215,14 @@ export class Resolver {
   /**
    * The frame that OWNS `name` for hygiene IDENTITY — walk the lexical scope frames,
    * then the capability base. Returns a stable {@link LexicalScope} for a lexical owner
-   * (so `=== defResolver.scope` compares the captured def frame) or the base
-   * {@link Capabilities.globalRoot} env for an unshadowed builtin (so `=== globalRoot`),
-   * `undefined` if unbound. Own bindings only — no resolvers, no synth — exactly like the
-   * old `Environment.ref` walk it replaces. NOT a value read and NOT a mutation path.
+   * (so `=== defResolver.scope` compares the captured def frame), the
+   * {@link Capabilities.globalRoot} sentinel for an unshadowed builtin (so `===
+   * globalRoot`) — GLASS: a live `Environment`; ASSEMBLED (ENV T3, LANDED): the sealed
+   * `CompiledResolutionChain` (BakedBase) itself — or `undefined` if unbound. Own
+   * bindings only — no resolvers, no synth — exactly like the old `Environment.ref`
+   * walk it replaces. NOT a value read and NOT a mutation path.
    */
-  refFrame(name: string): LexicalScope | Environment | undefined {
+  refFrame(name: string): LexicalScope | Environment | CompiledResolutionChain | undefined {
     return this.scope.refFrame(name) ?? this.capabilities.refFrame(name);
   }
 
