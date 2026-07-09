@@ -17,11 +17,13 @@ import type {
   PayloadStore,
   ProvenanceStore,
   PayloadTier,
+  RetentionClass,
+  RunStore,
   StoredTemplate,
   StreamHeader,
   TemplateStore,
 } from "./interfaces.js";
-import type { ProvenanceRecord } from "./records.js";
+import type { AggregationRun, ProvenanceRecord } from "./records.js";
 import type { WireframeGraph } from "../wireframe/types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +102,41 @@ export class ProvenanceStoreFake implements ProvenanceStore {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RunStore fake (Q12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Upsert key for one `AggregationRun` — `interfaces.ts`'s `RunStore.putRun` doc:
+ *  "idempotent by the run's own key (kind, templateHash, regionEpoch,
+ *  parentOrdinalPath, start)." Distinct from `aggregate.ts`'s `RunKey` (which
+ *  omits `start` — that one is the GROUPING key a run is folded under, before
+ *  its start ordinal is even known; this one is the STORAGE key once it is). */
+function runStorageKey(regionId: RegionId, run: AggregationRun): string {
+  return JSON.stringify([regionId, run.kind, run.templateHash, run.regionEpoch, run.parentOrdinalPath, run.start]);
+}
+
+/** In-memory `RunStore`: a flat `Map` keyed by `runStorageKey`, matching
+ *  `ProvenanceStoreFake`'s own upsert-by-key shape. No fault-injection knobs of
+ *  its own — `AggregatingProvenanceStore` (the write-side hook, `aggregate.ts`)
+ *  is what a law test drives to observe write-volume behavior; this fake is
+ *  deliberately as simple as `TemplateStoreFake`. */
+export class RunStoreFake implements RunStore {
+  private readonly runs = new Map<RegionId, Map<string, AggregationRun>>();
+
+  async putRun(regionId: RegionId, run: AggregationRun): Promise<void> {
+    let byKey = this.runs.get(regionId);
+    if (byKey === undefined) {
+      byKey = new Map();
+      this.runs.set(regionId, byKey);
+    }
+    byKey.set(runStorageKey(regionId, run), run);
+  }
+
+  async readRuns(regionId: RegionId): Promise<readonly AggregationRun[]> {
+    return [...(this.runs.get(regionId)?.values() ?? [])];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PayloadStore fake
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -114,6 +151,9 @@ interface PayloadSlot {
   tier: PayloadTier;
   value: unknown;
   stampIds: readonly number[];
+  /** Q14 privacy-LIMIT plumbing — set once at `put`, survives every subsequent tier
+   *  transition (including `evict`/`applySettle`'s degrade-to-`stub`) unchanged. */
+  retention: RetentionClass;
   /** Set while `tier === "pending"` and a `settle` call is scheduled but not yet
    *  applied (delayed-R2-settle fault injection) — cleared once `step` applies it. */
   scheduled: { outcome: "settled" | "failed"; dueAtTick: number } | undefined;
@@ -214,6 +254,9 @@ export class PayloadStoreFake implements PayloadStore {
       tier: oversize ? "pending" : "do",
       value: payload.value,
       stampIds: payload.stampIds,
+      // Q14: "standard" is the default a `put` without an explicit tag settles to
+      // (interfaces.ts's `RetentionClass` doc).
+      retention: payload.retention ?? "standard",
       scheduled: undefined,
     });
   }
@@ -221,7 +264,12 @@ export class PayloadStoreFake implements PayloadStore {
   async get(hash: PayloadHash): Promise<PayloadRecord> {
     const slot = this.payloads.get(hash);
     if (slot === undefined) throw new PayloadNotFound(hash);
-    return { tier: slot.tier, value: slot.tier === "stub" ? undefined : slot.value, stampIds: slot.stampIds };
+    return {
+      tier: slot.tier,
+      value: slot.tier === "stub" ? undefined : slot.value,
+      stampIds: slot.stampIds,
+      retention: slot.retention,
+    };
   }
 
   async settle(hash: PayloadHash, outcome: "settled" | "failed"): Promise<void> {

@@ -101,7 +101,7 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
     expect(recordIdKey(record.id)).toBe(recordIdKey(ID_A));
 
     const payload = await payloads.get(record.payloadHash);
-    expect(payload).toEqual({ tier: "do", value: { hello: "world" }, stampIds: [7, 8] });
+    expect(payload).toEqual({ tier: "do", value: { hello: "world" }, stampIds: [7, 8], retention: "standard" });
 
     const stream = await store.readStream(REGION);
     expect(stream).toHaveLength(1);

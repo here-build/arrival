@@ -39,6 +39,7 @@ import {
 import { appendOrdinal, type OrdinalPath, type RecordId, type RegionEpoch, type RegionId, type TemplateHash } from "../../provenance/store/ids.js";
 import type { ProvenanceStore } from "../../provenance/store/interfaces.js";
 import type { HostScheduleTriple } from "../../provenance/store/records.js";
+import { foldRegionStream, nextTrackOrdinal } from "../../provenance/store/fold.js";
 
 /**
  * ── Q11b: region events + host-schedule (docs/PROVENANCE.md §5; PROVENANCE-PLAN.md
@@ -213,6 +214,63 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
     trackCoordinate: _trackCoordinate,
     trackSink: _trackSink,
     trackOrdinal: 0,
+    hostSchedule: [],
+  };
+}
+
+/**
+ * Q13 (§5 C1) — the recovery half of `openRegionScope`: mint a scope for a track
+ * coordinate that ALREADY HAS a durable history (a DO wake after eviction/
+ * hibernation), rather than a brand-new one. `openRegionScope` always starts
+ * `pending: 0, trackOrdinal: 0` because a fresh scope has no history; a RESUMED
+ * scope must not make that assumption — reusing those zeros would (a) let
+ * `closeRegionScope` report `pending: 0` even when the durable stream shows a
+ * `track-open` with no matching `track-close` (a genuine crash — the in-flight
+ * call's promise is gone forever with the evicted JS heap, so there is nothing left
+ * TO settle; the incomplete door is the correct, honest answer, not a silent "0
+ * pending"), and (b) re-mint `track-open`/`track-close` ids starting at ordinal 0
+ * again, COLLIDING (id-only upsert, §5 C2/D1) with ones already durable from before
+ * the eviction.
+ *
+ * Both numbers come from ONE fold over ONE `readStream` call — `foldRegionStream`
+ * (§7's fold-as-recovery law: "the SAME fold reconstructs region state on DO wake")
+ * for `pending`, `nextTrackOrdinal` (scoped to `coordinate`, §5 C2/D1's collision
+ * concern) for `trackOrdinal`. Everything else is fresh, exactly like
+ * `openRegionScope`: a resumed scope has no live wrapper cache or accumulated
+ * host-schedule triples to recover (a WeakMap of JS closures and an in-flight
+ * comparator run are not stream-derivable facts — see `fold.ts`'s own doc).
+ *
+ * Unlike `openRegionScope`, `coordinate`/`sink` are explicit parameters, not read
+ * from the `withTrackCoordinate` ambient install — recovery is a distinct code path
+ * (triggered by the DO runtime waking a hibernated object), not a normal mint at a
+ * live crossing seam, so there is no ambient window to read from at that point.
+ */
+export async function reconstructRegionScope(opts: {
+  runCtx: RunContext;
+  dynSite: unknown;
+  coordinate: TrackCoordinate;
+  sink: TrackEmissionSink;
+}): Promise<RegionScope> {
+  const { runCtx, dynSite, coordinate, sink } = opts;
+  const records = await sink.store.readStream(sink.regionId);
+  const fold = foldRegionStream(records);
+  const parentSignal = runCtx.signal;
+  return {
+    open: true,
+    // §3 I4, recovered: a crash that left a track-open with no matching
+    // track-close survives the fold as `pending > 0` — closing this scope without
+    // first resolving that (impossible; the original call is gone) correctly
+    // throws the incomplete door, never silently reports a clean close.
+    pending: fold.pending,
+    signal: parentSignal === undefined ? NEVER_ABORTS : AbortSignal.any([parentSignal]),
+    runCtx,
+    dynSite,
+    cache: new WeakMap(),
+    trackCoordinate: coordinate,
+    trackSink: sink,
+    // §5 C2/D1: seeded past every ordinal this coordinate already used, so the next
+    // track event this resumed scope mints cannot collide with a durable one.
+    trackOrdinal: nextTrackOrdinal(records, coordinate),
     hostSchedule: [],
   };
 }

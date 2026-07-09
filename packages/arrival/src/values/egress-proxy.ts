@@ -64,6 +64,30 @@ function materializeElement(element: unknown): unknown {
   return element instanceof AValue ? element["arrival/toJS"]() : element;
 }
 
+/**
+ * Q14 (docs/PROVENANCE-PLAN.md, docs/PROVENANCE.md §5 payload tiering) — tier-state
+ * gate seam. This module stays a LEAF (file header above: "never membrane/env/
+ * bridge") so this interface is deliberately ABSTRACT — no `PayloadTier`/
+ * `EvidenceTier` import from `provenance/store`. The concrete implementation
+ * (`provenance/store/tiering.ts`'s `tierGateFromSnapshot`) closes over its own tier
+ * state and hands back a value shaped like this.
+ *
+ * Proxy traps (`get`/`getOwnPropertyDescriptor` below) are SYNCHRONOUS by spec, so a
+ * gate can only consult an ALREADY-RESOLVED view of tier state — never awaits.
+ */
+export interface TierGate {
+  /** `true`: tier state allows the real read through to `reader.read(key)` — this is
+   *  the ONLY path taken when a gate is omitted entirely, or every backing payload is
+   *  still ring-resident (byte-stable pass-through, no behavior change from the
+   *  pre-Q14 shape). `false`: the key's payload has degraded (evicted to `stub`) —
+   *  `stubbedValue(key)` substitutes instead, and `reader.read(key)` is never called. */
+  allows(key: string): boolean;
+  /** The degraded stand-in for a gated-off key. Never re-enters `reader.read` or
+   *  `materializeElement` — placed directly on the target, exactly like the existing
+   *  "raw FFI-passthrough" case (this file's header, mechanics bullet 4). */
+  stubbedValue(key: string): unknown;
+}
+
 function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined): never {
   const verb =
     kind === "assign"
@@ -82,8 +106,21 @@ function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined):
  * Identity is guaranteed HERE, at the single chokepoint every container's
  * `arrival/toJS` calls — membrane.toJS needs no separate pre-check because protocol
  * dispatch lands in this cache either way.
+ *
+ * `gate` (Q14, optional, additive): a tier-state gate consulted BEFORE
+ * `reader.read(key)` on first materialization of each key. Omitting it (every
+ * pre-Q14 call site) is EXACTLY the old behavior — `ensure` below takes the
+ * `gate === undefined` branch unconditionally, so this is byte-stable for every
+ * caller that doesn't opt in. The gate does not replace or duplicate the lazy-
+ * materialization seam itself (`reader`/`ensure`/the WeakMap identity cache) — it
+ * sits in front of it, deciding per key whether the existing seam runs at all.
  */
-export function egressContainerProxy(box: AValue, shape: "array" | "object", reader: EgressReader): object {
+export function egressContainerProxy(
+  box: AValue,
+  shape: "array" | "object",
+  reader: EgressReader,
+  gate?: TierGate,
+): object {
   const cached = egressProxies.get(box);
   if (cached) return cached;
 
@@ -96,7 +133,7 @@ export function egressContainerProxy(box: AValue, shape: "array" | "object", rea
   const ensure = (key: PropertyKey): void => {
     if (typeof key !== "string" || !nameSet.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
-    target[key] = materializeElement(reader.read(key));
+    target[key] = gate === undefined || gate.allows(key) ? materializeElement(reader.read(key)) : gate.stubbedValue(key);
   };
 
   const proxy = new Proxy(target, {

@@ -75,7 +75,7 @@ describe("PayloadStoreFake — tiering + fault injection", () => {
     const store = new PayloadStoreFake();
     await store.put("hash-1", { value: { hello: "world" }, stampIds: [1, 2, 3] });
     const rec = await store.get("hash-1");
-    expect(rec).toEqual({ tier: "do", value: { hello: "world" }, stampIds: [1, 2, 3] });
+    expect(rec).toEqual({ tier: "do", value: { hello: "world" }, stampIds: [1, 2, 3], retention: "standard" });
   });
 
   it("oversize payload routes to 'pending' instead of 'do'", async () => {

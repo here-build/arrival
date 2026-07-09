@@ -49,6 +49,7 @@ export type {
   PayloadStore,
   PayloadTier,
   ProvenanceStore,
+  RetentionClass,
   StoredTemplate,
   StreamHeader,
   TemplateStore,
@@ -82,3 +83,36 @@ export {
   isEmissionEnabled,
   setEmissionEnabled,
 } from "./emit.js";
+
+// Q13 — event-sourced regions + flush (§5 C1/C3). `fold.ts` is the fold-as-recovery
+// law's implementation (pure, over `readStream`'s output); `flush.ts` is the
+// ring/port-completion-barrier contract (fake-backed; real wiring is Q15/Q16's).
+export type { FoldTrackCoordinate, RegionFoldState } from "./fold.js";
+export { foldRegionState, foldRegionStream, nextTrackOrdinal } from "./fold.js";
+
+export type { ProvenanceRingOptions } from "./flush.js";
+export { ProvenanceRing } from "./flush.js";
+
+// Q14 — payload tiering (§5 A1/m6): the `ring` tier `PayloadStore` doesn't model,
+// plus the read-side `PayloadEvidenceEnvelope` every `recorded`/`stub`-arm drill-in
+// answer carries, plus the egress-proxy `TierGate` integration.
+export type { PayloadEvidenceEnvelope } from "./tiering.js";
+export { evidenceTierOf, PayloadNotRingResident, PayloadTierMachine, tierGateFromSnapshot } from "./tiering.js";
+
+// Q12 — path-scoped RLE aggregation (§5 A6 + round-3 m4). `RunStore` is the
+// write-side hook's ADDITIVE companion port to `ProvenanceStore` (interfaces.ts);
+// `RunStoreFake` (fakes.ts) is its in-memory implementation; everything else is
+// `aggregate.ts`'s own surface — the type/runtime never-list door, fold/unfold,
+// and `AggregatingProvenanceStore`, the reference write-side hook.
+export type { RunStore } from "./interfaces.js";
+export { RunStoreFake } from "./fakes.js";
+export type { AggregatableRecord, FoldResult, RunKey, UnfoldedFact } from "./aggregate.js";
+export {
+  AggregatingProvenanceStore,
+  assertAggregatable,
+  foldRuns,
+  isAggregatableKind,
+  NeverAggregatable,
+  runKeyString,
+  unfoldRun,
+} from "./aggregate.js";
