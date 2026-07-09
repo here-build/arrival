@@ -282,11 +282,20 @@ behavior — local, cloud-free). Depends: Q12, Q13, Q14, Q17. Gate: all three co
 + four probes green. Risk: if headroom < stated, the spec's Appendix A re-opens — this
 gate exists to catch exactly that.
 
-**Q20 — eager-oracle demotion.** Lands: eager stamp accumulation compiled out of
-production hot paths (test-flag only, per C12); the W4 accumulation death. Depends:
-Q16 (oracle no longer needed in prod), Q19. Gate: standing + perf delta recorded;
-oracle mode still runs the agreement corpus in CI. Risk: flushes out hidden
-production readers of eager stamps — sweep before flipping. SWEEP LIST NAMED
+**Q20 — eager-oracle demotion.** SPLIT (V ruling 2026-07-09, sampler review):
+**Q20a LANDED early** (54e6347418, no Q16/Q19 dependency) — the flag write-side wired
+into `withInputProvenance`/`mintVerdict`: OFF skips stamp accumulation (filter +
+union allocations) while R1 boxing + ctx propagation stay intact; default UNCHANGED
+(true). The opt-OUT for provenance non-consumers (arrival-sampler's ~513
+calls/decode-step oracle loop opts out via `setEagerProvenanceOracleEnabled(false)`;
+module-global granularity by ruling — upgrade path if ever needed is a
+RunContext-carried flag). **Q20b — the demotion proper** lands here as originally
+scoped: default flip, stamp accumulation compiled out of production hot paths
+(test-flag only, per C12), the W4 accumulation death, sort-comparator host-schedule
+wiring (Q11b's documented deriveSortCompare gap). Depends: Q16 (oracle no longer
+needed in prod), Q19. Gate: standing + perf delta recorded; oracle mode still runs
+the agreement corpus in CI. Risk: flushes out hidden production readers of eager
+stamps — sweep before flipping (SWEEP LIST below). SWEEP LIST NAMED
 (integration research, docs/working-proposals/): **`@here.build/arrival-reflect`
 is the largest hidden production reader** — all six verbs project
 `ResultHandle.teleological()`'s EvalTrace (the §1-EXCLUDED representation);
