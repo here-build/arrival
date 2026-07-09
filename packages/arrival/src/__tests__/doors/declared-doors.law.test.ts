@@ -113,6 +113,20 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
       expectSubstantiveWhy(message);
     },
   );
+
+  // W0 (docs/working-proposals/symbol-define-static-program-validation.md) — the causal-
+  // chain UX's first link, wired through EVERY declared door: `common/capability.ts`'s door
+  // bind arm derives `cause = { owner: <this capability's name>, needs: [] }` for a
+  // `notImplemented` door (which never sets one itself), so the thrown message now leads
+  // with `name @ capability` — never a raw hash (§3.1's display discipline) — for the whole
+  // production population, not just a hand-picked few.
+  it.each(DOORS.map((d): [string, { name: string; reason: string; pack: string }] => [`${d.name} (${d.pack})`, d]))(
+    "(%s) doors: the message names `name @ owning-capability`",
+    async (_label, door) => {
+      const message = await fireDoor(door.name);
+      expect(message).toContain(`${door.name} @ ${door.pack}`);
+    },
+  );
 });
 
 // ============================================================================

@@ -29,6 +29,11 @@ import { tf } from "../tagless-final.js";
 // z.instanceof(...) codec's captured class permanently undefined, depending on which path
 // entered it first.
 import { makeCallCtx } from "./CallCtx.js";
+import { PurityError } from "../../errors.js";
+// TYPE-ONLY: erased at compile, so this stays a pure compile-time edge even though
+// common/symbols/_bake.ts has its own runtime path back to this file (via scheme-zod.ts,
+// see the makeCallCtx note above) — a REAL (value) import here would close that cycle.
+import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
  *  promise (JS-host entry). Non-value returns are narrowed out at the call boundary. */
@@ -218,9 +223,69 @@ export class ARosettaProcedure extends AValue {
   }
 }
 
+/** A bound DOOR VALUE (errors-as-doors — `symbol.notImplemented`, `common/capability.ts`'s
+ *  door bind arm) — the introspectable replacement for the pre-W0 anonymous throwing
+ *  closure (`env.set(verb, () => { throw … })`). Resolves like any other binding — a bare
+ *  reference is legal, only APPLICATION throws (`declared-doors.law.test.ts`'s "resolves at
+ *  lookup, fires only at apply" pin) — carrying the same teaching `PurityError` a door has
+ *  always thrown: BYTE-COMPATIBLE message/owner when the baked `door` carries no `cause`
+ *  (pre-W0 shape), and leading with `name @ owner` once one is stamped
+ *  (docs/working-proposals/symbol-define-static-program-validation.md §3.1's display
+ *  discipline — every identity in a diagnostic resolves to `name @ capability`, never a raw
+ *  hash). `.door` is the static introspection surface: the design's W3 validator (and
+ *  discovery, and the wireframe) read door-ness + cause off the bound value instead of an
+ *  opaque closure.
+ *
+ *  A sibling of ACallable's other concretes — extends `AValue` directly, joins the union
+ *  below — rather than a bare JS closure, so it fires through the SAME apply term the
+ *  evaluator's structural `is_applyable`/`is_callable_value` gates already dispatch
+ *  through (the call-head path, `=>`'s arrow-proc threading, `procedure?`, …) with no
+ *  special-casing at any call site. */
+export class DoorProcedure extends AValue {
+  readonly kind = "procedure" as const;
+  /** JS never enforced arity on the pre-W0 closure (an arrow fn declaring 0 params) — a
+   *  door fires unconditionally regardless of arg count. `{min: 0, max: null}` names that
+   *  honestly (unbounded-tolerant) and keeps `ACallable.arity` a total field across every
+   *  member of the union (srfi-235.ts's `procedure-min-arity` reads it off ANY callable
+   *  value — BYTE-COMPATIBLE: it read the same `.length === 0` off the old bare closure). */
+  readonly arity: Arity = { min: 0, max: null };
+
+  constructor(
+    readonly door: DoorSymbolDef,
+    ctx?: RunContext,
+  ) {
+    super(ctx ?? CONSTANT_CTX);
+  }
+
+  ["arrival/toJS"](): unknown {
+    return `#<procedure ${this.door.name}>`;
+  }
+  ["arrival/print"](): string {
+    return `#<procedure:${this.door.name}>`;
+  }
+  withProvenance(): SchemeValue {
+    return this;
+  }
+  ["arrival/tagless-final/equals"](other: unknown): boolean {
+    return callableEquals(this, other);
+  }
+  /** Fires UNCONDITIONALLY, before any argument is even looked at — matches the pre-
+   *  DoorProcedure closure's behavior (`declared-doors.law.test.ts` calls every door with
+   *  0 args, uniformly, regardless of its real arity). */
+  ["arrival/tagless-final/apply"](): never {
+    const owner = this.door.cause?.owner;
+    const message = owner
+      ? `${this.door.name} @ ${owner} is not available.\n  Why: ${this.door.reason}`
+      : `${this.door.name} is not available.\n  Why: ${this.door.reason}`;
+    throw new PurityError(message, this.door.name, owner);
+  }
+}
+
 /** The callable union — of concrete classes, not an abstract parent (better narrowing, clean
- *  `kind` discrimination, and it drops cleanly into the SchemeValue union). */
-export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure;
+ *  `kind` discrimination, and it drops cleanly into the SchemeValue union). `DoorProcedure`
+ *  joins it (W0) so `is_callable_value`/`z.lambda`'s raw predicate stay SOUND — a door is a
+ *  genuine callable value (it has an apply term, the "procedure" kind), not a lesser shape. */
+export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorProcedure;
 
 /**
  * The single invocation seam every callback site routes through — the evaluator call-head, the

@@ -17,7 +17,7 @@ import { ABool } from "./primitives/ABool.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
-import { ALambda, ANativeProcedure, ARosettaProcedure, type ACallable } from "./primitives/ACallable.js";
+import { ALambda, ANativeProcedure, ARosettaProcedure, DoorProcedure, type ACallable } from "./primitives/ACallable.js";
 import { CLASS } from "../well-known-symbols.js";
 import { tf } from "./tagless-final.js";
 // Type-only — narrows the brand result to the evaluator's macro/syntax types so
@@ -67,10 +67,7 @@ export function is_false(o: unknown): o is false | null | ABool {
 }
 
 export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | AInexact =>
-  obj instanceof AString ||
-  obj instanceof ACharacter ||
-  obj instanceof AExact ||
-  obj instanceof AInexact;
+  obj instanceof AString || obj instanceof ACharacter || obj instanceof AExact || obj instanceof AInexact;
 
 /**
  * `is_macro` WITHOUT an import edge into the evaluator. A Macro / Syntax /
@@ -121,9 +118,20 @@ export function is_rosetta_procedure(o: unknown): o is ARosettaProcedure {
 export function is_procedure(o: unknown): o is ANativeProcedure | ARosettaProcedure {
   return o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
 }
-/** Any callable value — a lambda or a host-JS primitive. */
+/** A bound DOOR (errors-as-doors — `symbol.notImplemented`) — resolves like any other
+ *  binding, throws its teaching `PurityError` only on application. See `DoorProcedure`'s
+ *  own doc (ACallable.ts) for why it's a real callable value, not a bare closure. */
+export function is_door_procedure(o: unknown): o is DoorProcedure {
+  return o instanceof DoorProcedure;
+}
+/** Any callable value — a lambda, a host-JS primitive, or a door. */
 export function is_callable_value(o: unknown): o is ACallable {
-  return o instanceof ALambda || o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
+  return (
+    o instanceof ALambda ||
+    o instanceof ANativeProcedure ||
+    o instanceof ARosettaProcedure ||
+    o instanceof DoorProcedure
+  );
 }
 
 /** Structural, not nominal — unlike `is_callable_value`'s closed `ACallable` union, this

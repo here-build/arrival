@@ -17,7 +17,13 @@ import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { R7RSError } from "../errors.js";
-import { ALambda, ANativeProcedure, ARosettaProcedure, applyCallback } from "../values/primitives/ACallable.js";
+import {
+  ALambda,
+  ANativeProcedure,
+  ARosettaProcedure,
+  DoorProcedure,
+  applyCallback,
+} from "../values/primitives/ACallable.js";
 import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../values/primitives/region-scope.js";
 // Leaf with ZERO own imports (see header) — safe from scheme-zod.ts's cycles, same rationale as rosetta.ts.
 import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
@@ -426,13 +432,18 @@ export const bytevector = named(
 );
 
 /** Raw predicate for a callable — callable VALUE (ALambda/ANativeProcedure/
- *  ARosettaProcedure, post-B2 shape every builtin binds as) or plain JS function.
+ *  ARosettaProcedure/DoorProcedure, post-B2 shape every builtin binds as) or plain JS
+ *  function.
  *  [RETAGGED 2026-07-09] B4 audited with THREE independent live bare-fn producers;
  *  reverse-membrane-for-callables.md §3 "Step 1" (named-let → ALambda) and "Step 2"
  *  (curry → prelude + `procedure-min-arity` native) landed same day, retiring two. One
  *  survivor: `env.defineRosetta`'s legacy form / McpEnvCapability's inline-annotation
  *  authoring shape (gate: McpEnvCapability annotation-lifting, undone — separate migration).
- *  Narrows to ACallable union alone only once that lands. */
+ *  Narrows to ACallable union alone only once that lands.
+ *  [W0, 2026-07-10] `DoorProcedure` joins the instanceof arms — a bound door is a first-
+ *  class callable value now (`common/capability.ts`'s door bind arm), not a bare closure;
+ *  passing one where a `z.lambda` is expected still type-checks and still throws its
+ *  teaching `PurityError` the moment it's actually invoked. */
 export const lambda = named(
   "lambda",
   z.custom<(...args: unknown[]) => unknown>(
@@ -440,7 +451,8 @@ export const lambda = named(
       typeof v === "function" ||
       v instanceof ALambda ||
       v instanceof ANativeProcedure ||
-      v instanceof ARosettaProcedure,
+      v instanceof ARosettaProcedure ||
+      v instanceof DoorProcedure,
   ),
 );
 

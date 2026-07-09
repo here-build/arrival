@@ -379,11 +379,57 @@ export interface SequenceSymbolDef {
   readonly callbackRoles?: CallbackRoles;
 }
 
-/** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
+/** Structured CAUSE for a door (docs/working-proposals/symbol-define-static-program-
+ *  validation.md §W0) — the owning capability + WHAT missing input would satisfy it,
+ *  so a static reader (the design's W3 validator, discovery, the wireframe) can derive
+ *  V's causal chain from a bound door instead of reaching into an anonymous throwing
+ *  closure (capability.ts's pre-W0 `env.set(verb, () => { throw … })`).
+ *
+ *  ADDITIVE, stamped SEPARATELY from `notImplemented()` — the factory (`./notImplemented.js`)
+ *  is called from inside a `symbols` record literal, before the `EnvCapability` wrapping it
+ *  exists, so it cannot know its own owner. `common/capability.ts`'s door bind arm derives
+ *  `owner` from the binding capability's OWN `name` at bake (`lower().apply()`), with
+ *  `needs: []`: a `notImplemented` door is a PERMANENT design omission (set!, call/cc,
+ *  mutators — R7RS features arrival omits by the purity invariant), never conditional on an
+ *  absent config/dep, so it has nothing to list there. A NON-EMPTY `needs` is the door-SET-
+ *  DEGRADATION kind (design doc §3.7, a later wave — a capability lowered degraded because a
+ *  declared config key was ABSENT) — not produced by anything in this wave.
+ *
+ *  `needs` SCOPE, narrowed vs. the design doc's illustrative §3.3(b)(1) shape (a 3-model
+ *  grounded-audit finding, folded into W0 mid-flight): the doc's `needs` union also names
+ *  `dependency`/`resource` kinds, but a `dependency` need has an UNRESOLVED design hole —
+ *  naming an UNROOTED capability (one absent from the assembled root set, so its own doors
+ *  never bind at all — C3 pulls deps as object edges, not string ids) has no policy yet, and
+ *  inventing one here would be exactly the kind of undesigned decision this file shouldn't
+ *  make. W0 ships only what's actually derivable at bake with no open question: the owning
+ *  capability's id + its own declared `configuration` schema keys. `dependency` (and any
+ *  `resource` need — a capability's own resource, not subject to the SAME unrooted-naming
+ *  hole, but equally unpopulated by anything in this wave) lands in a later wave once that
+ *  policy is designed — this type grows additively then, exactly like `cause` grew onto
+ *  `DoorSymbolDef` here. */
+export interface DoorCause {
+  readonly owner: string;
+  readonly needs: readonly { readonly kind: "configuration"; readonly key: string; readonly hint?: string }[];
+}
+
+/** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason.
+ *  `cause` is ADDITIVE (`DoorCause`, above) — `notImplemented()` never sets it (byte-
+ *  compatible: the factory's return shape is unchanged); `common/capability.ts` stamps
+ *  it at bake for every door it binds. Absent only for a `DoorSymbolDef` built and used
+ *  OUTSIDE that bind path (a raw `symbol.notImplemented` template read directly, as
+ *  `symbol.test.ts` pins).
+ *
+ *  `preludeOnly` — see `Contract.preludeOnly` (KIND-AGNOSTIC). No `notImplemented` door
+ *  sets it today (grep-verified: every declared door binds into the runtime env), but
+ *  `capability.ts`'s door bind arm routes through the SAME `bindTarget(def)` every other
+ *  kind does, so a future door WOULD honor it — the field exists so that routing is
+ *  actually meaningful, not just structurally present. */
 export interface DoorSymbolDef {
   readonly kind: "door";
   readonly name: string;
   readonly reason: string;
+  readonly cause?: DoorCause;
+  readonly preludeOnly?: boolean;
 }
 
 /** A kernel KEYWORD: special form, made first-class. `lower()` binds `new Keyword(name)`; the

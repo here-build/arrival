@@ -51,6 +51,7 @@ export type {
   TaglessGuardSymbolDef,
   SequenceSymbolDef,
   DoorSymbolDef,
+  DoorCause,
   KeywordSymbolDef,
   MacroSymbolDef,
   AEntity,

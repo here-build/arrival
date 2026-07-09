@@ -1,0 +1,155 @@
+// DoorCause + DoorProcedure — W0 of docs/working-proposals/symbol-define-static-program-
+// validation.md ("SYMBOL.DEFINE W0 — door metadata"). Pins the causal-chain UX's FIRST
+// link: a bound door is no longer an anonymous throwing closure (capability.ts's pre-W0
+// `env.set(verb, () => { throw … })`) — it's an introspectable `DoorProcedure` carrying
+// its baked `DoorSymbolDef` (`.door`), whose `cause` (owning capability + `needs`, both
+// additive) travels into the thrown `PurityError`'s `.owner` + message. Two unit planes:
+//   1. `DoorProcedure` in isolation (no capability/env involved) — `.door` exposure, the
+//      byte-compatible cause-less throw, the `name @ owner` caused throw.
+//   2. `common/capability.ts`'s door bind arm — every door it binds gets a cause DERIVED
+//      from the owning capability's own `name`, `needs: []` (a `notImplemented` door is a
+//      permanent design omission, never conditional on an absent config/dep).
+//
+// The DECLARATION-DRIVEN law over the ~100 production doors (every BASE_PACKS door gets
+// `cause.owner` = its pack) is pinned in the sibling `declared-doors.law.test.ts`.
+
+import { describe, expect, it } from "vitest";
+import { symbol } from "../../common/symbol.js";
+import { DoorProcedure } from "../../values/primitives/ACallable.js";
+import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
+import { PurityError } from "../../errors.js";
+import { EnvCapability } from "../../common/capability.js";
+import type { ResolverSpec, RosettaSpec, SchemeEnv } from "../../common/scheme-env.js";
+
+describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
+  it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
+    const def = symbol.notImplemented`stub: a teaching stub`;
+    const proc = new DoorProcedure(def);
+    expect(proc.door).toBe(def);
+    expect(is_door_procedure(proc)).toBe(true);
+    // A door is a genuine callable value (it has an apply term) — is_callable_value
+    // must recognize it too, or `=>`/z.lambda-typed call sites would mis-dispatch it.
+    expect(is_callable_value(proc)).toBe(true);
+  });
+
+  it("resolves like any other value — constructing/holding a DoorProcedure never throws (only APPLY does)", () => {
+    const def = symbol.notImplemented`stub: a teaching stub`;
+    expect(() => new DoorProcedure(def)).not.toThrow();
+  });
+
+  it("PurityError is BYTE-COMPATIBLE for a cause-less door: same message/owner as pre-W0", () => {
+    const def = symbol.notImplemented`stub: a teaching stub`;
+    expect(def.cause).toBeUndefined();
+    const proc = new DoorProcedure(def);
+    let caught: unknown;
+    try {
+      proc["arrival/tagless-final/apply"]();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(PurityError);
+    const err = caught as PurityError;
+    // Byte-identical to the pre-W0 template (`${def.name} is not available.\n  Why: ${def.reason}`)
+    expect(err.message).toBe("stub is not available.\n  Why: a teaching stub");
+    expect(err.feature).toBe("stub");
+    expect(err.owner).toBe("owned-by/purity-invariant");
+  });
+
+  it("a CAUSED door leads its message with `name @ owner` (never a raw hash) and carries cause.owner as `.owner`", () => {
+    const raw = symbol.notImplemented`stub: a teaching stub`;
+    const def = { ...raw, cause: { owner: "test/pack", needs: [] } };
+    const proc = new DoorProcedure(def);
+    let caught: unknown;
+    try {
+      proc["arrival/tagless-final/apply"]();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(PurityError);
+    const err = caught as PurityError;
+    expect(err.message).toBe("stub @ test/pack is not available.\n  Why: a teaching stub");
+    expect(err.owner).toBe("test/pack");
+  });
+
+  it("fires UNCONDITIONALLY — no args needed, matches the pre-DoorProcedure closure's 0-arg call shape", () => {
+    const def = symbol.notImplemented`stub: a teaching stub`;
+    const proc = new DoorProcedure(def);
+    expect(() => proc["arrival/tagless-final/apply"]()).toThrow(PurityError);
+  });
+});
+
+/** A recording SchemeEnv — captures every `set()` call by name, throws loudly on any
+ *  surface this suite doesn't exercise (mirrors common/__tests__/capability.test.ts's
+ *  own `recordingEnv`, local here since that one's `set` is a deliberate no-op stub). */
+function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
+  const bound = new Map<string, unknown>();
+  const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
+  const env: SchemeEnv = {
+    set: (name, value) => {
+      bound.set(name, value);
+      return value;
+    },
+    get: (name) => bound.get(name),
+    defineRosetta: (_name: string, _cfg: RosettaSpec) => {
+      throw unrecordable("defineRosetta");
+    },
+    inherit: () => env,
+    registerResolver: (_r: ResolverSpec) => {
+      throw unrecordable("registerResolver");
+    },
+    list: () => [...bound.keys()],
+    allBoundNames: () => [...bound.keys()],
+  };
+  return { env, bound };
+}
+
+describe("common/capability.ts's door bind arm — cause DERIVED from the owning capability", () => {
+  it("stamps cause = { owner: <capability name>, needs: [] } for a notImplemented door with no cause of its own", async () => {
+    const cap = new EnvCapability("test/door-cap", {
+      symbols: {
+        stub: symbol.notImplemented`stub: a teaching stub`,
+      },
+    });
+    const { env, bound } = recordingEnv();
+    await cap.lower({}).apply(env, undefined as never);
+
+    const proc = bound.get("stub");
+    expect(proc).toBeInstanceOf(DoorProcedure);
+    const door = (proc as DoorProcedure).door;
+    expect(door.cause).toEqual({ owner: "test/door-cap", needs: [] });
+  });
+
+  it("firing the bound door throws PurityError naming `name @ capability`", async () => {
+    const cap = new EnvCapability("test/door-cap-2", {
+      symbols: {
+        stub: symbol.notImplemented`stub: a teaching stub`,
+      },
+    });
+    const { env, bound } = recordingEnv();
+    await cap.lower({}).apply(env, undefined as never);
+
+    const proc = bound.get("stub") as DoorProcedure;
+    let caught: unknown;
+    try {
+      proc["arrival/tagless-final/apply"]();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(PurityError);
+    expect((caught as PurityError).message).toBe("stub @ test/door-cap-2 is not available.\n  Why: a teaching stub");
+    expect((caught as PurityError).owner).toBe("test/door-cap-2");
+  });
+
+  it("a door constructed with its OWN cause already set passes through unchanged (the degradation-minted door path, not touched here)", async () => {
+    const preCaused = { ...symbol.notImplemented`stub: a teaching stub`, cause: { owner: "elsewhere/pack", needs: [] } };
+    const cap = new EnvCapability("test/door-cap-3", {
+      symbols: { stub: preCaused },
+    });
+    const { env, bound } = recordingEnv();
+    await cap.lower({}).apply(env, undefined as never);
+
+    const door = (bound.get("stub") as DoorProcedure).door;
+    // NOT overwritten with "test/door-cap-3" — the capability trusts an already-stamped cause.
+    expect(door.cause).toEqual({ owner: "elsewhere/pack", needs: [] });
+  });
+});

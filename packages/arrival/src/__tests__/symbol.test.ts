@@ -244,6 +244,16 @@ describe("symbol.notImplemented — errors-as-doors", () => {
     expect(def.name).toBe("set!");
     expect(def.reason).toMatch(/mutates/);
   });
+
+  // W0 (docs/working-proposals/symbol-define-static-program-validation.md) — signature/
+  // return-shape SOURCE-COMPATIBILITY pin: the factory still bakes no `cause` at all. It
+  // cannot know its own owning capability (it runs inside a `symbols` record literal,
+  // before the `EnvCapability` wrapping it exists) — `common/capability.ts`'s door bind
+  // arm stamps `cause` separately, at apply.
+  it("bakes NO `cause` — the factory has no owning capability to stamp yet", () => {
+    const def = symbol.notImplemented`stub: a teaching stub`;
+    expect(def.cause).toBeUndefined();
+  });
 });
 
 describe("name/doc parsing", () => {

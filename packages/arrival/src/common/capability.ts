@@ -17,10 +17,14 @@ import { z } from "zod";
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
-import type { AEntity } from "./symbol.js";
-import { PurityError } from "../errors.js";
+import type { AEntity, DoorSymbolDef } from "./symbol.js";
 import { Keyword } from "../values/Keyword.js";
-import { ANativeProcedure, ARosettaProcedure, type CallableImpl } from "../values/primitives/ACallable.js";
+import {
+  ANativeProcedure,
+  ARosettaProcedure,
+  DoorProcedure,
+  type CallableImpl,
+} from "../values/primitives/ACallable.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 // The dependency-free ambient leaf (see its header): the evaluator installs the current
 // invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
@@ -174,6 +178,12 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
    *  exists); `config` is validated against the `configuration` schemas. */
   lower(opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>> } = {}): LoweredPack {
     const { spec, name } = this;
+    // A SEPARATE alias for `apply()`'s door-bind arm: the per-symbol loop below rebinds
+    // `name` to each entry's OWN key (`for (const [name, def] of Object.entries(...))`),
+    // shadowing this capability-level `name` for the rest of that block — reading `name`
+    // from inside the "door" case would stamp the SYMBOL's name as the cause owner, not
+    // the capability's.
+    const capabilityName = name;
 
     const schema = spec.configuration ? z.object(spec.configuration as ZodMap) : z.object({});
     const configuration = schema.parse(opts.config ?? {}) as InferCfg<C>;
@@ -353,14 +363,27 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 bindTarget(def).set(verb, proc);
                 break;
               }
-              case "door":
-                // errors-as-doors: an OMITTED verb. Bind a throw carrying the teaching
-                // reason; the door's `name` is its omitted-set membership (PurityError.feature
-                // — the routing/telemetry key, mirroring core.ts's %purity-door → PurityError).
-                env.set(verb, () => {
-                  throw new PurityError(`${def.name} is not available.\n  Why: ${def.reason}`, def.name);
-                });
+              case "door": {
+                // errors-as-doors: an OMITTED verb. Bind an INTROSPECTABLE DoorProcedure
+                // (design doc symbol-define-static-program-validation.md §W0) — the causal-
+                // chain UX's first link. `def.cause` is stamped HERE when a `symbol.
+                // notImplemented` door carries none (the factory can't know its own
+                // capability — see notImplemented.ts): owner = this capability's OWN `name`,
+                // needs = [] (a permanent design omission, never caused by an absent
+                // config/dep — a non-empty `needs` is the door-set-degradation kind, a later
+                // wave). A door that already carries a cause (minted by that later wave)
+                // passes through unchanged. Firing still throws the same teaching
+                // `PurityError` (DoorProcedure's own doc) — `PurityError.feature`/`.owner`
+                // — the routing/telemetry keys, mirroring core.ts's %purity-door → PurityError.
+                const doorDef: DoorSymbolDef = def.cause
+                  ? def
+                  : { ...def, cause: { owner: capabilityName, needs: [] } };
+                // Routes through `bindTarget`, same as every other kind (a `preludeOnly`
+                // door — none exist yet, but the field is real on `DoorSymbolDef` now —
+                // binds into the assembly's prelude scope, not the runtime env).
+                bindTarget(def).set(verb, new DoorProcedure(doorDef));
                 break;
+              }
               case "keyword":
                 // kernel KEYWORD: bind the first-class marker the evaluator dispatches on.
                 // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of

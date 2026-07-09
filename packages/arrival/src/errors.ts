@@ -173,15 +173,21 @@ export function isHostRuntimeBug(e: unknown): boolean {
 // -------------------------------------------------------------------------
 export class PurityError extends ArrivalError {
   static [CLASS] = "purity-error";
-  public readonly owner = "owned-by/purity-invariant";
+  public readonly owner: string;
   public readonly name = "PurityError";
 
   constructor(
     message: string,
     /** The omitted feature, e.g. "set-cdr!" — internal routing/telemetry key. */
     public readonly feature: string,
+    /** The door's owning capability (`DoorCause.owner`, docs/working-proposals/
+     *  symbol-define-static-program-validation.md §W0) when the throwing `DoorProcedure`
+     *  carries a stamped cause. Absent ⇒ the pre-W0 fixed wall
+     *  ("owned-by/purity-invariant") — BYTE-COMPATIBLE for a cause-less door. */
+    owner?: string,
   ) {
     super(message);
+    this.owner = owner ?? "owned-by/purity-invariant";
   }
 }
 
