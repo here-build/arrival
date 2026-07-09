@@ -17,6 +17,12 @@
 //   • `string-split` is SRFI-152, not SRFI-13 — bound here because it is the
 //     most-reached-for missing symbol; its docstring says so.
 //
+// FOLLOW-UP (contract-layer gap this pack exercises hardest): scheme-zod has no
+// element-typed list schema, so `string-join`/`string-tokenize`/`string-split`
+// carry author-asserted `type:` strings (`List<string>`) over `z.value` contracts.
+// When scheme-zod grows a `z.list(z.string)` codec, the three author assertions
+// here retire — the honest images become derivable.
+//
 // PROVENANCE discipline mirrors `scheme/strings`: booleans/indices/counts derived
 // from inputs stamp `withInputProvenance`; sliced/derived strings stamp the source
 // string's lineage; the COLLAPSING op (`string-join`) re-stamps the DEEP union via
@@ -36,50 +42,13 @@ import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { APair, isCircularList } from "../../values/primitives/APair.js";
+import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_false, is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
-import { heapBudgetMessage } from "../../heap-budget.js";
-import { ArrivalError } from "../../eval/evaluator.js";
-import { ctxOf } from "../../values/primitives/AValue.js";
+import { to_array } from "../pack-helpers.js";
 import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
-
-// Pack-local copy of the list→array bridge helper `string-join` needs — byte-identical
-// to the strings.ts/lists.ts copies (incl. the per-run heap-meter charge at the
-// collection choke); pack isolation forbids a cross-pack import.
-function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
-  return function recur(list: SchemeValue): SchemeValue[] {
-    if (list instanceof ANil) {
-      return [];
-    }
-    invariant(list instanceof APair, `${name}: can't convert a non-list`);
-    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    // Heap meter off the operand's ctx — the designed operand-ctx read (RunContext.ts),
-    // replacing the retired `currentRunEnv()` env back-channel.
-    const meter = ctxOf(list).heapMeter;
-    const result: SchemeValue[] = [];
-    let node: unknown = list;
-    while (true) {
-      if (node instanceof APair) {
-        if (node.have_cycles("cdr")) {
-          break;
-        }
-        const car = node.car;
-        result.push(car);
-        if (meter !== undefined && ++meter.used > meter.max) {
-          throw new ArrivalError(heapBudgetMessage(meter.max), []);
-        }
-        node = node.cdr;
-      } else {
-        invariant(node instanceof ANil, `${name}: can't convert improper list`);
-        break;
-      }
-    }
-    return result;
-  };
-}
 
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE

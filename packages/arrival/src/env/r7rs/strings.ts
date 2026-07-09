@@ -52,40 +52,7 @@ import {
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
 import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
-// Pack-local copy of the list->array helper `join` needs (lists.ts carries its
-// own copy — pack isolation forbids a cross-pack import), including the per-run
-// heap-meter charge levied at the collection choke.
-function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
-  return function recur(list: SchemeValue): SchemeValue[] {
-    if (list instanceof ANil) {
-      return [];
-    }
-    // `list`'s declared param type is the wide `SchemeValue` (not `AListAlike`) — isCircularList
-    // only accepts a Pair, so narrow here; a non-Pair reaches the loop's own `ANil` invariant below.
-    invariant(!(list instanceof APair && isCircularList(list)), `${name}: can't convert a circular list`);
-    // Heap meter off the operand's ctx (RunContext.ts).
-    const meter = ctxOf(list).heapMeter;
-    const result: SchemeValue[] = [];
-    let node = list;
-    while (true) {
-      if (node instanceof APair) {
-        if (node.have_cycles("cdr")) {
-          break;
-        }
-        const car = node.car;
-        result.push(car);
-        if (meter !== undefined && ++meter.used > meter.max) {
-          throw new ArrivalError(heapBudgetMessage(meter.max), []);
-        }
-        node = node.cdr;
-      } else {
-        invariant(node instanceof ANil, `${name}: can't convert improper list`);
-        break;
-      }
-    }
-    return result;
-  };
-}
+import { to_array } from "../pack-helpers.js";
 
 export default new EnvCapability("scheme/strings", {
   symbols: {

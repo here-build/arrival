@@ -27,9 +27,9 @@
 //     bound as throwing procedures: a model that CALLS one gets the teaching door;
 //     a bare reference resolves to the throwing closure without firing. Acceptable
 //     — the reach we care about is the call site. (Sub-note: `parseNameDoc` splits
-//     the template on the first colon, so these three doors' `def.name` reports
-//     `char-set` rather than the full colon-name; the binding KEY — the object key
-//     below — is correct, and the reason still carries the full redirect.)
+//     on the first COLON-SPACE (": "), not the first colon — fixed in the law-grid
+//     bug batch precisely because these colon-named doors were truncating to
+//     `char-set`; `def.name` now reports the full `char-set:whitespace`.)
 //
 // No file-port symbol here is stubbed by `r7rs/host.ts`: host.ts doors the port
 // PRIMITIVES (current-*-port, read/write/display, open-*-string, eof-object) and

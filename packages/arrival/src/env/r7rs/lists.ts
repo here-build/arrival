@@ -32,6 +32,7 @@ import { type, typeErrorMessage } from "../../utils/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
+import { to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -59,40 +60,9 @@ const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue =
 // `unknown`), so this two-arg adapter is the exact contracted shape.
 const defaultCompare = (a: unknown, b: unknown): unknown => structuralEqual(a, b);
 
-// Pack-local copies of the list<->array bridge helpers. The stdlib originals
-// (`listToArray`/`arrayToList`/`to_array`/`isProperList`) stay in stdlib.ts for
-// its remaining consumers; these reproduce the same logic byte-for-byte (incl.
-// the per-run heap-meter charge `to_array` levies at the collection choke) so
-// the relocated defs are behavior-identical.
-function to_array(name: string): (list: AListAlike) => SchemeValue[] {
-  return function recur(list: AListAlike): SchemeValue[] {
-    if (list instanceof ANil) {
-      return [];
-    }
-    invariant(!isCircularList(list), `${name}: can't convert a circular list`);
-    // Heap meter off the OPERAND's ctx: a run-built list carries the run's RunContext;
-    // a quoted literal carries CONSTANT_CTX → no meter (and is parse-bounded anyway).
-    const meter = ctxOf(list).heapMeter;
-    const result: SchemeValue[] = [];
-    let node: unknown = list;
-    while (true) {
-      if (node instanceof APair) {
-        if (node.have_cycles("cdr")) {
-          break;
-        }
-        result.push(node.car);
-        if (meter !== undefined && ++meter.used > meter.max) {
-          throw new ArrivalError(heapBudgetMessage(meter.max), []);
-        }
-        node = node.cdr;
-      } else {
-        invariant(node instanceof ANil, `${name}: can't convert improper list`);
-        break;
-      }
-    }
-    return result;
-  };
-}
+// list<->array bridge: the shared env-layer helper (pack-helpers.ts) — was a
+// pack-local copy triplicated across lists/strings/srfi-13; the old comment's
+// "stdlib originals stay in stdlib.ts" referenced a file deleted long ago.
 const listToArray = to_array("list->array");
 
 function arrayToList(array: SchemeValue[]): SchemeValue {
