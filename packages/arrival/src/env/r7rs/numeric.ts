@@ -1,43 +1,27 @@
 /**
- * Numeric core pack — the carved-out home of the R7RS numeric primitives.
+ * R7RS numeric core — each op bound via `symbol.native` (LOOSE types-only
+ * contract; the impl IS the binding, capability.ts `case "native"`).
  *
- * This is the dissolution of the legacy `Operator`/`Codec`/`wrappedOps` model
- * (membrane.ts + operators/numeric.ts + the long-dead bridge.ts's `wrapOperator` —
- * bridge itself dissolved at 2bfefd7455; the historical names below are lineage,
- * not live citations). Each op is bound via `symbol.native` under a LOOSE
- * types-only contract — the impl IS the binding (capability.ts `case "native"`
- * binds it as an ANativeProcedure).
- *
- * `nativeNumericOp` is the numeric pack's per-op wrapper (historically
- * `wrapOperator ⊕ Operator.call`, both dead), three concerns inline:
- *   1. provenance — union the AValue inputs; stamp the result; boolean verdicts
- *      via the R8 mint (`mintVerdict` — flyweight when provenance-free, fresh
- *      stamped ABool when lineage rides);
+ * `nativeNumericOp` — pack's per-op wrapper, three concerns inline:
+ *   1. provenance — union AValue inputs, stamp result; boolean verdicts via R8
+ *      mint (`mintVerdict`: flyweight when provenance-free, fresh ABool otherwise);
  *   2. coercion + error-naming — `coerceNumeric` each arg, naming the bad index;
- *   3. codec marshalling — per-arg `match`+`toJS` decode → `fn` → `out.fromJS`.
+ *   3. codec marshalling — per-arg decode → `fn` → `out.fromJS`.
  *
- * (Tier-2 speculative evaluation — a HalfBaked cardinality-interval early-collapse read
- * on the five comparison ops — was ejected; see
- * docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL: zero production
- * reachability, superseded by R2/C3 struct-fact wires.)
+ * NCodec family DISSOLVED (uniform-vocabulary ruling): `NumSpec.in`/`inRest`/`out`
+ * are now the real `z.ZodTypeAny` from scheme-zod.ts — ONE vocabulary, consumed by
+ * both `marshalCall` (runtime) and `contractFromSpec` (type-inference face).
+ * `marshalCall`'s doc below carries the two identity special-cases (`z.schemeNumber`,
+ * `z.boolean`) this surfaced.
  *
- * [DISSOLVED 2026-07-09, uniform-vocabulary ruling] The pack used to carry its own
- * `NCodec` family — a 6-entry hand-synced shadow of scheme-zod.ts's real codecs
- * (`SchemeNum`/`AnyNum`/`Int`/`SafeInt`/`Num`/`Bool` next to `z.schemeNumber`/
- * `z.bigint`/`z.integer`/`z.number`/`z.boolean`, ONE table (`CODEC_SCHEMA`) hand-
- * mapping between them, never runtime-checked for drift). `NumSpec.in`/`inRest`/`out`
- * are now real `z.ZodTypeAny` — scheme-zod.ts's OWN codecs, consumed directly by both
- * `marshalCall` (runtime) and `contractFromSpec` (the `.d.ts`/type-inference face) —
- * ONE vocabulary, not two kept in sync by hand. `marshalCall`'s own doc comment below
- * carries the two identity special-cases (`z.schemeNumber`, `z.boolean`) this
- * dissolution surfaced.
+ * Tier-2 HalfBaked speculative eval (comparison ops) ejected — VERDICT KILL
+ * (docs/working-proposals/halfbaked-existence-review.md): superseded by R2/C3.
  */
 
 import * as z from "../../common/scheme-zod.js";
 import invariant from "tiny-invariant";
-// `TypeError.invariant` (used below, e.g. `marshalCall`) is a global augmentation —
-// import it explicitly so this file's correctness doesn't depend on some OTHER module
-// in the load graph happening to import it first.
+// `TypeError.invariant` is a global augmentation — import explicitly so correctness
+// doesn't depend on load order.
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -63,10 +47,7 @@ import { type } from "../../utils/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
 
 // ════════════════════════════════════════════════════════════════════════════
-// nativeNumericOp — the pack's per-op wrapper. (Historically a byte-for-byte
-// reproduction of bridge.ts's `wrapOperator` ⊕ membrane's `Operator.call`;
-// both ancestors are deleted — bridge at 2bfefd7455 — and this is now the
-// only implementation, evolved past them: R8 mintVerdict, A4 always-box.)
+// nativeNumericOp — pack's per-op wrapper (R8 mintVerdict, A4 always-box).
 // ════════════════════════════════════════════════════════════════════════════
 
 interface NumSpec {
@@ -77,22 +58,16 @@ interface NumSpec {
 }
 
 /**
- * Per-arg DECODE (scheme → JS) via the schema's own `.safeParse` — the schema IS the
- * NCodec `match`+`toJS` fusion now (uniform-vocabulary ruling). Two runtime realities
- * this absorbs, both verified empirically against zod 4.3.6:
- *
- *  1. `.safeParse` does NOT catch a raw THROW from inside a codec's `decode` — this
- *     module's codecs use `Error.invariant`/`TypeError.invariant` (bare `throw`, not
- *     `ctx.addIssue`), so a mismatch can surface as EITHER `{success:false}` OR an
- *     uncaught exception straight through `.safeParse`. Both normalize here to the
- *     SAME `${name}: argument ${index} type mismatch` door the old NCodec.match threw.
- *  2. `z.schemeNumber` is special-cased to IDENTITY. Its real decode does NOT
- *     reproduce the old `SchemeNum` NCodec's passthrough — it unwraps AExact/AInexact
- *     to a raw bigint/number (and its `exact` half DOORS on a non-integer rational,
- *     e.g. `1/2`) — wrong for every SchemeNum-role fn (`schemeAdd`, `schemeCompare`,
- *     …), which already received a `coerceNumeric`d ANumeric from `applyNumeric` and
- *     operates on that ANumeric directly. `===` identity is safe: `z.schemeNumber` is
- *     a module singleton exported once from scheme-zod.ts.
+ * Per-arg DECODE (scheme → JS) via the schema's own `.safeParse` (uniform-vocabulary
+ * ruling — the schema IS the NCodec `match`+`toJS` fusion). Two runtime realities:
+ *  1. `.safeParse` does NOT catch a raw THROW from a codec's `decode` — codecs here
+ *     use `Error.invariant`/`TypeError.invariant` (bare `throw`, not `ctx.addIssue`),
+ *     so a mismatch surfaces as EITHER `{success:false}` OR an uncaught exception;
+ *     both normalize to the SAME `${name}: argument ${index} type mismatch` door.
+ *  2. `z.schemeNumber` → IDENTITY. Its real decode unwraps AExact/AInexact to a raw
+ *     bigint/number (and its `exact` half DOORS on non-integer rationals) — wrong for
+ *     SchemeNum-role fns, which already hold a `coerceNumeric`d ANumeric. `===` is
+ *     safe: `z.schemeNumber` is a module singleton.
  */
 function decodeArg(name: string, index: number, schema: z.ZodTypeAny, arg: unknown): unknown {
   if ((schema as unknown) === z.schemeNumber) {
@@ -110,14 +85,11 @@ function decodeArg(name: string, index: number, schema: z.ZodTypeAny, arg: unkno
 }
 
 /**
- * Encode a JS result back to a scheme value via the schema's `z.encode` — the SAME
- * `z.schemeNumber`-identity special case as `decodeArg` (every SchemeNum-out `fn`
- * already returns an ANumeric directly), PLUS `z.boolean`: its real encode mints a
- * fresh `ABool`, but `nativeNumericOp`'s R8 `mintVerdict` step (below) owns that
- * boxing — the union of the CALL's operand provenance, not a single result value's —
- * so an ABool minted here would be the wrong box, silently overwritten downstream.
- * Matches the OLD `Bool` NCodec's own doc: "identity — the box happens in the
- * provenance stamp."
+ * Encode a JS result to a scheme value via `z.encode` — the SAME `z.schemeNumber`
+ * identity special case as `decodeArg`, PLUS `z.boolean`: its real encode mints a
+ * fresh `ABool`, but `nativeNumericOp`'s R8 `mintVerdict` step owns that boxing (the
+ * union of the CALL's operand provenance, not a single result's) — an ABool minted
+ * here would be the wrong box, silently overwritten downstream.
  */
 function encodeResult(schema: z.ZodTypeAny, result: unknown): unknown {
   if ((schema as unknown) === z.schemeNumber || (schema as unknown) === z.boolean) return result;
@@ -125,12 +97,10 @@ function encodeResult(schema: z.ZodTypeAny, result: unknown): unknown {
 }
 
 /**
- * The raw `Operator.call` marshalling — arity guard + per-arg schema decode + the
- * `fn` + output encode, WITHOUT the provenance/coerce layer. `nativeNumericOp`
- * runs it after coercion; the inline misc ops that used to call `ops.X.call(...)`
- * directly (`lcm`, `>>`, `<<`) run it too (those bypass the provenance layer,
- * exactly as `op.call` did; `floor/`/`truncate/` skip it and call the carved fns
- * directly).
+ * Raw marshalling — arity guard + per-arg schema decode + `fn` + output encode,
+ * WITHOUT the provenance/coerce layer. `nativeNumericOp` runs it after coercion;
+ * inline misc ops (`lcm`, `>>`, `<<`) run it too (bypass provenance); `floor/`/
+ * `truncate/` skip it and call the carved fns directly.
  */
 function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
   const { in: inSchemas, inRest, out, fn } = spec;
@@ -145,13 +115,9 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
   return encodeResult(out, jsResult);
 }
 
-/**
- * Build the `(...args) => unknown` builtin for one numeric op — the slot the dead
- * `wrapOperator(ops.X)` used to fill (since evolved past it; see the section header
- * above). See the file header for the three reproduced concerns.
- */
+/** Build the `(...args) => unknown` builtin for one numeric op. See file header for the three concerns. */
 function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => unknown {
-  // The synchronous numeric core: provenance + coerce-with-naming + marshalled call.
+  // provenance + coerce-with-naming + marshalled call.
   const applyNumeric = (callArgs: unknown[]): unknown => {
     const provenance = unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue));
     let converted: ANumeric[];
@@ -167,10 +133,8 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
     const result: unknown = marshalCall(name, spec, converted);
     if (provenance.size > 0 && result instanceof AValue) return result.withProvenance(provenance);
     // R8 mint (RULINGS.md R8, op-helpers.mintVerdict): every boolean verdict boxes —
-    // provenance-free operands still get the shared eq?-stable flyweight (allocation-free),
-    // stamped operands a fresh ABool carrying the union. Replaces the empty-provenance
-    // bare-JS-boolean fast path (the landmine `is_false`/`find`/`filter` already tolerate
-    // both shapes for).
+    // provenance-free operands get the eq?-stable flyweight, stamped operands a fresh
+    // ABool carrying the union.
     if (typeof result === "boolean") return mintVerdict(callArgs, result);
     return result;
   };
@@ -183,13 +147,12 @@ function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => u
 }
 
 /**
- * The R7RS tower-type predicates (`complex?`/`real?`/`rational?`/`integer?`/`exact?`/
- * …/`nan?`) — carved from bridge.ts's `makeTypePredicate`. A DIFFERENT shape from
- * `nativeNumericOp`: total over the value domain (a non-number returns #f, never an
- * error). R8 mint (op-helpers.mintVerdict): boxes + forwards `value`'s provenance —
- * `symbol.native`'s `"native"` kind binds the impl's return raw (no codec crossing,
- * capability.ts), so an unboxed `boolean` here would be a bare value living inside
- * the membrane (P4), not just an allocation shortcut.
+ * R7RS tower-type predicates (`complex?`/`real?`/`rational?`/`integer?`/`exact?`/…/
+ * `nan?`) — total over the value domain (a non-number returns #f, never an error).
+ * R8 mint (op-helpers.mintVerdict): boxes + forwards `value`'s provenance —
+ * `symbol.native`'s `"native"` kind binds the return raw (no codec crossing), so an
+ * unboxed `boolean` would be a bare value inside the membrane (P4), not just an
+ * allocation shortcut.
  */
 function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): (...args: unknown[]) => unknown {
   const fn = (value: unknown): ABool => {
@@ -209,8 +172,7 @@ function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean):
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// Operator implementations — carved VERBATIM from operators/numeric.ts. Each `fn`
-// is the body that used to live inside `Operator.create(name, { …, fn })`.
+// Operator implementations — fn bodies.
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── Arithmetic helpers (exactness-preserving) ───────────────────────────────────
@@ -587,17 +549,12 @@ const bitwiseNotFn = (x: bigint): bigint => ~x;
 const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n << BigInt(count) : n >> BigInt(-count));
 
 // ════════════════════════════════════════════════════════════════════════════
-// Reused op specs / cores — the aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME
-// op object as their canonical sibling (byte-identical to the original, which
-// minted a fresh `wrapOperator(ops.X)` carrying the canonical op's name). One
-// asymmetry: `==` binds the raw numeric core `numEqOp`, while canonical `=` binds
-// that same core wrapped in the `looseCompare` nil-tolerant overlay — the alias
-// skips the overlay. Specs are
-// named (not just the built op) so an alias's `symbol.native` declaration below can
-// build the SAME Contract shape its canonical sibling declares (`contractFromSpec(spec)`)
-// while still passing the identical shared impl reference. `arithmeticShiftSpec` is
-// also consumed by the `>>`/`<<`
-// inline ops (Phase 4).
+// Reused op specs / cores — aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME op
+// object as their canonical sibling. Asymmetry: `==` binds the raw `numEqOp` core,
+// canonical `=` binds it wrapped in `looseCompare` (nil-tolerant overlay) — the alias
+// skips the overlay. Specs named so an alias's `symbol.native` declaration builds the
+// SAME Contract shape (`contractFromSpec(spec)`) while passing the shared impl ref.
+// `arithmeticShiftSpec` also consumed by `>>`/`<<` inline ops.
 // ════════════════════════════════════════════════════════════════════════════
 
 const arithmeticShiftSpec: NumSpec = { in: [z.bigint, z.integer], out: z.bigint, fn: arithmeticShiftFn };
@@ -629,17 +586,16 @@ const lteOp = nativeNumericOp("<=", lteSpec);
 const gteOp = nativeNumericOp(">=", gteSpec);
 
 // ════════════════════════════════════════════════════════════════════════════
-// Comparison overlay — carved VERBATIM from bridge.ts. `wrapOrd` adds the FL-Ord
-// fallback (non-numeric ordered entities: strings/chars/DateTime/…); `looseCompare`
-// adds the nil-tolerant inference-plane overlay + the strict-mode gate. Numbers fall
-// through to the numeric core.
+// Comparison overlay — `wrapOrd` adds FL-Ord fallback (non-numeric ordered
+// entities: strings/chars/DateTime/…); `looseCompare` adds nil-tolerant overlay +
+// strict-mode gate. Numbers fall through to the numeric core.
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Wrap a NUMERIC operator with the FL-Ord fallback. FL-Ord only intercepts
- * NON-NUMERIC ordered entities; a number falls through to `numeric(...)` (ORD_REL is a
- * TOTAL-order shortcut that is WRONG for the partial numeric order, and the numeric op
- * carries provenance the FL branch can't).
+ * Wrap a NUMERIC operator with the FL-Ord fallback. FL-Ord only intercepts NON-NUMERIC
+ * ordered entities; a number falls through to `numeric(...)` (ORD_REL is a TOTAL-order
+ * shortcut WRONG for the partial numeric order, and the numeric op carries provenance
+ * the FL branch can't).
  */
 function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | ">="): (...a: unknown[]) => unknown {
   const rel = ORD_REL[sym];
@@ -666,11 +622,10 @@ function wrapOrd(numeric: (...a: unknown[]) => unknown, sym: "<" | ">" | "<=" | 
 }
 
 // ── Loose (nil-tolerant) comparison overlay ──────────────────────────────────────
-// The base comparisons throw on a nil operand (coerceNumeric rejects it). The
-// inference plane wants nil-tolerance: a nil operand resolves to #f/nil-as-bottom.
-// Under strict mode (RunContext.strict, read off the flat `this.runCtx`) loose
-// is gated off — an all-constant comparison like `(= '() '())` carries no operand to thread
-// strict, so the run ctx (not the operands) is the only honest source.
+// Base comparisons throw on nil (coerceNumeric rejects it); inference plane wants
+// nil-tolerance (nil operand → #f/nil-as-bottom). Strict mode (RunContext.strict,
+// off `this.runCtx`) gates loose off — an all-constant compare like `(= '() '())`
+// carries no operand to thread strict, so the run ctx is the only honest source.
 const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
 const flLteNum = (a, b) => a[tf("lte")](b);
@@ -714,10 +669,9 @@ function looseOrderChain(sym, args) {
 }
 function looseCompare(sym, core) {
   // strict is run-CONSTANT but can't ride the operands — an all-constant compare
-  // (`(= '() '())`) carries only CONSTANT_CTX operands. It rides the run's ctx, reconstructed
-  // onto `this.runCtx` by the native-value adapter (capability.ts) at every invocation
-  // path (call-head bare-fn, applyCallback fallback, ANativeProcedure impl). Replaces the
-  // retired ambient `isStrict()` holder.
+  // carries only CONSTANT_CTX operands. Rides the run's ctx (reconstructed onto
+  // `this.runCtx` by the native-value adapter, capability.ts, at every invocation
+  // path). Replaces the retired ambient `isStrict()` holder.
   const fn = function (this: CallCtx, ...args) {
     if (this.runCtx.strict === true) {
       if (!args.every(isNumberOperand))
@@ -736,10 +690,8 @@ function looseCompare(sym, core) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Inline misc ops — carved VERBATIM from bridge.ts's `wrappedOps` methods. These
-// did their own coercion and called `ops.X.call(...)` directly (the marshalling
-// layer, bypassing the provenance layer), so they map to the carved fns / a
-// `marshalCall` against the carved spec — never `nativeNumericOp`.
+// Inline misc ops — own coercion + `marshalCall` (bypass provenance layer), never
+// `nativeNumericOp`.
 // ════════════════════════════════════════════════════════════════════════════
 
 const lcmCoreFn = (...args: bigint[]): bigint => {
@@ -758,9 +710,8 @@ const floorSlashFn = (n1: unknown, n2: unknown): unknown => {
   const b = coerceNumeric(n2);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  // Both operands are AExact, so floorQuotient/floorRemainder take the bothExact
-  // branch and return AExact — no reconstruction (the old `as unknown as bigint`
-  // would have fed a non-bigint to the ctor's denom!=0n invariant in a dead else).
+  // Both operands AExact → floorQuotient/floorRemainder take the bothExact branch,
+  // return AExact — no reconstruction.
   const q = floorQuotientFn(aExact, bExact);
   const r = floorRemainderFn(aExact, bExact);
   return Values.from([q, r]);
@@ -771,9 +722,8 @@ const truncateSlashFn = (n1: unknown, n2: unknown): unknown => {
   const b = coerceNumeric(n2);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  // Both operands are AExact, so truncateQuotient/truncateRemainder take the
-  // bothExact branch and return AExact — no reconstruction (the old
-  // `as unknown as bigint` would have fed a non-bigint to the ctor in a dead else).
+  // Both operands AExact → truncateQuotient/truncateRemainder take the bothExact
+  // branch, return AExact — no reconstruction.
   const q = truncateQuotientFn(aExact, bExact);
   const r = truncateRemainderFn(aExact, bExact);
   return Values.from([q, r]);
@@ -866,10 +816,9 @@ const exactFn = (z: unknown): AExact => {
   return new AExact(inexact.ctx, num / g, scale / g);
 };
 
-// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc below for why a raw
-// return would crash `exec`'s uniform plain-JS exit. Carries the union of the
-// operand(s)' own provenance (the `nativeNumericOp`/`applyNumeric` convention this
-// direct-bound native otherwise bypasses).
+// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc for why a raw return
+// would crash `exec`'s uniform plain-JS exit. Carries the union of the operand(s)'
+// own provenance.
 const numberToStringFn = (z: unknown, radix?: unknown): AString => {
   const n = coerceNumeric(z);
   const radixArg = radix === undefined ? undefined : coerceNumeric(radix);
@@ -887,47 +836,37 @@ const numberToStringFn = (z: unknown, radix?: unknown): AString => {
 
 // ════════════════════════════════════════════════════════════════════════════
 // [DISSOLVED 2026-07-09] `NumSpec.in`/`inRest`/`out` are now the real scheme-zod.ts
-// schemas directly — `contractFromSpec` is a trivial projection, not a lookup through
-// a hand-synced shadow table (the old `CODEC_SCHEMA` Map + `codecSchema` throw-if-
-// missing guard are GONE; there is nothing left to keep in sync). What used to be
-// PURE TYPE-LAYER (never runtime-decoded) is now the SAME schema `marshalCall` (above)
-// actually runs at call time — one vocabulary, one set of edge cases, not two.
+// schemas — `contractFromSpec` is a trivial projection (the old `CODEC_SCHEMA` Map +
+// `codecSchema` guard are GONE). What used to be PURE TYPE-LAYER is now the SAME schema
+// `marshalCall` runs at call time — one vocabulary, not two.
 //
-// Two arguments from the old bridge comment still matter and move here, since
-// `marshalCall`'s `decodeArg`/`encodeResult` are the ones that must honor them now:
+// Two arguments that still matter (now honored by `marshalCall`'s `decodeArg`/
+// `encodeResult`):
 //
-//   Decode order (coerce THEN marshal). `nativeNumericOp`'s `applyNumeric` runs
-//   `coerceNumeric` on every call arg FIRST (throwing the named "Cannot apply X to
-//   (...)" door on a non-numeric arg) — `marshalCall`'s per-arg schema decode only
-//   ever sees an already-ANumeric value. This is WHY the `z.schemeNumber` identity
-//   special-case in `decodeArg` is safe: by the time it runs, `arg` is guaranteed
-//   AExact/AInexact already, never a raw scheme value the schema would need to
-//   validate from scratch.
+//   Decode order (coerce THEN marshal). `applyNumeric` runs `coerceNumeric` on every
+//   call arg FIRST — `marshalCall`'s per-arg decode only ever sees an ANumeric. This
+//   is WHY `decodeArg`'s `z.schemeNumber` identity special-case is safe: `arg` is
+//   guaranteed AExact/AInexact already, never a raw scheme value.
 //
-//   Bool identity passthrough (R8). `out: z.boolean` positions (every comparison/
-//   predicate spec) must NOT let `encodeResult` mint the `ABool` — `applyNumeric`'s
-//   own `mintVerdict` step does that AFTER `marshalCall` returns, boxing the UNION of
-//   the call's operand provenance (flyweight when provenance-free, per RULINGS.md R8),
-//   not a single result value's. An `ABool` minted inside `marshalCall` would carry no
-//   provenance and be silently discarded the instant `mintVerdict` re-boxes over it —
-//   `encodeResult`'s `z.boolean` special case exists exactly to not do that work twice
-//   (once wrong, once right).
+//   Bool identity passthrough (R8). `out: z.boolean` positions must NOT let
+//   `encodeResult` mint the ABool — `applyNumeric`'s `mintVerdict` does that AFTER
+//   `marshalCall` returns, boxing the UNION of the call's operand provenance (R8),
+//   not a single result's. An ABool minted inside `marshalCall` would carry no
+//   provenance and be silently discarded — `encodeResult`'s `z.boolean` special case
+//   exists to not do that work twice.
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Map a NumSpec's own schemas to a real `symbol.native` Contract — 1-tuple output
+/** Map a NumSpec's schemas to a real `symbol.native` Contract — 1-tuple output
  *  (the common case). `floor/`/`truncate/`'s 2-value output and the bespoke
- *  (non-NumSpec) ops below build their Contract by hand instead. */
+ *  (non-NumSpec) ops below build their Contract by hand. */
 function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestSpec> {
   return { input: spec.in, inputRest: spec.inRest, output: [spec.out] };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Per-op specs — named so a `symbols` entry below builds its Contract
+// Per-op specs — named so a `symbols` entry builds its Contract
 // (`contractFromSpec(spec)`) AND its impl (`nativeNumericOp(name, spec)`) from ONE
-// shared object, instead of writing the same in/inRest/out shape twice. Every
-// `symbols` entry below is a LITERAL `symbol.native` call — no bindOp/bind wrapper
-// hiding it (the old bake* constructors these once reached into `_bake.ts` for are
-// dissolved; see that file's note on where they went).
+// shared object. Every `symbols` entry below is a LITERAL `symbol.native` call.
 // ════════════════════════════════════════════════════════════════════════════
 
 const addSpec: NumSpec = { in: [], inRest: z.schemeNumber, out: z.schemeNumber, fn: addFn };
@@ -973,13 +912,12 @@ const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.l
 const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseXorFn };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
-// (its own coercion + a bespoke wrapper around `marshalCall`, or no NumSpec at all), so
-// their Contract is hand-declared to match the impl's OWN already-`unknown`-typed JS
-// signature (input) and its narrowest declared return type (output) — never a `NumSpec`
-// borrowed from an unrelated internal helper. (E.g. `lcmFn` wraps `lcmSpec`'s raw
-// bigint-in/bigint-out `marshalCall` with its OWN pre/post ANumeric coercion —
-// `lcmSpec` describes that INTERNAL step, not `lcmFn`'s real `(...unknown[]) =>
-// ANumeric` signature, so it is not reused here.) ──────────────────────────────────
+// (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
+// hand-declared to match the impl's OWN JS signature (input) and narrowest return type
+// (output) — never a `NumSpec` borrowed from an unrelated helper. (E.g. `lcmFn` wraps
+// `lcmSpec`'s raw bigint-in/out `marshalCall` with its OWN pre/post ANumeric coercion —
+// `lcmSpec` describes that INTERNAL step, not `lcmFn`'s real `(...unknown[]) => ANumeric`
+// signature, so it is not reused here.) ─────────────────────────────────────────────
 
 /** `complex?`/`real?`/`rational?`/`integer?`/`exact?`/`inexact?`/`exact-integer?`/
  *  `finite?`/`infinite?`/`nan?`/`number?` — all `(value: unknown) => boolean`, TOTAL
@@ -988,30 +926,26 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: b
 const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.value], output: [z.boolean] };
 
 /** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers.
- *  Input tightened from `z.value` to `z.schemeNumber`: both impls' first act is
- *  `coerceNumeric` on each operand (op-helpers.ts) — the contract states the SCHEME-LEVEL
- *  domain (a scheme exact/inexact value), matching every sibling `NumSpec`-driven contract
- *  above (`contractFromSpec` maps `SchemeNum` → `z.schemeNumber` the same way); the wider
- *  JS-side coercion `coerceNumeric` also accepts (raw bigint/number, a valueOf()-able
- *  object) is an internal leniency, not a documented caller contract. */
+ *  Input `z.schemeNumber` (not `z.value`): both impls `coerceNumeric` each operand first —
+ *  the contract states the SCHEME-LEVEL domain, matching every sibling `NumSpec`-driven
+ *  contract above; the wider JS-side coercion (raw bigint/number, valueOf()-able object)
+ *  is an internal leniency, not a documented caller contract. */
 const TWO_VALUE_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
   output: [z.schemeNumber, z.schemeNumber],
 };
 
-/** `1+`/`1-` — `(n: unknown) => ANumeric`. See `TWO_VALUE_OUTPUT_CONTRACT` above for why
- *  the input is `z.schemeNumber`, not `z.value` (`onePlusFn`/`oneMinusFn` both
- *  `coerceNumeric` their argument first). */
+/** `1+`/`1-` — `(n: unknown) => ANumeric`. Input `z.schemeNumber` (see
+ *  `TWO_VALUE_OUTPUT_CONTRACT` for why). */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.schemeNumber],
 };
 
-/** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. Same reasoning as
- *  `TWO_VALUE_OUTPUT_CONTRACT`: `shiftRightFn`/`shiftLeftFn` `coerceNumeric` both operands
- *  before handing them to `marshalCall(arithmeticShiftSpec, …)`, which itself doors at
- *  runtime if either isn't integer-shaped — the WIDE `schemeNumber` here is the honest
- *  declared domain; the integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
+/** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. `shiftRightFn`/`shiftLeftFn`
+ *  `coerceNumeric` both operands before `marshalCall(arithmeticShiftSpec, …)` (which
+ *  doors at runtime if not integer-shaped) — the wide `schemeNumber` is the honest
+ *  declared domain; integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
 const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
   output: [z.schemeNumber],
@@ -1024,33 +958,28 @@ const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   output: [z.schemeNumber],
 };
 
-/** `inexact`/`exact->inexact` — `(z: unknown) => AInexact`: narrower than the generic
- *  scheme-number union, matching `inexactFn`'s own declared return type exactly. Input is
- *  `z.schemeNumber` (`inexactFn` `coerceNumeric`s its argument first — same reasoning as
- *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
+/** `inexact`/`exact->inexact` — `(z: unknown) => AInexact` (narrower than the generic
+ *  scheme-number union, matching `inexactFn`'s declared return). Input `z.schemeNumber`
+ *  (`inexactFn` `coerceNumeric`s first — see `TWO_VALUE_OUTPUT_CONTRACT`). */
 const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.inexact],
 };
 
-/** `exact`/`inexact->exact` — `(z: unknown) => AExact`: narrower than the generic
- *  scheme-number union, matching `exactFn`'s own declared return type exactly. Input is
- *  `z.schemeNumber` (`exactFn` `coerceNumeric`s its argument first — same reasoning as
- *  `TWO_VALUE_OUTPUT_CONTRACT` above). */
+/** `exact`/`inexact->exact` — `(z: unknown) => AExact` (narrower than the generic
+ *  scheme-number union, matching `exactFn`'s declared return). Input `z.schemeNumber`
+ *  (`exactFn` `coerceNumeric`s first — see `TWO_VALUE_OUTPUT_CONTRACT`). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.exact],
 };
 
 /** `number->string` — `(z: unknown, radix?: unknown) => AString` (boxed, carrying the
- *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier now calls
- *  `toJS` on every result, which strict-doors a raw, never-boxed value; a native
- *  returning bare JS here would crash any top-level `(number->string …)` call the
- *  instant it reached the uniform exit, not just this one test). The `z.string`
- *  contract's DECODED type is still `string` (unchanged: it names what the value
- *  represents, not the native's own return shape — same as every other native in
- *  this file). Both `z`/`radix` are `z.schemeNumber` — `numberToStringFn`
- *  `coerceNumeric`s each. */
+ *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier calls `toJS`
+ *  on every result, which strict-doors a raw value; a bare-JS return would crash any
+ *  top-level `(number->string …)` call). The `z.string` contract's DECODED type is still
+ *  `string` (it names what the value represents, not the native's return shape). Both
+ *  `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
 const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber.optional()],
   output: [z.string],
@@ -1253,9 +1182,9 @@ export default new EnvCapability("scheme/numeric", {
     // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
     // Each impl below has a CONCRETE fixed-arity signature (unlike nativeNumericOp/
     // nativeTypePredicate's erased `(...args: unknown[]) => unknown`), so it doesn't
-    // satisfy the (deliberately loose) `Contract<VectorSpec,VectorSpec,RestSpec>` these
-    // hand-declared contracts carry without erasing the arity first — same boundary
-    // rosetta.ts/sequence.ts's `run` cross, cast once per declaration, right here.
+    // satisfy the loose `Contract<VectorSpec,VectorSpec,RestSpec>` without erasing the
+    // arity first — same boundary as rosetta.ts/sequence.ts's `run` cross, cast once
+    // per declaration.
     "floor/": symbol.native`floor/: floor quotient and remainder (two values)`(
       TWO_VALUE_OUTPUT_CONTRACT,
       floorSlashFn as (...args: unknown[]) => unknown,
@@ -1265,10 +1194,9 @@ export default new EnvCapability("scheme/numeric", {
       truncateSlashFn as (...args: unknown[]) => unknown,
     ),
     lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),
-    // R8 mint: boxes + forwards the operand's provenance (was a raw-boolean `as` cast — see
-    // nativeTypePredicate's doc comment for why an unboxed native return is a P4 violation,
-    // not just an allocation shortcut). Rest-param shape (not `(value: unknown)`) matches
-    // Impl's variadic contract honestly — no arity-erasing cast needed.
+    // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
+    // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
+    // variadic contract — no arity-erasing cast needed.
     "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, (...args: unknown[]): ABool => {
       const [value] = args;
       return mintVerdict([value], isSchemeNumber(value));

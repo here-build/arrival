@@ -1,7 +1,7 @@
 /**
- * Public `exec`/`parse` entry point: bridges the reader (now the leaf reader/parse.ts,
- * the upstream-LIPS-derived reader) to the generator-based evaluator. Self-bootstraps
- * the runtime on first use, then drives each top-level form through `run()`.
+ * Public `exec`/`parse` entry: bridges the reader (leaf reader/parse.ts,
+ * upstream-LIPS-derived) to the generator evaluator. Self-bootstraps the
+ * runtime on first use, drives each top-level form through `run()`.
  *
  * Usage:
  *   import { exec } from "./generator-exec.js";
@@ -28,17 +28,16 @@ import { makeRunContext, type RunContext } from "../values/primitives/RunContext
 import type { AListAlike, SchemeValue } from "../values/types.js";
 import { toJS } from "../membrane.js";
 
-// The value-layer shadow-cone skip reads the macro classes' `[CLASS]` brand
-// directly via `is_macro_value` in value-guards.ts — a downward, eval-import-free
-// test, so this module needs no runtime DI for it.
+// `is_macro_value` (value-guards.ts) reads the macro classes' `[CLASS]` brand
+// directly — downward, eval-import-free. No runtime DI needed here.
 
 /**
- * The realm-cached lexical root for DEFAULT (no-env) exec — a null-rooted scratch frame
- * where top-level user `define`s land, CUT from the capability base. Builtins resolve through
- * the assembled Resolver (`scope.lookup ?? capabilities.lookup`), NOT this env's `__parent__`
- * chain (it has none). Cached as a realm singleton so default defines ACCUMULATE across exec
- * calls — matching the pre-cut `user_env` accumulation. Custom-env (`exec({ env })`) callers
- * stay glass and never touch it. Lazily built so its identity is a leaf (no env-roots cycle).
+ * Realm-cached lexical root for DEFAULT (no-env) exec — null-rooted scratch frame
+ * where top-level `define`s land, CUT from the capability base. Builtins resolve
+ * through the assembled Resolver (`scope.lookup ?? capabilities.lookup`), NOT this
+ * env's `__parent__` chain (it has none). Cached as a realm singleton so default
+ * defines ACCUMULATE across exec calls (matches pre-cut `user_env` accumulation).
+ * Custom-env (`{ env }`) callers never touch it. Lazy: identity is a leaf (no env-roots cycle).
  */
 let _defaultLexicalRoot: Environment | undefined;
 function defaultLexicalRoot(): Environment {
@@ -46,33 +45,33 @@ function defaultLexicalRoot(): Environment {
 }
 
 /**
- * The realm-cached runtime bootstrap — the lazy base assembly, driven directly by `exec`.
+ * Realm-cached runtime bootstrap (lazy base assembly, driven by `exec`).
  *
- * Folds the base `assembleEnv` into a realm-cached promise — exactly the
- * `defaultLexicalRoot()` pattern above, async-flavoured: the `??=` assigns the
- * in-flight promise synchronously, so the cache IS the once-only guard (a second
- * `exec`, or a re-entrant prelude exec, sees the same settled/in-flight promise).
+ * `??=` assigns the in-flight promise synchronously, so the cache IS the once-only
+ * guard (a re-entrant prelude exec sees the same settled/in-flight promise).
  *
  * Two steps, order-significant:
- *   1. NATIVE_PACKS (value-domain clusters + numeric + error-object predicates) onto global_env,
- *      symbol-only (no prelude → no evalScheme).
- *   2. BASE_PACKS (the `.scm` stdlib: core/macros/polyglot/r7rs/srfi, `nil` among them) onto
- *      user_env. A base-pack prelude may call a native primitive (`+`, `string-length`), which
- *      resolves user_env → global_env, so the natives in step 1 must already be live.
+ *   1. NATIVE_PACKS (value-domain clusters + numeric + error-object predicates)
+ *      onto global_env — symbol-only, no prelude (no evalScheme).
+ *   2. BASE_PACKS (.scm stdlib: core/macros/polyglot/r7rs/srfi, `nil` among them)
+ *      onto user_env. A base-pack prelude may call a native primitive (`+`,
+ *      `string-length`), which resolves user_env → global_env, so natives in
+ *      step 1 must already be live.
  *
- * The pack rosters are imported DYNAMICALLY: `BASE_PACKS`/polyglot transitively pull the
- * evaluator (membrane), so a static import here would close a module-eval cycle. The
- * dynamic import is awaited exactly once (promise-cached), so it costs nothing after warm-up.
+ * Pack rosters are dynamic imports: BASE_PACKS/polyglot transitively pull the
+ * evaluator (membrane), so a static import here would close a module-eval cycle.
+ * Awaited exactly once (promise-cached); free after warm-up.
  *
- * `skipBootstrapWait: true` on the prelude evalScheme: those execs ARE this assembly, so they
- * must not re-enter the gate (which would await the very promise they are part of — deadlock).
+ * `skipBootstrapWait: true` on the prelude evalScheme: those execs ARE this
+ * assembly, so they must not re-enter the gate (would await the promise they
+ * are part of — deadlock).
  */
 let _baseAssembled: Promise<void> | undefined;
 export function ensureBaseAssembled(): Promise<void> {
   return (_baseAssembled ??= (async () => {
-    // The native root is populated ENTIRELY by the assembled packs below
-    // (NATIVE_PACKS + BASE_PACKS). Dynamic import only, by design — no
-    // static importer — so the package can declare `sideEffects: false`.
+    // Populated entirely by assembled packs below (NATIVE_PACKS + BASE_PACKS).
+    // Dynamic import only (by design, no static importer) so the package can
+    // declare `sideEffects: false`.
     const { NATIVE_PACKS } = await import("../env/native-packs.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");
     const evalScheme: EvalSchemeInto = (env, src) =>
@@ -88,23 +87,24 @@ export function ensureBaseAssembled(): Promise<void> {
   })());
 }
 
-// Evaluator injected into a capability's prelude during `exec({ capabilities })`
-// assembly — mirrors `ensureBaseAssembled`'s / _fresh-env's evalScheme. `skipBootstrapWait`:
-// the assembly happens AFTER `exec`'s own bootstrap gate (below), so the prelude eval must
-// not re-await the (already-settled) bootstrap promise.
+// Capability prelude's evalScheme (injected during `exec({ capabilities })`
+// assembly). Mirrors ensureBaseAssembled's / _fresh-env's evalScheme.
+// skipBootstrapWait: assembly happens AFTER exec's own bootstrap gate, so
+// the prelude eval must not re-await the (already-settled) bootstrap promise.
 const capabilityEvalScheme: EvalSchemeInto = (env, src) =>
   exec(src as string, { env: env as Environment, skipBootstrapWait: true });
 
 /**
- * Build the capability base for `exec({ capabilities })`: a fresh `user_env` child with the
- * supplied capabilities assembled on top, so they AUGMENT the standard assembled base
- * (`user_env → global_env`) rather than replace it. A fresh child per call keeps the user's
- * capabilities out of the shared `user_env` (no cross-call bleed); a caller wanting a
- * persistent capability env builds it once with `assembleEnv` and passes it as `{ env }`.
+ * Build capability base for `exec({ capabilities })`: fresh `user_env` child
+ * with the supplied capabilities assembled on top, so they AUGMENT the standard
+ * assembled base (`user_env → global_env`) rather than replace it. Fresh child
+ * per call keeps the user's capabilities out of shared `user_env` (no cross-call
+ * bleed); a caller wanting a persistent capability env builds it once with
+ * `assembleEnv` and passes it as `{ env }`.
  *
- * `config` is the ONE shared bag (see `ExecOptions.config`) handed to every capability's
- * `lower()` — each validates its own slice; `assembleEnv` supplies the phase-gated prelude
- * scope, so `preludeOnly` symbols work here with no extra wiring.
+ * `config` is the ONE shared bag (see ExecOptions.config) handed to every
+ * capability's `lower()` — each validates its own slice; `assembleEnv` supplies
+ * the phase-gated prelude scope, so `preludeOnly` symbols work with no extra wiring.
  */
 async function assembleCapabilityBase(capabilities: readonly EnvCapability[], config?: object): Promise<Environment> {
   const base = user_env.inherit("exec-capabilities");
@@ -117,71 +117,77 @@ async function assembleCapabilityBase(capabilities: readonly EnvCapability[], co
 
 export interface ExecOptions {
   /**
-   * GLASS — a custom base env. When set, the resolver wraps it directly: defines land in it
-   * and builtins resolve up its `__parent__` chain (byte-identical to pre-cut behavior). Takes
-   * precedence over `capabilities`/`scope` (the cut refinements); use `env` OR the cut options.
+   * GLASS — custom base env. When set, the resolver wraps it directly: defines
+   * land in it, builtins resolve up its `__parent__` chain (byte-identical to
+   * pre-cut). Takes precedence over `capabilities`/`scope` (the cut refinements);
+   * use `env` OR the cut options.
    */
   env?: Environment;
   /**
-   * THE CUT, capability-refined. EnvCapability packs assembled onto the standard base
-   * (`user_env → global_env`) for THIS run — the inference plane's nil-compat, an MCP/infer
-   * capability, etc. — instead of the bare default base. Assembled per call onto a fresh
-   * `user_env` child (no cross-call bleed). Ignored when `env` (glass) is set.
+   * THE CUT, capability-refined. EnvCapability packs assembled onto the standard
+   * base (`user_env → global_env`) for THIS run (inference-plane nil-compat, an
+   * MCP/infer capability, etc.) instead of the bare default base. Assembled per
+   * call onto a fresh `user_env` child (no cross-call bleed). Ignored when `env`
+   * (glass) is set.
    */
   capabilities?: readonly EnvCapability[];
   /**
-   * THE SHARED CONFIG BAG for `capabilities` (inert without them). ONE object handed to every
-   * capability's `lower({ config })`: each capability validates its OWN slice against its
-   * `configuration` zod schemas (`z.object` strips the keys it doesn't declare), so unrelated
-   * capabilities ride one bag without knowing about each other. Deliberately reference-shared,
-   * never cloned or split per capability: `EnvCapability.lower` threads the SAME raw object to
-   * its deps, so the kernel's closure dedup matches a capability's root + dep appearances by
-   * IDENTITY instead of tripping `AssembleConfigConflictError` (the idiom `buildArrivalEnv`
-   * pioneered — "each capability validates its own slice of the SHARED opts config").
+   * THE SHARED CONFIG BAG for `capabilities` (inert without them). ONE object
+   * handed to every capability's `lower({ config })`: each validates its OWN slice
+   * against its `configuration` zod schemas (`z.object` strips undeclared keys),
+   * so unrelated capabilities ride one bag without knowing about each other.
+   * Deliberately reference-shared, never cloned/split: `EnvCapability.lower`
+   * threads the SAME raw object to its deps, so the kernel's closure dedup
+   * matches a capability's root + dep appearances by IDENTITY instead of
+   * tripping `AssembleConfigConflictError` (the `buildArrivalEnv` idiom —
+   * "each capability validates its own slice of the SHARED opts config").
    */
   config?: object;
   /**
-   * THE CUT, scope-refined. The lexical root the run's top-level `define`s land in. Pass a
-   * persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls for REPL-style
-   * multi-step accumulation, instead of the realm-cached default scratch frame. Builtins still
-   * resolve through the capability base (composed `scope.lookup ?? capabilities.lookup`).
-   * Ignored when `env` (glass) is set.
+   * THE CUT, scope-refined. Lexical root the run's top-level `define`s land in.
+   * Pass a persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls
+   * for REPL-style multi-step accumulation, instead of the realm-cached default
+   * scratch frame. Builtins still resolve through the capability base (composed
+   * `scope.lookup ?? capabilities.lookup`). Ignored when `env` (glass) is set.
    */
   scope?: LexicalScope;
   dynamic_env?: Environment;
   use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
-  /** Predicate to suppress tap firing for specific nodes (atoms always skipped). Piped straight
-   *  through to `EvalContext.nodeFilter` (evaluator.ts), whose domain is the full `AListAlike`
-   *  spine, not just `APair` — matching that signature exactly instead of the narrower one. */
+  /** Predicate to suppress tap firing for specific nodes (atoms always skipped).
+   *  Piped through to `EvalContext.nodeFilter` (evaluator.ts), whose domain is
+   *  the full `AListAlike` spine, not just `APair` — matching that signature
+   *  exactly instead of the narrower one. */
   nodeFilter?: (node: AListAlike) => boolean;
   /**
    * Execution-budget signal. When the signal aborts, the trampoline throws
    * `signal.reason ?? DOMException("aborted", "AbortError")` at the next
-   * iteration boundary. See `EvalContext.signal` in evaluator.ts — the 5ms
+   * iteration boundary. See `EvalContext.signal` (evaluator.ts) — the 5ms
    * event-loop yield prevents UI freeze but does NOT bound CPU, so
    * `(define (loop) (loop))` needs an external bound for sandbox use.
    */
   signal?: AbortSignal;
   /**
-   * Wall-clock execution budget in milliseconds. Unlike `signal` (which needs
-   * an external controller to fire), this is an INTERNAL bound: the trampoline
-   * throws a `ArrivalError(/budget/)` once `budgetMs` of wall-clock elapses,
-   * checked at the same iteration boundary that yields to the event loop. This
-   * is the bound sandbox / agent code needs so `(let loop () (loop))` can't hang
-   * the host. Composable with `signal` — whichever fires first wins.
+   * Wall-clock execution budget (ms). Unlike `signal` (needs an external
+   * controller to fire), this is an INTERNAL bound: the trampoline throws
+   * `ArrivalError(/budget/)` once `budgetMs` of wall-clock elapses, checked at
+   * the same iteration boundary that yields to the event loop. This is the
+   * bound sandbox/agent code needs so `(let loop () (loop))` can't hang the host.
+   * Composable with `signal` — whichever fires first wins.
    */
   budgetMs?: number;
   /**
-   * Per-run ALLOCATION budget — the memory analogue of `budgetMs`. Caps the cumulative number of list
-   * cells materialized through the two collection-op choke points — `to_array` (append/join/reverse/…) and the
-   * fl-interop sequence-op dispatch (filter/map/reduce over a Pair/Vector, charged at the dispatch
-   * since the term walk bypasses to_array). The
-   * wall-clock budget is checked at trampoline TICKs, which a single native list pass (`filter`/
-   * `append` over a large list) never hits — so an O(K²)-churn loop runs uninterruptibly until it
-   * stack-overflows. This bound IS checked inside that loop. Undefined ⇒ unbounded (the default; only
-   * sandbox / agent runs opt in). Composable with `budgetMs`/`signal` — whichever fires first wins.
+   * Per-run ALLOCATION budget — the memory analogue of `budgetMs`. Caps the
+   * cumulative number of list cells materialized through the two collection-op
+   * choke points: `to_array` (append/join/reverse/…) and the fl-interop
+   * sequence-op dispatch (filter/map/reduce over Pair/Vector, charged at dispatch
+   * since the term walk bypasses to_array). The wall-clock budget is checked at
+   * trampoline TICKs, which a single native list pass (`filter`/`append` over a
+   * large list) never hits — so an O(K²)-churn loop runs uninterruptibly until
+   * it stack-overflows. This bound IS checked inside that loop. Undefined ⇒
+   * unbounded (default; only sandbox/agent runs opt in). Composable with
+   * `budgetMs`/`signal` — whichever fires first wins.
    */
   heapBudget?: number;
   /**
@@ -192,25 +198,27 @@ export interface ExecOptions {
    *
    * Nil-tolerance is a real evaluation mode threaded through `EvalContext.strict`,
    * not an env decoration. The inference-plane `car`/`cdr` (env/fl-interop.ts) read
-   * this off `ctx.runCtx.strict`: default ⇒ a nil/null projection yields nil, strict
+   * this off `ctx.runCtx.strict`: default ⇒ nil/null projection yields nil, strict
    * ⇒ the R7RS throw. A wrong-TYPE arg (car of a number/string) throws in BOTH
    * modes — tolerance is scoped to absence. The base `user_env` car/cdr are
-   * unaffected (always R7RS-strict); `first`/`second`/… and the cxr accessors
-   * are a later parity step.
+   * unaffected (always R7RS-strict); `first`/`second`/… and cxr accessors are
+   * a later parity step.
    */
   strict?: boolean;
   /**
-   * Opt OUT of freezing borrowed rosetta returns. Default (`undefined`/`true`) `Object.freeze`s the
-   * borrowed JS source inside AJSObject/AJSArray the first time Scheme reads it, so the host can't
-   * mutate a returned value afterward (prevention by construction, replacing the dev-only purity
-   * assert). Set `false` to keep borrowed returns mutable for hosts that intend to keep writing them.
+   * Opt out of freezing borrowed rosetta returns. Default (`undefined`/`true`)
+   * `Object.freeze`s the borrowed JS source inside AJSObject/AJSArray the first
+   * time Scheme reads it, so the host can't mutate a returned value afterward
+   * (prevention by construction, replacing the dev-only purity assert). Set
+   * `false` to keep borrowed returns mutable for hosts that intend to keep
+   * writing them.
    */
   freezeRosettaReturns?: boolean;
   /**
    * Internal: set by the bootstrap's own prelude evals (`ensureBaseAssembled`'s
-   * `evalScheme`) to bypass the bootstrap gate below — awaiting `ensureBaseAssembled`
-   * there would deadlock (the prelude eval IS part of the realm-cached promise it
-   * would be waiting on).
+   * evalScheme) to bypass the bootstrap gate below — awaiting
+   * `ensureBaseAssembled` there would deadlock (the prelude eval IS part of the
+   * realm-cached promise it would be waiting on).
    */
   skipBootstrapWait?: boolean;
   /**
@@ -232,7 +240,7 @@ export interface ExecOptions {
    */
   irLineage?: boolean;
   /**
-   * The Rosetta-IN (provenance-MINTING) op names for `classifierFromEnv` when
+   * Rosetta-IN (provenance-MINTING) op names for `classifierFromEnv` when
    * `irLineage` is on (the documented explicit seam — the env has no source
    * registry yet). DEFAULT empty ⇒ the SOURCE-FREE provable scope: untapped eager
    * eval does not mint at sources (the mint is tap-gated, rosetta.ts:453, falling
@@ -298,22 +306,23 @@ export async function execState(
     irLineageSources,
   }: ExecOptions = {},
 ): Promise<ExecState> {
-  // Resolve the default env from the env-roots leaf — `user_env` is arrival's
-  // interaction scope (`global_env.inherit("user-env")`), sourced STATICALLY so this
-  // entry never imports the stdlib monolith. The bootstrap gate below drives
-  // population: `ensureBaseAssembled` assembles the native packs + the `.scm` base.
+  // Default env = env-roots leaf `user_env` (arrival's interaction scope,
+  // `global_env.inherit("user-env")`), sourced STATICALLY so this entry never
+  // imports the stdlib monolith. Bootstrap gate below drives population:
+  // `ensureBaseAssembled` assembles native packs + the `.scm` base.
   const actualEnv = env ?? user_env;
 
-  // Self-initialize the runtime bootstrap (native packs + the `.scm` base) lazily, so
-  // embedders never trigger it manually. `ensureBaseAssembled` is realm-cached (a single
-  // in-flight/settled promise), so the first exec assembles and every later exec awaits the
-  // same settled promise — no half-assembled env can be observed. `skipBootstrapWait` is the
-  // one exception: a base-pack prelude eval IS the bootstrap and must not await its own promise.
+  // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
+  // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
+  // in-flight/settled promise): first exec assembles, every later exec awaits the
+  // same settled promise — no half-assembled env observable. `skipBootstrapWait` is
+  // the one exception: a base-pack prelude eval IS the bootstrap and must not
+  // await its own promise.
   if (!skipBootstrapWait) await ensureBaseAssembled();
 
   let parsed: SchemeValue[];
   if (typeof code === "string") {
-    // Thread strict into the reader so the R7RS control rejects loose-mode literals
+    // Thread strict into the reader so R7RS control rejects loose-mode literals
     // (#void/#null) at parse time. Default false ⇒ loose parse, unchanged.
     parsed = await readerParse(code, undefined, strict ?? false);
   } else if (code instanceof APair) {
@@ -324,34 +333,37 @@ export async function execState(
 
   // SHADOW MODE slice 2 — classify@load. Build one static lineage skeleton per
   // parsed form, BEFORE evaluation. Pure (classify runs no eval); gated entirely
-  // behind the flag so the flag-OFF path is byte-identical. The classifier is
-  // env-derived (classifierFromEnv); `irLineageSources` defaults empty ⇒ the
-  // source-free provable scope (see ExecOptions.irLineageSources). Skeletons align
-  // by index with `parsed`, consumed at the per-form assert hook below.
+  // behind the flag so flag-OFF is byte-identical. Classifier is env-derived
+  // (classifierFromEnv); `irLineageSources` defaults empty ⇒ source-free provable
+  // scope (see ExecOptions.irLineageSources). Skeletons align by index with
+  // `parsed`, consumed at the per-form assert hook below.
   let shadowSkeletons: LineageNode[] | undefined;
   if (irLineage) {
     const classifier = classifierFromEnv(actualEnv, new Set(irLineageSources));
     shadowSkeletons = parsed.map((form) => classify(form, classifier));
   }
 
-  // Evaluate each expression in sequence. The budget spans the WHOLE exec call
-  // (all top-level forms share one deadline) — a sandbox program that splits a
-  // hang across several forms is still bounded. Recompute the remaining budget
-  // per form from a single start so we don't reset the clock between forms.
-  // The per-run allocation meter is minted HERE, once, on `runCtx` — RunContext is its
-  // ONLY owner (no env-node courier copy: see the heapMeter-ownership tranche). It spans
-  // the WHOLE exec like the wall-clock budget; every value built during this run carries
-  // this SAME runCtx (`operand.ctx.heapMeter`), which `to_array`/the sequence-op dispatch
-  // charge against directly — no parent-chain walk, no install/restore dance.
+  // Evaluate each expression in sequence. Budget spans the WHOLE exec call (all
+  // top-level forms share one deadline) — a sandbox program that splits a hang
+  // across several forms is still bounded. Recompute remaining budget per form
+  // from a single start so we don't reset the clock between forms.
+  // Per-run allocation meter minted HERE, once, on `runCtx` — RunContext is its
+  // ONLY owner (no env-node courier copy: see heapMeter-ownership tranche). Spans
+  // the WHOLE exec like the wall-clock budget; every value built during this run
+  // carries this SAME runCtx (`operand.ctx.heapMeter`), which `to_array`/the
+  // sequence-op dispatch charge against directly — no parent-chain walk, no
+  // install/restore dance.
   const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal });
   // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
-  // A custom `env` stays GLASS — the resolver wraps it, defines land in it, builtins resolve
-  // up its base-linked chain — byte-identical (zero change for arrival-chain/inhuman). `env`
-  // wins over the cut refinements (capabilities/scope), which are ignored when it is set.
-  // No env → THE CUT: a lexical root (`scope.env` for REPL accumulation, else the realm-cached
-  // null-rooted scratch frame) holds user defines; the assembled base (`actualEnv`, optionally
-  // AUGMENTED with `capabilities`) supplies builtins; the Resolver composes the two. `actualEnv`
-  // (the BASE) still drives bootstrap + the classifier above; only the resolution topology changes.
+  // Custom `env` stays GLASS — resolver wraps it, defines land in it, builtins
+  // resolve up its base-linked chain — byte-identical (zero change for
+  // arrival-chain/inhuman). `env` wins over the cut refinements (capabilities/scope),
+  // which are ignored when set.
+  // No env → THE CUT: a lexical root (`scope.env` for REPL accumulation, else the
+  // realm-cached null-rooted scratch frame) holds user defines; the assembled base
+  // (`actualEnv`, optionally AUGMENTED with `capabilities`) supplies builtins; the
+  // Resolver composes the two. `actualEnv` (the BASE) still drives bootstrap + the
+  // classifier above; only the resolution topology changes.
   let runResolver: Resolver;
   if (env !== undefined) {
     runResolver = new Resolver(actualEnv);
@@ -363,8 +375,8 @@ export async function execState(
     const lexicalRoot = scope !== undefined ? scope.env : defaultLexicalRoot();
     runResolver = new Resolver(lexicalRoot, capabilityBase);
   }
-  // The run's exec frame = the resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
-  // Defines land here and the evaluator's `ctx.env` is here; the heap meter lives on
+  // Run's exec frame = resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
+  // Defines land here and evaluator's `ctx.env` is here; heap meter lives on
   // `runCtx` only (above), not on this frame.
   const results: SchemeValue[] = [];
   const start = budgetMs === undefined ? 0 : performance.now();
@@ -372,13 +384,13 @@ export async function execState(
     const expr = parsed[i];
     const remaining =
       budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-    // Preserve the audit-#42 wrapOperator contract: run() wraps every non-ArrivalError
-    // — including the TypeError wrapOperator throws to name operator + arg types — in
-    // an ArrivalError, masking both the TypeError class and its membrane cause. Surface
-    // the original TypeError so the user-visible error shape survives.
+    // Audit-#42 wrapOperator contract: run() wraps every non-ArrivalError —
+    // including the TypeError wrapOperator throws to name operator + arg types —
+    // in an ArrivalError, masking both the TypeError class and its membrane cause.
+    // Surface the original TypeError so the user-visible error shape survives.
     let result: SchemeValue;
     try {
-      // A top-level form evaluates to a value, never a bare expander — seal it.
+      // Top-level form evaluates to a value, never a bare expander — seal it.
       result = expectValue(
         await run(
           evaluate(expr, {
@@ -389,9 +401,9 @@ export async function execState(
             nodeFilter,
             signal,
             // Default false ⇒ today's tolerant nil-projection. No consumer reads
-            // ctx.strict yet (scaffolding); the car/cdr dispatch reads it later.
+            // ctx.strict yet (scaffolding); car/cdr dispatch reads it later.
             strict: strict ?? false,
-            // The per-run handle, threaded as data (unread scaffold; N2 reads it).
+            // Per-run handle, threaded as data (unread scaffold; N2 reads it).
             runCtx,
           }),
           { signal, budgetMs: remaining },
@@ -404,7 +416,7 @@ export async function execState(
     }
     results.push(result);
 
-    // SHADOW MODE slice 3 — the assert. Compare the static fullCone against this
+    // SHADOW MODE slice 3 — the assert. Compare static fullCone against this
     // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
     // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
     // keyword-projection form abstains (returns a skip reason we discard — it is
@@ -422,7 +434,7 @@ export async function execState(
  * SIMPLE tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — THE
  * default exec surface, "run, get JS". Delegates to {@link execState} (COMPLEX
  * tier) and fully unwraps each result through {@link toJS} — a true P4 membrane
- * crossing. Outside this function only plain-JS-observable values exist; the
+ * crossing. Outside this function only plain-JS-observable values exist;
  * provenance reading stays in the run's trace (containers egress as R9 lazy
  * proxies, see membrane.ts's `toJS`). Callers that need boxed values, the
  * lexical scope, or the run context (law tests, tooling, REPL continuation)
@@ -452,13 +464,14 @@ export async function exec(code: string | SchemeValue, options: ExecOptions = {}
 
 /**
  * Parse Scheme code without evaluating (delegates to the reader leaf, reader/parse.ts).
- * `source` (a filename / module path) is
- * stamped onto every produced location, so frames built from these forms read as
- * `file:line` — used by `(require …)` to attribute a module's throws to its file.
+ * `source` (a filename / module path) is stamped onto every produced location,
+ * so frames built from these forms read as `file:line` — used by `(require …)` to
+ * attribute a module's throws to its file.
  */
 export async function parse(code: string, _env?: Environment, source?: string): Promise<SchemeValue[]> {
-  // _env retained for API compat but inert: the reader no longer consults an env (the
-  // reader-extension lookup that used it was removed). Parsing is now a pure reader-leaf call.
+  // _env retained for API compat but inert: the reader no longer consults an env
+  // (the reader-extension lookup that used it was removed). Parsing is now a pure
+  // reader-leaf call.
   return readerParse(code, source);
 }
 
@@ -473,24 +486,25 @@ export async function execExpr(
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
 
-  // See exec() above: the realm-cached lazy bootstrap, awaited once.
+  // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();
 
-  // THE EXEC SEAM (see exec): glass for custom env, the cut for default (fresh null-rooted
-  // lexicalRoot + the assembled base).
+  // THE EXEC SEAM (see exec): glass for custom env, the cut for default (fresh
+  // null-rooted lexicalRoot + assembled base).
   const runResolver =
     env !== undefined
       ? new Resolver(actualEnv)
       : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
 
-  // Mint a per-run handle here too (mirrors exec() above) — closes two gaps at once: a
-  // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME abort
-  // signal `ctx.signal` already carries here, and the handler-stack WeakMap (exceptions.ts)
-  // stops falling back to the shared CONSTANT_CTX bucket for every require'd module.
+  // Mint per-run handle here too (mirrors exec()) — closes two gaps: a
+  // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME
+  // abort signal `ctx.signal` already carries, and the handler-stack WeakMap
+  // (exceptions.ts) stops falling back to the shared CONSTANT_CTX bucket for
+  // every require'd module.
   const runCtx = makeRunContext({ signal });
 
   try {
-    // A top-level form evaluates to a value, never a bare expander — seal it.
+    // Top-level form evaluates to a value, never a bare expander — seal it.
     return expectValue(
       await run(
         evaluate(expr, {

@@ -1,34 +1,20 @@
 /**
- * INCREMENTAL region fold — the streaming twin of `traceToRegions`.
+ * INCREMENTAL region fold — streaming twin of `traceToRegions` for APPEND-ONLY traces.
+ * Rebuilds the same `RegionGraph` without re-walking the whole trace per frame.
  *
- * `traceToRegions(trace)` rebuilds the whole `RegionGraph` from scratch on every call:
- * a fresh `snapshotTrace` + a full `regionsAt` DFS over EVERY invocation + the edge
- * (Hasse) build over every point. On a 486k-invocation trace that is ~6s — and the
- * blueprint render calls it once per animation frame as infers stream in. But the trace
- * is APPEND-ONLY (pure interpreter, no retraction), so almost all of that work is
- * redone identically each frame.
+ *   - `applyDelta()` walks only NEW invocations (id ≥ cursor), O(Δ) not O(N).
+ *   - `current()` reuses the EXACT `trace-to-regions.ts` helpers and freezes completed
+ *     iterations (a loop iteration whose successor exists, or a resolved map app,
+ *     reuses its already-built `Region[]`). Only the growth frontier recomputes.
  *
- * `TraceRegionFold` maintains the SAME `RegionGraph` incrementally:
- *   - `applyDelta()` walks only the NEW invocations (id ≥ cursor) and extends the
- *     persistent state — the snapshot mirror, the Hasse edges/reach, the recursion +
- *     branch-liveness signals. Per-tick cost O(Δ-new-invocations), not O(N).
- *   - `current()` materializes a `RegionGraph` reusing the EXACT shared helpers
- *     `trace-to-regions.ts` exports, plus an iteration-level memo: a loop iteration
- *     whose successor exists, or a resolved map application, is FROZEN — its already
- *     built `Region[]` is reused instead of re-walked. Only the growth frontier (the
- *     last loop iteration, a still-running application) is recomputed.
- *
- * The contract is PARITY: `current()` must deep-equal `traceToRegions` on every trace
- * state. That is enforced by `arrival-chain`'s `src/__tests__/trace-region-fold.test.ts`
- * (a strict normalized deep-equal across linear / GEPA-fanout / branch-flip / nested-loop /
- * streaming fixtures). The fold achieves it by NOT re-deriving any region logic — it reuses
+ * PARITY contract: `current()` deep-equals `traceToRegions` on every trace state.
+ * Enforced by `src/__tests__/trace-region-fold.test.ts`. Achieved by reusing
  * `regionsAt` / `leafFor` / `attributeFieldEdges` / `derivePorts` / `addPointToHasse`
- * verbatim through the `RegionWalkCtx` seam, so the two paths cannot drift.
+ * verbatim through the `RegionWalkCtx` seam — the two paths cannot drift.
  *
- * PHASE 1 is MAIN-THREAD: the fold holds the live `EvalTrace` and reads it for the
- * decision-operand value/provenance (`valueById` / `liveValueById`) — exactly as
- * `traceToRegions` does. Absorbing those live reads into the snapshot mirror is a
- * deferred Phase-2 concern (the worker boundary); see `trace-snapshot.ts`'s header.
+ * PHASE 1 main-thread: holds the live `EvalTrace`, reads decision-operand
+ * value/provenance via `valueById` / `liveValueById`. Live reads into the snapshot
+ * mirror deferred to Phase-2 (worker boundary); see `trace-snapshot.ts`.
  */
 import { schemeToJs } from "../rosetta.js";
 import type { APair } from "../values/primitives/APair.js";
@@ -59,16 +45,14 @@ import {
 } from "./trace-to-regions.js";
 import type { EvalTrace, Invocation } from "./trace.js";
 
-// The fold reuses the from-scratch SHAPE helpers (`recursionSignals` / `branchLiveness`)
-// by EXTENDING the same sets incrementally rather than calling them — `staticLoopBodyScopes`
+// Reuses the from-scratch SHAPE helpers by EXTENDING sets incrementally: `staticLoopBodyScopes`
 // / `staticRecursiveHeads` (define-only) re-run lazily on a new define; `STRUCTURAL_FORMS`
 // gates the dynamic recursive-head scan.
 
 const EMPTY_NUM: ReadonlySet<number> = new Set();
 
 const headOf = (inv: PlainInv): string => scopeId(inv.node).split("@")[0] ?? "?";
-/** Stringify a rejection — the snapshot's `errText`, inlined (kept identical so the fold's
- *  mirror stays deep-equal to a fresh `snapshotTrace`). */
+/** Snapshot's `errText`, inlined — kept identical so the fold's mirror deep-equals a fresh `snapshotTrace`. */
 const errText = (e: unknown): string | undefined => (e instanceof Error ? e.message : e == null ? undefined : String(e));
 const hasSelfAncestor = (inv: PlainInv): boolean => {
   for (let p = inv.parent; p; p = p.parent) if (p.node === inv.node) return true;
@@ -84,12 +68,9 @@ function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean 
   return true;
 }
 
-/** Deep-clone a built `Region[]` so a cached iteration template stays pristine while the
- *  returned graph (which `derivePorts` mutates in place) is independent. Ports are reset
- *  to `[]` because the template is captured pre-`derivePorts` and the clone is re-ported
- *  from scratch each `current()`. Only the fields a `Region` actually carries are copied
- *  — structural, not `structuredClone` (which would choke on nothing here but is
- *  needlessly broad). */
+/** Deep-clone a built `Region[]`: cached template stays pristine while the returned graph
+ *  (`derivePorts` mutates in place) is independent. Ports reset to `[]` (template captured
+ *  pre-`derivePorts`). Structural copy, not `structuredClone`. */
 function cloneRegions(regions: Region[]): Region[] {
   return regions.map(cloneRegion);
 }
@@ -117,17 +98,17 @@ function cloneRegion(r: Region): Region {
   }
 }
 
-/** A cached iteration: the pristine template + the decision wires it contributed during
- *  its first walk. On reuse the template is cloned (into the returned tree) AND the knot
- *  entries are replayed into the live walk collectors — because a reused iteration is NOT
- *  re-walked, so its `<>` knot→arm / operand→knot edges would otherwise be lost. */
+/** Cached iteration: pristine template + the decision wires from its first walk. Reuse
+ *  clones the template AND replays the knot entries into the live walk collectors — a
+ *  reused iteration is not re-walked, so its `<>` knot→arm / operand→knot edges must be
+ *  replayed or lost. */
 interface CachedIteration {
   template: Region[];
   knotArm: { knot: number; arm: number }[];
   knotInputs: { knot: number; from: number }[];
-  /** The signal generation the template was built under (see `#signalGen`). Stale when
-   *  the generation has since advanced (a branch flipped live, a new loop body / recursive
-   *  head appeared) — those change region SHAPE even for a structurally-frozen iteration. */
+  /** Signal generation the template was built under (see `#shapeGen`). Stale when the
+   *  generation advanced (branch flipped live, new loop body / recursive head) — changes
+   *  region SHAPE. */
   gen: number;
 }
 
@@ -135,27 +116,23 @@ export class TraceRegionFold {
   readonly #trace: EvalTrace;
 
   // ── cursor ──────────────────────────────────────────────────────────────────
-  /** Cursor into the trace's append-ordered `invocationLog`. Everything before this
-   *  index is already folded in; `invocationLog.slice(#logCursor)` is exactly the
-   *  delta, already in ascending-id (fold) order — O(Δ), no re-scan, no sort. */
+  /** Index into append-ordered `invocationLog`. `invocationLog.slice(#logCursor)` = the
+   *  delta, already in ascending-id (fold) order — O(Δ), no re-scan/sort. */
   #logCursor = 0;
 
   // ── snapshot mirror (the growing de-MobX'd PlainInv graph) ────────────────────
   readonly #invById = new Map<number, PlainInv>();
-  /** Live invocation refs, for decision-operand value + provenance (KEEP live-read — the
-   *  snapshot drops plumbing values; absorbing them is a Phase-2 concern). */
+  /** Live invocation refs, for decision-operand value + provenance (KEEP live-read —
+   *  snapshot drops plumbing values; absorption is Phase-2). */
   readonly #liveById = new Map<number, Invocation>();
-  /** Ids whose mirror was captured while the live invocation was still `running` — its
-   *  lifecycle fields (`state`/`value`/`metadata`/`provenance`) mutate when it later
-   *  resolves. `traceToRegions` snapshots them fresh each call, so the fold must REFRESH
-   *  these mirrors to stay equal mid-flight (the streaming-correctness fix). Bounded by
-   *  the running frontier; an id drops out once it settles. */
+  /** Mirrors captured while the live invocation was still `running` — lifecycle fields
+   *  mutate on resolve. `traceToRegions` snapshots fresh each call, so the fold REFRESHES
+   *  these to stay equal mid-flight. Bounded by running frontier; id drops out on settle. */
   readonly #runningIds = new Set<number>();
 
   // ── top-level (parentless) forms, in ascending id (= source order) ────────────
-  // Tracked incrementally so `current()` does not re-filter all mirrors (O(N)) to find
-  // the roots. A top-level form enters once, parentless; ascending id = source order, so
-  // the LAST is the program's statement-output form (matching `snap.invocations` order).
+  // Incremental so `current()` need not re-filter all mirrors (O(N)). Ascending id =
+  // source order; LAST = statement-output form (matches `snap.invocations` order).
   readonly #rootIds: number[] = [];
 
   // ── points + Hasse edges (incremental transitive reduction) ───────────────────
@@ -167,43 +144,32 @@ export class TraceRegionFold {
   // ── recursion + branch-liveness signals (monotonic) ───────────────────────────
   readonly #recursiveHeads = new Set<string>();
   readonly #loopBodies = new Set<object>();
-  /** Cached loop spines: ENTRY invocation id → ordered body-entry ids (= the chain
-   *  `nextSameBody` produces). Built in O(Δ) (each new body-entry links to its immediate
-   *  same-body ancestor's spine) so `current()` need not re-DFS the recursion — the
-   *  spine walk is otherwise O(N) per build (each iteration's subtree holds the next
-   *  entry deep inside). `#bodyEntryOf` maps a body-entry id → its loop's entry id. */
+  /** Cached loop spines: ENTRY id → ordered body-entry ids (`nextSameBody` chain).
+   *  Built O(Δ) so `current()` need not re-DFS recursion (spine walk otherwise O(N) per
+   *  build). `#bodyEntryOf`: body-entry id → its loop's entry id. */
   readonly #loopSpines = new Map<number, number[]>();
   readonly #bodyEntryOf = new Map<number, number>();
-  /** Per-scope set of branch-invocation ids, and per-invocation its CURRENT route (the
-   *  last evaluated child's node). `liveBranchScopes` = scopes whose invocations span ≥2
-   *  DISTINCT current routes — exactly `branchLiveness` over the present trace. We store
-   *  the route PER INVOCATION (not an accumulating multiset) so a route that SHIFTS as an
-   *  arm fills across deltas replaces the old one, matching what a fresh `routeOf` would
-   *  read — otherwise a streaming branch would record stale intermediate routes and spuriously
-   *  go live. */
+  /** Per-scope branch-invocation ids + per-invocation CURRENT route (last evaluated
+   *  child's node). Stored per-invocation (not accumulating) so a route SHIFTING as an
+   *  arm fills replaces the old — matching a fresh `routeOf`; otherwise a streaming branch
+   *  records stale intermediate routes and spuriously goes live. */
   readonly #branchInvsByScope = new Map<string, Set<number>>();
   readonly #branchRouteByInv = new Map<number, object>();
-  /** The live-branch scope set, recomputed at the end of each `applyDelta` (cheap —
-   *  branches are sparse) and reused by `current()`. */
+  /** Live-branch scope set, recomputed per `applyDelta` (branches sparse), reused by `current()`. */
   #liveBranchScopes = new Set<string>();
-  /** Scopes that are DYNAMIC-CAPABLE — at least one of their branch invocations has a
-   *  tested operand that traces (via `decisionInputProducers` + provenance) to an
-   *  inference point. This is EXACTLY `regionsAt`'s `wired.size > 0` condition, computed
-   *  with the same helpers (parity). Monotonic — a producer that is a point stays one — so
-   *  it only grows. Why it matters: a non-dynamic branch DISSOLVES (`wired.size===0` →
-   *  flatten) whether or not its scope is live, so its regions are IDENTICAL live-or-not.
-   *  Only a scope that is BOTH live AND dynamic-capable renders a `<>` marker — so the
-   *  iteration cache must invalidate only when the live∩dynamic set changes, NOT on every
-   *  liveBranchScopes change. Without this, the GEPA loop's static tail-`if` going live at
-   *  the FINAL iteration would clear the whole cache and force a full O(N) re-walk on the
-   *  terminal tick (a ~1.4s hitch at 500k) for a change that alters no region. */
+  /** DYNAMIC-CAPABLE scopes: ≥1 branch's tested operand traces (via `decisionInputProducers`
+   *  + provenance) to an infer point — EXACTLY `regionsAt`'s `wired.size > 0` (parity).
+   *  Monotonic. Why it matters: a non-dynamic branch DISSOLVES identically live-or-not, so
+   *  only a scope that is BOTH live AND dynamic-capable renders a `<>`. The iteration cache
+   *  invalidates only when live∩dynamic changes, NOT on every liveBranchScopes change — else
+   *  the GEPA loop's static tail-`if` going live at the FINAL iteration clears the whole cache
+   *  and forces a full O(N) re-walk (a ~1.4s hitch at 500k) for a change altering no region. */
   readonly #dynamicCapableScopes = new Set<string>();
-  /** Scopes whose dynamic-capability has been determined (checked once — wiredness is a
-   *  source-structure property, identical across a scope's invocations, so we never repeat
-   *  the O(depth) `#isWired` walk per invocation). */
+  /** Scopes whose dynamic-capability was checked (wiredness is a source-structure property,
+   *  identical per scope, so the O(depth) `#isWired` walk runs once per scope). */
   readonly #wiredChecked = new Set<string>();
-  /** Has any `(define …)` been seen since the static loop/recursion scan last ran? The
-   *  static readers depend only on defines, so re-run them lazily when a define arrives. */
+  /** `(define …)` seen since static loop/recursion scan last ran? Static readers depend
+   *  only on defines, so re-run lazily on define. */
   #pendingDefine = false;
 
   // ── value memo (cleared per current(); mirrors the from-scratch valCache) ──────
@@ -211,17 +177,13 @@ export class TraceRegionFold {
 
   // ── iteration memo (the incremental win) ──────────────────────────────────────
   readonly #iterCache = new Map<number, CachedIteration>();
-  /** Generation of the SHAPE-affecting signals — `loopBodies`, `recursiveHeads`, and the
-   *  branch ROUTES (which drive `liveBranchScopes`). Bumped by `applyDelta` whenever ANY
-   *  of them moves (a new loop body / recursive head, or any branch route changed). A
-   *  cached iteration built under an older generation is recomputed — its region SHAPE
-   *  may have changed (the branch-flip case: a scope crossing the live threshold turns a
-   *  dissolved branch into a `<>` marker in EVERY iteration). Deliberately TRACKS routes
-   *  rather than just `liveBranchScopes.size`, because a streaming route shift can change
-   *  the live SET without changing its size. Deliberately EXCLUDES `pointIds`: a
-   *  structurally-frozen iteration's point membership + operand wiring are fixed (new
-   *  points get higher ids, outside its closure), so a new infer elsewhere does not
-   *  invalidate it — that is what keeps reuse near-total. */
+  /** Generation of SHAPE-affecting signals: `loopBodies`, `recursiveHeads`, branch ROUTES.
+   *  Bumped by `applyDelta` when any moves. A stale-gen iteration is recomputed — branch-
+   *  flip (a scope crossing live threshold) turns a dissolved branch into a `<>` in EVERY
+   *  iteration. TRACKS routes (not `liveBranchScopes.size`) — a streaming route shift can
+   *  change the live SET without changing its size. EXCLUDES `pointIds`: a frozen iteration's
+   *  point membership + operand wiring are fixed (new points get higher ids), so a new
+   *  infer elsewhere does not invalidate it — keeps reuse near-total. */
   #shapeGen = 0;
   /** The `#shapeGen` the iteration cache was last validated against. */
   #cacheGen = -1;
@@ -230,8 +192,7 @@ export class TraceRegionFold {
     this.#trace = trace;
   }
 
-  /** Static `traceToRegions`-equivalent built through the fold (construct → applyDelta →
-   *  current). Used by the parity test as the reference incremental build. */
+  /** `traceToRegions`-equivalent built via fold. Used by the parity test as reference. */
   static fromTrace(trace: EvalTrace): RegionGraph {
     const fold = new TraceRegionFold(trace);
     fold.applyDelta();
@@ -244,16 +205,13 @@ export class TraceRegionFold {
    * O(Δ-new-invocations) — the whole point.
    */
   applyDelta(): number {
-    // Slice the new invocations off the trace's append-ordered log by index cursor —
-    // O(Δ), not an O(total-bindings) re-scan of every records binding each tick. The
-    // log is in `enter` order = ascending invocation id (the fold order), so the slice
-    // is already ordered (no collect-and-sort).
+    // Slice new invocations by index cursor — O(Δ), not O(total) re-scan. Log is `enter`
+    // order = ascending id (fold order), so slice is ordered (no sort).
     const log = this.#trace.invocationLog;
     const fresh: Invocation[] = log.slice(this.#logCursor);
     this.#logCursor = log.length;
-    // Refresh previously-running mirrors even when there are NO new invocations — an
-    // in-flight infer can resolve (running → resolved) without minting anything new, and
-    // the next `current()` must reflect that (parity with a fresh snapshot).
+    // Refresh running mirrors even with NO new invocations — an in-flight infer can
+    // resolve (running → resolved) without minting; next `current()` must reflect it.
     this.#refreshRunning();
     if (fresh.length === 0) return 0;
 
@@ -265,34 +223,26 @@ export class TraceRegionFold {
       if (plain.state === "running") this.#runningIds.add(inv.id);
       if (inv.parent === null) this.#rootIds.push(inv.id); // parentless top-level form
     }
-    // ── pass 2: wire parent/children by id (both endpoints now mirrored) ──────────
-    // A new invocation's parent may be OLD (already mirrored) — link both directions.
+    // ── pass 2: wire parent/children by id (both endpoints mirrored) ─────────────
+    // A new invocation's parent may be OLD — link both directions.
     for (const inv of fresh) {
       const plain = this.#invById.get(inv.id)!;
       if (inv.parent) {
         const parentPlain = this.#invById.get(inv.parent.id) ?? null;
         plain.parent = parentPlain;
-        // Append to the parent's children IN INVOCATION ORDER. `children` mirrors the
-        // live `inv.parent.children` push order; since we process ascending id and a
-        // child's id > its parent's, appending as we go reproduces that order — but a
-        // parent can gain children across MULTIPLE deltas, so guard against dup.
+        // Append to parent's children IN INVOCATION ORDER. Process ascending id, so append
+        // reproduces order — but a parent gains children across MULTIPLE deltas, so guard dup.
         if (parentPlain && !parentPlain.children.includes(plain)) parentPlain.children.push(plain);
       }
-      // This invocation may also be the PARENT of an already-mirrored child (children
-      // always have higher ids, so within one ascending pass the parent is seen first;
-      // across deltas a child can never precede its parent). Children of `inv` that are
-      // already mirrored get linked when THEY are processed (their own pass-2 step), so
-      // nothing to do here for the downward direction.
+      // This invocation may also be the PARENT of an already-mirrored child (children have
+      // higher ids; within one ascending pass the parent is seen first; across deltas a child
+      // never precedes parent). Children of `inv` get linked at THEIR own pass-2 step.
     }
-    // Re-materialize provenance for any OLD invocation whose provenance the snapshot
-    // would now keep but didn't when first mirrored. The snapshot keeps provenance only
-    // for (a) children of points and (b) roots. A child mirrored BEFORE its parent was
-    // known to be a point would have been stored with NO_PROVENANCE — but in practice a
-    // child's parent is created (entered) strictly before the child, and point-marking
-    // happens at the parent's rosetta-call time (before the child enters), so the parent's
-    // `isProvenancePoint` is already set when the child is mirrored. The root case is
-    // likewise stable (parentless from birth). So no back-fix pass is needed; asserted by
-    // the parity test (which would diverge if a child's provenance were dropped).
+    // The snapshot keeps provenance only for children-of-points + roots. A child mirrored
+    // before its parent was known to be a point would lack it — but the parent's
+    // `isProvenancePoint` is set at rosetta-call time (before the child enters), so the
+    // child's mirror already has it. The root case is stable (parentless from birth). No
+    // back-fix pass needed; asserted by parity test.
 
     // ── recursion + branch signals (extend the monotonic sets) ────────────────────
     this.#extendSignals(fresh);
@@ -301,16 +251,16 @@ export class TraceRegionFold {
     this.#extendSpines(fresh);
 
     // ── points + Hasse edges (ascending id) ───────────────────────────────────────
-    // New points, ascending id (already sorted). A point's children's provenance refers
-    // only to lower ids, so its upstream closure is complete the moment it is processed.
+    // New points, ascending id (sorted). A point's children's provenance refers only to
+    // lower ids, so upstream closure is complete when processed.
     for (const inv of fresh) {
       if (!inv.isProvenancePoint) continue;
       const plain = this.#invById.get(inv.id)!;
       this.#points.push(plain);
       this.#pointIds.add(inv.id);
     }
-    // The Hasse edges/reach must be extended in ascending POINT id (the topological order
-    // `addPointToHasse` assumes). New points are already ascending in `fresh`.
+    // Hasse edges/reach extended in ascending POINT id (topological order `addPointToHasse`
+    // assumes). New points already ascending in `fresh`.
     for (const inv of fresh) {
       if (!inv.isProvenancePoint) continue;
       const plain = this.#invById.get(inv.id)!;
@@ -329,19 +279,17 @@ export class TraceRegionFold {
    * `traceToRegions(trace)` for the same trace state.
    */
   current(): RegionGraph {
-    // liveBranchScopes is maintained by applyDelta (a CHANGE in it bumps #shapeGen).
+    // liveBranchScopes maintained by applyDelta (a CHANGE bumps #shapeGen).
     const liveBranchScopes = this.#liveBranchScopes;
-    // Invalidate the iteration cache iff a SHAPE-affecting signal moved since it was last
-    // validated (a new loop body / recursive head, or a live-branch membership change —
-    // all captured by `#shapeGen`, bumped in `applyDelta`).
+    // Invalidate the iteration cache iff a SHAPE-affecting signal moved since last validated
+    // (captured by `#shapeGen`, bumped in `applyDelta`).
     const gen = this.#shapeGen;
     if (gen !== this.#cacheGen) {
       this.#iterCache.clear();
       this.#cacheGen = gen;
     }
 
-    // Fresh value memo per build (mirrors from-scratch `valCache`; schemeToJs is pure but
-    // we keep parity with the one-shot which allocates a fresh cache each call).
+    // Fresh value memo per build (mirrors from-scratch `valCache`; parity with one-shot).
     this.#valCache = new Map<number, unknown>();
     const valueById = (id: number): unknown => {
       if (this.#valCache.has(id)) return this.#valCache.get(id);
@@ -350,12 +298,11 @@ export class TraceRegionFold {
       return v;
     };
     const liveValueById = (id: number): SchemeValue | undefined => this.#liveById.get(id)?.value;
-    // Mirror of from-scratch `liveProvenanceById` — the prune-exempt filter-child sets the
-    // filter-predicate decision reads. MUST match the one-shot exactly (parity).
+    // Mirror of from-scratch `liveProvenanceById`. MUST match one-shot exactly (parity).
     const liveProvenanceById = (id: number): Iterable<number> => this.#liveById.get(id)?.provenance ?? [];
-    // Mirror of from-scratch `livePointsUnder` (trace-to-regions): the topmost provenance
-    // points in an invocation's live subtree, for pluck-off-infer decision operands whose
-    // stamped value was GC-pruned. MUST match the one-shot exactly or the parity test trips.
+    // Mirror of from-scratch `livePointsUnder`: topmost provenance points in invocation's
+    // live subtree, for pluck-off-infer operands whose stamped value was GC-pruned. MUST match
+    // one-shot exactly or parity test trips.
     const livePointsUnder = (id: number): number[] => {
       const root = this.#liveById.get(id);
       if (!root) return [];
@@ -370,8 +317,8 @@ export class TraceRegionFold {
       return out;
     };
 
-    // Mirror of from-scratch `boundPointsOf` — the sidecar scoped to the live invocation's
-    // subtree, the narrowing-verdict pairing key. MUST match the one-shot exactly (parity).
+    // Mirror of from-scratch `boundPointsOf` — sidecar scoped to live invocation's subtree,
+    // narrowing-verdict pairing key. MUST match one-shot exactly (parity).
     const auto = this.#trace.autoBindings;
     const boundPointsOf = auto
       ? (id: number, name: string): readonly number[] => {
@@ -383,9 +330,9 @@ export class TraceRegionFold {
     const knotArm: { knot: number; arm: number }[] = [];
     const knotInputs: { knot: number; from: number }[] = [];
 
-    // The iteration memo (the incremental seam). On a freezable iteration: reuse the
-    // cached template (cloned) + replay its knot wires; else compute fresh, and if
-    // freezable, cache a pristine clone + the knot delta it produced.
+    // Iteration memo (the incremental seam). Freezable iteration: reuse cached template
+    // (cloned) + replay knot wires; else compute fresh; if freezable, cache pristine clone +
+    // knot delta produced.
     const iterationCache = (key: number, freezable: boolean, compute: () => Region[]): Region[] => {
       if (freezable) {
         const hit = this.#iterCache.get(key);
@@ -409,10 +356,8 @@ export class TraceRegionFold {
       return regions;
     };
 
-    // Cached loop spine — the body-entry list maintained in O(Δ). Falls back to the
-    // from-scratch `walkSpine` when an entry has no cached spine (e.g. a loop only
-    // dynamically detected after its entries were mirrored), so correctness never depends
-    // on cache completeness — the cache is purely the optimization.
+    // Cached loop spine (O(Δ) body-entry list). Falls back to from-scratch `walkSpine` when
+    // no cached spine, so correctness never depends on cache — cache is purely optimization.
     const loopSpine = (entry: PlainInv): PlainInv[] => {
       const ids = this.#loopSpines.get(entry.id);
       if (ids === undefined) return walkSpine(entry);
@@ -434,21 +379,20 @@ export class TraceRegionFold {
       loopSpine,
     };
 
-    // Roots = top-level (parentless) forms, ascending id (= source order, matching
-    // `snapshotTrace`'s `invocations` ordering for top-level forms). Tracked
-    // incrementally so this is O(#roots), not an O(N) re-filter.
+    // Roots = top-level (parentless) forms, ascending id (= source order, matches
+    // `snapshotTrace`'s `invocations`). Incremental: O(#roots), not O(N) re-filter.
     const tops = this.#rootIds.map((id) => this.#invById.get(id)!);
     const roots = tops.flatMap((t) => regionsAt(t, ctx));
 
-    // Field attribution over a COPY of the base edges (the from-scratch build rewrites in
-    // place; we keep #baseEdges pristine for the next tick).
+    // Field attribution over COPY of base edges (from-scratch rewrites in place; keep
+    // #baseEdges pristine for next tick).
     const finalizeCtx: FinalizeCtx = {
       points: this.#points,
       pointIds: this.#pointIds,
       reach: this.#reach,
     };
-    // Consumer-slot then producer-output-row attribution — identical to the from-scratch
-    // build so `current()` stays deep-equal to `traceToRegions` (the parity gate).
+    // Consumer-slot then producer-output-row attribution — identical to from-scratch build
+    // so `current()` deep-equals `traceToRegions` (parity gate).
     const edges = attributeFromFields(attributeFieldEdges(this.#baseEdges, finalizeCtx), carrierFieldEdges(this.#trace));
 
     // Decision wires, then the statement-output terminal (final = last top-level form).
@@ -463,18 +407,16 @@ export class TraceRegionFold {
 
   // ── internals ─────────────────────────────────────────────────────────────────
 
-  /** Re-read the lifecycle fields of every mirror captured while still running; once it
-   *  has settled (resolved/rejected) refresh its `state`/`value`/`metadata`/`provenance`
-   *  to the live values and drop it from the running set. This is what keeps the fold's
-   *  mirror equal to a fresh `snapshotTrace` mid-flight — a leaf parked at mirror time and
-   *  resolved later would otherwise show stale `running`/`undefined`. The lifecycle fields
-   *  re-use the EXACT materialization predicates `#mirror` (and `snapshotTrace`) apply.
+  /** Re-read lifecycle fields of mirrors captured while running; once settled, refresh
+   *  `state`/`value`/`metadata`/`provenance` to live values and drop from running set. Keeps
+   *  the fold's mirror equal to a fresh `snapshotTrace` mid-flight. Reuses EXACT predicates
+   *  `#mirror` (and `snapshotTrace`) apply.
    *
-   *  NOTE (documented residual): a point whose ARGUMENT is itself a still-running infer
-   *  (infer-as-infer-arg) could have been added to the Hasse with an incomplete upstream;
-   *  re-deriving point edges on a child's late provenance change is a Phase-2 concern. The
-   *  common streaming shape (an infer reading PRIOR results via let-bindings) resolves its
-   *  arg subtree before parking, so its upstream is complete when first added. */
+   *  NOTE (residual): a point whose ARGUMENT is a still-running infer (infer-as-infer-arg)
+   *  could be added to the Hasse with an incomplete upstream; re-deriving point edges on a
+   *  child's late provenance change is Phase-2. The common streaming shape (an infer reading
+   *  PRIOR results via let-bindings) resolves its arg subtree before parking, so upstream is
+   *  complete when first added. */
   #refreshRunning(): void {
     if (this.#runningIds.size === 0) return;
     for (const id of this.#runningIds) {
@@ -484,27 +426,27 @@ export class TraceRegionFold {
         this.#runningIds.delete(id);
         continue;
       }
-      if (live.state === "running") continue; // still in flight — re-check next tick.
+      if (live.state === "running") continue; // in flight — re-check next tick.
       const isPoint = plain.isProvenancePoint;
       const isRoot = plain.parent === null;
       const isBranchChild = BRANCH_FORMS.has(this.#headName(plain.parent?.node) ?? "");
       plain.state = live.state;
       plain.value = isPoint || isRoot || isBranchChild ? schemeToJs(live.value) : undefined;
       plain.metadata = isPoint ? live.metadata : undefined;
-      // A leaf parked while `running` may have REJECTED since — re-copy the error/cache too so
-      // the settled mirror matches a fresh snapshot.
+      // A leaf parked while `running` may have REJECTED since — re-copy error/cache so the
+      // settled mirror matches a fresh snapshot.
       plain.error = isPoint && live.state === "rejected" ? errText(live.error) : undefined;
       plain.cached = isPoint ? live.cached : undefined;
-      // Provenance is materialized for children-of-points + roots (snapshot predicate);
-      // it is computed at the live invocation's exit, so re-copy it now it has settled.
+      // Provenance materialized for children-of-points + roots (snapshot predicate);
+      // computed at live invocation's exit, so re-copy now it has settled.
       if (plain.parent?.isProvenancePoint || isRoot) plain.provenance = new Set(live.provenance);
       this.#runningIds.delete(id);
     }
   }
 
-  /** Mirror ONE live invocation as a PlainInv exactly as `snapshotTrace` pass 1 does:
-   *  scalar fields + pre-derived `scope` + the selective provenance/value/metadata
-   *  materialization. Parent/children are wired in pass 2 (`applyDelta`). */
+  /** Mirror ONE live invocation as `snapshotTrace` pass 1 does: scalar fields + pre-derived
+   *  `scope` + selective provenance/value/metadata materialization. Parent/children wired in
+   *  pass 2 (`applyDelta`). */
   #mirror(inv: Invocation): PlainInv {
     const isPoint = inv.isProvenancePoint;
     const isRoot = inv.parent === null;
@@ -532,10 +474,9 @@ export class TraceRegionFold {
     return typeof n === "string" ? n : undefined;
   }
 
-  /** Extend the recursion + branch-liveness signal sets with the new invocations. The
-   *  STATIC loop/recursion readers depend only on `(define …)` forms, so re-run them only
-   *  when a define arrived; the DYNAMIC scans (`hasSelfAncestor`) are applied per new inv;
-   *  branch routes are accumulated per new branch invocation. All monotonic. */
+  /** Extend recursion + branch-liveness signal sets. STATIC loop/recursion readers depend
+   *  only on `(define …)` → re-run only on define; DYNAMIC scans (`hasSelfAncestor`) per new
+   *  inv; branch routes per new branch invocation. All monotonic. */
   #extendSignals(fresh: Invocation[]): void {
     const headsBefore = this.#recursiveHeads.size;
     const bodiesBefore = this.#loopBodies.size;
@@ -546,9 +487,8 @@ export class TraceRegionFold {
         break;
       }
     }
-    // Re-run the static readers over ALL mirrored invocations when a define is pending.
-    // (They are idempotent — adding to a Set — and bounded by define count, not N; the
-    // GEPA trace has 3 defines total, scanned once.)
+    // Re-run static readers over ALL mirrored invocations when define pending. Idempotent
+    // (Set), bounded by define count not N (GEPA trace has 3 defines, scanned once).
     if (this.#pendingDefine) {
       const all = [...this.#invById.values()];
       for (const h of staticRecursiveHeads(all)) this.#recursiveHeads.add(h);
@@ -568,12 +508,11 @@ export class TraceRegionFold {
         this.#loopBodies.add(plain.node as object);
       }
     }
-    // Branch-route liveness (the LAST evaluated child's node identity = the taken route).
-    // A branch's route can CHANGE across deltas (its last child shifts as the arm fills),
-    // so we recompute the route for every branch invocation touched this delta — a branch
-    // in `fresh`, or an OLD branch whose child set grew (a parent-of-fresh that is a
-    // branch). We store the route PER INVOCATION, so a shift REPLACES the prior route
-    // (no stale accumulation) — keeping `liveBranchScopes` identical to a fresh scan.
+    // Branch-route liveness (LAST evaluated child's node = taken route). A route can CHANGE
+    // across deltas (last child shifts as arm fills), so recompute for every branch inv
+    // touched this delta (a branch in `fresh`, or OLD branch whose child set grew). Route
+    // stored PER INVOCATION so a shift REPLACES the prior (no stale accumulation) — keeps
+    // `liveBranchScopes` identical to a fresh scan.
     const branchTouched = new Set<number>();
     for (const inv of fresh) {
       const plain = this.#invById.get(inv.id)!;
@@ -581,7 +520,7 @@ export class TraceRegionFold {
       const par = plain.parent;
       if (par && BRANCH_FORMS.has(headOf(par))) branchTouched.add(par.id);
     }
-    // A transient schemeToJs memo for the operand-value reads decisionInputProducers needs.
+    // Transient `schemeToJs` memo for operand-value reads `decisionInputProducers` needs.
     const valCache = new Map<number, unknown>();
     const valueById = (vid: number): unknown => {
       if (valCache.has(vid)) return valCache.get(vid);
@@ -595,14 +534,12 @@ export class TraceRegionFold {
       const scope = scopeId(plain.node);
       (this.#branchInvsByScope.get(scope) ?? this.#branchInvsByScope.set(scope, new Set()).get(scope)!).add(id);
       this.#branchRouteByInv.set(id, routeOf(plain));
-      // Dynamic-capability — EXACTLY regionsAt's wired test (so live∩dynamic == the set of
-      // scopes that actually render a `<>`). Wiredness is a property of the SOURCE
-      // structure (does the operand's binding trace to an infer), so it is the SAME for
-      // every invocation of a scope — check ONCE per scope (the `#isWired` resolveRaw walk
-      // is O(ancestor-depth), so checking all 1000 loop-`if` invocations would be O(N²)).
-      // Mark "checked" only when the verdict is DETERMINATE: if any tested operand's
-      // producer is still RUNNING, its provenance may not be stamped yet, so re-check next
-      // delta (keeps the streaming verdict sound — a branch fed by an in-flight infer).
+      // Dynamic-capability — EXACTLY `regionsAt`'s wired test (live∩dynamic = scopes that
+      // render `<>`). Wiredness is a SOURCE-structure property, SAME per scope — check ONCE
+      // per scope (`#isWired` is O(depth), so checking all 1000 loop-`if` invocations is
+      // O(N²)). Mark "checked" only when DETERMINATE: if any tested operand's producer is
+      // still RUNNING, its provenance may be unstamped — re-check next delta (keeps streaming
+      // verdict sound for a branch fed by an in-flight infer).
       if (!this.#wiredChecked.has(scope)) {
         if (this.#isWired(plain, valueById)) {
           this.#dynamicCapableScopes.add(scope);
@@ -612,8 +549,8 @@ export class TraceRegionFold {
         }
       }
     }
-    // Recompute the live-branch scope set (sparse — branches are few). A scope is live iff
-    // its invocations span ≥2 DISTINCT current routes (exactly `branchLiveness`).
+    // Recompute live-branch scope set (sparse). Scope live iff its invocations span ≥2
+    // DISTINCT current routes (exactly `branchLiveness`).
     const liveBranchScopes = new Set<string>();
     for (const [scope, invs] of this.#branchInvsByScope) {
       const routes = new Set<object>();
@@ -625,28 +562,26 @@ export class TraceRegionFold {
       if (routes.size >= 2) liveBranchScopes.add(scope);
     }
     this.#liveBranchScopes = liveBranchScopes;
-    // Bump the shape generation iff a SHAPE-affecting signal moved — a new loop body /
-    // recursive head, or a change in the RENDERABLE branch set (live ∩ dynamic-capable).
-    // A liveBranchScopes change for a STATIC (dissolving) branch alters no region, so it
-    // must NOT invalidate the cache — that is what prevents the terminal-iteration full
-    // re-walk on the GEPA loop's static tail-`if`.
+    // Bump shape generation iff a SHAPE-affecting signal moved — new loop body / recursive
+    // head, or change in RENDERABLE branch set (live ∩ dynamic-capable). A liveBranchScopes
+    // change for a STATIC (dissolving) branch alters no region, so must NOT invalidate the
+    // cache — prevents the terminal-iteration full re-walk on the GEPA loop's static tail-`if`.
     const renderableChanged = !sameStringSet(this.#renderableBranchScopes(), renderableBefore);
     if (this.#recursiveHeads.size !== headsBefore || this.#loopBodies.size !== bodiesBefore || renderableChanged) {
       this.#shapeGen += 1;
     }
   }
 
-  /** The scopes that actually render a `<>` marker: live AND dynamic-capable. The cache
-   *  invalidates only when THIS set changes (region shape depends on it, not on raw
-   *  liveBranchScopes — a dissolving static branch flattens identically live-or-not). */
+  /** Scopes that render a `<>`: live AND dynamic-capable. Cache invalidates only when THIS
+   *  set changes (region shape depends on it, not raw liveBranchScopes — a dissolving static
+   *  branch flattens identically live-or-not). */
   #renderableBranchScopes(): Set<string> {
     const out = new Set<string>();
     for (const scope of this.#liveBranchScopes) if (this.#dynamicCapableScopes.has(scope)) out.add(scope);
     return out;
   }
 
-  /** Whether a branch invocation has ≥1 tested operand tracing to an inference point —
-   *  EXACTLY `regionsAt`'s `wired.size > 0` (same helpers, same provenance resolution). */
+  /** ≥1 tested operand traces to an infer point — EXACTLY `regionsAt`'s `wired.size > 0`. */
   #isWired(inv: PlainInv, valueById: (id: number) => unknown): boolean {
     for (const { producerId } of decisionInputProducers(inv, valueById)) {
       if (this.#pointIds.has(producerId)) return true;
@@ -657,9 +592,8 @@ export class TraceRegionFold {
     return false;
   }
 
-  /** Whether every operand producer of a branch invocation has SETTLED (not running) —
-   *  so a "not wired" verdict is final (the operand's provenance won't grow later). Used to
-   *  decide whether to lock in the dynamic-capability check or defer it. */
+  /** Every operand producer SETTLED (not running) — "not wired" verdict is final
+   *  (provenance won't grow). Decides whether to lock in or defer the dynamic-capability check. */
   #operandsResolved(inv: PlainInv): boolean {
     const valueById = (vid: number): unknown => schemeToJs(this.#liveById.get(vid)?.value);
     for (const { producerId } of decisionInputProducers(inv, valueById)) {
@@ -668,14 +602,12 @@ export class TraceRegionFold {
     return true;
   }
 
-  /** Extend the per-loop body-entry spines in O(Δ). For each NEW body-entry (an invocation
-   *  whose node is a loop body), link it to its loop's spine: its IMMEDIATE same-body
-   *  ancestor (the previous iteration's entry) is found by a bounded ancestor walk (one
-   *  iteration's nesting depth, NOT the spine length), and the new entry appends to THAT
-   *  entry's spine. A body-entry with no same-body ancestor STARTS a new spine. This
-   *  reconstructs exactly the `nextSameBody` chain (the inverse: B's nearest same-body
-   *  ancestor P ⟺ B = nextSameBody(P)), so `current()` reads the spine instead of
-   *  re-DFSing it — turning the otherwise-O(N)-per-build spine walk into O(spine length). */
+  /** Extend per-loop body-entry spines in O(Δ). For each NEW body-entry, link to its loop's
+   *  spine: nearest same-body ancestor (previous iteration's entry) found by bounded walk
+   *  (one iteration's depth, NOT spine length), append to THAT entry's spine. No same-body
+   *  ancestor → STARTS a new spine. Reconstructs the `nextSameBody` chain (inverse: B's
+   *  nearest same-body ancestor P ⟺ B = nextSameBody(P)), so `current()` reads the spine
+   *  instead of re-DFSing — turns the otherwise-O(N)-per-build walk into O(spine length). */
   #extendSpines(fresh: Invocation[]): void {
     for (const inv of fresh) {
       const plain = this.#invById.get(inv.id)!;
@@ -690,9 +622,9 @@ export class TraceRegionFold {
           this.#bodyEntryOf.set(plain.id, entryId);
           this.#loopSpines.get(entryId)?.push(plain.id);
         }
-        // ELSE p was mirrored BEFORE its node became a loop body (dynamic detection), so
-        // the true entry is unrecorded — DON'T start a spurious spine here. `current()`
-        // sees no spine for the true entry and falls back to the correct `walkSpine`.
+        // ELSE p mirrored BEFORE its node became a loop body (dynamic detection), so the
+        // true entry is unrecorded — DON'T start a spurious spine. `current()` sees no spine
+        // for the true entry and falls back to `walkSpine`.
         continue;
       }
       // First body-entry of a loop instance → start a new spine.

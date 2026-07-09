@@ -1,47 +1,19 @@
 /**
- * trace → REGION TREE — the structural model behind the blueprint render: infer
- * calls as leaves, fan-out (map/filter/fold) as CONTAINERS whose N iterations are
- * kept DISTINCT (so the render can stack them on a virtual Z-axis = tabs, one tree
- * shown at a time rather than N laid out flat). Built from the RAW invocation tree
- * (not the scope-collapsing forest), so iterations survive and the nesting is real.
+ * trace → REGION TREE — blueprint render's structural model. Infer calls = leaves;
+ * fan-out (map/filter/fold) = CONTAINERS, N iterations kept DISTINCT (Z-tabs). Built
+ * from RAW invocation tree (not the scope-collapsing forest) — iterations survive.
  *
- * The rules, walking each invocation:
- *   - provenance point (an `(infer …)` / `.prompt` call) → a LEAF.
- *   - fan-out head (`map`/`filter`/`fold`/…) → a CONTAINER; its iterations are the
- *     child applications (the children that carry a body — the eval'd-once args,
- *     the lambda + the collection, have none).
- *   - anything else (let, if, list, a plain function call) → PLUMBING: flattened
- *     through to the meaningful regions inside it.
+ * Walk rules: provenance point → LEAF; fan-out head → CONTAINER (child applications);
+ * else (let/if/list/fn call) → PLUMBING, flattened through. WIRES: provenance edges
+ * between leaves (`⋃ child.provenance` ∩ point set — same rule statechart/chain use).
  *
- * Plus the dataflow WIRES: the provenance edges between leaves (`⋃ child.provenance`
- * over a point's children ∩ the point set — the same rule the statechart/chain use).
+ * TCO: self-recursive fn (`loop ⊃ … ⊃ loop`) peeled into one `fanout`; each iteration
+ * CUT at next recursive call (bodies don't leak). Loop iterations reuse `fanout` (Z-tabs).
+ * PERF: spine walk O(N) total (early-return DFS).
  *
- * TCO containers: a self-recursive function (`loop ⊃ … ⊃ loop`, detected the same
- * way `traceToForest` does — a non-structural application that recurs on its own
- * ancestor chain) is peeled into one `fanout` container whose N iterations are the
- * successive body entries. The trampoline collapses the host stack, but the trace's
- * `currentInvocation` parent-link still chains, so the recursion spine is walkable.
- * Each iteration = that call's children, CUT at the next recursive call (so the next
- * iteration's body doesn't leak in); the recursive call's argument eval (e.g. the
- * `reflect` that seeds the next iteration) rides in as an arg, so nothing is lost —
- * it surfaces at the head of the iteration whose input it produced.
- *
- * Sequential loop iterations reuse the `fanout` container (Z-tab render, one shown
- * at a time) rather than a distinct kind. `tailPosition` (the evaluator's
- * R7RS §3.5 ground truth, on `Invocation`) is available if we later want to label
- * proper-TCO vs stack-growing recursion; detection here is structural so it covers
- * both. PERF: a very long loop builds an O(N)-deep `currentInvocation` chain; the
- * spine walk is O(N) total (early-return DFS), bounded by that existing depth.
- *
- * ── from-scratch vs incremental ───────────────────────────────────────────────
- * `traceToRegions(trace)` is the from-scratch build: `buildRegions(snapshotTrace(t), t)`.
- * The trace is APPEND-ONLY (pure interpreter, no retraction), so `TraceRegionFold`
- * (`trace-region-fold.ts`) maintains the SAME RegionGraph incrementally — O(Δ-new-
- * invocations) per tick, not O(N) per call. Parity is enforced by a strict deep-equal
- * test (`arrival-chain`'s `src/__tests__/trace-region-fold.test.ts`): the fold reuses the EXACT pure helpers
- * this module exports (`leafFor`, `conditionOf`, `decisionInputProducers`,
- * `addPointToHasse`, `regionsAt`, `attributeFieldEdges`, `derivePorts`, …) rather than
- * re-deriving them, so the two paths cannot drift.
+ * `traceToRegions(trace)` = `buildRegions(snapshotTrace(t), t)`. Trace APPEND-ONLY →
+ * `TraceRegionFold` (`trace-region-fold.ts`) maintains incrementally O(Δ). Parity: strict
+ * deep-equal test over EXPORTED pure helpers (`leafFor`, `conditionOf`, `regionsAt`, …).
  */
 import { APair } from "../values/primitives/APair.js";
 import { deepProvenance } from "../values/deep-provenance.js";
@@ -56,16 +28,13 @@ import type { EvalTrace, Invocation } from "./trace.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT
- *  (docs/package-specific/arrival-provenance/provenance-region-model-plan-2026-06-02.md, Stage 2).
- *  Keyed by the producer's STRUCTURAL scope-id, NOT per-value: a `map`/loop body that
- *  runs N times emits ONE port per structural producer (one dataflow), matching the
- *  `leaf.scope` contract. This is what makes each container a hermetic mini-chart with
- *  explicitly known granular inputs and outputs. */
+ *  (provenance-region-model-plan-2026-06-02.md, Stage 2). Keyed by producer's STRUCTURAL
+ *  scope-id, NOT per-value: a N-times body emits ONE port per structural producer. */
 export interface RegionPort {
-  /** The producer's structural scope-id (`head@line:col`) crossing the boundary. */
+  /** Producer's structural scope-id (`head@line:col`) crossing the boundary. */
   producer: string;
-  /** The consumer's named input slot the value flowed into, when recoverable (a
-   *  `.prompt` kwarg) — carried straight off the crossing edge's `field`. */
+  /** Consumer's named input slot the value flowed into (a `.prompt` kwarg) — off the
+   *  crossing edge's `field`. */
   field?: string;
 }
 
@@ -74,104 +43,84 @@ export type Region =
       kind: "leaf";
       id: number;
       label: string;
-      /** Stable STRUCTURAL identity (`head@line:col`) — the same string for every
-       *  iteration of one `(infer …)` call. The render keys a container's boundary
-       *  ports by this, so a `map`/loop body that runs N times emits ONE exit port
-       *  per structural producer (one dataflow), not N (one per value). */
+      /** Stable STRUCTURAL identity (`head@line:col`) — same string every iteration of one
+       *  `(infer …)`. Render keys boundary ports by this: N-times body emits ONE exit port
+       *  per structural producer, not N. */
       scope: string;
       nodeKind: "direct" | "prompt";
       /** Node metadata bound via `resultWithProvenance` — a `.prompt` leaf carries
-       *  `{ kind:"prompt", path, model, inputs }`; a bare `(infer …)` has none. The
-       *  render draws the node's card from this. */
+       *  `{ kind:"prompt", path, model, inputs }`; a bare `(infer …)` has none. */
       meta?: unknown;
-      /** The resolved inference result (`undefined` while still running). */
+      /** The resolved inference result (`undefined` while running). */
       value?: unknown;
       /** running | resolved | rejected — pending vs result vs error in the card. */
       state: "running" | "resolved" | "rejected";
-      /** Rejection detail for a `rejected` leaf — the message off `Invocation.error`, so the
-       *  card shows WHY it failed, not a bare `⚠ failed`. */
+      /** Rejection detail for a `rejected` leaf — off `Invocation.error`. */
       error?: string;
-      /** Cache HIT (replayed free) vs fresh (paid) call — the free-vs-paid cost signal.
-       *  `undefined` for non-infer leaves. */
+      /** Cache HIT (replayed free) vs fresh (paid). `undefined` for non-infer leaves. */
       cached?: boolean;
     }
   | {
       /** A `<>` DECISION MARKER — the point a live branch (`if`/`cond`/…) decided
-       *  one way HERE. It does NOT box or fork the flow: the divergence between
-       *  arms is already absorbed by the enclosing autonomous region's iteration
-       *  picker (map/filter/TCO Z-tabs), so the marker only annotates "a decision
-       *  was made here". The taken arm's content follows it as ordinary siblings. */
+       *  one way HERE. Doesn't box/fork: divergence's absorbed by the enclosing region's
+       *  iteration picker (map/filter/TCO Z-tabs); the marker just annotates "decision
+       *  made here". The taken arm follows as ordinary siblings. */
       kind: "decision";
       id: number;
-      /** The branch head — `if` | `cond` | `case` | `when` | `unless`. */
+      /** Branch head — `if` | `cond` | `case` | `when` | `unless`. */
       label: string;
       /** Stable source-location identity (`head@line:col`) of the branch site. */
       scope: string;
-      /** A HUMAN-READABLE rendering of the branch's test, recovered from the AST —
-       *  `score > 0.6`, `stage is "analyze"`, `fails is empty`. Known predicate
-       *  shapes get a tidy phrase; anything unrecognized falls back to the verbatim
-       *  s-expression (so it's never worse than showing the code). The decision node
-       *  TALKS instead of showing a bare `<>`. AST-only for now: value-substitution
-       *  (`score (0.73) > 0.6`) needs the test's runtime value, which the snapshot
-       *  doesn't carry for non-points — that's the next layer. `cond`/`case` are
-       *  multi-clause and stay unlabelled here (also next layer). */
+      /** Human-readable branch test, recovered from AST — `score > 0.6`, `stage is "analyze"`.
+       *  Known predicate shapes → tidy phrase; unrecognized → verbatim s-expression. AST-only:
+       *  value-substitution (`score (0.73) > 0.6`) needs the test's runtime value, which the
+       *  snapshot doesn't carry for non-points — next layer. `cond`/`case` stay unlabelled. */
       condition?: string;
-      /** PER-ELEMENT verdicts for a NARROWING decision (`filter` today; the survivorship
+      /** PER-ELEMENT verdicts for a NARROWING decision (`filter` today; survivorship
        *  family — `car`/`slice`/`take-while` — later), in collection order over the settled
-       *  prefix. `kept` = the element survived; `origins` = the inference points the
-       *  ELEMENT'S VALUE deep-traces to (NOT the predicate outcome's provenance, which
-       *  folds in compared-against values) — the pairing key that lets a render absorb
-       *  the verdict onto the producing fan-out's iterations as an element-axis stack
-       *  (`⊘ filtered` on the dropped candidate's tab). Empty `origins` = an element that
-       *  entered the collection without traced inference (a carried-over literal) — an
-       *  unpaired row, still counted by `condition`. Absent on plain branch decisions. */
+       *  prefix. `kept` = survived; `origins` = inference points the ELEMENT'S VALUE
+       *  deep-traces to (NOT the predicate outcome's provenance) — the pairing key that
+       *  lets render absorb the verdict onto the producing fan-out's iterations
+       *  (`⊘ filtered` on the dropped tab). `origins:[]` = entered without traced inference
+       *  (carried literal) — unpaired row, still counted by `condition`. Absent on plain
+       *  branch decisions. */
       verdicts?: { kept: boolean; origins: number[] }[];
     }
   | {
       kind: "fanout";
       id: number;
-      /** Stable STRUCTURAL identity (`head@line:col`) of the fanout's call site — the
-       *  same string for every iteration of an OUTER container this fanout is nested in,
-       *  exactly as `leaf.scope`/`decision.scope` are. The fanout's `id` is a per-pass
-       *  runtime invocation id, so it CANNOT key the cross-pass fold: a nested `(map …)`
-       *  run once per outer persona gets a fresh `id` each pass and would never
-       *  consolidate. Keying the render fold by `scope` folds all those passes onto one
-       *  container node (the matryoshka fix). */
+      /** Stable STRUCTURAL identity (`head@line:col`) of the fanout's call site — same
+       *  string every iteration of an OUTER container this fanout nests in. The fanout's `id`
+       *  is a per-pass runtime id, so it CANNOT key the cross-pass fold: a nested `(map …)`
+       *  run once per outer persona gets a fresh `id` each pass. Keying render fold by
+       *  `scope` folds all passes onto one container (matryoshka fix). */
       scope: string;
-      /** The fused transform breadcrumb, outermost→innermost. ONE entry = a plain
-       *  `map`/`filter`/TCO `loop`; SEVERAL = a fused chain (`map ▸ filter ▸ map`)
-       *  the cleanup pass collapsed into one frame. Each carries its own invocation
-       *  id so the render can later cmd-click-navigate to that stage's call site.
-       *  For ELK the whole fanout — chain included — is ONE node, never its stages. */
+      /** The fused transform breadcrumb, outermost→innermost. ONE entry = plain
+       *  `map`/`filter`/`TCO `loop`; SEVERAL = fused chain (`map ▸ filter ▸ map`) the
+       *  cleanup pass collapsed into one frame. Each carries its own invocation id for
+       *  cmd-click nav. For ELK the whole fanout — chain included — is ONE node. */
       stages: { label: string; id: number }[];
-      /** Distinct iterations, MEANINGFUL ones only (degenerate — no inference
-       *  inside — pruned by the cleanup pass). The render stacks them on Z-tabs. */
+      /** Distinct iterations, MEANINGFUL ones only (degenerate — no inference — pruned).
+       *  Render stacks them on Z-tabs. */
       iterations: Region[][];
-      /** Raw incoming invocation count BEFORE pruning. `iterations.length` is how
-       *  many carried inference — the banner reads "10 incoming, 5 mattered". */
+      /** Raw incoming invocation count BEFORE pruning — banner reads "10 incoming, 5 mattered". */
       incoming: number;
-      /** True when this container is a TCO SELF-RECURSION loop (peeled from a body
-       *  that re-enters itself in tail position), as opposed to a `map`/`filter`
-       *  fan-out over a collection. The render draws a loop-back arc on the frame —
-       *  a wire leaving the contour and pointing back into it — so recursion reads
-       *  as recursion, not as an N-way fan. */
+      /** True when a TCO SELF-RECURSION loop (peeled from a body re-entering itself in tail
+       *  position), vs a `map`/`filter` fan-out over a collection. Render draws a loop-back
+       *  arc so recursion reads as recursion, not an N-way fan. */
       loop?: boolean;
-      /** The container's BOUNDARY ports (Stage 2 — regions ARE boxes). `inputs` =
-       *  external producers whose values flow into its internals (entrance);
-       *  `outputs` = internal producers whose values flow outside (exit). Derived by
-       *  pure edge-vs-membership over the region tree — an edge `P→C` is an input of
-       *  every container holding `C` but not `P`, an output of every container holding
-       *  `P` but not `C` — keyed by producer scope so each structural producer is ONE
-       *  port regardless of iteration count. This is what lets a collapsed region show
-       *  just its ports instead of its exploded internals. */
+      /** The container's BOUNDARY ports (Stage 2). `inputs` = external producers whose
+       *  values flow into internals (entrance); `outputs` = internal producers whose values
+       *  flow outside (exit). Derived by pure edge-vs-membership — an edge `P→C` is an input
+       *  of every container holding `C` but not `P`, an output of every container holding
+       *  `P` but not `C` — keyed by producer scope so each structural producer is ONE port
+       *  regardless of iteration count. Lets a collapsed region show just its ports. */
       inputs: RegionPort[];
       outputs: RegionPort[];
     }
   | {
-      /** The program's final STATEMENT OUTPUT — the value the last top-level
-       *  expression returned. A single terminal node the whole graph flows into,
-       *  wired from its immediate producers (the last infer/region its value came
-       *  from). Rendered as a small terminal card, not a producer leaf. */
+      /** The program's final STATEMENT OUTPUT — the value the last top-level expression
+       *  returned. A single terminal node the whole graph flows into. */
       kind: "output";
       id: number;
       value: unknown;
@@ -181,21 +130,18 @@ export type Region =
 export interface RegionGraph {
   /** Top-level meaningful regions, plumbing flattened away. */
   roots: Region[];
-  /** Dataflow wires between leaf invocation ids (producer → consumer). `field` is
-   *  the consumer's INPUT slot the producer's value flowed into — the named kwarg of
-   *  a `.prompt` consumer (`"analysis"` for `… :analysis a`), DERIVED by matching the
-   *  producer's value against the consumer's `inputs` dict (not stored in the model:
-   *  it's recoverable from data already captured). Absent when the consumer isn't a
-   *  `.prompt`, or when the value was PROJECTED/transformed before it reached the
-   *  slot (then `inputs[k] !== producer.value` and the match honestly declines —
-   *  attributing a projected input needs provenance-on-value, the v1 follow-up). */
+  /** Dataflow wires between leaf invocation ids (producer → consumer). `field` =
+   *  consumer's INPUT slot the producer's value flowed into — the named kwarg of a
+   *  `.prompt` consumer (`"analysis"` for `… :analysis a`), DERIVED by matching the
+   *  producer's value against the consumer's `inputs` dict. Absent when the consumer
+   *  isn't a `.prompt`, or when the value was PROJECTED/transformed before reaching
+   *  the slot (then `inputs[k] !== producer.value` — attributing a projected input
+   *  needs provenance-on-value, the v1 follow-up). */
   /** `fromField` marks a field-PLUCK: the consumer read only a SUBSET of the
    *  producer's fields (`(:verdict (infer …))`) rather than the whole value. Its
-   *  presence tells the renderer to draw a granular per-field wire into that slot
-   *  instead of absorbing the producer's whole result — the produced value isn't
-   *  what lands in the slot, one of its fields is. Emitted by `attributeFromFields`
-   *  (below) from the static carrier's pins — so it appears only when the trace ran
-   *  with the `AutoBindings` sidecar armed; the consumer guards
+   *  presence tells the renderer to draw a granular per-field wire into that slot.
+   *  Emitted by `attributeFromFields` from the static carrier's pins — appears only
+   *  when the trace ran with `AutoBindings` armed; the consumer guards
    *  (`if (e.fromField !== undefined) continue`) honor it either way. */
   edges: { from: number; to: number; field?: string; fromField?: string; kind: "data" | "control" }[];
   warnings: string[];
@@ -225,10 +171,8 @@ const BRANCH_FORMS: ReadonlySet<string> = new Set(["if", "cond", "case", "when",
 
 const headOf = (inv: PlainInv): string => scopeId(inv.node).split("@")[0] ?? "?";
 
-// ── readable predicate recovery (the decision node TALKS) ────────────────────
-// Recover a human phrase from a branch's test Pair. Known shapes → a tidy phrase;
-// anything else → the verbatim s-expression (never worse than the code). AST-only:
-// the static predicate, not yet the runtime value it tested.
+// Recover a human phrase from a branch's test Pair. Known shapes → tidy phrase;
+// else → verbatim s-expression. AST-only: static predicate, not runtime value.
 interface PairLike {
   car: unknown;
   cdr: unknown;
@@ -244,8 +188,7 @@ const listOf = (v: unknown): unknown[] => {
   for (let c = asPair(v); c; c = asPair(c.cdr)) out.push(c.car);
   return out;
 };
-/** Annotate a symbol with its resolved runtime value — `(sym) => "(value)" | ""`.
- *  The empty string means "no value to show" (unresolved free var / a literal). */
+/** Annotate a symbol with its resolved runtime value — `(sym) => "(value)" | ""`. */
 type Annotate = (sym: string) => string;
 const NO_ANNOTATE: Annotate = () => "";
 
@@ -279,8 +222,7 @@ const INFIX: Readonly<Record<string, string>> = {
   "eqv?": "is",
 };
 /** The negated comparison — what the operator becomes on the arm where the test was
- *  FALSE. `a > b` failing IS `a ≤ b`, so the realized condition reads as the negation,
- *  not `a > b → no`. Equality's negation is `≠` / `is not`. */
+ *  FALSE. `a > b` failing IS `a ≤ b`. Equality's negation is `≠` / `is not`. */
 const NEG_INFIX: Readonly<Record<string, string>> = {
   ">": "≤",
   "<": "≥",
@@ -292,9 +234,8 @@ const NEG_INFIX: Readonly<Record<string, string>> = {
   "eqv?": "is not",
 };
 
-/** Render a test OPERAND. A compound operand (`(car prop)`, `(proposal-batch-score …)`)
- *  goes through the sugarcoat lens — `prop[0]`, curly subscripts — so the pill reads as the
- *  authored expression would. A bare atom keeps its inline runtime-value annotation. */
+/** Render a test OPERAND. A compound operand (`(car prop)`) goes through sugarcoat
+ *  — `prop[0]`, curly subscripts. A bare atom keeps its inline runtime-value annotation. */
 const renderOperand = (operand: unknown, ann: Annotate): string => {
   if (asPair(operand)) {
     try {
@@ -306,14 +247,10 @@ const renderOperand = (operand: unknown, ann: Annotate): string => {
   return atomStr(operand, ann);
 };
 
-/**
- * Render a test as the REALIZED condition for the arm that ran — no `→ yes/no` suffix.
- * `taken` is whether the test was true on this path; when false, each shape renders its
- * own negation (`a > b` → `a ≤ b`, `is empty` → `is not empty`, `not X` flips back to
- * `X`). So the pill states the fact that actually held, not the predicate plus an
- * outcome label. Operand symbols carry inline runtime values via `ann`; compound
- * operands pass through the sugarcoat lens.
- */
+/** Render a test as the REALIZED condition for the arm that ran — no `→ yes/no`.
+ * `taken` = test was true; on false each shape renders its own negation
+ * (`a > b` → `a ≤ b`, `is empty` → `is not empty`, `not X` flips to `X`). So the pill
+ * states the fact that actually held, not the predicate + outcome label. */
 function readablePolar(test: unknown, taken: boolean, ann: Annotate = NO_ANNOTATE): string {
   const p = asPair(test);
   if (!p) {
@@ -345,8 +282,7 @@ function readablePolar(test: unknown, taken: boolean, ann: Annotate = NO_ANNOTAT
 // inline, the faithful form of operand-wiring when the producer isn't a drawn node.
 const LET_FORMS: ReadonlySet<string> = new Set(["let", "let*", "letrec"]);
 
-/** The value-expression a let-family node binds `sym` to, or undefined. Handles the
- *  named-let shape `(let name ((b v)…) …)` whose bindings sit one slot later. */
+/** The value-expression a let-family node binds `sym` to, or undefined. */
 const bindingValueExpr = (letNode: unknown, sym: string): { valExpr: unknown } | undefined => {
   const parts = listOf(letNode);
   // named let: slot 1 is the loop name (a symbol), bindings shift to slot 2.
@@ -418,7 +354,7 @@ const outcomeOf = (inv: PlainInv, testNode: unknown, valueById: (id: number) => 
   return undefined;
 };
 
-/** The readable condition for a branch invocation, or undefined for the multi-clause
+/** The readable condition for a branch invocation, or undefined for multi-clause
  *  forms (`cond`/`case`). Rendered as the REALIZED fact for the arm that ran (polarised
  *  by the recovered outcome — `a > b` on the true arm, `a ≤ b` on the false one), with
  *  static operands carrying their runtime values inline. */
@@ -449,16 +385,14 @@ export const conditionOf = (
 
 /** The provenance set carried by a raw scheme VALUE — non-empty when it's an AValue
  *  stamped by a producer (a field-pluck off an infer, an infer result). Read
- *  structurally to avoid importing AValue here; a literal/unstamped value yields none.
- *  Exported so `TraceRegionFold` can compute a branch's "dynamic-capable" predicate with
- *  the EXACT same logic `regionsAt` uses (parity of the wired-operand test). */
+ *  structurally to avoid importing AValue. Exported so `TraceRegionFold` can compute a
+ *  branch's "dynamic-capable" predicate with the EXACT same logic `regionsAt` uses. */
 export const valueProvenance = (v: unknown): Iterable<number> => {
   const p = (v as { provenance?: unknown } | null | undefined)?.provenance;
   return p != null && typeof (p as Iterable<number>)[Symbol.iterator] === "function" ? (p as Iterable<number>) : [];
 };
 
-/** Symbols appearing in a test expression (operator heads included — harmless, they
- *  never resolve to a let-binding). */
+/** Symbols appearing in a test expression (operator heads included — harmless). */
 const symbolsIn = (node: unknown): string[] => {
   const s = symOf(node);
   if (s !== undefined) return [s];
@@ -470,14 +404,11 @@ const symbolsIn = (node: unknown): string[] => {
 /** The decision's DATA-input PRODUCERS: the invocations that computed the let-bound
  *  operands its test reads. A bare symbol `pair` or a compound `(> score 0.6)` both
  *  resolve through the enclosing lets to whichever invocation produced each operand.
- *
- *  Every operand value is, by construction, either rooted purely in literals (a
- *  STATIC operand — degenerate, no dataflow to draw) or derived directly/indirectly
- *  from an inference (then it ALWAYS carries that inference in its TRANSITIVE
- *  provenance). So the caller doesn't require the immediate producer to itself be a
- *  rendered point — it follows the producer's provenance back to the inference
- *  origin(s) and wires from THOSE. A plumbing producer (`(find-merge candidates)`)
- *  that derived from inferences thus still wires; a literal-only one wires nothing. */
+ *  Every operand is, by construction, either literal-rooted (STATIC — no dataflow)
+ *  or derived from an inference (then it ALWAYS carries that inference in TRANSITIVE
+ *  provenance). So the caller follows provenance back to the inference origin(s)
+ *  and wires from THOSE — a plumbing producer that derived from inferences still wires;
+ *  a literal-only one wires nothing. */
 export const decisionInputProducers = (
   inv: PlainInv,
   valueById: (id: number) => unknown,
@@ -499,18 +430,16 @@ export const decisionInputProducers = (
 
 /** The rosetta heads of a DIRECT, user-written inference call. A provenance point
  *  whose head is one of these is a raw `(infer …)` / `(infer/chat …)`. Any OTHER
- *  provenance point is a `.prompt` proc — now an opaque native proc, so its
- *  invocation IS the `(run-x …)` call at the real source location (head = the
- *  binding `run-x`). The old line-1 lambda-unwrap heuristic is gone with it. */
+ *  provenance point is a `.prompt` proc — now opaque, so its invocation IS the
+ *  `(run-x …)` call at the real source location (head = binding `run-x`). */
 const DIRECT_INFER_HEADS: ReadonlySet<string> = new Set(["infer", "infer/chat"]);
 
-/** Classify an infer provenance point by its head: a direct `(infer/chat …)` →
- *  `direct`, labelled by the rosetta head; a `.prompt` call `(run-x …)` →
- *  `prompt`, labelled by the binding `run-x` at its real source location. A
- *  `.prompt` point mints on the resolver-generated `(infer/run …)` form (its
- *  head/scope carry `@dotprompt:<path>`, not the user's call site) — project
- *  through `userCallSite` first so the label/scope read as the real `(run-x …)`
- *  invocation while `id`/`meta`/`value`/`state` stay the point's own. */
+/** Classify an infer provenance point by its head: direct `(infer/chat …)` → `direct`,
+ *  labelled by the rosetta head; a `.prompt` call `(run-x …)` → `prompt`, labelled by
+ *  the binding `run-x`. A `.prompt` point mints on the resolver-generated `(infer/run …)`
+ *  form (head/scope carry `@dotprompt:<path>`) — project through `userCallSite` first so
+ *  label/scope read as the real `(run-x …)` while `id`/`meta`/`value`/`state` stay the
+ *  point's own. */
 export function leafFor(inv: PlainInv): Extract<Region, { kind: "leaf" }> {
   const site = userCallSite(inv);
   const head = headOf(site);
@@ -529,31 +458,30 @@ export function leafFor(inv: PlainInv): Extract<Region, { kind: "leaf" }> {
 }
 
 /** A non-structural application that recurs on its own ancestor chain — the same
- *  loop-detection `traceToForest` uses (a recursive APPLICATION, not a re-entrant
- *  special form). `let`/`if`/`begin` re-enter every iteration, so they're excluded. */
+ *  loop-detection `traceToForest` uses. `let`/`if`/`begin` re-enter every iteration,
+ *  so they're excluded. */
 const hasSelfAncestor = (inv: PlainInv): boolean => {
   for (let p = inv.parent; p; p = p.parent) if (p.node === inv.node) return true;
   return false;
 };
 
 // ── shared origin resolution (field-point → producer) ─────────────────────────
-/** Resolve a provenance id to its concrete producer origin. Under FORWARD (the
- *  field-point mint is retired), a `(:field x)` projection forwards the producer's own
- *  point rather than minting a field-point that truncates to it — so a provenance id
- *  IS its origin, and this is the identity. (Kept as a named function so the call sites
- *  read as "resolve to origin" and to localize the place a future grounded carrier
- *  would re-introduce a walk.) */
+/** Resolve a provenance id to its concrete producer origin. Under FORWARD (field-point
+ *  mint retired), a `(:field x)` projection forwards the producer's own point rather
+ *  than minting a field-point — so a provenance id IS its origin, this is identity.
+ *  Kept named so call sites read as "resolve to origin" and localize the place a
+ *  future grounded carrier would re-introduce a walk. */
 export function resolveOriginVia(id: number): number {
   return id;
 }
 
 const EMPTY: ReadonlySet<number> = new Set();
 
-/** ONE point's contribution to the Hasse (transitive-reduction) edge set, in ascending
- *  id order. `up` = x's in-graph upstream origins (already origin-resolved + ∩ points).
- *  Appends the non-redundant `u→x` edges and records `reach[x]` (x's full ancestor
- *  closure). Ascending id is a valid topological order, so a new point only ADDS edges
- *  and never invalidates an existing one — which is exactly what lets `TraceRegionFold`
+/** ONE point's contribution to the Hasse (transitive-reduction) edge set, ascending id.
+ *  `up` = x's in-graph upstream origins (already origin-resolved + ∩ points). Appends
+ *  the non-redundant `u→x` edges and records `reach[x]` (x's full ancestor closure).
+ *  Ascending id is a valid topological order, so a new point only ADDS edges and
+ *  never invalidates an existing one — which is exactly what lets `TraceRegionFold`
  *  call this per new point and keep `edges`/`reach` identical to the from-scratch build.
  *  Returns the edges it appended (the caller pushes them into the shared list). */
 export function addPointToHasse(
@@ -582,9 +510,8 @@ export function addPointToHasse(
   return { edges: out, closure };
 }
 
-/** x's in-graph upstream origin set: ⋃ over x's children of child.provenance, each
- *  origin-resolved (identity under forward — see `resolveOriginVia`) and kept iff it's
- *  a point and not x. */
+/** x's in-graph upstream origin set: ⋃ over x's children of child.provenance, origin-
+ *  resolved (identity under forward) and kept iff it's a point and not x. */
 export function upstreamOfPoint(x: PlainInv, pointIds: ReadonlySet<number>): Set<number> {
   const up = new Set<number>();
   for (const c of x.children)
@@ -605,18 +532,17 @@ const BRANCH_VOID: object = Symbol("branch-route-void") as unknown as object;
 export const routeOf = (inv: PlainInv): object => (inv.children.length > 0 ? inv.children.at(-1)!.node : BRANCH_VOID);
 
 /** An OPTIONAL per-iteration memo hook (the incremental seam). `regionsAt` calls this
- *  at each iteration-producing site (a loop body-entry, a map appl-child) so that
- *  `TraceRegionFold` can REUSE a frozen iteration's already-built `Region[]` instead of
- *  re-walking its subtree — while the from-scratch build leaves it unset and recomputes
- *  everything. `freezable` is true iff the iteration's content can no longer change with
- *  trace growth (a loop iteration whose successor exists; a resolved map application);
- *  the hook may only cache when `freezable`. It MUST be transparent — return a value
- *  deep-equal to `compute()` — so parity holds whether it caches or not. */
+ *  at each iteration-producing site so `TraceRegionFold` can REUSE a frozen iteration's
+ *  already-built `Region[]` instead of re-walking — while from-scratch leaves it unset.
+ *  `freezable` = true iff the iteration's content can no longer change with trace growth
+ *  (a loop iteration whose successor exists; a resolved map application); the hook may
+ *  only cache when `freezable`. MUST be transparent — return a value deep-equal to
+ *  `compute()` — so parity holds whether it caches or not. */
 export type IterationCache = (key: number, freezable: boolean, compute: () => Region[]) => Region[];
 
-/** Everything `regionsAt` needs that is NOT the invocation itself — the global signal
- *  sets + value/point accessors + the per-walk collectors. Built fresh per from-scratch
- *  build; rebuilt (with cached membership) per incremental `current()`. */
+/** Everything `regionsAt` needs that is NOT the invocation itself — global signal sets
+ *  + value/point accessors + per-walk collectors. Built fresh per from-scratch build;
+ *  rebuilt (with cached membership) per incremental `current()`. */
 export interface RegionWalkCtx {
   loopBodies: ReadonlySet<object>;
   liveBranchScopes: ReadonlySet<string>;
@@ -624,17 +550,16 @@ export interface RegionWalkCtx {
   valueById: (id: number) => unknown;
   /** Live value of an invocation id (for decision-operand provenance) — the snapshot
    *  drops plumbing values, so the decision path reads the live trace. `SchemeValue |
-   *  undefined`, not `unknown`: this is the RAW pre-`schemeToJs` value (see `valueById`
-   *  above for the already-lowered sibling), and `Invocation.value` (trace.ts) is honestly
-   *  typed that way — matching it here is what lets every `schemeToJs(liveValueById(...))`
-   *  caller satisfy schemeToJs's own honest bound without a cast. */
+   *  undefined`, not `unknown`: RAW pre-`schemeToJs` value — matches `Invocation.value`
+   *  (trace.ts) so `schemeToJs(liveValueById(...))` satisfies schemeToJs's bound without
+   *  a cast. */
   liveValueById: (id: number) => SchemeValue | undefined;
-  /** Live INVOCATION provenance of an id — the snapshot zeroes plumbing provenance, and the
-   *  pruner frees most of it mid-run, but a `filter`'s direct children are prune-exempt (see
+  /** Live INVOCATION provenance of an id — snapshot zeroes plumbing provenance, pruner
+   *  frees most of it mid-run, but a `filter`'s direct children are prune-exempt (see
    *  `EvalTrace#pruneChildProvenance`): each per-element pred application's set names the
    *  inference origins that element's selection tested. The filter-predicate decision reads it. */
   liveProvenanceById: (id: number) => Iterable<number>;
-  /** The provenance POINTS in an invocation's live subtree (topmost ones — not descending
+  /** The provenance POINTS in an invocation's live subtree (topmost — not descending
    *  past a point). A field-pluck off an infer (`(:big (car (infer …)))`) carries its
    *  provenance on the stamped pluck VALUE, but that value is GC-pruned as non-point
    *  plumbing before the region build runs (`Trace#pruneChildProvenance`). The provenance
@@ -642,11 +567,11 @@ export interface RegionWalkCtx {
    *  points are never pruned — so the decision gate recovers it by walking here. */
   livePointsUnder: (id: number) => readonly number[];
   /** The producer POINTS a NAME was bound to within an invocation's live subtree — the
-   *  auto-bindings sidecar (`withAutoBindings`) scoped to that subtree. This is the
-   *  per-element pairing key for narrowing verdicts: a filter pred's PARAMETER binding
-   *  inside pred-application j carries exactly element j's origins (the predicate
-   *  OUTCOME's provenance would smear in compared-against elements — a Pareto test folds
-   *  the whole pool). Absent when the trace runs without the sidecar. */
+   *  auto-bindings sidecar (`withAutoBindings`) scoped to that subtree. The per-element
+   *  pairing key for narrowing verdicts: a filter pred's PARAMETER binding inside
+   *  pred-application j carries exactly element j's origins (the predicate OUTCOME's
+   *  provenance would smear in compared-against elements — a Pareto test folds the whole
+   *  pool). Absent when the trace runs without the sidecar. */
   boundPointsOf?: (id: number, name: string) => readonly number[];
   /** Collectors filled during the walk (knot→arm control wires, knot→operand data
    *  wires) — read after the walk to append the decision edges. */
@@ -724,24 +649,19 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
     }
   };
   const addOrigins = (ps: Iterable<number>): void => resolveInto(ps, origins);
-  // Per-element: each pred application's invocation provenance (prune-exempt for filter
-  // children) unions the origins that element's test folded in — the sharpest read.
+  // Per-element: pred invocation provenance (prune-exempt for filter children).
   for (const c of applChildren) addOrigins(ctx.liveProvenanceById(c.id));
-  // Fallback: the eval'd-once args' values, DEEP (a packed list's origins live on its
-  // elements) — covers a pred whose comparisons happened outside this subtree.
+  // Fallback: eval'd-once args' values, DEEP — covers pred whose comparisons happened
+  // outside this subtree.
   if (origins.size === 0) for (const arg of inv.children) {
     if (arg.children.length > 0) continue;
     addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
   }
-  if (origins.size === 0) return undefined; // static selection — degenerate, dissolve
-  // PER-ELEMENT VERDICTS — the half the aggregate `kept k of n` used to discard. The
-  // pairing key is the ELEMENT's OWN origins (the predicate OUTCOME's provenance is wrong
-  // for this — a Pareto test folds in the candidates it compared AGAINST). Two reads:
-  //  1. BINDING (primary): the pred parameter's auto-binding within application j's
-  //     subtree names exactly what element j carried — works however the collection
-  //     arrived (a bare symbol deref leaves no invocation to read positionally).
-  //  2. POSITIONAL (fallback): an eval'd-once collection arg whose live list aligns with
-  //     the applications in order — covers sidecar-less traces with inline collections.
+  if (origins.size === 0) return undefined; // static — degenerate, dissolve
+  // PER-ELEMENT VERDICTS. Pairing key = ELEMENT's OWN origins (predicate OUTCOME's
+  // provenance is wrong — Pareto test folds compared-AGAINST elements). Two reads:
+  //  1. BINDING (primary): pred param's auto-binding within appl j's subtree.
+  //  2. POSITIONAL (fallback): eval'd-once collection arg aligning with applications.
   // Neither available ⇒ no verdicts; the aggregate `condition` stays honest.
   const param = ctx.boundPointsOf ? predParamOf(inv.node) : undefined;
   const collection = inv.children
@@ -808,13 +728,10 @@ function predParamOf(node: unknown): string | undefined {
 export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
   if (inv.isProvenancePoint) {
     // A point is an ATOMIC card — but its ARGUMENT subtree can hold OTHER points
-    // (a nested `(infer …)`) or a live branch (`… :failures (list (pick n)))`).
-    // Those carry the very provenance that wires INTO this consumer, so if we
-    // returned the bare leaf they'd never render and their edges would dangle
-    // from nothing. HOIST them as PRECEDING siblings: the producers a card
-    // depends on draw before it, the card itself stays atomic, and every wire
-    // lands on a rendered node. (The point's OWN value still flows downstream
-    // via its leaf id, unchanged.)
+    // (a nested `(infer …)`) or a live branch. Those carry the very provenance that
+    // wires INTO this consumer, so HOIST them as PRECEDING siblings: the producers a
+    // card depends on draw before it, the card stays atomic, every wire lands on a
+    // rendered node. (The point's OWN value still flows downstream via its leaf id.)
     const hoisted = inv.children.flatMap((c) => regionsAt(c, ctx));
     return [...hoisted, leafFor(inv)];
   }
@@ -825,11 +742,11 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // CUT, so the next iteration's body doesn't leak into this one.
     if (hasSameBodyAncestor(inv)) return [];
 
-    // Loop ENTRY (the first body entry) → one fanout container; iterations =
-    // the spine of body entries, each cut at the next. The recursive call's
-    // arg eval (the `reflect` that seeds the next iteration) lives OUTSIDE the
-    // next body, so it stays in THIS iteration — correct: this iteration
-    // computed it. Sequential iters reuse `fanout` (Z-tabs) by design.
+    // Loop ENTRY → one fanout container; iterations = the spine of body entries,
+    // each cut at the next. The recursive call's arg eval (the `reflect` that
+    // seeds the next iteration) lives OUTSIDE the next body, so it stays in THIS
+    // iteration — correct: this iteration computed it. Sequential iters reuse
+    // `fanout` (Z-tabs) by design.
     const iterations: Region[][] = [];
     let incoming = 0;
     // The spine of body-entries — from the cached list (incremental) or by walking
@@ -846,10 +763,9 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
         ? ctx.iterationCache(here.id, frozen, () => here.children.flatMap((c) => regionsAt(c, ctx)))
         : here.children.flatMap((c) => regionsAt(c, ctx));
       // The TERMINAL spine entry with an EMPTY body is the loop's EXIT — the base case
-      // returning the value (`(if (zero? n) pool …)`'s bare-arm pass). It is not an
-      // "incoming iteration that got pruned": counting it made a 4-round loop read
-      // `4 ← ×5`, implying a fifth round existed. A MID-spine empty pass IS a real
-      // skip/discard round and stays counted.
+      // returning the value. Not an "incoming iteration that got pruned": counting it
+      // made a 4-round loop read `4 ← ×5`, implying a fifth round. A MID-spine empty
+      // pass IS a real skip/discard round and stays counted.
       if (regions.length > 0) iterations.push(regions);
       if (regions.length > 0 || frozen) incoming += 1;
     }
@@ -905,10 +821,9 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // like a branch: LIVE = both kept and dropped occurred in THIS invocation (a one-way
     // filter is invisible plumbing, as ever), DYNAMIC = the filtered collection's elements
     // trace to inference points (deep read — the container is provenance-transparent). Its
-    // data-ins wire from those origin points (the seed evaluation finally CONNECTS to the
-    // loop that selects on it) and its control arm gates the surviving fanout, so the
-    // render frames "kept k of n → [the kept work]". The marker's id is the first element
-    // application's (the fanout keeps `inv.id`; a pred application is never itself a region).
+    // data-ins wire from those origin points and its control arm gates the surviving fanout,
+    // so the render frames "kept k of n → [the kept work]". The marker's id is the first
+    // element application's (the fanout keeps `inv.id`; a pred application is never itself a region).
     const decision = headOf(inv) === "filter" ? filterDecision(inv, applChildren, ctx) : undefined;
     // An INLINE argument expression carries real work — `(map car (filter …))` computes
     // its collection in an argument position, and that subtree holds the filter's own
@@ -940,8 +855,6 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
   // already carried by the enclosing autonomous region's iteration picker, so the
   // marker just says "here's where the decision was made". An arm with no rendered
   // content this time (a bare-atom route) yields nothing → no marker either.
-  // (A branch that IS a loop body was already claimed above; a seamless one-way
-  // branch isn't live and falls through to plain plumbing.)
   if (BRANCH_FORMS.has(headOf(inv)) && ctx.liveBranchScopes.has(scopeId(inv.node))) {
     const inner = inv.children.flatMap((c) => regionsAt(c, ctx));
     if (inner.length === 0) return [];
@@ -1009,19 +922,17 @@ export interface FinalizeCtx {
 /**
  * The PRODUCER-side twin of `attributeFieldEdges`: stamp each data edge with `fromField` —
  * which OUTPUT field of the producer the consumer plucked (`(:verdict (car reactions))` →
- * `fromField:"verdict"`). The pin data is reused verbatim from `carrierFieldEdges` (the
- * spec-faithful, byte-identical replacement for the retired field-point mint), keyed by
- * `${producer}>${consumer}` — the exact point-id endpoints region edges carry, so the join
- * is a direct `Map.get` with no cell-lift (regions never collapse points). Pure: identical
- * for from-scratch + incremental (the fold calls it with the same carrier map).
+ * `fromField:"verdict"`). Pin data reused verbatim from `carrierFieldEdges` (the spec-faithful,
+ * byte-identical replacement for the retired field-point mint), keyed by `${producer}>${consumer}`
+ * — exact point-id endpoints region edges carry, so the join is a direct `Map.get`. Pure.
  *
  * Only DATA edges qualify (control/decision/output carry no producer-field pluck). An edge
  * with no carrier entry — whole-value flow, positional plucks (`car`/index), or the
- * auto-bindings flag OFF — passes through unchanged (`fromField` stays undefined), so this is
- * fully additive. Limitation: the carrier aggregates to `Set<field>` per `(producer,consumer)`
- * and loses which producer field fed which consumer slot, so a producer plucked into two
- * different slots of one consumer over-generates (the same fidelity ceiling `statechart.ts`
- * accepts); a true (slot,fromField)-paired carrier is a follow-up.
+ * auto-bindings flag OFF — passes through unchanged, fully additive. Limitation: the carrier
+ * aggregates to `Set<field>` per `(producer,consumer)` and loses which producer field fed
+ * which consumer slot, so a producer plucked into two different slots of one consumer
+ * over-generates (same fidelity ceiling `statechart.ts` accepts); a true (slot,fromField)-
+ * paired carrier is a follow-up.
  */
 export function attributeFromFields(edges: RegionEdge[], fromFieldEdges: Map<string, Set<string>>): RegionEdge[] {
   const out: RegionEdge[] = [];
@@ -1305,10 +1216,9 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
 
   // Live-value accessor for decision-operand substitution (memoized; pays the
   // `schemeToJs` cost only for operands a decision actually references).
-  // `Map<number, Invocation>`, not the old `{ value: unknown }` — `liveById` holds the
-  // live invocations themselves (every reader below wants a DIFFERENT field off them:
-  // `.value`, `.provenance`, `.children`/`.isProvenancePoint`), so the honest declared
-  // type is the real one, not a value-only projection two other readers had to cast past.
+  // `Map<number, Invocation>` — `liveById` holds live invocations themselves (every reader
+  // wants a DIFFERENT field: `.value`, `.provenance`, `.children`/`.isProvenancePoint`),
+  // so the declared type is the real one, not a value-only projection readers cast past.
   const liveById = new Map<number, Invocation>();
   for (const rec of trace.records.values()) for (const inv of rec.bindings) liveById.set(inv.id, inv);
   const valCache = new Map<number, unknown>();
