@@ -1,14 +1,12 @@
 /**
- * op-helpers — the cross-cutting leaf shared by every primitive cluster.
+ * op-helpers — cross-cutting leaf shared by every primitive cluster.
  *
- * These are the type-coercion + provenance + allocation-guard helpers that the
- * value-domain capability packs (numbers / strings / chars / lists / vectors /
- * bytevectors / control / core) all reach for. They live in their OWN leaf module
- * — importing only value-type classes, never the env layer — so a cluster pack
- * (`env/r7rs/*`, which assembles its `wrappedOps` from these helpers) can import
- * them without a cycle.
+ * Type-coercion + provenance + allocation-guard helpers the value-domain capability
+ * packs (numbers/strings/chars/lists/vectors/bytevectors/control/core) reach for. OWN
+ * leaf module (imports only value-type classes, never env layer) so a cluster pack
+ * (`env/r7rs/*`, which assembles its `wrappedOps` from these helpers) imports without a cycle.
  *
- * Dependency direction is down only: clusters → op-helpers → value-type classes.
+ * Dependency direction: clusters → op-helpers → value-type classes.
  */
 
 import invariant from "tiny-invariant";
@@ -29,32 +27,26 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// ============================================================================
 // Allocation cap — DoS defense for size-parameterized constructors
-// ============================================================================
 
-// `make-string` / `make-vector` / `make-bytevector` take an unbounded length `k`.
-// V8 throws RangeError only above its own ceiling (~2^29 chars, ~2^32 slots), but
-// that's the ENGINE's limit, not OUR policy: `(make-string 1e8)` allocates 200MB
-// of UTF-16 in ~1ms and succeeds, `(make-vector 1e8)` spins >10s on 100M slots —
-// one sandbox call drives host memory pressure. So length is checked O(1) BEFORE
-// allocation.
+// `make-string`/`make-vector`/`make-bytevector` take unbounded `k`. V8's ceiling
+// (~2^29 chars / ~2^32 slots) is the ENGINE limit, not our policy: `(make-string 1e8)`
+// allocates 200MB UTF-16 in ~1ms and succeeds, `(make-vector 1e8)` spins >10s on 100M
+// slots — one sandbox call drives host memory pressure. Length checked O(1) pre-alloc.
 //
-// Default: 2^24. Large enough no legitimate program hits it, small enough the
-// worst case (~32MB UTF-16 / one 16M-slot array) is recoverable, not a
-// host-killer. Host-overridable via `setAllocationLimit` for a tighter sandbox
-// or a looser trusted batch job.
+// Default 2^24: worst case (~32MB UTF-16 / one 16M-slot array) is recoverable. Host-
+// overridable via `setAllocationLimit` for tighter sandbox or trusted batch.
 let allocationLimit = 1 << 24; // 16,777,216
 
-/** Current per-call allocation cap for size-parameterized constructors. */
+/** Per-call allocation cap for size-parameterized constructors. */
 export function getAllocationLimit(): number {
   return allocationLimit;
 }
 
 /**
- * Override the per-call allocation cap (`make-string` / `make-vector` length).
- * Pass `Infinity` to disable (trusted contexts only). Negative / NaN is
- * rejected — the cap must be a meaningful upper bound.
+ * Override per-call allocation cap (`make-string`/`make-vector` length).
+ * `Infinity` disables (trusted contexts only). Negative/NaN rejected — cap must
+ * be a meaningful upper bound.
  */
 export function setAllocationLimit(limit: number): void {
   invariant(
@@ -65,39 +57,35 @@ export function setAllocationLimit(limit: number): void {
 }
 
 /**
- * Throw a Scheme-surfaceable error (O(1), pre-allocation) when a requested
- * length exceeds the cap or is otherwise not a usable count. `len` is read
- * once by the caller; we validate it here so both constructors share one
- * message shape and one policy.
+ * Throw Scheme-surfaceable error (O(1), pre-allocation) when len exceeds cap or
+ * is not a usable count. `len` read once by caller; validated here so both
+ * constructors share one message shape and one policy.
  */
 export function assertAllocatable(len: number, fnName: string): void {
   invariant(Number.isFinite(len) && len >= 0, `${fnName}: length must be a non-negative integer, got ${len}`);
   invariant(len <= allocationLimit, `${fnName}: requested length ${len} exceeds allocation limit ${allocationLimit}`);
 }
 
-// ============================================================================
 // Value-type coercion
-// ============================================================================
 
-/** Extract character value from SchemeCharacter */
+/** Unwrap SchemeCharacter → string */
 export function charValue(char: unknown): string {
   return (char as ACharacter).__char__;
 }
 
-/** Extract string value from SchemeString or convert to string */
+/** Unwrap AString.valueOf() or String(str) */
 export function stringValue(str: unknown): string {
   return str instanceof AString ? str.valueOf() : String(str);
 }
 
-/** Convert unknown to index number (for vector/string operations) */
+/** Coerce to index number for vector/string ops */
 export function toIndex(v: unknown): number {
   return typeof v === "number" ? v : Number((v as AExact).valueOf());
 }
 
-/** Structural guard for the vector PROTOCOL — a boxed AVector or a borrowed AJSArray, both
- *  answering `arrival/tagless-final/vector?` and exposing their element payload via `__vector__`.
- *  Honest duck-narrowing — no `instanceof AVector` reach-around, no operand cast in `asVector`'s
- *  body. */
+/** Vector PROTOCOL guard: boxed AVector or borrowed AJSArray — both answer
+ *  `arrival/tagless-final/vector?` and expose `__vector__`. Honest duck-narrowing —
+ *  no `instanceof AVector` reach-around, no operand cast in `asVector`. */
 interface VectorLike {
   "arrival/tagless-final/vector?"(): boolean;
   __vector__: SchemeValue[];
@@ -108,12 +96,11 @@ function isVectorLike(obj: unknown): obj is VectorLike {
 }
 
 /**
- * Resolve a vector argument to its raw element array (read view).
+ * Resolve vector arg to raw element array (read view).
  *
- * PROTOCOL dispatch — anything answering `arrival/tagless-final/vector?` (a boxed AVector OR a
- * borrowed AJSArray, which IS a vector) exposes its element payload via `__vector__`. No
- * `instanceof AVector` reach-around. A raw JS array is still tolerated (transition; S10 will
- * remove it). Throws otherwise.
+ * PROTOCOL dispatch — anything answering `arrival/tagless-final/vector?` exposes
+ * `__vector__`. No `instanceof AVector` reach-around. Raw JS array tolerated (transition;
+ * S10 removes). Throws otherwise.
  */
 export function asVector(obj: unknown, fnName: string): SchemeValue[] {
   if (isVectorLike(obj)) {
@@ -124,21 +111,19 @@ export function asVector(obj: unknown, fnName: string): SchemeValue[] {
 }
 
 /**
- * Convert bytevector-like value to Uint8Array view.
- * Accepts Uint8Array, ArrayBuffer, DataView, Node Buffer.
- * Preserves identity for Uint8Array, creates view for others.
+ * Coerce bytevector-like value to Uint8Array view.
+ * Accepts Uint8Array / ArrayBuffer / DataView / Node Buffer.
+ * Identity preserved for Uint8Array, view created for others.
  */
 export function asBytevector(obj: unknown, fnName: string): Uint8Array {
   switch (true) {
     case obj instanceof ABytevector:
-      // Unwrap by reference (env is immutable by design — vector-set!/bytevector-u8-
-      // set!/etc. are all notImplemented stubs, so there is no in-place writer left
-      // to guard against).
+      // Unwrap by reference: env is immutable (vector-set!/bytevector-u8-set!/etc.
+      // are notImplemented stubs — no in-place writer to guard against).
       return obj.__bytevector__;
     case obj instanceof Uint8Array:
-      // FFI coercion: a raw Uint8Array handed to byte vector op (e.g., from a
-      // JS function) is coerced in place. Stays permanently — it's the FFI
-      // adapter. (bytevector? tightens to instanceof-only in S4; asBytevector
+      // FFI coercion: raw Uint8Array from a JS fn coerced in place. Stays permanently —
+      // it's the FFI adapter. (bytevector? tightens instanceof-only in S4; asBytevector
       // keeps coercing raw forms.)
       return obj;
     case obj instanceof ArrayBuffer:
@@ -156,27 +141,21 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
 // Fantasy Land Ord — the type-agnostic ordered-comparison chain
 // ============================================================================
 
-// The comparison operators consult `arrival/tagless-final/lte` when their operands are
-// ordered ENTITIES (a DateTime, a Version, a SchemeCharacter, a SchemeString …),
-// exactly as equal? consults a Setoid's `arrival/tagless-final/equals`. All four relations
-// derive from the single `lte`; a chain `(< a b c)` holds iff each adjacent pair
-// does. The per-type order lives in the entity's instance, so the string<? /
-// char<? families are type-agnostic chains over it — adding a new ordered type
-// needs no new comparison builtin. Numeric operands take the numeric
-// path (`env/r7rs/numeric.ts`'s `wrapOrd` — carved out of the now-deleted
-// bridge.ts's `wrapOperator`) — the FL check is one inexpensive property read.
+// Ordered ENTITIES consult `arrival/tagless-final/lte` (like Setoid's equals for equal?).
+// All four relations derive from the single `lte`; a chain `(< a b c)` holds iff each
+// adjacent pair does. Per-type order in entity instance — string<?/char<? families are
+// type-agnostic chains. Adding new ordered type needs no new builtin. Numeric operands
+// take numeric path (`env/r7rs/numeric.ts`'s `wrapOrd`); FL check is one cheap property read.
 export interface AOrd {
   "arrival/tagless-final/lte"(other: unknown): boolean;
 }
 export const isOrd = (x: unknown): x is AOrd => x != null && typeof (x as Partial<AOrd>)[tf("lte")] === "function";
 const lte = (a: AOrd, b: unknown): boolean => Boolean(a[tf("lte")](b));
-// Nil is the BOTTOM of the universal order (V's F2: nil-as-bottom, matching SRFI-128's
-// "the empty list is ordered before all pairs" and Clojure's `compare`). Detected
-// structurally (null / undefined / ANil — by constructor name, so no value-class import
-// and no cycle). Returns the 3-way verdict when EITHER side is nil (both nil ⇒ 0/equal;
-// one nil ⇒ it is the lesser), else `undefined` — meaning "neither is nil, compare
-// normally". Shared by `deriveSortCompare` here AND the loose comparison ops in
-// fl-interop, so `<` and `sort` agree on where nil sorts.
+// Nil = universal-order BOTTOM (V's F2: nil-as-bottom, matching SRFI-128 + Clojure).
+// Detected structurally (null/undefined/ANil — by constructor name, no value-class import/
+// no cycle). Returns 3-way verdict when EITHER side nil (both nil ⇒ 0/equal; one nil ⇒ lesser),
+// else undefined ("neither nil, compare normally"). Shared: `deriveSortCompare` here AND
+// fl-interop loose ops — `<` and `sort` agree on nil position.
 const isNilValue = (x: unknown): boolean =>
   x == null || (x as { constructor?: { name?: string } })?.constructor?.name === "ANil";
 export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined {
@@ -185,14 +164,14 @@ export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined 
   if (!aN && !bN) return undefined;
   return aN && bN ? 0 : aN ? -1 : 1;
 }
-/** The four relations of a total order, all derived from the single `lte`. */
+/** Four total-order relations, all derived from the single `lte`. */
 export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => boolean> = {
   "<": (a, b) => !lte(b, a),
   ">": (a, b) => !lte(a, b),
   "<=": (a, b) => lte(a, b),
   ">=": (a, b) => lte(b, a),
 };
-/** n-ary ordered comparison derived purely from the operands' `arrival/tagless-final/lte`. */
+/** n-ary ordered comparison from operands' `arrival/tagless-final/lte`. */
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
   return (...args: unknown[]): ABool => {
@@ -203,54 +182,48 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
         break;
       }
     }
-    // R8 mint (op-helpers.mintVerdict, below) — this composition (withInputProvenance +
-    // schemeBool) is the ORIGINAL of the law mintVerdict now names for every site.
+    // R8 mint (`op-helpers.mintVerdict`) — withInputProvenance + schemeBool is the ORIGINAL
+    // of the law mintVerdict names for every site.
     return mintVerdict(args, verdict);
   };
 }
 
-/** Human kind-name of an element that can't be ordered — its scheme `kind` (an AValue:
- *  "pair"/"vector"/…) else the JS shape. Mirrors `common/symbols/_bake.ts`'s describeReceiver. */
+/** Kind-name of un-orderable element — scheme `kind` (AValue "pair"/"vector"/…) else JS shape.
+ *  Mirrors `common/symbols/_bake.ts`'s describeReceiver. */
 const describeOrdElement = (v: unknown): string =>
   v instanceof AValue ? v.kind : v === null || v === undefined ? String(v) : Array.isArray(v) ? "array" : typeof v;
 
-/** Derive the JS `Array.prototype.sort` comparator (a (a,b)=>number) used by every
- *  primitive's `arrival/tagless-final/sort`. The container-shape decision lives on the
- *  term; this is the SHARED element-ordering both APair and AVector reach for.
+/** Derive JS `Array.prototype.sort` comparator ((a,b)=>number) for every primitive's
+ *  `arrival/tagless-final/sort`. SHARED element-ordering both APair and AVector reach for.
  *
- *  • No comparator → the operand's OWN total order via `arrival/tagless-final/lte`: for a
- *    pair a,b — `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). Correct
- *    for EVERY Ord-bearing type (numbers/strings/chars/symbols/bytevectors all carry lte).
- *    An element lacking `lte` (e.g. a pair, with no user comparator) → a totalic "cannot
- *    order" throw — never a silent mis-order.
- *  • Comparator present → BOTH supported comparator shapes (the two conventions the
- *    ecosystem actually uses), ASSUMED SYNC (ES Array.sort is sync):
- *      – a JS-style NUMBER comparator (`(a b) → number`, <0 ⇒ a-before-b) — used DIRECTLY;
- *        a boxed Scheme numeric is unboxed.
- *      – else a `less?` predicate (SRFI-95 / a Scheme `<=`-style boolean) — truthy iff a
- *        precedes b: `!is_false(cmp(a,b)) ? -1 : (!is_false(cmp(b,a)) ? 1 : 0)`.
- *    The number branch is REQUIRED: reading a number comparator's verdict through
- *    `!is_false` (every nonzero number is scheme-truthy) would mis-order — a number must
- *    be consulted as a number, never coerced to less?-truthiness. */
+ *  • No comparator → operand's OWN total order via `arrival/tagless-final/lte`: a,b —
+ *    `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). Correct for EVERY
+ *    Ord-bearing type. Element lacking `lte` (e.g. pair, no user cmp) → "cannot order"
+ *    throw — never silent mis-order.
+ *  • Comparator present → BOTH supported shapes (ASSUMED SYNC):
+ *      – NUMBER comparator ((a,b)→number, <0 ⇒ a-before-b) — used DIRECTLY; boxed Scheme
+ *        numeric unboxed.
+ *      – else `less?` predicate (SRFI-95) — truthy iff a precedes b.
+ *    Number branch REQUIRED: reading number verdict through `!is_false` mis-orders (every
+ *    nonzero is scheme-truthy) — a number must be consulted as a number. */
 export function deriveSortCompare(
   comparator?: (a: unknown, b: unknown) => unknown,
 ): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {
-    // The comparator is a callable VALUE now (ANativeProcedure) — invoke through the seam, not
-    // as a bare fn. Sort is synchronous; a native comparator returns a settled value (a lambda
-    // comparator would return a promise, the pre-existing async-comparator limitation).
+    // Comparator is a callable VALUE (ANativeProcedure) — invoke through the seam, not bare fn.
+    // Sort sync; native cmp returns settled value (lambda cmp → promise, pre-existing limitation).
     const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], CONSTANT_CTX);
     return (a, b) => {
       const v = call(a, b);
       if (typeof v === "number") return v;
       if (v instanceof AExact || v instanceof AInexact) return Number(v.valueOf());
-      // `less?` predicate: a truthy verdict means a precedes b.
+      // `less?` predicate: truthy ≡ a precedes b.
       return is_false(v) ? (is_false(call(b, a)) ? 0 : 1) : -1;
     };
   }
   return (a, b) => {
     const nilCmp = nilOrderCompare(a, b);
-    if (nilCmp !== undefined) return nilCmp; // nil is the order's bottom (shared with the comparison ops)
+    if (nilCmp !== undefined) return nilCmp; // nil = order's bottom (shared with comparison ops)
     if (!isOrd(a))
       throw new TypeError(
         `sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`,
@@ -265,9 +238,7 @@ export function deriveSortCompare(
   };
 }
 
-// ============================================================================
-// Numeric coercion into the SchemeExact / SchemeInexact tower
-// ============================================================================
+// Numeric coercion into SchemeExact/SchemeInexact tower
 
 export function coerceNumeric(value: unknown): ANumeric {
   switch (true) {
@@ -276,8 +247,7 @@ export function coerceNumeric(value: unknown): ANumeric {
       return value;
     case typeof value === "bigint":
       return new AExact(CONSTANT_CTX, value);
-    // Safe integers become exact (likely from Scheme integer literals)
-    // Non-safe integers and floats become inexact
+    // Safe ints exact (likely Scheme int literals); non-safe + floats inexact
     case typeof value === "number":
       return Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
@@ -297,11 +267,9 @@ export function coerceNumeric(value: unknown): ANumeric {
   }
 }
 
-/** Check if a value can be converted to SchemeNumeric (without throwing). NOT a closed type guard:
- *  the `valueOf` arm admits any object exposing a number/bigint `valueOf()` (the same legacy-boxed
- *  coercion `coerceNumeric` accepts), so a true verdict does NOT prove `ANumeric | number | bigint`.
- *  Narrowing it to that union would be a lie; callers that need the boxed value go through
- *  `coerceNumeric` (which takes `unknown`), so no operand cast hangs off this predicate. */
+/** Convertible to SchemeNumeric without throwing. NOT a closed type guard: `valueOf` arm admits
+ *  any object exposing number/bigint valueOf(), so true ≠ `ANumeric | number | bigint`. Callers
+ *  needing boxed value go through `coerceNumeric` (takes unknown); no operand cast off this. */
 export function isSchemeNumber(value: unknown): boolean {
   switch (true) {
     case value instanceof AExact:
@@ -325,40 +293,26 @@ export function isSchemeNumber(value: unknown): boolean {
   }
 }
 
-// ============================================================================
 // Provenance stamping
-// ============================================================================
 
 /**
- * Stamp `result` with the union of `args`' provenances. The builtins that live in
- * the cluster packs — `string-append`, `string-copy`, `list-copy`, `vector`, etc. —
- * all produce fresh AValue / array / Uint8Array results whose provenance must
- * inherit from their inputs.
+ * Stamp `result` with union of `args`' provenances. Cluster-pack builtins
+ * (`string-append`, `string-copy`, `list-copy`, `vector`, …) produce fresh results whose
+ * provenance must inherit from inputs.
  *
- * Every scalar is boxed — string/number/bigint/boolean — UNCONDITIONALLY (the
- * bare-value purge, DAG node A4, RULINGS.md R1/P4): inside the membrane only
- * boxed AValues exist, so a raw JS scalar handed back here — even with empty
- * provenance to stamp — is a term the box-layer interpreter cannot execute
- * (P0/P4). This ONE call already existed a flyweight for the empty-provenance
- * case (`fromJs`'s `provenance === EMPTY_PROVENANCE` branch reuses `schemeTrue`/
- * `schemeFalse`/interns nothing for string/number — hot loops stay
- * allocation-free for booleans; strings/numbers get a fresh box, which is
- * correct, not merely tolerated — see `mintVerdict`'s doc for the boolean case).
- * Non-scalars (Pair / vector / object) stay raw — they carry provenance
- * structurally and `AValue.fromJs` would double-wrap them.
+ * Scalars boxed UNCONDITIONALLY (bare-value purge, DAG A4, RULINGS.md R1/P4): inside the
+ * membrane only boxed AValues — a raw JS scalar handed back is unexecutable (P0/P4).
+ * Empty-provenance flyweight exists (`fromJs` `EMPTY_PROVENANCE` branch reuses schemeTrue/
+ * schemeFalse — allocation-free for booleans; strings/numbers correctly boxed; see
+ * `mintVerdict`). Non-scalars stay raw — structural provenance, `AValue.fromJs` double-wraps.
  *
- * RETURN-TYPE CAST — the second `as T` (`fromJs(…) as T`) is INHERENT, not
- * laziness: it's the seam between two layers that model values differently. The
- * provenance layer BOXES a raw scalar (`fromJs`) to carry lineage, so a
- * `boolean`/`number` input can come back as a `SchemeBool`/`AExact` AValue — but
- * the symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`)
- * types the result by its DECODED JS shape, BLIND to the box (a `SchemeBool`
- * decodes back to `boolean` downstream), and the impl-side contract deliberately
- * wants that unboxed type (`string=?` is `: boolean`). Surfacing the box instead
- * would push the same widening into ~11 boxing-blind predicate/projection
- * contracts — a value-model decision belonging to the provenance/contract design,
- * not this leaf. The AValue-branch `as T` is separately sound (`withProvenance`
- * preserves the subtype).
+ * RETURN-TYPE CAST — `fromJs(…) as T` is INHERENT: seam between layers modeling values
+ * differently. Provenance layer boxes raw scalar; boolean/number → SchemeBool/AExact — but
+ * symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`) types by DECODED
+ * shape, blind to box. Impl-side contract wants unboxed type (`string=?` is `: boolean`).
+ * Surfacing box pushes widening into ~11 boxing-blind predicate/projection contracts —
+ * value-model decision for provenance/contract design, not this leaf. AValue-branch `as T`
+ * separately sound (`withProvenance` preserves subtype).
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   const inputs = args.filter((a): a is AValue => a instanceof AValue);
@@ -376,25 +330,22 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   return result;
 }
 
-// Re-export the provenance singletons cluster ops occasionally need for direct
-// boolean boxing, so a cluster need only import from this one leaf.
+// Re-export singletons cluster ops need for direct boolean boxing — single import source.
 export { schemeTrue, schemeFalse } from "./primitives/ABool.js";
 
-/** The scheme face of a predicate verdict — the shared flyweights (eq?-stable, empty
- *  provenance). The one boxing point every env pack's boolean-returning native uses
- *  under the Face split (a `z.boolean` output demands an ABool, never a raw JS boolean). */
+/** Scheme face of predicate verdict — shared flyweights (eq?-stable, empty provenance).
+ *  Every env pack's boolean-returning native boxes here under the Face split (`z.boolean`
+ *  output demands ABool, never raw JS boolean). */
 export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
 
 /**
- * THE ONE boxing point for boolean VERDICTS (RULINGS.md R8, two-tier-exec-api.md §6):
- * provenance-free operands → the shared eq?-stable flyweight (`schemeTrue`/`schemeFalse`
- * — hot loops stay allocation-free); stamped operands → a fresh `ABool` carrying the
- * union. A verdict derived from lineage carries it; one derived from constants doesn't.
- * This composition already existed ad hoc inside `deriveOrd` (above) — naming it here
- * makes it the law every boolean-verdict site (equal?/eqv?/eq?, the numeric comparison
- * wrappers, predicate natives returning a boolean through a wrap layer) routes through,
- * replacing the raw-boolean fast-path those sites used to fall through to on an
- * empty-provenance operand set.
+ * THE ONE boolean-VERDICT boxing point (RULINGS.md R8, two-tier-exec-api.md §6):
+ * provenance-free operands → eq?-stable flyweight (schemeTrue/schemeFalse — allocation-free
+ * hot loops); stamped operands → fresh ABool carrying union. Verdict from lineage carries it;
+ * from constants doesn't. This composition lived ad hoc in `deriveOrd` — naming here makes it
+ * the law every boolean-verdict site (equal?/eqv?/eq?, numeric comparison wrappers, predicate
+ * natives returning boolean through wrap layer) routes through, replacing the raw-boolean
+ * fast-path sites used on empty-provenance operands.
  */
 export function mintVerdict(operands: readonly unknown[], verdict: boolean): ABool {
   return withInputProvenance(operands, schemeBool(verdict));

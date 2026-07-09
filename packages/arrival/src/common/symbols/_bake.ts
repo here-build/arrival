@@ -1,54 +1,37 @@
-// symbols/_bake — the SHARED machinery behind the `arrival.symbol*` EnvCapability
-// symbol-definition API: the contract/decoded-type machinery, the baked `AEntity`
-// union + its members, and the shared types + helper fns the per-tag factory files
-// (`./native.ts`, `./rosetta.ts`, …) build their own `AEntity` member from directly —
-// there is no separate `bake*` constructor anymore (see §4 below). The factories live
-// one-per-file under this directory and are re-assembled into the `symbol` namespace by
-// `./index.ts`; the package's stable entry `../symbol.js` re-exports BOTH this module's
-// types and `export * as symbol from "./index.js"`. The cut is acyclic: factory files
-// import the shared types + helper fns from HERE; nothing here imports back up through
-// the namespace.
+// _bake: shared machinery behind arrival.symbol* EnvCapability — contract/decoded-type
+// layer, the baked AEntity union + members, shared types + helpers the per-tag factory files
+// (./native.ts, ./rosetta.ts, …) build their AEntity from directly (no separate bake* ctor — §4).
+// Factories live one-per-file, re-assembled into `symbol` namespace by ./index.ts. Stable entry
+// ../symbol.js re-exports both these types and `export * as symbol from "./index.js"`. Cut is acyclic:
+// factories import from here; nothing imports back up through the namespace.
 //
-// One zod contract, read (eventually) four ways: runtime validation (z.parse), static
-// impl types (z.infer via the generics here), the harvested .d.ts (printed from the
-// schema — printer BUILT in type-layer/schema-to-ts.ts; type-lens wiring pending), and the JS↔Scheme membrane (each
+// One zod contract, four readers: runtime validation (z.parse), static impl types (z.infer via
+// generics), harvested .d.ts (printer in type-layer/schema-to-ts.ts), JS↔Scheme membrane (each
 // schema is the per-arg codec). This module builds the AUTHORED-extension layer:
 //
 //   const symbol = { native, rosetta, tagless, notImplemented, … }
 //
-// so `import * as arrival from "../symbol.js"` →  arrival.symbol.native`name: doc`(…)
-//
 // ─────────────────────────────────────────────────────────────────────────────
-// THE RUNTIME MODEL (the interpretive call) — confirmed against the live interpreter
-// (src/rosetta.ts createRosettaWrapper, and src/common/capability.ts's ANativeProcedure/
-// ARosettaProcedure binder):
+// THE RUNTIME MODEL (confirmed against live interpreter — src/rosetta.ts createRosettaWrapper,
+// src/common/capability.ts ANativeProcedure/ARosettaProcedure binder):
 //
-//   symbol.native    — schemas are SCHEME-IDENTITY; impl works on SCHEME VALUES
-//                       (Pair, SchemeString, …). The native() factory (native.ts) attaches
-//                       { impl, in, out } with NO runtime
-//                       validation and NO codec — "zod for TYPES purely" (the schema
-//                       is there for static inference + the future .d.ts harvest). capability.ts
-//                       binds the baked .impl into a first-class ANativeProcedure, invoked
-//                       through the `arrival/tagless-final/apply` term — never a bare { value } binding.
+//   symbol.native    schemas SCHEME-IDENTITY; impl over SCHEME VALUES (Pair, SchemeString, …).
+//                    native() attaches { impl, in, out } with NO runtime validation and NO codec
+//                    ("zod for TYPES purely"). capability.ts binds .impl into ANativeProcedure,
+//                    invoked through `arrival/tagless-final/apply` — never a bare { value } binding.
 //
-//   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). The rosetta()
-//                       factory (rosetta.ts) produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
-//                       skippable/gated) → impl.call(this, decodedArgs) → await (async
-//                       implicit) → encode return (codec) → build the scheme values-list. This
-//                       mirrors createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
-//                       the codecs standing in for the generic schemeToJs/jsToScheme.
-//                       The impl receives ONLY the decoded scheme args POSITIONALLY — ctx is
-//                       never a param. ctx-coupled verbs read run-state off a per-call `this:
-//                       CallCtx` (`this.runCtx.signal` / `this.runCtx.signal?.aborted` /
-//                       `this.invocation.currentInvocation`); a pure verb is an arrow that
-//                       ignores `this`, so the call is byte-identical to `impl(decodedArgs)`.
-//                       PROVENANCE MINTING is RESOLVED: the evaluator appends ctx, so the
-//                       wrapper reads `this.invocation.currentInvocation` and mints/deep-stamps
-//                       EXACTLY as createRosettaWrapper does (a non-pure rosetta AEntity = a
-//                       source). withContext / argProvenance contract knobs are DROPPED here.
+//   symbol.rosetta   schemas CODECS; impl in JS-LAND (decoded). rosetta() produces wrapper:
+//                    decode args → VALIDATE (zod, skippable) → impl.call(this, decodedArgs) →
+//                    await (implicit) → encode return → build scheme values-list. Mirrors
+//                    createRosettaWrapper schemeToJs → fn → jsToScheme spine. impl receives ONLY
+//                    decoded scheme args POSITIONALLY — ctx never a param. ctx-coupled verbs read run-state
+//                    off `this: CallCtx` (`this.runCtx.signal`, `this.invocation.currentInvocation`).
+//                    PROVENANCE MINTING RESOLVED: evaluator appends ctx; wrapper reads this.invocation
+//                    .currentInvocation and mints/deep-stamps exactly as createRosettaWrapper does
+//                    (non-pure rosetta AEntity = a source). withContext / argProvenance knobs DROPPED here.
 //
-//   symbol.notImplemented — no contract/impl, just `name: reason`. bake → a door:
-//                       { kind: "door", name, reason } (the %purity-door story).
+//   symbol.notImplemented  no contract/impl, just `name: reason`. bake → door:
+//                    { kind: "door", name, reason } (the %purity-door story).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as z from "../scheme-zod.js";
@@ -66,13 +49,12 @@ import { ZodType, ZodUnion } from "zod";
  *  schema (`z.array` variadic / `z.tuple` / `z.union` overload). */
 export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
 
-/** The TWO faces of one schema (uniform-scheme-zod-vocabulary redesign: zod points FROM the
- *  scheme environment TOWARD the membrane). A codec's `z.input` is its SCHEME face (AString,
- *  APair, ACallable) and its `z.output` the JS face (`string`, `array`, a callable) — one
- *  vocabulary, two processing rules: `symbol.native` (a CONTOUR, stays in the value algebra)
- *  projects the scheme face; `symbol.rosetta` (the MEMBRANE, decode-in/encode-out) projects
- *  the JS face. A non-codec schema's faces coincide (`input ≡ output`), so every pre-codec
- *  contract types identically under either face — the split is strictly additive. */
+/** The TWO faces of one schema. A codec's `z.input` is its SCHEME face (AString, APair,
+ *  ACallable) and its `z.output` the JS face (`string`, `array`, a callable) — one vocabulary,
+ *  two processing rules: `symbol.native` (a CONTOUR, stays in value algebra) projects the scheme
+ *  face; `symbol.rosetta` (the MEMBRANE, decode-in/encode-out) projects the JS face. A non-codec
+ *  schema's faces coincide (`input ≡ output`), so pre-codec contracts type identically under
+ *  either face — split is strictly additive. */
 export type Face = "scheme" | "js";
 type ProjectFaceAtom<S extends z.ZodTypeAny, F extends Face> = F extends "scheme" ? z.input<S> : z.output<S>;
 type ProjectFaceArray<S extends z.ZodTypeAny[], F extends Face> = S extends [
@@ -86,25 +68,25 @@ type ProjectFace<S extends z.ZodTypeAny, F extends Face> =
 
 /** The ONE shared traversal: map a VectorSpec through the selected face (`z.output` for the
  *  membrane/JS face — the default, byte-identical to the pre-Face behavior — or `z.input` for
- *  the scheme face `symbol.native` projects). A tuple maps element-wise to a mutable tuple; a
- *  single schema infers bare (no wrapping — a variadic `z.array` schema's output is already an
- *  array, and a scalar schema's output stays a scalar).
- *  `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` are thin callers on top of this —
- *  they differ only in their OWN boundary handling (wrap a non-array single output in a
- *  1-tuple; collapse a 1-tuple to its bare value), never in how a spec's shape decodes. */
+ *  the scheme face `symbol.native` projects). A tuple maps element-wise to a mutable tuple;
+ *  a single schema infers bare (a variadic `z.array` schema's output is already an array,
+ *  a scalar schema's output stays scalar).
+ *  `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` are thin callers on top — they differ
+ *  only in their OWN boundary handling (wrap a non-array single output in a 1-tuple; collapse
+ *  a 1-tuple to its bare value), never in how a spec's shape decodes. */
 export type SpecInfer<S extends VectorSpec, F extends Face = "js"> = S extends readonly z.ZodTypeAny[]
   ? { -readonly [K in keyof S]: ProjectFace<S[K] & z.ZodTypeAny, F> }
   : S extends z.ZodTypeAny
     ? ProjectFace<S, F>
     : never;
 
-/** Decoded arg TYPES for the impl (the selected face; default = the codec OUTPUT/JS side). A
- *  bare tuple maps each element; an array-ish schema yields its element-array (variadic). */
+/** Decoded arg TYPES for the impl (selected face; default = codec OUTPUT/JS side). A bare
+ *  tuple maps each element; an array-ish schema yields its element-array (variadic). */
 export type DecodedArgs<S extends VectorSpec, F extends Face = "js"> =
   SpecInfer<S, F> extends readonly unknown[] ? SpecInfer<S, F> : [SpecInfer<S, F>];
 
-/** Decoded RETURN type: a single value when the output is a 1-tuple, else the
- *  values-vector (multiple-values). */
+/** Decoded RETURN type: single value when output is a 1-tuple, else the values-vector
+ *  (multiple-values). */
 export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
   ? SpecInfer<O, F>[0]
   : SpecInfer<O, F>;
@@ -112,28 +94,25 @@ export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O exten
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
 
-/** The variadic TAIL after a fixed leading `input` tuple. Two shapes:
- *  - a `z.ZodTypeAny` — a repeated single element type (0+ times), the variadic-tail case; OR
- *  - a plain kwargs SHAPE record `{k: schema}` — a trailing kwargs OBJECT. Its VALUES are
- *    schemas but the CONTAINER is a plain object, NOT a ZodType — which is exactly the sound
- *    `instanceof z.ZodType` discriminator between the two (no combinator can make a plain
- *    record satisfy `instanceof z.ZodType`).
- *  `undefined` = no rest (the default, unchanged shape). */
+/** The variadic TAIL after a fixed leading `input` tuple:
+ *  - a `z.ZodTypeAny` — repeated single element type (0+ times), the variadic-tail case; OR
+ *  - a plain kwargs SHAPE record `{k: schema}` — trailing kwargs OBJECT. VALUES are schemas but
+ *    the CONTAINER is a plain object, NOT a ZodType — the sound `instanceof z.ZodType`
+ *    discriminator between the two (no combinator can make a plain record satisfy it).
+ *  `undefined` = no rest (default). */
 export type RestSpec = z.ZodTypeAny | Record<string, z.ZodTypeAny> | undefined;
 
 /** Decoded arg types WITH a rest tail: `input`'s fixed-tuple decoded types, followed by a
- *  spread of `inputRest`'s element type (repeated 0+ times). A rest tail only composes with
- *  a FIXED leading tuple `input` (never a bare single/kwargs schema — there's no well-defined
- *  prefix length to split at), so a non-tuple `I` combined with a real `Rest` types to `never`
- *  rather than silently doing something else. No rest (`Rest` defaults to `undefined`) falls
- *  through to today's `DecodedArgs<I>`, BYTE-IDENTICAL — this is a strictly ADDITIVE change,
- *  zero behavior/type difference for every existing declaration that doesn't set `inputRest`.
- *  `SpecInfer<I>` (not `DecodedArgs<I>`) supplies the fixed-tuple half here — with `I` already
- *  narrowed to the tuple member, `SpecInfer`'s tuple branch IS the plain element-wise mapping,
- *  named as its OWN alias reference (rather than inlined) because TS's tuple-spread checker
- *  (`error TS2574: A rest element type must be an array type`) can't see a mapped type over a
- *  still-abstract `I` as array-shaped when it's written directly inside a `[...X, ...Y[]]`
- *  literal — a named alias resolves it. */
+ *  spread of `inputRest`'s element type (0+ times). A rest tail composes only with a FIXED
+ *  leading tuple `input` (never a bare single/kwargs schema — no well-defined prefix length
+ *  to split at), so a non-tuple `I` + a real `Rest` types to `never` rather than silently
+ *  doing something else. No rest (`Rest` defaults to `undefined`) → today's `DecodedArgs<I>`,
+ *  BYTE-IDENTICAL — strictly ADDITIVE, zero type/behavior difference for every existing
+ *  declaration that doesn't set `inputRest`.
+ *  `SpecInfer<I>` (not `DecodedArgs<I>`) supplies the fixed-tuple half — named as its OWN alias
+ *  (not inlined) because TS's tuple-spread checker (error TS2574: A rest element type must be
+ *  an array type) can't see a mapped type over a still-abstract `I` as array-shaped when
+ *  written directly inside a `[...X, ...Y[]]` literal — a named alias resolves it. */
 export type DecodedArgsWithRest<
   I extends VectorSpec,
   Rest extends RestSpec = undefined,
@@ -145,11 +124,11 @@ export type DecodedArgsWithRest<
       : never
     : never
   : Rest extends Record<string, z.ZodTypeAny>
-    // kwargs: a plain shape record `Rest` types the impl to ONE trailing arg — the decoded
+    // kwargs: plain shape record `Rest` types the impl to ONE trailing arg — the decoded
     // kwargs OBJECT (each field projected through the face), a single object param NOT a spread.
-    // Mirrors the runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
-    // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of
-    // it. Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
+    // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
+    // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of it.
+    // Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
     // so it never matches `extends z.ZodTypeAny`.
     ? [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
     : DecodedArgs<I, F>;
@@ -157,65 +136,57 @@ export type DecodedArgsWithRest<
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
-  /** The variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first
-   *  arg is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
-   *  type parameter separate from the tail's, so the two can differ (`apply`'s happen to both be
-   *  `z.value`, but `DecodedArgsWithRest`'s mechanism doesn't assume that). Only meaningful when
-   *  `input` is a fixed tuple — combining it with a bare single-schema `input` (today's "wholly
-   *  variadic" shape) is a contract-authoring error: `normalizeInputVector` throws rather than
-   *  silently ignoring it. Optional; absent ⇒ byte-identical to the pre-`inputRest` behavior. */
+  /** Variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first arg
+   *  is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
+   *  type parameter separate from the tail's, so the two can differ. Only meaningful when
+   *  `input` is a fixed tuple — combining with a bare single-schema `input` is a contract-
+   *  authoring error: `normalizeInputVector` throws. Absent ⇒ byte-identical to pre-`inputRest`. */
   inputRest?: Rest;
   output: O;
-  /** Optional ambient `.d.ts` member-body signature override — e.g. `"(ip: SchemeIP) => SchemeIP"`
-   *  — for the harvest (`schema-to-ts.ts`'s `signatureOf`), DECOUPLED from `input`/`output`'s zod
-   *  schemas. The zod schemas stay the MEMBRANE description (what actually crosses at runtime —
-   *  decode/validate/encode); `type` is a separate, author-asserted TYPE-LEVEL narrowing for
-   *  when the harvest wants to see something the zod schema can't itself express (a host entity
-   *  type like `SchemeIP`, not just the honest `z.output` the membrane decodes to). Mirrors
-   *  legacy `RosettaSpec.type`/`RosettaFunction.type` (rosetta.ts, scheme-env.ts) — same trust
-   *  model: an author assertion, not mechanically derived, checkable by eye. INERT everywhere
-   *  except the harvest: `native()`/`rosetta()`/`sequence()` (their per-tag factories) carry it through unchanged;
-   *  `signatureOf` prefers it over computing from `in`/`out` when present. Absent ⇒ byte-identical
-   *  to today's zod-derived signature. */
+  /** Ambient `.d.ts` member-body signature override — e.g. `"(ip: SchemeIP) => SchemeIP"` —
+   *  for the harvest (`schema-to-ts.ts`'s `signatureOf`), DECOUPLED from `input`/`output` zod
+   *  schemas. Zod schemas stay the MEMBRANE description (what actually crosses at runtime);
+   *  `type` is a separate author-asserted TYPE-LEVEL narrowing for what the harvest wants to
+   *  see that zod can't itself express (a host entity type like `SchemeIP`, not just the honest
+   *  `z.output` the membrane decodes to). Mirrors legacy `RosettaSpec.type`/`RosettaFunction.type`
+   *  — author assertion, not mechanically derived, checkable by eye. INERT everywhere except
+   *  the harvest: `native()`/`rosetta()`/`sequence()` carry it through; `signatureOf` prefers
+   *  it over computing from `in`/`out`. Absent ⇒ byte-identical to zod-derived signature. */
   readonly type?: string;
   /** ROSETTA-ONLY. `pure: true` makes the rosetta a TRANSFORM, not a source: it FORWARDS the
-   *  union of its inputs' provenance instead of minting a fresh point at the call site (mirrors
-   *  legacy defineRosetta `pure: true`). Strict `=== true` — undefined/false = source (the
-   *  default, mints). Ignored by `symbol.native` (native ops never mint). */
+   *  union of its inputs' provenance instead of minting a fresh point at the call site. Strict
+   *  `=== true` — undefined/false = source (default, mints). Ignored by `symbol.native`. */
   readonly pure?: boolean;
-  /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map) — one whose
-   *  lineage classifies to a per-element fan template. `native()`/`sequence()` (their per-tag
-   *  factories) stamp a plain `.fanout = true` on the def's impl/run fn; capability.ts copies
-   *  the marker onto the bound ANativeProcedure, and the lineage classifier reads it off
-   *  `env.get(op)`. Declared here on the contract, not in a name-list — so fan-ness follows
-   *  the binding (alias-correct), not a string match. */
+  /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map). `native()`/
+   *  `sequence()` stamp a plain `.fanout = true` on the def's impl/run fn; capability.ts copies
+   *  the marker onto the bound ANativeProcedure; lineage classifier reads it off `env.get(op)`.
+   *  On the contract, not in a name-list — fan-ness follows the binding (alias-correct). */
   readonly fanout?: boolean;
-  /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol ASSEMBLY-TIME-ONLY: it binds into
-   *  the assembly's phase-gated prelude scope (kernel.ts `assembleEnv` — a per-assembly Map
-   *  answered by a resolver on the base env while the C3 loop runs), never into the runtime env.
-   *  Callable from any later-applied capability's prelude during assembly; a plain
-   *  unbound-variable error everywhere at runtime — INCLUDING from lambdas a prelude defined
-   *  (closures walk the live chain at call time). A prelude bridges a preludeOnly value to
-   *  runtime by capturing the call's RESULT in an ordinary define, never the verb itself. See
-   *  docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
+  /** KIND-AGNOSTIC (native/rosetta). `true` = ASSEMBLY-TIME-ONLY: binds into the assembly's
+   *  phase-gated prelude scope (kernel.ts `assembleEnv` — per-assembly Map answered by a resolver
+   *  on the base env during the C3 loop), never into the runtime env. Callable from any later-
+   *  applied capability's prelude during assembly; plain unbound-variable error at runtime —
+   *  INCLUDING from lambdas a prelude defined (closures walk the live chain at call time).
+   *  A prelude bridges a preludeOnly value to runtime by capturing the call's RESULT in an
+   *  ordinary define, never the verb itself.
+   *  See docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1. */
   readonly preludeOnly?: boolean;
 }
 
-// CallCtx/makeCallCtx moved to values/primitives/CallCtx.ts (2026-07-08): ACallable.ts needs
-// makeCallCtx as a real function call, and importing it from here made ACallable.ts (and
-// therefore common/scheme-zod.ts, which imports ACallable.ts) transitively depend on this
-// file, closing a cycle that could leave a z.instanceof(...) codec's captured class
-// permanently undefined depending on which path entered it first. Re-exported here (not just
-// imported above) so existing `_bake.js` importers are unaffected.
+// CallCtx/makeCallCtx moved to values/primitives/CallCtx.ts: ACallable.ts needs makeCallCtx
+// as a real call; importing it from here closed a cycle (ACallable.ts → scheme-zod.ts → this
+// file) that could leave a `z.instanceof(...)` codec's captured class permanently undefined
+// depending on which path entered first. Re-exported here (not just imported) so existing
+// `_bake.js` importers are unaffected.
 export type { CallCtx };
 export { makeCallCtx, testCallCtx, missingCallCtxDoor };
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
- *  contract tuple becomes a MUTABLE positional param list the impl can declare, and splices in
- *  `inputRest`'s decoded element type as a spread tail when the contract declares one.
- *  `F` selects the face the impl works on: `"js"` (default — rosetta, the decoded membrane
- *  side) or `"scheme"` (native — the value-algebra side; `symbol.native` passes it). */
+ *  contract tuple becomes a MUTABLE positional param list; splices in `inputRest`'s decoded
+ *  element type as a spread tail when declared.
+ *  `F` selects the face: `"js"` (default — rosetta, decoded membrane side) or `"scheme"`
+ *  (native — value-algebra side; `symbol.native` passes it). */
 export type Impl<
   I extends VectorSpec,
   O extends VectorSpec,
@@ -224,18 +195,16 @@ export type Impl<
 > = (this: CallCtx, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. AEntity — the baked, discriminated union (an interpreter primitive — TYPE-ONLY,
-//    no class/runtime footprint: the def itself is a plain object for every kind). The
-//    RUNTIME BOUND VALUE capability.ts installs from a def differs by kind — a plain
-//    object for door/keyword/macro, but a first-class ANativeProcedure/ARosettaProcedure
-//    (an ACallable subclass, invoked through `arrival/tagless-final/apply`) for native/
-//    rosetta/tagless/tagless-guard/sequence — never a bare callable fn.
+// 2. AEntity — the baked discriminated union. Interpreter primitive, TYPE-ONLY (no class/runtime
+//    footprint: the def itself is a plain object for every kind). RUNTIME BOUND VALUE capability.ts
+//    installs differs by kind — plain object for door/keyword/macro, but a first-class
+//    ANativeProcedure/ARosettaProcedure (ACallable subclass, invoked through `arrival/tagless-
+//    final/apply`) for native/rosetta/tagless/tagless-guard/sequence — never a bare callable fn.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type AnyFn = (...args: any[]) => unknown;
 
-/** A native symbol: impl over SCHEME VALUES, no validation. Carries the (identity)
- *  schemas for the future .d.ts harvest. */
+/** A native symbol: impl over SCHEME VALUES, no validation. Identity schemas for .d.ts harvest. */
 export interface NativeSymbolDef {
   readonly kind: "native";
   readonly name: string;
@@ -249,12 +218,11 @@ export interface NativeSymbolDef {
   readonly preludeOnly?: boolean;
 }
 
-/** A rosetta symbol: impl in JS-land. `in`/`out` are the (codec) schemas; `run` is the
+/** A rosetta symbol: impl in JS-land. `in`/`out` are codec schemas; `run` is the
  *  decode→validate→impl→encode wrapper produced by bake.
  *
- *  `M` is optional metadata (e.g. for MCP annotations like description, inputSchema,
- *  dynamicDescription, etc.). Stored under `.metadata` so higher layers (arrival-mcp)
- *  can carry tool-specific data without polluting the core schema.
+ *  `M` = optional metadata (e.g. MCP annotations). Stored under `.metadata` so higher layers
+ *  (arrival-mcp) carry tool-specific data without polluting the core schema.
  */
 export interface RosettaSymbolDef<
   I extends z.ZodTypeAny = z.ZodTypeAny,
@@ -266,14 +234,14 @@ export interface RosettaSymbolDef<
   readonly doc?: string;
   readonly in: I;
   readonly out: O;
-  /** The raw JS-land impl (decoded args → result). Kept for the harvest / inspection. */
+  /** Raw JS-land impl (decoded args → result). Kept for harvest / inspection. */
   readonly impl: AnyFn;
   /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
-   *  + (optionally) validates inputs, runs the (ctx-free) impl, awaits, encodes the output,
+   *  (+ optionally validates) inputs, runs the (ctx-free) impl, awaits, encodes the output,
    *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
-   *  see the `rosetta()` factory's `run` wrapper in rosetta.ts). */
+   *  see `rosetta()` factory's `run` wrapper in rosetta.ts). */
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
-  /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
+  /** `true` = transform (forwards input provenance); default/false = source (mints). */
   readonly pure?: boolean;
   /** See `Contract.type`. */
   readonly type?: string;
@@ -283,10 +251,10 @@ export interface RosettaSymbolDef<
   readonly metadata?: M;
 }
 
-/** A tagless symbol: NO impl — the bypass to the operand's own `arrival/tagless-final/<name>`
- *  declaration. `run` is the ctx-aware dispatcher (receiver = the last scheme arg, per scheme's
- *  `(op …args collection)` convention) that hands the method the run's RunContext as its trailing
- *  arg, with a detailed type-mismatch error when the operand declares no such method. */
+/** Tagless symbol: NO impl — bypass to operand's own `arrival/tagless-final/<name>`. `run` is
+ *  ctx-aware dispatcher (receiver = last scheme arg, per scheme's `(op …args collection)`
+ *  convention) that hands the method the run's RunContext as trailing arg, with detailed error
+ *  when operand declares no such method. */
 export interface TaglessSymbolDef {
   readonly kind: "tagless";
   readonly name: string;
@@ -296,10 +264,10 @@ export interface TaglessSymbolDef {
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
 }
 
-/** A tagless GUARD — like `symbol.tagless`, but a receiver that declares no such method
- *  yields `#f` (a graceful predicate) rather than throwing (the hard op). The dispatch form
- *  for type predicates: `(vector? x)` asks x's OWN `arrival/tagless-final/vector?`, defaulting
- *  to #f when x can't answer — no host-type `instanceof` reach-around in the builtin. */
+/** Tagless GUARD — like `symbol.tagless`, but a receiver with no such method yields `#f` (graceful
+ *  predicate) rather than throwing. Dispatch form for type predicates: `(vector? x)` asks x's OWN
+ *  `arrival/tagless-final/vector?`, defaulting to `#f` when x can't answer — no host-type
+ *  `instanceof` reach-around in the builtin. */
 export interface TaglessGuardSymbolDef {
   readonly kind: "tagless-guard";
   readonly name: string;
@@ -309,11 +277,10 @@ export interface TaglessGuardSymbolDef {
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
 }
 
-/** A ctx-aware op: the impl receives the scheme args AND the run's RunContext (the dual of
- *  `symbol.native`, which is ctx-FREE). For ops that are kernel-logic-bearing — heap-charged,
- *  run-strict-reading — yet are NOT pure per-receiver dispatch (`symbol.tagless`): map/filter/
- *  reduce charge `runCtx.heapMeter` then dispatch to the term's own algebra. `run` is the
- *  ctx-aware wrapper that strips the evaluator ctx, extracts runCtx, and calls the impl. */
+/** Ctx-aware op: impl receives scheme args AND the run's RunContext (dual of `symbol.native`,
+ *  which is ctx-FREE). For kernel-logic-bearing ops that aren't pure per-receiver dispatch
+ *  (map/filter/reduce charge `runCtx.heapMeter`, then dispatch to the term's own algebra).
+ *  `run` is the ctx-aware wrapper that strips evaluator ctx, extracts runCtx, calls impl. */
 export interface SequenceSymbolDef {
   readonly kind: "sequence";
   readonly name: string;
@@ -332,20 +299,19 @@ export interface DoorSymbolDef {
   readonly reason: string;
 }
 
-/** A kernel KEYWORD: a special form, made first-class. No contract/impl — just the
- *  dispatch `name`. `lower()` binds `new Keyword(name)`; the evaluator resolves a call
- *  head through the env and dispatches `SPECIAL_FORMS[name]` when it resolves to that
- *  marker — so the special form is aliasable + lexically shadowable (the dual of cxr). */
+/** A kernel KEYWORD: special form, made first-class. `lower()` binds `new Keyword(name)`; the
+ *  evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` when it
+ *  resolves to that marker — aliasable + lexically shadowable (the dual of cxr). */
 export interface KeywordSymbolDef {
   readonly kind: "keyword";
   readonly name: string;
   readonly doc?: string;
 }
 
-/** A non-evaluating MACRO form: the impl is a raw JS transformer (a `Macro`/`Syntax`),
- *  bound as-is by assembly — NOT arg-evaluating (native/rosetta) nor evaluator-dispatched
- *  (keyword). The home for syntax-rules + the macro family that carries a JS expander; the
- *  generic `is_macro`/`is_syntax` eval hook expands whatever it binds. */
+/** Non-evaluating MACRO form: impl is a raw JS transformer (a `Macro`/`Syntax`), bound as-is by
+ *  assembly — NOT arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword). Home for
+ * syntax-rules + the macro family carrying a JS expander; generic `is_macro`/`is_syntax` eval
+ * hook expands whatever it binds. */
 export interface MacroSymbolDef {
   readonly kind: "macro";
   readonly name: string;
@@ -366,16 +332,14 @@ export type AEntity =
 // 3. Internals — name/doc parsing + vector normalization
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Parse `"name: human description"` from a tagged-template. Substitutions are
- *  interpolated first (so a `${verb}: …` template works), then split on the FIRST
- *  ": " (colon-SPACE) — the name/doc separator, per how every `symbol.notImplemented`/
- *  `symbol.native` template is actually authored ("name: doc"). Splitting on the
- *  first bare colon instead is wrong for a canonical name that itself CONTAINS a
- *  colon (SRFI-14's `char-set:whitespace: …`): a bare-colon split truncates the name
- *  at "char-set", losing "whitespace". A colon inside the name is never followed by
- *  a space (`char-set:whitespace`, `char-set:alphabetic`) — only the real name/doc
- *  separator is, so this handles both `name: doc` and `name:with:colons: doc`. No
- *  ": " ⇒ the whole string is the name (doc undefined). */
+/** Parse `"name: human description"` from a tagged-template. Substitutions interpolated first,
+ *  then split on FIRST ": " (colon-SPACE) — the name/doc separator, per how every `symbol
+ *  .notImplemented`/`symbol.native` template is actually authored ("name: doc"). Split on
+ *  first bare colon is WRONG for a canonical name that itself CONTAINS a colon (SRFI-14's
+ *  `char-set:whitespace: …`): bare-colon split truncates the name at "char-set". A colon inside
+ *  the name is never followed by space (`char-set:whitespace`, `char-set:alphabetic`) — only
+ *  the real name/doc separator is — so this handles both `name: doc` and `name:with:colons: doc`.
+ *  No ": " ⇒ whole string is the name (doc undefined). */
 export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
   let raw = "";
   for (let i = 0; i < tpl.length; i++) {
@@ -389,27 +353,25 @@ export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[])
 
 /** A zod schema describing a whole args/return VECTOR — its codec sides are array-shaped
  *  (a tuple `[a, b]` IS a `readonly unknown[]`; an array-ish schema's `T[]` is too). Typing
- *  the normalized schema this way lets `z.decode`/`z.encode` infer `readonly unknown[]` at the
- *  call site instead of `unknown` (a `ZodTypeAny`'s output) — so the wrapper reads the decoded
- *  args / encoded values-vector as an array WITHOUT an `as unknown[]` on every result. */
+ *  the normalized schema this way lets `z.decode`/`z.encode` infer `readonly unknown[]` at
+ *  the call site instead of `unknown` (a `ZodTypeAny`'s output) — so the wrapper reads the
+ *  decoded args / encoded values-vector as an array WITHOUT an `as unknown[]` cast each time. */
 type VectorSchema = z.ZodType<readonly unknown[], readonly unknown[]>;
 
-/** Read a kwargs KEY off a raw scheme call arg — a `:key` argument is a self-evaluating
- *  `ASymbol` (keyword-tagless-apply.md), read the same way `dict`'s native impl reads one
- *  (env/polyglot.ts): stringify and strip a leading `:`. One protocol, shared here because a
- *  kwargs rosetta's input lowering folds the identical `:key value` pair sequence `dict`
- *  already folds. */
+/** Read a kwargs KEY off a raw scheme call arg — a `:key` argument is a self-evaluating ASymbol
+ *  (keyword-tagless-apply.md), read the same way `dict`'s native impl reads one (env/polyglot.ts):
+ *  stringify and strip a leading `:`. One protocol, shared here because a kwargs rosetta's input
+ *  lowering folds the identical `:key value` pair sequence `dict` already folds. */
 function kwargsKeyOf(arg: unknown): string {
   return String(arg).replace(/^:/, "");
 }
 
 /** Fold a `(tool :k v :k2 v2 …)` call's interleaved scheme args into the RAW kwargs object —
- *  a plain JS record keyed by the kwargs shape's field names, valued by the RAW (still-encoded)
- *  scheme values. The kwargs schema's OWN `z.decode` (run by the caller, directly against the
- *  object schema — see the `rosetta()` factory in rosetta.ts) then validates + decodes each field through its own
- *  per-property codec; this fold only performs the array→object RESHAPE, not the per-field
- *  decode. A dangling keyword (odd arg count) doors with a teaching error rather than silently
- *  dropping it. */
+ *  a plain JS record keyed by kwargs shape's field names, valued by RAW (still-encoded) scheme
+ *  values. The kwargs schema's OWN `z.decode` (run by caller, directly against the object
+ *  schema — see `rosetta()` factory in rosetta.ts) then validates + decodes each field through
+ *  its own per-property codec; this fold only does the array→object RESHAPE, not the per-field
+ *  decode. A dangling keyword (odd arg count) doors with a teaching error. */
 export function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
   if (args.length % 2 !== 0) {
     throw new Error(
@@ -424,10 +386,10 @@ export function collectKwargsObject(args: readonly unknown[]): Record<string, un
 }
 
 /** Normalize a VectorSpec to ONE `VectorSchema` describing the whole args/return vector:
- *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses
- *  the decoded-args array against (and what the harvest will print from). (Kwargs no longer
- *  ride this fn: a kwargs contract is `input: []` + a plain-record `inputRest`, folded to an
- *  object schema by `normalizeInputVector`, never a single object `input` reaching here.) */
+ *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses the
+ *  decoded-args array against (and what the harvest prints from). (Kwargs no longer ride this
+ *  fn: a kwargs contract is `input: []` + plain-record `inputRest`, folded to an object schema
+ *  by `normalizeInputVector`, never a single object `input` reaching here.) */
 export function normalizeVector(spec: VectorSpec): VectorSchema {
   // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
   // OUT of the union on the false branch — so probe the tuple member with a guard that carries
@@ -459,17 +421,17 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
  *  `inputRest` just gives that shape a name split across two contract fields instead of one
  *  schema authored inline, so a fixed head and its variadic tail can be typed independently
  *  (`DecodedArgsWithRest`'s two generic params). Absent `inputRest` ⇒ byte-identical to
- *  `normalizeVector(input)` — this is what `native()`/`rosetta()` (their per-tag factories) call for `.in`/`inSchema`
- *  (the OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
+ *  `normalizeVector(input)` — this is what `native()`/`rosetta()` call for `.in`/`inSchema`
+ *  (OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
   // kwargs: a plain shape record `inputRest` (values are ZodType, the CONTAINER is not) means the
   // whole call is a trailing kwargs OBJECT, not a variadic element. `.in` becomes the bare
-  // `z.object(shape)` so the harvest surface prints the kwargs signature; `run` folds the raw
-  // `:k v` args into that object at decode time. instanceof is the sound discriminator — no
-  // combinator can make a plain record satisfy `instanceof z.ZodType`. (Cast: an object schema
-  // isn't array-shaped, but the kwargs decode path never parses the raw args array against it,
-  // the same benign cast the single-schema arm of `normalizeVector` already makes.)
+  // `z.object(shape)` so the harvest prints the kwargs signature; `run` folds the raw `:k v` args
+  // into that object at decode time. instanceof is the sound discriminator — no combinator can
+  // make a plain record satisfy `instanceof z.ZodType`. (Cast: an object schema isn't array-shaped,
+  // but the kwargs decode path never parses the raw args array against it, the same benign cast
+  // the single-schema arm of `normalizeVector` already makes.)
   if (!(inputRest instanceof ZodType)) return z.object(inputRest) as unknown as VectorSchema;
   // A real `z.ZodType` `inputRest` (variadic tail) needs a FIXED prefix length to split the call's
   // raw args at — only a tuple `input` has one; a single-schema `input` covers the WHOLE call with
@@ -488,80 +450,73 @@ export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): Ve
   return z.tuple(input as [z.ZodTypeAny, ...z.ZodTypeAny[]], inputRest) as VectorSchema;
 }
 
-/** Did the author give a 1-tuple output? Then the impl returns a SINGLE value (we wrap
- *  it as a 1-element values-list); otherwise it returns the values-vector already. */
+/** Author gave a 1-tuple output? Then impl returns a SINGLE value (we wrap as 1-element
+ *  values-list); otherwise it returns the values-vector already. */
 export function isSingleOutput(output: VectorSpec): boolean {
   return Array.isArray(output) && output.length === 1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Shared contract-impl types the per-tag factories build their return value from.
-//    There is NO separate "bake" constructor anymore (see the note below, where
-//    `bakeNative`/`bakeRosetta`/`bakeDoor` used to live) — each factory
-//    (`native.ts`/`rosetta.ts`/`sequence.ts`/…) wires its own `AEntity` member
-//    directly, inline, using these types + the helpers above.
+//    NO separate "bake*` ctor anymore (see below — `bakeNative`/`bakeRosetta`/`bakeDoor`
+//    used to live here) — each factory (`native.ts`/`rosetta.ts`/`sequence.ts`/…) wires its
+//    own `AEntity` member directly from these types + helpers above.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The impl a `symbol.sequence` contract demands: ONE args array (not spread — the dual of
- *  native/rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`,
- *  the run's RunContext, decoded return (or a promise) out via `DecodedReturn<O>`. Projects the
- *  SCHEME face (like `symbol.native` — a sequence op is a ctx-aware CONTOUR over scheme values,
- *  never a membrane crossing). No `Rest`: a sequence contract's `Contract<I,O>` never carries
- *  `inputRest` (map/filter/sort's variadic tail, where any, is expressed as the tagless
- *  receiver's own term algebra, not a contract rest slot). */
+/** The impl a `symbol.sequence` contract demands: ONE args array (not spread — dual of native/
+ *  rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`, the run's
+ *  RunContext, decoded return (or promise) out via `DecodedReturn<O>`. Projects the SCHEME face
+ *  (like `symbol.native` — a sequence op is a ctx-aware CONTOUR over scheme values, never a
+ *  membrane crossing). No `Rest`: a sequence contract never carries `inputRest` (map/filter/sort's
+ *  variadic tail is the tagless receiver's own term algebra, not a contract rest slot). */
 export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
   args: DecodedArgs<I, "scheme">,
   runCtx: RunContext,
 ) => MaybePromise<DecodedReturn<O, "scheme">>;
 
-/** Per-invocation knobs the wrapper honors. `validate` mirrors the design's
- *  `exec(src, { typecheck })` — see the decode note in `rosetta.ts` for the current
- *  fused-transform caveat. */
+/** Per-invocation knobs the wrapper honors. `validate` mirrors the design's `exec(src, { typecheck })`
+ *  — see the decode note in `rosetta.ts` for the current fused-transform caveat. */
 export interface BakeRuntimeOpts {
   /** Run zod validation on decoded args + encoded output. Default true. */
   validate?: boolean;
-  /** Arbitrary metadata to attach to the symbol (e.g. MCP tool annotations).
-   *  Stored in `.metadata` on the resulting RosettaSymbolDef.
-   *  Use the generic `RosettaSymbolDef<M>` to type it. */
+  /** Arbitrary metadata to attach to the symbol (e.g. MCP tool annotations). Stored in `.metadata`
+   *  on the resulting RosettaSymbolDef. Use generic `RosettaSymbolDef<M>` to type it. */
   metadata?: Record<string, any>;
 }
 
 // `bakeNative`/`bakeRosetta`/`bakeDoor` used to live here as separately-importable
-// constructors, each taking a `{kind, name, doc, contract, impl}` bag. DISSOLVED
-// (2026-07): the exact same logic is now inlined directly into the returned closure
-// of `native()`/`rosetta()`/`notImplemented()` (one file each, in this directory) —
-// so producing a `NativeSymbolDef`/`RosettaSymbolDef`/`DoorSymbolDef` is only possible
-// by calling `symbol.native`/`symbol.rosetta`/`symbol.notImplemented`. There is no
-// longer a raw constructor here to reach around them with.
+// constructors, each taking a `{kind, name, doc, contract, impl}` bag. DISSOLVED (2026-07):
+// the same logic is now inlined directly into the returned closure of `native()`/`rosetta()`
+// /`notImplemented()` (one file each) — producing a NativeSymbolDef/RosettaSymbolDef/DoorSymbolDef
+// is ONLY possible by calling `symbol.native`/`symbol.rosetta`/`symbol.notImplemented`. No raw
+// ctor here to reach around them with.
 
-/** Human description of a receiver for the type-mismatch error: an AValue reports its
- *  scheme `kind` ("number"/"pair"/"nil"/…), else the JS shape. */
+/** Human description of a receiver for the type-mismatch error: AValue reports its scheme `kind`
+ *  ("number"/"pair"/"nil"/…), else the JS shape. */
 export function describeReceiver(v: unknown): string {
   if (v === null || v === undefined) return String(v);
   if (v instanceof AValue) return v.kind;
   return Array.isArray(v) ? "array" : typeof v;
 }
 
-/** A receiver's tagless-final term method: scheme args (the leading operands + the run's
- *  RunContext) in, the op result out. Always called with the receiver as `this`. */
+/** A receiver's tagless-final term method: scheme args (leading operands + the run's RunContext)
+ *  in, op result out. Always called with the receiver as `this`. */
 type TermMethod = (this: unknown, ...args: unknown[]) => unknown;
 
 /** Resolve a named term method off a (possibly non-object) receiver, typed — the dispatch
- *  primitive both `tagless()` (tagless.ts, throws when absent) and `taglessGuard()`
- *  (taglessGuard.ts, #f when absent) stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the receiver is a
- *  real object, returns the callable iff it IS one, else `undefined` — so the call site decides
- *  the missing-method policy without a raw `receiver as Record` / `fn as callable` cast. */
+ *  primitive both `tagless()` (tagless.ts, throws when absent) and `taglessGuard()` (taglessGuard.ts,
+ *  #f when absent) stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the
+ *  receiver is a real object, returns the callable iff it IS one, else `undefined` — call site
+ *  decides missing-policy without a raw `receiver as Record` / `fn as callable` cast. */
 export function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {
   if (receiver == null || (typeof receiver !== "object" && typeof receiver !== "function")) return undefined;
   const fn = (receiver as Record<string, unknown>)[method];
   return typeof fn === "function" ? (fn as TermMethod) : undefined;
 }
 
-// `bakeTagless`/`bakeTaglessGuard`/`bakeSequence` used to live here too, for the same
-// reason `bakeNative`/`bakeRosetta`/`bakeDoor` did above — DISSOLVED, inlined into
-// `tagless()`/`taglessGuard()`/`sequence()` respectively.
+// `bakeTagless`/`bakeTaglessGuard`/`bakeSequence` used to live here too, same reason as the
+// `bake*` ctors above — DISSOLVED, inlined into `tagless()`/`taglessGuard()`/`sequence()`.
 
-// The tagged-template factories (`native`/`rosetta`/`tagless`/…) live one-per-file under
-// this directory; each imports the shared types + helpers from here (NOT a `bake*`
-// constructor — there isn't one anymore) and is re-assembled into the `symbol` namespace
-// by `./index.ts`. See `../symbol.js` for the stable entry.
+// Tagged-template factories (`native`/`rosetta`/`tagless`/…) live one-per-file under this
+// directory; each imports shared types + helpers from here (NOT a `bake*` ctor — gone) and is
+// re-assembled into `symbol` namespace by `./index.ts`. See `../symbol.js` for stable entry.
