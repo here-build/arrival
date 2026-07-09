@@ -280,7 +280,14 @@ gate exists to catch exactly that.
 production hot paths (test-flag only, per C12); the W4 accumulation death. Depends:
 Q16 (oracle no longer needed in prod), Q19. Gate: standing + perf delta recorded;
 oracle mode still runs the agreement corpus in CI. Risk: flushes out hidden
-production readers of eager stamps — sweep before flipping.
+production readers of eager stamps — sweep before flipping. SWEEP LIST NAMED
+(integration research, docs/working-proposals/): **`@here.build/arrival-reflect`
+is the largest hidden production reader** — all six verbs project
+`ResultHandle.teleological()`'s EvalTrace (the §1-EXCLUDED representation);
+re-grounds on wireframe-cone × stream joins per
+arrival-reflect-env-over-provenance.md. Second reader: inhuman studio's ~20
+EvalTrace files (elk render pile, inhuman-elk-over-provenance.md). Neither blocks
+Q20 core — both are named consumer waves after it.
 
 **Q21 — reconciliation audit.** Lands: REWORK-DAG P-track marked superseded with the
 absorption map; spec cross-check (every CHOSEN row → implementing step → law);
