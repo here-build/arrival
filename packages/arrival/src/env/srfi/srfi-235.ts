@@ -34,7 +34,7 @@ export default new EnvCapability("scheme/srfi-235", {
 ;; ============ SRFI-235 (combinators) ============
 ;; complement — the boolean negation of fn. (compose not fn): \`not\` (native, is_false)
 ;; handles a boxed SchemeBool, and the evaluator unwraps an async generator-lambda
-;; result before \`not\` sees it — so this pure-scheme form needs no JS unpromise/is_false
+;; result before \`not\` sees it — so this pure-scheme form needs no JS maybeThen/is_false
 ;; closure (the leak the former native impl carried). compose is co-resident (polyglot).
 (define (complement fn) (compose not fn))
 

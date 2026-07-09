@@ -39,7 +39,7 @@ describe("boolean landmine — find/filter (stdlib, THE documented landmine)", (
 
 describe("boolean landmine — complement (bridge): async + boxed-bool", () => {
   it("complement of a SchemeBool scheme-lambda predicate, through filter", async () => {
-    // exercises BOTH: the scheme-lambda Promise (unpromise) AND the boxed-bool
+    // exercises BOTH: the scheme-lambda Promise (maybeThen) AND the boxed-bool
     // negation (is_false, not `!`). Plain `!fn(...)` returned (), this returns (1 3).
     expect(await run(`(filter (complement ${EVEN_SB}) '(1 2 3 4))`)).toBe("(1 3)");
   });

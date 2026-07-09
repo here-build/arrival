@@ -12,7 +12,7 @@ import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { Values } from "../../values/primitives/Values.js";
-import { unpromise } from "../../utils/promises.js";
+import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { type SchemeValue } from "../../values/types.js";
 
@@ -36,7 +36,7 @@ export default new EnvCapability("scheme/r7rs/binding", {
 
     "call-with-values": symbol.native`call-with-values: feed a producer's values into a consumer`(
       // Output is z.value (SchemeValue), not narrower: it flows through the shared,
-      // generic `unpromise` (utils/promises.ts, also used by srfi-1's fold), whose own
+      // sync-fast-path `maybeThen` (utils/promises.ts, also srfi-1's seam), whose own
       // signature is `(value: unknown, fn) => unknown` — no narrower type is achievable
       // here without widening that shared utility (out of scope) or a banned `as SchemeValue`
       // cast (honest-types-no-casts). The two z.custom callable params are UNREPRESENTABLE
@@ -57,9 +57,9 @@ export default new EnvCapability("scheme/r7rs/binding", {
         // `instanceof Values` check, else a multi-value producer leaks the Promise as a single
         // arg (wrong arity).
         const runCtx = this.runCtx;
-        // unpromise is a generic (unknown-typed) sync/async unwrap utility — assert at this
+        // maybeThen is a generic (unknown-typed) sync/async seam — assert at this
         // one boundary that its result is what the callback below actually produces.
-        return unpromise(applyCallback(producer, [], runCtx), (maybe) => {
+        return maybeThen(applyCallback(producer, [], runCtx), (maybe) => {
           if (maybe instanceof Values) {
             return applyCallback(consumer, maybe.valueOf(), runCtx);
           }

@@ -1,12 +1,10 @@
 // These names are re-exported explicitly (not via `export * from "./stdlib.js"`) so every
 // export is visible at the barrel — no opaque star laundering an unknown name set:
 //   • box / patch_value / quote — value-representation leaves (reader/values-repr.ts)
-//   • unpromise                 — promise util (utils/promises.ts)
 //   • global_env / env          — the native root + interaction scope (env-roots.ts)
 //   • eof                       — the EOF singleton (values/primitives/EOF.ts)
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
 export { box, patch_value, quote } from "./reader/values-repr.js";
-export { unpromise } from "./utils/promises.js";
 export { global_env, user_env as env } from "./env-roots.js";
 export { eof } from "./values/primitives/EOF.js";
 // The inference-plane base env — every cross-package consumer inherits from it

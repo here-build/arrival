@@ -306,7 +306,7 @@ export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda VALUE passed as
  * an arg. Native HOFs like reduce/fold/find recurse via promise chains
- * (`unpromise(fn(acc, x)).then(recurse)` in the stdlib HOFs), so iteration
+ * (`maybeThen(fn(acc, x)).then(recurse)` in the stdlib HOFs), so iteration
  * N+1 fires from a microtask AFTER the outer evaluatePair's finally has
  * restored the holder. Without per-call re-install, the lambda body for
  * iteration ≥1 would inherit the WRONG dynamic parent.
@@ -3033,7 +3033,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     //
     // Two-pronged: (a) module-level holder for synchronous HOF iteration,
     // (b) per-lambda wrapper for native HOFs that recurse via promises
-    // (reduce/fold/find call `unpromise().then(callback)`, which fires from
+    // (reduce/fold/find call `maybeThen().then(callback)`, which fires from
     // a microtask AFTER finally restores the holder). Each wrapped lambda
     // re-installs its dynamic site on every invocation, so iter N+1 from
     // a microtask still sees the right parent.

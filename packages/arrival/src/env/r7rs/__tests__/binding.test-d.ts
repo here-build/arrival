@@ -21,7 +21,7 @@
 //
 // call-with-values's output ALSO moved off its intermediate `z.undefinedResult` shape (a REAL
 // bug: R7RS call-with-values returns the consumer's result, never void — see binding.ts's own
-// fix comment) onto `z.value`, matching `values`'s own contract. The `unpromise` return-type
+// fix comment) onto `z.value`, matching `values`'s own contract. The `maybeThen` return-type
 // gap this file used to document (a bare cast would be needed to narrow it) is resolved the
 // same way `rosetta.ts`'s `rawImpl` / this session's other erasure-boundary casts are: an
 // INERT assertion (true by construction — the callback only ever produces `applyCallback`'s

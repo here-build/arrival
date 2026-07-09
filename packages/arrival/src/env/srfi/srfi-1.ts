@@ -15,7 +15,7 @@ import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import type { APair } from "../../values/primitives/APair.js";
-import { unpromise } from "../../utils/promises.js";
+import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
@@ -45,7 +45,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike): Schem
     return nil;
   }
   // Seam-routed: `arg` is a callable VALUE now (ANativeProcedure), not a bare fn.
-  return unpromise(applyCallback(arg, [list.car], CONSTANT_CTX), function (value) {
+  return maybeThen(applyCallback(arg, [list.car], CONSTANT_CTX), function (value) {
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
