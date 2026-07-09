@@ -124,6 +124,30 @@ const INVERSIONS: readonly LedgerRow[] = [
   // plain `it()`, asserted against real `exec` output).
 ] as const;
 
+/**
+ * STAGED — §7 spec-law rows that are LEDGER-ONLY at Q5 (docs/PROVENANCE-PLAN.md: "Two
+ * rows are LEDGER-ONLY, not stub files — they get an `@ledger` row citing their
+ * flipping step but no law-test body yet"). Neither row below has an `it.todo`/
+ * `it.fails` call anywhere in the six new Q5 stub files (`laws/provenance-roles`,
+ * `provenance/{wireframe-agreement,replay,track-cone,track-stream}`,
+ * `doors/tier-honesty`) — this index entry IS their only test-suite presence today.
+ * Distinct from GAPS/INVERSIONS (which index real `it.fails` rows the walker below
+ * cross-references): a STAGED row is neither a documented gap nor a deliberate
+ * inversion, it's a §7 law the plan has explicitly deferred giving a body to.
+ */
+const STAGED: readonly LedgerRow[] = [
+  {
+    id: "loop-unroll",
+    gate: "Q21 (docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19; staged it.todo, ledger-visible through Q21 per PROVENANCE-PLAN.md's reconciliation audit)",
+    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once the plan stages its body",
+  },
+  {
+    id: "memory retention",
+    gate: "Q19 (docs/PROVENANCE.md §7: \"sealed-value growth measured against Appendix A budget\" — rides the R3 hard gate)",
+    replacedBy: "a benchmark assertion in `__benchmarks__/provenance-budget*`, never a law-test row (PROVENANCE-PLAN.md Q5: \"a benchmark assertion, not a law-test row\")",
+  },
+] as const;
+
 // The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's
 // include list (laws/membrane/provenance/ledger land now; conformance/doors/agreement
 // are pre-declared per docs/test-suite-v2/DESIGN.md §2 and simply won't exist on disk yet).
@@ -193,6 +217,10 @@ describe("ledger — every gap names its gate", () => {
   });
   it.each(INVERSIONS.map((g) => [g.id, g] as const))("INVERTS %s", () => {
     /* index row */
+  });
+
+  it.each(STAGED.map((g) => [g.id, g] as const))("STAGED %s", () => {
+    /* index row — a §7 law explicitly ledger-only at Q5, no test body yet */
   });
 
   it("meta: no it.fails exists in the suite without a ledger row (walker)", () => {
