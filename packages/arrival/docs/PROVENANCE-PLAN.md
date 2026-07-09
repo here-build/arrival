@@ -26,7 +26,15 @@ trivial; the adapter surface is two small interfaces; default CI stays hermetic.
 | §2 container structural facts — VALUES-layer `{groupingFact, lengthFact}`, PROXIED/PROVENANCED/MINTED verbs, A13 closure (`length` reads container facts) | c27b2e8b62 (C1/C2/C4): map/sort PROXY, filter PROVENANCES; golden-prov-fan + conservation A13 green |
 | §3/§4 region discipline — scope tokens, doors, per-(callable,scope) identity, async pending counters | 9f622345d2 (B3) + b81cc2d88c/823a6fcd3c/c9b07242bc (all four binder kinds on ACallable) |
 | §4 eager-stamp machinery (the future TEST-ONLY oracle) | production stamping as it exists today (withInputProvenance/mintVerdict, aa04112e3b) — Q9 flags it, Q20 demotes it |
-| §1 homoiconicity substrate | uneval.ts in core (ea39d3bd4a), write/read round-trip law, env-capability assembler primitives |
+| §1 homoiconicity substrate | `src/provenance/uneval.ts` (moved from `arrival-provenance` at C0, ea39d3bd4a); write/read round-trip pinned by parser tests (`toString()`/reader symmetry) — the PAYLOAD-level round-trip law (spec §5 D2, persisted value+stamp-ids) is Q5/Q11a's stub, not yet a named law; env-capability assembler primitives |
+| §1 substrate — member access algebra | 8568d4fcd8: `arrival/tagless-final/{get,has,keys}` terms land on ADict/AJSObject/AJSArray + de98c16658 Part 1: membrane accessor faces (readMember/hasMember/memberKeys) DELETED — `@`/`@?`/`@keys` verbs invoke the receiver's own terms directly |
+| §1 substrate — toJS protocol | de98c16658 Part 2: `schemeToJs` stops eager-materializing, delegates per-class to `arrival/toJS`; `exec()` can return a region-wrapped callable (ALambda/AProcedure as a host fn, DETACHED_SCOPE precedent); null↔nil round-trip closed |
+| §1 substrate — dotted-path/member-walk | 8568d4fcd8 (S6): `member-walk.ts` deleted, `ASymbol.object`'s zero-producer path confirmed dead, dotted identifiers hit the normal unbound-variable door |
+| Crossing-seam ingress channel (feeds Q11a's ctx-derived record fields) | ctx tranches dd045a810e/1101971f40/162af3c39c: rosetta-ctx-single-channel COMPLETE — flat `CallCtx`, mandatory `this`, `testCallCtx()` the sanctioned direct-call idiom, zero silent `CONSTANT_CTX` fallbacks |
+| §4 hermetic env / heap accounting | a823e402fd (env T0): `Environment.__heapMeter__` deleted, meter owned by `RunContext`; `Environment.set()` narrowed to `EnvironmentValue` only (auto-boxing branches gone) |
+| §1 template layer (W0 substrate) | e2052c9480: `EnvLookup` deleted — `TemplateValue = SchemeValue`, single-typed template layer (span propagation threads one value shape, strictly easier) |
+| Async/promise plumbing (I4 / effect-track replay substrate) | 19b20b3abb: LIPS promise decomposer replaced by `maybeThen` (single-promise, sync-stays-sync, never traverses) |
+| §2 R2 / A13 ledger accuracy | be0b3e4047: stale A13 GAPS ledger row retired — C4's fix (c27b2e8b62) had already closed A13; only the ledger bookkeeping lagged. A13 G2 gate CLOSED |
 
 What §2 R2 still LACKS — and this plan builds — is the WIREFRAME-side struct-fact
 wires: see Q8c.
@@ -36,7 +44,12 @@ wires: see Q8c.
 **Q1 — lineage kinds + quarantine.** Lands: `sink`/`transparent`/`loop` kinds in
 `src/values/lineage.ts`; `loop` lowers to `binder{cycles}`; `opaque` quarantine drift
 alarm — MACHINERY only; the baseline NUMBER is a post-Q6 artifact, never pinned here.
-Depends: —. Gate: standing + new kind unit rows. Risk: low.
+Note — two strata of `opaque`, do not conflate: **graph-opaque** is the `LineageNode`
+kind (`{ kind: "opaque" }`) already at HEAD (`src/values/lineage.ts`, classifier's
+black-box fallback) — nothing to land. **Declaration-opaque** is the future quarantined
+`provenance` ROLE (spec §2's declared-role vocabulary, landing at Q2) — the V3 drift
+alarm this node pins tracks THAT population, not the graph kind. Depends: —. Gate:
+standing + new kind unit rows. Risk: low.
 
 **Q2 — declared `provenance` role field.** Lands: role field on symbol declarations
 replacing `fanout?`/`pure?` (two readers each); drift-alarm door (role vs contract
@@ -54,19 +67,29 @@ polymorphic-return callbacks (spec LIMIT) — the door must under-trigger, not g
 
 ## Cluster L — law stubs (spec §7; stubs BEFORE machinery)
 
-**Q5 — all law families land as stubs.** Lands: `laws/provenance-roles.law`,
-`provenance/wireframe-agreement.law`, `provenance/replay.law` (wire-γ +
-replay-nondeterminism + pure-mux-derivation), `provenance/track-cone.law` (stamp/replay
-containment SPLIT), `provenance/track-stream.law` (fold + monotonicity + fold-as-
-recovery), `doors/tier-honesty.law`, wire-locality assembly checks, the I5
-exterior-collapse row (region = ONE wireframe node; flips at Q8a — structured-egress
-field-demand stays DEFERRED per the spec LIMIT), and the R2 demand-monotonicity row
-(cone(count) ⊆ cone(value), cone(field-k) ⊆ cone(whole); flips at Q17) — all it.todo/
-it.fails with ledger rows naming their flipping step (Q-numbers). The W1-agreement stub
-carries the m3 scoping note VERBATIM: pure-mux wires assert the abstract both-arms
-cone, "do not fix by re-recording." Generator corpus class list extended per spec §7.
-Depends: Q1 (naming). Gate: walker green, zero unexpected. Risk: none — stubs are the
-spec made executable-red.
+**Q5 — all law families land as stubs.** **None of the six stub files below exist yet
+at HEAD — creating them IS Q5.** (A prior audit round misread this absence as a defect;
+stated plainly so no future reader repeats it.) Six files, `.test.ts` suffix throughout
+(vitest convention, per `.claude/rules/tests.md`) — every §7 spec law is assigned to
+exactly one:
+
+| Stub file | §7 laws it houses |
+|---|---|
+| `src/__tests__/laws/provenance-roles.law.test.ts` | V1/V2/V3/V4 role-vocabulary rows (drift-alarm doors, opaque quarantine, loop kind) |
+| `src/__tests__/provenance/wireframe-agreement.law.test.ts` | wire-locality (assembly-time FV check) · W1 agreement (m3-scoped: exact on port-coupled+segments, abstract both-arms on pure-mux — carries the m3 note VERBATIM, "do not fix by re-recording") · **I5 exterior collapse** (region = ONE wireframe node; it.todo, flips at Q8a) |
+| `src/__tests__/provenance/replay.law.test.ts` | wire-γ · replay-nondeterminism · pure-mux derivation · effect-track replay-between-records (sub-gate) — all flip at Q16 |
+| `src/__tests__/provenance/track-cone.law.test.ts` | track containment (stamp arm flips Q9, replay arm flips Q16) · track separation (Q16) · R2 demand-monotonicity (cone(count) ⊆ cone(value), cone(field-k) ⊆ cone(whole); machinery at Q8c, law flips Q17) |
+| `src/__tests__/provenance/track-stream.law.test.ts` | W3 port completeness (Q11a) · stream fold + monotonicity + fold-as-recovery (Q13) |
+| `src/__tests__/doors/tier-honesty.law.test.ts` | tier honesty (Q17) |
+
+Two rows are LEDGER-ONLY, not stub files — they get an `@ledger` row citing their
+flipping step but no law-test body yet: **loop-unroll** (grok finding #19 — widened vs
+exact-via-count cones; staged it.todo, ledger-visible through Q21) and **memory
+retention** (rides the R3 gate at Q19 — a benchmark assertion, not a law-test row).
+
+All rows land it.todo/it.fails with ledger rows naming their flipping step (Q-numbers).
+Generator corpus class list extended per spec §7. Depends: Q1 (naming). Gate: walker
+green, zero unexpected. Risk: none — stubs are the spec made executable-red.
 
 ## Cluster S — spans
 
@@ -81,18 +104,28 @@ Gate: standing + span-totality check on the conformance corpus. Risk: HIGH-subtl
 **Q7 — program prelude.** Lands: pure-only prelude classification at wireframe build
 (same classifier that finds ports — port-reaching defines rejected into wireframe
 material); content-addressed prelude artifact; hermetic-env assembler recipe (base
-packs + prelude + ingress) as a named EnvCapability composition. Depends: Q3. Gate:
-standing + prelude-membership rows — BOTH directions: a fetch-wrapping helper MUST be
-rejected AND a pure helper MUST be referenced by name (never carried as payload). Risk:
-transitive port-reachability through first-class HOFs — conservative rejection is
-correct (falls to wireframe material).
+packs + prelude + ingress) as a named EnvCapability composition. Note: the assembler is
+a NAMED COMPOSITION of primitives already at HEAD (`assembleEnv`/`EnvCapability`/
+`schemePacks` — `src/common/kernel.ts`, `src/common/scheme-env.ts`, the base-packs
+assembly used by `initBridge`) — Q7 wires a recipe over them, it does not invent new
+env-assembly machinery. Depends: Q3. Gate: standing + prelude-membership rows — BOTH
+directions: a fetch-wrapping helper MUST be rejected AND a pure helper MUST be
+referenced by name (never carried as payload). Risk: transitive port-reachability
+through first-class HOFs — conservative rejection is correct (falls to wireframe
+material).
 
 **Q8a — wireframe builder core (Fable).** Lands: classify() generalized whole-program
 per the wireframe design §2 AS AMENDED: pure-mux collapse with **selector-cone
 REACHABILITY analysis owned HERE** (Q3 supplies declarations only — reachability of a
 port from a selector's cone is builder analysis, not classification); `uneval` emitting
 closed wire lambdas (FV ⊆ params ∪ prelude-names, wire-locality enforced at emission);
-region-as-one-node exterior collapse (I5 row flips). Depends: Q4, Q6, Q7. Gate:
+region-as-one-node exterior collapse (I5 row flips). Note: field-step classification is
+PARTLY landed already — `src/values/lineage.ts`'s `memberRead` canonicalization and the
+`field` `LineageNode` kind exist at HEAD (feeding the tagless `get`/`has`/`keys` trio,
+8568d4fcd8/de98c16658), and `walk()`'s `field` arm already does selector-cone-shaped
+reachability over existing `field` nodes (descend the focused child, demand-mode
+match-or-prune) — Q8a's REACHABILITY work is extending this pattern to port-coupled mux
+selectors, not building field-step classification from zero. Depends: Q4, Q6, Q7. Gate:
 standing + wire-locality green + I5 row + builder core rows (loop-free + fan scope
 acceptable for first landing). Risk: the largest single node.
 
@@ -169,7 +202,11 @@ settlement-ordered under injected delays.
 **Q14 — payload tiering.** Lands: ring → store → R2-fake → stub state machine with the
 NAMED `pending → R2-ref` settlement transition (spec m6); per-tier deterministic
 degradation surfaced in the answer envelope (`replayed | replayed-cached | recorded |
-stub`); privacy LIMIT flag plumbed (retention metadata on payload records). Depends:
+stub`); privacy LIMIT flag plumbed (retention metadata on payload records). Note: the
+in-memory→degraded-view mechanics wrap the EXISTING `egressContainerProxy`
+(`src/values/egress-proxy.ts`, already the lazy-materialization seam for
+AVector/APair/ADict's `arrival/toJS`) — tiering adds a tier-state gate in front of that
+proxy's reader, it does not replace or duplicate it. Depends:
 Q10 ONLY (the state machine + envelope build against fakes with synthetic payloads —
 hivemind-verified; full integration against real emission re-verifies at Q19). Gate:
 tier state-machine rows + tier-honesty stubs half-green (recorded/stub arms; replayed
@@ -179,8 +216,15 @@ explicit.
 ## Cluster G — γ / replay (spec §4)
 
 **Q15 — silent regions + hermetic apply.** Lands: silent-region mode on B3 (doors
-active, emission off); γ = apply(wire, ingress) in Q7's hermetic env. Depends: Q7, Q13.
-Gate: standing + silent-region rows (a replay emits ZERO records — asserted). Risk:
+active, emission off). Note: a "silent region" IS an emission-off flag layered onto the
+region discipline already landed in `src/values/primitives/region-scope.ts` (B3's scope
+tokens `{open, pending, signal}`, doors, per-invocation identity) — Q15 adds the flag
+and the emission-suppression path, it does not build region discipline from zero; γ =
+apply(wire, ingress) in Q7's hermetic env. The glass
+whole-program replay class (spec §4, V ruling — cached membrane behavior +
+whole-program re-run) is ALSO a silent region: the penetration stream is authoritative
+and re-run emits zero new records, same discipline as a wire-γ drill-in. Depends: Q7,
+Q13. Gate: standing + silent-region rows (a replay emits ZERO records — asserted). Risk:
 low — machinery exists (B3 + env assembler).
 
 **Q16 — replay laws green (Fable).** Lands: wire-γ (loop-free adjunction), replay-
@@ -191,9 +235,11 @@ Q9, where the oracle infrastructure lives). PLUS the **effect-track
 replay-between-records mode** (spec §4 CHOSEN: pure stretches applied, recorded port
 events interleaved verbatim) — implementation + generator rows exercising effect
 callbacks, as its own sub-gate; the G cluster is NOT pure-wire-only. Depends: Q9
-(oracle), Q11a/Q11b (records), Q15. Gate: all five law families green + the
-effect-track sub-gate; conformance 651. Risk: THE verification step — failures are
-design-level and re-open spec rows; schedule slack.
+(oracle), Q11a/Q11b (records), Q15. Gate: all §7 Q16-gated law rows green — wire-γ,
+replay-nondeterminism, pure-mux-derivation, track-containment-replay, track-separation
+(spanning `provenance/replay.law.test.ts` and `provenance/track-cone.law.test.ts` per
+Q5's stub-file mapping table) — + the effect-track sub-gate; conformance 651. Risk: THE
+verification step — failures are design-level and re-open spec rows; schedule slack.
 
 **Q17 — memo + walks + tier honesty.** Lands: egress/cone memo (LRU, ephemeral,
 replayed-cached labeling) — SCOPE stated in-code per spec m2: egress/cone queries
@@ -264,17 +310,30 @@ disjoint AND neither consumes the other's artifacts.*
 **Standing per-wave gates:** suite 0 failed · conformance 651 · tsc 0 · ledger walker
 green. Per-node exit gates from Part I carry over unchanged.
 
-## Pre-wave 0 — tree hygiene (BLOCKING)
+## Pre-wave 0 — tree hygiene (BLOCKING) — CLEARED 2026-07-09
 
-In-flight tranches in the same tree — **ctx-single-channel**, the **AWrap/AUnwrap
-rework**, and the **type()/interop reworks** — occupy territories this DAG needs:
-rosetta.ts / membrane.ts / evaluator.ts (Q11a's hooks), capability.ts / common/symbols
-(V-cluster), op-helpers.ts (Q9 reads, Q20 writes). RULE: any tranche touching
-`rosetta.ts`, `membrane.ts`, `evaluator.ts`, `region-scope.ts`, `capability.ts`,
+In-flight tranches in the same tree occupied territories this DAG needs: rosetta.ts /
+membrane.ts / evaluator.ts (Q11a's hooks), capability.ts / common/symbols (V-cluster),
+op-helpers.ts (Q9 reads, Q20 writes). RULE (unchanged going forward): any tranche
+touching `rosetta.ts`, `membrane.ts`, `evaluator.ts`, `region-scope.ts`, `capability.ts`,
 `common/symbols/*`, or `op-helpers.ts` must LAND (or be explicitly frozen with its
-owner's sign-off) before wave 1 launches. Tranches confined elsewhere may continue —
+owner's sign-off) before a wave launches. Tranches confined elsewhere may continue —
 wave 1's territories (lineage.ts, syntax-rules/reader, new store files) are this DAG's
-alone. Verify with `git status` against the territory column at launch time.
+alone.
+
+All five named tranches are LANDED:
+
+| Tranche | Landed at |
+|---|---|
+| ctx-single-channel | dd045a810e / 1101971f40 / 162af3c39c (tranches 1–3, COMPLETE per 162af3c39c's own commit message) |
+| AWrap/AUnwrap rework | 409c467ef8 |
+| type()/interop reworks | 3027dc4acb (CLASS is the term) / 9746386f84 (interop-access family rule) |
+| member access | 8568d4fcd8 (tagless member access + dotted-path elimination) |
+| accessor dissolution | de98c16658 (membrane accessors + schemeToJs move into the algebra) |
+
+**Pre-wave-0 = CLEARED; wave 1 launches without false gates.** Verify with `git status`
+against the territory column at launch time regardless — the rule above still applies to
+any NEW tranche opened after this clearance.
 
 ## The DAG
 

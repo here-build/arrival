@@ -160,6 +160,10 @@ rows cite unflipped `[INVERTS:]` tags).
 
 # Phase 2 — the provenance two-layer (P-track)
 
+> **SUPERSEDED.** This P-track is superseded by [`PROVENANCE-PLAN.md`](PROVENANCE-PLAN.md)'s
+> Q-track, which absorbed and renumbered every node here (see that file's "P-track
+> absorption map"). Kept below as history — do not plan new provenance work against P-nodes.
+
 *Post-Z execution plan. THE NORMATIVE SPEC IS [`PROVENANCE.md`](PROVENANCE.md) (fused,
 ratified 2026-07-09) — the working proposals it fuses remain design history. Discipline unchanged: stubs before
 machinery (the v2-suite method), standing gates on every commit, agents never commit.
