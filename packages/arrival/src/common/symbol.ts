@@ -42,6 +42,9 @@ export type {
   MaybePromise,
   Contract,
   Impl,
+  ProvenanceRole,
+  CallbackRole,
+  CallbackRoles,
   NativeSymbolDef,
   RosettaSymbolDef,
   TaglessSymbolDef,
@@ -55,6 +58,13 @@ export type {
   CallCtx,
 } from "./symbols/_bake.js";
 export { makeCallCtx, testCallCtx, missingCallCtxDoor } from "./symbols/_bake.js";
+
+// Q4 callback-role machinery (docs/PROVENANCE.md §2): `withCallbackRoles` is the
+// declaration channel for the contract-less kinds (tagless/tagless-guard — reduce's
+// acc-chain marker rides it); `declaresAccChain` is the data-read for the chained
+// track-composition operator (spec §3); `extractCallbackRoles` is surfaced for the
+// law suite (the factories call it internally at bake).
+export { withCallbackRoles, declaresAccChain, extractCallbackRoles } from "./symbols/_bake.js";
 
 // Re-export the generic form for convenience when using metadata.
 export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";

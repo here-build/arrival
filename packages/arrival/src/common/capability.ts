@@ -27,7 +27,7 @@ import type { RunContext } from "../values/primitives/RunContext.js";
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { InvocationLike } from "../rosetta.js";
-import { CallCtx, makeCallCtx, type ProvenanceRole } from "./symbols/_bake.js";
+import { CallCtx, makeCallCtx, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 
@@ -251,8 +251,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // Stamp the RESOLVED provenance role onto the bound value (docs/PROVENANCE.md
                 // §2, PROVENANCE-PLAN.md Q2) — the lineage classifier reads it OFF THE BOUND
                 // VALUE via `env.get(op)`, replacing the retired `.fanout` boolean this same
-                // seam used to copy.
+                // seam used to copy. The Q4 twin rides the same seam: the resolved per-lambda-
+                // arm callback roles (element-transformer/control/effect/accumulator), read as
+                // data by the classifier (Q3) and the wireframe builder (Q8a).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.callbackRoles !== undefined) {
+                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
+                }
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -289,8 +294,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 });
                 // Stamp the RESOLVED provenance role (all three kinds now carry `.provenance`
                 // on the def itself — sequence()/tagless()/taglessGuard() resolve it at bake
-                // time) onto the bound value, same seam as the native case above.
+                // time) onto the bound value, same seam as the native case above — plus the
+                // Q4 callback roles (sequence: bake-extracted; tagless: `withCallbackRoles`-
+                // declared, e.g. reduce's acc-chain marker).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.callbackRoles !== undefined) {
+                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
+                }
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -335,8 +345,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   impl,
                 });
                 // Same stamp as the native/sequence cases — the classifier reads it off the
-                // bound value uniformly across every callable kind.
+                // bound value uniformly across every callable kind (callback roles included).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.callbackRoles !== undefined) {
+                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
+                }
                 bindTarget(def).set(verb, proc);
                 break;
               }

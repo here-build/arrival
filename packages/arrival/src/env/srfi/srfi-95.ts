@@ -41,6 +41,12 @@ export default new EnvCapability("scheme/srfi-95", {
         // (unlike find, whose schema IS list-only). The comparator mirrors the `(a,b)=>unknown`
         // AValue.ts declares for the sort protocol — the assertion states that shape, not an invention.
         type: "(seq: unknown, less?: (a: unknown, b: unknown) => unknown) => unknown",
+        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): pipe host with value egress —
+        // shape underdetermines. less? is `control` (the ORDERING return; the merged
+        // selector+decision role) — sort is the canonical host-schedule op (spec §5's
+        // `(left-ordinal, right-ordinal, verdict)` record cites exactly this comparator's
+        // verdicts). Roles align with LAMBDA arms: less? is arm 0 despite input position 1.
+        callbackRoles: ["control"],
       },
       (args, runCtx) => {
         const [seq, comparator] = args;

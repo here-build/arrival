@@ -9,6 +9,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { jsToScheme, type InvocationLike } from "../../rosetta.js";
 import {
   assertProvenanceRoleShape,
+  extractCallbackRoles,
   type BakeRuntimeOpts,
   CallCtx,
   collectKwargsObject,
@@ -44,6 +45,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // undefined/false ⇒ "source", so `forwards` below is BYTE-IDENTICAL to the old `pure`.
     const provenance = contract.provenance ?? "source";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    // Per-lambda-arm callback roles (PROVENANCE-PLAN.md Q4): shape extraction + the
+    // declared override, drift-door checked — see extractCallbackRoles in _bake.ts.
+    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     const forwards = provenance === "pipe";
     // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
     // for the trust model + future use; see the decode note below for why it currently
@@ -162,6 +166,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       impl,
       run,
       provenance,
+      callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
     };

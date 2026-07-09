@@ -10,7 +10,7 @@
 // list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
-import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
+import { type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -70,7 +70,12 @@ export default new EnvCapability("scheme/srfi-1", {
         // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
         // `seq` operand implements and returns a value in THAT SAME representation, so there is
         // no single richer scheme-zod collection type honest for every call site.
-        { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+        // callbackRoles OVERRIDE (docs/PROVENANCE.md §2, Q4): filter's contract is shape-
+        // identical to map's (fan host, lambda + value in, value out), so extraction's
+        // fan default would say element-transformer — but the pred is a SELECTOR: its
+        // verdict decides membership (the PROVENANCED length-changing verb, §2 R2), the
+        // merged selector+decision role the one-color ruling calls `control`.
+        { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = resolveMethod(seq, tf("filter"));
@@ -87,7 +92,16 @@ export default new EnvCapability("scheme/srfi-1", {
           return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
         },
       ),
-    reduce: symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+    // The DECLARED acc-chain marker (docs/PROVENANCE.md §2/§3, PROVENANCE-PLAN.md Q4 —
+    // "fold declares acc chain"): reduce's f is the fold-shaped `accumulator` callback,
+    // the source of CHAINED track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the only
+    // sanctioned inter-track edge — the track-separation law's one exception). A tagless
+    // def is contract-less (shapeless `z.array(z.value)` in), so declaration is the ONLY
+    // channel — `withCallbackRoles`, not a Contract field.
+    reduce: withCallbackRoles(
+      symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+      ["accumulator"],
+    ),
     find: symbol.native`find: first list element matching the predicate, else nil`(
       {
         input: [z.lambda, z.union([z.pair, z.nil])],
@@ -99,6 +113,10 @@ export default new EnvCapability("scheme/srfi-1", {
         // representation-agnostic like filter/sort — the predicate is a one-arg callable, and the
         // result is the matched car or nil (any value).
         type: "(pred: (x: unknown) => unknown, list: List<unknown>) => unknown",
+        // callbackRoles DECLARED (Q4): the host is a pipe (not fan) with value egress, so
+        // shape underdetermines the pred's role. It is `control` — a boolean-returning
+        // selector deciding WHICH element egresses (the merged selector+decision role).
+        callbackRoles: ["control"],
       },
       findImpl,
     ),

@@ -3,6 +3,7 @@
 
 import {
   assertProvenanceRoleShape,
+  extractCallbackRoles,
   CallCtx,
   type Contract,
   DecodedArgs,
@@ -33,6 +34,9 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // to ride the `run` fn itself.
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    // Per-lambda-arm callback roles (PROVENANCE-PLAN.md Q4): shape extraction + the
+    // declared override, drift-door checked — see extractCallbackRoles in _bake.ts.
+    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     return {
       kind: "sequence",
       name,
@@ -47,6 +51,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       } as SequenceSymbolDef["run"],
       type: contract.type,
       provenance,
+      callbackRoles,
     };
   };
 }

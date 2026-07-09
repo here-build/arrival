@@ -510,6 +510,11 @@ export default new EnvCapability("scheme/lists", {
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
         // null` list → `unknown | false`), plus the optional binary comparator.
         type: "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): pipe host with value egress —
+        // shape underdetermines. compare is `control` (boolean-returning equality selector:
+        // its verdict decides WHICH sublist egresses). Roles align with LAMBDA arms —
+        // compare is arm 0 despite input position 2.
+        callbackRoles: ["control"],
       },
       (obj, list, compare = defaultCompare) => {
         let current: unknown = list;
@@ -537,6 +542,9 @@ export default new EnvCapability("scheme/lists", {
         output: [z.union([z.value, z.booleanFalse])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+        // Same `control` declaration as `member` above (Q4 — the alist search twin's
+        // compare is the same equality selector).
+        callbackRoles: ["control"],
       },
       (obj, alist, compare = defaultCompare) => {
         let current: unknown = alist;

@@ -307,6 +307,11 @@ export default new EnvCapability("scheme/strings", {
         inputRest: z.string,
         output: [z.string],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
+        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): the host is role `pipe`
+        // (string-map was never a declared fan — Q2 migrated only map/filter/vector-map's
+        // `fanout` booleans), so the fan default can't fire and shape underdetermines.
+        // proc's return BECOMES the output character — `element-transformer`.
+        callbackRoles: ["element-transformer"],
       },
       function (this: CallCtx, proc: unknown, ...strings: AString[]) {
         invariant(strings.length > 0, "string-map: expected at least one string");

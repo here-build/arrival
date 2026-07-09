@@ -145,6 +145,29 @@ export type DecodedArgsWithRest<
  *  narrowed to "whatever's reachable today". */
 export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
 
+/** docs/PROVENANCE.md §2's CALLBACK-role vocabulary (PROVENANCE-PLAN.md Q4) — the per-
+ *  z.lambda-arm dual of `ProvenanceRole` (which names the HOST symbol's role). Extracted
+ *  from contract SHAPE where shape decides, declared (`Contract.callbackRoles`) where it
+ *  underdetermines — `extractCallbackRoles` below owns the exact split:
+ *  - `element-transformer` — the callback's return BECOMES the element (map's fn). Parallel
+ *    track composition (spec §3).
+ *  - `control` — boolean/ordering returns: the ONE merged selector+decision role (spec §2
+ *    EXCLUDED the selector/decision split until a product query needs it — one cone color).
+ *    filter's pred, sort's less?, member/assoc's compare.
+ *  - `effect` — void/unused returns under sink-ish hosts (the for-each family). Terminal
+ *    track composition — no egress.
+ *  - `accumulator` — the fold-shaped acc-position arm. DECLARES THE ACC CHAIN: chained
+ *    track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the ONLY sanctioned inter-track
+ *    edge — spec §3 / the track-separation law's one exception). */
+export type CallbackRole = "element-transformer" | "control" | "effect" | "accumulator";
+
+/** Resolved per-arm callback roles, aligned with the contract's z.lambda arms IN LAMBDA
+ *  ORDER (k-th entry = k-th lambda arm, NOT k-th input position — sort's less? sits at
+ *  input position 1 but is lambda arm 0). An `undefined` entry = underdetermined-and-
+ *  undeclared: shape decided nothing and the author declared nothing — HONEST data for
+ *  the classifier (Q3/Q8a consume this positionally), never a guessed default. */
+export type CallbackRoles = readonly (CallbackRole | undefined)[];
+
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
@@ -179,6 +202,22 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  §2's EXCLUDED "heuristic classification"). See `assertProvenanceRoleShape` below for the
    *  two SHAPE-decidable contradictions this field is checked against at bake time. */
   readonly provenance?: ProvenanceRole;
+  /** Declared CALLBACK roles (docs/PROVENANCE.md §2, PROVENANCE-PLAN.md Q4), one per
+   *  z.lambda arm IN LAMBDA ORDER — the override channel for exactly the arms whose role
+   *  the contract SHAPE underdetermines (`z.lambda` is a bare callable schema carrying no
+   *  return shape, so the callback's own return — control's boolean/ordering, element-
+   *  transformer's value — is invisible to shape; only the HOST's output vector decides
+   *  anything). Two shape rules, split by strength (`extractCallbackRoles`):
+   *  - DECIDED — void-family host output ⇒ every lambda arm is `effect` (the callback's
+   *    product has no egress wire to ride); a declaration CONTRADICTING a decided arm
+   *    throws `ProvenanceRoleShapeError` at bake (the Q4 drift-door extension).
+   *  - DEFAULT — `fan`-role host with value egress ⇒ `element-transformer`; a declaration
+   *    OVERRIDES freely (filter is fan-shaped like map but its pred is `control` — the
+   *    shapes are identical, so the default must yield; under-trigger, never guess).
+   *  Underdetermined + undeclared arms resolve to `undefined` (honest holes). May be
+   *  SHORTER than the lambda-arm count (trailing arms fall to shape/undefined); LONGER
+   *  throws — a role for a phantom callback is a decidable contradiction. */
+  readonly callbackRoles?: readonly CallbackRole[];
   /** KIND-AGNOSTIC (native/rosetta). `true` = ASSEMBLY-TIME-ONLY: binds into the assembly's
    *  phase-gated prelude scope (kernel.ts `assembleEnv` — per-assembly Map answered by a resolver
    *  on the base env during the C3 loop), never into the runtime env. Callable from any later-
@@ -236,6 +275,10 @@ export interface NativeSymbolDef {
   /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
    *  Non-optional: `native()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED per-lambda-arm callback roles (`extractCallbackRoles` — shape + declared
+   *  override; see `Contract.callbackRoles`). `undefined` when the contract has no z.lambda
+   *  arm. capability.ts stamps this onto the bound callable beside `provenanceRole`. */
+  readonly callbackRoles?: CallbackRoles;
 }
 
 /** A rosetta symbol: impl in JS-land. `in`/`out` are codec schemas; `run` is the
@@ -266,6 +309,8 @@ export interface RosettaSymbolDef<
    *  `rosetta()` always resolves the default before baking. Replaces the retired `pure?: boolean`
    *  (PROVENANCE-PLAN.md Q2 — `pure: true` migrated to `"pipe"`, byte-identical behavior). */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
+  readonly callbackRoles?: CallbackRoles;
   /** See `Contract.type`. */
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
@@ -288,6 +333,12 @@ export interface TaglessSymbolDef {
   /** Always `"pipe"` — `tagless()` takes no `Contract`, so there is no author override
    *  channel yet (see `Contract.provenance`'s kind-default table). */
   readonly provenance: ProvenanceRole;
+  /** DECLARED per-callable-arg callback roles. A tagless def's contract is shapeless by
+   *  construction (`in: z.array(z.value)` — the real per-op types live on the receiver
+   *  terms), so shape can NEVER extract here; `withCallbackRoles` below is the declaration
+   *  channel (srfi-1's `reduce` declares its acc chain through it — PROVENANCE-PLAN.md Q4
+   *  "fold declares acc chain"). */
+  readonly callbackRoles?: CallbackRoles;
 }
 
 /** Tagless GUARD — like `symbol.tagless`, but a receiver with no such method yields `#f` (graceful
@@ -303,6 +354,8 @@ export interface TaglessGuardSymbolDef {
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
   /** Always `"pipe"` — same rationale as `TaglessSymbolDef.provenance`. */
   readonly provenance: ProvenanceRole;
+  /** See `TaglessSymbolDef.callbackRoles` — same shapeless-contract rationale. */
+  readonly callbackRoles?: CallbackRoles;
 }
 
 /** Ctx-aware op: impl receives scheme args AND the run's RunContext (dual of `symbol.native`,
@@ -322,6 +375,8 @@ export interface SequenceSymbolDef {
    *  Non-optional: `sequence()` always resolves the default before baking. Replaces the
    *  retired `.fanout` stamped onto `run` (PROVENANCE-PLAN.md Q2). */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
+  readonly callbackRoles?: CallbackRoles;
 }
 
 /** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason. */
@@ -561,6 +616,103 @@ export function assertProvenanceRoleShape(
       );
     }
   }
+}
+
+/** CALLBACK-role extraction from the contract (docs/PROVENANCE.md §2 CHOSEN, PROVENANCE-
+ *  PLAN.md Q4): per z.lambda arm, derive a `CallbackRole` from SHAPE (arm position + return
+ *  schema) with the declared `Contract.callbackRoles` overriding exactly where shape
+ *  underdetermines. Returns the resolved per-arm array (lambda order), or `undefined` when
+ *  the contract carries no z.lambda arm at all.
+ *
+ *  What shape can actually see today — and the strength split it forces:
+ *  - `z.lambda` is a bare callable schema (scheme-zod.ts): it carries NO return shape, so
+ *    the CALLBACK's own return — the thing §2's role parentheticals describe — is invisible.
+ *    Only the HOST contract's vectors decide anything.
+ *  - DECIDED: void-family host egress (every top-level output schema `undefinedResult`, or
+ *    a zero-output vector) ⇒ every lambda arm is `effect` — whatever the callback returns
+ *    has no egress wire to ride (for-each/string-for-each/vector-for-each). An override
+ *    contradicting this THROWS (the drift-door extension; same `ProvenanceRoleShapeError`
+ *    family, errors-as-doors).
+ *  - DEFAULT: `fan`-role host with value egress ⇒ `element-transformer` (map/vector-map).
+ *    Overridable WITHOUT the door: filter's contract is shape-identical to map's yet its
+ *    pred is `control` — arrange-vs-membership is semantic, so the default must yield.
+ *  - NOT extracted: `control` — a callback's boolean/ordering return is exactly what
+ *    z.lambda can't express, and the host's own boolean egress is NOT a proxy (procedure?
+ *    takes a z.lambda it never invokes and returns a boolean — a host-return rule would
+ *    door an introspection subject as a decision callback). `accumulator` — fold-shaped
+ *    acc-position is a semantic fact (and `reduce` is a shapeless tagless def anyway);
+ *    both arrive by declaration only. The Q4 risk register's rule, restated: the door
+ *    must UNDER-trigger, never guess.
+ *
+ *  Decidable contradictions that DO door: a declared roles array LONGER than the lambda-arm
+ *  count (a role for a phantom callback — including any declaration on a lambda-free
+ *  contract), and a declaration against a DECIDED arm that disagrees with it. */
+export function extractCallbackRoles(
+  name: string,
+  hostRole: ProvenanceRole,
+  inSchema: z.ZodTypeAny,
+  outSchema: z.ZodTypeAny,
+  declared: readonly CallbackRole[] | undefined,
+): CallbackRoles | undefined {
+  const inItems = topLevelSchemas(inSchema) ?? [];
+  // Lambda arms in input order. `lookupName` resolves through `.optional()` wrappers
+  // (scheme-zod.ts resolveCore walks `innerType`), so `z.lambda.optional()` (sort's less?,
+  // member/assoc's compare) counts as a lambda arm — as it must: the role describes the
+  // callback WHEN PRESENT.
+  const lambdaCount = inItems.filter((item) => z.lookupName(item) === "lambda").length;
+  if (declared !== undefined && declared.length > lambdaCount) {
+    throw new ProvenanceRoleShapeError(
+      name,
+      declared.join(","),
+      lambdaCount === 0
+        ? "callbackRoles declared, but this contract's input vector has no z.lambda arm to carry a callback role"
+        : `callbackRoles declares ${declared.length} role(s), but this contract's input vector carries only ${lambdaCount} z.lambda arm(s) — a role for a phantom callback`,
+    );
+  }
+  if (lambdaCount === 0) return undefined;
+  // Void-family egress: every top-level output schema is `undefinedResult`, INCLUDING the
+  // vacuous zero-output vector (`output: []` — same no-egress reading the sink/transparent
+  // check above takes). A non-introspectable output (`topLevelSchemas` undefined) stays
+  // conservative: NOT void, nothing decided.
+  const outItems = topLevelSchemas(outSchema);
+  const voidEgress = outItems !== undefined && outItems.every((item) => z.lookupName(item) === "undefinedResult");
+  const roles: (CallbackRole | undefined)[] = [];
+  for (let k = 0; k < lambdaCount; k++) {
+    const decided: CallbackRole | undefined = voidEgress ? "effect" : undefined;
+    const declaredRole = declared?.[k];
+    if (declaredRole !== undefined && decided !== undefined && declaredRole !== decided) {
+      throw new ProvenanceRoleShapeError(
+        name,
+        declaredRole,
+        `callback arm ${k} is shape-DECIDED "${decided}" (void-family host egress — the callback's product has no egress wire), contradicting the declared "${declaredRole}"`,
+      );
+    }
+    const dflt: CallbackRole | undefined = hostRole === "fan" && !voidEgress ? "element-transformer" : undefined;
+    roles.push(declaredRole ?? decided ?? dflt);
+  }
+  return roles;
+}
+
+/** DECLARATION channel for the contract-LESS kinds (tagless/tagless-guard): their `in` is
+ *  the shapeless `z.array(z.value)` (the real per-op algebra lives on the receiver terms),
+ *  so `extractCallbackRoles` can never see their callbacks — declaration is the ONLY
+ *  channel, and there is no shape for a declaration to contradict (no drift door here BY
+ *  CONSTRUCTION, not by leniency). Roles align with the op's callable args in call order.
+ *  The one live use is the acc-chain marker: srfi-1's `reduce` declares `["accumulator"]`
+ *  (PROVENANCE-PLAN.md Q4 "fold declares acc chain" — the chained track-composition
+ *  operator's source, spec §3). */
+export function withCallbackRoles<D extends TaglessSymbolDef | TaglessGuardSymbolDef>(
+  def: D,
+  callbackRoles: readonly CallbackRole[],
+): D {
+  return { ...def, callbackRoles };
+}
+
+/** The ACC-CHAIN marker, read as data (spec §3: chained composition — `egress(Tᵢ) →
+ *  ingress(Tᵢ₊₁)` is the ONLY sanctioned inter-track edge; the track-separation law's one
+ *  exception). True iff the resolved roles carry an `accumulator` arm. Q3/Q8a's read. */
+export function declaresAccChain(callbackRoles: CallbackRoles | undefined): boolean {
+  return callbackRoles !== undefined && callbackRoles.includes("accumulator");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
