@@ -21,8 +21,16 @@
  * docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL: zero production
  * reachability, superseded by R2/C3 struct-fact wires.)
  *
- * The few codecs the numeric ops actually use (most are the identity `SchemeNum`)
- * are carved here too — membrane's `Codec` family is deleted in the teardown.
+ * [DISSOLVED 2026-07-09, uniform-vocabulary ruling] The pack used to carry its own
+ * `NCodec` family — a 6-entry hand-synced shadow of scheme-zod.ts's real codecs
+ * (`SchemeNum`/`AnyNum`/`Int`/`SafeInt`/`Num`/`Bool` next to `z.schemeNumber`/
+ * `z.bigint`/`z.integer`/`z.number`/`z.boolean`, ONE table (`CODEC_SCHEMA`) hand-
+ * mapping between them, never runtime-checked for drift). `NumSpec.in`/`inRest`/`out`
+ * are now real `z.ZodTypeAny` — scheme-zod.ts's OWN codecs, consumed directly by both
+ * `marshalCall` (runtime) and `contractFromSpec` (the `.d.ts`/type-inference face) —
+ * ONE vocabulary, not two kept in sync by hand. `marshalCall`'s own doc comment below
+ * carries the two identity special-cases (`z.schemeNumber`, `z.boolean`) this
+ * dissolution surfaced.
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -55,106 +63,6 @@ import { type } from "../../utils/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Codecs — carved from membrane.ts (the `Codec` family) + operators/numeric.ts
-// (`SchemeNum`). After `coerceNumeric` every arg is already an ANumeric, so the
-// dominant `SchemeNum` codec is the identity passthrough; a few convert to JS
-// number/bigint for the ops whose `fn` works in JS-land (abs, the bitwise family,
-// rounding, transcendentals).
-// ════════════════════════════════════════════════════════════════════════════
-
-interface NCodec<S, J> {
-  match(value: unknown): value is S;
-  toJS(value: S): J;
-  fromJS(value: J): S;
-}
-
-/** Passthrough — keeps the ANumeric, no JS conversion (the dominant case). */
-const SchemeNum: NCodec<ANumeric, ANumeric> = {
-  match(v): v is ANumeric {
-    return v instanceof AExact || v instanceof AInexact;
-  },
-  toJS: (v) => v,
-  fromJS: (v) => v,
-};
-
-/** Any scheme number ↔ JS number/bigint. */
-const AnyNum: NCodec<ANumeric, number | bigint> = {
-  match(v): v is ANumeric {
-    return v instanceof AExact || v instanceof AInexact;
-  },
-  toJS(v) {
-    if (v instanceof AExact) {
-      if (v.isInteger && v.num >= BigInt(Number.MIN_SAFE_INTEGER) && v.num <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(v.num);
-      }
-      if (v.isInteger) return v.num;
-      return Number(v.num) / Number(v.denom);
-    }
-    return v.real;
-  },
-  fromJS(v) {
-    if (typeof v === "bigint") {
-      return new AExact(CONSTANT_CTX, v);
-    }
-    if (Number.isSafeInteger(v)) {
-      return new AExact(CONSTANT_CTX, BigInt(v));
-    }
-    return new AInexact(CONSTANT_CTX, v);
-  },
-};
-
-/** Exact integers ↔ JS bigint. */
-const Int: NCodec<AExact, bigint> = {
-  match(v): v is AExact {
-    return v instanceof AExact && v.isInteger;
-  },
-  toJS: (v) => v.num,
-  fromJS: (v) => new AExact(CONSTANT_CTX, v),
-};
-
-/** Safe integers ↔ JS number (for bitwise shift counts etc.). */
-const SafeInt: NCodec<AExact, number> = {
-  match(v): v is AExact {
-    return (
-      v instanceof AExact &&
-      v.isInteger &&
-      v.num >= BigInt(Number.MIN_SAFE_INTEGER) &&
-      v.num <= BigInt(Number.MAX_SAFE_INTEGER)
-    );
-  },
-  toJS: (v) => Number(v.num),
-  fromJS: (v) => new AExact(CONSTANT_CTX, BigInt(v)),
-};
-
-/** Any number as JS number (lossy for bigints and rationals). */
-const Num: NCodec<ANumeric, number> = {
-  match(v): v is ANumeric {
-    return v instanceof AExact || v instanceof AInexact;
-  },
-  toJS(v) {
-    if (v instanceof AExact) {
-      return Number(v.num) / Number(v.denom);
-    }
-    return v.real;
-  },
-  fromJS(v) {
-    if (Number.isSafeInteger(v)) {
-      return new AExact(CONSTANT_CTX, BigInt(v));
-    }
-    return new AInexact(CONSTANT_CTX, v);
-  },
-};
-
-/** Scheme boolean ↔ JS boolean (identity — the box happens in the provenance stamp). */
-const Bool: NCodec<boolean, boolean> = {
-  match(v): v is boolean {
-    return typeof v === "boolean";
-  },
-  toJS: (v) => v,
-  fromJS: (v) => v,
-};
-
-// ════════════════════════════════════════════════════════════════════════════
 // nativeNumericOp — the pack's per-op wrapper. (Historically a byte-for-byte
 // reproduction of bridge.ts's `wrapOperator` ⊕ membrane's `Operator.call`;
 // both ancestors are deleted — bridge at 2bfefd7455 — and this is now the
@@ -162,41 +70,78 @@ const Bool: NCodec<boolean, boolean> = {
 // ════════════════════════════════════════════════════════════════════════════
 
 interface NumSpec {
-  in: NCodec<any, any>[];
-  inRest?: NCodec<any, any>;
-  out: NCodec<any, any>;
+  in: z.ZodTypeAny[];
+  inRest?: z.ZodTypeAny;
+  out: z.ZodTypeAny;
   fn: (...jsArgs: any[]) => any;
 }
 
 /**
- * The raw `Operator.call` marshalling — arity guard + per-arg codec decode + the
+ * Per-arg DECODE (scheme → JS) via the schema's own `.safeParse` — the schema IS the
+ * NCodec `match`+`toJS` fusion now (uniform-vocabulary ruling). Two runtime realities
+ * this absorbs, both verified empirically against zod 4.3.6:
+ *
+ *  1. `.safeParse` does NOT catch a raw THROW from inside a codec's `decode` — this
+ *     module's codecs use `Error.invariant`/`TypeError.invariant` (bare `throw`, not
+ *     `ctx.addIssue`), so a mismatch can surface as EITHER `{success:false}` OR an
+ *     uncaught exception straight through `.safeParse`. Both normalize here to the
+ *     SAME `${name}: argument ${index} type mismatch` door the old NCodec.match threw.
+ *  2. `z.schemeNumber` is special-cased to IDENTITY. Its real decode does NOT
+ *     reproduce the old `SchemeNum` NCodec's passthrough — it unwraps AExact/AInexact
+ *     to a raw bigint/number (and its `exact` half DOORS on a non-integer rational,
+ *     e.g. `1/2`) — wrong for every SchemeNum-role fn (`schemeAdd`, `schemeCompare`,
+ *     …), which already received a `coerceNumeric`d ANumeric from `applyNumeric` and
+ *     operates on that ANumeric directly. `===` identity is safe: `z.schemeNumber` is
+ *     a module singleton exported once from scheme-zod.ts.
+ */
+function decodeArg(name: string, index: number, schema: z.ZodTypeAny, arg: unknown): unknown {
+  if ((schema as unknown) === z.schemeNumber) {
+    TypeError.invariant(arg instanceof AExact || arg instanceof AInexact, `${name}: argument ${index} type mismatch`);
+    return arg;
+  }
+  let result: { success: boolean; data?: unknown };
+  try {
+    result = schema.safeParse(arg);
+  } catch {
+    result = { success: false };
+  }
+  TypeError.invariant(result.success, `${name}: argument ${index} type mismatch`);
+  return result.data;
+}
+
+/**
+ * Encode a JS result back to a scheme value via the schema's `z.encode` — the SAME
+ * `z.schemeNumber`-identity special case as `decodeArg` (every SchemeNum-out `fn`
+ * already returns an ANumeric directly), PLUS `z.boolean`: its real encode mints a
+ * fresh `ABool`, but `nativeNumericOp`'s R8 `mintVerdict` step (below) owns that
+ * boxing — the union of the CALL's operand provenance, not a single result value's —
+ * so an ABool minted here would be the wrong box, silently overwritten downstream.
+ * Matches the OLD `Bool` NCodec's own doc: "identity — the box happens in the
+ * provenance stamp."
+ */
+function encodeResult(schema: z.ZodTypeAny, result: unknown): unknown {
+  if ((schema as unknown) === z.schemeNumber || (schema as unknown) === z.boolean) return result;
+  return z.encode(schema, result as never);
+}
+
+/**
+ * The raw `Operator.call` marshalling — arity guard + per-arg schema decode + the
  * `fn` + output encode, WITHOUT the provenance/coerce layer. `nativeNumericOp`
  * runs it after coercion; the inline misc ops (`floor/`, `>>`, …) that used to call
  * `ops.X.call(...)` directly run it too (those bypass the provenance layer, exactly
  * as `op.call` did).
  */
 function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
-  const { in: inCodecs, inRest, out, fn } = spec;
-  const minArgs = inCodecs.length;
+  const { in: inSchemas, inRest, out, fn } = spec;
+  const minArgs = inSchemas.length;
   TypeError.invariant(args.length >= minArgs, `${name}: expected at least ${minArgs} args, got ${args.length}`);
   TypeError.invariant(inRest || args.length <= minArgs, `${name}: expected ${minArgs} args, got ${args.length}`);
   const jsArgs = args.map((arg, i) => {
-    const prof = i < inCodecs.length ? inCodecs[i] : inRest!;
-    // `prof.match` IS a real type predicate (`(value: unknown) => value is S`), and
-    // `TypeError.invariant` is a TS assertion function (`asserts condition`) — the same
-    // narrowing machinery `if (prof.match(arg))` would give. So this assertion narrows
-    // `arg: unknown` down to `prof`'s own `S` with no cast: the old `arg as any` was
-    // already inert, just unproven at the call site. `S` resolves to `any` here because
-    // `prof` is picked dynamically per-index out of a heterogeneous codec list (`in`/
-    // `inRest` can each carry a DIFFERENT NCodec's S/J) — that heterogeneity is inherent
-    // to a shared dispatch table keyed by op name, not a typing gap.
-    TypeError.invariant(prof.match(arg), `${name}: argument ${i} type mismatch`);
-    return prof.toJS(arg);
+    const schema = i < inSchemas.length ? inSchemas[i] : inRest!;
+    return decodeArg(name, i, schema, arg);
   });
-  // `jsArgs` is already `any[]` (each `prof.toJS(arg)` above returns `J = any`, same
-  // per-index-heterogeneity reason) — `fn` (`(...jsArgs: any[]) => any`) accepts it directly.
   const jsResult = fn(...jsArgs);
-  return out.fromJS(jsResult);
+  return encodeResult(out, jsResult);
 }
 
 /**
@@ -650,14 +595,14 @@ const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n 
 // inline ops (Phase 4).
 // ════════════════════════════════════════════════════════════════════════════
 
-const arithmeticShiftSpec: NumSpec = { in: [Int, SafeInt], out: Int, fn: arithmeticShiftFn };
+const arithmeticShiftSpec: NumSpec = { in: [z.bigint, z.integer], out: z.bigint, fn: arithmeticShiftFn };
 
-const exptSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: schemeExpt };
-const remainderSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: remainderFn };
-const numEqSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: numEqFn };
-const bitwiseIorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseIorFn };
-const bitwiseAndSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseAndFn };
-const bitwiseNotSpec: NumSpec = { in: [Int], out: Int, fn: bitwiseNotFn };
+const exptSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt };
+const remainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: remainderFn };
+const numEqSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: numEqFn };
+const bitwiseIorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseIorFn };
+const bitwiseAndSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseAndFn };
+const bitwiseNotSpec: NumSpec = { in: [z.bigint], out: z.bigint, fn: bitwiseNotFn };
 
 const exptOp = nativeNumericOp("expt", exptSpec);
 const remainderOp = nativeNumericOp("remainder", remainderSpec);
@@ -668,10 +613,10 @@ const bitwiseNotOp = nativeNumericOp("bitwise-not", bitwiseNotSpec);
 
 // The numeric comparison cores (provenance), wrapped by `wrapOrd`
 // (FL-Ord fallback) and `looseCompare` (nil-tolerant overlay) below.
-const ltSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: ltFn };
-const gtSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: gtFn };
-const lteSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: lteFn };
-const gteSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: Bool, fn: gteFn };
+const ltSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: ltFn };
+const gtSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gtFn };
+const lteSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: lteFn };
+const gteSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gteFn };
 
 const ltOp = nativeNumericOp("<", ltSpec);
 const gtOp = nativeNumericOp(">", gtSpec);
@@ -801,7 +746,7 @@ const lcmCoreFn = (...args: bigint[]): bigint => {
   // Seed with 1n and abs each operand so the result is non-negative.
   return args.reduce((a, b) => lcm2(a, b < 0n ? -b : b), 1n);
 };
-const lcmSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: lcmCoreFn };
+const lcmSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: lcmCoreFn };
 
 const floorSlashFn = (n1: unknown, n2: unknown): unknown => {
   const a = coerceNumeric(n1);
@@ -936,65 +881,39 @@ const numberToStringFn = (z: unknown, radix?: unknown): AString => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// Codec → zod-schema bridge. Each of the six `NCodec` instances above has a
-// zod-schema counterpart whose DECODED (`z.output`) type matches that codec's own
-// `toJS`/`fromJS` JS-side type exactly — mapping through this table turns a NumSpec
-// into a real `symbol.native` Contract. PURE TYPE-LAYER: `symbol.native` never runs
-// this validation at runtime — `def.in`/`def.out` feed static inference and the
-// future `.d.ts` harvest only; `nativeNumericOp`'s OWN `marshalCall` remains the sole
-// runtime type-check/coerce/dispatch. The pairing, verified against each codec's own
-// `match`/`toJS`/`fromJS` (not just its name):
+// [DISSOLVED 2026-07-09] `NumSpec.in`/`inRest`/`out` are now the real scheme-zod.ts
+// schemas directly — `contractFromSpec` is a trivial projection, not a lookup through
+// a hand-synced shadow table (the old `CODEC_SCHEMA` Map + `codecSchema` throw-if-
+// missing guard are GONE; there is nothing left to keep in sync). What used to be
+// PURE TYPE-LAYER (never runtime-decoded) is now the SAME schema `marshalCall` (above)
+// actually runs at call time — one vocabulary, one set of edge cases, not two.
 //
-//   SchemeNum → z.schemeNumber   identity (ANumeric↔ANumeric) — exact match.
-//   AnyNum    → z.union([z.number, z.bigint])  no single schema decodes to `number | bigint`
-//               (z.number/z.integer are number-only, z.bigint is bigint-only); inlined at the
-//               call site (the standalone numberOrBigint export was dropped in the v2 vocabulary).
-//   Int       → z.bigint        decoded type (bigint) matches Int.toJS's return exactly;
-//               z.bigint's INPUT side also accepts AInexact (Int.match doesn't) — inert
-//               for a native contract, which is never decoded/validated at runtime.
-//   SafeInt   → z.integer       exact match (both are "safe-integer, as a JS number").
-//   Num       → z.number        decoded type (number) matches Num.toJS's return exactly;
-//               z.integer would be WRONG (Num's domain includes non-integers like 3.7 —
-//               e.g. floor's input — z.integer's decode would door on those). z.number's
-//               decode FUNCTION BODY doors on a non-integer exact rational / out-of-range
-//               exact integer where Num.toJS instead lossily divides — again inert, since
-//               a native contract's decode is never invoked at runtime.
-//   Bool      → z.boolean       decoded type (boolean) matches Bool.toJS's return exactly;
-//               z.boolean's INPUT side is `z.instanceof(ABool)` (a boxed scheme bool)
-//               where Bool.match is a raw JS `typeof v === "boolean"` (marshalCall runs
-//               BEFORE nativeNumericOp's applyNumeric mints the ABool via mintVerdict,
-//               RULINGS.md R8) — again inert for the same reason.
+// Two arguments from the old bridge comment still matter and move here, since
+// `marshalCall`'s `decodeArg`/`encodeResult` are the ones that must honor them now:
+//
+//   Decode order (coerce THEN marshal). `nativeNumericOp`'s `applyNumeric` runs
+//   `coerceNumeric` on every call arg FIRST (throwing the named "Cannot apply X to
+//   (...)" door on a non-numeric arg) — `marshalCall`'s per-arg schema decode only
+//   ever sees an already-ANumeric value. This is WHY the `z.schemeNumber` identity
+//   special-case in `decodeArg` is safe: by the time it runs, `arg` is guaranteed
+//   AExact/AInexact already, never a raw scheme value the schema would need to
+//   validate from scratch.
+//
+//   Bool identity passthrough (R8). `out: z.boolean` positions (every comparison/
+//   predicate spec) must NOT let `encodeResult` mint the `ABool` — `applyNumeric`'s
+//   own `mintVerdict` step does that AFTER `marshalCall` returns, boxing the UNION of
+//   the call's operand provenance (flyweight when provenance-free, per RULINGS.md R8),
+//   not a single result value's. An `ABool` minted inside `marshalCall` would carry no
+//   provenance and be silently discarded the instant `mintVerdict` re-boxes over it —
+//   `encodeResult`'s `z.boolean` special case exists exactly to not do that work twice
+//   (once wrong, once right).
 // ════════════════════════════════════════════════════════════════════════════
 
-const CODEC_SCHEMA = new Map<NCodec<any, any>, z.ZodTypeAny>([
-  [SchemeNum, z.schemeNumber],
-  // AnyNum → z.union([z.number, z.bigint]) inline: no single schema decodes to `number | bigint`
-  // (z.number is number-only, z.bigint is bigint-only). numberOrBigint export dropped — inlined here.
-  [AnyNum, z.union([z.number, z.bigint])],
-  [Int, z.bigint],
-  [SafeInt, z.integer],
-  [Num, z.number],
-  [Bool, z.boolean],
-]);
-
-/** The zod schema a NumSpec codec maps to (see the table above). Throws if a NEW NCodec
- *  is ever added to the pack without a matching CODEC_SCHEMA entry — a loud authoring
- *  error, not a silent `z.value` regression. */
-function codecSchema(codec: NCodec<any, any>): z.ZodTypeAny {
-  const schema = CODEC_SCHEMA.get(codec);
-  invariant(schema, "numeric.ts: no zod schema mapped for this NCodec (add it to CODEC_SCHEMA)");
-  return schema;
-}
-
-/** Map a NumSpec's own precise codec types to a real `symbol.native` Contract —
- *  1-tuple output (the common case). `floor/`/`truncate/`'s 2-value output and the
- *  bespoke (non-NumSpec) ops below build their Contract by hand instead. */
+/** Map a NumSpec's own schemas to a real `symbol.native` Contract — 1-tuple output
+ *  (the common case). `floor/`/`truncate/`'s 2-value output and the bespoke
+ *  (non-NumSpec) ops below build their Contract by hand instead. */
 function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestSpec> {
-  return {
-    input: spec.in.map(codecSchema),
-    inputRest: spec.inRest === undefined ? undefined : codecSchema(spec.inRest),
-    output: [codecSchema(spec.out)],
-  };
+  return { input: spec.in, inputRest: spec.inRest, output: [spec.out] };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1006,47 +925,47 @@ function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestS
 // dissolved; see that file's note on where they went).
 // ════════════════════════════════════════════════════════════════════════════
 
-const addSpec: NumSpec = { in: [], inRest: SchemeNum, out: SchemeNum, fn: addFn };
-const subSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: subFn };
-const mulSpec: NumSpec = { in: [], inRest: SchemeNum, out: SchemeNum, fn: mulFn };
-const divSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: divFn };
-const quotientSpec: NumSpec = { in: [Int, Int], out: Int, fn: quotientFn };
-const moduloSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: moduloFn };
-const floorQuotientSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorQuotientFn };
-const floorRemainderSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: floorRemainderFn };
-const truncateQuotientSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateQuotientFn };
-const truncateRemainderSpec: NumSpec = { in: [SchemeNum, SchemeNum], out: SchemeNum, fn: truncateRemainderFn };
-const numeratorSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: numeratorFn };
-const denominatorSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: denominatorFn };
-const makeRectangularSpec: NumSpec = { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const makePolarSpec: NumSpec = { in: [Num, Num], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const realPartSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const imagPartSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const magnitudeSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const angleSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: (): ANumeric => complexDoor() };
-const absSpec: NumSpec = { in: [AnyNum], out: AnyNum, fn: absFn };
-const gcdSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: gcdFn };
-const maxSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: maxFn };
-const minSpec: NumSpec = { in: [SchemeNum], inRest: SchemeNum, out: SchemeNum, fn: minFn };
-const zeroSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isZeroFn };
-const positiveSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isPositiveFn };
-const negativeSpec: NumSpec = { in: [AnyNum], out: Bool, fn: isNegativeFn };
-const oddSpec: NumSpec = { in: [Int], out: Bool, fn: isOddFn };
-const evenSpec: NumSpec = { in: [Int], out: Bool, fn: isEvenFn };
-const floorSpec: NumSpec = { in: [Num], out: Num, fn: Math.floor };
-const ceilingSpec: NumSpec = { in: [Num], out: Num, fn: Math.ceil };
-const truncateSpec: NumSpec = { in: [Num], out: Num, fn: Math.trunc };
-const roundSpec: NumSpec = { in: [Num], out: Num, fn: roundFn };
-const sqrtSpec: NumSpec = { in: [SchemeNum], out: SchemeNum, fn: sqrtFn };
-const expSpec: NumSpec = { in: [Num], out: Num, fn: Math.exp };
-const logSpec: NumSpec = { in: [Num], inRest: Num, out: Num, fn: logFn };
-const sinSpec: NumSpec = { in: [Num], out: Num, fn: Math.sin };
-const cosSpec: NumSpec = { in: [Num], out: Num, fn: Math.cos };
-const tanSpec: NumSpec = { in: [Num], out: Num, fn: Math.tan };
-const asinSpec: NumSpec = { in: [Num], out: Num, fn: Math.asin };
-const acosSpec: NumSpec = { in: [Num], out: Num, fn: Math.acos };
-const atanSpec: NumSpec = { in: [Num], inRest: Num, out: Num, fn: atanFn };
-const bitwiseXorSpec: NumSpec = { in: [], inRest: Int, out: Int, fn: bitwiseXorFn };
+const addSpec: NumSpec = { in: [], inRest: z.schemeNumber, out: z.schemeNumber, fn: addFn };
+const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
+const mulSpec: NumSpec = { in: [], inRest: z.schemeNumber, out: z.schemeNumber, fn: mulFn };
+const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
+const quotientSpec: NumSpec = { in: [z.bigint, z.bigint], out: z.bigint, fn: quotientFn };
+const moduloSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn };
+const floorQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn };
+const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorRemainderFn };
+const truncateQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: truncateQuotientFn };
+const truncateRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: truncateRemainderFn };
+const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
+const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
+const makeRectangularSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const makePolarSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const angleSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const absSpec: NumSpec = { in: [z.looseAnyNumber], out: z.looseAnyNumber, fn: absFn };
+const gcdSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: gcdFn };
+const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
+const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
+const zeroSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isZeroFn };
+const positiveSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isPositiveFn };
+const negativeSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isNegativeFn };
+const oddSpec: NumSpec = { in: [z.bigint], out: z.boolean, fn: isOddFn };
+const evenSpec: NumSpec = { in: [z.bigint], out: z.boolean, fn: isEvenFn };
+const floorSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.floor };
+const ceilingSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.ceil };
+const truncateSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.trunc };
+const roundSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: roundFn };
+const sqrtSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: sqrtFn };
+const expSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.exp };
+const logSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.looseNumber, fn: logFn };
+const sinSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.sin };
+const cosSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.cos };
+const tanSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.tan };
+const asinSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.asin };
+const acosSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.acos };
+const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.looseNumber, fn: atanFn };
+const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseXorFn };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (its own coercion + a bespoke wrapper around `marshalCall`, or no NumSpec at all), so

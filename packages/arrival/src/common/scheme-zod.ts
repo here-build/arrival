@@ -360,6 +360,77 @@ export const bigint = named(
   ]),
 );
 
+// --- loose JS-number-land conversions (permissive — arithmetic/math-builtin domain) ---
+//
+// [ADDED 2026-07-09, numeric.ts NCodec dissolution] `number`/`bigint` above are the
+// STRICT rosetta-boundary casts: they deliberately DOOR on precision loss (a non-
+// integer exact rational, an out-of-safe-range integer) and reject IEEE non-finite
+// values (`z.number()`'s stock validator excludes NaN/±Infinity — confirmed against
+// zod 4.3.6: `z.number().safeParse(NaN)` and `.safeParse(Infinity)` both fail). That
+// strictness is correct for a value crossing the membrane to a JS caller who didn't
+// ask for silent precision loss.
+//
+// It is WRONG for `env/r7rs/numeric.ts`'s internal math builtins (`round`/`floor`/
+// `ceiling`/`truncate`/`sqrt`/`sin`/…/`abs`/`zero?`/`positive?`/`negative?`), which
+// need to (a) accept `+nan.0`/`+inf.0`/`-inf.0` — ordinary R7RS inexact reals, tested
+// directly by the R7RS conformance corpus (`(negative? -inf.0)` etc.) — and (b)
+// LOSSILY convert a non-integer exact rational to a JS float (`(round 7/2)` — the
+// input IS a non-integer rational; that is the whole point of rounding it), never
+// door on it. Discovered via a real conformance regression when this dissolution
+// first tried routing those ops through the strict `number`/`bigint` codecs above —
+// 10 real R7RS test failures (6 positive?/negative? on non-finite reals, 4 round on
+// exact rationals), not a theoretical edge case.
+//
+// These two codecs are the missing, PERMISSIVE half of the vocabulary — byte-for-byte
+// the old (pre-dissolution) `Num`/`AnyNum` NCodec behavior from numeric.ts, now named
+// and public instead of a hand-rolled shadow object.
+
+/** Any scheme number ↔ JS `number`, LOSSY (a non-integer exact rational divides;
+ *  out-of-safe-range exact integers divide too — no invariant, no door) and permissive
+ *  of non-finite values (`+nan.0`/`+inf.0`/`-inf.0` pass through AInexact's `.real`
+ *  unchanged). Encode canonicalizes a safe-integer JS number to AExact, else AInexact —
+ *  same rule `number`'s AExact branch uses, just without `number`'s finite-only guard. */
+export const looseNumber = named(
+  "looseNumber",
+  z.codec(
+    z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
+    z.custom<number>((v) => typeof v === "number"),
+    {
+      decode: (n) => (n instanceof AExact ? Number(n.num) / Number(n.denom) : n.real),
+      encode: (n) => (Number.isSafeInteger(n) ? new AExact(CONSTANT_CTX, BigInt(n)) : new AInexact(CONSTANT_CTX, n)),
+    },
+  ),
+);
+
+/** Any scheme number ↔ JS `number | bigint` — `looseNumber`'s domain, PLUS an
+ *  out-of-safe-range exact integer decodes to a `bigint` instead of a lossy float
+ *  (preserving magnitude, the one case `looseNumber` alone would corrupt). Used by
+ *  `abs`/`zero?`/`positive?`/`negative?` — ops whose `fn` branches on `typeof x ===
+ *  "bigint"` to stay exact for big integers. */
+export const looseAnyNumber = named(
+  "looseAnyNumber",
+  z.codec(
+    z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
+    z.union([z.custom<number>((v) => typeof v === "number"), z.bigint()]),
+    {
+      decode: (n) => {
+        if (n instanceof AExact) {
+          if (n.isInteger && n.num >= SAFE_MIN && n.num <= SAFE_MAX) return Number(n.num);
+          if (n.isInteger) return n.num;
+          return Number(n.num) / Number(n.denom);
+        }
+        return n.real;
+      },
+      encode: (v) =>
+        typeof v === "bigint"
+          ? new AExact(CONSTANT_CTX, v)
+          : Number.isSafeInteger(v)
+            ? new AExact(CONSTANT_CTX, BigInt(v))
+            : new AInexact(CONSTANT_CTX, v),
+    },
+  ),
+);
+
 export const bytevector = named(
   "bytevector",
   z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
