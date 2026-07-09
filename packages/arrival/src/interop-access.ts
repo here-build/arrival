@@ -15,12 +15,15 @@
  *
  * TWO CONCEPTS live here, deliberately co-located because the CHECKER reads both:
  * 1. THE READ POLICY — accessMember/accessHas/accessKeys + the boundary walk +
- *    blocklists. Its three legitimate mouths: AJSObject (borrowed-JS get/has/keys on
- *    `source`), membrane.readMember (the `@`/`:key` protocol over ANY polyglot value),
- *    and member-walk (the evaluator's dotted-path resolution). It is the MEMBRANE's
- *    policy, not AJSObject's private helper — readMember dispatches over all values,
- *    so confining this to AJSObject would invert the dependency (membrane importing
- *    policy from one of its wrappers).
+ *    blocklists. After the tagless member-access rework, its mouths are exactly TWO —
+ *    the borrowed-value terms `AJSObject` and `AJSArray` (their own `get/has/keys` over
+ *    `source`). The membrane's `readMember` face no longer calls the policy directly
+ *    (it dispatches to the value's `arrival/tagless-final/get|has|keys` term), and
+ *    member-walk (the dotted-path side-door) was deleted with V's dotted-path ruling.
+ *    ENDGAME (noted, not executed): with only two callers, both borrowed-value classes,
+ *    the policy could inline INTO those classes entirely — interop-access dissolving the
+ *    way bridge.ts did. Held: the blocklist/boundary-walk is genuinely shared logic and
+ *    a shared module is the honest home until a third pressure decides the cut.
  * 2. THE PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary/@arrival.private:
  *    the opt-in for HOST classes (arrival-chain re-exports it). Arrival's own value
  *    family no longer stamps per-class: the family rule inside `isInteropBoundary`

@@ -41,12 +41,14 @@ import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js"
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { type SchemeValue } from "../values/types.js";
 
-// IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator) that
-// can be MID-INITIALIZATION when this capability's spec object is evaluated — the
-// assembly path imports it via `base-packs → polyglot → membrane → evaluator → …`, a
-// cycle. Reading `readMember` at module-eval time would freeze the TDZ `undefined`
-// into the spec. So defer every membrane read to APPLY time (when `initBridge`
-// assembles, all modules are loaded): `symbols` uses the builder form.
+// IMPORT-ORDER SAFETY: `membrane.ts` is a heavy module (it pulls the evaluator via
+// SchemePromise) that can be MID-INITIALIZATION when this capability's spec object is
+// evaluated — the assembly path imports it via `base-packs → polyglot → membrane →
+// evaluator → …`, a cycle. Reading `readMember` at module-eval time would freeze the
+// TDZ `undefined` into the spec. So defer every membrane read to APPLY time: `symbols`
+// uses the builder form. (The tagless member-access rework moved the DISPATCH onto the
+// value classes, but the FACES still live in membrane.ts — the cycle, and therefore
+// this deferral, is membrane→evaluator's, not the dispatch's. Verified 2026-07-09.)
 
 export default new EnvCapability("scheme/polyglot", {
   prelude: `
@@ -370,10 +372,11 @@ export default new EnvCapability("scheme/polyglot", {
   // carries `apply` — so this pack contributes no resolvers, only symbols.
   symbols: () => ({
     // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
-    // `readMember`/`hasMember`/`memberKeys` dispatch on `instanceof AJSObject` / `Array.isArray`
-    // / plain-prototype checks, and are called directly with raw (non-scheme) JS values from
-    // outside the evaluator too (see clone-identity.test.ts). Each op below has a single,
-    // unconditional real OUTPUT type, so the output sides are typed precisely, not left blind.
+    // the faces (`readMember`/`hasMember`/`memberKeys`, membrane.ts) normalize the key and
+    // dispatch to the receiver's own `arrival/tagless-final/get|has|keys` terms (ADict/
+    // AJSObject/AJSArray); a term-less receiver answers nil/false/[] — absence IS the
+    // semantics. Each op below has a single, unconditional real OUTPUT type, so the output
+    // sides are typed precisely, not left blind.
     "@": symbol.native`@: read a member — origin-agnostic (dict / membrane-foreign / array)`(
       // `readMember` always returns a real scheme value (nil / a boxed read / an AJSArray-
       // wrapped array) — never something OUTSIDE SchemeValue. `z.value` is the identity term

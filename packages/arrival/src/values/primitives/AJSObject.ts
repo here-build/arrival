@@ -33,6 +33,15 @@ import { jsToScheme } from "../../rosetta.js";
  */
 const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
 
+/** The borrowed-wrapper member-name fold: a face-normalized string passes through; a
+ *  SchemeValue key (keyword symbol, boxed string) unwraps via valueOf with the `:`
+ *  accessor sigil stripped. Shared by AJSObject's and AJSArray's member terms. */
+export function foldMemberName(key: SchemeValue | string): string {
+  let name = typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
+  if (name.startsWith(":")) name = name.slice(1);
+  return name;
+}
+
 /**
  * Thin wrapper for JS objects. Property access is lazy — entries box on demand through
  * `jsToScheme` (rosetta.ts), stamped with the wrapper's own provenance, so e.g. an entry
@@ -183,11 +192,18 @@ export class AJSObject extends AValue {
   }
 
   // `@`/`dict-ref`/`:key` are one protocol, several syntaxes, over the same underlying
-  // `.get`; the `:`-strip mirrors readMember's convention (membrane.ts).
-  ["arrival/tagless-final/get"](key: SchemeValue): SchemeValue {
-    let name = String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
-    if (name.startsWith(":")) name = name.slice(1);
-    return this.get(name);
+  // `.get` — the membrane face (`readMember`) and the keyword accessor both dispatch to
+  // this term. The `:`-strip is the receiver's own fold (a keyword symbol arrives raw).
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+    return this.get(foldMemberName(key));
+  }
+
+  ["arrival/tagless-final/has"](key: SchemeValue | string): boolean {
+    return this.has(foldMemberName(key));
+  }
+
+  ["arrival/tagless-final/keys"](): string[] {
+    return this.keys();
   }
 
   toString(): string {

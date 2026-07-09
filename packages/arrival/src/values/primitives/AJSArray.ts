@@ -27,6 +27,10 @@ import { type SchemeValue } from "../types.js";
 // called only inside wrapper methods at runtime.
 import { jsToScheme } from "../../rosetta.js";
 import { tf } from "../tagless-final.js";
+import { nil } from "./ANil.js";
+import { accessHas, accessKeys, accessMember, NOT_FOUND } from "../../interop-access.js";
+import { InteropAccessError } from "../../errors.js";
+import { foldMemberName } from "./AJSObject.js";
 
 /**
  * A borrowed JS array, re-presented as a vector. It is an `AValue` (a sibling of
@@ -164,6 +168,40 @@ export class AJSArray extends AValue {
   // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).
   ["arrival/tagless-final/vector?"](): boolean {
     return true;
+  }
+
+  // ── Member trio (`@`/`@?`/`@keys` + the `:key` accessor) — the borrowed-array arm of the
+  // protocol AJSObject/ADict carry. Reads go through the interop policy over the RAW source
+  // (own members only, boundary walk — a borrowed array's `length`/index reads are member
+  // reads, not vector algebra). Semantics inherited verbatim from the membrane face's
+  // former AJSArray branch: NOT_FOUND/blocked → nil; an array-valued member re-presents as
+  // a borrowed AJSArray (so car/cdr work on it); other members box via jsToScheme with
+  // EMPTY provenance (the face's historical choice — element reads via `vector-ref` carry
+  // this container's provenance instead; that asymmetry precedes this term and is pinned
+  // by the identity/lineage suites).
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+    this.freezeSource();
+    let raw: unknown;
+    try {
+      raw = accessMember(this.source, foldMemberName(key));
+    } catch (e) {
+      if (e instanceof InteropAccessError) return nil;
+      throw e;
+    }
+    if (raw === NOT_FOUND) return nil;
+    if (Array.isArray(raw)) return new AJSArray(this.ctx, raw);
+    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, EMPTY_PROVENANCE);
+    return boxed;
+  }
+
+  ["arrival/tagless-final/has"](key: SchemeValue | string): boolean {
+    this.freezeSource();
+    return accessHas(this.source, foldMemberName(key));
+  }
+
+  ["arrival/tagless-final/keys"](): string[] {
+    this.freezeSource();
+    return accessKeys(this.source);
   }
 
   // Indexed access — boxes JUST element k (no full materialize), the same lazy crossing as

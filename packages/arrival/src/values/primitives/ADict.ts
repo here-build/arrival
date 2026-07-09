@@ -147,10 +147,19 @@ export class ADict extends AValue {
     return true;
   }
 
-  // Keyed read — the `:key` keyword accessor's `apply` (ASymbol.ts, keyword-tagless-
-  // apply.md) hands its own symbol here, not a pre-folded string; `AJSObject`
-  // implements this the same way, over its own `.get`.
-  ["arrival/tagless-final/get"](key: SchemeValue): SchemeValue {
-    return this.get(foldKeyName(key as DictKey));
+  // Keyed member read — the `:key` keyword accessor's `apply` (ASymbol.ts) hands its own
+  // symbol here; the membrane's `readMember` face hands its normalized string. Either way
+  // the RECEIVER folds: a string is already a fold-name, a DictKey folds through
+  // `foldKeyName`. `AJSObject`/`AJSArray` implement the same trio over their own reads.
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+    return this.get(typeof key === "string" ? key : foldKeyName(key as DictKey));
+  }
+
+  ["arrival/tagless-final/has"](key: SchemeValue | string): boolean {
+    return this.has(typeof key === "string" ? key : foldKeyName(key as DictKey));
+  }
+
+  ["arrival/tagless-final/keys"](): string[] {
+    return this.keys();
   }
 }

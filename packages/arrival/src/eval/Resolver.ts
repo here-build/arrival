@@ -3,7 +3,7 @@
  *
  * Holds a {@link LexicalScope} and a {@link Capabilities} base as TWO separate
  * fields; resolution COMPOSES them (`scope.lookup(name) ?? capabilities.lookup(name)`,
- * with the keyword/cxr/dotted synth wrapping that same composed lookup). Two modes,
+ * with the keyword/cxr synth wrapping that same composed lookup). Two modes,
  * one code path:
  *
  *   GLASS (custom-env + bare-ctx fallback): no explicit base, so `capabilities`
@@ -25,7 +25,6 @@ import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { type BindingName, Environment, type EnvironmentValue } from "../Environment.js";
-import { resolveMemberPath } from "../member-walk.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
@@ -85,34 +84,21 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
 
 /**
  * The synth tail shared by the glass {@link env_get} and the composed
- * {@link Resolver.resolve}: after a DIRECT binding miss, synthesize. First c[ad]+r
+ * {@link Resolver.resolve}: after a DIRECT binding miss, synthesize c[ad]+r
  * composition (no env binding, no resolver — the family IS car/cdr composition over
- * the unified tagless-final algebra). Then dot-notation — `foo.bar.baz` source sugar,
- * or syntax-rules gensyms carrying their property path on `ASymbol.object` — resolving
- * the base NAME through the SAME `lookup` (load-bearing under the cut: a dotted/cxr base
- * that is a let-bound lexical name must still resolve), then walking members through the
- * membrane. Else throw Unbound. `lookup` is the raw bindings probe: a single-env
- * `_lookupWithResolvers` for the glass standalone, `scope.lookup ?? capabilities.lookup`
- * for the Resolver. `Environment.get` does pure name-resolution only; member-access
- * lives here / in member-walk.ts.
+ * the unified tagless-final algebra). Else throw Unbound.
+ *
+ * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) was RULED OUT (V,
+ * 2026-07-09): it was the legacy side-door that bypassed BOTH the membrane face and
+ * the provenance field-step classification. `@`/`:key` are THE member-access surface.
+ * A dotted identifier now resolves as an ordinary (unbound) symbol — the normal
+ * unbound-variable door. (`ASymbol.object`, the gensym property-path carrier the
+ * dropped branch also read, had zero producers monorepo-wide.)
  */
-function resolveSynth(
-  sym: ASymbol,
-  name: string | symbol,
-  lookup: (n: string | symbol) => EnvironmentValue | undefined,
-): EnvironmentValue | undefined {
+function resolveSynth(name: string | symbol): EnvironmentValue | undefined {
   if (typeof name === "string") {
     const cxr = cxrUnfold(name);
     if (cxr !== undefined) return cxr;
-  }
-
-  const objectParts = (sym as unknown as { [key: symbol]: string[] | undefined })[ASymbol.object];
-  const parts: string[] | undefined =
-    objectParts ?? (typeof name === "string" && name.includes(".") ? name.split(".").filter(Boolean) : undefined);
-  if (parts && parts.length > 1) {
-    const [first, ...rest] = parts;
-    const base = lookup(first);
-    if (base !== undefined) return resolveMemberPath(base, rest);
   }
   throw unboundVariableError(String(name));
 }
@@ -139,7 +125,7 @@ export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | unde
     return value;
   }
 
-  return resolveSynth(sym, name, (n) => env._lookupWithResolvers(n));
+  return resolveSynth(name);
 }
 
 /**
@@ -192,12 +178,11 @@ export class Resolver {
 
   /**
    * Full name resolution — the throwing, synth-aware lookup (`:key` accessors,
-   * c[ad]+r composition, dotted member walk) over the COMPOSED `scope.lookup ??
-   * capabilities.lookup`. Glass: `scope.env === capabilities.env`, so this is
-   * byte-identical to `env_get(env, sym)`. Cut: the lexical chain wins for program
-   * names, the base for builtins; the keyword/cxr/dotted synth wraps the SAME
-   * composed lookup, so a `:key` accessor or a dotted base resolves against the base
-   * even though the lexical root is null-rooted.
+   * c[ad]+r composition) over the COMPOSED `scope.lookup ?? capabilities.lookup`.
+   * Glass: `scope.env === capabilities.env`, so this is byte-identical to
+   * `env_get(env, sym)`. Cut: the lexical chain wins for program names, the base for
+   * builtins; the keyword/cxr synth wraps the SAME composed lookup, so a `:key`
+   * accessor resolves against the base even though the lexical root is null-rooted.
    */
   resolve(sym: ASymbol): EnvironmentValue | undefined {
     const name = sym.__name__;
@@ -212,7 +197,7 @@ export class Resolver {
       this.scope.lookup(n) ?? this.capabilities.lookup(n);
     const value = lookup(name);
     if (value !== undefined) return value;
-    return resolveSynth(sym, name, lookup);
+    return resolveSynth(name);
   }
 
   /**

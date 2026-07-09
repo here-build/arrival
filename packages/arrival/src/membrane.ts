@@ -38,13 +38,6 @@ import { APair } from "./values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme } from "./rosetta.js";
-import {
-  accessHas,
-  accessKeys,
-  accessMember,
-  markInteropBoundary,
-  NOT_FOUND,
-} from "./interop-access.js";
 import { InteropAccessError } from "./errors.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
@@ -262,23 +255,26 @@ export function toJS(value: SchemeValue) {
 // Polyglot member access — the interop read protocol (Graal InteropLibrary).
 //
 // arrival is a polyglot runtime, not a host with a fenced guest: a value is a
-// value whichever language minted it. readMember/hasMember/memberKeys are
-// origin-agnostic — they define what counts as a *readable member*, not a host
-// defense. Back the `@`/`@?`/`@keys` surface and the `:key` accessor — one
-// protocol, two syntaxes.
+// value whichever language minted it. readMember/hasMember/memberKeys are the
+// FACE of the protocol — key normalization + tagless dispatch — backing the
+// `@`/`@?`/`@keys` surface and the `:key` accessor: one protocol, two syntaxes.
 //
-//   • meta-members (constructor/__proto__/prototype, blocked in accessMember)
-//     and anything marked `@arrival.private` are not members — reading yields
-//     nil, same as Graal hides a value's meta-object from a peer language.
-//     (Privacy is `@arrival.private`'s job; a leading `_` is an ordinary
-//     member, no convention.)
-//   • only two kinds expose members: a foreign value routes through its
-//     `SchemeJSObject.get` (provenance-cached); a native dict reads
-//     structurally. A scheme LEAF value (string/number/symbol/nil/pair), a
-//     primitive, or a function has no members — reading one yields nil, never
-//     the AValue's internal provenance/kind.
+// The protocol itself lives ON the values (tagless algebra, AValue.ts): a
+// member-carrying term implements `arrival/tagless-final/get|has|keys` — ADict
+// structurally, AJSObject/AJSArray through the interop read policy
+// (interop-access.ts) over their borrowed source. ABSENCE IS THE SEMANTICS: a
+// scheme leaf, a raw FFI passthrough, a function — no terms, no members; the
+// face answers nil/false/[], never a value's internal provenance/kind fields.
+// (Meta-members and `@arrival.private` are blocked inside the borrowed terms'
+// policy, same as Graal hides a meta-object from a peer language.)
+//
+// The former central `instanceof` dispatch (+ its raw-object branch and the
+// derive-ctx-from-container hack) is dissolved — the S1 throwing-door probe
+// proved the raw path uninhabited across the whole suite: post-A4 only boxed
+// values circulate, so the face never sees a bare object/array.
 
-/** `readMember(obj, key)` — read a member off any polyglot value. Missing/blocked → nil. */
+/** `readMember(obj, key)` — read a member off any polyglot value. Missing/blocked/
+ *  member-less receiver → nil. */
 export function readMember(obj: unknown, key: unknown): SchemeValue {
   if (obj == null) return nil;
   const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
@@ -286,39 +282,8 @@ export function readMember(obj: unknown, key: unknown): SchemeValue {
   // keyword-style member: a leading `:` is the accessor sigil, not part of the name.
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
-  // membrane-exposed foreign value (lazy proxy) → provenance-cached read.
-  if (obj instanceof AJSObject) return obj.get(keyStr);
-  // native dict — entries are already real SchemeValues with their own provenance,
-  // so (unlike AJSObject.get above) there is nothing to box through jsToScheme.
-  if (obj instanceof ADict) return obj.get(keyStr);
-  try {
-    const source = obj instanceof AJSArray ? obj.source : obj;
-    // Only a dict or array exposes members; a scheme leaf/primitive/function has
-    // none — reading one would leak an AValue's own `provenance`/`kind` fields
-    // (the boundary's prototype-walk guard doesn't stop own-field reads).
-    if (!Array.isArray(source)) {
-      const proto = typeof source === "object" && source !== null ? Object.getPrototypeOf(source) : false;
-      if (proto !== Object.prototype && proto !== null) return nil;
-    }
-    const result = accessMember(source, keyStr);
-    if (result === NOT_FOUND) return nil;
-    // readMember is ctx-free; derive ctx from the container (native dict falls
-    // back to CONSTANT_CTX).
-    const ctx = obj instanceof AValue ? obj.ctx : CONSTANT_CTX;
-    // re-present a JS array as a polyglot array so car/cdr work on the result.
-    if (Array.isArray(result)) {
-      return new AJSArray(ctx, result);
-    }
-    // A member read is a VALUE read — box via jsToScheme (faithful value path), not
-    // fromJS (whose wider boundary return carries raw FFI/control plumbing).
-    // jsToScheme is typed `any` (rosetta debt); annotate to the honest union so
-    // this needs no cast.
-    const boxed: SchemeValue = jsToScheme(ctx, result, {}, EMPTY_PROVENANCE);
-    return boxed;
-  } catch (e) {
-    if (e instanceof InteropAccessError) return nil;
-    throw e;
-  }
+  const getter = (obj as Partial<AValue>)["arrival/tagless-final/get"];
+  return typeof getter === "function" ? getter.call(obj, keyStr) : nil;
 }
 
 /** `hasMember(obj, key)` — does the polyglot value expose this member? */
@@ -328,15 +293,13 @@ export function hasMember(obj: unknown, key: unknown): boolean {
   if (rawKey == null || rawKey instanceof ANil) return false;
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
-  if (obj instanceof ADict) return obj.has(keyStr);
-  const source = obj instanceof AJSObject ? obj.source : obj;
-  return accessHas(source, keyStr);
+  const has = (obj as Partial<AValue>)["arrival/tagless-final/has"];
+  return typeof has === "function" ? has.call(obj, keyStr) : false;
 }
 
 /** `memberKeys(obj)` — the polyglot value's own member names. */
 export function memberKeys(obj: unknown): string[] {
   if (obj == null) return [];
-  if (obj instanceof ADict) return obj.keys();
-  const source = obj instanceof AJSObject ? obj.source : obj;
-  return accessKeys(source);
+  const keys = (obj as Partial<AValue>)["arrival/tagless-final/keys"];
+  return typeof keys === "function" ? keys.call(obj) : [];
 }
