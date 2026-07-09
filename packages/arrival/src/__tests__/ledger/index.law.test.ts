@@ -134,11 +134,16 @@ const GAPS: readonly LedgerRow[] = [
   // whatever the step expressions reach, same as named-let gets for free from its
   // literal tail-position recursive call. See provenance/wireframe-agreement.law.
   // test.ts's do-loop row, now a plain `it()`.
-  {
-    id: "first-class source reference bypasses role dispatch (A21 HOF hole)",
-    gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c/Q16/Q17 all landed without touching it; needs a design ruling on how a first-class reference to a declared-role name is REPRESENTED, not a mechanical builder patch. Q9 finding — walkForCuts only designates a node at an application HEAD position; a declared-role name passed as a bare VALUE, or a HOF parameter later called, is invisible to string-based role dispatch — docs/PROVENANCE.md §2's own LIMIT note: \"the drift alarm catches CONTRADICTIONS, not lies... mitigation is the W1 agreement gate\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's first-class-HOF row, once first-class references to declared-role names get SOME representation (even a conservative opaque/quarantine one) instead of silently falling to ordinary ingress",
-  },
+  // "first-class source reference bypasses role dispatch (A21 HOF hole)" RETIRED
+  // (V ruling, 2026-07-10: "we need to provenance rosetta-to-rosetta; we actually
+  // do not care on reassignments here"): `walkForCuts` (builder.ts) now designates
+  // a node for a declared-role name (source/sink/fan/loop) occurring as a bare
+  // VALUE, not only at an application head — `(define (call-source f) (f))
+  // (call-source fetch-item)`'s `fetch-item` argument now cuts to a `source` node
+  // at the occurrence, so the prospective cone includes it. Deliberately still OUT
+  // of scope, per the ruling: chasing an ALIAS to its later call site (a let-bound
+  // name later applied) — no alias-tracking machinery was added. See provenance/
+  // wireframe-agreement.law.test.ts's first-class-HOF row, now a plain `it()`.
   {
     id: "field-shaped pure ops not projection-aware (car/cons sibling leak)",
     gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c built fact wires and Q17 flipped demand-monotonicity WITHOUT a `field` WireframeNode; whether one is added, and where it cuts, is a design ruling. Q9 finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",

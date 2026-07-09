@@ -74,6 +74,18 @@
  * identical to before this landing). The count-demand CONSUMER of the tag —
  * `reachableNodesForDemand`'s `"count"` grade, routing through fact wires only and
  * never an element wire — lives in `wireframe/loops.ts`.
+ *
+ * BARE DECLARED-ROLE REFERENCES (Q9 finding 5, V's ruling 2026-07-10): "we need to
+ * provenance rosetta-to-rosetta; we actually do not care on reassignments here."
+ * `walkForCuts` designates a node for a declared-role name (source/sink/fan/loop)
+ * occurring as a bare VALUE, not just at an application head — closing the A21 HOF
+ * hole's SILENT half (`(define (call-source f) (f)) (call-source fetch-item)`:
+ * `fetch-item` now cuts to a `source` node at the argument occurrence, so the
+ * prospective cone sees it even though the call that actually fires it, `(f)`, is
+ * hidden behind a parameter string-based dispatch can't follow). Ruled OUT of
+ * scope, deliberately unaddressed: chasing an ALIAS to its later call site (a
+ * let-bound name later applied, `(let ((g fetch-item)) (g))`'s `(g)`) — only the
+ * direct occurrence gets a node, never a tracked binding.
  */
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -294,7 +306,44 @@ class GraphBuilder {
    *  enclosing `emitWire` to close. */
   private walkForCuts(expr: unknown, env: WalkEnv): void {
     if (this.cuts.has(expr)) return;
-    if (!(expr instanceof APair)) return; // literals & bare symbols are wire material
+    // Q9 finding 5 (V's ruling, 2026-07-10 — "we need to provenance rosetta-to-
+    // rosetta; we actually do not care on reassignments here"): a DECLARED-ROLE
+    // name (source/sink/fan/loop — a rosetta whose `.provenanceRole` is a PORT
+    // role, not pipe/undefined) occurring as a bare VALUE — not applied at THIS
+    // occurrence — is a rosetta-to-rosetta flow (e.g. `(call-source fetch-item)`,
+    // where `fetch-item` fires later, inside `call-source`'s own body, through a
+    // parameter string-based dispatch can't see through). DESIGNATE it: cut a node
+    // for the occurrence itself, mirroring the node an application of the same
+    // name would build (`buildArgNode`'s `role` arm below), but with no ingress
+    // operands — there is no call HERE, the callable is a value at this site.
+    // source/sink get their own faithful kind (source is what the cone-collector
+    // in w1-harness.ts's `graphSourceNames` actually reads); fan/loop fall back to
+    // `opaque` (no call site here to derive a template/interior shape from — the
+    // ledger's own phrasing: "even a conservative opaque/quarantine one").
+    // DELIBERATELY LOCAL — this fires on the occurrence, never chases a binding:
+    // a let-alias's OWN later call site (`(let ((g fetch-item)) (g))`'s `(g)`)
+    // stays exactly as under-designated as before (out of scope per the ruling —
+    // "do not chase aliases"); only the direct reference gets a node, wherever
+    // walkForCuts naturally reaches one (a let RHS, an if/cond arm, a call
+    // argument — no new machinery, no alias tracking).
+    if (expr instanceof ASymbol) {
+      const name = opName(expr);
+      if (!env.subst.has(name) && !this.bctx.materialNames.has(name)) {
+        const role = this.bctx.classifier.roleOf(name);
+        if (role === "source" || role === "sink" || role === "fan" || role === "loop") {
+          this.cuts.set(
+            expr,
+            this.addNode(
+              role === "source" || role === "sink"
+                ? { kind: role, op: name, span: scopeId(expr) }
+                : { kind: "opaque", op: name, span: scopeId(expr) },
+            ),
+          );
+        }
+      }
+      return;
+    }
+    if (!(expr instanceof APair)) return; // literals are wire material
 
     const head = expr.car;
     if (head instanceof ASymbol) {

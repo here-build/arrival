@@ -358,33 +358,34 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     );
   });
 
-  describe("NEW FINDING (Q9) — first-class reference to a declared source bypasses string-based role dispatch (the A21 HOF hole)", () => {
-    // Root-caused: `walkForCuts` only designates a node at an APPLICATION HEAD
-    // position (`(op . args)` where `op` is a literal symbol matching a declared
-    // role). `fetch-item` passed as a bare VALUE — never applied at this call site
-    // — is just a leaf symbol; `unevalWire` cannot resolve it against
-    // params/prelude/base, so it falls back to treating it as ORDINARY PROGRAM
-    // INGRESS (a "slot" param, exactly like an unbound top-level variable) — no
-    // WireLocalityError, no designated node, no trace that it names a declared
-    // source at all. `call-source`'s own body (`(f)`, `f` a formal parameter) is
-    // symmetric: string-based role lookup cannot see through the parameter either,
-    // so `call-source` is (wrongly, but silently) judged port-free. Documented in
-    // builder.ts as "classify's A21 HOF hole; conservative wire material" — this
-    // row is the empirical demonstration that the hole is SILENT (no build-time
-    // door), the more consequential half of what docs/PROVENANCE.md §2's LIMIT
-    // note names: "the drift alarm catches CONTRADICTIONS, not lies... arrange-vs-
-    // membership is semantic. Mitigation is the W1 agreement gate" — this IS that
-    // mitigation catching it.
-    // @ledger: first-class source reference bypasses role dispatch (A21 HOF hole)
-    it.fails(
-      "(define (call-source f) (f)) (call-source fetch-item): wireframe cone SHOULD include fetch-item (it fires at runtime) — it is invisible, the whole source reference is unrepresented",
+  describe("FINDING (Q9) — first-class reference to a declared source bypasses string-based role dispatch (the A21 HOF hole) — FLIPPED by V's ruling (2026-07-10)", () => {
+    // Root-caused: `walkForCuts` used to designate a node ONLY at an APPLICATION
+    // HEAD position (`(op . args)` where `op` is a literal symbol matching a
+    // declared role). `fetch-item` passed as a bare VALUE — never applied at this
+    // call site — was just a leaf symbol; the flow was silently invisible (no
+    // WireLocalityError, no designated node, no trace it named a declared source
+    // at all).
+    //
+    // V's ruling (2026-07-10): "we need to provenance rosetta-to-rosetta; we
+    // actually do not care on reassignments here." `walkForCuts` (builder.ts,
+    // header's "BARE DECLARED-ROLE REFERENCES" paragraph) now designates the bare
+    // OCCURRENCE itself — `fetch-item` cuts to a `source` node right where it's
+    // passed, so the prospective cone sees it even though the call that actually
+    // fires it (`(f)`, hidden behind `call-source`'s own parameter — string-based
+    // role lookup still can't see through THAT) never gets designated. Ruled OUT
+    // of scope, deliberately unaddressed: `call-source` itself is still (silently)
+    // judged port-free by materialNames' fixed point, and a let-ALIAS's own later
+    // call site (`(let ((g fetch-item)) (g))`'s `(g)`) stays exactly as under-
+    // designated as before — "do not chase aliases."
+    it(
+      "(define (call-source f) (f)) (call-source fetch-item): wireframe cone includes fetch-item (it fires at runtime) — the bare-argument occurrence is now designated",
       async () => {
         const code = `(define (call-source f) (f)) (call-source fetch-item)`;
         const registry = new SourceRegistry();
         const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
         const program = await wfCorpus(code);
         const wireframe = prospectiveSourceCone(program);
-        expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {}, eager = {fetch-item}
+        expect([...wireframe].sort()).toEqual([...eager].sort()); // both {fetch-item}
       },
     );
   });
