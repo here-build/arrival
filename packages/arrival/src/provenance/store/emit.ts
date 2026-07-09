@@ -11,11 +11,12 @@
  * flag read is the only thing that runs, nothing is allocated, nothing awaited, no store
  * method is ever called.
  *
- * Territory: mint / mux-decision / fan-instantiation / ingress-binding are THIS node's
- * kinds. `track-open` / `track-close` / `host-schedule` stay Q11b's (`region-scope.ts`'s
- * territory, off limits here per the task brief) — no `emitTrackOpen`/`emitTrackClose`/
- * `emitHostSchedule` exists in this file on purpose; `records.ts` already types those
- * three kinds (Q10 landed the full union), this file just never constructs them.
+ * Territory: mint / mux-decision / fan-instantiation / ingress-binding were Q11a's
+ * kinds. `emitTrackOpen`/`emitTrackClose`/`emitHostSchedule` are Q11b's addition —
+ * PURE builders, same flag-gated shape as their Q11a siblings; the DECIDING-WHEN
+ * (which B3 counter mutation triggers a call, which comparator invocation accumulates
+ * a triple) is `src/values/primitives/region-scope.ts`'s job, per the Q11b split
+ * (that file serializes with Q13/Q15, this one doesn't).
  *
  * MEASURED OVERHEAD (Q11a's own risk note: "measure in-step, budget ~µs/record") —
  * `__benchmarks__/provenance-emit.bench.test.ts`, in-process against the store fakes
@@ -36,7 +37,16 @@
  * mechanism, per §5 C2/D1: "persistence is IDEMPOTENT UPSERT keyed by record id."
  */
 import type { PayloadHash, RecordId, RegionId, RegionSeq } from "./ids.js";
-import type { FanInstantiationRecord, IngressBindingRecord, MintRecord, MuxDecisionRecord } from "./records.js";
+import type {
+  FanInstantiationRecord,
+  HostScheduleRecord,
+  HostScheduleTriple,
+  IngressBindingRecord,
+  MintRecord,
+  MuxDecisionRecord,
+  TrackCloseRecord,
+  TrackOpenRecord,
+} from "./records.js";
 import type { Payload, PayloadStore, ProvenanceStore } from "./interfaces.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,6 +197,71 @@ export async function emitIngressBinding(opts: {
   const { store, regionId, id } = opts;
   const seq: RegionSeq = await store.allocateSeq(regionId);
   const record: IngressBindingRecord = { kind: "ingress-binding", id, seq };
+  await store.append(regionId, record);
+  return record;
+}
+
+/** §5 A6 row 5 (open half) + Q11b: a TRACK OPENED — one re-entrant (scheme→JS) call
+ *  started under a `RegionScope` (`region-scope.ts`'s B3 counters: `pending++`).
+ *  Aggregates (counter deltas, per the applicability table) — this function mints one
+ *  RAW record per call; folding a run of these into an `AggregationRun` is Q12's job,
+ *  never this one's. No payload: presence at `id.ordinalPath`'s trailing ordinal is
+ *  the whole fact. */
+export async function emitTrackOpen(opts: {
+  readonly store: ProvenanceStore;
+  readonly regionId: RegionId;
+  readonly id: RecordId;
+}): Promise<TrackOpenRecord | undefined> {
+  if (!isEmissionEnabled()) return undefined;
+  const { store, regionId, id } = opts;
+  const seq: RegionSeq = await store.allocateSeq(regionId);
+  const record: TrackOpenRecord = { kind: "track-open", id, seq };
+  await store.append(regionId, record);
+  return record;
+}
+
+/** §5 A6 row 5 (close half) + §3 I4 + Q11b: the SAME track's completion — `settled` is
+ *  the promise-pending distinction (§4 R1: "a promise egress keeps its track PENDING
+ *  until settled"). `region-scope.ts`'s `withRegionCall` only ever reaches its
+ *  `finally` (where this fires) AFTER the call has settled one way or another, so
+ *  production callers always pass `settled: true` here — `settled: false` stays
+ *  representable for tests exercising the record SHAPE the incomplete door's
+ *  precondition implies (records.ts's own doc), never something this function's
+ *  caller constructs for a real crossing. */
+export async function emitTrackClose(opts: {
+  readonly store: ProvenanceStore;
+  readonly regionId: RegionId;
+  readonly id: RecordId;
+  readonly settled: boolean;
+}): Promise<TrackCloseRecord | undefined> {
+  if (!isEmissionEnabled()) return undefined;
+  const { store, regionId, id, settled } = opts;
+  const seq: RegionSeq = await store.allocateSeq(regionId);
+  const record: TrackCloseRecord = { kind: "track-close", id, seq, settled };
+  await store.append(regionId, record);
+  return record;
+}
+
+/** §5 A6 row 6 + §5 D5 + Q11b: an order-dependent selector host's FULL comparator
+ *  schedule (e.g. one `sort` call's every `less?` verdict) — "the sequence IS the
+ *  record," never aggregated, never split across multiple `HostScheduleRecord`s for
+ *  one host invocation. Callers accumulate triples over the host's run (see
+ *  `region-scope.ts`'s `recordHostScheduleVerdict`/`RegionScope.hostSchedule`) and
+ *  call this ONCE, at the host boundary — never once per triple. A caller passing
+ *  zero triples gets `undefined` back with no store write: an order-dependent host
+ *  that made no comparisons (a 0/1-element sort) schedules nothing, and "nothing
+ *  happened" is not itself information worth a record. */
+export async function emitHostSchedule(opts: {
+  readonly store: ProvenanceStore;
+  readonly regionId: RegionId;
+  readonly id: RecordId;
+  readonly triples: readonly HostScheduleTriple[];
+}): Promise<HostScheduleRecord | undefined> {
+  if (!isEmissionEnabled()) return undefined;
+  const { store, regionId, id, triples } = opts;
+  if (triples.length === 0) return undefined;
+  const seq: RegionSeq = await store.allocateSeq(regionId);
+  const record: HostScheduleRecord = { kind: "host-schedule", id, seq, triples };
   await store.append(regionId, record);
   return record;
 }

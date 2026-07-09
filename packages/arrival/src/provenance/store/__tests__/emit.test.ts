@@ -10,15 +10,24 @@
  * `emitMint`/`emitMuxDecision`/etc. — not `store.append` called by hand — so a real
  * regression in the emission core's id derivation (not just the fake's own upsert
  * logic, already covered by `store-fakes.smoke.test.ts`) would fail here.
+ *
+ * Q11b ADDENDUM: `emitTrackOpen`/`emitTrackClose`/`emitHostSchedule` get the SAME
+ * direct, store-fake-backed treatment here (shape + idempotence) — the DECIDING-WHEN
+ * half (which B3 counter mutation calls these) is exercised end-to-end through REAL
+ * `region-scope.ts` machinery in `src/__tests__/provenance/region-events.test.ts`
+ * instead, mirroring `emission-hooks.test.ts`'s split from THIS file for Q11a.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SEMANTICS_EPOCH,
   emitFanInstantiation,
+  emitHostSchedule,
   emitIngressBinding,
   emitMint,
   emitMuxDecision,
+  emitTrackClose,
+  emitTrackOpen,
   ensureStreamHeader,
   isEmissionEnabled,
   setEmissionEnabled,
@@ -54,6 +63,15 @@ describe("the flag — default OFF, every emit* a provable no-op while disabled"
     await emitMuxDecision({ store, regionId: REGION, id: ID_A, arm: 0 });
     await emitFanInstantiation({ store, regionId: REGION, id: ID_A });
     await emitIngressBinding({ store, regionId: REGION, id: ID_A });
+    expect(await store.readStream(REGION)).toHaveLength(0);
+  });
+
+  // Q11b
+  it("emitTrackOpen/emitTrackClose/emitHostSchedule are ALSO no-ops while disabled", async () => {
+    const store = new ProvenanceStoreFake();
+    await emitTrackOpen({ store, regionId: REGION, id: ID_A });
+    await emitTrackClose({ store, regionId: REGION, id: ID_A, settled: true });
+    await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples: [{ left: [0], right: [1], verdict: -1 }] });
     expect(await store.readStream(REGION)).toHaveLength(0);
   });
 
@@ -122,7 +140,7 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
     expect(stream).toHaveLength(1);
   });
 
-  it("every kind (mint/mux-decision/fan-instantiation/ingress-binding) is independently idempotent under retry", async () => {
+  it("every kind (mint/mux-decision/fan-instantiation/ingress-binding/track-open/track-close/host-schedule) is independently idempotent under retry", async () => {
     setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
@@ -139,9 +157,22 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
     await emitIngressBinding({ store, regionId: REGION, id: { ...ID_A, templateHash: "ingress" } });
     await emitIngressBinding({ store, regionId: REGION, id: { ...ID_A, templateHash: "ingress" } });
 
+    await emitTrackOpen({ store, regionId: REGION, id: { ...ID_A, templateHash: "track-open" } });
+    await emitTrackOpen({ store, regionId: REGION, id: { ...ID_A, templateHash: "track-open" } });
+
+    await emitTrackClose({ store, regionId: REGION, id: { ...ID_A, templateHash: "track-close" }, settled: true });
+    await emitTrackClose({ store, regionId: REGION, id: { ...ID_A, templateHash: "track-close" }, settled: true });
+
+    const scheduleId = { ...ID_A, templateHash: "host-schedule" };
+    const triples = [{ left: [0], right: [1], verdict: -1 }];
+    await emitHostSchedule({ store, regionId: REGION, id: scheduleId, triples });
+    await emitHostSchedule({ store, regionId: REGION, id: scheduleId, triples });
+
     const stream = await store.readStream(REGION);
-    expect(stream).toHaveLength(4); // one per DISTINCT id, despite 8 emit calls
-    expect(new Set(stream.map((r) => r.kind))).toEqual(new Set(["mint", "mux-decision", "fan-instantiation", "ingress-binding"]));
+    expect(stream).toHaveLength(7); // one per DISTINCT id, despite 14 emit calls
+    expect(new Set(stream.map((r) => r.kind))).toEqual(
+      new Set(["mint", "mux-decision", "fan-instantiation", "ingress-binding", "track-open", "track-close", "host-schedule"]),
+    );
   });
 
   it("write-failure fault injection: a failed emitMint throws, never appends a partial/duplicate; the retry after clearing the fault succeeds exactly once", async () => {
@@ -178,5 +209,56 @@ describe("ensureStreamHeader — §5 C6, write-once", () => {
     await store.putHeader(REGION, { semanticsEpoch: "custom-epoch" });
     await ensureStreamHeader(store, REGION, "a-different-epoch");
     expect(await store.getHeader(REGION)).toEqual({ semanticsEpoch: "custom-epoch" });
+  });
+});
+
+describe("emitTrackOpen/emitTrackClose — §5 A6 row 5, Q11b", () => {
+  it("emitTrackOpen appends a payload-free track-open record at the given id", async () => {
+    setEmissionEnabled(true);
+    const store = new ProvenanceStoreFake();
+    const record = await emitTrackOpen({ store, regionId: REGION, id: ID_A });
+    expect(record).toBeDefined();
+    if (record === undefined) throw new Error("unreachable");
+    expect(record.kind).toBe("track-open");
+    expect(recordIdKey(record.id)).toBe(recordIdKey(ID_A));
+    expect(await store.readStream(REGION)).toEqual([record]);
+  });
+
+  it("emitTrackClose carries the settled flag (§4 R1's promise-pending distinction)", async () => {
+    setEmissionEnabled(true);
+    const store = new ProvenanceStoreFake();
+    const record = await emitTrackClose({ store, regionId: REGION, id: ID_A, settled: true });
+    expect(record).toBeDefined();
+    if (record === undefined) throw new Error("unreachable");
+    expect(record.kind).toBe("track-close");
+    expect(record.settled).toBe(true);
+  });
+});
+
+describe("emitHostSchedule — §5 A6 row 6 + D5, Q11b", () => {
+  it("carries the FULL comparator sequence in one record, inlined verdicts, replay-free", async () => {
+    setEmissionEnabled(true);
+    const store = new ProvenanceStoreFake();
+    const triples = [
+      { left: [0], right: [1], verdict: -1 },
+      { left: [0], right: [2], verdict: 1 },
+      { left: [1], right: [2], verdict: 1 },
+    ];
+    const record = await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples });
+    expect(record).toBeDefined();
+    if (record === undefined) throw new Error("unreachable");
+    expect(record.kind).toBe("host-schedule");
+    expect(record.triples).toEqual(triples);
+
+    const stream = await store.readStream(REGION);
+    expect(stream).toHaveLength(1); // ONE record for the whole schedule, never one per triple
+  });
+
+  it("zero triples never lands a record — \"nothing happened\" is not information worth a write", async () => {
+    setEmissionEnabled(true);
+    const store = new ProvenanceStoreFake();
+    const record = await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples: [] });
+    expect(record).toBeUndefined();
+    expect(await store.readStream(REGION)).toHaveLength(0);
   });
 });

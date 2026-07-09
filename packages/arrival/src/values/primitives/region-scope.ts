@@ -30,6 +30,69 @@
  */
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import {
+  emitHostSchedule,
+  emitTrackClose,
+  emitTrackOpen,
+  isEmissionEnabled,
+} from "../../provenance/store/emit.js";
+import { appendOrdinal, type OrdinalPath, type RecordId, type RegionEpoch, type RegionId, type TemplateHash } from "../../provenance/store/ids.js";
+import type { ProvenanceStore } from "../../provenance/store/interfaces.js";
+import type { HostScheduleTriple } from "../../provenance/store/records.js";
+
+/**
+ * ── Q11b: region events + host-schedule (docs/PROVENANCE.md §5; PROVENANCE-PLAN.md
+ * Q11b) ─────────────────────────────────────────────────────────────────────────────
+ * This file's B3 counters (`pending`, and the new `trackOrdinal` below) are exactly
+ * the "track open/close" row's source of truth: a track (§3 — "a wire whose
+ * expression is a first-class lambda") is ONE re-entrant call, bracketed by
+ * `withRegionCall`'s `pending++`/`pending--`. `noteTrackOpen`/`noteTrackClose` fire at
+ * those two mutation points; both are flag-gated, detached (fire-and-forget, never
+ * awaited by the real call), and no-op unless BOTH the emission flag is on AND a
+ * `TrackCoordinate`/`TrackEmissionSink` pair was ambiently installed when the scope
+ * was OPENED (captured once, into the scope, mirroring why `runCtx`/`dynSite` are
+ * captured rather than re-read — see the file's original header) — the exact same
+ * three-part no-op conjunction `eval/provenance-hooks.ts`'s Q11a hook uses, kept as an
+ * INDEPENDENT ambient pair here (not a shared import) because pulling in
+ * `eval/provenance-hooks.ts` from this leaf module would close a cycle
+ * (`region-scope.ts` → `provenance-hooks.ts` → `rosetta.js` → `region-scope.ts`) —
+ * exactly the class of layering violation this file's original header already
+ * documents for `eval/evaluator.ts`.
+ *
+ * Host-schedule (§5 D5) rides the SAME scope: an order-dependent selector host (sort's
+ * comparator, the canonical `control`-callbackRole op — see `env/srfi/srfi-95.ts`) is
+ * one exported symbol invocation, i.e. one `RegionScope`'s whole lifetime, so its
+ * comparator verdicts accumulate on `scope.hostSchedule` via
+ * `recordHostScheduleVerdict` and flush as ONE `HostScheduleRecord` at
+ * `closeRegionScope` — "the sequence IS the record" (§5 A6), never one record per
+ * triple. NOTE (real-wiring gap, out of this node's territory): today's
+ * `deriveSortCompare` (`values/op-helpers.ts`) invokes its comparator via
+ * `applyCallback` DIRECTLY under `CONSTANT_CTX` — it does not go through
+ * `callableToHostFn`/`withRegionCall`, so no `RegionScope` is open around a real sort's
+ * comparator calls yet, and `Array.prototype.sort`'s comparator signature carries no
+ * element ordinals to attribute a triple to in the first place. This file lands the
+ * MACHINERY (`recordHostScheduleVerdict`, the accumulator, the close-time flush) —
+ * wiring a real host's comparator loop into it is `op-helpers.ts` territory (Q20's,
+ * per the plan's node table), explicitly out of bounds here.
+ */
+
+/** Q11b: this scope's designated-node coordinate for track-open/close/host-schedule
+ *  emission — the SAME three-field address shape `eval/provenance-hooks.ts`'s
+ *  `RecordCoordinate` uses (§5 C2/D1), kept as an independent type here per the
+ *  no-cross-import rule above. */
+export interface TrackCoordinate {
+  readonly templateHash: TemplateHash;
+  readonly ordinalPath: OrdinalPath;
+  readonly regionEpoch: RegionEpoch;
+}
+
+/** Q11b: where a `TrackCoordinate`'s events land — store + region only (no
+ *  `PayloadStore`: track-open/track-close/host-schedule are all payload-free kinds,
+ *  §5 A6). */
+export interface TrackEmissionSink {
+  readonly store: ProvenanceStore;
+  readonly regionId: RegionId;
+}
 
 /** Shared by every RegionScope that never had a run signal to derive from
  *  (e.g. a direct-JS caller with no ctx at all — the same "no ambient scope"
@@ -78,6 +141,27 @@ export interface RegionScope {
    *  idiom stays because the "value recipe" is genuinely per-call-site here, not
    *  derivable from the key alone. */
   readonly cache: WeakMap<object, (...args: unknown[]) => unknown>;
+
+  /** Q11b: this scope's `TrackCoordinate`, captured AMBIENTLY at `openRegionScope`
+   *  time (mirrors `runCtx`/`dynSite`: closed over once, never re-read) —
+   *  `undefined` for every scope minted outside `withTrackCoordinate`'s install
+   *  window (today's entire production call graph, same as Q11a's coordinate). */
+  readonly trackCoordinate: TrackCoordinate | undefined;
+  /** Q11b: paired sink for `trackCoordinate`'s emissions — `undefined` exactly when
+   *  `trackCoordinate` is. */
+  readonly trackSink: TrackEmissionSink | undefined;
+  /** Q11b: one of B3's counters, alongside `pending` — the NEXT ordinal ANY track
+   *  event (open OR close, of any re-entrant call) minted under THIS scope will
+   *  claim; see `mintTrackId`'s doc for why open and close each claim their OWN fresh
+   *  ordinal rather than sharing one. Mutated in place (like `pending`), never reset
+   *  mid-scope: two events must not collide on `RecordId` (§5 C2/D1's "nested fans
+   *  collide otherwise," the identical principle applied here). */
+  trackOrdinal: number;
+  /** Q11b (§5 D5): accumulated `(left, right, verdict)` triples for an
+   *  order-dependent selector host's comparator schedule running under this scope
+   *  — see `recordHostScheduleVerdict`. Flushed as ONE `HostScheduleRecord` at
+   *  `closeRegionScope`, then drained (never double-flushed). */
+  readonly hostSchedule: HostScheduleTriple[];
 }
 
 /**
@@ -100,6 +184,13 @@ export const DETACHED_SCOPE: RegionScope = {
   runCtx: CONSTANT_CTX,
   dynSite: undefined,
   cache: new WeakMap(),
+  // Q11b: a detached scope was never minted under `withTrackCoordinate` — no
+  // coordinate/sink means `noteTrackOpen`/`noteTrackClose`/`recordHostScheduleVerdict`
+  // no-op unconditionally for every wrapper sharing this singleton.
+  trackCoordinate: undefined,
+  trackSink: undefined,
+  trackOrdinal: 0,
+  hostSchedule: [],
 };
 
 /** Mint a fresh, open scope for one symbol invocation. `parentSignal` is the
@@ -117,6 +208,12 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
     runCtx: opts.runCtx,
     dynSite: opts.dynSite,
     cache: new WeakMap(),
+    // Q11b: captured NOW, from whatever `withTrackCoordinate` installed ambiently —
+    // never re-read later (same rationale as runCtx/dynSite above).
+    trackCoordinate: _trackCoordinate,
+    trackSink: _trackSink,
+    trackOrdinal: 0,
+    hostSchedule: [],
   };
 }
 
@@ -151,6 +248,11 @@ function regionIncompleteDoor(pending: number): Error {
  */
 export function closeRegionScope(scope: RegionScope): void {
   scope.open = false;
+  // Q11b: flush BEFORE the incomplete-door throw — a host-schedule this scope DID
+  // complete is independent of whether some OTHER reverse call is still pending;
+  // losing a completed schedule to an unrelated door would under-report (§3 I1's
+  // "under-reporting forbidden" spirit, applied to §5 D5's record).
+  flushHostSchedule(scope);
   if (scope.pending > 0) throw regionIncompleteDoor(scope.pending);
 }
 
@@ -160,15 +262,148 @@ export function closeRegionScope(scope: RegionScope): void {
  * and race it against the scope's abort signal. `fn` is the actual re-entry
  * (jsToScheme the args → applyCallback → schemeToJs the result) — this
  * wrapper owns only the bookkeeping around it, never the marshaling.
+ *
+ * Q11b: `pending++`/`pending--` are exactly B3's track-open/track-close counter
+ * mutations (see the file header) — `noteTrackOpen`/`noteTrackClose` fire right
+ * alongside them, detached, never perturbing the real call's timing or outcome.
  */
 export async function withRegionCall<T>(scope: RegionScope, fn: () => Promise<T> | T): Promise<T> {
   if (!scope.open) throw regionEscapeDoor();
   scope.pending++;
+  noteTrackOpen(scope);
   try {
     return await raceRegionAbort(Promise.resolve().then(fn), scope.signal);
   } finally {
     scope.pending--;
+    noteTrackClose(scope);
   }
+}
+
+// ── Q11b: track-open/track-close/host-schedule emission ─────────────────────────────
+// See the file header block above for the full design rationale (why an independent
+// ambient pair, why the scope is host-schedule's natural accumulation container).
+
+/** Q11b's ambient "current track coordinate/sink" — installed by
+ *  {@link withTrackCoordinate}, read (and captured into the scope, never re-read
+ *  after) by {@link openRegionScope}. `undefined` for every scope minted outside an
+ *  install window — today's entire production call graph, mirroring Q11a's
+ *  `RecordCoordinate`'s own "nothing wires this yet" state. */
+let _trackCoordinate: TrackCoordinate | undefined;
+let _trackSink: TrackEmissionSink | undefined;
+
+/** Read the ambient track coordinate — exposed mainly for tests; production code has
+ *  no reason to read this directly (it's captured into the scope at open time). */
+export function currentTrackCoordinate(): TrackCoordinate | undefined {
+  return _trackCoordinate;
+}
+
+/** Read the ambient track sink — see {@link currentTrackCoordinate}. */
+export function currentTrackEmissionSink(): TrackEmissionSink | undefined {
+  return _trackSink;
+}
+
+/** Install a `TrackCoordinate`/`TrackEmissionSink` pair for the duration of a
+ *  SYNCHRONOUS `fn` — save/restore, the same idiom {@link withRegionScope} and
+ *  `eval/provenance-hooks.ts`'s `withRecordCoordinate` both use. `openRegionScope` is
+ *  itself always synchronous at every real call site (`rosetta.ts`'s
+ *  `createRosettaWrapper` calls it before its first `await`), so a sync-only installer
+ *  is sufficient — there is no async sibling to this function, unlike
+ *  `withRecordCoordinate`/`withRecordCoordinateAsync`'s pair. */
+export function withTrackCoordinate<T>(coordinate: TrackCoordinate, sink: TrackEmissionSink, fn: () => T): T {
+  const savedCoordinate = _trackCoordinate;
+  const savedSink = _trackSink;
+  _trackCoordinate = coordinate;
+  _trackSink = sink;
+  try {
+    return fn();
+  } finally {
+    _trackCoordinate = savedCoordinate;
+    _trackSink = savedSink;
+  }
+}
+
+/** One track event's `RecordId` — claims a FRESH trailing ordinal from
+ *  `scope.trackOrdinal` every call (never reused across open/close, and never across
+ *  two different tracks). Collision-freedom matters structurally, not just for tidy
+ *  ids: `ProvenanceStore`'s upsert contract (`fakes.ts`'s `append`) dedupes on
+ *  `recordIdKey(id)` ALONE — it does not fold `kind` into the key — so an open and a
+ *  close sharing one id would silently collapse into ONE record (the close's write
+ *  clobbering the open's) instead of two. Correlating a track's open with its close is
+ *  therefore by STREAM ORDER (open's `seq` always precedes its close's), matching how
+ *  §7's law reads them — "completed ≤ started, monotone" is a COUNT invariant over the
+ *  ordered stream, never an id-matched pairing. */
+function mintTrackId(scope: RegionScope, coordinate: TrackCoordinate): RecordId {
+  return {
+    templateHash: coordinate.templateHash,
+    ordinalPath: appendOrdinal(coordinate.ordinalPath, scope.trackOrdinal++),
+    regionEpoch: coordinate.regionEpoch,
+  };
+}
+
+/** Fires at `withRegionCall`'s `pending++` (a track STARTING). No-ops (checked FIRST,
+ *  before any other work — the sunset-byte-identical contract) unless the emission
+ *  flag is on AND `scope` was minted with a coordinate/sink installed. */
+function noteTrackOpen(scope: RegionScope): void {
+  if (!isEmissionEnabled()) return;
+  const { trackCoordinate: coordinate, trackSink: sink } = scope;
+  if (coordinate === undefined || sink === undefined) return;
+  const id = mintTrackId(scope, coordinate);
+  // Detached — never awaits, never perturbs the real call (mirrors
+  // `eval/provenance-hooks.ts`'s `notePotentialRosettaExit`).
+  void emitTrackOpen({ store: sink.store, regionId: sink.regionId, id }).catch(() => {});
+}
+
+/** Fires at `withRegionCall`'s `pending--` (a track SETTLING — resolve or reject,
+ *  `finally` runs either way, so production always reaches here with `settled: true`;
+ *  see `emitTrackClose`'s own doc). Mints its OWN fresh id (see `mintTrackId`'s doc for
+ *  why it must not reuse the open's) — no-ops under the same flag/coordinate/sink
+ *  conjunction as `noteTrackOpen`. */
+function noteTrackClose(scope: RegionScope): void {
+  if (!isEmissionEnabled()) return;
+  const { trackCoordinate: coordinate, trackSink: sink } = scope;
+  if (coordinate === undefined || sink === undefined) return;
+  const id = mintTrackId(scope, coordinate);
+  void emitTrackClose({ store: sink.store, regionId: sink.regionId, id, settled: true }).catch(() => {});
+}
+
+/** Q11b (§5 D5): record one order-dependent selector host's comparator verdict —
+ *  appends ONLY, onto `scope.hostSchedule`; the actual `HostScheduleRecord` emission
+ *  happens once, at `closeRegionScope` (`flushHostSchedule` below), never per call
+ *  here — "the sequence IS the record" (§5 A6). `left`/`right` are the compared
+ *  elements' own `RecordId["ordinalPath"]`s (whatever the caller can attribute them
+ *  to); `verdict` is the raw comparator result (negative/zero/positive). A caller with
+ *  no live scope (or emission off) gets a harmless no-op — this function never throws
+ *  and never allocates when the flag is off (checked first). */
+export function recordHostScheduleVerdict(
+  scope: RegionScope,
+  left: OrdinalPath,
+  right: OrdinalPath,
+  verdict: number,
+): void {
+  if (!isEmissionEnabled()) return;
+  if (scope.trackCoordinate === undefined || scope.trackSink === undefined) return;
+  scope.hostSchedule.push({ left, right, verdict });
+}
+
+/** Q11b (§5 D5): emit `scope`'s ENTIRE accumulated comparator schedule as ONE
+ *  `HostScheduleRecord`, keyed at the scope's OWN coordinate (the host invocation's
+ *  own address — never a per-track ordinal; the schedule belongs to the host call as
+ *  a whole, not to any one comparator invocation). Drains `hostSchedule` first
+ *  (`splice(0)`) so a scope that somehow closes twice — or any future retry path —
+ *  never double-flushes the same triples. Zero triples ⇒ `emitHostSchedule` itself
+ *  no-ops (never an empty record on the wire). */
+function flushHostSchedule(scope: RegionScope): void {
+  if (!isEmissionEnabled()) return;
+  if (scope.hostSchedule.length === 0) return;
+  const { trackCoordinate: coordinate, trackSink: sink } = scope;
+  if (coordinate === undefined || sink === undefined) return;
+  const triples: HostScheduleTriple[] = scope.hostSchedule.splice(0);
+  const id: RecordId = {
+    templateHash: coordinate.templateHash,
+    ordinalPath: coordinate.ordinalPath,
+    regionEpoch: coordinate.regionEpoch,
+  };
+  void emitHostSchedule({ store: sink.store, regionId: sink.regionId, id, triples }).catch(() => {});
 }
 
 /**

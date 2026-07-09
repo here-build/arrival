@@ -15,10 +15,27 @@
  * it is the recovery mechanism"; §3 I4's completion rule is asserted at Q13
  * specifically because that is where region-close semantics live, per
  * PROVENANCE-PLAN.md's own node table) — those five rows stay `it.todo` below.
+ *
+ * Q11b ADDENDUM: track-open/track-close/host-schedule (§5 A6 rows 5-6, D5) had no
+ * staged rows anywhere in the Q5 mapping — this file adds them fresh, at the SAME
+ * "LAW-FILE-HOMED assertion of the store-level property" grain the W3 block above
+ * uses (direct `emit*` calls through the fakes); the REAL deciding-WHEN half — B3's
+ * counters in `region-scope.ts` actually calling these — is exercised end-to-end in
+ * `src/__tests__/provenance/region-events.test.ts` (Q11b's sibling of
+ * `emission-hooks.test.ts`), not here.
  */
 import { describe, expect, it } from "vitest";
 
-import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, setEmissionEnabled } from "../../provenance/store/emit.js";
+import {
+  emitFanInstantiation,
+  emitHostSchedule,
+  emitIngressBinding,
+  emitMint,
+  emitMuxDecision,
+  emitTrackClose,
+  emitTrackOpen,
+  setEmissionEnabled,
+} from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../../provenance/store/fakes.js";
 import type { RecordId } from "../../provenance/store/ids.js";
 
@@ -86,6 +103,69 @@ describe("W3 port completeness (§7; PROVENANCE-PLAN.md Q11a)", () => {
 
         const stream = await store.readStream(REGION);
         expect(stream).toHaveLength(1); // exactly once, per id — not per write attempt
+      } finally {
+        setEmissionEnabled(false);
+      }
+    },
+  );
+});
+
+describe("region events + host-schedule (§5 A6 rows 5-6, D5; PROVENANCE-PLAN.md Q11b)", () => {
+  const REGION = "q11b-region";
+
+  // @ledger: Q11b — LANDED
+  it(
+    "a track-open/track-close pair is emitted EXACTLY ONCE PER RECORD ID under retry " +
+      "— the SAME idempotent-upsert contract W3 asserts for mint/mux/fan/ingress, now " +
+      "over the two region-event kinds (§5 A6 row 5). Open and close use DISTINCT ids " +
+      "(`ProvenanceStoreFake.append` dedupes on id ALONE, never id+kind — sharing one " +
+      "id would collapse the pair into one record) — correlation is by stream ORDER, " +
+      "not shared identity (region-scope.ts's `mintTrackId` doc)",
+    async () => {
+      setEmissionEnabled(true);
+      try {
+        const store = new ProvenanceStoreFake();
+        const openId: RecordId = { templateHash: "track", ordinalPath: [0], regionEpoch: "e0" };
+        const closeId: RecordId = { templateHash: "track", ordinalPath: [1], regionEpoch: "e0" };
+
+        for (let i = 0; i < 2; i++) {
+          await emitTrackOpen({ store, regionId: REGION, id: openId });
+          await emitTrackClose({ store, regionId: REGION, id: closeId, settled: true });
+        }
+
+        const stream = await store.readStream(REGION);
+        expect(stream).toHaveLength(2); // one per DISTINCT id, despite 4 emit calls
+        expect(new Set(stream.map((r) => r.kind))).toEqual(new Set(["track-open", "track-close"]));
+      } finally {
+        setEmissionEnabled(false);
+      }
+    },
+  );
+
+  // @ledger: Q11b — LANDED
+  it(
+    "a host-schedule record carries its FULL comparator sequence as ONE record — " +
+      "\"the sequence IS the record\" (§5 A6 row 6), never aggregated, never split " +
+      "across multiple records for one host invocation",
+    async () => {
+      setEmissionEnabled(true);
+      try {
+        const store = new ProvenanceStoreFake();
+        const id: RecordId = { templateHash: "sort-call", ordinalPath: [0], regionEpoch: "e0" };
+        const triples = [
+          { left: [0], right: [1], verdict: -1 },
+          { left: [1], right: [2], verdict: 1 },
+        ];
+        await emitHostSchedule({ store, regionId: REGION, id, triples });
+        // A retry of the SAME logical host invocation (identical id) overwrites in
+        // place — W3's exactly-once-per-id, applied to the one-kind-never-aggregates
+        // row.
+        await emitHostSchedule({ store, regionId: REGION, id, triples });
+
+        const stream = await store.readStream(REGION);
+        expect(stream).toHaveLength(1);
+        expect(stream[0].kind).toBe("host-schedule");
+        expect(stream[0].kind === "host-schedule" && stream[0].triples).toEqual(triples);
       } finally {
         setEmissionEnabled(false);
       }

@@ -64,15 +64,20 @@ export {
   TemplateStoreFake,
 } from "./fakes.js";
 
-// Q11a — record emission core (flag-gated sidecar). See emit.ts's own header for the
-// territory note (mint/mux-decision/fan-instantiation/ingress-binding only; track-open/
-// track-close/host-schedule stay Q11b's).
+// Q11a/Q11b — record emission core (flag-gated sidecar). mint/mux-decision/
+// fan-instantiation/ingress-binding are Q11a's; track-open/track-close/host-schedule
+// are Q11b's addition — same module, same flag, deciding-WHEN still lives outside
+// this file (evaluator.ts's generic apply site for Q11a, region-scope.ts's B3 counters
+// for Q11b).
 export {
   DEFAULT_SEMANTICS_EPOCH,
   emitFanInstantiation,
+  emitHostSchedule,
   emitIngressBinding,
   emitMint,
   emitMuxDecision,
+  emitTrackClose,
+  emitTrackOpen,
   ensureStreamHeader,
   isEmissionEnabled,
   setEmissionEnabled,
