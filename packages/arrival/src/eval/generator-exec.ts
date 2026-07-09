@@ -54,7 +54,7 @@ function defaultLexicalRoot(): Environment {
  * `exec`, or a re-entrant prelude exec, sees the same settled/in-flight promise).
  *
  * Two steps, order-significant:
- *   1. GLOBAL_NATIVE_PACKS (value-domain clusters + numeric + exceptions) onto global_env,
+ *   1. NATIVE_PACKS (value-domain clusters + numeric + error-object predicates) onto global_env,
  *      symbol-only (no prelude → no evalScheme).
  *   2. BASE_PACKS (the `.scm` stdlib: core/macros/polyglot/r7rs/srfi, `nil` among them) onto
  *      user_env. A base-pack prelude may call a native primitive (`+`, `string-length`), which
@@ -71,15 +71,15 @@ let _baseAssembled: Promise<void> | undefined;
 export function ensureBaseAssembled(): Promise<void> {
   return (_baseAssembled ??= (async () => {
     // The native root is populated ENTIRELY by the assembled packs below
-    // (GLOBAL_NATIVE_PACKS + BASE_PACKS). Dynamic import only, by design — no
+    // (NATIVE_PACKS + BASE_PACKS). Dynamic import only, by design — no
     // static importer — so the package can declare `sideEffects: false`.
-    const { GLOBAL_NATIVE_PACKS } = await import("../bridge.js");
+    const { NATIVE_PACKS } = await import("../env/native-packs.js");
     const { BASE_PACKS } = await import("../env/base-packs.js");
     const evalScheme: EvalSchemeInto = (env, src) =>
       exec(src as string, { env: env as Environment, skipBootstrapWait: true });
     await assembleEnv(
       global_env,
-      GLOBAL_NATIVE_PACKS.map((pack) => pack.lower()),
+      NATIVE_PACKS.map((pack) => pack.lower()),
     );
     await assembleEnv(
       user_env,

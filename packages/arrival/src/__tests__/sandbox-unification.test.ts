@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { inferenceEnv } from "../inference-env.js";
 
 // The host-language verbs the sweep deleted at the source. The old

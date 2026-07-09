@@ -18,7 +18,7 @@ import type { Environment } from "../Environment.js";
 import { global_env } from "../env-roots.js";
 import { assembleEnv } from "../common/kernel.js";
 import { BASE_PACKS } from "../env/base-packs.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { exec } from "../eval/generator-exec.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
 

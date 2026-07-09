@@ -5,7 +5,7 @@
 // vector->string even returned RAW JS strings (provenance-blind escapees).
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import bytevectorsCap from "../env/r7rs/bytevectors.js";
 import vectorsCap from "../env/r7rs/vectors.js";
 import type { EnvCapability } from "../common/capability.js";

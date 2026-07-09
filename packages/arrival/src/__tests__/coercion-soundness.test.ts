@@ -34,7 +34,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
 import { PortabilityError } from "../errors.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { APair } from "../values/primitives/APair.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { AVector } from "../values/primitives/AVector.js";

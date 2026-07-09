@@ -97,10 +97,14 @@ export { AExact } from "./values/primitives/AExact.js";
 export { AInexact } from "./values/primitives/AInexact.js";
 export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 
-// Bridge: numeric coercion re-export + R7RS exception verbs + bootstrap. The
-// numeric core (Operator/Codec stack) lives in the `scheme/numeric` pack, not
-// part of this public surface.
-export { coerceNumeric, wrappedOps as wrappedOps, initBridge as initBridge } from "./bridge.js";
+// Former bridge.ts surface, re-exported from the real homes (bridge.ts — the
+// LIPS-era monolith's last husk — is deleted; see env/r7rs/error-objects.ts's
+// header for the lineage). `initBridge` stays the stable public name for
+// "ensure the runtime base is assembled" (inhuman cli.ts and the smoke suites
+// await it); it aliases the realm-cached `ensureBaseAssembled`.
+export { coerceNumeric } from "./values/op-helpers.js";
+export { wrappedOps } from "./env/r7rs/error-objects.js";
+export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";
 
 // Generator-based evaluator: flat trampoline for stack safety and performance.
 export {

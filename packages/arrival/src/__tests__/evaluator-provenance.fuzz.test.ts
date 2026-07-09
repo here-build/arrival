@@ -25,7 +25,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../values/primitives/AValue.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { exec } from "../eval/generator-exec.js";
 

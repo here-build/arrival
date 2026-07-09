@@ -23,7 +23,7 @@
  * untouched; its retirement is a later phase.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import {

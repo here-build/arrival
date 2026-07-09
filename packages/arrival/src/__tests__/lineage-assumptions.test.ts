@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { execState } from "../eval/generator-exec.js";
 import { parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";

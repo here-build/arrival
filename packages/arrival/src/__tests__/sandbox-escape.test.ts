@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import {

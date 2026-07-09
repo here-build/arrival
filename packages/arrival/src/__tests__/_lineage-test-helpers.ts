@@ -19,7 +19,7 @@
  * needs to register its deterministic `defineRosetta` sources.
  */
 import * as z from "../common/scheme-zod.js";
-import { initBridge } from "../bridge.js";
+import { initBridge } from "../index.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
