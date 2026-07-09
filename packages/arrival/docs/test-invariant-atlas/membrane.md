@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`). Notably the LAMBDA brand is deleted (B5, `a484d7c1ab`) and the exit convention is R1's uniform plain-JS exit.
+
 ## membrane.spec.ts
 ### Wrapper Layer > isSchemeValue
 - INVARIANT: nil is recognized as a scheme value

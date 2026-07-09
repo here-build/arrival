@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`).
+
 ## attestation.test.ts
 ### attestation registry (attest / isAttested / freshIfSingleton)
 - INVARIANT: exempt singletons (nil, void, interned symbols, #t/#f) are never marked attested

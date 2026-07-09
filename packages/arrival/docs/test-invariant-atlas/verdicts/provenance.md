@@ -1,3 +1,5 @@
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`).
+
 ## Findings
 
 `golden-prov-arithmetic.test.ts > GOLDEN — documented asymmetries the eager path exhibits TODAY > "(cdr (list a b))..."` — [P10] FLIP-TO-FAILS: plain-green assertion of a provenance drop (spine cell carries `[]`); this is the exact case P10's own text cites as the motivating lie ("cdr of a proper list returning an unstamped spine cell... pinned GREEN"). **ALREADY-EXECUTED** (2026-07-08, commit 3b9fad2d0c "law-grid bug batch + conservation repair" — cdr fixed at root, golden rewritten as a regular passing row, no longer a documented-asymmetry lie; verified in current source).

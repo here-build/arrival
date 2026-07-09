@@ -1,5 +1,7 @@
 ---
 
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`).
+
 # Arrival test audit — common / type-layer / benchmarks / assigned `src/__tests__` files
 
 **Premise correction on hunt #2:** the legacy `SymbolDeclaration` arm is *not* "slated pre-prod death" as unqualified dead weight — `capability.ts:62-69` documents it as deliberately staged and load-bearing for `McpEnvCapability`'s downstream population (here.build/inhuman/sift MCP packs), gated on a named future migration (annotation-lifting → baked-symbol splicing). It is still transitional, so RETAGs below stand, but the death is migration-gated, not pre-prod-scheduled.

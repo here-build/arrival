@@ -1,5 +1,10 @@
 # Test Verdicts — the suite judged against PRINCIPLES.md (2026-07-08)
 
+> **Historical record — fully executed.** The mechanical sweep landed (G1, `db850bab44`),
+> the ruling queue below is resolved (`docs/test-suite-v2/RULINGS.md`, 2026-07-09), and the
+> v1 suite was subsequently retired (G2, `5d4919ad8f`). Kept as the original judgment record;
+> file/symbol references describe the pre-rework suite.
+
 Six per-cluster audits, rubric = `docs/PRINCIPLES.md` (P0–P16), evidence = the actual test
 files (agents ran suspect tests where the label and the marker disagreed). Full per-cluster
 ledgers in [`verdicts/`](verdicts/). Verdict vocabulary is closed:

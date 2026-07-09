@@ -1,5 +1,8 @@
 # Test Suite v2 — Removal Manifest
 
+> **Status: EXECUTED (G2, 2026-07-09, `5d4919ad8f`).** Every row below carries its own
+> execution note. Historical record.
+
 *Everything the consolidation removes, with the invariant value each item carried and where
 that value SURVIVES in the new suite. Rule: nothing is deleted until its surviving home is
 named — a removal without a survivor row is a coverage regression, not a cleanup.*

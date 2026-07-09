@@ -90,7 +90,11 @@ Conventions:
 
 ## 3. Migration
 
-1. Stubs land (full grids, `it.todo` bodies) — reviewable shape. **[this phase]**
+*Status 2026-07-09: all five steps executed — G1 mechanical sweep (`db850bab44`), chibi v2
+cutover + G2 v1 retirement per REMOVAL-MANIFEST.md (`5d4919ad8f`), G3 single-runner cutover
+(`vitest.config.ts` is THE runner, suite green — known-red triage 35→0, `7d48e303c4`).*
+
+1. Stubs land (full grids, `it.todo` bodies) — reviewable shape. **[executed]**
 2. Chibi v2 harness lands per its own design; v1 harness retired at registry parity + floor.
 3. Mechanical sweep from VERDICTS.md runs against v1 files (flips/deletes/retags) — v1 stays
    the gate while v2 fills in.
@@ -98,9 +102,9 @@ Conventions:
    when its v2 cell goes green (or `it.fails` with the same gate).
 5. R1–R7 rulings unblock their gated cells as they land.
 
-## 4. Open dependencies
+## 4. Open dependencies — all since resolved
 
-- R1 (exit convention) blocks F3's exit column and the shared comparison helper.
-- R2 (container box) blocks four F1/F2 cells.
-- Reverse-membrane landing blocks F5 bodies (stubs land now).
-- Chibi v2 design doc (in flight, Fable) defines F4's module layout.
+- R1 (exit convention) blocked F3's exit column and the shared comparison helper — landed (`c0852b879c`).
+- R2 (container box) blocked four F1/F2 cells — ruled + landed (C1/C2/C4, `c27b2e8b62`).
+- Reverse-membrane landing blocked F5 bodies — B1–B3 landed (`9f622345d2` et al.).
+- Chibi v2 design doc defines F4's module layout — landed (`conformance/chibi-r7rs-v2.spec.ts` + `chibi/`).

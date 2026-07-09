@@ -1,3 +1,5 @@
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`). The curly-infix suite and the reader's curly-infix mode named below are since deleted (R6).
+
 ## Findings
 
 `evaluator.spec.ts > evaluate() > "should handle JS functions that return promises"` — [P1] RETAG transitional: `env.set("async-add", async (a,b)=>...)` binds a bare JS fn, `expect(result).toBe(30)` asserts raw unboxed pass-through — the exact scheduled-inversion pattern (comment: "With membrane, JS functions receive JS values (not SchemeExact)"); dies with the reverse-membrane migration. **EXECUTED** (2026-07-08 mechanical sweep — `[INVERTS: reverse-membrane/P1]` marker added).

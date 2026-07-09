@@ -1,3 +1,5 @@
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`) — `clone-identity.test.ts`'s survivor is `laws/identity.law.test.ts`.
+
 ## Findings
 
 `coercion-soundness.test.ts > G6 golden(eager-parity) — "Pair · length drops the container box"` — [P10] RULING-NEEDED — container-box drop is blessed via "outside a count's cone" reasoning, matching P10's explicitly forbidden "container was fresh so lineage is empty" rationale; the file's own comment already flags this as a contested ruling awaiting V. **SKIPPED** — RULING-NEEDED (R2-gated per DESIGN.md §3), not part of the mechanical sweep; untouched.

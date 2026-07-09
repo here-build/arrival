@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`). Notably `curly-infix.test.ts` and the reader's curly-infix mode itself are deleted (R6 ruling).
+
 ## evaluator.spec.ts
 ### run() trampoline
 - INVARIANT: run() drives a bare generator to completion and returns its final return value

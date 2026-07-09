@@ -1,5 +1,13 @@
 # Test Invariant Atlas — @here.build/arrival (2026-07-08)
 
+> **Historical snapshot — pre-rework.** This atlas maps the v1 suite as it stood on
+> 2026-07-08, before the REWORK-DAG execution: the G1 mechanical sweep (`db850bab44`), the
+> G2 v1 retirement (`5d4919ad8f`), and the G3 single-runner cutover all landed after it was
+> written. Files, paths, counts, and the dead-code baseline below describe that snapshot —
+> many named files/symbols (e.g. `bridge.ts`, `reader/curly-infix.ts`, `clone-identity.test.ts`,
+> the v1 chibi harness) are since deleted or relocated. The live suite layout is
+> `docs/test-suite-v2/`; the execution record is `docs/REWORK-DAG.md`.
+
 Six-cluster sweep of every test file (151 files, ~23.4k lines): what invariants the suite
 enforces, named — no code, no rationale. Cross-referenced against a production-only
 reachability run (knip, all 14 package subpath exports as entries, `__tests__`/`__benchmarks__`

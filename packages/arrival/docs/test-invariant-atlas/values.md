@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`). Notably `clone-identity.test.ts` is retired (survivor: `laws/identity.law.test.ts`), `bridge.ts` is dissolved (`2bfefd7455`), and AHalfBaked is dissolved (`90272a0b99`).
+
 ## pair-cycle.test.ts
 ### APair[Symbol.iterator]
 - INVARIANT: iterator yields every list element exactly once, in order

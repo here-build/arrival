@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`).
+
 ## core-contract-precision.test.ts
 ### scheme/core Contract precision — author-asserted type override
 - INVARIANT: gensym's harvested signature is `(name?: string) => string` via Contract.type override, not the unknown catch-all [impl-pinning]

@@ -1,3 +1,5 @@
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`). The LAMBDA brand named below is since deleted (B5, `a484d7c1ab`).
+
 ## Findings
 
 `membrane.spec.ts > toJS > "converts SchemeSymbol via its own protocol to a quoted-name string ('foo)"` — [P15] RETAG: comment admits `// todo symbols gets transformed into opaque symbol` (not final), yet pinned via plain `it()` not `it.fails`/`it.todo`, while js-interop's sibling gap (schemeToJs(symbol) should unwrap to bare string) is honestly `it.fails` — same underlying gap, inconsistent taxonomy. **SKIPPED** — not in the 2026-07-08 mechanical-sweep task list; untouched.

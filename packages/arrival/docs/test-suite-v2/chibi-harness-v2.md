@@ -1,5 +1,11 @@
 # Chibi Harness v2 — Design Doc
 
+> **Status: IMPLEMENTED + cut over (G2, 2026-07-09, `5d4919ad8f`).** v1 (`chibi-r7rs.spec.ts`,
+> `chibi-harness.ts`) is deleted; every present-tense "v1 …" row below describes the deleted
+> harness as it existed. One deviation from §9/§11: the v2 spec kept its name — it lives at
+> `src/__tests__/conformance/chibi-r7rs-v2.spec.ts` (+ `src/__tests__/chibi/` modules); no
+> rename to `chibi-r7rs.spec.ts` happened. Current baseline: 651 conformance passes / 0 fails.
+
 **Package root:** `/Users/jabher/WebstormProjects/dappsnap/foundations/arrival/arrival` (all `src/…`, `vendor/…`, `docs/…` paths below are relative to it; the reverse-membrane proposal lives at `/Users/jabher/WebstormProjects/dappsnap/docs/working-proposals/reverse-membrane-for-callables.md`).
 
 ## 0. Ground truth (verified)

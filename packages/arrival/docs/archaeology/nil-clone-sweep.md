@@ -35,8 +35,9 @@ ANil`. The systematic fix was to migrate every `=== nil` guard the same way.
   `value["arrival/toJS"]()` (`src/membrane.ts:240`), no nil special-case at
   all.
 - `rosetta.ts:70` — `schemeToJs` entry — still unfixed as of 2026-07-08
-  (`src/__tests__/clone-identity.test.ts`'s `rosetta.ts` describe block keeps
-  this as a live `it.fails`).
+  (tracked as a live `it.fails`; since G2 that tracker lives in
+  `src/__tests__/laws/identity.law.test.ts` — `clone-identity.test.ts` itself
+  was retired, `5d4919ad8f`).
 - `rosetta.ts:130` — `schemeToJs` Pair-spine tail — FIXED (verified green).
 - `bridge.ts:985` — `list-copy` entry — FIXED. `bridge.ts` no longer has
   `list-copy` at all (the file is down to 137 lines); the logic lives in
@@ -70,7 +71,9 @@ ANil`. The systematic fix was to migrate every `=== nil` guard the same way.
 ## Current state (2026-07-08)
 
 Of the ~14 sites, only `rosetta.ts:70` (`schemeToJs` on a bare nil clone
-outside a Pair) remains an open gap, tracked live as `it.fails` in
-`clone-identity.test.ts`'s `rosetta.ts` describe block. Every other site is
-fixed and verified against current source; the corresponding tests in
-`clone-identity.test.ts` are regression guards (`it()`), not bug reports.
+outside a Pair) remains an open gap, tracked live as `it.fails` — since the
+G2 suite retirement (`5d4919ad8f`) that row and every regression guard from
+`clone-identity.test.ts` live in `src/__tests__/laws/identity.law.test.ts`
+(the file this ledger's tests were consolidated into). Every other site is
+fixed and verified against current source; the corresponding law rows are
+regression guards (`it()`), not bug reports.

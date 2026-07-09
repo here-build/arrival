@@ -1,3 +1,5 @@
+> **Historical snapshot (2026-07-08, pre-rework v1 suite).** Files named here may be deleted, renamed, or relocated since (G1/G2/G3 — see `../../REWORK-DAG.md` and `../test-suite-v2/REMOVAL-MANIFEST.md`).
+
 ## capability-prelude-only-symbol.test.ts
 ### EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx.preludeScope
 - INVARIANT: a preludeOnly rosetta binds onto ctx.preludeScope, not onto the runtime env

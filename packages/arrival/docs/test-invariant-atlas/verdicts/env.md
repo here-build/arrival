@@ -1,3 +1,5 @@
+> **Historical record — executed.** Findings below carry their per-row EXECUTED/SKIPPED markers (G1 sweep `db850bab44`); rulings resolved in `../../test-suite-v2/RULINGS.md`; the v1 suite was subsequently retired (G2, `5d4919ad8f`).
+
 ## Audit: `foundations/arrival/arrival/src/env/__tests__/`, `env/r7rs/__tests__/`, `env/srfi/__tests__/`
 
 All 23 files read against `docs/PRINCIPLES.md` (P0–P16) and cross-checked against `docs/test-invariant-atlas/env.md`.
