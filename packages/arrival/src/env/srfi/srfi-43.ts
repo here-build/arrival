@@ -1,7 +1,7 @@
 // SRFI-43 — vector library (pure ops). Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles `SRFI43_SCM` and
-// evals it (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
+// (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/srfi-43", {

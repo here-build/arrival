@@ -1,7 +1,7 @@
 // SRFI-2 — and-let*. Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles `SRFI2_SCM` and
-// evals it (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
+// (via initBridge's assembleEnv), so this module is the sole definition site.
 //
 // `define-macro`, not `define-syntax`/`syntax-rules` — the sandbox's matcher has no
 // `define-syntax`, so this is the one definition serving both envs.

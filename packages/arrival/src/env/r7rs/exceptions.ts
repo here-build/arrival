@@ -7,7 +7,8 @@
 // soundness; this pack supplies the exception forms it keeps. Built on the host
 // try/catch/finally special forms + the `%raise`/`%current-handlers`/
 // `%set-handlers!`/`make-error-object` machinery below, all owned here —
-// `scheme/exceptions` (bridge.ts) is now just the R7RS predicate surface
+// `scheme/exceptions` (error-objects.ts, the last survivor of the deleted
+// bridge.ts monolith) is now just the R7RS predicate surface
 // (error-object?/error-object-message/etc).
 //
 // SINGLE SOURCE: this module is the sole definition site for both the machinery

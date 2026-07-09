@@ -127,9 +127,10 @@ function encodeResult(schema: z.ZodTypeAny, result: unknown): unknown {
 /**
  * The raw `Operator.call` marshalling — arity guard + per-arg schema decode + the
  * `fn` + output encode, WITHOUT the provenance/coerce layer. `nativeNumericOp`
- * runs it after coercion; the inline misc ops (`floor/`, `>>`, …) that used to call
- * `ops.X.call(...)` directly run it too (those bypass the provenance layer, exactly
- * as `op.call` did).
+ * runs it after coercion; the inline misc ops that used to call `ops.X.call(...)`
+ * directly (`lcm`, `>>`, `<<`) run it too (those bypass the provenance layer,
+ * exactly as `op.call` did; `floor/`/`truncate/` skip it and call the carved fns
+ * directly).
  */
 function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
   const { in: inSchemas, inRest, out, fn } = spec;
@@ -145,8 +146,9 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
 }
 
 /**
- * Build the `(...args) => unknown` builtin for one numeric op — identical to
- * `wrapOperator(ops.X)`. See the file header for the three reproduced concerns.
+ * Build the `(...args) => unknown` builtin for one numeric op — the slot the dead
+ * `wrapOperator(ops.X)` used to fill (since evolved past it; see the section header
+ * above). See the file header for the three reproduced concerns.
  */
 function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => unknown {
   // The synchronous numeric core: provenance + coerce-with-naming + marshalled call.
@@ -587,7 +589,10 @@ const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n 
 // ════════════════════════════════════════════════════════════════════════════
 // Reused op specs / cores — the aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME
 // op object as their canonical sibling (byte-identical to the original, which
-// minted a fresh `wrapOperator(ops.X)` carrying the canonical op's name). Specs are
+// minted a fresh `wrapOperator(ops.X)` carrying the canonical op's name). One
+// asymmetry: `==` binds the raw numeric core `numEqOp`, while canonical `=` binds
+// that same core wrapped in the `looseCompare` nil-tolerant overlay — the alias
+// skips the overlay. Specs are
 // named (not just the built op) so an alias's `symbol.native` declaration below can
 // build the SAME Contract shape its canonical sibling declares (`contractFromSpec(spec)`)
 // while still passing the identical shared impl reference. `arithmeticShiftSpec` is
@@ -861,7 +866,7 @@ const exactFn = (z: unknown): AExact => {
   return new AExact(inexact.ctx, num / g, scale / g);
 };
 
-// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc above for why a raw
+// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc below for why a raw
 // return would crash `exec`'s uniform plain-JS exit. Carries the union of the
 // operand(s)' own provenance (the `nativeNumericOp`/`applyNumeric` convention this
 // direct-bound native otherwise bypasses).

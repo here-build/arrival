@@ -1,11 +1,13 @@
 // symbols/_bake — the SHARED machinery behind the `arrival.symbol*` EnvCapability
 // symbol-definition API: the contract/decoded-type machinery, the baked `AEntity`
-// union + its members, and the `bake*` constructors the per-tag factory files
-// (`./native.ts`, `./rosetta.ts`, …) stand on. The factories live one-per-file under
-// this directory and are re-assembled into the `symbol` namespace by `./index.ts`;
-// the package's stable entry `../symbol.js` re-exports BOTH this module's types and
-// `export * as symbol from "./index.js"`. The cut is acyclic: factory files import
-// the bake fns + types from HERE; nothing here imports back up through the namespace.
+// union + its members, and the shared types + helper fns the per-tag factory files
+// (`./native.ts`, `./rosetta.ts`, …) build their own `AEntity` member from directly —
+// there is no separate `bake*` constructor anymore (see §4 below). The factories live
+// one-per-file under this directory and are re-assembled into the `symbol` namespace by
+// `./index.ts`; the package's stable entry `../symbol.js` re-exports BOTH this module's
+// types and `export * as symbol from "./index.js"`. The cut is acyclic: factory files
+// import the shared types + helper fns from HERE; nothing here imports back up through
+// the namespace.
 //
 // One zod contract, read (eventually) four ways: runtime validation (z.parse), static
 // impl types (z.infer via the generics here), the harvested .d.ts (printed from the
@@ -18,17 +20,19 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // THE RUNTIME MODEL (the interpretive call) — confirmed against the live interpreter
-// (src/rosetta.ts createRosettaWrapper, and the `{ value }` env.set path):
+// (src/rosetta.ts createRosettaWrapper, and src/common/capability.ts's ANativeProcedure/
+// ARosettaProcedure binder):
 //
 //   symbol.native    — schemas are SCHEME-IDENTITY; impl works on SCHEME VALUES
-//                       (Pair, SchemeString, …), exactly like today's { value: fn }
-//                       ops. bake.native attaches { impl, in, out } with NO runtime
+//                       (Pair, SchemeString, …). The native() factory (native.ts) attaches
+//                       { impl, in, out } with NO runtime
 //                       validation and NO codec — "zod for TYPES purely" (the schema
-//                       is there for static inference + the future .d.ts harvest). The
-//                       baked .impl IS the binding (≈ today's { value } + type metadata).
+//                       is there for static inference + the future .d.ts harvest). capability.ts
+//                       binds the baked .impl into a first-class ANativeProcedure, invoked
+//                       through the `arrival/tagless-final/apply` term — never a bare { value } binding.
 //
-//   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). bake.rosetta
-//                       produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
+//   symbol.rosetta   — schemas are CODECS; impl works in JS-LAND (decoded). The rosetta()
+//                       factory (rosetta.ts) produces a wrapper:  decode args (codec) → VALIDATE (zod parse,
 //                       skippable/gated) → impl.call(this, decodedArgs) → await (async
 //                       implicit) → encode return (codec) → build the scheme values-list. This
 //                       mirrors createRosettaWrapper's schemeToJs → fn → jsToScheme spine, with
@@ -170,7 +174,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  type like `SchemeIP`, not just the honest `z.output` the membrane decodes to). Mirrors
    *  legacy `RosettaSpec.type`/`RosettaFunction.type` (rosetta.ts, scheme-env.ts) — same trust
    *  model: an author assertion, not mechanically derived, checkable by eye. INERT everywhere
-   *  except the harvest: `bakeNative`/`bakeRosetta`/`bakeSequence` carry it through unchanged;
+   *  except the harvest: `native()`/`rosetta()`/`sequence()` (their per-tag factories) carry it through unchanged;
    *  `signatureOf` prefers it over computing from `in`/`out` when present. Absent ⇒ byte-identical
    *  to today's zod-derived signature. */
   readonly type?: string;
@@ -180,10 +184,11 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  default, mints). Ignored by `symbol.native` (native ops never mint). */
   readonly pure?: boolean;
   /** NATIVE/SEQUENCE. `fanout: true` marks a fan-out op (map/filter/vector-map) — one whose
-   *  lineage classifies to a per-element fan template. `bakeNative`/`bakeSequence` stamp a plain
-   *  `.fanout = true` on the bound fn; the lineage classifier reads it off `env.get(op)`.
-   *  Declared here on the contract, not in a name-list — so fan-ness follows the binding
-   *  (alias-correct), not a string match. */
+   *  lineage classifies to a per-element fan template. `native()`/`sequence()` (their per-tag
+   *  factories) stamp a plain `.fanout = true` on the def's impl/run fn; capability.ts copies
+   *  the marker onto the bound ANativeProcedure, and the lineage classifier reads it off
+   *  `env.get(op)`. Declared here on the contract, not in a name-list — so fan-ness follows
+   *  the binding (alias-correct), not a string match. */
   readonly fanout?: boolean;
   /** KIND-AGNOSTIC (native/rosetta). `true` marks the symbol ASSEMBLY-TIME-ONLY: it binds into
    *  the assembly's phase-gated prelude scope (kernel.ts `assembleEnv` — a per-assembly Map
@@ -220,9 +225,11 @@ export type Impl<
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. AEntity — the baked, discriminated union (an interpreter primitive — TYPE-ONLY,
-//    no class/runtime footprint; the bound runtime value stays whatever shape it's always
-//    been — a plain object for door/keyword/macro, a real callable fn for native/rosetta/
-//    tagless/tagless-guard/sequence).
+//    no class/runtime footprint: the def itself is a plain object for every kind). The
+//    RUNTIME BOUND VALUE capability.ts installs from a def differs by kind — a plain
+//    object for door/keyword/macro, but a first-class ANativeProcedure/ARosettaProcedure
+//    (an ACallable subclass, invoked through `arrival/tagless-final/apply`) for native/
+//    rosetta/tagless/tagless-guard/sequence — never a bare callable fn.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type AnyFn = (...args: any[]) => unknown;
@@ -264,7 +271,7 @@ export interface RosettaSymbolDef<
   /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
    *  + (optionally) validates inputs, runs the (ctx-free) impl, awaits, encodes the output,
    *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
-   *  see bakeRosetta). */
+   *  see the `rosetta()` factory's `run` wrapper in rosetta.ts). */
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** `true` = a transform (forwards input provenance); default/false = a source (mints). */
   readonly pure?: boolean;
@@ -399,7 +406,7 @@ function kwargsKeyOf(arg: unknown): string {
 /** Fold a `(tool :k v :k2 v2 …)` call's interleaved scheme args into the RAW kwargs object —
  *  a plain JS record keyed by the kwargs shape's field names, valued by the RAW (still-encoded)
  *  scheme values. The kwargs schema's OWN `z.decode` (run by the caller, directly against the
- *  object schema — see bakeRosetta) then validates + decodes each field through its own
+ *  object schema — see the `rosetta()` factory in rosetta.ts) then validates + decodes each field through its own
  *  per-property codec; this fold only performs the array→object RESHAPE, not the per-field
  *  decode. A dangling keyword (odd arg count) doors with a teaching error rather than silently
  *  dropping it. */
@@ -452,7 +459,7 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
  *  `inputRest` just gives that shape a name split across two contract fields instead of one
  *  schema authored inline, so a fixed head and its variadic tail can be typed independently
  *  (`DecodedArgsWithRest`'s two generic params). Absent `inputRest` ⇒ byte-identical to
- *  `normalizeVector(input)` — this is what `bakeNative`/`bakeRosetta` call for `.in`/`inSchema`
+ *  `normalizeVector(input)` — this is what `native()`/`rosetta()` (their per-tag factories) call for `.in`/`inSchema`
  *  (the OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
@@ -540,8 +547,8 @@ export function describeReceiver(v: unknown): string {
 type TermMethod = (this: unknown, ...args: unknown[]) => unknown;
 
 /** Resolve a named term method off a (possibly non-object) receiver, typed — the dispatch
- *  primitive both `bakeTagless` (throws when absent) and `bakeTaglessGuard` (#f when absent)
- *  stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the receiver is a
+ *  primitive both `tagless()` (tagless.ts, throws when absent) and `taglessGuard()`
+ *  (taglessGuard.ts, #f when absent) stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the receiver is a
  *  real object, returns the callable iff it IS one, else `undefined` — so the call site decides
  *  the missing-method policy without a raw `receiver as Record` / `fn as callable` cast. */
 export function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {

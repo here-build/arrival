@@ -36,8 +36,8 @@
 //
 // ── provenance ─────────────────────────────────────────────────────────────────────────────
 //
-// Moved verbatim from `@here.build/arrival-chain`'s `run-program.ts` `BUILTIN_PREAMBLE`
-// (2026-07-03) — chain's preamble now carries a pointer comment here instead of the
+// Moved verbatim from `@here.build/arrival-run`'s `run-program.ts` `BUILTIN_PREAMBLE`
+// (2026-07-03) — that file's preamble now carries a pointer comment here instead of the
 // definitions themselves. NOT in `BASE_PACKS` (it's not scheme stdlib — it's config-free but
 // domain-specific, the same posture `arrival/overridable` has); consumed as an ordinary
 // capability (listed in `arrivalCapabilities()`'s root set) AND declared as

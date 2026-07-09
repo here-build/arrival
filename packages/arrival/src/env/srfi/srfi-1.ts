@@ -1,7 +1,7 @@
 // SRFI-1 — list library completion. Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles `SRFI1_SCM` and
-// evals it (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
+// (via initBridge's assembleEnv), so this module is the sole definition site.
 //
 // SCOPE: the whole SRFI-1 surface lives here — the *completion* set (take-while …
 // length+), `remove` (relocated from arrival-extensions, beside its `delete` twin),
@@ -34,12 +34,13 @@ import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 // result. Procedure-only matcher (no host RegExp).
 //
 // Precision-typed to match its own Contract (below): `arg` is the callable-schema convention
-// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each/curry). `list`'s car/cdr
+// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each). `list`'s car/cdr
 // decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the SAME shared
 // identity primitive lists.ts's list ops use) — every recursive/return site that hands a car/cdr
-// back through this SchemeValue-returning fn casts it, mirroring lists.ts's established
-// "typecheck is not a TS guard; re-state it" idiom: `typecheck` above already re-validates
-// pair-or-nil on every recursive call, so the cast states a runtime-enforced invariant, not a blind one.
+// back through this SchemeValue-returning fn casts it. findImpl carries no runtime pair-or-nil
+// check of its own (an earlier revision's `typecheck(...)` guards were removed; `symbol.native`
+// contracts are TYPE-ONLY and never validated at runtime — see string-split's comment in
+// srfi-13.ts), so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
 function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike): SchemeValue {
   if (list instanceof ANil) {
     return nil;
@@ -58,10 +59,10 @@ export default new EnvCapability("scheme/srfi-1", {
     // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.value], z.value)'s
     // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
     // exactly 2). pred uses the established callable-schema convention (z.custom<(...args)
-    // => T>(), matching vector-map/vector-for-each/curry); seq stays z.value — it's dispatched
+    // => T>(), matching vector-map/vector-for-each); seq stays z.value — it's dispatched
     // via tf("filter") term-lookup, representation-agnostic. `symbol.sequence`'s impl signature
     // is always `(args: unknown[], runCtx)` regardless of the contract shape (see
-    // SequenceInput in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
+    // SequenceImpl in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
     filter:
       symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
         // Output is `z.value` (the representation-BLIND scheme-value identity), NOT a "proper
@@ -94,8 +95,9 @@ export default new EnvCapability("scheme/srfi-1", {
         // The z.custom predicate arg is unrepresentable to the harvest printer, collapsing the WHOLE
         // signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the real
         // shape (checkable by eye against findImpl): the receiver is `List<unknown>` — findImpl is
-        // list-only (`typecheck(list, ["pair","nil"])`), NOT representation-agnostic like filter/sort —
-        // the predicate is a one-arg callable, and the result is the matched car or nil (any value).
+        // list-only (its `list` parameter is typed `AListAlike`, i.e. pair-or-nil), NOT
+        // representation-agnostic like filter/sort — the predicate is a one-arg callable, and the
+        // result is the matched car or nil (any value).
         type: "(pred: (x: unknown) => unknown, list: List<unknown>) => unknown",
       },
       findImpl,

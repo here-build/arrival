@@ -5,7 +5,8 @@
  * — those are served by a resolver, not this pack.
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
- * validation — "zod for types purely") and an impl bound raw. List args are
+ * validation — "zod for types purely") and an impl that receives Scheme values
+ * as-is (bound as a first-class ANativeProcedure — capability.ts). List args are
  * typed `Pair | Nil` (the proper-list domain; the defensive improper-list
  * passthrough is robustness, not the declared domain), indices are the
  * `schemeNumber` tower, the searched object and copied/returned cells are
@@ -209,7 +210,8 @@ export default new EnvCapability("scheme/lists", {
     map: symbol.sequence`map: fn over one list (its own term map — box discipline) or a zip over several`(
       // fn is the fixed HEAD; the further lists/vectors are the variadic TAIL —
       // `symbol.sequence`'s factory type has no Rest generic, so a hand-authored
-      // z.tuple(fixed, rest) is the only available shape (matches srfi-1.ts's filter).
+      // z.tuple(fixed, rest) is the only available shape (srfi-1.ts's filter, the
+      // one-time sibling example, has since narrowed to a plain fixed 2-tuple).
       // The rest is z.value, NOT z.union([z.pair, z.nil]): a further "list" argument here
       // is any sequence answering arrival/tagless-final/map (Pair, Nil, OR Vector — see
       // the impl's single-list dispatch below), so a pair|nil union would wrongly exclude
@@ -238,7 +240,7 @@ export default new EnvCapability("scheme/lists", {
             );
           }
           // The tagless-final map/vector-map term algebra declares SchemeValue | Promise<SchemeValue>
-          // (this file's own header comment) — `resolveMethod`'s TermMethod return is `unknown` (it
+          // (AValue.ts's protocol declaration) — `resolveMethod`'s TermMethod return is `unknown` (it
           // resolves ANY term method, not just this one's specific protocol), so the assertion states
           // that documented, real invariant rather than widening the contract's own DecodedReturn.
           return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
@@ -324,8 +326,8 @@ export default new EnvCapability("scheme/lists", {
         output: [z.value],
         type: "<T>(proc: (...args: unknown[]) => T, ...argsThenList: unknown[]) => T",
       },
-      // The final tail element must be a PROPER list — `listToArray` (pack-local, the same
-      // to_array the bridge used) is the door: it rejects an improper/atom final arg loudly
+      // The final tail element must be a PROPER list — `listToArray` (the shared
+      // pack-helpers `to_array`) is the door: it rejects an improper/atom final arg loudly
       // ("can't convert improper list") rather than crashing on a non-iterable spread.
       function (this: CallCtx, fn: unknown, ...rest: unknown[]) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
@@ -355,7 +357,7 @@ export default new EnvCapability("scheme/lists", {
         }
         // Stamp the head Pair only — internal cons cells share the same lineage
         // by definition; downstream traversal reads provenance off whichever pair
-        // is bound. Parallel to lips.ts \`cons\` which only stamps the produced cell.
+        // is bound. Parallel to this pack's \`cons\` above, which only stamps the produced cell.
         return withInputProvenance(fill === undefined ? [k] : [k, fill], result);
       },
     ),
@@ -423,15 +425,15 @@ export default new EnvCapability("scheme/lists", {
 
     // R7RS 6.4 List searching functions.
     //
-    // memq/memv/assq/assv/member/assoc's output — all six — is z.union([z.value,
-    // z.booleanFalse]), not a bare z.value: each returns EITHER a matched sublist/entry
-    // OR a raw, unboxed JS `false` sentinel on no-match (the interpreter boxes it
-    // downstream — the same pattern used pervasively across this codebase). z.value
-    // alone would silently exclude the real false-return path.
+    // memq/memv/assq/assv/member/assoc's output — all six — unions the match arm with
+    // z.booleanFalse (memq narrows its match arm to z.pair, the matched sublist; the
+    // other five use z.value), never a bare match arm: each returns EITHER a matched
+    // sublist/entry OR a raw, unboxed JS `false` sentinel on no-match (the interpreter
+    // boxes it downstream — the same pattern used pervasively across this codebase).
+    // The match arm alone would silently exclude the real false-return path.
     memq: symbol.native`memq: first sublist whose car is eq? to obj, else #f`(
       // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the canonical
-      // representation-blind case (scheme-zod.ts's own doc comment: "a predicate that
-      // classifies host JS too — eq?, bytevector?") — not imprecision to fix.
+      // representation-blind case — not imprecision to fix.
       { input: [z.value], inputRest: z.pair, output: [z.union([z.pair, z.booleanFalse])] },
       (obj, list) => {
         let current: unknown = list;
@@ -446,8 +448,8 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     memv: symbol.native`memv: first sublist whose car is eqv? to obj, else #f`(
-      // `eqv` compares Scheme values, so the search key is `z.value` (not the
-      // representation-blind `z.unknown` memq uses for its `===` identity test).
+      // `eqv` compares Scheme values, so the search key is `z.value` — the same
+      // schema memq declares, there read representation-blind for its `===` identity test.
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
       (obj, list) => {
         let current: unknown = list;
@@ -613,12 +615,13 @@ export default new EnvCapability("scheme/lists", {
 
     nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
       // index is z.schemeNumber (not z.value) — it's coerced via Number(index) below,
-      // exactly the same domain list-tail/list-ref/list-set!'s own k argument already uses.
+      // exactly the same domain list-tail/list-ref's own k argument already uses.
       // obj (2nd arg) and the output STAY z.value: nth is genuinely LIPS-polymorphic over
       // pair | raw JS array, and the array branch (`obj[idx]`, `Array.isArray(obj)`) can
-      // return arbitrary host data (a borrowed array isn't a SchemeValue) — matches
-      // `reverse`'s own established representation-blind precedent in this exact file, so
-      // z.value would be dishonest here (it would silently exclude that real return path).
+      // return arbitrary host data (a borrowed array isn't a SchemeValue) — unlike
+      // `reverse` above (pair|nil only; its raw-array branch is gone), nth keeps its
+      // array branch, so a pair|nil narrowing would be dishonest here (it would
+      // silently exclude that real array path).
       { input: [z.schemeNumber, z.value], output: [z.value], type: "<T>(index: number, list: T[]): T | null" },
       (index, obj) => {
         // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed

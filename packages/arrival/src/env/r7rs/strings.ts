@@ -5,8 +5,9 @@
  * `string-for-each`. (`number->string` lives in numeric.ts, not here.)
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
- * validation — "zod for TYPES purely") and an impl bound raw. Native means the
- * schema choice cannot change runtime behavior.
+ * validation — "zod for TYPES purely") and an impl that receives Scheme values
+ * as-is (bound as a first-class ANativeProcedure — capability.ts). Native means
+ * the schema choice cannot change runtime behavior.
  */
 
 import foldCase from "fold-case";
@@ -201,8 +202,8 @@ export default new EnvCapability("scheme/strings", {
     // Substring search. `string-contains` is SRFI-13: the index of the first
     // occurrence of `sub` in `str`, or #f when absent. (#f is the ONLY false value
     // in Scheme — an index of 0 is truthy — so `(if (string-contains h n) …)` reads
-    // naturally.) `string-contains?` is the boolean predicate the same way `member?`
-    // pairs with `member`. Both carry the lineage of the strings they searched, so a
+    // naturally.) `string-contains?` is its boolean-predicate twin (the `?`-suffix
+    // predicate convention). Both carry the lineage of the strings they searched, so a
     // "this name contains 'Alloy'" decision over an evidence read stays grounded.
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f`(
       { input: [z.string, z.string], output: [z.union([z.bigint, z.boolean])] },
@@ -359,7 +360,8 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     // ---------------------------------------------------------------------
-    // `concat`/`join`/`split` are LIPS-era names, kept as extensions; `substring`
+    // `concat`/`join` are LIPS-era names, kept as extensions (`split` is NOT bound
+    // in this pack — `string-split` lives in srfi-13.ts); `substring`
     // and `string->number` are genuine R7RS. `native` means the (identity) zod
     // contract never runs — the impls receive Scheme values directly.
     // ---------------------------------------------------------------------

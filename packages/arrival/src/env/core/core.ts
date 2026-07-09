@@ -62,11 +62,10 @@ export default new EnvCapability("scheme/core", {
     // the optional name hint is a raw symbol NAME (string/symbol/number), an ASymbol
     // wrapper, or null — NOT a boxed SchemeValue (gensym predates the union and threads
     // raw names). Output is the freshly-minted ASymbol.
-    // `type`: the blind `z.custom<…>()` name-hint slot is UNREPRESENTABLE, so the harvest
-    // (schema-to-ts.ts `signatureOf`) would throw on it and degrade the WHOLE signature to
-    // the catch-all `(...args: unknown[]) => unknown`. Assert the model-facing shape the
-    // schema can't itself express: an optional string name hint in, a fresh symbol (string
-    // image, per z.symbol's own IMAGE_BY_NAME entry) out.
+    // `type`: `z.symbol` IS a registered leaf (schema-to-ts.ts's IMAGE_BY_NAME maps it to a
+    // string image), so the harvest wouldn't degrade to the catch-all here. The explicit
+    // `type:` still pins the exact model-facing shape: an optional string name hint in, a
+    // fresh symbol (string image) out.
     gensym: symbol.native`gensym: a fresh uninterned symbol (optional name hint)`(
       {
         input: [z.symbol.optional()],

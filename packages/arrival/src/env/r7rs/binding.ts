@@ -7,7 +7,8 @@
 // genuine TODO, not a purity omission. When added it belongs in this pack.
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this capability's prelude and evals
-// it (via initBridge's assembleEnv), so this module is the sole definition site.
+// it (via ensureBaseAssembled's assembleEnv), so this module is the sole
+// definition site.
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";

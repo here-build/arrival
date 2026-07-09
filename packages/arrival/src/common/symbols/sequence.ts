@@ -33,8 +33,9 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // Erased to the def's stored shape — SequenceSymbolDef.run is deliberately non-generic
       // (the same erasure boundary rosetta.ts's `rawImpl` crosses). By construction, the sliced
       // args array always matches `DecodedArgs<I,"scheme">`.
-      // Stamp fanout on the bound fn only when the contract declares it: cell-less packs bind
-      // `def.run` raw, so the lineage classifier reads `.fanout` off `env.get(op)` directly.
+      // Stamp fanout on the returned `run` fn only when the contract declares it: capability.ts
+      // wraps `run` into a bound ANativeProcedure and copies this marker onto it, so the
+      // lineage classifier reads `.fanout` off `env.get(op)` from that bound value.
       run: Object.assign(
         function (this: CallCtx, ...args: unknown[]) {
           return impl(args as DecodedArgs<I, "scheme">, this.runCtx);

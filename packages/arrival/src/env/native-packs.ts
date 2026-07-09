@@ -7,7 +7,8 @@
 // `assembleEnv` as the first step of the lazy runtime bootstrap — it dynamic-imports
 // this roster, so this file must stay exec-edge-free (near-leaf; no module-eval cycle).
 // Each member is a live `EnvCapability` — the sole home of its domain's primitives,
-// symbol-only (`{ value }` bindings, no prelude, no resources, no deps).
+// symbol-only (baked `symbol.native`/`symbol.rosetta` bindings, no prelude, no resources,
+// no deps).
 //
 // Sibling of `BASE_PACKS` (the `.scm`-defined packs assembled onto `user_env`).
 // Together they are the full pack-assembled surface. This roster ABSORBED bridge.ts's

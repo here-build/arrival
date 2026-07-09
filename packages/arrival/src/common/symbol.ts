@@ -14,9 +14,11 @@
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
 // live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under `vitest --typecheck`
-// (the `test-d` script / vitest.typecheck.config.ts) — both package tsconfigs EXCLUDE the test
-// dirs, so a plain `*.test.ts` would never be typechecked; `tsconfig.typecheck.json` re-includes
-// the `*.test-d.ts` proofs, so a type regression fails CI as a real test instead of riding the build.
+// (the `test-d` script / vitest.typecheck.config.ts) — both package tsconfigs EXCLUDE `*.test-d.ts`
+// specifically (tsconfig.json typechecks ordinary `*.test.ts` directly via `tsc --noEmit`), so a
+// `.test-d.ts` proof would never be typechecked by the normal build/typecheck flow;
+// `tsconfig.typecheck.json` re-includes the `*.test-d.ts` proofs, so a type regression fails CI as
+// a real test instead of riding the build.
 
 // The authored-extension symbol API. `import { symbol } from "@here.build/arrival/symbol"` (or
 // the package root) → `symbol.native` + a `name: doc` template + `(contract, impl)`.

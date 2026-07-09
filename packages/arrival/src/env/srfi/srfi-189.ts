@@ -1,7 +1,7 @@
 // SRFI-189 — Maybe & Either. Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles `SRFI189_SCM` and
-// evals it (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
+// (via initBridge's assembleEnv), so this module is the sole definition site.
 import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/srfi-189", {

@@ -342,10 +342,12 @@ function describeSuggestion(entry: WellKnownSymbolEntry): string {
  * `raw.startsWith(...) && raw.length > bareWall.length` string-length check) — a
  * wording change to either `.message` or `.publicMessage` can no longer silently
  * break that decision, because `enriched` doesn't depend on either string's
- * content. (`second-foundation/arrival-manifold`'s `manifold-tool.ts` currently
- * does exactly that sniff, keyed off `.message`; wiring it to read `.enriched`
- * instead is a separate, later change — see
- * docs/working-proposals/arrival-manifold-decomposition-2026-07-05.md §5.4.)
+ * content. (As of 2026-07-05, `second-foundation/arrival-manifold`'s
+ * `manifold-tool.ts` did exactly that sniff, keyed off `.message` — see
+ * docs/working-proposals/arrival-manifold-decomposition-2026-07-05.md §5.4. That
+ * sniff is no longer present in the current `manifold-tool.ts` after arrival-manifold's
+ * later rebuild; if a consumer still needs this decision, re-locate the sniff site
+ * before assuming `.enriched` is unwired.)
  */
 export function unboundVariableError(name: string): Error & { publicMessage: string; enriched: boolean } {
   const hint = richErrorFor(name);

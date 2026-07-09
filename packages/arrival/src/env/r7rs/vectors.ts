@@ -231,7 +231,7 @@ export default new EnvCapability("scheme/vectors", {
           result.push(applyCallback(proc, elements, runCtx) as SchemeValue);
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
-        // the list \`map\` (stdlib.ts): if any slot is a promise, await them all so the
+        // the list \`map\` (r7rs/lists.ts): if any slot is a promise, await them all so the
         // returned vector holds SETTLED values (not "[object Promise]") and provenance
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
         if (result.some(is_promise)) {

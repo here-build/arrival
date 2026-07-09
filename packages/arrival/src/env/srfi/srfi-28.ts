@@ -1,8 +1,7 @@
 // SRFI-28 — basic format strings (the string-destination subset). Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: this module is the sole definition site. It is NOT registered in
-// `srfi/index.ts` / `base-packs.ts` — an orchestrator wires it in later; a consumer
-// assembles it onto an env explicitly (see the test).
+// SINGLE SOURCE: this module is the sole definition site. It is registered in
+// `srfi/index.ts` (`allSrfi`) and reaches the base env via `base-packs.ts`.
 //
 // WHY: LLM agents in our sandboxed tool-calling REPL reach for `(format ...)` from
 // training data (Common-Lisp / SRFI-28 idioms). Left unbound, a model that wants to

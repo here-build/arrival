@@ -6,8 +6,9 @@
 //   ./stubs.ts    — the EnvCapability: well-known-but-unimplemented symbols,
 //                   bound as `symbol.notImplemented` teaching doors. Registered
 //                   in `base-packs.ts` (BASE_PACKS), same as any other pack.
-//   ./registry.ts — the well-known-symbol DATA TABLE + `richErrorFor`, consumed
-//                   directly by the arrival-side unbound-variable throw sites
+//   ./registry.ts — the well-known-symbol DATA TABLE + `richErrorFor`, wrapped by
+//                   `unboundVariableError` and imported directly (not through this
+//                   barrel) by the arrival-side unbound-variable throw sites
 //                   (`Environment.ts`, `eval/Resolver.ts`, `eval/evaluator.ts`) to
 //                   enrich "Unbound variable" with a "did you mean `reduce`?"
 //                   hint when the miss is a close typo of a famous symbol —

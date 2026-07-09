@@ -206,10 +206,10 @@ export default new EnvCapability("scheme/equality", {
     // it — a genuine gap, not a design omission (see `env/polyglot-rich-errors/stubs.ts`'s
     // header for that distinction). A native dict is an `ADict` instance
     // (native-dict-provenance.md); the fallback below still recognizes a genuinely
-    // foreign, dict-SHAPED `AJSObject` (or a bare plain-proto object) — same
-    // `readMember` (membrane.ts) disambiguation, kept so a dict-shaped value from a
-    // tool result still answers `dict?` without being an `ADict`. An array, a scalar,
-    // or any other foreign class instance is not a dict.
+    // foreign `AJSObject` (a borrowed JS object — arrays box separately as `AJSArray`,
+    // so they never reach this branch), kept so a dict-shaped value from a tool result
+    // still answers `dict?` without being an `ADict`. A scalar, an array, or any other
+    // non-object foreign value is not a dict.
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         { input: [z.value], output: [z.boolean] },

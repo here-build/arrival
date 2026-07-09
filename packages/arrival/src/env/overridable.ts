@@ -51,9 +51,9 @@ import { z } from "zod";
 
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
-// The scheme-aware zod vocabulary — only the identity carriers (`sz.value`/`sz.symbol`) are
-// needed here (the verb decodes/encodes manually via `schemeToJs`/`jsToScheme`; no codec crossing
-// at the contract level).
+// The scheme-aware zod vocabulary — only the identity carrier `sz.value` is needed here (the
+// verb decodes/encodes manually via `schemeToJs`/`jsToScheme`; no codec crossing at the contract
+// level). NOT `sz.symbol` for the `name` param — see that param's own comment below for why.
 import * as sz from "../common/scheme-zod.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../common/schema-tag.js";
@@ -65,7 +65,8 @@ import { schemaCapability } from "./schema.js";
  *  into the canonical JS tagged-list form (a bare string, or an array the s/* constructors
  *  build) — to the zod schema that validates a JS value against it. Routes through the ONE
  *  canonical lowering (`tagToJsonSchema`) + zod's own JSON-Schema reconstruction — the same
- *  bridge arrival-chain's `schemaToZod` uses — so this capability can't drift from either the
+ *  bridge `@here.build/arrival-schema-zod`'s `schemaToZod` uses (arrival-chain re-exports it,
+ *  but that's no longer where it's defined) — so this capability can't drift from either the
  *  wire schema or the s/* authoring surface: EVERY tag the schema DSL can express (object,
  *  array, enum, bare primitive, the `/optional` compositor) is accepted, not just a hand-rolled
  *  scalar subset. A tag `tagToJsonSchema`/`z.fromJSONSchema` can't turn into a real validator
