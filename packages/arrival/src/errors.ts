@@ -388,6 +388,32 @@ export class PreludeMembershipError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: WireLocalityError — a wire body's free variable is not accounted for (Q8a).
+//
+// docs/PROVENANCE.md §1 CHOSEN: "a wire is a closed arrival lambda … FV(body) ⊆
+// params ∪ prelude-names (checked at emission — wire-locality law). Locality is
+// thereby syntactic; declared-vs-actual consumption drift is unrepresentable."
+// Thrown by `provenance/uneval.ts`'s `unevalWire` — the EMISSION-time check, not
+// a post-hoc audit. errors-as-doors: names the variable, where, and the route
+// (a port-reaching define must be a wireframe node, never a captured value).
+// -------------------------------------------------------------------------
+export class WireLocalityError extends ArrivalError {
+  static [CLASS] = "wire-locality-error";
+  public readonly name = "WireLocalityError";
+
+  constructor(
+    /** The offending free variable name. */
+    public readonly variable: string,
+    /** `scopeId` of the wire body's surface form — where the wire was cut. */
+    public readonly span: string,
+    /** The teaching explanation — why this name cannot ride the wire. */
+    public readonly reason: string,
+  ) {
+    super(`wire-locality: free variable "${variable}" in the wire at ${span} — ${reason}`);
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: ProvenanceShadowDivergence — static fullCone vs the eager stamp disagree (a named bug).
 // -------------------------------------------------------------------------
 export class ProvenanceShadowDivergence extends Error {

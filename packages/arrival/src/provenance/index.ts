@@ -80,7 +80,8 @@ export {
   resolveReadIds,
   type Slice,
 } from "./slice.js";
-export { buildUneval, type Uneval, type UnevalContainer } from "./uneval.js";
+export { buildUneval, unevalWire, type Uneval, type UnevalContainer, type WireEmission } from "./uneval.js";
+export * from "./wireframe/index.js";
 export {
   classifyProgramPrelude,
   assertPreludeEligible,

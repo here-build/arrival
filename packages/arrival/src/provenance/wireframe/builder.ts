@@ -1,0 +1,584 @@
+/**
+ * Q8a (PROVENANCE-PLAN.md wave 5) — THE WIREFRAME BUILDER CORE. `classify()`
+ * generalized whole-program (execution-plan-wireframe.md §2, AS AMENDED by
+ * docs/PROVENANCE.md §1): build the PROSPECTIVE template graph over a program's
+ * top-level defines + main expression.
+ *
+ * THE CUT-AND-CLOSE ALGORITHM. Walk each surface expression; every DESIGNATED
+ * subterm (§1: a membrane-crossing port, a PORT-COUPLED mux, a fan instantiation
+ * point, a binder, a call to a port-reaching define) becomes a NODE; the maximal
+ * pure residue around the cuts is ONE WIRE — `unevalWire` closes it into a
+ * lambda-lifted arrival lambda whose params are exactly its ingress (cut node
+ * egresses + env-supplied slots), with wire-locality enforced at emission. This is
+ * §1's collapse rule operationally: "maximal pure connected subgraphs fold to one
+ * wire. Ports break segments by definition, so a wire body structurally contains
+ * no source, sink, or port-coupled mux — wire purity is by construction."
+ *
+ * SELECTOR-CONE REACHABILITY IS OWNED HERE (plan Q8a amendment 1): Q3's classifier
+ * supplies DECLARATIONS only; whether a mux stays a node is builder analysis. A mux
+ * is port-coupled iff its selector's backward cone reaches a port. Computed as
+ * `reachesPort(classify(selector, reachClassifier, subst))` where
+ *   - `subst` is the builder's own let-walk substitution (the same map
+ *     `classifyLet` builds internally, threaded in via classify's Q8a param) — so
+ *     `(let ((y (src))) (if y …))` couples through the binding;
+ *   - `classify`'s `field` arm descends the FOCUSED child only (siblings pruned
+ *     structurally) — `walk()`'s field-arm demand pattern, EXTENDED to selector
+ *     reachability rather than rebuilt (amendment 1's instruction): a selector
+ *     `(:flag (src))` couples, `(:flag cfg)` over a plain slot does not;
+ *   - `reachClassifier` additionally lowers PORT-REACHING DEFINE names to `opaque`
+ *     (reachesPort's conservative arm), closing the transitive gap the prelude
+ *     partition's fixpoint closed one layer down: `(if (helper x) …)` couples when
+ *     `helper` wraps a fetch.
+ * A pure-selector mux collapses INTO its wire (§1 A2): its decision is a
+ * deterministic function of frozen ingress, rederived by γ — the wire's params are
+ * its full FV set, BOTH arms' ingress included (the m3 precision trade; do not
+ * "fix" by re-recording).
+ *
+ * I5 EXTERIOR COLLAPSE (§3): a fan is a REGION HOST and presents as ONE node from
+ * the enclosing graph; the callback body's own wireframe is the region's private
+ * `template` interior (replayed on demand), never spliced into G. No region
+ * field-ports exist (I5 LIMIT: field-demand at a region boundary answers by
+ * REPLAY, not by records).
+ *
+ * FIRST-LANDING SCOPE (plan: "loop-free + fan acceptable"):
+ *   - binder{cycles} nodes (named-let / do / declared `loop`) are DESIGNATED but
+ *     DEFERRED — the node exists, its interior/backedge wiring is Q8a′; a port
+ *     inside a deferred loop body is not yet wireframed (loop-heavy programs gate
+ *     on Q8a′ BEFORE emission, per the plan's hard-gate note).
+ *   - A local closure (`letrec`-bound lambda) wrapping a port under-designates a
+ *     mux whose selector calls it (classify never expands call sites into callee
+ *     bodies): the port itself is still cut to a node, so replay stays sound (the
+ *     abstract cone includes its ingress); designation precision re-audits at Q9's
+ *     agreement corpus.
+ *   - A sink cut in non-tail `begin` position leaves the wire a sequencing
+ *     reference to the sink node (D6 territory) — tolerated, not modeled.
+ *   - Hash/path keying is Q8b; struct-fact wires are Q8c.
+ */
+import type { SchemeValue } from "../../values/types.js";
+import { APair } from "../../values/primitives/APair.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { classify, type Classifier, type LineageNode, type Subst } from "../../values/lineage.js";
+import type { CallbackRoles } from "../../common/symbols/_bake.js";
+import { classifyProgramPrelude, buildPreludeSource, reachesPort } from "../prelude.js";
+import { defineNameOf } from "../slice.js";
+import { scopeId } from "../scope-id.js";
+import { unevalWire } from "../uneval.js";
+import type {
+  DefineTemplate,
+  Wire,
+  WireConsumer,
+  WireFrame,
+  WireFrameEntry,
+  WireframeGraph,
+  WireframeNode,
+  WireframeProgram,
+} from "./types.js";
+
+export interface WireframeBuildOptions {
+  /** Q3's declaration-driven classifier — the ONE role read (`.provenanceRole`). */
+  readonly classifier: Classifier;
+  /** Is this name resolvable in the hermetic BASE env (natives, macros, base
+   *  packs)? Production derives it from the sealed base chain; tests use a set. */
+  readonly isBaseName: (name: string) => boolean;
+  /** Q4's contract-extracted callback roles for a host verb, when available —
+   *  stamped onto fan nodes as data (never consulted for designation here). */
+  readonly callbackRolesOf?: (op: string) => CallbackRoles | undefined;
+}
+
+/** Shared, immutable per-program context every GraphBuilder reads. */
+interface BuildCtx {
+  readonly classifier: Classifier;
+  /** `classifier` widened for REACHABILITY: a port-reaching define name lowers to
+   *  `opaque` (reachesPort's conservative arm) — the transitive coupling read. */
+  readonly reachClassifier: Classifier;
+  readonly preludeNames: ReadonlySet<string>;
+  readonly materialNames: ReadonlySet<string>;
+  readonly isBaseName: (name: string) => boolean;
+  readonly callbackRolesOf?: (op: string) => CallbackRoles | undefined;
+}
+
+/** The walk's lexical context: `subst` feeds classify-based selector reachability
+ *  (let transparency); `frames` are the let-family wrappers `unevalWire` re-wraps. */
+interface WalkEnv {
+  readonly subst: Subst;
+  readonly frames: readonly WireFrame[];
+}
+
+// ── local surface helpers (lineage.ts keeps its own private copies; same shapes) ──
+
+function opName(x: unknown): string {
+  const v = (x as { valueOf?: () => unknown })?.valueOf?.();
+  return typeof v === "string" || typeof v === "symbol" ? String(v) : String(x);
+}
+
+function operands(app: APair<SchemeValue, SchemeValue>): unknown[] {
+  const out: unknown[] = [];
+  let n: unknown = app.cdr;
+  while (n instanceof APair) {
+    out.push(n.car);
+    n = n.cdr;
+  }
+  return out;
+}
+
+/** Formal names of a lambda formals list (positional symbols; a variadic/dotted
+ *  tail symbol is included — it binds too). */
+function lambdaParams(formals: unknown): string[] {
+  const out: string[] = [];
+  let n: unknown = formals;
+  while (n instanceof APair) {
+    if (n.car instanceof ASymbol) out.push(opName(n.car));
+    n = n.cdr;
+  }
+  if (n instanceof ASymbol) out.push(opName(n));
+  return out;
+}
+
+const LEAF = (slot: string): LineageNode => ({ kind: "leaf", slot });
+
+/** `(let ((a e)…) …)` binding entries as {name, rhs} pairs. */
+function letEntries(bindings: unknown): WireFrameEntry[] {
+  const out: WireFrameEntry[] = [];
+  let n: unknown = bindings;
+  while (n instanceof APair) {
+    const b = n.car;
+    if (b instanceof APair && b.car instanceof ASymbol) {
+      out.push({ name: opName(b.car), rhs: b.cdr instanceof APair ? b.cdr.car : undefined });
+    }
+    n = n.cdr;
+  }
+  return out;
+}
+
+/** Elements of a proper pair chain. */
+function chainOf(n: unknown): unknown[] {
+  const out: unknown[] = [];
+  let cur: unknown = n;
+  while (cur instanceof APair) {
+    out.push(cur.car);
+    cur = cur.cdr;
+  }
+  return out;
+}
+
+/** One graph under construction (the main program, a define template, or a fan
+ *  region's interior — each region interior is its OWN GraphBuilder: I5's collapse
+ *  is structural, interior nodes cannot leak into the enclosing graph). */
+class GraphBuilder {
+  private readonly nodes: WireframeNode[] = [];
+  private readonly wires: Wire[] = [];
+  /** Designated surface subterm → node id, shared across this graph's emissions
+   *  (a cut made while walking a let RHS is visible to every wire wrapped in that
+   *  frame). */
+  private readonly cuts = new Map<unknown, number>();
+  private egress: number | null = null;
+
+  constructor(private readonly bctx: BuildCtx) {}
+
+  finish(): WireframeGraph {
+    return { nodes: this.nodes, wires: this.wires, egress: this.egress };
+  }
+
+  private addNode(node: WireframeNode): number {
+    this.nodes.push(node);
+    return this.nodes.length - 1;
+  }
+
+  /** Walk a top-level form whose VALUE is dropped — designated nodes (and their
+   *  ingress wires) still land; the pure residue emits no wire (dead by D6's
+   *  root-binder sequencing, which is prospective-only). */
+  walkDropped(expr: unknown, env: WalkEnv): void {
+    this.walkForCuts(expr, env);
+  }
+
+  /** Wireframe the graph's VALUE expression: an out-port node + the egress wire.
+   *  A form that IS entirely a sink keeps `egress` null (§2: a sink is a port with
+   *  no egress wire — nothing flows onward). */
+  emitEgress(expr: unknown, env: WalkEnv): void {
+    this.walkForCuts(expr, env);
+    const cutId = this.cuts.get(expr);
+    if (cutId !== undefined && this.nodes[cutId].kind === "sink") return;
+    const out = this.addNode({ kind: "port", direction: "out", span: scopeId(expr) });
+    this.egress = out;
+    this.emitWire(expr, { node: out, slot: "out" }, env);
+  }
+
+  /** Close the maximal pure residue of `expr` into ONE wire feeding `consumer`. */
+  private emitWire(expr: unknown, consumer: WireConsumer, env: WalkEnv): void {
+    this.walkForCuts(expr, env);
+    const emitted = unevalWire({
+      expr,
+      frames: env.frames,
+      cuts: this.cuts,
+      preludeNames: this.bctx.preludeNames,
+      materialNames: this.bctx.materialNames,
+      isBaseName: this.bctx.isBaseName,
+    });
+    this.wires.push({ ...emitted, consumer });
+  }
+
+  /** Selector-cone reachability (Q8a amendment 1) — see the file header. */
+  private selectorReachesPort(selector: unknown, env: WalkEnv): boolean {
+    return reachesPort(classify(selector as SchemeValue, this.bctx.reachClassifier, env.subst));
+  }
+
+  // ── the designation walk ────────────────────────────────────────────────────
+
+  /** Find and BUILD every designated subterm under `expr` (registering it in
+   *  `cuts`); descend nothing already cut. Pure residue is left in place for the
+   *  enclosing `emitWire` to close. */
+  private walkForCuts(expr: unknown, env: WalkEnv): void {
+    if (this.cuts.has(expr)) return;
+    if (!(expr instanceof APair)) return; // literals & bare symbols are wire material
+
+    const head = expr.car;
+    if (head instanceof ASymbol) {
+      const form = opName(head);
+      if (!env.subst.has(form)) {
+        switch (form) {
+          case "quote":
+            return; // datum space — no designation inside
+          case "quasiquote":
+            this.walkQuasi(expr.cdr instanceof APair ? expr.cdr.car : undefined, 1, env);
+            return;
+          case "if":
+          case "when":
+          case "unless": {
+            const rest = expr.cdr;
+            if (!(rest instanceof APair)) return;
+            const test = rest.car;
+            if (this.selectorReachesPort(test, env)) {
+              this.cuts.set(expr, this.buildMux(expr, rest, form, env));
+              return;
+            }
+            // Pure-selector mux — collapses INTO the wire (§1 A2); keep walking for
+            // designated subterms in selector/arms (they cut out of the wire).
+            this.walkForCuts(test, env);
+            for (const arm of chainOf(rest.cdr)) this.walkForCuts(arm, env);
+            return;
+          }
+          case "cond": {
+            const clauses = chainOf(expr.cdr).filter((c): c is APair<SchemeValue, SchemeValue> => c instanceof APair);
+            const coupled = clauses.some(
+              (c) => !(c.car instanceof ASymbol && opName(c.car) === "else") && this.selectorReachesPort(c.car, env),
+            );
+            if (coupled) {
+              this.cuts.set(expr, this.buildCondMux(expr, clauses, env));
+              return;
+            }
+            for (const clause of clauses) {
+              if (!(clause.car instanceof ASymbol && opName(clause.car) === "else")) this.walkForCuts(clause.car, env);
+              for (const bodyForm of chainOf(clause.cdr)) {
+                if (bodyForm instanceof ASymbol && opName(bodyForm) === "=>") continue;
+                this.walkForCuts(bodyForm, env);
+              }
+            }
+            return;
+          }
+          case "let":
+          case "let*":
+          case "letrec":
+          case "letrec*":
+            this.walkLet(expr, form as "let" | "let*" | "letrec" | "letrec*", env);
+            return;
+          case "do":
+            // Iterative loop — designated binder{cycles}; interior is Q8a′'s.
+            this.cuts.set(expr, this.buildBinder(expr, "do"));
+            return;
+          case "begin":
+          case "and":
+          case "or":
+            for (const sub of chainOf(expr.cdr)) this.walkForCuts(sub, env);
+            return;
+          case "lambda": {
+            const rest = expr.cdr;
+            if (!(rest instanceof APair)) return;
+            const extended = new Map(env.subst);
+            for (const p of lambdaParams(rest.car)) extended.set(p, LEAF(p));
+            const inner: WalkEnv = { subst: extended, frames: env.frames };
+            for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, inner);
+            return;
+          }
+          case "define": {
+            // Interior define (rare in wire space) — walk its value/body forms.
+            const rest = expr.cdr;
+            if (!(rest instanceof APair)) return;
+            const extended = new Map(env.subst);
+            if (rest.car instanceof APair) for (const p of lambdaParams(rest.car.cdr)) extended.set(p, LEAF(p));
+            const inner: WalkEnv = { subst: extended, frames: env.frames };
+            for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, inner);
+            return;
+          }
+          default:
+            break; // not a modeled special form — application path below
+        }
+      }
+    }
+
+    // ── application: (op . args) ──
+    if (head instanceof APair) {
+      // Computed operator — walk it and the args; no designation for the call itself
+      // (classify's A21 HOF hole; conservative wire material).
+      this.walkForCuts(head, env);
+      for (const a of operands(expr)) this.walkForCuts(a, env);
+      return;
+    }
+    if (!(head instanceof ASymbol)) {
+      for (const a of operands(expr)) this.walkForCuts(a, env);
+      return;
+    }
+
+    const op = opName(head);
+    if (!env.subst.has(op)) {
+      // A call to a port-reaching top-level define — its call sites reference its
+      // template subgraph (§1).
+      if (this.bctx.materialNames.has(op)) {
+        this.cuts.set(expr, this.buildArgNode({ kind: "template-ref", name: op, span: scopeId(expr) }, expr, env));
+        return;
+      }
+      const role = this.bctx.classifier.roleOf(op);
+      switch (role) {
+        case "source":
+        case "sink":
+        case "transparent":
+        case "opaque":
+          this.cuts.set(expr, this.buildArgNode({ kind: role, op, span: scopeId(expr) }, expr, env));
+          return;
+        case "fan":
+          this.cuts.set(expr, this.buildFan(expr, op, env));
+          return;
+        case "loop":
+          this.cuts.set(expr, this.buildBinder(expr, op));
+          return;
+        default:
+          break; // pipe / undefined — pure application, wire material
+      }
+    }
+    for (const a of operands(expr)) this.walkForCuts(a, env);
+  }
+
+  /** Quasiquote space: only `unquote`/`unquote-splicing` bodies re-enter expression
+   *  space (depth-counted, mirroring free-vars.ts's walkQuasi). */
+  private walkQuasi(n: unknown, depth: number, env: WalkEnv): void {
+    if (!(n instanceof APair)) return;
+    if (n.car instanceof ASymbol) {
+      const hn = opName(n.car);
+      if (hn === "unquote" || hn === "unquote-splicing") {
+        const arg = n.cdr instanceof APair ? n.cdr.car : undefined;
+        if (depth === 1) this.walkForCuts(arg, env);
+        else this.walkQuasi(arg, depth - 1, env);
+        return;
+      }
+      if (hn === "quasiquote") {
+        this.walkQuasi(n.cdr instanceof APair ? n.cdr.car : undefined, depth + 1, env);
+        return;
+      }
+    }
+    let cur: unknown = n;
+    while (cur instanceof APair) {
+      this.walkQuasi(cur.car, depth, env);
+      cur = cur.cdr;
+    }
+  }
+
+  /** let-family: TRANSPARENT to designation (mirrors `classifyLet`) — walk RHSs,
+   *  thread the substitution per kind, extend the frame stack for the body. A named
+   *  let is a recursive binder → designated, deferred to Q8a′. */
+  private walkLet(expr: APair<SchemeValue, SchemeValue>, kind: "let" | "let*" | "letrec" | "letrec*", env: WalkEnv): void {
+    const rest = expr.cdr;
+    if (!(rest instanceof APair)) return;
+    if (rest.car instanceof ASymbol) {
+      // named let — binder{cycles:true}
+      this.cuts.set(expr, this.buildBinder(expr, "named-let"));
+      return;
+    }
+    const entries = letEntries(rest.car);
+    const sequential = kind !== "let";
+    const extended = new Map(env.subst);
+    const partial: WireFrameEntry[] = [];
+    for (const entry of entries) {
+      // Walk the RHS for designated subterms. A sequential form's later RHS sits
+      // under the earlier entries (frame + subst); a parallel let's RHSs see the
+      // outer scope only.
+      const rhsEnv: WalkEnv = sequential
+        ? { subst: extended, frames: [...env.frames, { kind, entries: [...partial] }] }
+        : env;
+      this.walkForCuts(entry.rhs, rhsEnv);
+      const rhsSubst = sequential ? extended : env.subst;
+      const rhsNode: LineageNode =
+        entry.rhs === undefined
+          ? { kind: "literal" }
+          : classify(entry.rhs as SchemeValue, this.bctx.reachClassifier, rhsSubst);
+      extended.set(entry.name, rhsNode);
+      partial.push(entry);
+    }
+    const bodyEnv: WalkEnv = { subst: extended, frames: [...env.frames, { kind, entries }] };
+    for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, bodyEnv);
+  }
+
+  // ── node constructors ───────────────────────────────────────────────────────
+
+  /** A port/opaque/template-ref node: every operand becomes an ingress wire. */
+  private buildArgNode(node: WireframeNode, expr: APair<SchemeValue, SchemeValue>, env: WalkEnv): number {
+    const id = this.addNode(node);
+    operands(expr).forEach((a, i) => this.emitWire(a, { node: id, slot: `arg${i}` }, env));
+    return id;
+  }
+
+  /** A PORT-COUPLED mux (if/when/unless): selector wire + one wire per arm. */
+  private buildMux(
+    expr: APair<SchemeValue, SchemeValue>,
+    rest: APair<SchemeValue, SchemeValue>,
+    form: string,
+    env: WalkEnv,
+  ): number {
+    const test = rest.car;
+    // if: arms = [then, else?]; when/unless: the body's VALUE is its last form
+    // (earlier forms walk value-dropped).
+    const bodyForms = chainOf(rest.cdr);
+    const arms = form === "if" ? bodyForms : bodyForms.length > 0 ? [bodyForms[bodyForms.length - 1]] : [];
+    if (form !== "if") for (const dropped of bodyForms.slice(0, -1)) this.walkForCuts(dropped, env);
+    const id = this.addNode({ kind: "mux", op: form, span: scopeId(expr), arms: arms.length });
+    this.emitWire(test, { node: id, slot: "selector" }, env);
+    arms.forEach((arm, k) => this.emitWire(arm, { node: id, slot: `arm${k}` }, env));
+    return id;
+  }
+
+  /** A PORT-COUPLED cond: one selector wire per non-else test, one wire per arm. */
+  private buildCondMux(
+    expr: APair<SchemeValue, SchemeValue>,
+    clauses: readonly APair<SchemeValue, SchemeValue>[],
+    env: WalkEnv,
+  ): number {
+    const id = this.addNode({ kind: "mux", op: "cond", span: scopeId(expr), arms: clauses.length });
+    let sel = 0;
+    clauses.forEach((clause, k) => {
+      const isElse = clause.car instanceof ASymbol && opName(clause.car) === "else";
+      if (!isElse) this.emitWire(clause.car, { node: id, slot: `selector${sel++}` }, env);
+      const body = chainOf(clause.cdr).filter((f) => !(f instanceof ASymbol && opName(f) === "=>"));
+      // Arm value: the last body form; a `(test)` clause's value is the test itself.
+      // (A `=>` clause's receiver is approximated as the arm — its applied-to-test
+      // threading is classifyCond's `combine("=>")`, deferred here.)
+      const arm = body.length > 0 ? body[body.length - 1] : clause.car;
+      for (const dropped of body.slice(0, -1)) this.walkForCuts(dropped, env);
+      this.emitWire(arm, { node: id, slot: `arm${k}` }, env);
+    });
+    return id;
+  }
+
+  /** A fan instantiation point = region host (I5: ONE node from G; the callback
+   *  body's wireframe is the region's PRIVATE template interior). */
+  private buildFan(expr: APair<SchemeValue, SchemeValue>, op: string, env: WalkEnv): number {
+    const args = operands(expr);
+    const fn = args[0];
+    // Mirrors lineage.ts's fan arm: map/vector-map preserve length; filter does not.
+    const lengthPreserving = op === "map" || op === "vector-map";
+    let template: WireframeGraph | undefined;
+    let elementParams: string[] | undefined;
+    let fnOp: string | undefined;
+    if (fn instanceof APair && fn.car instanceof ASymbol && opName(fn.car) === "lambda" && fn.cdr instanceof APair) {
+      const params = lambdaParams(fn.cdr.car);
+      const interior = new GraphBuilder(this.bctx);
+      const intSubst = new Map(env.subst);
+      for (const p of params) intSubst.set(p, LEAF(p));
+      // frames: [] — a template wire's slot params beyond `elementParams` are
+      // region CAPTURES by name (sealed at region open, I2); an enclosing let
+      // binding is a capture from the region's view, never an inlined frame.
+      const intEnv: WalkEnv = { subst: intSubst, frames: [] };
+      const bodyForms = chainOf(fn.cdr.cdr);
+      for (const dropped of bodyForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
+      if (bodyForms.length > 0) interior.emitEgress(bodyForms[bodyForms.length - 1], intEnv);
+      template = interior.finish();
+      elementParams = params;
+    } else if (fn instanceof ASymbol) {
+      fnOp = opName(fn);
+    } else if (fn !== undefined) {
+      this.walkForCuts(fn, env); // computed callback — designated subterms still land
+    }
+    const roles = this.bctx.callbackRolesOf?.(op);
+    const id = this.addNode({
+      kind: "fan",
+      op,
+      span: scopeId(expr),
+      lengthPreserving,
+      ...(template !== undefined ? { template } : {}),
+      ...(elementParams !== undefined ? { elementParams } : {}),
+      ...(fnOp !== undefined ? { fnOp } : {}),
+      ...(roles !== undefined ? { callbackRoles: roles } : {}),
+    });
+    // The fanned container(s): (map f xs) → slot "source"; (map f xs ys) → +"source1".
+    args.slice(1).forEach((a, i) => this.emitWire(a, { node: id, slot: i === 0 ? "source" : `source${i}` }, env));
+    return id;
+  }
+
+  /** A loop-shaped binder — designated NOW, wired at Q8a′ (backedge topology).
+   *  Deliberately NO interior walk: half-wired loop interiors would present loop
+   *  variables as program ingress; the plan gates emission on Q8a′ instead. */
+  private buildBinder(expr: unknown, op: string): number {
+    return this.addNode({ kind: "binder", op, span: scopeId(expr), cycles: true, deferred: "Q8a′" });
+  }
+}
+
+/** Extract a wireframe-material define's formals + body forms. Handles
+ *  `(define (name . formals) body…)` and `(define name (lambda formals body…))`;
+ *  a value define with a non-lambda RHS is a zero-param template over its RHS. */
+function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[]; bodyForms: unknown[] } {
+  const rest = form.cdr;
+  if (!(rest instanceof APair)) return { params: [], bodyForms: [] }; // malformed — defineNameOf-guarded upstream
+  const target = rest.car;
+  if (target instanceof APair) return { params: lambdaParams(target.cdr), bodyForms: chainOf(rest.cdr) };
+  const rhs = rest.cdr instanceof APair ? rest.cdr.car : undefined;
+  if (rhs instanceof APair && rhs.car instanceof ASymbol && opName(rhs.car) === "lambda" && rhs.cdr instanceof APair) {
+    return { params: lambdaParams(rhs.cdr.car), bodyForms: chainOf(rhs.cdr.cdr) };
+  }
+  return { params: [], bodyForms: rhs === undefined ? [] : [rhs] };
+}
+
+/**
+ * Build the whole-program prospective layer (§1): partition top-level defines via
+ * Q7's prelude classifier, wireframe each PORT-REACHING define into a named
+ * template, and wireframe the main (non-define) forms — the last one's value flows
+ * to the out-port; earlier ones walk value-dropped (their ports still land).
+ */
+export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBuildOptions): WireframeProgram {
+  const membership = classifyProgramPrelude(forms, opts.classifier);
+  const preludeSource = buildPreludeSource(forms, membership);
+  const bctx: BuildCtx = {
+    classifier: opts.classifier,
+    reachClassifier: {
+      roleOf: (op) => (membership.wireframe.has(op) ? "opaque" : opts.classifier.roleOf(op)),
+    },
+    preludeNames: membership.pure,
+    materialNames: membership.wireframe,
+    isBaseName: opts.isBaseName,
+    ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}),
+  };
+
+  const templates = new Map<string, DefineTemplate>();
+  for (const form of forms) {
+    const name = defineNameOf(form);
+    if (name === null || !membership.wireframe.has(name) || !(form instanceof APair)) continue;
+    const { params, bodyForms } = defineShape(form);
+    const g = new GraphBuilder(bctx);
+    const subst = new Map<string, LineageNode>(params.map((p) => [p, LEAF(p)]));
+    const env: WalkEnv = { subst, frames: [] };
+    for (const dropped of bodyForms.slice(0, -1)) g.walkDropped(dropped, env);
+    if (bodyForms.length > 0) g.emitEgress(bodyForms[bodyForms.length - 1], env);
+    templates.set(name, { params, graph: g.finish() });
+  }
+
+  const mainForms = forms.filter((f) => defineNameOf(f) === null);
+  const main = new GraphBuilder(bctx);
+  const rootEnv: WalkEnv = { subst: new Map(), frames: [] };
+  mainForms.forEach((form, i) => {
+    if (i < mainForms.length - 1) main.walkDropped(form, rootEnv);
+    else main.emitEgress(form, rootEnv);
+  });
+
+  return {
+    prelude: { names: membership.pure, source: preludeSource },
+    membership,
+    templates,
+    main: main.finish(),
+  };
+}

@@ -50,6 +50,15 @@ export function writeForm(node: unknown): string {
   return writeDatum(node, new Set<unknown>());
 }
 
+/** `writeForm` with a SUBSTITUTION hook — the wireframe builder's serializer (Q8a). `sub` is
+ *  consulted on every node BEFORE ordinary serialization; a non-undefined return replaces that
+ *  subtree verbatim (the wire emitter substitutes each cut designated subterm with its minted
+ *  param name, so the emitted wire lambda references node egresses by parameter, never by
+ *  re-serializing the port call — docs/PROVENANCE.md §1's closed-wire-lambda rule). */
+export function writeFormWith(node: unknown, sub: (n: unknown) => string | undefined): string {
+  return writeDatum(node, new Set<unknown>(), sub);
+}
+
 /** Re-serialize an inexact/number datum to a RE-PARSEABLE numeral. JS `String()` (via the boxed
  *  `toString`) has two failure modes the reader rejects: an integer-valued inexact in exponential
  *  form gets a spurious trailing `.0` (`1.5e+300.0` — re-parses as a SYMBOL), and negative zero
@@ -63,7 +72,10 @@ function writeNumber(node: unknown): string {
   return String(node).replace(/(e[+-]?\d+)\.0$/i, "$1");
 }
 
-function writeDatum(node: unknown, seen: Set<unknown>): string {
+function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => string | undefined): string {
+  // Substitution hook first (writeFormWith): a matched subtree is replaced verbatim, never descended.
+  const replaced = sub?.(node);
+  if (replaced !== undefined) return replaced;
   // Raw JS primitives — defensive; parsed forms are boxed, but a stray unbox shouldn't corrupt.
   if (typeof node === "string") return JSON.stringify(node);
   if (typeof node === "number" || typeof node === "bigint") {
@@ -81,11 +93,17 @@ function writeDatum(node: unknown, seen: Set<unknown>): string {
       const parts: string[] = [];
       let cur: unknown = node;
       while (isPair(cur)) {
-        parts.push(writeDatum(cur.car, seen));
+        parts.push(writeDatum(cur.car, seen, sub));
         cur = cur.cdr;
+        // A substituted tail replaces the rest of the spine (a cut pair in cdr position).
+        const tailSub = sub?.(cur);
+        if (tailSub !== undefined) {
+          parts.push(".", tailSub);
+          return `(${parts.join(" ")})`;
+        }
         invariant(!(isPair(cur) && seen.has(cur)), CYCLE);
       }
-      if (kindOf(cur) !== "nil") parts.push(".", writeDatum(cur, seen)); // improper/dotted tail
+      if (kindOf(cur) !== "nil") parts.push(".", writeDatum(cur, seen, sub)); // improper/dotted tail
       return `(${parts.join(" ")})`;
     }
     case "string":
@@ -93,7 +111,7 @@ function writeDatum(node: unknown, seen: Set<unknown>): string {
     case "vector": {
       invariant(!seen.has(node), CYCLE);
       seen.add(node);
-      return `#(${(node as { __vector__: unknown[] }).__vector__.map((el) => writeDatum(el, seen)).join(" ")})`;
+      return `#(${(node as { __vector__: unknown[] }).__vector__.map((el) => writeDatum(el, seen, sub)).join(" ")})`;
     }
     case "bytevector":
       return `#u8(${[...(node as { __bytevector__: Uint8Array }).__bytevector__].join(" ")})`;

@@ -335,8 +335,12 @@ function combine(op: string, nodes: readonly LineageNode[]): LineageNode {
 
 /** Substitution carried through `let`-family transparency: a bound symbol's
  *  leaf-slot resolves to classify(its RHS), making `(let ((x e)) … x …)` equal
- *  the inlined `… e …`. */
-type Subst = ReadonlyMap<string, LineageNode>;
+ *  the inlined `… e …`. Exported for the wireframe builder (Q8a,
+ *  `provenance/wireframe/builder.ts`), which threads its OWN let-walk's
+ *  substitutions into `classify` when asking selector-cone reachability — so
+ *  `(let ((y (src))) (if y …))` classifies the selector `y` as the source it is
+ *  bound to, exactly the inlined-form equality this map already encodes. */
+export type Subst = ReadonlyMap<string, LineageNode>;
 const NO_SUBST: Subst = new Map();
 
 /**
@@ -345,9 +349,14 @@ const NO_SUBST: Subst = new Map();
  * operands: ≤1 → pipe (pass-through), ≥2 → merge (the tree branches). Special
  * forms (if, cond, let-family, begin, and, or, lambda) are handled by shape —
  * see the file header.
+ *
+ * `subst` (optional, Q8a) seeds the let-transparency substitution from OUTSIDE —
+ * the wireframe builder classifies a mux SELECTOR in the binding context its own
+ * walk accumulated (the same map `classifyLet` builds internally); every existing
+ * caller's two-argument shape is unchanged.
  */
-export function classify(ast: SchemeValue, c: Classifier): LineageNode {
-  return classifyWith(ast, c, NO_SUBST);
+export function classify(ast: SchemeValue, c: Classifier, subst: Subst = NO_SUBST): LineageNode {
+  return classifyWith(ast, c, subst);
 }
 
 function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
