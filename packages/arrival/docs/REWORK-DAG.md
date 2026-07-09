@@ -232,3 +232,36 @@ stream laws (fold-reconstruction, monotonicity = the completion door in stream f
 
 Critical path: **P1 → P2 → P3 → P7 → P8 → P9 → P10**, with P6 parallel from day one
 (the one Fable-tier prerequisite with no dependencies) and P5 stubs immediately after P1.
+
+## P-track revision (2026-07-09, post-adversarial-panel)
+
+*Three-model challenge verdicts in `docs/working-proposals/provenance-design-challenges.md`
+(C1–C12). Plan deltas:*
+
+- **P4 → P7 dependency added** (C7): wireframe fan templates need contract-derived roles.
+- **P8 exit gate extended** (C1/C5/C9): mint records carry PAYLOADS (authoritative for
+  replay — replay never re-invokes a source); selector hosts with data-dependent
+  invocation order emit a host-schedule record; promise egress keeps its track pending
+  (unsettled egress at region close = incomplete door); stream total order = emission
+  order.
+- **NEW P8b — port aggregation** (C2, Sonnet, depends P8): run-length/ring encoding for
+  stable-wiring repeated ports; loops store O(1)+count. Gates P10.
+- **P10's R3 is a HARD GATE, not a benchmark** (C2): the 186MB workload class must
+  demonstrably die, or the reframe failed.
+- **Suite split** (C6): stamp-containment laws gate P8; replay-containment laws gate P9;
+  **P11 drill-in gates on P9** (counters-only UI allowed on P8).
+- **NEW law families**: `provenance/replay-nondeterminism.law` (C1 — the one all three
+  models demanded: frozen-payload replay with the external world mutated between runs),
+  `loop-unroll.law` staged it.todo (C4), memory-retention measurement rides R3 (limits).
+- **W2 adjunction scoped to loop-free segments** (C4); loops = documented
+  over-approximation until unroll records exist.
+- **F2 corpus classes extended** (C10): interior sources, nested regions, first-class
+  HOFs, structured egress, macro bodies (post-P6), deep mux.
+- **Vocabulary unified** (C11): declaration kinds LOWER to graph node kinds 1:1
+  (sink/transparent = declaration facts lowering to graph shapes; loop → binder{cycles});
+  selector/decision = ONE control role and one cone color until a product query needs two.
+- **Oracle is test-only** (C12): eager stamps survive as a test-mode flag for the
+  agreement corpus; production single-path. No permanent dual-run.
+- **Stated as load-bearing** (refuted attacks): no call/cc/dynamic-wind and total
+  immutability (mutator family doored) are I1/I4 design invariants — any future
+  continuation or mutation work re-opens the panel findings.
