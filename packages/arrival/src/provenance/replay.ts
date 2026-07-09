@@ -123,8 +123,13 @@ export class FrozenMints {
 /** Union `taintFrom`'s (deep) provenance into `value`'s own stamp set — the
  *  port-coupled-mux control-dependency: the taken arm's replayed value carries the
  *  selector's cone, mirroring the eager oracle's own `if` semantics (and the
- *  wireframe backward cone, which walks the selector wire — W1 agreement's shape). */
-function withUnionedProvenance(value: SchemeValue, taintFrom: SchemeValue): SchemeValue {
+ *  wireframe backward cone, which walks the selector wire — W1 agreement's shape).
+ *  Exported (Q17 addition, flagged): `replay-walk.ts`'s step generator reimplements
+ *  this file's per-node switch to get YIELD points inside it (this closure has none
+ *  to offer — `nodeValue` is private to `replayGraphIn`) and must apply the IDENTICAL
+ *  control-dependency union at its own mux step rather than a second, driftable
+ *  copy of this law. */
+export function withUnionedProvenance(value: SchemeValue, taintFrom: SchemeValue): SchemeValue {
   if (!(value instanceof AValue)) return value;
   const taint = collapseProvenance(taintFrom);
   if (taint.size === 0) return value;

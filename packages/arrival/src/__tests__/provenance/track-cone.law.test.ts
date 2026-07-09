@@ -29,9 +29,10 @@
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { initBridge } from "../../index.js";
-import { parse } from "../../eval/generator-exec.js";
+import { parse, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import { collapseProvenance } from "../../provenance-collapse.js";
+import { classify, fieldCone, fullCone, type Bindings, type Classifier, type DeclaredRole, type PathStep } from "../../values/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
 import { FrozenMints, boxPayload, replayBetweenRecords, replayGraphEgress } from "../../provenance/replay.js";
@@ -48,7 +49,9 @@ import {
 } from "../../values/primitives/region-scope.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
+import type { SchemeValue } from "../../values/types.js";
 import { recordRun, replayedCone, type RecordedRun } from "./q16-harness.js";
+import { SourceRegistry } from "./w1-harness.js";
 
 const ROLES: Record<string, DeclaredRole> = { "fetch-list": "source", "fetch-item": "source", "src-a": "source", "src-b": "source", "emit!": "sink", map: "fan", filter: "fan" };
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
@@ -96,11 +99,41 @@ afterEach(() => {
 });
 
 describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
-  // @ledger: Q9
-  it.todo(
-    "I1 over stamp sets: for interior n of track Ti, cone+(n) ∩ G ⊆ cone+(egress(Ti)) — " +
-      "checked against the eager oracle's recorded stamp sets on the agreement corpus " +
-      "(this is the STAMP arm; the REPLAY arm below is a separate gate)",
+  // @ledger: Q9 — FLIPPED, folded into Q17's gate (per this task's brief: the row
+  // named for Q9's oracle infrastructure was never itself exercised until Q17
+  // reused w1-harness.ts's `SourceRegistry` — the SAME eager-oracle idiom Q9's own
+  // agreement law drives — over MAP_CODE's per-element body directly. This is the
+  // STAMP arm: no replay, no wireframe graph, just the untapped eager execution
+  // `SourceRegistry` mints against, checked per track (per element `v`).
+  it(
+    "I1 holds over the eager oracle's stamp sets: cone+(n) ∩ G ⊆ cone+(egress(Ti)), " +
+      "checked per-track against SourceRegistry's minted stamps (the agreement " +
+      "corpus, reusing w1-harness/q16-harness's shared source-mint idiom)",
+    async () => {
+      const registry = new SourceRegistry();
+      const elements = [1, 2, 3];
+      const tracks: { egress: SchemeValue; portStamp: number }[] = [];
+      for (const v of elements) {
+        const env = inferenceEnv.inherit(`i1-stamp-track-${v}`);
+        registry.register(env, "fetch-item", "num");
+        const { values } = await execState(`(* (fetch-item ${v}) 2)`, { env });
+        const egress = values[values.length - 1];
+        const cone = collapseProvenance(egress);
+        expect(cone.size).toBe(1); // exactly ONE interior mint per track (fetch-item)
+        tracks.push({ egress, portStamp: [...cone][0] });
+      }
+      for (const track of tracks) {
+        const egressCone = collapseProvenance(track.egress);
+        // interior n (the track's own fetch-item mint): cone+(n) ⊆ cone+(egress(Ti)).
+        expect(egressCone.has(track.portStamp), `interior stamp ${track.portStamp} escaped its own track's egress cone`).toBe(true);
+        // confinement: nothing beyond this track's own stamp reaches the egress.
+        expect([...egressCone]).toEqual([track.portStamp]);
+      }
+      // distinct crossings mint distinct ids — tracks stay pairwise-disjoint under
+      // the eager oracle too, mirroring the REPLAY arm's own separation shape.
+      const allStamps = tracks.map((t) => t.portStamp);
+      expect(new Set(allStamps).size).toBe(allStamps.length);
+    },
   );
 });
 
@@ -314,17 +347,77 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
 });
 
 describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)", () => {
-  // @ledger: Q17
-  it.todo("cone(count) ⊆ cone(value) — a count-demand cone is never wider than the value-demand cone it's derived from");
+  // @ledger: Q17 — FLIPPED. Generalizes Q8c's own machinery (`reachableNodesForDemand`)
+  // over a small corpus: every count-demand cone is a subset of its own value-demand
+  // cone, over the SAME (program, demand root) pair.
+  it("cone(count) ⊆ cone(value) — a count-demand cone is never wider than the value-demand cone it's derived from", async () => {
+    const CORPUS = [
+      "(emit! (length (map f (fetch-list))) (car (filter g xs)))",
+      "(length (map (lambda (v) (+ (fetch-item v) 1)) xs))",
+      "(emit! (length (append (map f (fetch-list)) ys)))",
+    ];
+    for (const code of CORPUS) {
+      const p = await wf(code);
+      const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
+      const from = p.main.egress ?? sinkIdx;
+      expect(from).toBeGreaterThanOrEqual(0);
+      const valueCone = reachableNodesForDemand(p.main, from, "value");
+      const countCone = reachableNodesForDemand(p.main, from, "count");
+      for (const id of countCone) {
+        expect(valueCone.has(id), `count-cone node ${id} escaped the value cone (${code})`).toBe(true);
+      }
+    }
+  });
 
-  // @ledger: Q17
-  it.todo("cone(field-k) ⊆ cone(whole) — a single-field demand cone is never wider than the whole-value demand cone");
+  // @ledger: Q17 — FLIPPED. `field-k` has no SEPARATE demand grade at the wireframe
+  // layer (no consumer has asked for one there — §6 EXCLUDED: "further grades...
+  // until a consumer demands it"). The demand lattice's field-k arm is already
+  // landed at the RETROSPECTIVE layer (`values/lineage.ts`'s `fieldCone`/`fullCone`,
+  // pre-dating this provenance wave) — this row reuses THAT machinery rather than
+  // inventing a second field-demand walk, generalizing lineage-field.test.ts's own
+  // per-case assertions into the monotonicity LAW itself.
+  it("cone(field-k) ⊆ cone(whole) — a single-field demand cone is never wider than the whole-value demand cone", async () => {
+    const FIELD_CLASSIFIER: Classifier = { roleOf: () => undefined };
+    const FIELD_CORPUS: ReadonlyArray<{ code: string; bindings: Bindings; step: PathStep }> = [
+      { code: "(:foo x)", bindings: { x: [42] }, step: { field: "foo" } },
+      { code: "(:foo x)", bindings: { x: [42] }, step: { field: "bar" } }, // pruned sibling — [] ⊆ whole trivially
+      { code: "(cons (:foo a) (:bar b))", bindings: { a: [1], b: [2] }, step: { field: "foo" } }, // merge barrier
+      { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "foo" } }, // mux, matches both arms
+      { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "zzz" } }, // mux, prunes both arms
+    ];
+    for (const { code, bindings, step } of FIELD_CORPUS) {
+      const [ast] = await parse(code, inferenceEnv);
+      const n = classify(ast, FIELD_CLASSIFIER);
+      const whole = new Set(fullCone(n, bindings));
+      const field = new Set(fieldCone(n, bindings, step));
+      for (const id of field) {
+        expect(whole.has(id), `field-cone id ${id} escaped the whole cone (${code}, ${JSON.stringify(step)})`).toBe(true);
+      }
+    }
+  });
 
-  // @ledger: Q17
-  it.todo(
+  // @ledger: Q17 — FLIPPED, over a SECOND corpus row broadening the assertion
+  // beyond the one example `wireframe-fact-wires.test.ts` already covers — here the
+  // ROLES are SWAPPED (`filter`, non-length-preserving, is the fact-tagged/INCLUDED
+  // branch; `map` is the untagged/EXCLUDED "element" branch), proving the
+  // structural-producer carve-out is symmetric in `lengthPreserving`, not an
+  // artifact of the one direction the machinery test happened to exercise.
+  it(
     "count-demand traverses fact wires ONLY — touches ZERO element wires (§6: " +
       "\"struct-fact wires answer count-demand without touching elements\"; the routing " +
       "machinery lands at Q8c, this law itself flips at Q17 once query maturity lands)",
+    async () => {
+      const p = await wf("(emit! (length (filter g (fetch-list))) (car (map f xs)))");
+      const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
+      const filterFanIdx = p.main.nodes.findIndex((n) => n.kind === "fan" && n.lengthPreserving === false);
+      const mapFanIdx = p.main.nodes.findIndex((n) => n.kind === "fan" && n.lengthPreserving === true);
+      expect(sinkIdx).toBeGreaterThanOrEqual(0);
+      expect(filterFanIdx).toBeGreaterThanOrEqual(0);
+      expect(mapFanIdx).toBeGreaterThanOrEqual(0);
+      const countCone = reachableNodesForDemand(p.main, sinkIdx, "count");
+      expect(countCone.has(filterFanIdx)).toBe(true); // the fact-tagged branch's fan — included
+      expect(countCone.has(mapFanIdx)).toBe(false); // the untagged "element" branch's fan — excluded
+    },
   );
 
   // @ledger: Q8c — the ROUTING MACHINERY (not the full LAW — see the file header

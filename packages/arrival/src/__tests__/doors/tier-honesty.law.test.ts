@@ -1,6 +1,11 @@
 /**
- * LAW (staged) — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law
- * table; docs/PROVENANCE-PLAN.md Q5's stub-file mapping table). Flips at Q17.
+ * LAW — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law table;
+ * docs/PROVENANCE-PLAN.md Q5's stub-file mapping table). FULLY GREEN at Q17: the
+ * four rows below that were `it.todo` (@ledger: Q17) now compose Q14's payload
+ * envelope (`store/tiering.ts`'s `recorded`/`stub` arms) with Q17's replay tiers
+ * (`replay-memo.ts`'s `replayed`/`replayed-cached` arms) via `answerQuery` —
+ * exactly the "Q17 SUPERSEDES a recorded answer with replayed/replayed-cached"
+ * composition `store/tiering.ts`'s own header names.
  *
  * pure-mux derivation deliberately does NOT live here — PROVENANCE-PLAN.md's Q5
  * mapping table homes it in `provenance/replay.law.test.ts` (it flips at Q16, with
@@ -9,14 +14,43 @@
  * The `EvidenceTier` enum this whole law is ABOUT is ALREADY COMMITTED (Q10 —
  * `src/provenance/store/interfaces.ts`), so the anti-vacuity grounding test below is a
  * REAL, running, GREEN assertion (not `it.todo`) pinning that the four-tier vocabulary
- * this staged law will check against hasn't drifted — everything else in this file is
- * `it.todo`: the answer ENVELOPE that actually computes/carries a tier per drill-in
- * answer is Q14 (`recorded`/`stub` arms)/Q17 (`replayed`/`replayed-cached` arms), and
- * tier-honesty itself (the FULL green law) flips at Q17.
+ * this law checks against hasn't drifted.
  */
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import { buildWireframe } from "../../provenance/wireframe/builder.js";
+import { replayGraphEgress, ReplayScopeError } from "../../provenance/replay.js";
+import { answerQuery, ReplayMemo, type ReplayMemoKey } from "../../provenance/replay-memo.js";
+import { recordRun } from "../provenance/q16-harness.js";
 import type { EvidenceTier } from "../../provenance/store/index.js";
 import { PayloadStoreFake, PayloadTierMachine } from "../../provenance/store/index.js";
+
+// A single-source, straight-line wire — no fan/mux needed to exercise the
+// envelope's tier composition. Shared by every Q17 row below.
+const ROLES: Record<string, DeclaredRole> = { "fetch-item": "source" };
+const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
+const BASE = new Set(["*"]);
+const isBaseName = (n: string): boolean => BASE.has(n);
+const CODE = "(* (fetch-item) 2)";
+
+async function wf() {
+  const forms = await parse(CODE, inferenceEnv);
+  return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
+}
+
+/** A `ReplayScopeError` — the SAME refusal replay.ts's D4 rows throw for a demand
+ *  outside γ's claimed scope (a fan/binder/loop node); `answerQuery` catches
+ *  exactly this class to fall through to the Q14 `fallback` arm. */
+function outOfScope(): never {
+  throw new ReplayScopeError("fan", "synthetic-span", "outside the replay driver's claimed scope for this row");
+}
+
+beforeAll(async () => {
+  await initBridge();
+});
 
 /** The four evidence tiers, in the spec's own order (§5 A1 / §7: "the envelope enum
  *  `replayed | replayed-cached | recorded | stub`"). A `readonly EvidenceTier[]` cast
@@ -33,32 +67,194 @@ describe("tier-honesty envelope shape — the enum Q10 already committed (ground
 });
 
 describe("tier honesty (§7: every drill-in answer carries an honest evidence tier)", () => {
-  // @ledger: Q17
-  it.todo(
+  // @ledger: Q17 — FLIPPED. Exercises all four arms through the SAME `answerQuery`
+  // composition: a fresh γ (`replayed`), a memo hit (`replayed-cached`), and Q14's
+  // `recorded`/`stub` arms reached via a `ReplayScopeError` fallback.
+  it(
     "every drill-in answer carries its evidence tier from the envelope enum " +
       "`replayed | replayed-cached | recorded | stub` — no answer is ever tier-less",
+    async () => {
+      const memo = new ReplayMemo();
+      const program = await wf();
+      const run = await recordRun(inferenceEnv, CODE, { "fetch-item": "num" });
+      const unreachable = (): never => {
+        throw new Error("unreachable — this row's replay always succeeds");
+      };
+
+      const freshKey: ReplayMemoKey = { templateHash: "th-tier-1-fresh", ordinalPath: [0], demand: "value" };
+      const fresh = await answerQuery({
+        memo,
+        key: freshKey,
+        replay: () => replayGraphEgress({ program, frozen: run.frozen }),
+        fallback: unreachable,
+      });
+      expect(EVIDENCE_TIERS).toContain(fresh.tier);
+      expect(fresh.tier).toBe("replayed");
+
+      const cachedAnswer = await answerQuery({
+        memo,
+        key: freshKey,
+        replay: () => replayGraphEgress({ program, frozen: run.frozen }),
+        fallback: unreachable,
+      });
+      expect(EVIDENCE_TIERS).toContain(cachedAnswer.tier);
+      expect(cachedAnswer.tier).toBe("replayed-cached");
+
+      const store = new PayloadStoreFake();
+      const machine = new PayloadTierMachine(store);
+      machine.ringPut("tier-1-payload", { value: 6, stampIds: [] });
+      const recordedAnswer = await answerQuery({
+        memo,
+        key: { templateHash: "th-tier-1-recorded", ordinalPath: [0], demand: "value" },
+        replay: outOfScope,
+        fallback: () => machine.read("tier-1-payload"),
+      });
+      expect(EVIDENCE_TIERS).toContain(recordedAnswer.tier);
+      expect(recordedAnswer.tier).toBe("recorded");
+
+      await machine.evict("tier-1-payload");
+      const stubAnswer = await answerQuery({
+        memo,
+        key: { templateHash: "th-tier-1-stub", ordinalPath: [0], demand: "value" },
+        replay: outOfScope,
+        fallback: () => machine.read("tier-1-payload"),
+      });
+      expect(EVIDENCE_TIERS).toContain(stubAnswer.tier);
+      expect(stubAnswer.tier).toBe("stub");
+    },
   );
 
-  // @ledger: Q17
-  it.todo(
+  // @ledger: Q17 — FLIPPED.
+  it(
     "a `stub` answer (value evicted, lineage intact) NEVER presents itself as freshly " +
       "`replayed` — a stub or cached answer never claims a fresher tier than it has " +
       "(§5 A1 EXCLUDED: \"silent degradation... a stub answering as if replayed is a lie\")",
+    async () => {
+      const memo = new ReplayMemo();
+      const store = new PayloadStoreFake();
+      const machine = new PayloadTierMachine(store);
+      machine.ringPut("stub-only", { value: "x", stampIds: [7] });
+      await machine.evict("stub-only");
+      const key: ReplayMemoKey = { templateHash: "th-stub-only", ordinalPath: [0], demand: "value" };
+
+      const answer = await answerQuery({ memo, key, replay: outOfScope, fallback: () => machine.read("stub-only") });
+      expect(answer.tier).toBe("stub");
+      expect(answer.tier).not.toBe("replayed");
+      expect(answer.tier).not.toBe("replayed-cached");
+      expect(answer.value).toBeUndefined();
+      expect(answer.stampIds).toEqual([7]);
+      // a scope refusal never populates the memo — nothing was actually replayed,
+      // so a REPEAT query still honestly reaches the fallback, still `stub`.
+      expect(memo.has(key)).toBe(false);
+      const again = await answerQuery({ memo, key, replay: outOfScope, fallback: () => machine.read("stub-only") });
+      expect(again.tier).toBe("stub");
+    },
   );
 
-  // @ledger: Q17
-  it.todo(
+  // @ledger: Q17 — FLIPPED. The memo-outlives-payload row (§4 m2): the memo holds
+  // its OWN copy of a replayed egress, entirely independent of the backing
+  // `PayloadStore`'s own tier — evicting the latter never reaches into the former.
+  it(
     "a `replayed-cached` (memo-hit) answer is never conflated with a live `replayed` " +
       "one, even when both report the identical egress value — a memo entry MAY outlive " +
       "its evicted payload, and its answers carry `replayed-cached`, never `replayed` " +
       "(§4 CHOSEN replay-memo scope)",
+    async () => {
+      const memo = new ReplayMemo();
+      const program = await wf();
+      const run = await recordRun(inferenceEnv, CODE, { "fetch-item": "num" });
+      const key: ReplayMemoKey = { templateHash: "th-outlives", ordinalPath: [0], demand: "value" };
+
+      // cold: a live γ replay.
+      const cold = await answerQuery({
+        memo,
+        key,
+        replay: () => replayGraphEgress({ program, frozen: run.frozen }),
+        fallback: () => {
+          throw new Error("unreachable");
+        },
+      });
+      expect(cold.tier).toBe("replayed");
+
+      // Separately: the SAME logical payload's backing store degrades to stub (a
+      // DO-storage eviction, independent of the memo — the memo never reads
+      // through PayloadTierMachine at all).
+      const mint = run.mints[0];
+      const store = new PayloadStoreFake();
+      const machine = new PayloadTierMachine(store);
+      machine.ringPut(mint.record.payloadHash, { value: mint.payload.value, stampIds: mint.payload.stampIds });
+      await machine.evict(mint.record.payloadHash);
+      const rawPayloadNow = await machine.read(mint.record.payloadHash);
+      expect(rawPayloadNow.tier).toBe("stub"); // the backing payload really is gone
+
+      // The SAME memo key still answers — from cache, never re-touching the (now
+      // stubbed) payload — an HONEST cache tier, never a fabricated fresh
+      // "replayed" and never silently downgraded to "recorded"/"stub" either.
+      const warm = await answerQuery({
+        memo,
+        key,
+        replay: () => replayGraphEgress({ program, frozen: run.frozen }),
+        fallback: () => {
+          throw new Error("unreachable — the memo must hit before fallback is ever considered");
+        },
+      });
+      expect(warm.tier).toBe("replayed-cached");
+      expect(warm.tier).not.toBe(cold.tier); // never conflated with the live replay that produced it
+      expect(warm.value).toBe(cold.value); // same egress value (purity) ...
+      expect(warm.stampIds).toEqual(cold.stampIds); // ... same cone ...
+      // ... reported through a DIFFERENT, honest tier — the row's whole point.
+    },
   );
 
-  // @ledger: Q17
-  it.todo(
+  // @ledger: Q17 — FLIPPED.
+  it(
     "degradation is PER TIER and deterministic — a payload's tier only ever moves " +
       "toward `stub` (ring → do → pending/r2 → stub), never silently reports a tier it " +
       "no longer occupies (§5 A1)",
+    async () => {
+      const memo = new ReplayMemo();
+      const program = await wf();
+      const run = await recordRun(inferenceEnv, CODE, { "fetch-item": "num" });
+      const key: ReplayMemoKey = { templateHash: "th-monotone", ordinalPath: [0], demand: "value" };
+      await answerQuery({
+        memo,
+        key,
+        replay: () => replayGraphEgress({ program, frozen: run.frozen }),
+        fallback: () => {
+          throw new Error("unreachable");
+        },
+      });
+      // Repeated hits: ALWAYS `replayed-cached` — never regresses to `recorded`/
+      // `stub`, and never re-claims a fresh `replayed` (γ never silently re-runs on
+      // a memo hit — `answerQuery`'s hit branch short-circuits before `replay` is
+      // even called).
+      for (let i = 0; i < 5; i++) {
+        const hit = await answerQuery({
+          memo,
+          key,
+          replay: () => {
+            throw new Error("a memo hit must never call replay again");
+          },
+          fallback: () => {
+            throw new Error("unreachable");
+          },
+        });
+        expect(hit.tier).toBe("replayed-cached");
+      }
+
+      // The STORAGE tier's own monotonicity (Q14), cross-checked at the Q17
+      // envelope boundary too: ring -> do -> stub, never backward, and every
+      // subsequent read agrees once stubbed (no "un-evict").
+      const store = new PayloadStoreFake();
+      const machine = new PayloadTierMachine(store);
+      machine.ringPut("monotone-hash", { value: 1, stampIds: [] });
+      expect((await machine.read("monotone-hash")).tier).toBe("recorded");
+      await machine.flush("monotone-hash");
+      expect((await machine.read("monotone-hash")).tier).toBe("recorded");
+      await machine.evict("monotone-hash");
+      expect((await machine.read("monotone-hash")).tier).toBe("stub");
+      expect((await machine.read("monotone-hash")).tier).toBe("stub");
+    },
   );
 
   // @ledger: Q14 — GREEN (store/tiering.ts's PayloadTierMachine + evidenceTierOf).
