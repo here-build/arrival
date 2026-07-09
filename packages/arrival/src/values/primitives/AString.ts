@@ -9,7 +9,6 @@ import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ACharacter } from "./ACharacter.js";
 import { withInputProvenance } from "../op-helpers.js";
 
@@ -17,7 +16,6 @@ type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
 
 export class AString extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "string";
   readonly kind = "string" as const;
 

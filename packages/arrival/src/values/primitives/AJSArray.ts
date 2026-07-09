@@ -10,9 +10,9 @@
  * cycle, safe because the wrapper methods call it only at runtime and a hoisted function binding
  * is never in TDZ.
  *
- * SANDBOX BOUNDARY (`static [INTEROP_BOUNDARY] = true`): marked like its membrane siblings so the
- * sandbox symbol-to-field walk stops at this prototype before it can reach `source` (or the
- * delegated vector / its `vec()` builder).
+ * INTEROP BOUNDARY: the member-access walk stops at this prototype (before it can reach
+ * `source` or the delegated vector) via the arrival-family rule in interop-access.ts —
+ * any class carrying the own `[CLASS]` brand is a boundary; no per-class stamp needed.
  */
 
 import { CLASS } from "../../well-known-symbols.js";
@@ -22,7 +22,6 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
 import { AVector } from "./AVector.js";
 import { printValue } from "../print.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { type SchemeValue } from "../types.js";
 // Runtime import cycle (benign — see header): a hoisted `export function` declaration,
 // called only inside wrapper methods at runtime.
@@ -52,7 +51,6 @@ import { tf } from "../tagless-final.js";
  * out raw without materializing.)
  */
 export class AJSArray extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "js-array";
   readonly kind = "vector" as const;
 

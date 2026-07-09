@@ -13,6 +13,19 @@
  * "Boundary" here is the membrane sense — the prototype where the member walk STOPS —
  * not a sandbox. See docs/sandbox-security-model.md for the original design rationale.
  *
+ * TWO CONCEPTS live here, deliberately co-located because the CHECKER reads both:
+ * 1. THE READ POLICY — accessMember/accessHas/accessKeys + the boundary walk +
+ *    blocklists. Its three legitimate mouths: AJSObject (borrowed-JS get/has/keys on
+ *    `source`), membrane.readMember (the `@`/`:key` protocol over ANY polyglot value),
+ *    and member-walk (the evaluator's dotted-path resolution). It is the MEMBRANE's
+ *    policy, not AJSObject's private helper — readMember dispatches over all values,
+ *    so confining this to AJSObject would invert the dependency (membrane importing
+ *    policy from one of its wrappers).
+ * 2. THE PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary/@arrival.private:
+ *    the opt-in for HOST classes (arrival-chain re-exports it). Arrival's own value
+ *    family no longer stamps per-class: the family rule inside `isInteropBoundary`
+ *    (own `[CLASS]` brand on the constructor = boundary) covers every primitive.
+ *
  * Lineage: GraalVM Truffle InteropLibrary (Würthinger et al. 2013/2017);
  * object-capability membrane (Miller, "Robust Composition", 2006).
  */
@@ -22,6 +35,11 @@
 import "@here.build/error-invariant";
 
 import { InteropAccessError } from "./errors.js";
+// The arrival value-family brand (a plain string key, P7 taxonomy) — used by the
+// family rule in `isInteropBoundary`: any class carrying an OWN `[CLASS]` static is
+// an arrival value class, hence a boundary. well-known-symbols.ts is a constants
+// leaf (zero imports), so this stays cycle-free.
+import { CLASS } from "./well-known-symbols.js";
 
 // ============================================================================
 // Interop Boundary Marker
@@ -192,6 +210,28 @@ export function isInteropBoundary(proto: object | null): boolean {
   if (isGlobalConstructorPrototype(proto)) {
     boundaryCache.set(proto, true);
     return true;
+  }
+
+  // ARRIVAL FAMILY RULE: a prototype whose OWN-descriptor constructor carries an
+  // OWN `[CLASS]` brand ("arrival/class", the P7 string-key taxonomy) is an arrival
+  // value class — always a boundary. Replaces the per-class
+  // `static [INTEROP_BOUNDARY] = true` stamp every primitive used to carry (each
+  // subclass needed its own stamp because this check is hasOwnProperty-based); one
+  // rule here covers the whole family, and the primitives lose the import entirely.
+  // Forgery direction is harmless: a borrowed class self-stamping `[CLASS]` only
+  // SEALS itself — the same privacy `@arrival.private` grants deliberately. (The F1
+  // forgery-guard concern — data keys masquerading as protocol on VALUES — doesn't
+  // apply: this reads a constructor during a privacy walk, and the failure mode is
+  // more privacy, not less.)
+  {
+    const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
+    if (
+      typeof ctor === "function" &&
+      Object.prototype.hasOwnProperty.call(ctor, CLASS)
+    ) {
+      boundaryCache.set(proto, true);
+      return true;
+    }
   }
 
   // Explicit marker on the prototype itself. hasOwnProperty, not `in` — don't

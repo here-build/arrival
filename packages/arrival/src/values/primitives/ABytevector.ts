@@ -17,7 +17,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { withInputProvenance } from "../op-helpers.js";
 
 
@@ -52,7 +51,6 @@ function toUint8(source: BytevectorSource): Uint8Array {
 }
 
 export class ABytevector extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 

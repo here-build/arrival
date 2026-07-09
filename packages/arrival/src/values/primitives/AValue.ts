@@ -193,8 +193,9 @@ export function pointProvenance(callId: number): ReadonlySet<number> {
 // ============================================================================
 // INTEROP BOUNDARY (defensive on the abstract base): `accessMember`'s symbol-to-field
 // auto-resolution walks the prototype chain of any object reachable from inference-plane
-// scheme. Subtypes (AString, APair, …) mark themselves individually at their definition
-// sites; marking the abstract `AValue` base too is a defensive belt — a future subtype that
-// forgets its own marker still inherits the boundary, so exposure degrades to "blocked"
-// rather than "exposed."
+// scheme. Concrete subtypes are covered by the FAMILY RULE in interop-access.ts (own
+// `[CLASS]` brand on the constructor = boundary) — they carry no per-class stamp anymore.
+// The abstract base keeps this ONE explicit stamp as the defensive belt: a future
+// CLASS-less subtype's walk still stops here, so exposure degrades to "blocked at
+// AValue.prototype" rather than "exposed."
 // ============================================================================

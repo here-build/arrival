@@ -17,7 +17,6 @@ import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
-import { INTEROP_BOUNDARY } from "../interop-access.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 

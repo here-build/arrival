@@ -26,7 +26,6 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
@@ -36,7 +35,6 @@ import type { SchemeValue } from "../types.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 
 export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "vector";
   readonly kind = "vector" as const;
 

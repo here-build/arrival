@@ -5,7 +5,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
 import invariant from "tiny-invariant";
 
@@ -57,7 +56,6 @@ const characters: Record<string, string> = {
 export { characters };
 
 export class ACharacter extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "character";
   // Named character mappings
   static readonly __names__: Record<string, string> = characters;

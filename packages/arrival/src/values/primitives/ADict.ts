@@ -18,7 +18,6 @@ import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
 import { AString } from "./AString.js";
@@ -53,7 +52,6 @@ export function isDictShaped(source: unknown): boolean {
 }
 
 export class ADict extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "dict";
   readonly kind = "dict" as const;
 

@@ -1,7 +1,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike, SchemeValue } from "../types.js";
 import { isSchemeString, isString } from "../types.js";
@@ -47,7 +46,6 @@ function isKeywordName(name: string): name is string {
 }
 
 export class ASymbol extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "symbol";
   // Interning is per run context — see `internTables` / `internTableFor` above.
   /** Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for` registry

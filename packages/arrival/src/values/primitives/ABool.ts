@@ -1,7 +1,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 
 /**
  * Boxed boolean. Lineage: the representation-blind `arrival/tagless-final/equals` is a
@@ -10,7 +9,6 @@ import { INTEROP_BOUNDARY } from "../../interop-access.js";
  * pattern.
  */
 export class ABool extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "boolean";
   readonly kind = "bool" as const;
 

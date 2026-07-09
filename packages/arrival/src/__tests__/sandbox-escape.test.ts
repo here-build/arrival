@@ -130,16 +130,16 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * built-in proto methods) must be marked as sandbox boundaries so the
    * prototype-chain walk in accessMember stops at them.
    */
-  it("SchemeString is marked as a sandbox boundary", async () => {
-    // Direct check, two ways the marker can be present:
-    const protoMarked =
-      Object.prototype.hasOwnProperty.call(AString.prototype, INTEROP_BOUNDARY) &&
-      Reflect.get(AString.prototype, INTEROP_BOUNDARY) === true;
-    const ctorMarked =
-      Object.prototype.hasOwnProperty.call(AString, INTEROP_BOUNDARY) &&
-      (AString as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true;
-    expect(protoMarked || ctorMarked).toBe(true);
+  it("SchemeString is a sandbox boundary", async () => {
+    // The INVARIANT (walk stops at the prototype), not the mechanism: per-class
+    // INTEROP_BOUNDARY stamps were replaced by the arrival-family rule in
+    // interop-access.ts (own [CLASS] brand on the constructor = boundary), so the
+    // checker's verdict is the thing to pin — plus the behavioral consequence.
     expect(isInteropBoundary(AString.prototype)).toBe(true);
+    // Behavioral half: a grafted String.prototype method is NOT reachable through
+    // the member walk on an AString instance.
+    const str = new AString(CONSTANT_CTX, "abc");
+    expect(() => accessMember(str, "charCodeAt")).toThrow(InteropAccessError);
   });
 });
 

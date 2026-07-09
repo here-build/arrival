@@ -7,17 +7,18 @@
  * runtime import cycle — safe because `get()` calls it only at runtime, and a hoisted
  * `export function` binding is never in TDZ. interop-access.ts is a true leaf, imported directly.
  *
- * SANDBOX BOUNDARY (`static [INTEROP_BOUNDARY] = true`): this wrapper IS the JS↔Scheme membrane.
- * get/set/has/delete/keys route through accessMember for the WRAPPED value, but the wrapper's
- * own prototype is reachable via symbol-to-field auto-resolution; the boundary marker stops the
- * prototype walk here so sandbox code can't read `get`/`toString` to reach `source`.
+ * INTEROP BOUNDARY: this wrapper IS the JS↔Scheme membrane. get/set/has/delete/keys route
+ * through accessMember for the WRAPPED value, but the wrapper's own prototype is reachable
+ * via symbol-to-field auto-resolution; the arrival-family rule in interop-access.ts (own
+ * `[CLASS]` brand on the constructor = boundary) stops the prototype walk here so sandbox
+ * code can't read `get`/`toString` to reach `source`.
  */
 
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { nil } from "./ANil.js";
-import { accessHas, accessKeys, accessMember, INTEROP_BOUNDARY, NOT_FOUND, } from "../../interop-access.js";
+import { accessHas, accessKeys, accessMember, NOT_FOUND } from "../../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
@@ -42,7 +43,6 @@ const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue>>();
  * All property access is sandboxed — see interop-access.ts for the security model.
  */
 export class AJSObject extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "js-object";
   readonly kind = "object" as const;
 

@@ -5,12 +5,10 @@ import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { type RunContext } from "./RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
 
 export class AInexact extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "number";
   readonly kind = "number" as const;
 

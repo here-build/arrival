@@ -34,7 +34,6 @@ import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "./AExact.js";
 import { AInexact } from "./AInexact.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
@@ -183,7 +182,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // helpers) and metadata symbols (__data__/__location__) are otherwise reachable from any held
   // Pair via symbol-to-field auto-resolution — the ref-tracking helpers especially would leak
   // host-side identity comparisons. This marker stops the prototype walk at Pair.
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "pair";
   readonly kind = "pair" as const;
   [DATA]?: boolean;

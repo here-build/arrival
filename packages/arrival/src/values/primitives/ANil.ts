@@ -10,12 +10,10 @@ import { type SchemeValue } from "../types.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import { APair } from "./APair.js";
 import { AExact } from "./AExact.js";
 
 export class ANil extends AValue {
-  static [INTEROP_BOUNDARY] = true;
   static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
