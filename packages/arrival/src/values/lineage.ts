@@ -11,8 +11,8 @@
  *
  * `classify`/`fullCone`/`countCone`/`fieldCone`/`fieldResolve`/`stepKey`/`PathStep`/
  * `LineageNode` are exported from the package barrel and consumed cross-package by
- * the arrival-chain field-point shadows (lineage-field-shadow{,-autobound}.test.ts),
- * which assert the static carrier reproduces the live runtime field-points;
+ * the arrival-chain field-pin shadow (`lineage-field-shadow-corpus.test.ts`),
+ * which asserts the static carrier reproduces the live runtime field pins;
  * lineage-shadow.ts wires the full-cone shadow in-package. Operates on real AST
  * nodes (Pair / SchemeSymbol from the reader); classify() runs no evaluation.
  *
@@ -191,8 +191,8 @@ function literalIndex(x: unknown): number | null {
 
 /**
  * Recognize a member-read across its SURFACE syntaxes and return the CANONICAL
- * step + the projected argument expression — else null. Mirrors trace.ts's
- * `accessorField` (65-70) for the keyword head, generalized to the four accessor
+ * step + the projected argument expression — else null. Mirrors
+ * `provenance/trace.ts`'s `accessorField` for the keyword head, generalized to the four accessor
  * shapes consumers pin (v0.2 §"The carrier"):
  *   - `(:foo x)`        keyword head — a SchemeSymbol `__name__` ":foo" (len>1) → {field:"foo"}
  *   - `(@ x :foo)`      the get term (env/polyglot @) — key is the 2nd operand (`:foo` symbol or "foo" string)
@@ -277,7 +277,7 @@ function classifyFanTemplate(fn: unknown, c: Classifier, subst: Subst): LineageN
  *  (cond's selector, a `=>` arm). Drop empties, FORWARD a singleton (pipe), UNION ≥2
  *  (merge). `op` tags the synthetic node with the form/op that combines the children.
  *
- *  Differs from `unionProvenance` (AValue.ts:104-120): this counts NODES (static,
+ *  Differs from `unionProvenance` (AValue.ts): this counts NODES (static,
  *  pre-binding), that cuts on distinct SET identity at runtime. Two operands that
  *  resolve to the SAME provenance set still count as 2 here → `merge`, where the
  *  runtime would singleton-forward → pipe. `fullCone` is unaffected (union of equal
@@ -373,7 +373,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     // D-v02-1 ABSORPTION: a field directly under another field is a deeper pluck within
     // the SAME producer pin — keep base + ONE step, do NOT compose nested keys into a
     // path. KEYWORD-PRIORITY: the runtime accessor that ROUTES the forward branch
-    // (`accessorField`, arrival-provenance/trace.ts) recognizes ONLY keyword heads and is
+    // (`accessorField`, provenance/trace.ts) recognizes ONLY keyword heads and is
     // BLIND to the positional `car`/`index` steps, so a keyword anywhere in the chain
     // wins over a transparent positional step. This keeps the carrier — now the sole home
     // of the key — pinning `(:verdict (car x))` → {field:"verdict"} (NOT {car}); the 2b fix.

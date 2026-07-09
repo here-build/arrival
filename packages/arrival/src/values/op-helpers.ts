@@ -4,9 +4,9 @@
  * These are the type-coercion + provenance + allocation-guard helpers that the
  * value-domain capability packs (numbers / strings / chars / lists / vectors /
  * bytevectors / control / core) all reach for. They live in their OWN leaf module
- * — importing only value-type classes, never `bridge` / `stdlib` / `env` — so a
- * cluster pack can import them without the cycle a `bridge.ts` import would create
- * (bridge re-assembles `wrappedOps` FROM the clusters, so cluster→bridge inverts).
+ * — importing only value-type classes, never the env layer — so a cluster pack
+ * (`env/r7rs/*`, which assembles its `wrappedOps` from these helpers) can import
+ * them without a cycle.
  *
  * Dependency direction is down only: clusters → op-helpers → value-type classes.
  */
@@ -163,8 +163,8 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
 // does. The per-type order lives in the entity's instance, so the string<? /
 // char<? families are type-agnostic chains over it — adding a new ordered type
 // needs no new comparison builtin. Numeric operands take the numeric
-// path (numeric.ts's `wrapOrd` — carved out of bridge.ts's former `wrapOperator`) —
-// the FL check is one inexpensive property read.
+// path (`env/r7rs/numeric.ts`'s `wrapOrd` — carved out of the now-deleted
+// bridge.ts's `wrapOperator`) — the FL check is one inexpensive property read.
 export interface AOrd {
   "arrival/tagless-final/lte"(other: unknown): boolean;
 }
@@ -210,7 +210,7 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
 }
 
 /** Human kind-name of an element that can't be ordered — its scheme `kind` (an AValue:
- *  "pair"/"vector"/…) else the JS shape. Mirrors symbol.ts describeReceiver. */
+ *  "pair"/"vector"/…) else the JS shape. Mirrors `common/symbols/_bake.ts`'s describeReceiver. */
 const describeOrdElement = (v: unknown): string =>
   v instanceof AValue ? v.kind : v === null || v === undefined ? String(v) : Array.isArray(v) ? "array" : typeof v;
 
@@ -326,7 +326,7 @@ export function isSchemeNumber(value: unknown): boolean {
 }
 
 // ============================================================================
-// Provenance stamping (the bridge twin of lips.ts withInputProvenance)
+// Provenance stamping
 // ============================================================================
 
 /**
@@ -390,7 +390,7 @@ export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
  * provenance-free operands → the shared eq?-stable flyweight (`schemeTrue`/`schemeFalse`
  * — hot loops stay allocation-free); stamped operands → a fresh `ABool` carrying the
  * union. A verdict derived from lineage carries it; one derived from constants doesn't.
- * This composition already existed ad hoc inside `deriveOrd` (below) — naming it here
+ * This composition already existed ad hoc inside `deriveOrd` (above) — naming it here
  * makes it the law every boolean-verdict site (equal?/eqv?/eq?, the numeric comparison
  * wrappers, predicate natives returning a boolean through a wrap layer) routes through,
  * replacing the raw-boolean fast-path those sites used to fall through to on an

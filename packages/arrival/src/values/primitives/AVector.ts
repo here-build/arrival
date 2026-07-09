@@ -11,7 +11,7 @@
  * builtins mint AVector. Being its own class leaves `Array.isArray` sites unaffected — never
  * widen them to accept it.
  *
- * Boxing track: docs/plan-2026-06-10-boxing-track.md (S5).
+ * Boxing track: docs/package-specific/arrival-scheme/plan-2026-06-10-boxing-track.md (S5).
  *
  * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
@@ -141,8 +141,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
   }
 
-  // Print protocol — R7RS external repr `#(elem …)`, each element via `printValue` (matches the
-  // printer's get_instances AVector entry at quote=false).
+  // Print protocol — R7RS external repr `#(elem …)`, each element via `printValue`.
   ["arrival/print"](): string {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
@@ -284,6 +283,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 // AVector. Boxing is producer-driven.
 
 // ============================================================================
-// INTEROP BOUNDARY: same rationale as AString/ABytevector — blocks inherited-method exposure
-// when interop symbol-to-field resolution walks the prototype chain.
+// INTEROP BOUNDARY: same rationale as AString/ABytevector — inherited-method exposure is
+// blocked when interop symbol-to-field resolution walks the prototype chain, via the FAMILY
+// RULE in interop-access.ts (own `[CLASS]` brand on the constructor = boundary; no per-class
+// stamp).
 // ============================================================================

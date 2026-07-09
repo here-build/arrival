@@ -129,7 +129,7 @@ export class ASymbol extends AValue {
     return String(str);
   }
 
-  // Print protocol — the bare symbol name (printer get_native_types calls toString(quote=false)).
+  // Print protocol — the bare symbol name (toString(quote=false), the display form).
   ["arrival/print"](): string {
     return this.toString();
   }
@@ -225,9 +225,11 @@ function is_gensym(symbol: unknown): boolean {
 }
 
 // ============================================================================
-// INTEROP BOUNDARY: ASymbol tracks gensym/literal metadata via well-known symbols
-// (`literal`, `object`); symbol-to-field auto-resolution would otherwise expose any class-
-// or prototype-level property to inference-plane scheme. This marker blocks inherited-
-// property access on instances. Interning lives in the module-scope `internTables` WeakMap
-// (not a class member), so it isn't symbol-field reachable at all.
+// INTEROP BOUNDARY: ASymbol tracks gensym metadata via well-known symbols (`literal`
+// is the live one; `object` is a write-only legacy carrier — dotted-path resolution was
+// ruled out, so nothing reads it); symbol-to-field auto-resolution would otherwise expose
+// any class- or prototype-level property to inference-plane scheme. The FAMILY RULE in
+// interop-access.ts (own `[CLASS]` brand on the constructor = boundary; no per-class stamp)
+// blocks inherited-property access on instances. Interning lives in the module-scope
+// `internTables` WeakMap (not a class member), so it isn't symbol-field reachable at all.
 // ============================================================================

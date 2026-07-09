@@ -52,5 +52,7 @@ export const schemeFalse = new ABool(CONSTANT_CTX, false);
 // ============================================================================
 // INTEROP BOUNDARY: ABool's prototype is narrow today, but `schemeTrue`/`schemeFalse` are
 // heavily reused singletons — any future helper grafted onto the prototype would reach every
-// Boolean-valued response from the inference plane. Marked now so the surface stays empty.
+// Boolean-valued response from the inference plane. The FAMILY RULE in interop-access.ts
+// (own `[CLASS]` brand on the constructor = boundary; no per-class stamp) keeps the
+// inherited surface blocked.
 // ============================================================================

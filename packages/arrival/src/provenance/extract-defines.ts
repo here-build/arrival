@@ -13,10 +13,9 @@
  * editor) renders the parse error through its own channel.
  *
  * Pair / SchemeSymbol are duck-typed because the concrete classes are
- * not in arrival-scheme's public surface — same approach as
- * `trace-view.tsx`. The `__location__` symbol is a registry symbol
- * (`Symbol.for("__location__")`) so we can read it without importing
- * `arrival-scheme/primitives.js`.
+ * not in arrival-scheme's public surface. The `__location__` symbol is a
+ * registry symbol (`Symbol.for("__location__")`) so we can read it
+ * without importing `arrival-scheme/primitives.js`.
  */
 import { parse as parseGenerator } from "../eval/generator-exec.js";
 

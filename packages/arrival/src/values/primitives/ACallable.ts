@@ -1,4 +1,4 @@
-// Callables as values (stage 0 of the callable-as-value rework;
+// Callables as values (the callable-as-value rework;
 // see docs/working-proposals/callable-as-value-run-ctx.md).
 //
 // Every arrival callable becomes an AValue with an EXPLICIT `run(args, runCtx)` surface,
@@ -15,10 +15,9 @@
 //   • ANativeProcedure   — host-JS CONTOUR (car/cdr/cons/map/…); stays in the value algebra.
 //   • ARosettaProcedure  — host-JS MEMBRANE (rosetta/MCP); decode → host → encode → mint.
 //
-// STAGE 0 is purely additive: these classes are defined and guarded, but nothing constructs
-// or dispatches them yet. The bake machinery (stage 1), evalLambda (stage 2), and the HOFs
-// (stage 3) migrate onto them in later cuts; `run`'s validate/decode/encode bodies are stubs
-// here (direct impl call) and gain their contract enforcement when bake is adapted.
+// These are LIVE: the bake/capability binders mint ANativeProcedure/ARosettaProcedure
+// (common/capability.ts, scheme-zod.ts's z.procedure), the evaluator mints ALambda
+// (evalLambda, named-let), and dispatch routes through `applyCallback`/the apply term.
 
 import { AValue } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";

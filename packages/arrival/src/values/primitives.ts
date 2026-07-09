@@ -106,5 +106,6 @@ export const hash_literals = ["#t", "#f"];
 // ----------------------------------------------------------------------
 // Hidden props
 // ----------------------------------------------------------------------
-// Cross-cutting brand symbols (__data__/__ref__/__cycles__/__lambda__/__location__/
-// __prototype__) moved to ../well-known-symbols.ts — see that module.
+// Cross-cutting brand symbols (DATA/REF/CYCLES/LOCATION/…) moved to
+// ../well-known-symbols.ts — see that module for the current registry
+// (LAMBDA is retired; see its tombstone note there).

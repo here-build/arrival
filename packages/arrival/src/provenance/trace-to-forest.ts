@@ -42,7 +42,7 @@ import type { EvalTrace } from "./trace.js";
 
 // scopeId moved to a cycle-neutral leaf (trace-snapshot needs it too; trace-to-forest
 // imports trace-snapshot, so the reverse import would close a loop). Re-exported here
-// so the 8 downstream `from "./trace-to-forest.js"` importers stay unchanged.
+// so the downstream `from "./trace-to-forest.js"` importers stay unchanged.
 
 // CandidateBox/BoxType describe the forest's own vocabulary (the candidate boxes
 // this module produces for the MDL collapse optimizer to decide over) — they live
@@ -117,7 +117,6 @@ export const STRUCTURAL_FORMS = new Set([
   "set!",
 ]);
 
-/** Leading symbol of a form's Pair, e.g. `(map …)` → `"map"`. */
 // ── Static tail-recursion detection ──────────────────────────────────────────
 // `hasSelfAncestor` can only call a function a loop AFTER it has recursed at least
 // once — which, when the recursive arg is an async `(infer …)`, is not until the
@@ -230,8 +229,8 @@ export interface ForestOptions {
 export function traceToForest(trace: EvalTrace, opts: ForestOptions = {}): CandidateBox[] {
   const promoted = opts.promoted ?? new Map<string, "suggested" | "forced">();
 
-  // De-proxy the observable trace once; the classification passes below then walk
-  // plain parent/children/node refs (no MobX per-read cost). Signature unchanged.
+  // Snapshot the live trace once; the classification passes below then walk
+  // plain parent/children/node refs on an immutable copy. Signature unchanged.
   const all: PlainInv[] = snapshotTrace(trace).invocations;
 
   // A loop = a self-recursive function. We box its BODY (the lambda-body scope,

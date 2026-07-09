@@ -201,9 +201,10 @@ export function isNumeric(value: unknown): value is ANumeric | number | bigint {
 // ============================================================================
 
 /**
- * Check if value is complex (has a non-zero imaginary part). arrival is reals-only,
- * so no representable value is ever complex — always #f. (Kept as a total guard so
- * callers don't need to special-case its removal.)
+ * Check if value has a non-zero imaginary part. arrival is reals-only, so no
+ * representable value ever does — always #f. NOT the `complex?` predicate: that
+ * routes through the number classes' own `isComplex` getters, which answer #t for
+ * every real (real ⊂ complex — see the file header).
  */
 export function isComplex(_n: unknown): boolean {
   return false;
@@ -232,9 +233,10 @@ export function isInteger(n: unknown): n is AExact | bigint | number {
 // isRational/isReal getters + arithmetic protocol) on their prototypes. Numeric
 // values are the densest object population in any inference computation, and
 // symbol-to-field auto-resolution makes each number a potential probe point
-// into the host numeric tower. Boundary-marking restricts interop member-access
-// to own properties (num/denom for exact, real for inexact) — the intended
-// data surface — blocking the tower-internals methods. The arithmetic ops
-// scheme code actually uses (`+`, `*`, `floor`, …) live in env bindings, not
-// on these prototypes.
+// into the host numeric tower. The FAMILY RULE in interop-access.ts (own
+// `[CLASS]` brand on the constructor = boundary; no per-class stamp) restricts
+// interop member-access to own properties (num/denom for exact, real for
+// inexact) — the intended data surface — blocking the tower-internals methods.
+// The arithmetic ops scheme code actually uses (`+`, `*`, `floor`, …) live in
+// env bindings, not on these prototypes.
 // ============================================================================

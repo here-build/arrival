@@ -1,18 +1,17 @@
 /**
  * Plain (non-observable) mirror of an EvalTrace, for the flow-graph build.
  *
- * The trace is fully MobX-observable so the chart can fill in live as infers
- * resolve. But the graph build (`traceToStatechart` / `traceToForest`) is a heavy
- * O(n²)-ish traversal that reads `children` / `provenance` millions of times — and
- * against the live trace, every one of those reads pays observable-proxy +
- * dependency-tracking overhead (profiling a large render put `ObservableSet`
- * iteration alone at ~22% and `track` at ~7%).
- *
- * `snapshotTrace` is the **reactive boundary**: one linear pass copies the fields
- * the build needs into plain objects/Sets. Called inside the React observer, that
- * single pass is what gets tracked — so live-fill is preserved (a trace change
- * re-runs the snapshot → re-renders) — while the expensive build downstream
- * touches only plain structures and pays zero MobX cost. Reactivity at the edge,
+ * The trace's objects are PLAIN now (`Invocation`/`NodeRecord` were de-MobXed —
+ * see the note atop trace.ts; the one reactive signal left is the monotonic
+ * `entries` counter, observable only on arrival-provenance's `ObservableEvalTrace`
+ * subclass). `snapshotTrace` remains the boundary between the live, still-mutating
+ * trace and the graph build (`traceToStatechart` / `traceToForest`, a heavy
+ * O(n²)-ish traversal): one linear pass copies the fields the build needs into
+ * plain objects/Sets, so a live-fill renderer re-runs the snapshot on an `entries`
+ * tick and the expensive build downstream reads only immutable-for-its-lifetime
+ * structures. (Historically the whole trace was observable and every build read
+ * paid proxy + tracking overhead — `ObservableSet` iteration alone ~22% of a large
+ * render — which is why this boundary exists.) Reactivity at the edge,
  * computation in the core.
  *
  * ── structured-clone contract (the worker boundary) ─────────────────────────
@@ -23,7 +22,8 @@
  * transport, so this file's job (DAG node A1) is to pin down precisely what
  * survives that round-trip and what does not.
  *
- * SURVIVES `structuredClone` (verified — see `__tests__/trace-snapshot-clone.test.ts`):
+ * SURVIVES `structuredClone` (verified — see `arrival-chain`'s
+ * `src/__tests__/trace-snapshot-clone.test.ts`):
  *   - `id` / `state` — number / string primitives.
  *   - `scope` — the pre-derived `scopeId(node)` string (`head@line:col`). This is the
  *     clone-safe twin of `node`: it captures the symbol-keyed `__location__` (which
@@ -84,7 +84,7 @@ export interface PlainInv {
    *  is the ONE field that is NOT structured-clone-safe: a clone loses the prototype,
    *  cross-snapshot identity, and the symbol-keyed `__location__`. A2 must project it
    *  to a plain shape before `postMessage`. See the structured-clone contract in this
-   *  file's header and `__tests__/trace-snapshot-clone.test.ts`. */
+   *  file's header and `arrival-chain`'s `src/__tests__/trace-snapshot-clone.test.ts`. */
   node: APair<SchemeValue, SchemeValue>;
   /** Pre-derived `scopeId(node)` (`head@line:col`) — the clone-safe twin of `node`.
    *  `scopeId` reads the symbol-keyed `__location__` off the live Pair, which
@@ -149,7 +149,7 @@ const NO_PROVENANCE: ReadonlySet<number> = new Set();
 export function snapshotTrace(trace: EvalTrace): PlainTrace {
   const byId = new Map<number, PlainInv>();
   const invocations: PlainInv[] = [];
-  // Pass 1: copy each invocation's scalar fields and de-proxy its provenance Set.
+  // Pass 1: copy each invocation's scalar fields and its provenance Set.
   for (const rec of trace.records.values()) {
     for (const inv of rec.bindings) {
       const isPoint = inv.isProvenancePoint;

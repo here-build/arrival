@@ -1,5 +1,5 @@
 /**
- * Core Scheme value-type contracts extracted from lips.ts.
+ * Core Scheme value-type contracts.
  * Concrete value classes live in ./primitives/*; this file keeps the pure
  * type/interface/guard surface they share.
  */
@@ -26,12 +26,12 @@ import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
 import type { Keyword } from "./Keyword.js";
 // A caught condition reaching `(catch (e) …)` is an R7RS error object —
-// `error-object?` is exactly `obj instanceof R7RSError` (bridge.ts). `import type`
-// keeps this erased at runtime, so the mutual edge with errors.ts (which
-// `import type`s SchemeValue from here) is a pure compile-time cycle.
+// `error-object?` is exactly `obj instanceof R7RSError` (env/r7rs/error-objects.ts).
+// `import type` keeps this erased at runtime, so the mutual edge with errors.ts
+// (which `import type`s SchemeValue from here) is a pure compile-time cycle.
 import type { R7RSError } from "../errors.js";
-// `AProcedure` is a JS function used as a Scheme procedure with optional LIPS
-// metadata — a first-class *value* (unlike Macro/Syntax/Environment, which are
+// `AProcedure` is a JS function used as a Scheme procedure with optional
+// `__name__`/`__code__` metadata — a first-class *value* (unlike Macro/Syntax/Environment, which are
 // env bindings, never values). No runtime brand distinguishes it from a plain
 // procedure, so a value resolved from the env arrives typed as one. `import
 // type` keeps the mutual edge with Environment.ts a pure compile-time cycle.
@@ -105,7 +105,7 @@ export type SchemeValue =
   | Values
   // A caught R7RS condition object, bound as the catch variable.
   | R7RSError
-  // A JS function used as a Scheme procedure, with optional LIPS metadata.
+  // A JS function used as a Scheme procedure, with optional `__name__`/`__code__` metadata.
   | AProcedure
   // A callable-as-value (stage 0 of the callable-as-value rework): ALambda /
   // ANativeProcedure / ARosettaProcedure. Additive alongside the legacy `AProcedure` fn arm
@@ -223,14 +223,14 @@ export function isString(x: unknown): x is SchemeStringLike | string {
 
 // AList: the "APair | ANil" scheme-list spine spelled out ~50x across the codebase.
 // Deliberately NOT recursive (type AList<T> = APair<T, AList<T>|ANil>) -- APair's own
-// method shapes are already self-referential through Cdr (see AConcatPair/APairValue),
+// method shapes are already self-referential through Cdr (see AConcatPair in APair.ts),
 // and a prior "type instantiation excessively deep" error on APair itself was fixed by
 // falling back to APair<any,any>. A second layer of alias recursion risks the same wall.
 // Car/Cdr default to `any`, matching the inline union verbatim -- no call site in this
 // codebase threads a real element type through the Cdr slot today. The `extends SchemeValue`
-// bound (mirroring APairLike above and APair's own class signature) is load-bearing, not
-// decoration -- APair<Car, Cdr>'s own params require it, so a bare unconstrained `Car = any`
-// fails to satisfy APair's constraint at the alias's own declaration site.
+// bound (mirroring APair's own class signature) is load-bearing, not decoration --
+// APair<Car, Cdr>'s own params require it, so a bare unconstrained `Car = any` fails to
+// satisfy APair's constraint at the alias's own declaration site.
 export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? ANil : SchemeValue = any> =
   | APair<Car, Cdr>
   | ANil;

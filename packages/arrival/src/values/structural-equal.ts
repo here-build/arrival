@@ -8,10 +8,10 @@ import { tf } from "./tagless-final.js";
 
 /**
  * Cycle-safe structural deep-equality for Scheme values — the ONE `equal?`
- * implementation (R7RS-small §6.1). Routed to by every surface: bridge.ts's
- * `equal?`/`member`/`assoc`, sandbox-env.ts's `equal?`, and ramda-functions.ts's
- * `equals` — a single walker so all three agree on cycles, SchemeCharacter, and
- * Scheme numeric/provenance types (previously three divergent, partially-broken
+ * implementation (R7RS-small §6.1). Routed to by every surface (`env/r7rs/equality.ts`'s
+ * `equal?`, `env/r7rs/lists.ts`'s `member`/`assoc`, and each term's own Setoid recursion)
+ * — a single walker so every caller agrees on cycles, SchemeCharacter, and
+ * Scheme numeric/provenance types (it replaced three divergent, partially-broken
  * implementations: a `JSON.stringify` fallback that threw on cyclic input, a
  * separate `deepEqual` with no cycle guard and no character case, and `R.equals`
  * with no Scheme-type awareness).

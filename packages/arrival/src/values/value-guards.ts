@@ -34,8 +34,8 @@ export function is_plain_object(object: unknown): object is Record<string, unkno
 /**
  * `nil` is the module-load singleton with empty provenance. Once `Nil` extends
  * AValue, `nil.withProvenance(p)` mints a FRESH Nil so the singleton's empty
- * provenance set is preserved (see types.ts:87 — withProvenance returns
- * `new Nil(p)`). `restrictControlFlowProvenance` (evaluator.ts:627) does
+ * provenance set is preserved (see ANil.ts — withProvenance mints a fresh
+ * `ANil`). `restrictControlFlowProvenance` (evaluator.ts) does
  * exactly this when a control-flow arm resolves to nil while the predicate
  * carries non-empty provenance, so `=== nil` would silently report false on
  * those clones and cascade through `length` / `null?` / `car` / `cdr`
@@ -75,8 +75,8 @@ export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | 
 /**
  * `is_macro` WITHOUT an import edge into the evaluator. A Macro / Syntax /
  * Syntax.Parameter each carry a stable `static [CLASS]` brand ("macro" /
- * "syntax" / "syntax-parameter" — eval/Macro.ts:33, eval/Syntax.ts:35,39),
- * read here off `constructor[CLASS]` exactly as utils/typecheck.ts:107 does.
+ * "syntax" / "syntax-parameter" — eval/Macro.ts, eval/Syntax.ts),
+ * read here off `constructor[CLASS]` exactly as utils/typecheck.ts does.
  * The brand is the value layer's downward-readable identity for the macro
  * classes, so the lineage shadow-cone skip can test "is this a macro?" with no
  * value→eval runtime edge — replacing the former `installMacroGuard` late-bound

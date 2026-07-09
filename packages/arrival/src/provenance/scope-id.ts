@@ -52,9 +52,9 @@ export function scopeId(node: unknown): string {
   return head;
 }
 
-/** Marker substring stamped into a `.prompt`'s generated-lambda source (see
- *  `resolvePrompt` in `llm-plane-arrival-env/src/prompt.ts`: `parse(…, undefined,
- *  \`dotprompt:${path}\`)`). A `scopeId`/`PlainInv.scope` string containing this
+/** Marker substring stamped into a `.prompt`'s generated-lambda source (see the
+ *  `ext/prompt/resolve` native handler in `llm-plane-arrival-env/src/prompt.ts`:
+ *  `parse(…, undefined, \`dotprompt:${path}\`)`). A `scopeId`/`PlainInv.scope` string containing this
  *  marker was minted on the RESOLVER-GENERATED `(infer/run …)` form inside the
  *  resolved lambda, not on the user's own call site. */
 export const DOTPROMPT_SOURCE_MARKER = "@dotprompt:";

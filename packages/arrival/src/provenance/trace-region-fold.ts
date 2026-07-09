@@ -19,9 +19,9 @@
  *     last loop iteration, a still-running application) is recomputed.
  *
  * The contract is PARITY: `current()` must deep-equal `traceToRegions` on every trace
- * state. That is enforced by `__tests__/trace-region-fold.test.ts` (a strict normalized
- * deep-equal across linear / GEPA-fanout / branch-flip / nested-loop / streaming
- * fixtures). The fold achieves it by NOT re-deriving any region logic — it reuses
+ * state. That is enforced by `arrival-chain`'s `src/__tests__/trace-region-fold.test.ts`
+ * (a strict normalized deep-equal across linear / GEPA-fanout / branch-flip / nested-loop /
+ * streaming fixtures). The fold achieves it by NOT re-deriving any region logic — it reuses
  * `regionsAt` / `leafFor` / `attributeFieldEdges` / `derivePorts` / `addPointToHasse`
  * verbatim through the `RegionWalkCtx` seam, so the two paths cannot drift.
  *

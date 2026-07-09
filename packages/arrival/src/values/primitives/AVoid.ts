@@ -1,7 +1,7 @@
 /**
  * Void — the unspecified-value singleton. The result of expressions whose value
  * R7RS leaves *unspecified*: `(if #f #f)`, a not-taken `when`/`unless`, and the
- * side-effecting procedures (`set!`, `for-each`, `display`, `vector-set!`, …).
+ * side-effecting procedures (`set!`, `for-each`, `display`, …).
  *
  * Distinct from `nil` (`'()` — the empty LIST) and from `#f`: "computed no useful
  * value" is neither "the empty list" nor "false". One identity-compared singleton,

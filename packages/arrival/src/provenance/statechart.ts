@@ -1,16 +1,16 @@
 /**
  * trace → causal statechart model (pure; no React, no layout engine).
  *
- * This is the data behind the flows-debugging view: the dataflow DAG the two
- * existing trace views never draw. `trace-view`/`trace-editor` render
- * `Invocation.ancestors()` — the dynamic CALL STACK ("how the interpreter got
- * here"). This renders `Invocation.provenance` — the CAUSALITY ("what caused
- * this"). Different graph entirely.
+ * This is the data behind the flows-debugging view (the studio's `TraceGraph`):
+ * a call-stack view renders `Invocation.ancestors()` — the dynamic CALL STACK
+ * ("how the interpreter got here"); this renders `Invocation.provenance` — the
+ * CAUSALITY ("what caused this"). Different graph entirely.
  *
  * Operates on a plain `PlainTrace` snapshot (see trace-snapshot.ts), not the live
- * observable trace — the O(n²) traversal below reads children/provenance far too
- * many times to pay MobX proxy + tracking on each. `traceToStatechart` keeps its
- * `EvalTrace` signature and snapshots internally, so callers are unaffected.
+ * trace — the snapshot decouples the O(n²) traversal below from a still-mutating
+ * trace (and, historically, from MobX proxy + tracking cost, back when the trace
+ * objects were observable). `traceToStatechart` keeps its `EvalTrace` signature
+ * and snapshots internally, so callers are unaffected.
  *
  * ── why the edge rule looks indirect ────────────────────────────────────────
  * Every `(infer …)` invocation is a provenance point, so its OWN `.provenance`

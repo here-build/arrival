@@ -9,7 +9,7 @@
  * Buffer coercion is co-located in the constructor, so a SchemeBytevector
  * always normalizes to a single Uint8Array payload.
  *
- * Boxing track: docs/plan-2026-06-10-boxing-track.md (S1).
+ * Boxing track: docs/package-specific/arrival-scheme/plan-2026-06-10-boxing-track.md (S1).
  *
  * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
  * Fantasy Land (fantasyland/fantasy-land).
@@ -91,8 +91,8 @@ export class ABytevector extends AValue {
     return new ABytevector(this.ctx, this.__bytevector__, p);
   }
 
-  // Print protocol — R7RS external repr `#u8(byte …)` (matches the printer's get_instances
-  // ABytevector entry; bytes are raw numbers, no element recursion).
+  // Print protocol — R7RS external repr `#u8(byte …)` (bytes are raw numbers, no
+  // element recursion).
   ["arrival/print"](): string {
     return `#u8(${Array.from(this.__bytevector__).join(" ")})`;
   }
@@ -159,6 +159,8 @@ export class ABytevector extends AValue {
 // ============================================================================
 // INTEROP BOUNDARY
 // ============================================================================
-// Same rationale as SchemeString (SchemeString.ts): block inherited-method exposure
-// when interop symbol-to-field resolution walks the prototype chain. Own
-// properties (the algebra methods) remain the intended API.
+// Same rationale as AString (AString.ts): block inherited-method exposure
+// when interop symbol-to-field resolution walks the prototype chain — via the
+// FAMILY RULE in interop-access.ts (own `[CLASS]` brand on the constructor =
+// boundary; no per-class stamp). Own properties (the algebra methods) remain
+// the intended API.

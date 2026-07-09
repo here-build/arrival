@@ -38,7 +38,7 @@
  * The trace is APPEND-ONLY (pure interpreter, no retraction), so `TraceRegionFold`
  * (`trace-region-fold.ts`) maintains the SAME RegionGraph incrementally — O(Δ-new-
  * invocations) per tick, not O(N) per call. Parity is enforced by a strict deep-equal
- * test (`__tests__/trace-region-fold.test.ts`): the fold reuses the EXACT pure helpers
+ * test (`arrival-chain`'s `src/__tests__/trace-region-fold.test.ts`): the fold reuses the EXACT pure helpers
  * this module exports (`leafFor`, `conditionOf`, `decisionInputProducers`,
  * `addPointToHasse`, `regionsAt`, `attributeFieldEdges`, `derivePorts`, …) rather than
  * re-deriving them, so the two paths cannot drift.
@@ -193,9 +193,10 @@ export interface RegionGraph {
    *  producer's fields (`(:verdict (infer …))`) rather than the whole value. Its
    *  presence tells the renderer to draw a granular per-field wire into that slot
    *  instead of absorbing the producer's whole result — the produced value isn't
-   *  what lands in the slot, one of its fields is. Currently un-emitted: the seam
-   *  the field-pluck derivation drops into (a separate follow-up); the consumer
-   *  guards (`if (e.fromField !== undefined) continue`) already honor it. */
+   *  what lands in the slot, one of its fields is. Emitted by `attributeFromFields`
+   *  (below) from the static carrier's pins — so it appears only when the trace ran
+   *  with the `AutoBindings` sidecar armed; the consumer guards
+   *  (`if (e.fromField !== undefined) continue`) honor it either way. */
   edges: { from: number; to: number; field?: string; fromField?: string; kind: "data" | "control" }[];
   warnings: string[];
 }
@@ -1303,7 +1304,7 @@ export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const pointIds = new Set(points.map((p) => p.id));
 
   // Live-value accessor for decision-operand substitution (memoized; pays the
-  // MobX/`schemeToJs` cost only for operands a decision actually references).
+  // `schemeToJs` cost only for operands a decision actually references).
   // `Map<number, Invocation>`, not the old `{ value: unknown }` — `liveById` holds the
   // live invocations themselves (every reader below wants a DIFFERENT field off them:
   // `.value`, `.provenance`, `.children`/`.isProvenancePoint`), so the honest declared

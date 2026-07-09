@@ -19,9 +19,11 @@
  *     wired (forward / loopback by causal layer, per-field pins preserved). No
  *     compression, nothing hidden.
  *
- * The MDL path (`traceToFlowGraph`) is untouched and stays the default. This is
- * its sibling, selected by the trace view's builder toggle. Emits the identical
- * `FlowGraph` types so the renderer needs no changes.
+ * The MDL path (`traceToFlowGraph`) is untouched. This is its sibling — same
+ * `FlowGraph` output types, so a renderer can swap builders freely. (No UI
+ * consumes either builder today — the studio's trace views render
+ * `traceToRegions`/`TraceRegionFold`; both flow-graph builders are exercised by
+ * arrival-chain's tests and benchmarks.)
  */
 import type { FlowGraph, FlowGraphEdge, FlowGraphNode } from "./flow-graph.js";
 import { regionBoundariesFromEdges } from "./region-boundaries.js";

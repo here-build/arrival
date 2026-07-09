@@ -5,7 +5,8 @@
  * type-only, so this leaf imports nothing at runtime) and the cone traversals
  * (pure over `edges`). The EvalTrace → graph PRODUCER (`traceToFlowGraph`) lives
  * in `trace-to-flow-graph.ts` and imports these; this leaf is the engine-free model
- * `@here.build/arrival-provenance` surfaces — so a UI can render and select over the
+ * `@here.build/arrival`'s provenance subpath surfaces (re-exported, unchanged, by the
+ * `@here.build/arrival-provenance` shim) — so a UI can render and select over the
  * graph without pulling the interpreter.
  */
 import type { EdgeKind } from "./statechart.js";

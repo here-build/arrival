@@ -1,6 +1,6 @@
 /**
- * RunContext — the per-run handle the hermetic-ctx migration threads, and (later)
- * every value constructed during a run carries. See the memory
+ * RunContext — the per-run handle the hermetic-ctx migration threads, carried by
+ * every value constructed during a run (`AValue.ctx`). See the memory
  * `project-arrival-hermetic-env-dissolution` for the full DAG.
  *
  * ── Why it exists ────────────────────────────────────────────────────────────
@@ -15,8 +15,9 @@
  * It is intentionally lean; more fields land as ops move off the holders.
  *
  *  - NOT here: the singletons. nil/#t/#f/eof stay GLOBAL CONSTANTS — car-of-nil's
- *    strict is read from the active run's holder, not from `nil.ctx`, so a constant
- *    nil bears no run-state and never needed to be per-run (the corrected plan).
+ *    strict is read from the THREADED run context (the `runCtx` parameter the
+ *    tagless terms take), not from `nil.ctx`, so a constant nil bears no run-state
+ *    and never needed to be per-run (the corrected plan).
  *  - NOT here: dynamic-extent state (exception-handler stack, call-site). That VARIES
  *    by call depth, so it can't ride a constant-per-run handle — it stays the holder
  *    family, dissolved separately through the trampoline.
@@ -30,9 +31,10 @@ export interface HeapMeter {
 }
 
 /**
- * The per-run context. Minted once per `exec()` (see `makeRunContext`); eventually
- * carried by every AValue built during the run, with ops reading run-state off the
- * operand (`operand.ctx.heapMeter`) instead of a module holder.
+ * The per-run context. Minted once per `exec()` (see `makeRunContext`); carried
+ * by every AValue built during the run (`AValue.ctx`), with ops reading run-state
+ * off the operand (`operand.ctx.heapMeter`) or the threaded `runCtx` parameter
+ * instead of a module holder.
  */
 export interface RunContext {
   /** R7RS-strict nil-projection (`car`/`cdr` of nil throws) vs tolerant (yields nil). */

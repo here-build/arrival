@@ -5,20 +5,22 @@
  * the auto-bound lineage carrier rather than walking any runtime field-point registry:
  *
  *   for each consumer source-point, classify its ARGUMENT sub-expressions (`classify` stops
- *   at the source head — `lineage.ts:396` — so the whole call would be inert; the keyword
+ *   at the source head — lineage.ts's `isRosettaIn` cut — so the whole call would be inert; the keyword
  *   plucks live in the args), collect the `field` nodes, and resolve each auto-bound to
  *   `{ base: producer-ids, key }`. Fold to the same `Map<"producer>consumer", Set<field>>`
- *   the live statechart builds inline (`fieldsByPointEdge`, `statechart.ts:166-181`).
+ *   the (now-removed) inline builder used to produce — `traceToStatechart` reads this
+ *   function's output directly (step 5, `statechart.ts`).
  *
- * Proven BYTE-IDENTICAL to the live edge `:fields` over the corpus (gepa / multi-field /
- * positional-only) by `lineage-field-shadow-corpus.test.ts` — fed the REAL consumer AST off
- * the trace, no curated pluck list, so the no-spurious-pin / no-missing-pin claim is real.
+ * Proven BYTE-IDENTICAL to the old inline-built edge `:fields` over the corpus (gepa /
+ * multi-field / positional-only) by `arrival-chain`'s `lineage-field-shadow-corpus.test.ts`
+ * — fed the REAL consumer AST off the trace, no curated pluck list, so the
+ * no-spurious-pin / no-missing-pin claim is real.
  *
  * ADDITIVE + flag-gated: returns an EMPTY map when no `AutoBindings` sidecar is attached
- * (`trace.withAutoBindings()` is the flag), so wiring this reader in keeps the live path
- * byte-identical while off. The swap into `traceToStatechart` behind `--ir-lineage`, and the
- * mint's retirement, are later L2 steps; this rides ALONGSIDE the mint until every consumer
- * migrates.
+ * (`trace.withAutoBindings()` is the flag), so a trace built without one carries no `:fields`.
+ * `traceToStatechart` already defaults to this reader unconditionally (an explicit
+ * `opts.fieldEdges` override exists only for tests) — the inline builder and the field-point
+ * mint it depended on are both deleted, not merely superseded.
  *
  * SLOT SCOPING: each field node's slots resolve ONLY against auto-bindings recorded within the
  * CONSUMER point's invocation subtree (`subtreeIds`), NOT the global first-match — so two

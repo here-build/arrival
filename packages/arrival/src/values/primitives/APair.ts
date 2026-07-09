@@ -2,9 +2,10 @@
  * The cons cell. Beyond car/cdr, a Pair carries its own metadata — source
  * location, datum-label/cycle marks, provenance — on the instance (symbol-keyed),
  * not in a sidecar map, so a value and its origin travel together and survive
- * structure sharing. Runtime cycles (from `set-cdr!`) are detected actively by
- * `isCircularList` (Floyd's), which keeps spine-walking builtins from spinning.
- * The class is an interop boundary (see the bottom of the file).
+ * structure sharing. Cyclic spines (reader datum labels, the `__tieKnot` door —
+ * `set-cdr!` is a notImplemented stub, values are frozen by design) are detected
+ * actively by `isCircularList` (Floyd's), which keeps spine-walking builtins from
+ * spinning. The class is an interop boundary (see the note on `[CLASS]` below).
  *
  * Lineage: a cons-list is the free monoid over its elements; the Fantasy Land
  * instances below (Functor/Foldable/Traversable/Chain/Monoid/Semigroup —
@@ -70,11 +71,12 @@ const trampoline =
  * Returns true iff the list is CIRCULAR (a cdr eventually revisits a node).
  *
  * Unlike `have_cycles()` (a metadata read populated only by the reader for `#0=`
- * datum labels), this ACTIVELY detects cycles created at runtime by `set-cdr!` —
- * the gap behind the list?/length/append/memq/reverse/list-copy non-termination.
- * Spine-walking builtins guard on this so a circular list terminates (list? → #f)
- * or raises a clean error instead of spinning. Never throws; the caller decides
- * what a cycle means.
+ * datum labels), this ACTIVELY detects any cyclic spine regardless of how it was
+ * tied (datum-label knot-tying, `__tieKnot` surgery; historically `set-cdr!`,
+ * now a notImplemented stub) — the gap behind the list?/length/append/memq/
+ * reverse/list-copy non-termination. Spine-walking builtins guard on this so a
+ * circular list terminates (list? → #f) or raises a clean error instead of
+ * spinning. Never throws; the caller decides what a cycle means.
  */
 export function isCircularList(head: APair<any, any>): boolean {
   let slow = head;
@@ -507,8 +509,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   /**
-   * Parser/macro-attached metadata (`__location__`, `__cycles__`, `__ref__`) must
-   * survive — losing it breaks stack traces and reader-cycle reconstruction.
+   * Parser/macro-attached metadata (`LOCATION`, `CYCLES`, `REF` — well-known-symbols.ts)
+   * must survive — losing it breaks stack traces and reader-cycle reconstruction.
    */
   withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
     const copy = new APair<Car, Cdr>(this.ctx, this.car, this.cdr, p);
@@ -542,7 +544,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // Functor — `map` that preserves every element's box + provenance. Walks the cdr-spine
-  // directly, calls `fn` per element concurrently (LIPS lambdas return Promises), then rebuilds
+  // directly, calls `fn` per element concurrently (scheme lambdas return Promises), then rebuilds
   // a fresh spine via Pair.fromArray(_, false) — same shape as the eager `map` builtin. Results
   // are kept RAW so a SchemeString/SchemeExact element keeps its box (coercion-soundness: "map
   // preserves every element's box", lineage A13/A18b). Honors the empty-pair sentinel and a
@@ -586,8 +588,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Filterable — preserves every kept element's box. Keep-rule matches the eager `filter`
   // builtin: Scheme-truthy (`!is_false`) AND nil dropped; a RegExp arg adapts via
-  // `String(x).match`, a fn passes through. `pred` is awaited per element (concurrent fan — LIPS
-  // lambdas return Promises); kept elements re-cons shallow via Pair.fromArray(_, false), so
+  // `String(x).match`, a fn passes through. `pred` is awaited per element (concurrent fan —
+  // scheme lambdas return Promises); kept elements re-cons shallow via Pair.fromArray(_, false), so
   // element boxes survive and the container box drops. Supersedes the old stdlib `filter`
   // builtin dispatch — the term owns the algebra.
   ["arrival/tagless-final/filter"](
@@ -730,7 +732,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // Semigroup — list append. `this ⋄ other` = this list's elements followed by other's. Pure:
-  // builds a fresh spine, never mutates either operand (unlike the in-place `append` method above).
+  // builds a fresh spine, never mutates either operand.
   ["arrival/tagless-final/concat"]<T extends AListAlike>(other: T): AConcatPair<APair<Car, Cdr>, T> {
     return concatPair<APair<Car, Cdr>, T>(this.ctx, this, other);
   }

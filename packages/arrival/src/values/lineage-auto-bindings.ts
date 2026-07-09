@@ -19,8 +19,9 @@
  * each capture is scoped to one invocation's symbol resolutions.
  *
  * Generalizes the already-shipped `argProvenance → buildInputsProvenance`
- * `slot→producer-id[]` map (rosetta.ts:416-418) — same shape, built for the carrier's
- * free leaf slots from `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
+ * `slot→producer-id[]` map (rosetta.ts's `argProvenance` capture +
+ * llm-plane-arrival-env/prompt.ts's `buildInputsProvenance`) — same shape, built for the
+ * carrier's free leaf slots from `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
  *
  * HOOK + REVERSIBILITY. An `AutoBindings` instance attaches to an `EvalTrace`
  * explicitly (flag-gated); when present, `exit` records the invocation's symbol
@@ -138,7 +139,7 @@ export class AutoBindings {
 
   /**
    * Assemble a `Bindings` for a classified skeleton's free LEAF/SOURCE slots — the auto
-   * analogue of `bindingsForSkeleton` (lineage-shadow.ts:134), but each slot resolves to
+   * analogue of `bindingsForSkeleton` (lineage-shadow.ts), but each slot resolves to
    * the producer ids the RUNTIME VALUE carried (per-value), not `provOf(env.get(slot))`
    * (which reads the top-level env where a lambda-param leaf like `reactions` isn't even
    * bound). `slots` is the set the skeleton references (the consumer reads it off
