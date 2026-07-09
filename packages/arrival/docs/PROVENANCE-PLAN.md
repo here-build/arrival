@@ -252,7 +252,13 @@ ONLY, step-walks are NEVER memoized (a walk-misses-memo assertion pins it); lazy
 step-walks off the generator interpreter; the full answer envelope; tier-honesty.law
 fully green; the **R2 demand-monotonicity law flips here** (query maturity — Q8c built
 its machinery). Depends: Q14, Q16, Q8c. Gate: tier-honesty green +
-memo-outlives-payload row + demand-monotonicity green. Risk: low.
+memo-outlives-payload row + demand-monotonicity green. Risk: low. NOTED for the
+P11/Q17-adjacent window (elk triage, inhuman-elk-over-provenance.md §4bis): the ONE
+promoted render capability — `spanAttribution(wire, ingress)`, a named γ-side query
+(static for the TEMPLATED family, γ in general) answering substring-level
+consumption. NOT a record kind, NOT a demand-lattice amendment (§6 excludes further
+grades "until a consumer demands it" — this is that consumer, demanding at the query
+layer). LIMIT: opaque JS rosetta assembly stays unattributable.
 
 **Q18 — offload protocol.** Lands: drill-in request serialization (template-hash,
 ingress payloads, stream epoch from Q11a's header); worker-side epoch refusal AND the
