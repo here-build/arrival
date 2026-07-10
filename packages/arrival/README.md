@@ -24,7 +24,7 @@ package (every example on this page was executed as written; outputs are real):
 3. [**Provenance penetrates that membrane.**](#provenance-penetrates-the-membrane) Every value
    remembers its origin, and a finished run reverses into the program that re-derives any value.
 4. [**Polyglot by observation.**](#polyglot-by-observation-not-by-design) The extended dialect surface was
-   reverse-engineered from LLM latent space, not designed by humans.
+   reverse-engineered from LLM latent space, not designed.
 5. [**An IDE stack.**](#an-ide-not-just-an-interpreter) A Scheme→TypeScript type lens where `tsc`
    is the checker, wired into a CodeMirror plugin with paredit-style structural editing.
 6. [**A human-readable face.**](#sugarcoat--the-reversible-human-face) Sugarcoat renders stored
@@ -248,7 +248,7 @@ retained; evict the cache they live in and a fresh live run may diverge from wha
 ## Polyglot by observation, not by design
 
 The thesis first, because without it this section reads as trivia: **the dialect roster was
-reverse-engineered from LLM latent space, not designed by humans.** It is a measurement of what
+reverse-engineered from LLM latent space, not designed.** It is a measurement of what
 models trained on all of Lisp believe Scheme is, turned into a surface. It is still R7RS Scheme;
 only the behaviors undefined by spec were enrichened to make the runtime polyglot. A model reaches for
 Clojure's threading in one breath and CL's `mapcar` in the next; arrival meets the guess instead
@@ -275,7 +275,13 @@ Two sibling packages turn the language into an editing experience, and both are 
 **`@here.build/arrival-type-lens`** is the Scheme→TypeScript type lens as a language service.
 Scheme programs lower into a typed TS view against a declaration-merged prelude (one `.d.ts` leaf
 per builtin), `tsc` checks that view, and diagnostics lift back to their `.scm` spans — `(car 5)`
-produces a real type error without arrival growing a type checker. `SchemeLanguageService` is the
+produces a real type error without arrival growing a type checker. And because the checker is
+`tsc`, contracts get **generics for free**: a contract's optional `type` field carries the full
+TypeScript signature language, so the stdlib declares `map` as
+`<R>(fn: (...args) => R, ...lists) => R[]` and `list-ref` as `<T>(index: number, list: T[]) => T
+| null` — zod validates the monomorphic runtime at the membrane, the declared signature gives the
+lens real parametric polymorphism, and the harvest prefers the declared form over the
+schema-derived one. `SchemeLanguageService` is the
 familiar IDE verb set in Scheme coordinates: semantic diagnostics, hover, completions (including
 a completion-*context* API driven by the same Σ∩T machinery that masks the sampler's logits),
 go-to-definition, semantic tokens. It runs in-process, or behind a provided worker/SharedWorker
