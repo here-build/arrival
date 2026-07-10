@@ -329,7 +329,7 @@ async function replayGraphIn(
 // program source itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface PlaybackReplayOptions {
+export interface PlaybackReplayOptions {
   /** The FULL program source (defines included) — re-run the ENTIRE program. */
   readonly source: string;
   /** Recorded penetrations per op, in stream order — the "cached membrane

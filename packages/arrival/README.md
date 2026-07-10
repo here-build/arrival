@@ -21,8 +21,9 @@ package (every example on this page was executed as written; outputs are real):
    A typed tool in five lines, run in one call — on an R7RS subset proven against chibi's suite.
 2. [**A totalic membrane.**](#the-totalic-membrane--everything-crosses) Everything crosses or is
    refused loudly: lambdas both directions, structures by borrowed identity, promises defanged.
-3. [**Provenance penetrates that membrane.**](#provenance-penetrates-the-membrane) Every value
-   remembers its origin, and a finished run reverses into the program that re-derives any value.
+3. [**Provenance penetrates that membrane.**](#provenance-penetrates-the-membrane) Attach a trace
+   tap and every value remembers its origin — and a finished run reverses into the program that
+   re-derives any value.
 4. [**Polyglot by observation.**](#polyglot-by-observation-not-by-design) The extended dialect surface was
    reverse-engineered from LLM latent space, not designed.
 5. [**An IDE stack.**](#an-ide-not-just-an-interpreter) A Scheme→TypeScript type lens where `tsc`
@@ -95,8 +96,20 @@ SRFIs assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `
 the deliberately-absent ones (hash tables, random, time/date, …) are doored stubs naming why
 they're out and what to use instead — exactly the symbols an LLM agent predictably reaches for.
 
-Sessions, REPL-style accumulation, scope handles, and the execution budgets are their own short
-read: [`docs/execution-sequences.md`](./docs/execution-sequences.md).
+**Multi-turn agent sessions** need no framework and no hidden layer — mint a scope, reuse it, and
+top-level `define`s accumulate across calls:
+
+```typescript
+import { execState, schemeToJs, LexicalScope } from '@here.build/arrival';
+
+const scope = LexicalScope.fresh("agent-session");             // the session's mutable frame
+await execState(`(define (sq x) (* x x))`, { scope });         // turn 1 — defines land on the scope
+const { values: [v] } = await execState(`(sq 7)`, { scope });  // turn 2 — sees turn 1's define
+schemeToJs(v, {});                                             // 49
+```
+
+The longer read — sequence diagrams, budget errors observed live, the assemble-once/run-N-times
+idiom — is [`docs/execution-sequences.md`](./docs/execution-sequences.md), shipped in the package.
 
 ## The totalic membrane — everything crosses
 
@@ -157,9 +170,13 @@ never a side door. Every other claim on this page stands on that architectural f
 
 ## Provenance penetrates the membrane
 
-Give a value a source and every derivation remembers it — across the membrane, through
-containers, past collapsing ops. The source verb from the first example is already the whole
-setup; attach a trace tap and read the lineage off the values themselves:
+One requirement first, because omitting it fails *silently*: **the mint is trace-gated**. Pass a
+trace tap (`tap: new EvalTrace()`) when you mean to ask about lineage — without one, every value's
+provenance reads `[]` while the values themselves look correct (lineage is a property of
+*observed* runs, and an audit pipeline that forgets the tap gets an empty trail, not an error).
+With the tap attached: give a value a source and every derivation remembers it — across the
+membrane, through containers, past collapsing ops. The source verb from the first example is
+already the whole setup:
 
 ```typescript
 import { execState, schemeToJs, deepProvenance } from '@here.build/arrival';
@@ -173,14 +190,17 @@ const { values: [line] } = await execState(
 
 schemeToJs(line, {});         // "today: cloudy in berlin"
 [...deepProvenance(line)];    // [1] — the value confesses which crossing it descends from
+trace.toolNameFor(1);         // "forecast-for" — the ordinal resolved to the verb that minted it
 ```
 
 Join two sources and the origins **union** — `(string-append (forecast-for "berlin") " / "
 (forecast-for "tokyo"))` carries `[1, 2]` — while a literals-only value has no origin to confess
 (`[]`). Nobody threads the origin by hand: a crossing stamps the value, a container threads its
 stamp into every element read out of it, and a collapsing op (`string-append`, `join`) deep-walks
-its inputs so the lineage survives even when the structure that carried it doesn't. (The mint is
-trace-gated: lineage is a property of *observed* runs — attach the tap when you mean to ask.)
+its inputs so the lineage survives even when the structure that carried it doesn't. And the
+ordinals are not dead ends: `trace.toolNameFor(id)` answers "which tool produced this value?" by
+name, `trace.invocationById(id)` hands back the full invocation — ids are trace-scoped, so resolve
+them against the same `EvalTrace` that was the run's tap.
 
 And the part that sounds impossible: granular provenance normally costs you the hot path. Here
 it doesn't, because provenance is not instrumentation — it is a *second interpretation of the
@@ -229,14 +249,16 @@ We built it and the first thing that fell out was a **seal** — a verdict that 
 a result, checks that each one traces to a real source, and *mathematically refuses to sign* one
 that doesn't. Not a lint pass you can disable: a fabricated leaf has no signature to give, because
 grounding is read per-leaf off the lineage the value already carries. With trace replay
-(`src/provenance/replay.ts` — every crossing answered from the recorded payload stream, the live
-world never consulted) this composes into a property nothing bolt-on offers: an output either
-traces end-to-end — and a third party can re-derive it — or it has no signature at all. The
-whole-result walker and the `whyOf` / `whereOf` / `howOf` queries live one layer up
-(`@here.build/arrival-chain`, the sift work); what lives *here* is the boundary that makes them
-sound — the carrying above, plus the **attestation brand** (`src/values/attestation.ts`): where
-provenance unions forward, attestation *drops on compute*, so an agent must re-assert what a
-derived value IS while reference-passing preserves it for free.
+(`replayProgramWithPlayback`, exported from `/provenance` — the whole program re-run with every
+membrane crossing answered from the recorded payload stream, the live world never consulted) this
+composes into a property nothing bolt-on offers: an output either traces end-to-end — and a third
+party can re-derive it — or it has no signature at all. The production whole-result walker is
+`groundingVerdict` in the sibling `@here.build/arrival-provenance` package (its `/verdict`
+subpath); the `whyOf` / `whereOf` / `howOf` queries live one layer further up
+(`@here.build/arrival-chain`, the sift work — not shippable from this package). What lives *here*
+is the boundary that makes them sound — the carrying above, plus the **attestation brand** (the
+`/attestation` subpath): where provenance unions forward, attestation *drops on compute*, so an
+agent must re-assert what a derived value IS while reference-passing preserves it for free.
 
 Two limits, stated plainly, because the seal invites overreading. First: it is a
 **lineage-completeness oracle, not a truth oracle** — a lying tool's answer traces perfectly and
@@ -314,7 +336,7 @@ sweetens it for the person reviewing, their tweaks convert back; neither side ev
 translation of the other's work. The package also ships the runtime-free s-expression reader
 (`parseSexprs` / `printScheme`) half the toolchain uses to parse Scheme without evaluating it, a
 TextMate grammar (`editors/`), and the formal grammar (`GRAMMAR.md`). The 5-minute syntax tour is
-[`LEARN.md`](../arrival-sugarcoat/LEARN.md).
+`LEARN.md`, shipped inside the `@here.build/arrival-sugarcoat` package.
 
 ## Does the medium measurably help?
 
@@ -333,8 +355,7 @@ Composing multiple tool calls inside one program eliminates round-trips a schema
 native call can't avoid — pipe a result straight into the next call, filter/reduce before it ever
 re-enters the transcript — so the token surcharge buys task completion, not verbosity. The noise
 floor is real and no single run can be trusted alone; the methodology (and the forensics on the
-pre-neutralization runs) is in
-[`arrival-manifold`'s README](../../../second-foundation/arrival-manifold/README.md). A +7pt
+pre-neutralization runs) is in `@here.build/arrival-manifold`'s own README. A +7pt
 shift on a grounded benchmark is as heavy a claim as anything above — it gets the same treatment.
 
 ## What's in the box
@@ -354,8 +375,8 @@ capability grant; the base stdlib itself is assembled from the same packs you wr
 
 No ports, no filesystem, no clock, no `random`. Not as a security posture — as an *algebraic* one:
 an ambient read has no construction site to root a value's lineage at, so admitting it would hole
-the one guarantee the language makes (the full argument:
-[`why-no-io-dataflow-algebra.md`](../../../docs/foundations/arrival-scheme/why-no-io-dataflow-algebra.md)).
+the one guarantee the language makes (the full argument: `why-no-io-dataflow-algebra.md`, in the
+monorepo's `docs/foundations/arrival-scheme/`).
 Effects come back in as capability verbs that mint provenance at the membrane — a filesystem read
 is a recorded crossing that stamps its result, not a stream from nowhere.
 
@@ -387,6 +408,11 @@ Static validation found 1 error — nothing was evaluated:
 A missing capability is likewise diagnosed as a configuration fact, not a mystery. For an agent
 this compounds into **zero-round-trip self-repair**: every diagnostic arrives at once, each
 carrying its alternative — the crash-read-guess-crash loop collapses into one informed retry.
+
+One scope limit, stated out loud: the pass cannot see the bindings a `(require …)` spills at
+runtime, so validating a require-using program would false-fail on every spilled name —
+consumers skip the pass for such programs instead (`arrival-cli` does, with a printed note), and
+the runtime doors remain the backstop.
 
 ### A Curry-Howard type layer, in a language never designed for one
 
@@ -426,7 +452,7 @@ borrowed JS sources at the membrane.
 | | |
 |---|---|
 | First-class special forms | special-ness travels with the keyword *value* — `(define => lambda)` aliases a form; full lexical shadowing is a documented gap, not a silent wrong answer |
-| Replay drivers | re-run a traced program with every membrane crossing answered from the recorded payload stream (`src/provenance/replay.ts`) |
+| Replay drivers | re-run a traced program with every membrane crossing answered from the recorded payload stream (`replayProgramWithPlayback`, exported from `/provenance`) |
 | Trace analysis stack | flow graphs, region folds, span attribution, MDL trace collapse — the trace is a queryable artifact, not a log (`src/provenance/`) |
 | `@here.build/arrival-serializer` | budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut, every reduction signaled inline |
 | `@here.build/arrival-mcp` | the language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result |
@@ -478,7 +504,10 @@ From here: tools — `EnvCapability` + `symbol.rosetta` (first section); data �
 - `validateProgram` / `vocabularyFromChain` — the complete-diagnostic-list validation pass.
 - `classify`, `fullCone`, `fieldCone` — the static lineage carrier; `deepProvenance` — the deep
   provenance read; `schemeToJs` — the boxed→plain exit read.
-- `EvalTrace` / `buildUneval` (from `/provenance`) — the traced-run recorder and reverse slicer.
+- `EvalTrace` / `buildUneval` (from `/provenance`) — the traced-run recorder and reverse slicer;
+  `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
+  verb / invocation that minted it; `replayProgramWithPlayback` — the recorded-payload replay
+  driver.
 
 **Subpath exports** — granular, tree-shaken entries: `/oracle`, `/type-layer`, `/symbol`,
 `/scheme-zod`, `/schema-tag`, `/provenance`, `/srfi`, `/capability`, `/env`, `/resources`,
@@ -527,7 +556,7 @@ compilable *toward* JavaScript (Python and others are plausible too) — so raw 
 
 The language stance — an R7RS-small sandboxed base, a forgiving superset layered *under* strict
 (never beside it), the reserved-zone rule keeping it non-conflicting with any SRFI — is the charter
-in [`language-design-foundations.md`](../../../docs/foundations/arrival-scheme/language-design-foundations.md);
+in `language-design-foundations.md` (the monorepo's `docs/foundations/arrival-scheme/`);
 read it before adding a reader macro, literal, or borrowing. The governing principles of this
 package — the two-interpreter keystone, the value plane, the membrane, provenance, the surface
 rules — are [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md).

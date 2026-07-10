@@ -91,3 +91,16 @@ export {
 } from "./prelude.js";
 export { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
+
+// ── Replay drivers — the "every crossing answered from the recorded payload stream" claim,
+// exported (the README used to cite src/provenance/replay.ts, which is not an API; a src path
+// is never customer surface). `replayProgramWithPlayback` is the whole-program face: re-run
+// under a hermetic env whose only membrane ops are playback sources, silent region, queue
+// underflow = teaching door (never a live re-fetch).
+export {
+  replayProgramWithPlayback,
+  ReplayScopeError,
+  type PlaybackReplayOptions,
+  type ReplayedValue,
+} from "./replay.js";
+export type { Payload } from "./store/interfaces.js";

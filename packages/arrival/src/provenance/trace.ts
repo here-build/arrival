@@ -287,6 +287,24 @@ export class EvalTrace implements EvalTap {
     return this.invocationByTask.get(task) ?? [];
   }
 
+  /** The invocation that minted provenance id `provenanceId` — the ordinal→invocation read for
+   *  the ids `deepProvenance` yields (each id IS an invocation id of THIS trace; `#invocationLog`
+   *  is enter-ordered and gap-free, so the id doubles as the index). `undefined` for an id this
+   *  trace never minted. */
+  invocationById(provenanceId: number): Invocation | undefined {
+    return this.#invocationLog[provenanceId];
+  }
+
+  /** The verb name that minted provenance id `provenanceId` — answers "which tool produced this
+   *  value?" for a `deepProvenance` ordinal (`[...deepProvenance(v)].map((id) => trace.toolNameFor(id))`).
+   *  Returns the minting invocation's head symbol (`forecast-for`, `scan-output`, …); `undefined`
+   *  for an id this trace never minted, or a headless form. Ids are trace-scoped: resolve them
+   *  against the SAME `EvalTrace` that was the run's `tap`. */
+  toolNameFor(provenanceId: number): string | undefined {
+    const inv = this.invocationById(provenanceId);
+    return inv === undefined ? undefined : (headNameOf(inv.node) ?? undefined);
+  }
+
   /** Look up symbol's resolved value inside given invocation's scope. */
   symbolValueIn(inv: Invocation, name: string): unknown {
     return this.symbolValues.get(inv)?.get(name);
