@@ -43,6 +43,7 @@ export type {
   Contract,
   Impl,
   ProvenanceRole,
+  CacheClass,
   CallbackRole,
   CallbackRoles,
   NativeSymbolDef,

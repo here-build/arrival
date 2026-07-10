@@ -31,6 +31,10 @@ import { assertShadowCone } from "../values/lineage-shadow.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import { APair } from "../values/primitives/APair.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
+import type { RunCache } from "../values/run-cache.js";
+// TYPE-ONLY (erased — no runtime scheme-zod edge from this module): the `exec` exit
+// contract's schema type + its output-face projection (the output-bearing overload).
+import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
 import { toJS } from "../membrane.js";
 
@@ -245,6 +249,34 @@ export interface ExecOptions {
    */
   heapBudget?: number;
   /**
+   * THE RUN CACHE (values/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2).
+   * When set, rides `makeRunContext` onto the run's `RunContext.cache`, and every baked
+   * rosetta penetration is intercepted at the decode/fire chokepoint per the mode law:
+   * in `"record"` mode the impl always fires (a `view` writes/overwrites its slot, a
+   * `sink` writes its tombstone); in `"replay"` mode a `view` hit is served without
+   * re-firing, a `sink` tombstone skips, and `pure`/unclassified always re-fire.
+   * `undefined` (the default) ⇒ no interception — byte-identical to today. The cache
+   * is a RUN-level entity: session identity (epoch/roster/configDigest validity) is the
+   * session layer's concern, checked BEFORE a cache is handed to a run.
+   */
+  cache?: RunCache;
+  /**
+   * THE EXIT CONTRACT (B2, arrival-type-hardening-ladder.md §1.2 — RULED: "generic
+   * per-form tuple + zod `output` contract"). When supplied, the LAST form's result is
+   * validated against this schema at the exit boundary — AFTER the `toJS` unwrap, so
+   * the schema describes the plain-JS value `exec` actually hands back (a plain zod
+   * schema, not a scheme-face codec). A mismatch throws a teaching door naming
+   * expected vs got — the outbound twin of `define/overridable`'s validation
+   * (env/overridable.ts): the program declares what it yields, the host declares what
+   * it expects, and the boundary checks BOTH directions. The parse RESULT replaces the
+   * last element (schema transforms/coercions apply), which is what lets the schema
+   * drive the static return type: `exec`'s output-bearing overload types the result as
+   * `[...unknown[], z.output<O>]` when the generic tuple isn't given explicitly.
+   * Consumed by `exec` (the SIMPLE tier's exit) only — `execState`/`execExpr` hand
+   * back boxed values and perform no exit validation.
+   */
+  output?: ZodType;
+  /**
    * Interpreter-level NIL-TOLERANCE mode. When `true`, projection ops
    * (`car`/`cdr` and friends) applied to `null`/nil THROW instead of resolving
    * tolerantly to `nil`. Default (`undefined`/`false`) is TOLERANT — today's
@@ -384,6 +416,7 @@ export async function execState(
     signal,
     budgetMs,
     heapBudget,
+    cache,
     strict,
     freezeRosettaReturns,
     staticValidation,
@@ -446,7 +479,7 @@ export async function execState(
   // carries this SAME runCtx (`operand.ctx.heapMeter`), which `to_array`/the
   // sequence-op dispatch charge against directly — no parent-chain walk, no
   // install/restore dance.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal });
+  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache });
   // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
   // Custom `env` stays GLASS — resolver wraps it, defines land in it, builtins
   // resolve up its base-linked chain — byte-identical (zero change for
@@ -552,6 +585,24 @@ export async function execState(
   return { values: results, scope: runResolver.scope, runCtx };
 }
 
+/** A short, safe rendering of an arrived value for the exit-contract door's "got …"
+ *  clause — the same rendering `define/overridable`'s door uses (env/overridable.ts). */
+function describeExitValue(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** A short human phrase for the declared output schema, for the door's "expected …"
+ *  clause. zod 4's public `.def.type` names the schema's own kind ("string", "object",
+ *  "array", …); anything unreadable falls back to the honest generic phrase. */
+function describeExitSchema(schema: ZodType): string {
+  const type = (schema as { def?: { type?: string } }).def?.type;
+  return typeof type === "string" ? `a value matching the declared ${type} contract` : "the declared output contract";
+}
+
 /**
  * SIMPLE tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — THE
  * default exec surface, "run, get JS". Delegates to {@link execState} (COMPLEX
@@ -562,9 +613,19 @@ export async function execState(
  * lexical scope, or the run context (law tests, tooling, REPL continuation)
  * use {@link execState} directly.
  *
+ * THE RETURN SHAPE (B2, arrival-type-hardening-ladder.md §1.2 — RULED): a generic
+ * per-form tuple. The caller may assert the tuple shape —
+ * `const [, users] = await exec<[void, User[]]>(…)` — a caller-asserted boundary
+ * generic (the fetch-json idiom), zero runtime change; the default stays `unknown[]`.
+ * Composing half two: `ExecOptions.output` — when supplied WITHOUT an explicit tuple,
+ * the schema's output face drives the LAST element's static type
+ * (`[...unknown[], z.output<O>]`), and at runtime the last form's result is validated
+ * against it either way (see the option's doc — the outbound twin of
+ * `define/overridable`'s validation).
+ *
  * @param code - String of Scheme code or pre-parsed SchemeValue
  * @param options - Optional environment and dynamic binding options
- * @returns Promise<unknown[]> - one plain-JS value per top-level expression
+ * @returns one plain-JS value per top-level expression
  *
  * @example
  * ```typescript
@@ -574,15 +635,49 @@ export async function execState(
  * // Multiple expressions
  * const results = await exec("(define x 10) (+ x 5)");  // results = [undefined, 15]
  *
- * // With custom environment — `env` types as `SchemeEnv`, satisfied by
- * // `ResolvingEnvironment` (not the plain `Environment` glass narrows to internally)
- * const env = new ResolvingEnvironment("my-env", { x: 42 });
- * const [result] = await exec("x", { env });  // result = 42
+ * // Caller-asserted tuple (checked by the reader, asserted by the caller)
+ * const [, sum] = await exec<[void, number]>("(define x 10) (+ x 5)");  // sum: number
+ *
+ * // Exit contract — validated at the boundary AND driving the last element's type
+ * const results = await exec("(+ 1 2)", { output: z.number() });  // last: number
  * ```
  */
-export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<unknown[]> {
+export async function exec<O extends ZodType>(
+  code: string | SchemeValue,
+  options: ExecOptions & { output: O },
+): Promise<[...unknown[], ZodOutputOf<O>]>;
+export async function exec<T extends readonly unknown[] = unknown[]>(
+  code: string | SchemeValue,
+  options?: ExecOptions,
+): Promise<T>;
+export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<readonly unknown[]> {
   const state = await execState(code, options);
-  return state.values.map((v) => toJS(v));
+  const values = state.values.map((v) => toJS(v));
+  const contract = options.output;
+  if (contract !== undefined) {
+    // THE EXIT DOOR — the outbound twin of define/overridable's validation: expected
+    // vs got, plus the schema's own issue list (which names the precise mismatch path).
+    if (values.length === 0) {
+      throw new Error(
+        `exec output contract: expected ${describeExitSchema(contract)}, got NO forms at all — ` +
+          `an empty program has no last result to validate; drop the \`output\` option or run a real form`,
+      );
+    }
+    const last = values.length - 1;
+    const outcome = contract.safeParse(values[last]);
+    if (!outcome.success) {
+      const issues = outcome.error.issues
+        .map((i) => (i.path.length > 0 ? `${i.path.join(".")}: ${i.message}` : i.message))
+        .join("; ");
+      throw new Error(
+        `exec output contract: expected ${describeExitSchema(contract)}, got ` +
+          `${describeExitValue(values[last])} — ${issues} — the program's last form must satisfy the ` +
+          `declared \`output\` schema at the exit boundary (the outbound twin of define/overridable's validation)`,
+      );
+    }
+    values[last] = outcome.data; // the parse result — transforms apply, and the static type says so
+  }
+  return values;
 }
 
 /**
@@ -607,7 +702,7 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, skipBootstrapWait }: ExecOptions = {},
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
   // Same honest SchemeEnv → Environment narrow as execState's seam above.
@@ -630,7 +725,7 @@ export async function execExpr(
   // every require'd module. `heapBudget` bounds THIS expression's allocations
   // (a per-form meter; a cumulative multi-form bound needs a shared RunContext,
   // which no caller can inject yet — the ledgered runProgram gap).
-  const runCtx = makeRunContext({ signal, heapBudget });
+  const runCtx = makeRunContext({ signal, heapBudget, cache });
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.

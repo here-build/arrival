@@ -109,7 +109,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       // γ = apply in the hermetic env (§4): the wire resolves `inc` through the
       // SEALED base+prelude chain — proof the reference needed no payload.
       const env = await hermeticEnv([], p.prelude.source);
-      const [result] = await exec(`(${w.source} 41)`, { env, skipBootstrapWait: true });
+      const [result] = (await execState(`(${w.source} 41)`, { env, skipBootstrapWait: true })).values;
       expect(schemeToJs(result)).toBe(42);
     },
   );
@@ -518,7 +518,7 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
 
       const prelude = buildPreludeSource(forms, membership);
       const env = await hermeticEnv([], prelude);
-      const [result] = await exec("(caller 41)", { env, skipBootstrapWait: true });
+      const [result] = (await execState("(caller 41)", { env, skipBootstrapWait: true })).values;
       expect(schemeToJs(result)).toBe(42);
 
       // `helper` is a REAL bound name resolved through the sealed base chain — not

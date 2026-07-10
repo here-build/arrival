@@ -32,7 +32,7 @@ import type { RunContext } from "../values/primitives/RunContext.js";
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { InvocationLike } from "../rosetta.js";
-import { CallCtx, makeCallCtx, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
+import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 import {
@@ -330,8 +330,12 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // classifier reads it OFF THE BOUND VALUE via `env.get(op)`, never a duck-read.
                 // The resolved per-lambda-arm callback roles (element-transformer/control/
                 // effect/accumulator) ride the same seam, read as data by the classifier and
-                // the wireframe builder.
+                // the wireframe builder. The cache class (Ruling A — the CACHE axis, lineage-
+                // independent) rides it too, stamped only when declared (absent = regenerateable).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.cacheClass !== undefined) {
+                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
+                }
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
@@ -374,8 +378,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // on the def itself — sequence()/tagless()/taglessGuard() resolve it at bake
                 // time) onto the bound value, same seam as the native case above — plus the
                 // callback roles (sequence: bake-extracted; tagless: `withCallbackRoles`-
-                // declared, e.g. reduce's acc-chain marker).
+                // declared, e.g. reduce's acc-chain marker). Cache class: only `sequence`
+                // carries a Contract to declare one on (tagless kinds are contract-less by
+                // construction — no channel, so nothing to stamp).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.kind === "sequence" && def.cacheClass !== undefined) {
+                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
+                }
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
@@ -422,7 +431,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 });
                 // Same stamp as the native/sequence cases — the classifier reads it off the
                 // bound value uniformly across every callable kind (callback roles included).
+                // The cache class rides here too: `env.get(op).cacheClass` is the declared
+                // read surface for downstream consumers; the run-cache interception itself
+                // reads the bake-closure copy inside the `run` wrapper (same resolved value).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
+                if (def.cacheClass !== undefined) {
+                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
+                }
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }

@@ -4,11 +4,12 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, jsToScheme, schemeToJs, sandboxedEnv } from "../index.js";
+import { exec, execState, jsToScheme, schemeToJs, sandboxedEnv } from "../index.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
-    const results = await exec(
+    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    const { values: results } = await execState(
       `
   (filter (lambda (x) (> x 5))
     (list 1 3 7 9 2))
@@ -25,7 +26,8 @@ describe("Quick Start Examples", () => {
       fn: (numbers: number[]) => numbers.map((x) => x * 2),
     });
 
-    const results = await exec(
+    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    const { values: results } = await execState(
       `
   (double-all (list 1 2 3 4 5))
 `,
@@ -50,7 +52,8 @@ describe("Quick Start Examples", () => {
 
     sandboxedEnv.set("users", jsToScheme(CONSTANT_CTX, users, {}));
 
-    const results = await exec(
+    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    const { values: results } = await execState(
       `
   (high-priority-users users)
 `,

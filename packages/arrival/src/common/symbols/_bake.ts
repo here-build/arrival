@@ -41,7 +41,7 @@ import { type RunContext } from "../../values/primitives/RunContext.js";
 import { type CallCtx, makeCallCtx, testCallCtx } from "../../values/primitives/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
-import { ProvenanceRoleShapeError } from "../../errors.js";
+import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -145,6 +145,10 @@ export type DecodedArgsWithRest<
  *  "whatever's reachable today". */
 export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
 
+/** The CACHE-CLASS vocabulary (Solidity's — Ruling A, arrival-mcp-rework-over-phases.md §2.3):
+ *  an explicit declaration, never derived from the lineage role. See `Contract.cacheClass`. */
+export type CacheClass = "view" | "pure";
+
 /** The CALLBACK-role vocabulary — the per-z.lambda-arm dual of `ProvenanceRole` (which names
  *  the HOST symbol's role). Extracted from contract SHAPE where shape decides, declared
  *  (`Contract.callbackRoles`) where it underdetermines — `extractCallbackRoles` below owns
@@ -198,6 +202,20 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  a duck-read off an ad-hoc property. See `assertProvenanceRoleShape` below for the two
    *  SHAPE-decidable contradictions this field is checked against at bake time. */
   readonly provenance?: ProvenanceRole;
+  /** EXPLICIT cache class (Solidity's vocabulary) — a declaration, never derived:
+   *  - "view":  cacheable ACROSS runs — a boundary snapshot worth persisting. Demands a
+   *             serializable contract (shape gate: `assertCacheClassShape`): a cache entry
+   *             must serialize.
+   *  - "pure":  regenerateable — deterministic from its decoded args; recovery = re-call;
+   *             NEVER persisted cross-run. No shape gate (nothing of it is stored).
+   *  - absent:  regenerateable — the SAFE default; an undeclared verb re-runs on replay.
+   *  Both view and pure remain provenance `source` on the LINEAGE axis ("we cannot not
+   *  do it") — this field is the cache axis, `provenance` stays the lineage axis.
+   *  NAMING HAZARD: legacy defineRosetta's `pure: true` meant provenance PIPE
+   *  (`RosettaSpec.pure` / createRosettaWrapper's `mintsPoint = pure !== true` — mints
+   *  nothing); THIS `pure` is a cache class on a source. Different axes, same word; the
+   *  legacy path is dying and never carries this field. */
+  readonly cacheClass?: CacheClass;
   /** Declared CALLBACK roles, one per z.lambda arm IN LAMBDA ORDER — the override channel
    *  for exactly the arms whose role the contract SHAPE underdetermines (`z.lambda` is a
    *  bare callable schema carrying no return shape, so the callback's own return — control's
@@ -270,6 +288,11 @@ export interface NativeSymbolDef {
   /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
    *  Non-optional: `native()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED cache class — the authored `Contract.cacheClass`, shape-gated at bake
+   *  (`assertCacheClassShape`). OPTIONAL by design: absent = regenerateable, the safe
+   *  default (never a resolved kind-default like `provenance`'s). capability.ts stamps
+   *  it onto the bound callable beside `provenanceRole`. */
+  readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles (`extractCallbackRoles` — shape + declared
    *  override; see `Contract.callbackRoles`). `undefined` when the contract has no z.lambda
    *  arm. capability.ts stamps this onto the bound callable beside `provenanceRole`. */
@@ -303,6 +326,10 @@ export interface RosettaSymbolDef<
    *  `"pipe"` = transform (forwards input provenance); `"source"` (default) mints. Non-optional:
    *  `rosetta()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The baked rosetta `run`
+   *  wrapper is the ONE membrane chokepoint the run-cache interception (values/run-cache.ts)
+   *  gates on this. Absent = regenerateable (never touches the serialized cache). */
+  readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
   /** See `Contract.type`. */
@@ -368,6 +395,8 @@ export interface SequenceSymbolDef {
   /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
    *  Non-optional: `sequence()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
+  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. */
+  readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
 }
@@ -713,7 +742,12 @@ export function assertProvenanceRoleShape(
 ): void {
   if (role === "sink" || role === "transparent") {
     const items = topLevelSchemas(outSchema);
-    const hasEgress = items === undefined ? true : items.length > 0;
+    // VOID-FAMILY reading (the same no-egress reading `extractCallbackRoles`'s `voidEgress`
+    // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no
+    // real egress — `output: [z.undefinedResult]` is a void verb, not a return value. This
+    // is the sink gate the run-cache tombstone-skip (§2.2's replay table) stands on: a
+    // sink's replay-skip returns void, sound only because the contract PROVED void here.
+    const hasEgress = items === undefined ? true : items.some((item) => z.lookupName(item) !== "undefinedResult");
     if (hasEgress) {
       throw new ProvenanceRoleShapeError(
         name,
@@ -734,6 +768,67 @@ export function assertProvenanceRoleShape(
         role,
         "a fan op applies a proc across elements, but this contract's input vector has no z.lambda arm to apply",
       );
+    }
+  }
+}
+
+/** Every schema a cache-class gate must inspect: a normalized vector's top-level slots
+ *  (`topLevelSchemas`), PLUS a kwargs `z.object`'s per-field codecs (a kwargs contract's
+ *  `.in` is the bare object schema — its fields are the slots that cross), PLUS the bare
+ *  schema itself when nothing introspects (so `z.lookupName` can still name it). Local to
+ *  the cache gate: the provenance gates deliberately stay on `topLevelSchemas`' narrower
+ *  read (their conservative fallbacks differ). */
+function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
+  const items = topLevelSchemas(schema);
+  if (items !== undefined) return items;
+  const def = (schema as { _zod?: { def?: { type?: string; shape?: Record<string, z.ZodTypeAny> } } })._zod?.def;
+  if (def?.type === "object" && def.shape) return Object.values(def.shape);
+  return [schema];
+}
+
+/** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
+ *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
+ *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw
+ *  escape hatch, by definition not serializable) — because a cache entry must serialize
+ *  (arrival-mcp-rework-over-phases.md §2.3, Ruling A). A contradiction throws
+ *  `CacheClassShapeError` at BAKE; the author's way out is declaring `pure` (or nothing).
+ *  `pure` has NO shape gate: recovery is re-call, nothing of it is persisted. Called by
+ *  `native()`/`rosetta()`/`sequence()` on the schemas each already normalizes.
+ *
+ *  Checked on BOTH vectors: an input `z.value`/`z.lambda` breaks the cache KEY (decoded
+ *  args must canonicalize to JSON — run-cache.ts's `canonicalJson`), an output one breaks
+ *  the cache ENTRY (the decoded-face value must serialize). `z.lookupName` resolves
+ *  through `.optional()` wrappers, so an optional lambda arm still gates. */
+export function assertCacheClassShape(
+  name: string,
+  cacheClass: CacheClass | undefined,
+  inSchema: z.ZodTypeAny,
+  outSchema: z.ZodTypeAny,
+): void {
+  if (cacheClass !== "view") return; // pure / absent: regenerateable, nothing persists — no gate.
+  for (const [side, schema] of [
+    ["input", inSchema],
+    ["output", outSchema],
+  ] as const) {
+    for (const slot of cacheGateSlots(schema)) {
+      const slotName = z.lookupName(slot);
+      if (slotName === "lambda") {
+        throw new CacheClassShapeError(
+          name,
+          cacheClass,
+          `a view's cache entry must serialize, but this contract's ${side} vector carries a z.lambda arm — ` +
+            `a callable is not a boundary snapshot; declare "pure" (recovery = re-call) or drop the declaration`,
+        );
+      }
+      if (slotName === "value") {
+        throw new CacheClassShapeError(
+          name,
+          cacheClass,
+          `a view's cache entry must serialize, but this contract's ${side} vector carries a z.value slot ` +
+            `(the declared raw escape hatch — raw crossings don't serialize); declare "pure" (recovery = ` +
+            `re-call) or narrow the slot to a data codec`,
+        );
+      }
     }
   }
 }

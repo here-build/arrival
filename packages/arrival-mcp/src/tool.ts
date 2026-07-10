@@ -2,6 +2,14 @@ import { z as sz } from "@here.build/arrival";
 import { Contract, symbol, VectorSpec } from "@here.build/arrival/symbol";
 import * as z from "zod";
 
+// CACHE CLASS (R1, arrival-mcp-rework-over-phases.md §2.3, D4 — lazy classification):
+// every verb authored through this wrapper is deliberately UNCLASSIFIED (regenerateable,
+// the safe default — re-runs on replay, never cache-absorbed). `view` is structurally
+// barred here today: the wrapper hardcodes `output: [sz.value]` (the raw escape hatch),
+// which the bake-time shape gate (`assertCacheClassShape`) rejects for a serializable
+// cache entry. A verb wanting `view` semantics (a boundary snapshot) first narrows its
+// output to data codecs, then declares — per capability owner, when the semantics are
+// actually wanted; unclassified is CORRECT, not a gap.
 export const tool = (tpl: TemplateStringsArray, ...sub: (string | number)[]) => {
   const full = String.raw({ raw: tpl }, ...sub);
   const match = full.match(/^([^:]+):\s*(.*)$/);

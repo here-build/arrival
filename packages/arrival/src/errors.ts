@@ -251,6 +251,34 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: CacheClassShapeError — declared `cacheClass` vs contract SHAPE.
+//
+// A symbol declares the `view` cache class (Solidity vocabulary — cacheable ACROSS
+// runs, a boundary snapshot worth persisting) but its own contract is structurally
+// non-serializable: a `z.lambda` arm (a callable can't be a snapshot) or a `z.value`
+// slot (the declared raw escape hatch — raw crossings don't serialize). Thrown at
+// ASSEMBLY (bake time — `common/symbols/{native,rosetta,sequence}.ts`, via
+// `assertCacheClassShape` in `_bake.ts`, beside `assertProvenanceRoleShape`), never
+// at call time. `pure` gets NO shape gate — its recovery is re-call, nothing of it
+// is persisted; the author's way out of this door is declaring `pure` (or nothing).
+// -------------------------------------------------------------------------
+export class CacheClassShapeError extends ArrivalError {
+  static [CLASS] = "cache-class-shape-error";
+  public readonly name = "CacheClassShapeError";
+
+  constructor(
+    /** The declaring symbol's name — routing/telemetry key. */
+    public readonly op: string,
+    /** The declared cache class the contract's shape disproves (always `"view"` today). */
+    public readonly cacheClass: string,
+    /** The teaching explanation of WHY the contract's shape disproves the class. */
+    public readonly rule: string,
+  ) {
+    super(`${op}: declared cache class "${cacheClass}" contradicts its own contract — ${rule}`);
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: InteropAccessError — a Scheme access that would cross an interop boundary.
 // -------------------------------------------------------------------------
 export class InteropAccessError extends Error {

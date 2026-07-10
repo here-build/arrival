@@ -7,7 +7,9 @@ import { ZodType } from "zod";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../../rosetta.js";
+import { penetrateThroughCache } from "../../values/run-cache.js";
 import {
+  assertCacheClassShape,
   assertProvenanceRoleShape,
   extractCallbackRoles,
   type BakeRuntimeOpts,
@@ -53,6 +55,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // TRANSFORM (forwards input provenance); "source" (default) MINTS.
     const provenance = contract.provenance ?? "source";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    // The EXPLICIT cache class (Ruling A) — no kind default: absent = regenerateable, the
+    // safe polarity. `view` demands a serializable contract (the gate); `pure` is ungated.
+    // Lineage ⊥ cache: this never touches `provenance` above — infer is the standing proof
+    // (a provenance SOURCE that declares cacheClass "pure").
+    const cacheClass = contract.cacheClass;
+    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
@@ -113,7 +121,24 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    reads run-state off `this` (`this.runCtx.signal` / `this.runCtx.signal?.aborted` /
       //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
       //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
-      const result = await rawImpl.call(this, ...decodedArgs);
+      //
+      //    THE RUN-CACHE INTERCEPTION (R2, values/run-cache.ts) sits exactly HERE — the one
+      //    chokepoint where args are decoded and the impl hasn't fired. Gated on the run's
+      //    cache (`this.runCtx.cache` — absent on every non-session run: the fast path below
+      //    is byte-identical to before) and the bake-resolved cache class / sink lineage
+      //    role. A replay-hit serves the DECODED-FACE value in `result`'s place; steps 3–4
+      //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
+      //    impl return — values are never restored around the membrane, only through it.
+      const runCache = this.runCtx.cache;
+      const result =
+        runCache === undefined
+          ? await rawImpl.call(this, ...decodedArgs)
+          : await penetrateThroughCache(
+              runCache,
+              { symbolName: name, cacheClass, sink: provenance === "sink" },
+              decodedArgs,
+              async () => rawImpl.call(this, ...decodedArgs),
+            );
 
       // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta
       //    (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
@@ -177,6 +202,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       impl,
       run,
       provenance,
+      cacheClass,
       callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,

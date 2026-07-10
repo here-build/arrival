@@ -12,14 +12,15 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../eval/generator-exec.js";
+import { exec, execState } from "../eval/generator-exec.js";
 import { user_env } from "../env-roots.js";
 import { schemeToJs } from "../rosetta.js";
 
 describe("default exec — the 3b.3 cut", () => {
   it("default-path defines persist across exec calls (realm-cached lexical root)", async () => {
     await exec("(define cut-persist-witness 41)");
-    const [v] = await exec("(+ cut-persist-witness 1)");
+    // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
+    const [v] = (await execState("(+ cut-persist-witness 1)")).values;
     expect(schemeToJs(v, {})).toBe(42);
   });
 
@@ -28,7 +29,7 @@ describe("default exec — the 3b.3 cut", () => {
     // The define landed in the null-rooted lexicalRoot, NOT the capability base.
     expect(user_env.has("cut-leak-witness")).toBe(false);
     // …yet a builtin still resolves — through the assembled base, not the lexical chain.
-    const [sum] = await exec("(+ 1 2)");
+    const [sum] = (await execState("(+ 1 2)")).values;
     expect(schemeToJs(sum, {})).toBe(3);
   });
 });

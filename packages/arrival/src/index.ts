@@ -80,6 +80,18 @@ export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 export { is_callable_value } from "./values/value-guards.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./values/primitives/RunContext.js";
+// The first-class run cache (R2, arrival-mcp-rework-over-phases.md §2.2): a run's durable
+// twin is (program, cache); `exec(src, { cache })` threads it onto the run's RunContext and
+// the baked rosetta membrane records/replays through it. `canonicalJson`/`runCacheKey` are
+// the NORMATIVE content-keying algorithm (the session layer reuses them for configDigest).
+export {
+  MemoryRunCache,
+  canonicalJson,
+  runCacheKey,
+  type RunCache,
+  type RunCacheEntry,
+  type RunCacheClass,
+} from "./values/run-cache.js";
 // `SchemeValue` — the honest union of every value the interpreter can hold; a cross-package
 // AST-walking consumer (mcp-substrate's statement-facts.ts) names this type in its own
 // signatures when walking a real parsed form, not a plain-object `Node` shape.

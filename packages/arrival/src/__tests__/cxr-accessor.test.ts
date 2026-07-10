@@ -20,7 +20,8 @@ import { ANil } from "../values/primitives/ANil.js";
 const evalIn =
   (env: typeof global_env) =>
   async (expr: string): Promise<unknown> =>
-    schemeToJs((await exec(expr, { env }))[0], {});
+    // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
+    schemeToJs((await execState(expr, { env })).values[0], {});
 
 // element index k ≡ (car (cdr^k x)) ≡ "ca" + "d"×k + "r"
 const cxrForIndex = (k: number): string => `ca${"d".repeat(k)}r`;

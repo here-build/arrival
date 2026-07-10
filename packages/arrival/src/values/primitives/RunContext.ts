@@ -23,6 +23,8 @@
  *    family, dissolved separately through the trampoline.
  */
 
+import type { RunCache } from "../run-cache.js";
+
 /** Per-run allocation meter — the memory analogue of the wall-clock budget. The
  *  reference is fixed for the run; `used` is incremented in place as cells materialize. */
 export interface HeapMeter {
@@ -51,6 +53,12 @@ export interface RunContext {
    *  body's `CallCtx.runCtx.signal`, not just the trampoline) can observe abort state — never
    *  independently re-derived, so the two can't drift out of sync. */
   readonly signal: AbortSignal | undefined;
+  /** The run's cache (values/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2), if
+   *  any; `undefined` ⇒ no interception (the default — only session/replay runs opt in). The
+   *  baked rosetta `run` wrapper reads it HERE (`this.runCtx.cache`) — the same per-run
+   *  hermetic seam `signal`/`heapMeter` ride — and gates record/replay per the stamped cache
+   *  class. Constant for the run, like everything on this handle. */
+  readonly cache: RunCache | undefined;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
@@ -60,6 +68,7 @@ export function makeRunContext(
     heapBudget?: number;
     freezeRosettaReturns?: boolean;
     signal?: AbortSignal;
+    cache?: RunCache;
   } = {},
 ): RunContext {
   return {
@@ -67,6 +76,7 @@ export function makeRunContext(
     heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
     freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
     signal: opts.signal,
+    cache: opts.cache,
   };
 }
 
@@ -82,4 +92,5 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   heapMeter: undefined,
   freezeRosettaReturns: true,
   signal: undefined,
+  cache: undefined,
 });

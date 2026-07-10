@@ -2,6 +2,7 @@
 // types live in ./_bake.js.
 
 import {
+  assertCacheClassShape,
   assertProvenanceRoleShape,
   extractCallbackRoles,
   CallCtx,
@@ -33,6 +34,10 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // ANativeProcedure (`provenanceRole`).
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    // The EXPLICIT cache class (Ruling A) — no kind default: absent = regenerateable. See
+    // native.ts's note: interception is rosetta-membrane-only; the field rides uniformly.
+    const cacheClass = contract.cacheClass;
+    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
@@ -50,6 +55,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       } as SequenceSymbolDef["run"],
       type: contract.type,
       provenance,
+      cacheClass,
       callbackRoles,
     };
   };

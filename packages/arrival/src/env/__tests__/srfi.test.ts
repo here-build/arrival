@@ -1,5 +1,5 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { exec, sandboxedEnv, schemeToJs } from "../../index.js";
+import { exec, execState, sandboxedEnv, schemeToJs } from "../../index.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
@@ -199,7 +199,8 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   async function sortEnv() {
     const env = sandboxedEnv.inherit(`s95-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi95.lower({ evalScheme }) as never]);
-    return (src: string) => exec(src, { env });
+    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    return async (src: string) => (await execState(src, { env })).values;
   }
 
   it("sorts a list by the elements' own total order (no comparator) — list in, list out", async () => {

@@ -6,6 +6,7 @@
 // wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
 
 import {
+  assertCacheClassShape,
   assertProvenanceRoleShape,
   extractCallbackRoles,
   normalizeInputVector,
@@ -37,6 +38,11 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // reads it off `env.get(op)`, replacing the retired `fanout: true` → `.fanout` duck-read.
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    // The EXPLICIT cache class (Ruling A) — no kind default: absent = regenerateable. The
+    // run-cache INTERCEPTION lives on the rosetta membrane only (a native is a contour, not
+    // a penetration); the resolved field still rides the def uniformly for downstream readers.
+    const cacheClass = contract.cacheClass;
+    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
@@ -52,6 +58,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       type: contract.type,
       preludeOnly: contract.preludeOnly,
       provenance,
+      cacheClass,
       callbackRoles,
     };
   };
