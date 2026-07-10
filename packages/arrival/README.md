@@ -62,23 +62,76 @@ layer computes *what*, the box layer computes *where from*, and the same lineage
 between the interpretations enforced as a tested law, not assumed. Eager per-op accumulation is a
 dial (an oracle the CI cross-check runs), not a tax the production path pays.
 
+## Then run it backward
+
+Because the lineage lives on the values, a finished run can be *reversed*. A traced run builds a
+container whose `uneval` takes a selector — "the head of the result", "the `:PID` of the third
+row" — and reverse-slices the trace by the effective value's provenance into a **minimal
+re-runnable program that re-derives exactly that value** (the Galois-slicing `uneval` of
+Perera–Cheney; purity is the theorem that makes the least slice exist). This runs, today:
+
+```typescript
+import { execState, sandboxedEnv, jsToScheme, pointProvenance, CONSTANT_CTX } from '@here.build/arrival';
+import { EvalTrace, buildUneval } from '@here.build/arrival/provenance';
+
+const env = sandboxedEnv.inherit('demo');
+env.set('scan-output', jsToScheme(CONSTANT_CTX, 'evil.exe', {}, pointProvenance(1)));
+env.set('noise', jsToScheme(CONSTANT_CTX, 'irrelevant', {}, pointProvenance(2)));
+
+const trace = new EvalTrace();
+const src = `
+  (define chatter (string-append noise "!"))
+  (define verdict (string-append "malware: " scan-output))
+  (list verdict "benign")
+`;
+const { values } = await execState(src, { env, tap: trace });
+
+const run = buildUneval({ env, result: values.at(-1), trace, source: src, forms: [] });
+const head = await run.uneval('(car result)');
+
+head.value;        // "malware: evil.exe"
+head.provenance;   // [1] — descends from scan-output; noise never touched it
+head.program;      // (define verdict (string-append "malware: " scan-output))
+                   // (let ((result (list verdict "benign"))) (car result))
+```
+
+The unrelated `chatter` derivation is pruned; what remains is the backward dependence cone plus the
+selector — a closed program a reviewer, or another agent, re-runs to re-derive the exact value under
+question. "Why did you conclude X?" stops being post-hoc narration and becomes a derivation you can
+hand over. (The slice is per top-level form today; intra-form slicing is the documented next step.)
+
 ## Then build the thing only you can see
 
 We built it and the first thing that fell out was a **seal** — a verdict that walks every leaf of a
 result, checks that each one traces to a real source, and *mathematically refuses to sign* one that
 doesn't. Not a lint pass you can disable: a value with a fabricated leaf has no signature to give,
-because the grounding is read per-leaf off the lineage the value already carries. (The seal, and the
-human-readable `whyOf` / `whereOf` / `howOf` / `dagOf` lineage queries, live one layer up on this
-substrate — in `@here.build/arrival-chain` and the sift work — built *on* the provenance this package
-makes free.)
+because the grounding is read per-leaf off the lineage the value already carries. Together with
+trace replay this composes into a property nothing bolt-on offers: an output either traces
+end-to-end — and a third party can re-derive it — or it has no signature at all. The whole-result
+walker and the human-readable `whyOf` / `whereOf` / `howOf` / `dagOf` queries live one layer up (in
+`@here.build/arrival-chain` and the sift work); what lives *here* is the boundary that makes them
+sound — the provenance carrying above, plus the **attestation brand** (`src/values/attestation.ts`),
+a second, deliberately different algebra: where provenance unions forward through computation,
+attestation *drops on compute* — a derived value loses its inputs' attestation, so an agent must
+re-assert what a new value IS, while plain reference-passing preserves it for free. Core carries the
+brand and its stamp sites; enforcement at the tool boundary lives in the manifold layer.
+
+Two limits, stated plainly, because the seal invites overreading. First: it is a
+**lineage-completeness oracle, not a truth oracle** — a lying tool's answer traces perfectly and
+signs happily; what the seal forecloses is *unattributed* values, not wrong ones. Second: replay
+never re-invokes a source — the frozen recorded payloads are authoritative
+(`src/provenance/replay.ts`) — so replaying a run whose crossings include model calls stays exact
+only as long as those recorded results are retained; evict the cache they live in and a fresh live
+run may diverge from what was signed. (Resampling an inference is likewise no hidden reset verb:
+it's an explicit cache-key change at the call site, one layer up in the LLM plane.)
 
 That's one thing. We don't fully know what else this medium is for; neither will you, until you build
 it. A language that can't keep a secret from itself is a strange piece of clay — here it is.
 
 ## What's in the box
 
-Provenance is the headline, but it is one of ten load-bearing pieces. The others are not garnish —
-several of them are the reason the headline is possible at all.
+Provenance is the headline, but it rides on a load-bearing stack. The rest is not garnish — several
+pieces are the reason the headline is possible at all.
 
 ### A real R7RS subset, proven against Chibi's own suite
 
@@ -86,30 +139,31 @@ arrival is honest, faithful, predictable R7RS — a subset by *subtraction* (no 
 mutation), not a lookalike. The test framework for this claim is not ours: the vendored
 chibi-scheme `r7rs-tests.scm` — the reference suite the Chibi implementation tests itself with —
 runs against arrival form-by-form (`src/__tests__/conformance/`). A documented gap is an `it.fails`
-that flips loudly the day it's fixed, never a silent skip. Pure R7RS and SRFI code runs unchanged;
-that's what makes real Scheme libraries usable rather than merely "inspirational."
+that flips loudly the day it's fixed, never a silent skip.
 
-### Polyglot by observation, not by design
+And the subset is deep where it counts, not just wide: **proper tail calls** via a flat trampoline
+(trampolined style after Ganz–Friedman–Wand — unbounded mutual recursion without stack growth),
+**multiple values** (`values` / `call-with-values`), the **full R7RS exception tower** (`raise`,
+`raise-continuable`, `with-exception-handler`, `guard`, error objects with irritants), an **exact
+numeric tower** (bigint-backed rationals — `(+ (/ 1 3) (/ 2 3))` is exactly `1`, not `0.999…`), and
+**datum labels** (`#0=` / `#0#`), so circular literals read without infinite descent.
 
-The surface accepts more than one dialect's spelling — and the roster wasn't invented, it was
-reverse-engineered from what LLMs *think* Scheme is. Models trained on all of Lisp reach for
-Clojure's threading in one breath and CL's `mapcar` in the next; arrival meets them there instead
-of punishing the guess:
+Twelve SRFIs are implemented and assembled by default — 1 (lists), 2, 8, 13, 26, 28, 43, 95, 128,
+151, 189, 235 (`src/env/srfi/`) — so real Scheme libraries are usable rather than merely
+"inspirational." The deliberately-absent ones (hash tables, random, time/date, char-sets, sets,
+string ports) are doored stubs, not silence — each names why it's out and routes back to the real
+dataflow (`src/env/srfi/srfi-stubs.ts`); they are exactly the symbols an LLM agent predictably
+reaches for.
 
-```scheme
-(->> {:versions (list {:state "draft"} {:state "live"})} :versions last :state)  ; "live"
-(map (lambda (x) (* x x)) [1 2 3])                                               ; #(1 4 9)
-(mapcar car (list (list 1) (list 2)))                                            ; (1 2)
-```
+### Everything is a pack — the C3 capability DAG
 
-Four dialect packs carry this (`src/env/polyglot*.ts`): Clojure (`->` / `->>`, `comp`, `get-in`,
-`zipmap`, `frequencies`, `group-by`, `partial`, `juxt`, …), Racket (`~>` / `~>>`, the `dict-*`
-family), Common Lisp (`mapcar`, `remove-if`, `remove-if-not`), and the shared core: `{:key value …}`
-dict literals, `[ … ]` vector literals, the `(:key obj)` keyword accessor, and the `@` / `@?` /
-`@keys` member-read protocol. All of it canonicalizes at read time and stays R7RS-compliant —
-borrowings are admitted only where R7RS leaves behavior undefined (PRINCIPLES P13). The dialect
-verbs that *can't* carry over honestly (`setf`, `loop`, `gethash`, `with-open-file`, …) aren't
-absent — they're doored (see below) with the reason and the working alternative.
+The environment is not a monolith with registration bolted on. Every capability — the R7RS base, each
+SRFI, each dialect pack, your tools — is an `EnvCapability`: a named, dependency-carrying, async
+contribution. `assembleEnv` C3-linearizes the dependency DAG (the same monotonic linearization Python
+uses for MRO — cited, not invented), dedups by identity, detects cycles, applies each pack once, and
+disposes LIFO. The dep edge *is* the capability grant; the base stdlib itself is assembled from the
+same packs you write. This is what "pluggable" means here: there is one composition mechanism and
+everything, including the language's own standard library, goes through it.
 
 ### IO taken away — to come back with lineage
 
@@ -119,6 +173,42 @@ it would put a hole in the one guarantee the language makes (the full argument:
 [`why-no-io-dataflow-algebra.md`](../../../docs/foundations/arrival-scheme/why-no-io-dataflow-algebra.md)).
 Effects come back in as capability-pack tools that mint provenance at the membrane — a filesystem
 read is a recorded crossing that stamps its result, not a stream that appears from nowhere.
+
+### The rosetta membrane — peers, not host
+
+JS ↔ Scheme interop is a recursive wrapper membrane in the object-capability lineage (Miller / Van
+Cutsem), with a member-read protocol modeled on GraalVM's `InteropLibrary`. Values cross as thin,
+identity-cached wrappers, lazily and recursively — a JS object crosses as a borrowed wrapper whose
+members box on first read, carrying the wrapper's provenance:
+
+```typescript
+env.set('users', jsToScheme(CONSTANT_CTX, [{ id: 'alice', priority: 15 }, { id: 'bob', priority: 5 }], {}));
+
+await exec(`(map (lambda (u) (:id u)) users)`, { env });                       // [["alice", "bob"]]
+await exec(`(filter (lambda (u) (> (@ u :priority) 10)) users)`, { env });     // [[{ id: "alice", priority: 15 }]]
+```
+
+Crossings round-trip to identity both directions (arrays ↔ vectors, objects ↔ borrowed wrappers,
+dicts ↔ plain objects, `null`/`undefined` ↔ nil, booleans ↔ `#t`/`#f`). Two things are banned at
+the boundary, with teaching doors: a bare `Promise` entering value space (await it, or hand over the
+structure holding it and let the entry settle lazily), and a bare JS function coming back out of a
+rosetta (untraceable). Critically, JS sits **beneath the language as a peer, not above it as a
+host** — there is no ambient `console`, `process`, or `require` to escape to, so a real effect is
+always a recorded crossing, never a side door. That is the architectural fact every other safety
+claim on this page stands on; it also means a huge host graph crosses zero-copy, borrowed, with no
+hidden effect channel riding along.
+
+### One program, many interpreters — the tagless-final algebra
+
+Operations live *on* the values: each primitive carries `arrival/tagless-final/<op>` methods
+(`map`, `filter`, `get`, `apply`, …) and the builtins are thin dispatchers over them. That's not a
+style choice — it's the load-bearing structure. The value interpreter and the provenance interpreter
+execute the *same terms* in lock-step, and further interpreters read those same terms statically:
+the type lens, the static lineage classifier, the sampler oracle's feasibility layers. N
+interpretations of one program, held in agreement by tested laws — that is the whole architecture
+in one sentence (PRINCIPLES P0/P15). Every declared symbol also carries a **provenance role**
+(`source` / `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`) on its contract, so the
+lineage reading is declared per-verb, never guessed.
 
 ### Errors are doors, not walls
 
@@ -143,70 +233,34 @@ Static validation found 1 error — nothing was evaluated:
     program would crash there.
 ```
 
-And a missing capability is diagnosed as a configuration fact, not a mystery:
+A missing capability is likewise diagnosed as a configuration fact, not a mystery ("Configuration
+key `fs` … was not provided. It disables `require @ arrival/loader` (referenced at 1:35) — this
+program would crash there. Provide `fs` to enable it."). For an agent, this compounds into
+**zero-round-trip self-repair**: every diagnostic arrives at once, each carrying its alternative,
+so the usual failure loop — crash, read one error, guess, crash again — collapses into a single
+informed retry.
 
-```
-Configuration key `fs` (a filesystem) was not provided in the exec configuration. It disables
-`require @ arrival/loader` (referenced at 1:35) — this program would crash there. Provide `fs`
-to enable it.
-```
+### Polyglot by observation, not by design
 
-### SRFIs that actually work — or explain precisely why not
+The thesis first, because without it this section reads as trivia: **the dialect roster was
+reverse-engineered from LLM latent space, not designed for humans.** It is a measurement of what
+models trained on all of Lisp believe Scheme is, turned into a surface. A model reaches for
+Clojure's threading in one breath and CL's `mapcar` in the next; arrival meets the guess instead of
+punishing it:
 
-Implemented and assembled by default (`src/env/srfi/`): SRFI 1 (lists), 2 (`and-let*`), 8
-(`receive`), 13 (strings, the char/predicate subset), 26 (`cut`), 28 (`format`), 43 (vectors),
-95 (sorting), 128 (comparators), 151 (bitwise), 189 (maybe/either), 235 (combinators).
-
-Deliberately *not* implemented — and doored, not dropped (`src/env/srfi/srfi-stubs.ts`): SRFI-69/125
-hash tables (dicts are native and immutable here), SRFI-27 random and SRFI-19 time/date (ambient
-non-determinism has no lineage root), SRFI-14 char-sets (the string library takes a char or a
-predicate), SRFI-113 sets (no set type exists — the door says so instead of pretending), string
-ports. These stubs exist because they are the symbols an LLM agent *predictably* reaches for; each
-one routes the caller back to the real dataflow instead of walling them off.
-
-### Everything is a pack — the C3 capability DAG
-
-The environment is not a monolith with registration bolted on. Every capability — the R7RS base, each
-SRFI, each dialect pack, your tools — is an `EnvCapability`: a named, dependency-carrying, async
-contribution. `assembleEnv` C3-linearizes the dependency DAG (the same monotonic linearization Python
-uses for MRO — cited, not invented), dedups by identity, detects cycles, applies each pack once, and
-disposes LIFO. The dep edge *is* the capability grant; the base stdlib itself is assembled from the
-same packs you write. This is what "pluggable" means here: there is one composition mechanism and
-everything, including the language's own standard library, goes through it.
-
-### The rosetta membrane — peers, not host
-
-JS ↔ Scheme interop is a recursive wrapper membrane in the object-capability lineage (Miller / Van
-Cutsem), with a member-read protocol modeled on GraalVM's `InteropLibrary`. Values cross as thin,
-identity-cached wrappers, lazily and recursively — a JS object crosses as a borrowed wrapper whose
-members box on first read, carrying the wrapper's provenance:
-
-```typescript
-env.set('users', jsToScheme(CONSTANT_CTX, [{ id: 'alice', priority: 15 }, { id: 'bob', priority: 5 }], {}));
-
-await exec(`(map (lambda (u) (:id u)) users)`, { env });                       // [["alice", "bob"]]
-await exec(`(filter (lambda (u) (> (@ u :priority) 10)) users)`, { env });     // [[{ id: "alice", priority: 15 }]]
+```scheme
+(->> {:versions (list {:state "draft"} {:state "live"})} :versions last :state)  ; "live"
+(map (lambda (x) (* x x)) [1 2 3])                                               ; #(1 4 9)
+(mapcar car (list (list 1) (list 2)))                                            ; (1 2)
 ```
 
-Crossings round-trip to identity both directions (arrays ↔ vectors, objects ↔ borrowed wrappers,
-dicts ↔ plain objects, `null`/`undefined` ↔ nil, booleans ↔ `#t`/`#f`). Two things are banned at
-the boundary, with teaching doors: a bare `Promise` entering value space (await it, or hand over the
-structure holding it and let the entry settle lazily), and a bare JS function coming back out of a
-rosetta (untraceable). Critically, JS sits **beneath the language as a peer, not above it as a
-host** — there is no ambient `console`, `process`, or `require` to escape to, so a real effect is
-always a recorded crossing, never a side door.
-
-### One program, many interpreters — the tagless-final algebra
-
-Operations live *on* the values: each primitive carries `arrival/tagless-final/<op>` methods
-(`map`, `filter`, `get`, `apply`, …) and the builtins are thin dispatchers over them. That's not a
-style choice — it's the load-bearing structure. The value interpreter and the provenance interpreter
-execute the *same terms* in lock-step, and further interpreters read those same terms statically:
-the type lens, the static lineage classifier, the sampler oracle's feasibility layers. N
-interpretations of one program, held in agreement by tested laws — that is the whole architecture
-in one sentence (PRINCIPLES P0/P15). Every declared symbol also carries a **provenance role**
-(`source` / `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`) on its contract, so the
-lineage reading is declared per-verb, never guessed.
+Four dialect packs carry this (`src/env/polyglot*.ts`): Clojure (`->` / `->>`, `comp`, `get-in`,
+`zipmap`, …), Racket (`~>` / `~>>`, the `dict-*` family), Common Lisp (`mapcar`, `remove-if`, …),
+and the shared core — `{:key value …}` dict literals, `[ … ]` vectors, the `(:key obj)` accessor,
+the `@` / `@?` / `@keys` member-read protocol. All of it canonicalizes at read time and stays
+R7RS-compliant — borrowings are admitted only where R7RS leaves behavior undefined (PRINCIPLES
+P13); the verbs that *can't* carry over honestly (`setf`, `loop`, `gethash`, …) aren't absent —
+they're doored, with the reason and the working alternative.
 
 ### A Curry-Howard type layer, in a language never designed for one
 
@@ -217,18 +271,52 @@ discharges three ways from one canonical lowering: as a runtime validator (zod),
 (JSON Schema for structured outputs), and as a *static* projection — the type layer
 (`@here.build/arrival/type-layer`) prints harvested signatures as TypeScript, so the checker is
 `tsc` itself. Scheme programs get real type-checking without arrival growing a type checker: the
-proofs are discharged by a checker that already exists.
+proofs are discharged by a checker that already exists. A side effect worth naming: **the schema
+cannot drift** — advertised wire schema, enforced validator, and static type are three projections
+of one term, so there is no second copy to fall out of sync with the first.
 
-### The oracle — the interpreter wired into the sampler *(experimental)*
+### The oracle — the interpreter wired into the sampler
 
 `@here.build/arrival/oracle` exposes the interpreter's own knowledge — structural validity and the
-bound-symbol set (Σ) — as a scanner a constrained decoder can consult token-by-token. Under it, an
-unbalanced program is *ungeneratable*; with a grant env, an unbound symbol is *ungeneratable*. The
-consumer is `@here.build/arrival-sampler` (a separate package): a substrate-free constrained-decoding
-kernel plus node-llama-cpp wiring, an OpenAI-compatible server, and BFCL harness integration. This
-is research-grade — a working proof-of-concept, not a shipped guarantee. But the idea
-is the same grain as everything above: the language is small and honest enough that the interpreter
-can sit *inside* the model's decode loop and make wrong programs impossible to emit.
+bound-symbol set (Σ) — as a **truncation-safe scanner**: pure, O(n), single pass, where an
+unterminated string or comment is a reported state, never a throw (`src/oracle/scanner.ts`) —
+exactly what a constrained decoder consulting it token-by-token needs. Under it, an unbalanced
+program is *ungeneratable*; with a grant env, an unbound symbol is *ungeneratable*. Read that back
+against the capability DAG: an ungranted tool is not merely uncallable at runtime — it is
+**unwritable at generation time**. Containment moves from the sandbox into the decoder.
+
+The consumer is `@here.build/arrival-sampler` (a separate package), and it is more than a sketch:
+a substrate-free mask kernel — Σ + structural gates, a tool-call grammar profile, a per-step
+EXPLAIN record for every veto — pinned by its own kernel test corpus; an async **Σ∩T** layer that
+narrows the symbol mask through a type lens between forward passes (a cache miss degrades
+conservatively to Σ, never to a wrong restriction); node-llama-cpp wiring; an OpenAI-compatible
+server. The honest split: the mask kernel is tested machinery; the decode strategies riding it
+keep the *experimental* tag.
+
+### Boundable execution — the knobs
+
+Execution is **boundable, not bounded by default** — and the default is stated on the tin. `signal`
+(an `AbortSignal`) makes any run killable, always. `budgetMs` is an opt-in *internal* wall-clock
+bound — the trampoline throws when it elapses, no external controller needed. `heapBudget` is an
+opt-in allocation cap charged at the collection-op choke points — the bound an O(n²)-churn list
+loop actually hits, where a wall-clock tick can't see inside a single native pass. Sandbox and
+agent hosts opt in (the MCP layer passes its own defaults); embedded library use pays nothing.
+Two more knobs change the interpretation itself — `strict: true` turns off nil-tolerance
+(projecting into nil throws, R7RS-strict; caller-scoped, so a strict host and a forgiving REPL
+coexist), `freezeRosettaReturns` freezes borrowed JS sources at the membrane — and `execState`
+returns the session `scope`: REPL-style continuation, so a long agent session accumulates
+definitions instead of resending the world each turn.
+
+### And a shelf that earns its weight
+
+| | |
+|---|---|
+| First-class special forms | special-ness travels with the keyword *value* — `(define => lambda)` aliases a form; full lexical shadowing is a documented gap, not a silent wrong answer |
+| Replay drivers | re-run a traced program with every membrane crossing answered from the recorded payload stream — the live world is never consulted (`src/provenance/replay.ts`) |
+| Trace analysis stack | flow graphs, region folds, span attribution, MDL trace collapse — the trace is a queryable artifact, not a log (`src/provenance/`) |
+| `@here.build/arrival-sugarcoat` | a bidirectional lens over canonical s-expressions — `evidence.map{ it[0].normalize[:family] }` renders for humans, folds edits back losslessly |
+| `@here.build/arrival-serializer` | budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut, and every reduction is signaled inline |
+| `@here.build/arrival-mcp` | the language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result |
 
 ## Quick Start
 
@@ -279,9 +367,8 @@ const [line] = await exec(
 
 `provenance: "source"` declares the lineage role: this verb introduces external data, so its results
 mint a fresh origin. A pure transform declares `"pipe"` and forwards its inputs' lineage instead.
-
-There is also a low-ceremony legacy path — `env.defineRosetta(name, { fn, pure? })` — which still
-works but carries no contract; prefer the declared form for anything that outlives a scratch session.
+(A low-ceremony legacy path — `env.defineRosetta(name, { fn, pure? })` — still works but carries no
+contract; prefer the declared form for anything that outlives a scratch session.)
 
 ### Passing data across
 
@@ -310,12 +397,10 @@ const [, highPriority] = await exec(
 
 The program stays self-describing (it runs on its defaults with no host at all), and a value that
 doesn't match the declared type is rejected with a door naming the binding, the expected shape, and
-who supplied it — the host's override and the author's default validate against the same type.
-
-For run-neutral values wired below the program level there is still the manual membrane path —
-`env.set(name, jsToScheme(CONSTANT_CTX, value, {}))` on an `inherit`ed environment (each child
-scope is isolated; nothing leaks between siblings) — but prefer the declared parameter for
-anything a program consumes by name.
+who supplied it — the host's override and the author's default validate against the same type. For
+run-neutral values wired below the program level there is still the manual membrane path
+(`env.set(name, jsToScheme(CONSTANT_CTX, value, {}))` on an `inherit`ed environment; each child
+scope is isolated), but prefer the declared parameter for anything a program consumes by name.
 
 ## API surface
 
@@ -327,7 +412,8 @@ anything a program consumes by name.
 - `ExecOptions`: `env` (a live environment), `capabilities` (assembled per call), `config` (the
   shared configuration bag capabilities read), `override` (host values for the program's
   `define/overridable` parameters — seamless, validated, no `jsToScheme`), `scope`,
-  `staticValidation: "on" | "off"`, `signal` / `budgetMs` (killable, bounded evaluation),
+  `staticValidation: "on" | "off"`, `signal` (killable, always), `budgetMs` / `heapBudget`
+  (opt-in wall-clock / allocation bounds), `strict` (nil-tolerance off), `freezeRosettaReturns`,
   `tap` (trace recording).
 - `parse(code)`, `tokenize(source)` — the reader, standalone.
 - `initBridge()` — pre-warm the lazily assembled base (it otherwise assembles on first `exec`).
@@ -344,11 +430,13 @@ anything a program consumes by name.
   `symbol.define`, `symbol.defineSyntax`, `symbol.tagless`, `symbol.notImplemented`, …), and the
   `z` scheme-zod codec namespace.
 
-**Static analysis**
+**Static analysis & provenance**
 
 - `validateProgram` / `vocabularyFromChain` — the complete-diagnostic-list validation pass.
 - `classify`, `fullCone`, `fieldCone` — the static lineage carrier; `deepProvenance` — the deep
   provenance read over a structured value.
+- `EvalTrace` / `buildUneval` (from `/provenance`) — the traced-run recorder and the reverse
+  slicer: the `{ result, meta, uneval }` container shown above.
 
 **Subpath exports** — granular, tree-shaken entries: `/oracle`, `/type-layer`, `/symbol`,
 `/scheme-zod`, `/schema-tag`, `/provenance`, `/srfi`, `/capability`, `/env`, `/resources`,
