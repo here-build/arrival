@@ -111,36 +111,45 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
   // agreement law drives — over MAP_CODE's per-element body directly. This is the
   // STAMP arm: no replay, no wireframe graph, just the untapped eager execution
   // `SourceRegistry` mints against, checked per track (per element `v`).
-  it(
-    "I1 holds over the eager oracle's stamp sets: cone+(n) ∩ G ⊆ cone+(egress(Ti)), " +
-      "checked per-track against SourceRegistry's minted stamps (the agreement " +
-      "corpus, reusing w1-harness/q16-harness's shared source-mint idiom)",
-    async () => {
-      const registry = new SourceRegistry();
-      const elements = [1, 2, 3];
-      const tracks: { egress: SchemeValue; portStamp: number }[] = [];
-      for (const v of elements) {
-        const env = inferenceEnv.inherit(`i1-stamp-track-${v}`);
-        registry.register(env, "fetch-item", "num");
-        const { values } = await execState(`(* (fetch-item ${v}) 2)`, { env });
-        const egress = values[values.length - 1];
-        const cone = collapseProvenance(egress);
-        expect(cone.size).toBe(1); // exactly ONE interior mint per track (fetch-item)
-        tracks.push({ egress, portStamp: [...cone][0] });
-      }
-      for (const track of tracks) {
-        const egressCone = collapseProvenance(track.egress);
-        // interior n (the track's own fetch-item mint): cone+(n) ⊆ cone+(egress(Ti)).
-        expect(egressCone.has(track.portStamp), `interior stamp ${track.portStamp} escaped its own track's egress cone`).toBe(true);
-        // confinement: nothing beyond this track's own stamp reaches the egress.
-        expect([...egressCone]).toEqual([track.portStamp]);
-      }
-      // distinct crossings mint distinct ids — tracks stay pairwise-disjoint under
-      // the eager oracle too, mirroring the REPLAY arm's own separation shape.
-      const allStamps = tracks.map((t) => t.portStamp);
-      expect(new Set(allStamps).size).toBe(allStamps.length);
+  const elements = [1, 2, 3];
+  let tracks: { v: number; egress: SchemeValue; portStamp: number }[];
+
+  beforeAll(async () => {
+    const registry = new SourceRegistry();
+    tracks = [];
+    for (const v of elements) {
+      const env = inferenceEnv.inherit(`i1-stamp-track-${v}`);
+      registry.register(env, "fetch-item", "num");
+      const { values } = await execState(`(* (fetch-item ${v}) 2)`, { env });
+      const egress = values[values.length - 1];
+      const cone = collapseProvenance(egress);
+      expect(cone.size).toBe(1); // exactly ONE interior mint per track (fetch-item)
+      tracks.push({ v, egress, portStamp: [...cone][0] });
+    }
+  });
+
+  it.each(elements)(
+    "I1 holds over the eager oracle's stamp sets for element %i: cone+(n) ∩ G ⊆ cone+(egress(Ti)), " +
+      "checked against SourceRegistry's minted stamps (the agreement corpus, reusing " +
+      "w1-harness/q16-harness's shared source-mint idiom)",
+    (v) => {
+      const track = tracks.find((t) => t.v === v)!;
+      const egressCone = collapseProvenance(track.egress);
+      // interior n (the track's own fetch-item mint): cone+(n) ⊆ cone+(egress(Ti)).
+      expect(egressCone.has(track.portStamp), `interior stamp ${track.portStamp} escaped its own track's egress cone`).toBe(true);
+      // confinement: nothing beyond this track's own stamp reaches the egress.
+      expect([...egressCone]).toEqual([track.portStamp]);
     },
   );
+
+  // INVARIANT: distinct crossings mint distinct ids — tracks stay pairwise-disjoint
+  // under the eager oracle too, mirroring the REPLAY arm's own separation shape. A
+  // cross-track invariant (comparing ALL tracks against each other) — inherently an
+  // aggregate over the whole row set, not itself a per-row case.
+  it("distinct crossings mint distinct ids — tracks stay pairwise-disjoint under the eager oracle too", () => {
+    const allStamps = tracks.map((t) => t.portStamp);
+    expect(new Set(allStamps).size).toBe(allStamps.length);
+  });
 });
 
 describe("track containment — REPLAY arm (§3 I1 under γ)", () => {
@@ -149,27 +158,33 @@ describe("track containment — REPLAY arm (§3 I1 under γ)", () => {
   // the pure arg wire) stays inside the track's replayed egress cone — and the
   // egress cone contains NOTHING beyond the track's own ingress stamps (the two
   // inclusions together are the confinement).
-  it("I1 holds under replay: cone+(n) ∩ G ⊆ cone+(egress(Ti)), checked against γ's replayed cone", async () => {
-    const run = await recordRun(inferenceEnv, MAP_CODE, { "fetch-item": "num" });
+  let run: RecordedRun;
+  let template: WireframeGraph;
+
+  beforeAll(async () => {
+    run = await recordRun(inferenceEnv, MAP_CODE, { "fetch-item": "num" });
+    template = await fanTemplateOf(MAP_CODE);
+  });
+
+  it("the recorded run mints 3 payloads with egress [2,4,6]", () => {
     expect(run.mints).toHaveLength(3);
     expect(run.egress).toEqual([2, 4, 6]);
-    const template = await fanTemplateOf(MAP_CODE);
+  });
 
-    for (let i = 0; i < 3; i++) {
-      const track = await replayTrack(run, template, i);
-      // the track's value replays: element i of the recorded egress
-      expect(track.value).toBe((run.egress as number[])[i]);
-      const egressCone = replayedCone(track.boxed);
-      // interior n #1 — the track's own port (its recorded mint): cone ⊆ egress cone
-      for (const id of run.mints[i].payload.stampIds) {
-        expect(egressCone.has(id), `interior port stamp ${id} escaped track ${i}'s egress cone`).toBe(true);
-      }
-      // interior n #2 — the pure element ingress (an unstamped literal): ∅ ⊆ egress, trivially inside
-      // …and CONFINEMENT: the egress cone holds nothing beyond this track's own ingress
-      const own = new Set(run.mints[i].payload.stampIds);
-      for (const id of egressCone) {
-        expect(own.has(id), `track ${i}'s replayed cone carries foreign stamp ${id}`).toBe(true);
-      }
+  it.each([0, 1, 2])("element track %i replays: value matches, interior stamp is contained AND confined", async (i) => {
+    const track = await replayTrack(run, template, i);
+    // the track's value replays: element i of the recorded egress
+    expect(track.value).toBe((run.egress as number[])[i]);
+    const egressCone = replayedCone(track.boxed);
+    // interior n #1 — the track's own port (its recorded mint): cone ⊆ egress cone
+    for (const id of run.mints[i].payload.stampIds) {
+      expect(egressCone.has(id), `interior port stamp ${id} escaped track ${i}'s egress cone`).toBe(true);
+    }
+    // interior n #2 — the pure element ingress (an unstamped literal): ∅ ⊆ egress, trivially inside
+    // …and CONFINEMENT: the egress cone holds nothing beyond this track's own ingress
+    const own = new Set(run.mints[i].payload.stampIds);
+    for (const id of egressCone) {
+      expect(own.has(id), `track ${i}'s replayed cone carries foreign stamp ${id}`).toBe(true);
     }
   });
 });
@@ -356,13 +371,14 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
   // @ledger: Q17 — FLIPPED. Generalizes Q8c's own machinery (`reachableNodesForDemand`)
   // over a small corpus: every count-demand cone is a subset of its own value-demand
   // cone, over the SAME (program, demand root) pair.
-  it("cone(count) ⊆ cone(value) — a count-demand cone is never wider than the value-demand cone it's derived from", async () => {
-    const CORPUS = [
-      "(emit! (length (map f (fetch-list))) (car (filter g xs)))",
-      "(length (map (lambda (v) (+ (fetch-item v) 1)) xs))",
-      "(emit! (length (append (map f (fetch-list)) ys)))",
-    ];
-    for (const code of CORPUS) {
+  const MONOTONICITY_CORPUS = [
+    "(emit! (length (map f (fetch-list))) (car (filter g xs)))",
+    "(length (map (lambda (v) (+ (fetch-item v) 1)) xs))",
+    "(emit! (length (append (map f (fetch-list)) ys)))",
+  ];
+  it.each(MONOTONICITY_CORPUS)(
+    "cone(count) ⊆ cone(value) for %j — a count-demand cone is never wider than the value-demand cone it's derived from",
+    async (code) => {
       const p = await wf(code);
       const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
       const from = p.main.egress ?? sinkIdx;
@@ -372,8 +388,8 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
       for (const id of countCone) {
         expect(valueCone.has(id), `count-cone node ${id} escaped the value cone (${code})`).toBe(true);
       }
-    }
-  });
+    },
+  );
 
   // @ledger: Q17 — FLIPPED. `field-k` has no SEPARATE demand grade at the wireframe
   // layer (no consumer has asked for one there — §6 EXCLUDED: "further grades...
@@ -382,16 +398,17 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
   // pre-dating this provenance wave) — this row reuses THAT machinery rather than
   // inventing a second field-demand walk, generalizing lineage-field.test.ts's own
   // per-case assertions into the monotonicity LAW itself.
-  it("cone(field-k) ⊆ cone(whole) — a single-field demand cone is never wider than the whole-value demand cone", async () => {
-    const FIELD_CLASSIFIER: Classifier = { roleOf: () => undefined };
-    const FIELD_CORPUS: ReadonlyArray<{ code: string; bindings: Bindings; step: PathStep }> = [
-      { code: "(:foo x)", bindings: { x: [42] }, step: { field: "foo" } },
-      { code: "(:foo x)", bindings: { x: [42] }, step: { field: "bar" } }, // pruned sibling — [] ⊆ whole trivially
-      { code: "(cons (:foo a) (:bar b))", bindings: { a: [1], b: [2] }, step: { field: "foo" } }, // merge barrier
-      { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "foo" } }, // mux, matches both arms
-      { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "zzz" } }, // mux, prunes both arms
-    ];
-    for (const { code, bindings, step } of FIELD_CORPUS) {
+  const FIELD_CLASSIFIER: Classifier = { roleOf: () => undefined };
+  const FIELD_CORPUS: ReadonlyArray<{ code: string; bindings: Bindings; step: PathStep; note: string }> = [
+    { code: "(:foo x)", bindings: { x: [42] }, step: { field: "foo" }, note: "matched field" },
+    { code: "(:foo x)", bindings: { x: [42] }, step: { field: "bar" }, note: "pruned sibling — [] ⊆ whole trivially" },
+    { code: "(cons (:foo a) (:bar b))", bindings: { a: [1], b: [2] }, step: { field: "foo" }, note: "merge barrier" },
+    { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "foo" }, note: "mux, matches both arms" },
+    { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "zzz" }, note: "mux, prunes both arms" },
+  ];
+  it.each(FIELD_CORPUS)(
+    "cone(field-k) ⊆ cone(whole) for $code / field $step.field ($note)",
+    async ({ code, bindings, step }) => {
       const [ast] = await parse(code);
       const n = classify(ast, FIELD_CLASSIFIER);
       const whole = new Set(fullCone(n, bindings));
@@ -399,8 +416,8 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
       for (const id of field) {
         expect(whole.has(id), `field-cone id ${id} escaped the whole cone (${code}, ${JSON.stringify(step)})`).toBe(true);
       }
-    }
-  });
+    },
+  );
 
   // @ledger: Q17 — FLIPPED, over a SECOND corpus row broadening the assertion
   // beyond the one example `wireframe-fact-wires.test.ts` already covers — here the

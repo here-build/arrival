@@ -37,26 +37,23 @@ const TS_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 describe("name-escape — the bifunctor lens", () => {
   // INVARIANT: unescapeName(escapeName(x)) === x for every name in the R7RS-flavoured corpus
   // (round-trip law).
-  it("ROUND-TRIPS every name: unescapeName(escapeName(x)) === x", () => {
-    for (const name of CORPUS) {
-      expect(unescapeName(escapeName(name))).toBe(name);
-    }
+  it.each(CORPUS)("ROUND-TRIPS %j: unescapeName(escapeName(x)) === x", (name) => {
+    expect(unescapeName(escapeName(name))).toBe(name);
   });
 
   // INVARIANT: escapeName's image is always a valid TS identifier for every corpus name.
-  it("the IMAGE is always a valid TS identifier", () => {
-    for (const name of CORPUS) {
-      expect(escapeName(name)).toMatch(TS_IDENTIFIER);
-    }
+  it.each(CORPUS)("the IMAGE of %j is always a valid TS identifier", (name) => {
+    expect(escapeName(name)).toMatch(TS_IDENTIFIER);
   });
 
   // INVARIANT: an already-identifier-safe name is a fixed point of escapeName (escape = id).
-  it("identifier-safe names are FIXED POINTS (escape = id)", () => {
-    for (const name of ["get_route", "getRoute", "make_vector", "foo123", "_private"]) {
+  it.each(["get_route", "getRoute", "make_vector", "foo123", "_private"])(
+    "%j is identifier-safe — a FIXED POINT (escape = id)",
+    (name) => {
       expect(isTsIdentifier(name)).toBe(true);
       expect(escapeName(name)).toBe(name);
-    }
-  });
+    },
+  );
 
   // INVARIANT: named tokens encode readably (e.g. `nil?` → `nil$question$`, `+` → `$plus$`,
   // `set!` → `set$bang$`).
@@ -85,21 +82,23 @@ describe("name-escape — the bifunctor lens", () => {
 
   // INVARIANT: an ECMAScript reserved word is never a fixed point of isTsIdentifier, though it
   // still round-trips through escape/unescape.
-  it("an ECMAScript RESERVED WORD is never a fixed point — it must route through `_`, not print bare", () => {
-    for (const word of ["for", "class", "new", "return", "if", "let", "do", "case", "var", "delete"]) {
+  it.each(["for", "class", "new", "return", "if", "let", "do", "case", "var", "delete"])(
+    "%j is an ECMAScript RESERVED WORD — never a fixed point; it must route through `_`, not print bare",
+    (word) => {
       expect(isTsIdentifier(word)).toBe(false);
       // escapeName still round-trips it (no char needs escaping — the word is unescaped by
       // charFor, matching the round-trip law); the CALLER is what routes it through `_.`.
       expect(unescapeName(escapeName(word))).toBe(word);
-    }
-  });
+    },
+  );
 
   // INVARIANT: a TS contextual (non-reserved) keyword (e.g. "string", "type", "get") IS a fixed
   // point — a valid bare identifier.
-  it("a TS CONTEXTUAL (non-reserved) type-level keyword stays a fixed point — `const string = 1` is valid TS", () => {
-    for (const word of ["any", "string", "number", "unknown", "type", "declare", "of", "as", "get", "set"]) {
+  it.each(["any", "string", "number", "unknown", "type", "declare", "of", "as", "get", "set"])(
+    "%j is a TS CONTEXTUAL (non-reserved) type-level keyword — stays a fixed point (`const «word» = 1` is valid TS)",
+    (word) => {
       expect(isTsIdentifier(word)).toBe(true);
       expect(escapeName(word)).toBe(word);
-    }
-  });
+    },
+  );
 });

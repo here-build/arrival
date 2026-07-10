@@ -167,76 +167,72 @@ describe("oracle Layer-S — corpus loaded", () => {
 // reader on depth/inString/inComment/midToken/position/closeable/closeSuffix/overClosed,
 // for every prefix of every corpus entry.
 describe("oracle Layer-S — agrees with the canonical reference on every prefix", () => {
-  for (const entry of CORPUS) {
-    it(`agrees on all prefixes of ${JSON.stringify(entry)}`, () => {
-      for (const prefix of prefixesOf(entry)) {
-        const ref = refAnalyze(prefix);
-        const got = scan(prefix);
-        const ctx = JSON.stringify(prefix);
-        expect(got.depth, `depth @ ${ctx}`).toBe(ref.depth);
-        expect(got.inString, `inString @ ${ctx}`).toBe(ref.inString);
-        expect(got.inComment, `inComment @ ${ctx}`).toBe(ref.inComment);
-        expect(got.midToken, `midToken @ ${ctx}`).toBe(ref.midToken);
-        expect(got.position, `position @ ${ctx}`).toBe(ref.position);
-        expect(got.closeable, `closeable @ ${ctx}`).toBe(ref.closeable);
-        expect(got.closeSuffix, `closeSuffix @ ${ctx}`).toBe(ref.closeSuffix);
-        expect(got.overClosed, `overClosed @ ${ctx}`).toBe(ref.overClosed);
-      }
-    });
-  }
+  it.each(CORPUS)("agrees on all prefixes of %j", (entry) => {
+    for (const prefix of prefixesOf(entry)) {
+      const ref = refAnalyze(prefix);
+      const got = scan(prefix);
+      const ctx = JSON.stringify(prefix);
+      expect(got.depth, `depth @ ${ctx}`).toBe(ref.depth);
+      expect(got.inString, `inString @ ${ctx}`).toBe(ref.inString);
+      expect(got.inComment, `inComment @ ${ctx}`).toBe(ref.inComment);
+      expect(got.midToken, `midToken @ ${ctx}`).toBe(ref.midToken);
+      expect(got.position, `position @ ${ctx}`).toBe(ref.position);
+      expect(got.closeable, `closeable @ ${ctx}`).toBe(ref.closeable);
+      expect(got.closeSuffix, `closeSuffix @ ${ctx}`).toBe(ref.closeSuffix);
+      expect(got.overClosed, `overClosed @ ${ctx}`).toBe(ref.overClosed);
+    }
+  });
 });
 
 // INVARIANT: feasible() equals ¬overClosed per the reference reader, for every prefix
 // of every corpus entry.
 describe("oracle Layer-S — feasible() matches structural feasibility (no over-close)", () => {
-  for (const entry of CORPUS) {
-    it(`feasible matches reference on all prefixes of ${JSON.stringify(entry)}`, () => {
-      for (const prefix of prefixesOf(entry)) {
-        const ref = refAnalyze(prefix);
-        expect(structuralScanner.feasible(prefix), `feasible @ ${JSON.stringify(prefix)}`).toBe(!ref.overClosed);
-      }
-    });
-  }
+  it.each(CORPUS)("feasible matches reference on all prefixes of %j", (entry) => {
+    for (const prefix of prefixesOf(entry)) {
+      const ref = refAnalyze(prefix);
+      expect(structuralScanner.feasible(prefix), `feasible @ ${JSON.stringify(prefix)}`).toBe(!ref.overClosed);
+    }
+  });
 });
 
 describe("oracle Layer-S — analyze() exposes the full contract surface with graceful Σ/T", () => {
   // INVARIANT: with no env injected, every prefix's validSymbols()/expectedType() are
   // null and produces() reports true (graceful Σ/T degradation).
-  it("Σ/T degrade gracefully on every prefix (validSymbols=null, expectedType=null, produces=true)", () => {
-    for (const entry of CORPUS) {
-      for (const prefix of prefixesOf(entry)) {
-        const st = structuralScanner.analyze(prefix);
-        expect(st.validSymbols()).toBeNull();
-        expect(st.expectedType()).toBeNull();
-        expect(st.produces("anything", "AnyType")).toBe(true);
-        expect(st.validClasses()).toBeInstanceOf(Set);
-      }
+  it.each(CORPUS)("Σ/T degrade gracefully on every prefix of %j (validSymbols=null, expectedType=null, produces=true)", (entry) => {
+    for (const prefix of prefixesOf(entry)) {
+      const st = structuralScanner.analyze(prefix);
+      expect(st.validSymbols()).toBeNull();
+      expect(st.expectedType()).toBeNull();
+      expect(st.produces("anything", "AnyType")).toBe(true);
+      expect(st.validClasses()).toBeInstanceOf(Set);
     }
   });
 
   // INVARIANT: appending closeSuffix to a well-nested, non-truncated prefix always
-  // closes it to depth 0.
-  it("closeSuffix actually closes the program (appending it reaches depth 0 / closeable)", () => {
-    for (const entry of CORPUS) {
-      const st = structuralScanner.analyze(entry);
-      // Only well-nested, non-text-truncated prefixes are repairable by appending closeSuffix.
-      if (st.overClosed || st.inString || st.inComment) continue;
-      const repaired = entry + st.closeSuffix;
-      expect(scan(repaired).depth, `depth after repair of ${JSON.stringify(entry)}`).toBe(0);
-    }
+  // closes it to depth 0. Only well-nested, non-text-truncated entries are repairable
+  // by appending closeSuffix — the corpus is pre-filtered to that subset (a row-
+  // conditional skip on the full CORPUS would otherwise report a vacuous pass for
+  // every truncated/in-text entry; per the it.each protocol, filter the row set
+  // instead of branching inside the row).
+  const REPAIRABLE = CORPUS.filter((entry) => {
+    const st = structuralScanner.analyze(entry);
+    return !st.overClosed && !st.inString && !st.inComment;
+  });
+  it.each(REPAIRABLE)("closeSuffix actually closes %j (appending it reaches depth 0 / closeable)", (entry) => {
+    const st = structuralScanner.analyze(entry);
+    const repaired = entry + st.closeSuffix;
+    expect(scan(repaired).depth, `depth after repair of ${JSON.stringify(entry)}`).toBe(0);
   });
 
   // INVARIANT: validClasses() includes "end" iff closeable, and includes "close" iff
   // depth > 0 (outside string/comment).
-  it("validClasses gates `end` exactly on closeable and `close` exactly on open depth", () => {
-    for (const entry of CORPUS) {
-      for (const prefix of prefixesOf(entry)) {
-        const st = structuralScanner.analyze(prefix);
-        const classes = st.validClasses();
-        expect(classes.has("end")).toBe(st.closeable);
-        if (!st.inString && !st.inComment) {
-          expect(classes.has("close")).toBe(st.depth > 0);
-        }
+  it.each(CORPUS)("validClasses gates `end`/`close` correctly on every prefix of %j", (entry) => {
+    for (const prefix of prefixesOf(entry)) {
+      const st = structuralScanner.analyze(prefix);
+      const classes = st.validClasses();
+      expect(classes.has("end")).toBe(st.closeable);
+      if (!st.inString && !st.inComment) {
+        expect(classes.has("close")).toBe(st.depth > 0);
       }
     }
   });
@@ -247,32 +243,30 @@ describe("oracle Layer-S — analyze() exposes the full contract surface with gr
 // entry. INVARIANT: Layer S never eagerly evaluates — session.lastClosed stays null
 // and session.failed stays false throughout.
 describe("oracle Layer-S — resumable session agrees with from-scratch analyze (the §A1 property)", () => {
-  for (const entry of CORPUS) {
-    it(`session === analyze on every prefix of ${JSON.stringify(entry)}`, () => {
-      // Drive a single session char-by-char; at each step its state must equal analyze(prefix).
-      const session = structuralScanner.session!();
-      for (let i = 0; i < entry.length; i++) {
-        session.advance(entry[i]!);
-        const prefix = entry.slice(0, i + 1);
-        const fromScratch = structuralScanner.analyze(prefix);
-        const live = session.state;
-        const ctx = JSON.stringify(prefix);
-        expect(live.depth, `depth @ ${ctx}`).toBe(fromScratch.depth);
-        expect(live.inString, `inString @ ${ctx}`).toBe(fromScratch.inString);
-        expect(live.inComment, `inComment @ ${ctx}`).toBe(fromScratch.inComment);
-        expect(live.midToken, `midToken @ ${ctx}`).toBe(fromScratch.midToken);
-        expect(live.position, `position @ ${ctx}`).toBe(fromScratch.position);
-        expect(live.formKind, `formKind @ ${ctx}`).toBe(fromScratch.formKind);
-        expect(live.strict, `strict @ ${ctx}`).toBe(fromScratch.strict);
-        expect(live.closeable, `closeable @ ${ctx}`).toBe(fromScratch.closeable);
-        expect(live.closeSuffix, `closeSuffix @ ${ctx}`).toBe(fromScratch.closeSuffix);
-        expect(live.overClosed, `overClosed @ ${ctx}`).toBe(fromScratch.overClosed);
-        // Layer S is structural-only: no eager evaluation.
-        expect(session.lastClosed).toBeNull();
-        expect(session.failed).toBe(false);
-      }
-    });
-  }
+  it.each(CORPUS)("session === analyze on every prefix of %j", (entry) => {
+    // Drive a single session char-by-char; at each step its state must equal analyze(prefix).
+    const session = structuralScanner.session!();
+    for (let i = 0; i < entry.length; i++) {
+      session.advance(entry[i]!);
+      const prefix = entry.slice(0, i + 1);
+      const fromScratch = structuralScanner.analyze(prefix);
+      const live = session.state;
+      const ctx = JSON.stringify(prefix);
+      expect(live.depth, `depth @ ${ctx}`).toBe(fromScratch.depth);
+      expect(live.inString, `inString @ ${ctx}`).toBe(fromScratch.inString);
+      expect(live.inComment, `inComment @ ${ctx}`).toBe(fromScratch.inComment);
+      expect(live.midToken, `midToken @ ${ctx}`).toBe(fromScratch.midToken);
+      expect(live.position, `position @ ${ctx}`).toBe(fromScratch.position);
+      expect(live.formKind, `formKind @ ${ctx}`).toBe(fromScratch.formKind);
+      expect(live.strict, `strict @ ${ctx}`).toBe(fromScratch.strict);
+      expect(live.closeable, `closeable @ ${ctx}`).toBe(fromScratch.closeable);
+      expect(live.closeSuffix, `closeSuffix @ ${ctx}`).toBe(fromScratch.closeSuffix);
+      expect(live.overClosed, `overClosed @ ${ctx}`).toBe(fromScratch.overClosed);
+      // Layer S is structural-only: no eager evaluation.
+      expect(session.lastClosed).toBeNull();
+      expect(session.failed).toBe(false);
+    }
+  });
 
   // INVARIANT: clone() branches share no mutable state — advancing a branch leaves the
   // base session's state untouched.
@@ -389,12 +383,13 @@ function sigmaEnv(): Environment {
 
 describe("oracle Layer-Σ — graceful degradation when no env is injected", () => {
   // INVARIANT: with no env injected, validSymbols() stays null on every shape, identical to the Layer-S scanner
-  it("makeOracle() (no env) keeps Σ null on every shape — identical to the Layer-S scanner", () => {
-    const oracle = makeOracle();
-    for (const prefix of ["", "(", "(car ", "(let ((x 1)) (+ x ", "'(a "]) {
+  it.each(["", "(", "(car ", "(let ((x 1)) (+ x ", "'(a "])(
+    "makeOracle() (no env) keeps Σ null on shape %j — identical to the Layer-S scanner",
+    (prefix) => {
+      const oracle = makeOracle();
       expect(oracle.analyze(prefix).validSymbols(), `Σ @ ${JSON.stringify(prefix)}`).toBeNull();
-    }
-  });
+    },
+  );
 });
 
 describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given)", () => {

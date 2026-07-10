@@ -95,44 +95,40 @@ function errorClass(e: unknown): string | undefined {
   return undefined;
 }
 
-for (const file of corpusFiles) {
-  describe(`spec corpus — ${file}`, () => {
-    for (const c of loadCases(file)) {
-      it(c.name, async () => {
-        const run = async (): Promise<unknown> => {
-          if (c.mode === "read") {
-            const datums = await parse(c.input);
-            return renderAst(datums.at(-1));
-          }
-          // execState (COMPLEX tier): `toJson`'s canonicalization discriminates by BOXED
-          // type (ASymbol vs AString vs AExact, …) — a boxed-state concern (RULINGS.md
-          // R1), not the SIMPLE tier's plain-JS exit (whose apostrophe-prefixed symbol
-          // string is indistinguishable from a real string starting with `'`).
-          const { values } = await execState(c.input);
-          return toJson(values.at(-1));
-        };
-        if (c.expect.error !== undefined) {
-          let failed: unknown = undefined;
-          let ok = false;
-          try {
-            await run();
-          } catch (e) {
-            ok = true;
-            failed = e;
-          }
-          expect(ok, `expected ${c.expect.error}, but ${c.mode} succeeded`).toBe(true);
-          if (c.expect.error !== "*") {
-            expect(errorClass(failed), `error message: ${String(failed)}`).toBe(c.expect.error);
-          }
-          return;
-        }
-        const actual = await run();
-        if (c.expect.ast !== undefined) {
-          expect(actual).toBe(c.expect.ast);
-        } else {
-          expect(actual).toEqual(c.expect.value);
-        }
-      });
+describe.each(corpusFiles)("spec corpus — %s", (file) => {
+  it.each(loadCases(file))("$name", async (c) => {
+    const run = async (): Promise<unknown> => {
+      if (c.mode === "read") {
+        const datums = await parse(c.input);
+        return renderAst(datums.at(-1));
+      }
+      // execState (COMPLEX tier): `toJson`'s canonicalization discriminates by BOXED
+      // type (ASymbol vs AString vs AExact, …) — a boxed-state concern (RULINGS.md
+      // R1), not the SIMPLE tier's plain-JS exit (whose apostrophe-prefixed symbol
+      // string is indistinguishable from a real string starting with `'`).
+      const { values } = await execState(c.input);
+      return toJson(values.at(-1));
+    };
+    if (c.expect.error !== undefined) {
+      let failed: unknown = undefined;
+      let ok = false;
+      try {
+        await run();
+      } catch (e) {
+        ok = true;
+        failed = e;
+      }
+      expect(ok, `expected ${c.expect.error}, but ${c.mode} succeeded`).toBe(true);
+      if (c.expect.error !== "*") {
+        expect(errorClass(failed), `error message: ${String(failed)}`).toBe(c.expect.error);
+      }
+      return;
+    }
+    const actual = await run();
+    if (c.expect.ast !== undefined) {
+      expect(actual).toBe(c.expect.ast);
+    } else {
+      expect(actual).toEqual(c.expect.value);
     }
   });
-}
+});
