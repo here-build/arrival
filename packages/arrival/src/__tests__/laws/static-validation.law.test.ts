@@ -17,8 +17,10 @@
  *    3 diagnostics in ONE pass — never crash-on-first.
  *
  *  LAW 4 (macro firewall, §3.4 — no false positives): binder-macro formals
- *    (`receive`, `let-values`) and placeholder tokens (`cut`'s `<>`) do NOT report;
- *    the ternary is live — an `"expression"`-attributed macro's arguments DO walk.
+ *    (`receive`, `let-values`, and `and-let*` — the W4-migrated `symbol.defineSyntax`
+ *    pack, the FIRST production `macroAttribute: "binder"` declaration) and
+ *    placeholder tokens (`cut`'s `<>`) do NOT report; the ternary is live — an
+ *    `"expression"`-attributed macro's arguments DO walk.
  *
  *  LAW 5 (SPECIAL_FORMS no-FP, §2.1/§3.5): `while`/`try` programs are clean — the
  *    KEYWORD_SYNTAX baseline + the try/catch scope arm.
@@ -220,6 +222,15 @@ describe("LAW 4 — macro firewall: binder formals and placeholder tokens never 
   it("`let-values` claw names do not report", async () => {
     const [result] = await exec("(let-values (((a b) (values 3 4))) (list a b))", { staticValidation: "on" });
     expect(result).toEqual([3, 4]);
+  });
+
+  it("`and-let*` claw-bound variables (srfi-2, migrated `macroAttribute: \"binder\"`) do not report — and the program runs", async () => {
+    const [result] = await exec("(and-let* ((x 5) (y (* x 2))) (+ x y))", { staticValidation: "on" });
+    expect(result).toBe(15);
+    // The bare-guard claw shape (a claw whose car is itself a pair, no binding) —
+    // same firewall, no reference to `x`/`y` should ever surface as unbound.
+    const [guarded] = await exec("(and-let* ((x 3) ((> x 0))) (* x 10))", { staticValidation: "on" });
+    expect(guarded).toBe(30);
   });
 
   it("`cut`'s `<>` placeholder does not report (opaque interior)", async () => {

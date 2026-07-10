@@ -76,39 +76,51 @@ export default new EnvCapability("scheme/srfi-28", {
   symbols: {
     format:
       symbol.native`format: fills a format string using ~ directives and returns the resulting string (SRFI-28/48); supports (format fmt arg ...) and (format #f fmt ...)`(
-        // A single homogeneous VARIADIC vector, not `[fmt, ...rest]` — the impl (below) is a
-        // real `(...args: unknown[])`, and args[0]'s true type is decided AT RUNTIME (a format
-        // string per SRFI-28, or `#f` per the SRFI-48/CL destination form, or anything else,
-        // which throws the DEST_REASON teaching error) — there is no static fixed-prefix to
-        // split `input`/`inputRest` at. Each element is `z.value` — the representation-BLIND
-        // scheme-value identity, excluding raw non-scheme JS — since a directive-fill arg can
-        // be ANY scheme value (rendered via `displayOf`/`writeOf`).
-        { input: z.array(z.value), output: [z.string] },
-        (...args: unknown[]): AString => {
+        // REAL contract (W4 — retired the fully-shapeless `z.array(z.value)`): a
+        // FIXED head + an `inputRest` variadic tail (the rosetta idiom —
+        // `_bake.ts`'s `normalizeInputVector`/`DecodedArgsWithRest`; same shape
+        // family as `r7rs/strings.ts`'s `string-append`). The head's honest type is
+        // `string | boolean` — SRFI-28 proper's fmt-string arg UNIONED with the
+        // SRFI-48/CL `#f`-destination sentinel: a plain `z.string` would be a LIE
+        // (`(format #f ...)` legitimately hands a boolean here), and this file has
+        // no `as unknown`/`as any` license to paper over that. `#t` (or any other
+        // boolean/non-string value that isn't the `#f` sentinel) is still a runtime
+        // teaching door below (DEST_REASON) — z.union can't express "boolean, but
+        // only false", and `symbol.native` never runtime-validates its contract
+        // anyway (`_bake.ts`: "zod for TYPES purely" — no z.decode fires here), so
+        // the union costs nothing beyond the .d.ts/static-arity precision it buys
+        // over the old form (which couldn't even statically say format takes ≥1
+        // argument). `inputRest` is `z.value` — the representation-BLIND
+        // scheme-value identity — since a directive-fill arg can be ANY scheme
+        // value (rendered via `displayOf`/`writeOf`).
+        { input: [z.union([z.string, z.boolean])], inputRest: z.value, output: [z.string] },
+        (head: AString | ABool | undefined, ...tail: unknown[]): AString => {
           // ── Resolve destination vs format string ───────────────────────────────
-          // SRFI-28: first arg IS the format string. SRFI-48/CL: first arg is a
-          // destination; we admit `#f` only, and then the SECOND arg is the format.
+          // SRFI-28: `head` IS the format string. SRFI-48/CL: `head` is a
+          // destination; we admit `#f` only, and then `tail[0]` is the format.
+          // (`head` reads `undefined` only when the evaluator hands us fewer args
+          // than the contract declares — `symbol.native` never enforces arity.)
           let fmtValue: unknown;
           let rest: unknown[];
           // provInputs — the values whose lineage the fresh string inherits: the fmt
           // string + every arg (the `#f` destination carries no data, so it's excluded).
           let provInputs: unknown[];
 
-          if (args.length > 0 && isStringLike(args[0])) {
-            fmtValue = args[0];
-            rest = args.slice(1);
-            provInputs = args;
-          } else if (args.length > 0 && isHashF(args[0])) {
-            if (args.length < 2 || !isStringLike(args[1])) {
+          if (isStringLike(head)) {
+            fmtValue = head;
+            rest = tail;
+            provInputs = [head, ...tail];
+          } else if (isHashF(head)) {
+            if (tail.length === 0 || !isStringLike(tail[0])) {
               throw new ArrivalError(
                 "format: (format #f fmt arg ...) needs a format string as its second argument",
                 [],
               );
             }
-            fmtValue = args[1];
-            rest = args.slice(2);
-            provInputs = args.slice(1);
-          } else if (args.length === 0) {
+            fmtValue = tail[0];
+            rest = tail.slice(1);
+            provInputs = tail;
+          } else if (head === undefined) {
             throw new ArrivalError("format: expected a format string (SRFI-28: (format fmt arg ...))", []);
           } else {
             // #t, a port, or any other non-string, non-#f first argument.
