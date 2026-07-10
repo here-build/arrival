@@ -23,8 +23,8 @@ package (every example on this page was executed as written; outputs are real):
    refused loudly: lambdas both directions, structures by borrowed identity, promises defanged.
 3. [**Provenance penetrates that membrane.**](#provenance-penetrates-the-membrane) Every value
    remembers its origin, and a finished run reverses into the program that re-derives any value.
-4. [**Polyglot by observation.**](#polyglot-by-observation-not-by-design) The dialect surface was
-   reverse-engineered from LLM latent space, not designed for humans.
+4. [**Polyglot by observation.**](#polyglot-by-observation-not-by-design) The extended dialect surface was
+   reverse-engineered from LLM latent space, not designed by humans.
 5. [**An IDE stack.**](#an-ide-not-just-an-interpreter) A Scheme→TypeScript type lens where `tsc`
    is the checker, wired into a CodeMirror plugin with paredit-style structural editing.
 6. [**A human-readable face.**](#sugarcoat--the-reversible-human-face) Sugarcoat renders stored
@@ -248,8 +248,9 @@ retained; evict the cache they live in and a fresh live run may diverge from wha
 ## Polyglot by observation, not by design
 
 The thesis first, because without it this section reads as trivia: **the dialect roster was
-reverse-engineered from LLM latent space, not designed for humans.** It is a measurement of what
-models trained on all of Lisp believe Scheme is, turned into a surface. A model reaches for
+reverse-engineered from LLM latent space, not designed by humans.** It is a measurement of what
+models trained on all of Lisp believe Scheme is, turned into a surface. It is still R7RS Scheme;
+only the behaviors undefined by spec were enrichened to make the runtime polyglot. A model reaches for
 Clojure's threading in one breath and CL's `mapcar` in the next; arrival meets the guess instead
 of punishing it:
 
@@ -352,16 +353,16 @@ the one guarantee the language makes (the full argument:
 Effects come back in as capability verbs that mint provenance at the membrane — a filesystem read
 is a recorded crossing that stamps its result, not a stream from nowhere.
 
-### One program, many interpreters — the tagless-final algebra
+### One program, many interpreters
 
-Operations live *on* the values: each primitive carries `arrival/tagless-final/<op>` methods and
-the builtins are thin dispatchers over them. The value interpreter and the provenance interpreter
-execute the *same terms* in lock-step; further interpreters read those terms statically — the
-type lens, the static lineage classifier, the sampler oracle's feasibility layers. N
-interpretations of one program, held in agreement by tested laws — the whole architecture in one
-sentence (PRINCIPLES P0/P15). Every declared symbol also carries a **provenance role** (`source`
-/ `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`), so the lineage reading is
-declared per-verb, never guessed.
+The same program is executed by several interpreters at once, and they cannot drift: the value
+interpreter computes *what*, the provenance interpreter computes *where from* in lock-step, and
+further interpreters read the same terms statically — the type lens, the static lineage
+classifier, the sampler oracle's feasibility layers. N interpretations of one program, held in
+agreement by tested laws — the whole architecture in one sentence (the keystone principle,
+[PRINCIPLES P0](./docs/PRINCIPLES.md)). Every declared symbol also carries a **provenance role**
+(`source` / `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`), so the lineage reading
+is declared per-verb, never guessed.
 
 ### Errors are doors, not walls
 
@@ -582,6 +583,6 @@ narrow it retroactively — gray area? Ask, answers are public and bind us. And 
 is a head start, not a moat: every release MITs on its own two-year clock, and we are open to
 conversations about converting the project to full MIT sooner.
 
-arrival grew out of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed), and its copyright notices are preserved in the source where shared code — the reader and tokenizer — remains. The interpreter itself is a ground-up rewrite: the tagless-final term algebra, the trampoline-generator kernel, the rosetta membrane, the capability environment, and the provenance substrate share no code with LIPS.
+arrival grew out of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed), and its copyright notices are preserved in the source where shared code — the reader and tokenizer — remains. The interpreter itself is a ground-up rewrite: the term algebra, the trampoline-generator kernel, the rosetta membrane, the capability environment, and the provenance substrate share no code with LIPS.
 
 For licensing questions, exemptions, or clarifications: team@here.build
