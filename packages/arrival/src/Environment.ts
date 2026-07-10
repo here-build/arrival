@@ -47,9 +47,7 @@ function ownProps(obj: object): (string | symbol)[] {
  *     capabilities.lookup` — and is the single object the evaluator threads
  *     (`EvalContext.resolver`). `resolver.env` is the underlying lexical frame.
  *
- * ENV T1 (docs/working-proposals/environment-resolution-chain.md §T1, Option C
- * extraction 1 of docs/working-proposals/environment-decomposition-options.md):
- * fallback resolvers used to live on EVERY Environment instance, even though only
+ * Fallback resolvers used to live on EVERY Environment instance, even though only
  * the baked capability roots (`global_env`/`user_env`, env-roots.ts) ever have any
  * registered in production — every let/lambda/letrec frame carried a dead-weight
  * `__resolvers__: []` and paid an empty loop on every lookup miss. Resolvers now
@@ -87,7 +85,7 @@ export class Environment {
     // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
     // `mintsPoint = pure !== true`) — no static side-table records it any more; the
     // static classifier reads the declared `.provenanceRole` off baked bound values
-    // instead (values/lineage-classifier-from-env.ts, Q3). Legacy-registered names
+    // instead (values/lineage-classifier-from-env.ts). Legacy-registered names
     // carry no role and fall to the classifier's `undefined` default.
     if (config.type !== undefined) rosettaTypesOf(this).set(name, config.type);
   }
@@ -119,7 +117,7 @@ export class Environment {
   /**
    * Resolve a name within one env layer before yielding to its parent. Own bindings win
    * over the parent (a closer module shadows a deeper dependency) — the resolver leg
-   * that used to sit between them lives only on {@link ResolvingEnvironment} now (ENV T1);
+   * that used to sit between them lives only on {@link ResolvingEnvironment} now;
    * a plain frame is own → parent, full stop.
    */
   _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
@@ -139,17 +137,18 @@ export class Environment {
   }
 
   /**
-   * T0b NOTE (not extracted here — T3 territory): `get()`'s `patch_value(directValue)` call
-   * below is the SAME storage-membrane class of work as `set()`'s (former) auto-boxing —
-   * every read gets coerced (pair → `quote(mark_cycles(...))`, else `box(value)`) on the way
-   * out, mirroring the box-on-the-way-in `set()` used to do. Unlike `set()`'s boxing, this
-   * coercion isn't a narrow-the-signature fix: it runs on the READ path for every lookup hit
-   * (own bindings, resolver hits, and parent-chain hits alike), so moving it to "the caller's
-   * boundary" isn't a single call-site rewrite — it would need every `get()`/`lookupSettled()`/
-   * `_lookupWithResolvers` consumer to apply its own patch, or a wrapping read-membrane type
-   * (`Frame`/`BakedBase` per the decomposition options doc, Option A/C) that owns "coerce on
-   * read" as a declared responsibility instead of a per-call incidental. That's the T1/T3
-   * territory (frames vs. baked roots as distinct types), not a T0 no-regret move.
+   * `get()`'s `patch_value(directValue)` call below is the SAME storage-membrane class
+   * of work as `set()`'s (former) auto-boxing — every read gets coerced (pair →
+   * `quote(mark_cycles(...))`, else `box(value)`) on the way out, mirroring the
+   * box-on-the-way-in `set()` used to do. Unlike `set()`'s boxing, this coercion isn't
+   * a narrow-the-signature fix: it runs on the READ path for every lookup hit (own
+   * bindings, resolver hits, and parent-chain hits alike), so moving it to "the
+   * caller's boundary" isn't a single call-site rewrite — it would need every
+   * `get()`/`lookupSettled()`/`_lookupWithResolvers` consumer to apply its own patch,
+   * or a wrapping read-membrane type (`Frame`/`BakedBase`) that owns "coerce on read"
+   * as a declared responsibility instead of a per-call incidental. Left deliberately
+   * unresolved: frames vs. baked roots as distinct types is a bigger cut than a
+   * no-regret move.
    */
   get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue | undefined {
     // `:key` keyword accessors aren't special-cased here: a `:`-prefixed symbol is never
@@ -180,11 +179,11 @@ export class Environment {
   }
 
   /**
-   * Storage-membrane face (T0b, docs/working-proposals/environment-decomposition-options.md
-   * bucket 4): `set()` accepts `EnvironmentValue` ONLY — an honest signature. A caller that
-   * used to pass a raw JS `number`/`bigint` and rely on Environment auto-boxing it into
-   * AExact/AInexact must now box at ITS OWN boundary before calling `set` (via `fromJS`/
-   * `jsToScheme` per context) — storage is inside the membrane, not a second door into it.
+   * Storage-membrane face: `set()` accepts `EnvironmentValue` ONLY — an honest
+   * signature. A caller that used to pass a raw JS `number`/`bigint` and rely on
+   * Environment auto-boxing it into AExact/AInexact must now box at ITS OWN boundary
+   * before calling `set` (via `fromJS`/`jsToScheme` per context) — storage is inside
+   * the membrane, not a second door into it.
    */
   set(name: BindingName, value: EnvironmentValue): this {
     let storedValue: EnvironmentValue;
@@ -192,7 +191,7 @@ export class Environment {
     if (isSchemeValue(value)) {
       storedValue = value;
     }
-    // Bare-value purge (A4/P4): a raw JS boolean/string/symbol used to pass through
+    // Bare-value purge: a raw JS boolean/string/symbol used to pass through
     // unboxed here — a P4 violation (the membrane's world ends at the frame boundary;
     // storage IS inside). Falls to the `fromJS` branch below, which boxes it
     // (boolean→ABool, string→AString, a registered symbol→keyword ASymbol, a unique
@@ -227,25 +226,26 @@ export class Environment {
 }
 
 /**
- * ENV T1 extraction (docs/working-proposals/environment-resolution-chain.md §T1):
- * the BAKED-ROOT specialization of {@link Environment} — the only place fallback
- * resolvers live. Exactly the two production producer classes register here (see the
- * design doc §0): the kernel's phase-gated prelude-scope resolver
- * (`common/kernel.ts`'s `assembleEnv`, via the `registerResolver` duck-type probe) and
- * pack-declared `EnvCapability.resolvers` (`common/capability.ts:383`). Both apply
- * targets are, and must stay, `ResolvingEnvironment` instances: `env-roots.ts`'s
- * `global_env`/`user_env`, and any env built by `.inherit()`ing off one of those (e.g.
- * `generator-exec.ts`'s per-call `exec-capabilities` base) — `inherit()` is overridden
- * below to keep that subtype, so a capability-augmented base built on top of `user_env`
- * stays resolver-capable without the caller doing anything special.
+ * The BAKED-ROOT specialization of {@link Environment} — the only place fallback
+ * resolvers live. Exactly two production producer classes register here: the
+ * kernel's phase-gated prelude-scope resolver (`common/kernel.ts`'s `assembleEnv`,
+ * via the `registerResolver` duck-type probe) and pack-declared
+ * `EnvCapability.resolvers` (`common/capability.ts:383`). Both apply targets are,
+ * and must stay, `ResolvingEnvironment` instances: `env-roots.ts`'s
+ * `global_env`/`user_env`, and any env built by `.inherit()`ing off one of those
+ * (e.g. `generator-exec.ts`'s per-call `exec-capabilities` base) — `inherit()` is
+ * overridden below to keep that subtype, so a capability-augmented base built on
+ * top of `user_env` stays resolver-capable without the caller doing anything
+ * special.
  *
- * Plain lexical frames (let/lambda/letrec/… — `Environment.inherit`, `defaultLexicalRoot`)
- * are deliberately NOT `ResolvingEnvironment`: per the design's ambient/lexical boundary,
- * only the baked capability base is "ambient" middleware territory; the lexical chain a
- * program introduces is cut from it. A GLASS caller (custom `{ env }`) that wants a layer
- * of its own chain to answer via resolver must build that layer as a `ResolvingEnvironment`
- * explicitly — the current walk otherwise stays byte-identical (a resolver-less layer in a
- * glass chain just falls straight through to its parent, same as any other name miss).
+ * Plain lexical frames (let/lambda/letrec/… — `Environment.inherit`,
+ * `defaultLexicalRoot`) are deliberately NOT `ResolvingEnvironment`: only the baked
+ * capability base is "ambient" middleware territory; the lexical chain a program
+ * introduces is cut from it. A GLASS caller (custom `{ env }`) that wants a layer
+ * of its own chain to answer via resolver must build that layer as a
+ * `ResolvingEnvironment` explicitly — the current walk otherwise stays unchanged (a
+ * resolver-less layer in a glass chain just falls straight through to its parent,
+ * same as any other name miss).
  */
 export class ResolvingEnvironment extends Environment implements SchemeEnv {
   private readonly __resolvers__: ResolverSpec[] = [];
@@ -265,10 +265,10 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
     return this;
   }
 
-  /** Remove a registered resolver by id — the kernel's SEAL hook (ENV T2, design §1):
-   *  the bake-scoped `preludeOnly` overlay registers for the C3 loop's duration and
-   *  unregisters here, so no spent machinery survives assembly on any env. No-op for
-   *  an unknown id. */
+  /** Remove a registered resolver by id — the kernel's SEAL hook: the bake-scoped
+   *  `preludeOnly` overlay registers for the C3 loop's duration and unregisters
+   *  here, so no spent machinery survives assembly on any env. No-op for an
+   *  unknown id. */
   unregisterResolver(id: string): this {
     const at = this.__resolvers__.findIndex((r) => r.id === id);
     if (at !== -1) this.__resolvers__.splice(at, 1);
@@ -283,8 +283,8 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
   }
 
   /**
-   * The full direct-bindings → resolvers → parent precedence contract (unchanged from
-   * pre-T1 `Environment`): a module's explicit binding wins over its own lazy resolver
+   * The full direct-bindings → resolvers → parent precedence contract: a module's
+   * explicit binding wins over its own lazy resolver
    * (a pinned override can't be undone by a catch-all fallback in the same layer), and
    * BOTH win over the parent (a closer module shadows a deeper dependency). A resolver
    * returns `undefined` to mean "not mine, keep looking" — never a found nil.

@@ -15,7 +15,7 @@ import { CLASS } from "../well-known-symbols.js";
  * also dissolves the historical Macro/Syntax ESM-init-cycle hazard this file used to
  * document (their brands are read the same way as everyone's; nothing is imported).
  *
- * Deliberate treatments (design decisions, 2026-07-09 tagless rework):
+ * Deliberate treatments (design decisions):
  * - `null` guard stays first: `null.constructor` throws; `"null"` predates the guard.
  * - raw JS `NaN` reports `"NaN"`; a BOXED AInexact holding NaN reports `"number"` like
  *   any inexact. Asymmetry kept: the raw NaN name flags an unboxed JS value leaking
@@ -31,11 +31,10 @@ import { CLASS } from "../well-known-symbols.js";
  *   now).
  * - plain objects (ctor === Object) and anonymous classes report `"object"`. The old
  *   LIPS-era duck-branches for plain-object iterables ("iterator"/"async-iterator")
- *   are deleted: no consumer ever branched on those strings (verified — the only
- *   producer was this file).
+ *   are deleted: no consumer ever branched on those strings — the only producer was
+ *   this file.
  * - `"native-symbol"` arm deleted: `typeof Symbol() === "symbol"` never enters the
- *   object branch; the arm was unreachable (verified — nothing boxes symbols via
- *   `Object()`).
+ *   object branch; the arm was unreachable — nothing boxes symbols via `Object()`.
  * - callers may still override for pedagogy (evaluator's not-callable door reports
  *   dict-SHAPED AJSObjects as "dict" — a door-specific teaching choice, not a brand).
  *

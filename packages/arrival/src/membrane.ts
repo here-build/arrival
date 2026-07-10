@@ -11,8 +11,6 @@
  * (The former Codec/Operator FFI layer is dissolved; numeric marshalling now lives
  * in the `scheme/numeric` pack via `symbol.native`.)
  *
- * See docs/membrane-design.md for full design rationale.
- *
  * Lineage: object-capability membranes (Miller 2006; Van Cutsem & Miller 2013).
  * The member-read protocol mirrors GraalVM Truffle's InteropLibrary (Würthinger
  * et al. 2013/2017) — see interop-access.ts.
@@ -78,9 +76,8 @@ import { ACharacter } from "./values/primitives/ACharacter.js";
  * isn't assignable to `SchemeValue`, and why the membrane keeps its own boundary
  * type instead of widening the value union.
  *
- * (The `[LAMBDA]`-branded scheme-lambda case this union/predicate once carried is
- * RETIRED — reverse-membrane-for-callables.md §3 step 1: every scheme lambda is a
- * real `ALambda` now, caught by the `instanceof AValue` case below.)
+ * (Every scheme lambda is a real `ALambda`, caught by the `instanceof AValue` case
+ * below — there is no separate `[LAMBDA]`-branded case.)
  */
 export type BoxedSchemeValue =
   | ANil
@@ -128,7 +125,7 @@ type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Pro
  */
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
-    // R3 (RULINGS.md): recognition is `instanceof AValue` — every wrapper/native
+    // Recognition is `instanceof AValue` (RULINGS.md) — every wrapper/native
     // Scheme term, including ANil, Keyword, AVoid, and the callable
     // primitives, derives from AValue. This is structural, not enumerative: a new
     // AValue subclass is recognized for free, closing the class of "omitted from
@@ -228,19 +225,17 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
  *  boxed values cross — a raw JS value reaching here means the caller is already
  *  on the JS side and there is nothing to convert.
  *
- *  R9 (two-tier-exec-api.md §5): native containers (AVector/APair/ADict) egress as
- *  lazy ref-tracking proxies. The same-box→same-proxy WeakMap pre-check lives in
- *  values/egress-proxy.ts's single chokepoint (which every container's own
- *  `arrival/toJS` calls), NOT here — protocol dispatch lands in that cache whether
- *  the exit came through this function or a direct protocol call, so a second
- *  membrane-side check would be redundant. */
+ *  Native containers (AVector/APair/ADict) egress as lazy ref-tracking proxies. The
+ *  same-box→same-proxy WeakMap pre-check lives in values/egress-proxy.ts's single
+ *  chokepoint (which every container's own `arrival/toJS` calls), NOT here —
+ *  protocol dispatch lands in that cache whether the exit came through this function
+ *  or a direct protocol call, so a second membrane-side check would be redundant. */
 export function toJS(value: SchemeValue) {
   // Multiple values exit as a JS ARRAY of unwrapped elements — the same convention
   // the baked rosetta encoder uses ("the multiple-values case is a RAW JS ARRAY").
   // Values sits outside the AValue hierarchy, so without this arm exec() on any
-  // values-returning program ((partition …), (exact-integer-sqrt …)) died on the
-  // R1 strict-exit invariant below — an R1 gap found by mcp-substrate's
-  // render-observation suite the day after the flip.
+  // values-returning program ((partition …), (exact-integer-sqrt …)) would die on
+  // the strict-exit invariant below.
   if (value instanceof Values) return value.__values__.map((v) => toJS(v));
   invariant(
     isSchemeValue(value),

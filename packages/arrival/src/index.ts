@@ -22,7 +22,7 @@ export {
 } from "./interop-access.js";
 export { schemeToJs, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 
-// Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md §5.
+// Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md.
 export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 
 // A* aliases for arrival-chain compatibility — both spellings work until L4
@@ -52,10 +52,9 @@ export { APair } from "./values/primitives/APair.js";
 // needs `instanceof AVector` to distinguish a `[...]` literal from an ordinary cons list,
 // same as `APair`/`ANil`/`AString`/`ASymbol` are exported for.
 export { AVector } from "./values/primitives/AVector.js";
-// `ADict` — the native open-key map AND the `{...}` dict-literal NODE face
-// (docs/working-proposals/dict-literal-true-shape.md). Same cross-package AST-walking
-// need as `AVector` above (mcp-substrate's statement-facts.ts distinguishes a `{...}`
-// literal via `instanceof ADict` + `literalForms`).
+// `ADict` — the native open-key map AND the `{...}` dict-literal NODE face. Same
+// cross-package AST-walking need as `AVector` above (mcp-substrate's statement-facts.ts
+// distinguishes a `{...}` literal via `instanceof ADict` + `literalForms`).
 export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 // The ONE invocation seam for any JS site calling a scheme callable: dispatches a
 // callable VALUE's apply term, else a bare fn with a defined `this`. External packages
@@ -86,9 +85,7 @@ export { EOF as EOF } from "./values/primitives/EOF.js";
 
 // Invocation-context metadata registry (the rosetta-type side-table), held off the
 // scope-node, keyed by env. `rosettaTypesOf` is the type-lens harvest seam — studio
-// derives its lens roster from `[...rosettaTypesOf(env)]`. (The sibling `rosettaPureOf`
-// purity registry is DELETED — write-only after Q2/Q3 moved the static classifier onto
-// the declared `.provenanceRole`; see docs/working-proposals/rosetta-registry-dissolution.md.)
+// derives its lens roster from `[...rosettaTypesOf(env)]`.
 export { rosettaTypesOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
@@ -120,10 +117,9 @@ export {
   type EvalTap,
   type StackFrame,
 } from "./eval/evaluator.js";
-// `Invocation` moved to its own leaf (2026-07-09, the reverse-membrane migration's
-// dynamic-call-site extraction — see `eval/dynamic-call-site.ts`'s header) so
-// `rosetta.ts` can install one without importing the evaluator; re-exported from
-// here unchanged for existing external importers of this package.
+// `Invocation` lives in its own leaf (`eval/dynamic-call-site.ts`) so `rosetta.ts`
+// can install one without importing the evaluator; re-exported from here unchanged
+// for existing external importers of this package.
 export type { Invocation } from "./eval/dynamic-call-site.js";
 
 // Generator exec entry point (parser + generator evaluator) for string-to-value eval.
@@ -169,13 +165,12 @@ export { tokenize } from "./reader/tokenize.js";
 // callers gain a killable, bounded evaluator.
 export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js";
 
-// The STATIC VALIDATION PASS (W3, docs/working-proposals/symbol-define-static-program-
-// validation.md §3) — the compiler's front door: parsed forms × a sealed-chain
-// vocabulary → the COMPLETE eslint-style Diagnostic list (never crash-on-first).
-// `exec({ staticValidation: "on" })` is the wired consumer; DiscoveryTool/MCP
-// structured diagnostics and the codemirror LSP squiggles are NOTED consumers of the
-// same surface (their waves); mercury's roster mode constructs its own vocabulary
-// from `EnvCapability.exports()` when that wave lands.
+// The STATIC VALIDATION PASS — the compiler's front door: parsed forms × a
+// sealed-chain vocabulary → the COMPLETE eslint-style Diagnostic list (never
+// crash-on-first). `exec({ staticValidation: "on" })` is the wired consumer;
+// DiscoveryTool/MCP structured diagnostics and the codemirror LSP squiggles consume
+// the same surface; mercury's roster mode can construct its own vocabulary from
+// `EnvCapability.exports()`.
 export {
   validateProgram,
   StaticValidationError,

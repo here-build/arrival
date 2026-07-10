@@ -8,7 +8,6 @@
 // autoregressive generation (the model emits token t from 1..t-1 and never revises).
 //
 // === Why this is a single-pass scanner, not the Lexer FSM ===
-// (see docs/audit-2026-06-09-workplan-dag.md, Track O §2, for the integration plan this follows)
 //
 // The oracle is DEFINED ON TRUNCATED INPUT — EOF is its normal case — but the real Lexer
 // (src/Lexer.ts) THROWS `Unterminated` on exactly the truncated prefixes the oracle must report
@@ -307,8 +306,8 @@ function makeState(s: ScanResult, prefix: string, env: OracleEnvΣ | null): Orac
  * (no eager evaluation — that is Track A's incremental evaluator, not Layer S).
  *
  * The session re-scans the accumulated prefix from scratch on each `advance`. That keeps the
- * resumable path BYTE-IDENTICAL to `analyze` (the property the O0 corpus asserts) and is correct by
- * construction; the scan is O(n) and the prefixes are scout-program sized.
+ * resumable path always agreeing with `analyze` over the same prefix (asserted by the O0 corpus)
+ * and correct by construction; the scan is O(n) and the prefixes are scout-program sized.
  */
 class StructuralSession implements OracleSession {
   private prefix: string;

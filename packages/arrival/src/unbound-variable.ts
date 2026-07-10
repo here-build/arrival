@@ -7,15 +7,13 @@
 // must be importable from anywhere in the graph with no cycle risk (the same constraint
 // the dissolved `env/polyglot-rich-errors/registry.ts` documented).
 //
-// WHAT CHANGED vs. that registry (the Environment-despecialization arc,
-// docs/working-proposals/environment-is-capability-composition.md): the registry kept a
-// STATIC curated table of "well-known" names (4 sub-tables: polyglot-bound /
-// cross-dialect-stubbed / srfi-r7rs-stubbed / general-fame) and matched typos against
-// it. That table was declaration data smuggled into the error path — every row either
-// duplicated a REAL binding (env/polyglot.ts, the SRFI/R7RS packs) or duplicated a
-// DECLARED `symbol.notImplemented` door (env/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
-// env/r7rs/host.ts), and its one genuinely-absent row (SRFI-1's bare `fold`) is now a
-// declared door in env/srfi/srfi-1.ts. Teaching about well-known-but-absent names is
+// There is deliberately no static curated table of "well-known" names here (the old
+// dissolved registry kept one, matching typos against it). That table was declaration
+// data smuggled into the error path — every row either duplicated a REAL binding
+// (env/polyglot.ts, the SRFI/R7RS packs) or duplicated a DECLARED
+// `symbol.notImplemented` door (env/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
+// env/r7rs/host.ts); the one genuinely-absent row it had (SRFI-1's bare `fold`) is now
+// a declared door in env/srfi/srfi-1.ts. Teaching about well-known-but-absent names is
 // CAPABILITY DATA resolving through the ordinary chain now, not a special error path.
 //
 // What remains here is exactly the half that CANNOT be declared: a MISTYPED name has no
@@ -30,10 +28,10 @@
 //   • a typo of a LEXICALLY bound program name (a user `define`) suggests it too — the
 //     Resolver passes its composed scope+capabilities vocabulary.
 //
-// GATING (load-bearing, unchanged in spirit): a suggestion fires ONLY for a close miss
-// of a name that actually exists in the vocabulary — an arbitrary unbound identifier
-// (`csv-content`) matches nothing and gets the PLAIN message, byte-identical to the
-// pre-enrichment wording. A wrong hint is poison; under-trigger, never guess.
+// GATING (load-bearing): a suggestion fires ONLY for a close miss of a name that
+// actually exists in the vocabulary — an arbitrary unbound identifier (`csv-content`)
+// matches nothing and gets the PLAIN message, with no hint appended. A wrong hint is
+// poison; under-trigger, never guess.
 
 /** Names the RESOLVER SYNTHESIZES structurally rather than binding (`c[ad]+r`
  *  composition, eval/Resolver.ts#cxrUnfold) — absent from every enumerable vocabulary
@@ -139,14 +137,13 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
  *
  * The hint (when a near name exists) rides both `.message` (the thrown Error, e.g.
  * surfaced in a stack trace) and `.publicMessage` (the model/agent-facing string an
- * MCP tool surface reads); with no hint both are byte-identical to the pre-existing
- * plain wording — a pure addition, never a regression.
+ * MCP tool surface reads); with no hint both fall back to the plain wording — a pure
+ * addition, never a regression.
  *
  * `enriched` is a THIRD, STRUCTURED signal alongside the two wording fields:
  * unambiguously true iff a did-you-mean suffix was appended. It exists so a consumer
  * that needs "did arrival already enrich this?" asks a typed boolean instead of
- * sniffing the SHAPE of `.message` (a manifold-side consumer did exactly that sniff
- * once — see docs/working-proposals/arrival-manifold-decomposition-2026-07-05.md §5.4).
+ * sniffing the SHAPE of `.message`.
  */
 export function unboundVariableError(
   name: string,

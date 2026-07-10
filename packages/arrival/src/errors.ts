@@ -180,10 +180,9 @@ export class PurityError extends ArrivalError {
     message: string,
     /** The omitted feature, e.g. "set-cdr!" — internal routing/telemetry key. */
     public readonly feature: string,
-    /** The door's owning capability (`DoorCause.owner`, docs/working-proposals/
-     *  symbol-define-static-program-validation.md §W0) when the throwing `DoorProcedure`
-     *  carries a stamped cause. Absent ⇒ the pre-W0 fixed wall
-     *  ("owned-by/purity-invariant") — BYTE-COMPATIBLE for a cause-less door. */
+    /** The door's owning capability (`DoorCause.owner`) when the throwing `DoorProcedure`
+     *  carries a stamped cause. Absent ⇒ falls back to the fixed wall
+     *  ("owned-by/purity-invariant") for a cause-less door. */
     owner?: string,
   ) {
     super(message);
@@ -228,13 +227,12 @@ export function strictGate(
 // -------------------------------------------------------------------------
 // :: ProvenanceRoleShapeError — declared `provenance` role vs contract SHAPE.
 //
-// docs/PROVENANCE.md §2's drift alarm (PROVENANCE-PLAN.md Q2): a symbol declares a
-// `provenance` role (spec's declaration vocabulary — pipe/fan/source/sink/transparent/
-// loop/opaque) that its OWN contract's normalized in/out vectors structurally disprove.
-// Thrown at ASSEMBLY (bake time — `common/symbols/{native,rosetta,sequence}.ts`, via
-// `assertProvenanceRoleShape` in `_bake.ts`), never at call time. LIMIT, stated at
-// every throw site: shape catches CONTRADICTIONS, not LIES — a JS body that fans while
-// declared `pipe` is consistent-but-wrong and invisible to shape (spec §2's own words).
+// A symbol declares a `provenance` role (the declaration vocabulary — pipe/fan/source/
+// sink/transparent/loop/opaque) that its OWN contract's normalized in/out vectors
+// structurally disprove. Thrown at ASSEMBLY (bake time —
+// `common/symbols/{native,rosetta,sequence}.ts`, via `assertProvenanceRoleShape` in
+// `_bake.ts`), never at call time. LIMIT: shape catches CONTRADICTIONS, not LIES — a
+// JS body that fans while declared `pipe` is consistent-but-wrong and invisible to shape.
 // -------------------------------------------------------------------------
 export class ProvenanceRoleShapeError extends ArrivalError {
   static [CLASS] = "provenance-role-shape-error";
@@ -358,14 +356,13 @@ export class ResourceNotLiveError extends Error {
 // -------------------------------------------------------------------------
 // :: PreludeMembershipError — a port-reaching define asked for prelude membership.
 //
-// docs/PROVENANCE.md §1 (round 2 A3, narrowed round 3 M1): prelude membership is
-// PURE-ONLY — a top-level define whose body transitively reaches a port (directly, or
-// through a reference to another port-reaching define — PROVENANCE-PLAN.md Q7's
-// fixpoint) is wireframe material, never prelude. Thrown by
+// Prelude membership is PURE-ONLY — a top-level define whose body transitively reaches
+// a port (directly, or through a reference to another port-reaching define, checked to
+// a fixpoint) is wireframe material, never prelude. Port-reaching defines are excluded
+// because name indirection would smuggle sources into "pure" wire bodies — γ would
+// re-invoke them on replay, breaking the frozen-payload guarantee. Thrown by
 // `provenance/prelude.ts`'s `assertPreludeEligible` — errors-as-doors: names WHY, never
-// a bare rejection. §1 EXCLUDED: "port-reaching defines in the prelude (name
-// indirection would smuggle sources into 'pure' wire bodies — γ would re-invoke them on
-// replay, re-opening the R1 hole the frozen-payload ruling closed)".
+// a bare rejection.
 // -------------------------------------------------------------------------
 export class PreludeMembershipError extends ArrivalError {
   static [CLASS] = "prelude-membership-error";
@@ -382,14 +379,14 @@ export class PreludeMembershipError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
-// :: WireLocalityError — a wire body's free variable is not accounted for (Q8a).
+// :: WireLocalityError — a wire body's free variable is not accounted for.
 //
-// docs/PROVENANCE.md §1 CHOSEN: "a wire is a closed arrival lambda … FV(body) ⊆
-// params ∪ prelude-names (checked at emission — wire-locality law). Locality is
-// thereby syntactic; declared-vs-actual consumption drift is unrepresentable."
-// Thrown by `provenance/uneval.ts`'s `unevalWire` — the EMISSION-time check, not
-// a post-hoc audit. errors-as-doors: names the variable, where, and the route
-// (a port-reaching define must be a wireframe node, never a captured value).
+// A wire is a closed arrival lambda: FV(body) ⊆ params ∪ prelude-names, checked at
+// emission (the wire-locality law). Locality is thereby syntactic; declared-vs-actual
+// consumption drift is unrepresentable. Thrown by `provenance/uneval.ts`'s
+// `unevalWire` — the EMISSION-time check, not a post-hoc audit. errors-as-doors: names
+// the variable, where, and the route (a port-reaching define must be a wireframe node,
+// never a captured value).
 // -------------------------------------------------------------------------
 export class WireLocalityError extends ArrivalError {
   static [CLASS] = "wire-locality-error";
@@ -410,13 +407,11 @@ export class WireLocalityError extends ArrivalError {
 // -------------------------------------------------------------------------
 // :: DefineLocalityError — a `symbol.define` body's free variable escapes its
 // capability's own bake-time allowlist (WireLocalityError's SIBLING, one level
-// down — docs/working-proposals/symbol-define-static-program-validation.md §2.1's
-// bake FV law: `FV(B) ⊆ SPECIAL_FORMS ∪ KEYWORD_SYNTAX ∪ ownNames(K) ∪
+// down — the bake FV law: `FV(B) ⊆ SPECIAL_FORMS ∪ KEYWORD_SYNTAX ∪ ownNames(K) ∪
 // exports(transitiveDeps(K)) ∪ resolver-synth family`). Thrown at BAKE (first
 // `lower()`/`apply()` that evaluates the define), never at call time — an
-// undeclared cross-capability reference is a declaration-authoring bug the
-// design converts into a bake-time door instead of assembly-order luck
-// (the srfi-235→polyglot `compose` census catch, §2.1).
+// undeclared cross-capability reference is a declaration-authoring bug the design
+// converts into a bake-time door instead of assembly-order luck.
 // -------------------------------------------------------------------------
 export class DefineLocalityError extends ArrivalError {
   static [CLASS] = "define-locality-error";
@@ -439,9 +434,9 @@ export class DefineLocalityError extends ArrivalError {
 
 // -------------------------------------------------------------------------
 // :: DefineForwardReferenceError — an EAGER (non-lambda) `symbol.define` RHS
-// referencing a LATER sibling define in the same capability (§2.3's decidable
-// ordering check: today's prelude enforces this only by crashing at eval time;
-// this makes it a named bake-time door instead).
+// referencing a LATER sibling define in the same capability. Ordering is
+// decidable statically; the prelude used to enforce it only by crashing at eval
+// time — this makes it a named bake-time door instead.
 // -------------------------------------------------------------------------
 export class DefineForwardReferenceError extends ArrivalError {
   static [CLASS] = "define-forward-reference-error";

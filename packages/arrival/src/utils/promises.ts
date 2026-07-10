@@ -1,19 +1,13 @@
 // Promise utilities for the trampoline's async seams.
 //
-// HISTORY (2026-07-09): this module used to be LIPS's deep promise DECOMPOSER —
-// `unpromise` recursively walked arrays (Promise.all) and plain objects (entry
-// walk), eagerly flattening nested promises inside structures. That machinery is
-// gone, and deliberately: the case it protected is UNINHABITED post
-// bare-value-purge — the only live callers hand it `applyCallback` results, which
-// are boxed SchemeValues (or promises thereof), never raw arrays/plain objects (a
-// scheme callable structurally cannot return them; an AValue has a class
-// prototype, so neither Array.isArray nor a plain-object check ever fired). The
-// design stance replacing it: structures hold promise-valued members INERT (the
-// membrane's Promise row is "raw passthrough — the trampoline awaits"); the
-// interpreter awaits lazily at the seams where a value is actually NEEDED — the
-// trampoline's settle points, the HOF result-collection sites (`promise_all`
-// below), and the op-return seam. Eager traversal of structures to hunt promises
-// is exactly the work the two-layer design says never to do.
+// Structures hold promise-valued members INERT — the membrane's Promise row is "raw
+// passthrough, the trampoline awaits". The interpreter awaits lazily at the seams
+// where a value is actually NEEDED: the trampoline's settle points, the HOF
+// result-collection sites (`promise_all` below), and the op-return seam. Eager
+// traversal of structures to hunt promises is exactly the work this design avoids —
+// a scheme callable structurally cannot return a raw array or plain object (an
+// AValue has a class prototype), so the only live callers ever hand these utilities
+// boxed SchemeValues (or promises thereof), never a structure to walk.
 
 import { is_promise } from "../eval/guards.js";
 

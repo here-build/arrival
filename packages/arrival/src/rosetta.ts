@@ -1,5 +1,7 @@
 /**
- * Scheme<->JS membrane: schemeToJs/jsToScheme marshal at FFI boundary, round-trip to identity both directions (bifunctor framing — see docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md).
+ * Scheme<->JS membrane: schemeToJs/jsToScheme marshal at FFI boundary, round-trip to
+ * identity both directions (bifunctor framing: schemeToJs∘jsToScheme = id and
+ * jsToScheme∘schemeToJs = id on the values each side owns).
  * Environment.defineRosetta() wraps JS fn as Scheme-callable rosetta.
  */
 
@@ -57,7 +59,7 @@ export interface RosettaFunction {
    */
   type?: string;
   /**
-   * Provenance role. Default (`pure` unset): Rosetta-IN SOURCE — introduces external data, result MINTS fresh provenance leaf (conservative: never silently lose origin). `pure: true`: fn only TRANSFORMS args (e.g. `string-append`, `dedent`), result PROPAGATES inputs' provenance. Author assertion over `any` impl (JS purity undecidable), same trust model as `type`. LIVE — gates `mintsPoint = pure !== true` in createRosettaWrapper, drives static lineage classifier (`isRosettaIn === !pure`, docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5). Control/declaration forms (expose/approval/…) take `pure: true` for no-mint — richer taxonomy deferred.
+   * Provenance role. Default (`pure` unset): Rosetta-IN SOURCE — introduces external data, result MINTS fresh provenance leaf (conservative: never silently lose origin). `pure: true`: fn only TRANSFORMS args (e.g. `string-append`, `dedent`), result PROPAGATES inputs' provenance. Author assertion over `any` impl (JS purity undecidable), same trust model as `type`. LIVE — gates `mintsPoint = pure !== true` in createRosettaWrapper, drives static lineage classifier (`isRosettaIn === !pure`). Control/declaration forms (expose/approval/…) take `pure: true` for no-mint — richer taxonomy deferred.
    */
   pure?: boolean;
 }
@@ -79,7 +81,7 @@ export interface InvocationLike {
 }
 
 /**
- * Reverse-membrane wrapper (docs/working-proposals/reverse-membrane-for-callables.md §4/§7c): scheme callable crossing scheme→JS becomes region-scoped async JS fn. Reads AMBIENT `RegionScope` (`currentRegionScope()` — see region-scope.ts header) and CLOSES OVER it: wrapper never re-reads, so a call arriving after exporting invocation returns still sees (closed) scope minted against — that makes escape door detectable.
+ * Reverse-membrane wrapper: scheme callable crossing scheme→JS becomes region-scoped async JS fn. Reads AMBIENT `RegionScope` (`currentRegionScope()` — see region-scope.ts header) and CLOSES OVER it: wrapper never re-reads, so a call arriving after exporting invocation returns still sees (closed) scope minted against — that makes escape door detectable.
  * Per-(callable, scope) identity: `scope.cache` is scope-owned WeakMap — SAME callable exported twice through SAME scope gets SAME wrapper (eq?-stability); two scopes (two invocations) each mint own.
  */
 /** `applyCallback`'s `CallResult` admits trampoline bounce token (`SchemeBounceMarker`) alongside `SchemeValue` — types.ts doc names invariant: bounce "never reaches a value slot," call boundary narrows it out first. `callableToHostFn` is that boundary for reverse-membrane re-entry result, asserts invariant explicitly vs widening `schemeToJs` input type to tolerate structurally impossible shape. */
@@ -94,12 +96,12 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
   if (cached) return cached;
   const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
     withRegionCall(scope, async () => {
-      // Args mint under ENCLOSING invocation's runCtx, never CONSTANT_CTX (§7b) — `scope.runCtx` is exactly that (or CONSTANT_CTX for detached fallback).
+      // Args mint under ENCLOSING invocation's runCtx, never CONSTANT_CTX — `scope.runCtx` is exactly that (or CONSTANT_CTX for detached fallback).
       // A promise-valued arg settles BEFORE boxing (the reverse membrane is already
       // async) — the last inbound top-level Promise path, closed; a bare Promise
       // reaching jsToScheme now doors (jsToSchemeAsyncDoor).
       const schemeArgs = await Promise.all(jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a, options)));
-      // Re-entry trace nests under exporting invocation (§7b "child scope"), via SAME ambient mechanism evaluator HOF-boundary wrappers use — never through callable `this` (§9).
+      // Re-entry trace nests under the exporting invocation (a "child scope"), via SAME ambient mechanism evaluator HOF-boundary wrappers use — never through callable `this`.
       const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, scope.runCtx));
       invariant(!isBounceMarker(raw), "callableToHostFn: a reverse-membrane call resolved to a bounce token");
       // Nested callable in result crosses under SAME scope — one discipline for whole re-entry, not just top-level return.
@@ -121,7 +123,7 @@ export function schemeToJsUnrecognizedDoor(value: object): Error {
 
 /**
  * Recursive body behind `schemeToJs`. `unknown`-typed, not `any`: recursion crosses raw JS intermediates no single generic can describe (raw array element, plain object field) — see `schemeToJs` doc for narrowing at public boundary.
- * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as R9 lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (A3 borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: `forceBigInt`, elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
+ * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: `forceBigInt`, elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
  */
 function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   // null/undefined echo back unchanged (matches AUnwrap non-SchemeValue arm).
@@ -136,12 +138,12 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     if (typeof value === "number") return BigInt(value);
   }
 
-  // Scheme callable crossing OUT → region-scoped JS wrapper (reverse-membrane §4/§7c). Checked BEFORE protocol dispatch (callable IS AValue) so rosetta face threads OPTIONS into wrapper re-entry marshalling; protocol `arrival/toJS` on ACallable (options-less, plain `toJS`/exec) builds same wrapper with defaults.
+  // Scheme callable crossing OUT → region-scoped JS wrapper (reverse-membrane). Checked BEFORE protocol dispatch (callable IS AValue) so rosetta face threads OPTIONS into wrapper re-entry marshalling; protocol `arrival/toJS` on ACallable (options-less, plain `toJS`/exec) builds same wrapper with defaults.
   if (is_callable_value(value)) {
     return callableToHostFn(value, options);
   }
 
-  // Other boxed shapes: ONE protocol dispatch via class `arrival/toJS` (NOT membrane.toJS — would close module-init cycle rosetta→membrane→evaluator, scheme-zod z.instanceof codecs capture undefined classes). Scalars unwrap, containers egress as R9 lazy readonly proxies (egress-proxy.ts chokepoint keeps same-box → same-proxy), borrowed wrappers return source identity, ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
+  // Other boxed shapes: ONE protocol dispatch via class `arrival/toJS` (NOT membrane.toJS — would close module-init cycle rosetta→membrane→evaluator, scheme-zod z.instanceof codecs capture undefined classes). Scalars unwrap, containers egress as lazy readonly proxies (egress-proxy.ts chokepoint keeps same-box → same-proxy), borrowed wrappers return source identity, ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
   if (value instanceof AValue) {
     return value["arrival/toJS"]();
   }
@@ -244,7 +246,7 @@ export interface InboundClaim {
  *  6. non-AValue scheme orphans (EOF / Values / R7RSError) pass by identity — they
  *     ARE scheme values, formerly smuggled through the exotic passthrough;
  *  7. the binary FFI passthrough is the one DECLARED raw identity (named superset,
- *     mirrors the outbound allow-list + the F3 crossing row);
+ *     mirrors the outbound allow-list's own raw-passthrough treatment in schemeToJsImpl);
  *  8. a bare Promise DOORS (see jsToSchemeAsyncDoor — container entries settle
  *     lazily instead);
  *  9. every remaining object (class instance, Map, Date, Error, …) re-presents as a
@@ -354,7 +356,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
   },
   {
     // The one DECLARED raw passthrough (named superset: FFI identity) — mirrors the
-    // outbound allow-list in schemeToJsImpl and the F3 crossing row.
+    // outbound allow-list's own raw-passthrough treatment in schemeToJsImpl.
     name: "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
     claims: (v) =>
       v instanceof Uint8Array ||
@@ -422,8 +424,8 @@ function jsToSchemeImpl(
  * JS → Scheme deep-stamping membrane — the fold over INBOUND_CLAIMS (the declared,
  * ordered inbound algebra above; the registry doc is the law). Single pass: every AValue
  * constructed inherits `provenance`, so downstream extractors (`car`, `cdr`, `dict-ref`,
- * `@`) see element-only lineage carrying the rosetta origin id (spec §5.3 Interpretation
- * A) without a separate re-stamp per builtin; an already-AValue with a fresh stamp
+ * `@`) see element-only lineage carrying the rosetta origin id without a separate
+ * re-stamp per builtin; an already-AValue with a fresh stamp
  * re-stamps through its OWN protocol (deep on spine carriers via
  * `arrival/withProvenanceDeep`, shallow elsewhere — borrowed wrappers' entries stay lazy
  * via `.get`).
@@ -461,14 +463,13 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     // Per-arg deep provenance (opt-in), aligned to schemeArgs — lets consumer fn (e.g. `.prompt` building `inputsProvenance[field]`) attribute each input to producer, recovering per-field origins union can't distinguish.
     const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
-    // R-CTX-3 (rosetta-ctx-single-channel.md): `this` IS the CallCtx — the type parameter
-    // forces it at every call site (unbound call = compile error); makeCallCtx/testCallCtx
-    // are the only constructors and never yield nullable fields, so no runtime door exists
-    // (the R-CTX-3 migration door retired 2026-07-10 once the null case went uninhabited).
+    // `this` IS the CallCtx — the type parameter forces it at every call site (unbound
+    // call = compile error); makeCallCtx/testCallCtx are the only constructors and
+    // never yield nullable fields, so no runtime null-check is needed here.
     // Destructured ONCE; the body below is `this`-free.
     const { runCtx, invocation } = this;
     const inv = invocation.currentInvocation;
-    // Region discipline (§7c): this ONE call — here to `fn.apply` settling — is "symbol invocation" any scheme callable among `schemeArgs` region-binds to. Opened before marshaling (callable arg wrapper minted DURING `schemeToJs`, reads ambient scope), closed when `fn` settles (rule 2: throws if reverse call still pending).
+    // Region discipline: this ONE call — here to `fn.apply` settling — is "symbol invocation" any scheme callable among `schemeArgs` region-binds to. Opened before marshaling (callable arg wrapper minted DURING `schemeToJs`, reads ambient scope), closed when `fn` settles (throws if a reverse call is still pending).
     const scope = openRegionScope({ runCtx, dynSite: inv });
     try {
       let rawResult: unknown;
@@ -481,7 +482,7 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
         closeRegionScope(scope);
       }
 
-      // Decide output provenance before jsToScheme so deep-stamp reaches every constructed AValue in one pass (spec §5.3) — mint overrides inputs. No invocation in ctx (e.g. direct JS calls in tests): fall back to input provenance, silently. Node metadata bound separately via `ctx.currentInvocation.setMetadata(…)` — known up front, doesn't ride result.
+      // Decide output provenance before jsToScheme so deep-stamp reaches every constructed AValue in one pass — mint overrides inputs. No invocation in ctx (e.g. direct JS calls in tests): fall back to input provenance, silently. Node metadata bound separately via `ctx.currentInvocation.setMetadata(…)` — known up front, doesn't ride result.
       let resultProvenance = inputProvenance;
       if (mintsPoint && inv && typeof inv.id === "number") {
         // MobX observable — flip via own action for strict-mode safety. Plain POJO (direct-JS tests) has no method, set directly.

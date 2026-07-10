@@ -35,8 +35,8 @@ import type { Environment } from "../Environment.js";
 /**
  * The assembled oracle. Given an `env` (a live {@link Environment} or pre-built {@link OracleEnvΣ})
  * it is Σ-LIVE: `validSymbols()` returns the position-filtered bound set. Given nothing, it's the
- * Layer-S structural scanner — Σ/T degrade to null/true per the contract. `makeOracle()` with no
- * argument stays byte-identical to the Layer-S scanner; T (O3) will land behind the same surface.
+ * Layer-S structural scanner — Σ/T degrade to null/true per the contract. T will land behind the
+ * same surface as `makeOracle()` with no argument.
  */
 export function makeOracle(env?: Environment | OracleEnvΣ): OracleScanner {
   if (!env) return structuralScanner;

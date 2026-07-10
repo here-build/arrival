@@ -20,12 +20,11 @@
 //   here afterwards (no production `.set` on it exists outside assembly).
 //   `user_env`  — the top of the DEFAULT capability base for bare `exec(code)`.
 //   Write window: phase 2 (the BAKE) only. At the end of `ensureBaseAssembled`
-//   the base SEALS into a frozen `CompiledResolutionChain` (ENV T2,
-//   environment-resolution-chain.md §§1–2) — the artifact every default-path
-//   exec resolves builtins through; the sealed artifact has no write surface,
-//   so the write window is a structural fact, not a convention. Top-level user
-//   defines accumulate on the mutable SESSION FRAME above the chain
-//   (generator-exec's realm-cached `defaultLexicalRoot` — REPL semantics
+//   the base SEALS into a frozen `CompiledResolutionChain` — the artifact every
+//   default-path exec resolves builtins through; the sealed artifact has no
+//   write surface, so the write window is a structural fact, not a convention.
+//   Top-level user defines accumulate on the mutable SESSION FRAME above the
+//   chain (generator-exec's realm-cached `defaultLexicalRoot` — REPL semantics
 //   preserved exactly), never on this frame. Hermetic callers pass `{ env }`
 //   (glass — live walk, unbaked by definition) or `{ capabilities }` (assembles
 //   + seals a FRESH `user_env.inherit(...)` child per call). The provenance
@@ -41,12 +40,11 @@
 // re-exports `user_env as env` and keeps both spellings public — renaming is
 // downstream churn with zero semantic gain, so the heritage names stay.
 //
-// ENV T1 (docs/working-proposals/environment-resolution-chain.md §T1): both roots are
-// `ResolvingEnvironment` — the baked-capability specialization that carries fallback
-// resolvers (env-agnostic packs/kernel machinery register onto these two, never onto a
-// plain lexical frame). `user_env`'s `.inherit()` call below resolves to the overridden,
-// subtype-preserving method, so it comes out `ResolvingEnvironment` too, with zero extra
-// ceremony here.
+// Both roots are `ResolvingEnvironment` — the baked-capability specialization that
+// carries fallback resolvers (env-agnostic packs/kernel machinery register onto these
+// two, never onto a plain lexical frame). `user_env`'s `.inherit()` call below resolves
+// to the overridden, subtype-preserving method, so it comes out `ResolvingEnvironment`
+// too, with zero extra ceremony here.
 import { ResolvingEnvironment } from "./Environment.js";
 
 export const global_env = new ResolvingEnvironment("global", {}, undefined);

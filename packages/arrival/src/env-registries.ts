@@ -14,14 +14,12 @@
 // (`defineRosetta` carrying a `type`) and a membership-only reader share one path; an
 // empty container created by a read is inert (membership = false) and GC-eligible.
 //
-// HISTORY (rosetta-registry dissolution, docs/working-proposals/rosetta-registry-dissolution.md):
-// a sibling `rosettaPureOf` purity registry used to live here — the static lineage
-// classifier's chain-walked source-vs-pipe side-table. Q2/Q3 (PROVENANCE-PLAN.md)
-// replaced that read with the declared `.provenanceRole` stamped on the bound value
-// (`values/lineage-classifier-from-env.ts`), leaving the registry write-only; it is
-// deleted. `pure: true` on a legacy `defineRosetta` config remains LIVE at runtime —
-// it gates `mintsPoint` inside `createRosettaWrapper` (rosetta.ts) — but no static
-// side-table records it any more.
+// This registry holds ONLY the TS-signature strings for the type-lens harvest — it
+// does not track purity. `pure: true` on a `defineRosetta` config is still load-bearing
+// at runtime even so: it gates `mintsPoint` inside `createRosettaWrapper` (rosetta.ts).
+// The static lineage classifier gets purity a different way — the bound value's
+// declared `.provenanceRole` (see `values/lineage-classifier-from-env.ts`), not a
+// side-table lookup here.
 
 import type { Environment } from "./Environment.js";
 
