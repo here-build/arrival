@@ -7,7 +7,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 export default [
   ...nodejs,
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "demos/**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: {
