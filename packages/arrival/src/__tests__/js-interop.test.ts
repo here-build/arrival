@@ -22,6 +22,7 @@ import { ABool } from "../values/primitives/ABool.js";
 const one = async (src: string): Promise<any> => (await exec(src))[0];
 
 describe("JS-interop: numbers", () => {
+  // INVARIANT: numeric scheme values coerce correctly in arithmetic via valueOf
   it("coerce in arithmetic via valueOf", async () => {
     const n = await one("(+ 1 2)");
     expect(n + 1).toBe(4);
@@ -45,6 +46,7 @@ describe("JS-interop: numbers", () => {
 });
 
 describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)", () => {
+  // INVARIANT: strings come back as AString, and grafted String.prototype keeps concat/spread/JSON interop natural
   it("strings come back as AStrings (grafted String.prototype keeps interop natural)", async () => {
     const s = await one('(string-append "ab" "c")');
     // Boxed under the Face split (taintString always returns the AString scheme face —
@@ -97,6 +99,7 @@ describe("JS-interop: symbols", () => {
 });
 
 describe("JS-interop: lists (Pair)", () => {
+  // INVARIANT: a list is iterable from JS (spread/for-of/Array.from)
   it("a list is iterable from JS (spread / for-of / Array.from)", async () => {
     const lst = await one("(list 1 2 3)");
     expect(Array.from(lst)).toHaveLength(3);
@@ -113,12 +116,14 @@ describe("JS-interop: lists (Pair)", () => {
     expect(JSON.stringify(lst)).toBe("[1,2,3]");
   });
 
+  // INVARIANT: schemeToJs(list) is the working escape hatch to a plain JS array
   it("schemeToJs(list) is the working escape hatch", async () => {
     expect(schemeToJs(await one("(list 1 2 3)"), {})).toEqual([1, 2, 3]);
   });
 });
 
 describe("JS-interop: vectors", () => {
+  // INVARIANT: a vector is iterable from JS like a Pair; elements coerce via valueOf
   it("a vector is iterable from JS like a Pair (spread / for-of / Array.from)", async () => {
     const vec = await one("(vector 1 2 3)");
     expect(Array.from(vec).length).toBe(3);
@@ -129,12 +134,14 @@ describe("JS-interop: vectors", () => {
     expect([...vec].map(Number)).toEqual([1, 2, 3]);
   });
 
+  // INVARIANT: schemeToJs(vector) is the working escape hatch to a plain JS array
   it("schemeToJs(vector) is the working escape hatch", async () => {
     expect(schemeToJs(await one("(vector 1 2 3)"), {})).toEqual([1, 2, 3]);
   });
 });
 
 describe("JS-interop: bytevectors", () => {
+  // INVARIANT: a bytevector is iterable from JS, yielding raw bytes
   it("a bytevector is iterable from JS (spread / for-of / Array.from yield bytes)", async () => {
     const bv = await one("(bytevector 1 2 3)");
     expect([...bv]).toEqual([1, 2, 3]);
@@ -155,6 +162,7 @@ describe("JS-interop: dicts / objects", () => {
     expect(() => JSON.stringify(d)).not.toThrow();
   });
 
+  // INVARIANT: schemeToJs(dict) is the working escape hatch to a plain JS object
   it("schemeToJs(dict) is the working escape hatch", async () => {
     expect(schemeToJs(await one("(dict :a 1 :b 2)"), {})).toEqual({ a: 1, b: 2 });
   });

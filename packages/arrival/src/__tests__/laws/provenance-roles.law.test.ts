@@ -28,6 +28,24 @@
  *   name stays prelude-side, resolved through the sealed chain) lives in the sibling
  *   `provenance/wireframe-agreement.law.test.ts` (closer to that file's assembler/
  *   chain-resolution concerns).
+ *
+ * Lineage note (test-invariant-atlas, membrane.md): this V1-V4 declarative role
+ * vocabulary is the eventual successor of the older `rosetta-pure-marker.test.ts`
+ * (deleted `af3014f1f6`, "rosettaPureOf dies write-only" — the per-env `pure` REGISTRY
+ * that file exercised is confirmed dead, not merely superseded). Of that file's two
+ * invariants:
+ *   - DEAD: "env.defineRosetta's `pure: true` marker round-trips into the pure
+ *     registry; default (no flag) is absent from it" — the registry itself is gone;
+ *     `RosettaSpec.pure` survives only as `createRosettaWrapper`'s runtime mint gate
+ *     (`config.pure`), a different, narrower mechanism than a queryable registry.
+ *   - SUPERSEDED (not a 1:1 port, but the same classification law, declaratively): "a
+ *     pure rosetta fn classifies as a 'pipe' ...; a default rosetta fn classifies as a
+ *     'source' ..." — the V1 "KIND DEFAULTS" case below asserts `symbol.rosetta`'s
+ *     default `.provenance` is `"source"` (a rosetta fn mints a fresh provenance leaf
+ *     by default), and the same `Contract.provenance` channel lets a rosetta def
+ *     declare `"pipe"` explicitly when it genuinely propagates input provenance
+ *     instead — the classification the old file derived from a boolean `pure` flag
+ *     at runtime is now a first-class declared fact at bake time.
  */
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";

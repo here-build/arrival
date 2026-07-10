@@ -50,6 +50,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 
 describe("AValue.fromJs — boxer dispatch produces the expected subtype per typeof tag", () => {
   // Boxer registry resolution: typeof string → "string" boxer (SchemeString.ts:139)
+  // INVARIANT: string → SchemeString via boxer dispatch
   it("string → SchemeString", () => {
     const result = fromJs(CONSTANT_CTX, "hello");
     expect(result).toBeInstanceOf(AString);
@@ -58,6 +59,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // typeof 42 === "number" — registered in operators/index.ts (via the
   // numbers module). Safe integer path → SchemeExact with bigint num.
+  // INVARIANT: a safe-integer number → SchemeExact
   it("number (safe integer) → SchemeExact", () => {
     const result = fromJs(CONSTANT_CTX, 42);
     expect(result).toBeInstanceOf(AExact);
@@ -65,6 +67,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   });
 
   // Non-integer float → SchemeInexact (real part).
+  // INVARIANT: a float number → SchemeInexact
   it("number (float) → SchemeInexact", () => {
     const result = fromJs(CONSTANT_CTX, 3.14);
     expect(result).toBeInstanceOf(AInexact);
@@ -72,6 +75,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   });
 
   // typeof 1n === "bigint" → SchemeExact regardless of size.
+  // INVARIANT: bigint → SchemeExact regardless of size
   it("bigint → SchemeExact", () => {
     const result = fromJs(CONSTANT_CTX, 123n);
     expect(result).toBeInstanceOf(AExact);
@@ -80,11 +84,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
   // singletons. Non-empty provenance mints a fresh SchemeBool.
+  // INVARIANT: boolean with empty provenance reuses the schemeTrue/schemeFalse singletons (pins implementation, not behavior)
   it("boolean (empty provenance) → singleton SchemeBool", () => {
     expect(fromJs(CONSTANT_CTX, true)).toBe(schemeTrue);
     expect(fromJs(CONSTANT_CTX, false)).toBe(schemeFalse);
   });
 
+  // INVARIANT: boolean with non-empty provenance mints a fresh ABool carrying that provenance
   it("boolean (non-empty provenance) → fresh SchemeBool with provenance", () => {
     const prov = new Set<number>([99]);
     const result = fromJs(CONSTANT_CTX, true, prov);
@@ -98,12 +104,14 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // concept-split): null → nil (empty list); undefined → void (unspecified).
   // Empty provenance still returns a fresh instance (withProvenance always
   // allocates) — the clone-leak shape.
+  // INVARIANT: null → ANil instance
   it("null → Nil instance", () => {
     const result = fromJs(CONSTANT_CTX, null);
     expect(result).toBeInstanceOf(ANil);
     expect(result instanceof ANil).toBe(true);
   });
 
+  // INVARIANT: undefined → AVoid instance
   it("undefined → Void instance", () => {
     const result = fromJs(CONSTANT_CTX, undefined);
     expect(result).toBeInstanceOf(AVoid);
@@ -111,6 +119,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // the "object" boxer. A JS array IS an R7RS vector → a borrowed AJSArray (no more list
   // coercion); a plain object wraps as SchemeJSObject.
+  // INVARIANT: array → borrowed AJSArray vector, boxing lazily on access (pins implementation, not behavior)
   it("array → borrowed AJSArray vector (boxes lazily on access)", () => {
     const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
     expect(result).toBeInstanceOf(AJSArray);
@@ -118,6 +127,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1n);
   });
 
+  // INVARIANT: plain object → AJSObject wrapper preserving source
   it("plain object → SchemeJSObject wrapper", () => {
     const obj = { foo: 1 };
     const result = fromJs(CONSTANT_CTX, obj);
@@ -125,6 +135,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AJSObject).source).toBe(obj);
   });
 
+  // INVARIANT: function → #void — the boxer registry never mints a callable wrapper
   it("function → #void (the boxer registry never mints a callable wrapper)", () => {
     expect(fromJs(CONSTANT_CTX, () => 42)).toBe(theVoid);
   });
@@ -147,21 +158,26 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // AValue` (jsToScheme's very first case), not a brand check — pinned below against a real
   // `ALambda`. The membrane's OTHER law is unchanged: an unbranded bare host function still
   // voids (also pinned below).
+  // INVARIANT: a real scheme lambda (ALambda) passes through jsToScheme by identity (already a scheme value)
+  // — historically pinned to the now-deleted LAMBDA brand; the law survives, the mechanism doesn't (pins implementation, not behavior)
   it("a real ALambda passes through jsToScheme by identity (it IS a scheme value)", () => {
     const lam = new ALambda({ name: "test-lambda", arity: { min: 0, max: 0 }, scope: undefined, runner: () => theVoid });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
   });
 
+  // INVARIANT: an unbranded (borrowed host) function still voids through jsToScheme
   it("a bare host function still voids through jsToScheme (borrowed host callback, by design)", () => {
     expect(jsToScheme(CONSTANT_CTX, () => 42)).toBe(theVoid);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.
+  // INVARIANT: AValue input with empty provenance is returned by identity (fast path)
   it("AValue input (empty provenance) is returned by identity", () => {
     const orig = new AString(CONSTANT_CTX, "x");
     expect(fromJs(CONSTANT_CTX, orig)).toBe(orig);
   });
 
+  // INVARIANT: AValue input with non-empty provenance is cloned via withProvenance, carrying the new provenance (pins implementation, not behavior)
   it("AValue input (with non-empty provenance) is cloned via withProvenance", () => {
     const orig = new AString(CONSTANT_CTX, "x");
     const prov = new Set<number>([7]);
@@ -181,6 +197,7 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // primitives now route through `AValue.fromJs` (boxer registry) so a JS
   // string in produces a `SchemeString` carrying the supplied provenance.
   // Closes the shape divergence the membrane symmetry audit flagged.
+  // INVARIANT: a string is boxed into AString by jsToScheme
   it("string is wrapped through jsToScheme into SchemeString", () => {
     const lipsified = jsToScheme(CONSTANT_CTX, "hello");
     expect(lipsified).toBeInstanceOf(AString);
@@ -189,14 +206,17 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // String pass-through round trips by accident — raw in, raw out.
   // This IS expected behavior today and is the green guard for the
   // primitive-passthrough contract.
+  // INVARIANT: string round-trips by passthrough (raw in, raw out)
   it("string round-trips by passthrough (raw → raw)", () => {
     expect(schemeToJs(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
   });
 
+  // INVARIANT: number round-trips by passthrough
   it("number round-trips by passthrough", () => {
     expect(schemeToJs(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
   });
 
+  // INVARIANT: boolean round-trips by passthrough
   it("boolean round-trips by passthrough", () => {
     expect(schemeToJs(jsToScheme(CONSTANT_CTX, true))).toBe(true);
   });
@@ -205,11 +225,13 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // back into an array. The element-level cons'ing also wraps the leaves
   // through jsToScheme (so primitives stay primitives), and schemeToJs
   // recurses through the Pair spine.
+  // INVARIANT: array round-trips through a Pair chain
   it("array round-trips through a Pair chain", () => {
     const result = schemeToJs(jsToScheme(CONSTANT_CTX, [1, 2, 3]));
     expect(result).toEqual([1, 2, 3]);
   });
 
+  // INVARIANT: nested array round-trips
   it("nested array round-trips", () => {
     const result = schemeToJs(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
     expect(result).toEqual([[1, 2], [3, 4]]);
@@ -217,11 +239,13 @@ describe("jsToScheme → schemeToJs round-trip", () => {
 
   // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, schemeToJs
   // mirrors via Object.entries → schemeToJs(value). Round-trip is correct.
+  // INVARIANT: plain object round-trips
   it("plain object round-trips", () => {
     const result = schemeToJs(jsToScheme(CONSTANT_CTX, { a: 1, b: "two" }));
     expect(result).toEqual({ a: 1, b: "two" });
   });
 
+  // INVARIANT: nested object round-trips
   it("nested object round-trips", () => {
     const result = schemeToJs(jsToScheme(CONSTANT_CTX, { outer: { inner: 42 } }));
     expect(result).toEqual({ outer: { inner: 42 } });
@@ -231,6 +255,8 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // delegates to arrival/toJS (ANil's toJS returns null), closing the round
   // trip exactly. The old rosetta-surface asymmetry (nil singleton, not null)
   // is gone — the lazy membrane-accessor rework, 2026-07-09.
+  // INVARIANT: null round-trips symmetrically through nil back to null (the historical
+  // jsToScheme(null)→nil / schemeToJs(nil)→nil-singleton asymmetry is fixed, not live)
   it("null round-trips to null (jsToScheme null → nil, schemeToJs nil → null)", () => {
     expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
   });
@@ -244,6 +270,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   // Membrane's isSchemeValue (membrane.ts:70-99) is a long `instanceof`
   // chain. Each test asserts the chain has a branch for the subtype.
 
+  // INVARIANT: every native AValue subtype (String/Symbol/Character/Exact/Inexact/Bool/Pair/nil/JSObject) is recognized as a scheme value
   it("SchemeString → true", () => {
     expect(isSchemeValue(new AString(CONSTANT_CTX, "x"))).toBe(true);
   });
@@ -284,6 +311,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   // Nil clones — should be recognized but aren't. See clone-identity.test.ts
   // for the full enumeration of `=== nil` sites. This is a duplicate of the
   // membrane.ts:71 site, deliberately kept here for the completeness map.
+  // INVARIANT: a Nil clone (via withProvenance) is recognized as a scheme value
   it("Nil clone → true (see membrane.ts:71 + clone-identity.test.ts; fixed via `instanceof Nil`)", () => {
     const clone = nil.withProvenance(new Set<number>([1]));
     expect(isSchemeValue(clone)).toBe(true);
@@ -291,6 +319,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 
   // Plain JS values should NOT be Scheme values. Negative cases keep the
   // boundary's other direction honest.
+  // INVARIANT: plain JS values (string/number/object/array/null/undefined) are NOT scheme values
   it("plain string → false", () => {
     expect(isSchemeValue("hello")).toBe(false);
   });
@@ -321,17 +350,20 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 // =========================================================================
 
 describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () => {
+  // INVARIANT: a string primitive round-trips through fromJS/toJS
   it("primitive round-trips: string", () => {
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
     // SchemeValue. The runtime value IS a SchemeValue — the mismatch is in the declared union.
     expect(toJS(fromJS("hello"))).toBe("hello");
   });
 
+  // INVARIANT: a number primitive round-trips through fromJS/toJS
   it("primitive round-trips: number", () => {
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(42))).toBe(42);
   });
 
+  // INVARIANT: bigint materializes to AExact and round-trips to a JS number (bigint-vs-number is normalized away)
   it("bigint materializes to an exact integer (JS bigint-vs-number is normalized)", () => {
     // host-agnostic: 10n is the exact integer 10. fromJS boxes it to AExact; toJS gives back the
     // exact value as a JS number (the bigint type is a host detail arrival does not preserve).
@@ -340,12 +372,14 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(10n))).toBe(10);
   });
 
+  // INVARIANT: null round-trips through nil to null
   it("null round-trips through nil", () => {
     // fromJS(null) → nil (the singleton). toJS(nil) → null via `value === nil`.
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(null))).toBe(null);
   });
 
+  // INVARIANT: an object round-trips through AJSObject preserving the exact source reference
   it("object round-trips through SchemeJSObject (same source reference)", () => {
     const obj = { a: 1 };
     const wrapped = fromJS(obj);
@@ -354,10 +388,12 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(wrapped)).toBe(obj);
   });
 
+  // INVARIANT: a borrowed function does not cross the membrane — materializes to #void
   it("a borrowed function does NOT cross — it materializes to #void (not a portable value)", () => {
     expect(fromJS(() => 42)).toBe(theVoid);
   });
 
+  // INVARIANT: the wrapper cache returns the same wrapper instance for the same JS object
   it("wrapper cache: same JS object → same wrapper instance", () => {
     const obj = { x: 1 };
     const a = fromJS(obj);

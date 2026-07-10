@@ -27,6 +27,7 @@ beforeAll(async () => {
 });
 
 describe("host-language verbs are non-existent", () => {
+  // INVARIANT: every host-language verb (eval/load/set-obj!/set-special!/new/instanceof) is genuinely Unbound in the inference env
   it("every host-language verb is genuinely Unbound in the inference env", () => {
     for (const verb of HOST_LANGUAGE_VERBS) {
       const value = inferenceEnv.get(verb, { throwError: false });
@@ -34,6 +35,7 @@ describe("host-language verbs are non-existent", () => {
     }
   });
 
+  // INVARIANT: no host-language verb appears as a key on the env's own surface (pins implementation, not behavior)
   it("no host-language verb appears in the env's own surface", () => {
     const names = new Set(Object.keys(inferenceEnv.__env__));
     for (const verb of HOST_LANGUAGE_VERBS) {

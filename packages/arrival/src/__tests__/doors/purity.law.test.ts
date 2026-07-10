@@ -46,9 +46,12 @@ const DYNAMICS_AND_MUTATORS: ReadonlyArray<readonly [name: string, src: string, 
   ["delay-force", "(delay-force (delay 1))", /omitted from arrival by design/],
   // R7RS §4.1.6 assignment — env/r7rs/binding.ts. `x` must already be bound (`let`)
   // before the door call, else applicative-order evaluation of the (unbound) first
-  // argument would throw "Unbound variable" before ever reaching the door — the
-  // same argument-evaluation-order caveat `polyglot-rich-errors-stubs.test.ts`
-  // documents for setf/defun.
+  // argument would throw "Unbound variable" before ever reaching the door — the same
+  // argument-evaluation-order caveat setf/defun have. [STALE-LABEL fix: this used to cite
+  // `polyglot-rich-errors-stubs.test.ts`, which is retired — see declared-doors.law.test.ts's
+  // header, which notes the setf/defun already-bound-vs-unbound-argument nuance specifically
+  // is no longer exercised by any live test (that harness calls every door with zero
+  // arguments uniformly, sidestepping the distinction entirely).]
   ["set!", "(let ((x 1)) (set! x 2))", /violates value provenance|mutates/],
   // Writing methods — every entity is frozen by construction; env/r7rs/lists.ts,
   // vectors.ts, strings.ts, bytevectors.ts.

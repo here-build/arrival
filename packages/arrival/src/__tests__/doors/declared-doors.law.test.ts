@@ -69,6 +69,21 @@ const DOORS = declaredDoors();
 // unbound-variable argument would evaluate that argument BEFORE the door fires, since
 // doors are procedures, not macros).
 
+// INVARIANT (carried from the dissolved polyglot-rich-errors-stubs.test.ts, generalized: every
+// declared door — including each well-known cross-dialect stub, e.g. type-of/<>/make-hash/
+// make-hasheq/hash-ref/gethash/getf/println/print/loop/nreverse/for-list/for-fold — fires a
+// PurityError door whose message names the symbol and carries a substantive reason, because
+// the owning pack ships in BASE_PACKS; unlike the old per-name-enumerated test, this is
+// declaration-driven so it covers every door without hand-listing names):
+// DEAD/NARROWED: the old suite additionally regex-matched each stub's message against "the
+// correct bound alternative" by name; this generic harness only asserts shape (names the
+// symbol + a substantive "Why:" clause) — the alternative-naming content is pinned at the
+// SOURCE (each reason string in env/polyglot-stubs.ts) rather than re-asserted here.
+// DEAD: "setf/defun fire their door when called with already-bound arguments (limitation:
+// unbound-argument calls surface 'Unbound variable' instead, since these are procedures, not
+// macros)" — this harness deliberately calls every door with ZERO arguments uniformly to
+// sidestep argument-evaluation order entirely, so the already-bound-vs-unbound-argument
+// distinction for setf/defun specifically is no longer exercised by any live test.
 describe("F6 doors — every DECLARED notImplemented door fires at apply with teaching (declaration-driven)", () => {
   // Anti-vacuity floor (P16/F9): if this ever collapses to 0, `it.each` below
   // silently runs zero tests and the suite stays green while testing nothing.
@@ -103,6 +118,8 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
     expect(whyMatch![1].trim().length).toBeGreaterThan(15);
   }
 
+  // INVARIANT: every stub symbol doors with "is not available." in the DEFAULT env, because
+  // the owning pack ships in BASE_PACKS (pins implementation, not behavior)
   it.each(DOORS.map((d): [string, { name: string; reason: string; pack: string }] => [`${d.name} (${d.pack})`, d]))(
     "(%s) doors: names the symbol + carries a substantive teaching reason",
     async (_label, door) => {

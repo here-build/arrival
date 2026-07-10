@@ -474,6 +474,10 @@ describe("registry poisoning vectors", () => {
 // immutability — the mutator family is teaching-doored, a JS-side setter
 // bypassing that discipline had zero production callers). The symbol-intern
 // pollution half of S6 remains live below.
+//
+// DEAD (test-invariant-atlas, no longer testable — the API itself is gone):
+//   - accessSet rejects "__proto__"/"constructor"/"prototype" as blocked keys
+//   - accessSet installs an own data property without firing inherited/poisoned setters
 // ============================================================================
 
 describe("CRITICAL: write-side prototype pollution (S6)", () => {
