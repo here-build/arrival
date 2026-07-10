@@ -35,6 +35,8 @@ describe("Capabilities.assembled (3b.3 — assembled base sentinel)", () => {
     // globalRoot is the stable base sentinel — ENV T3: the SEALED CHAIN artifact
     // (BakedBase), not the raw base-leaf env. `sealResolutionChain` is memoized per base,
     // so this is the SAME object `Capabilities.assembled` sealed internally.
+    // INVARIANT (3b.3): globalRoot is the base TOP (user_env), one stable identity
+    // surviving the topology cut (pins implementation, not behavior).
     expect(caps.globalRoot).toBe(sealResolutionChain(user_env));
 
     // refFrame probes the WHOLE base chain and points every base-owned name back to that

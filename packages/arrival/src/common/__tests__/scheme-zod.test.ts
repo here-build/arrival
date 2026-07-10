@@ -60,6 +60,8 @@ function forceGc(): void {
 }
 
 describe("scheme-zod collection functions (Zod style)", () => {
+  // INVARIANT: z.list(element) decodes a real pair-spine into a JS array via the element
+  // codec, and encodes back to a pair-spine.
   it("z.list(element) produces a codec for homogeneous proper lists", () => {
     const charList = z.list(z.char);
     expect(charList).toBeTruthy();
@@ -80,6 +82,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(back).toEqual(["x", "y"]);
   });
 
+  // INVARIANT: z.cons(car, cdrSchema) validates a dotted pair, decoding to a 2-tuple, and
+  // rejects a cdr failing its schema.
   it("z.cons(car, cdrSchema) — dotted pair — e.g. z.cons(z.char, z.union([z.nil, z.boolean]))", () => {
     const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
@@ -114,6 +118,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(() => oneCharThenNil.parse(twoChars)).toThrow();
   });
 
+  // INVARIANT: z.vector(element) accepts and decodes both AVector and AJSArray; encode
+  // canonically produces AVector.
   it("z.vector(element) works for both AVector and AJSArray", () => {
     const strVec = z.vector(z.string);
 
@@ -137,6 +143,7 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(strArr.parse([makeString("hi"), makeString("ho")])).toEqual(["hi", "ho"]);
   });
 
+  // INVARIANT: element codecs apply during list decode/encode (e.g. AString ↔ string).
   it("element codecs are applied (string codec turns AString <-> string)", () => {
     const strList = z.list(z.string);
 
@@ -151,6 +158,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect((reEncoded as APair<any, any>).car).toBeInstanceOf(AString);
   });
 
+  // INVARIANT: a homogeneous z.list rejects an improper list (non-nil, non-pair cdr
+  // terminator).
   it("rejects improper lists for homogeneous z.list", () => {
     const anyList = z.list();
     // cdr is a char (not nil and not a pair) → improper termination
@@ -158,6 +167,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(() => anyList.parse(improper)).toThrow();
   });
 
+  // INVARIANT: z.list([A, B]) requires exactly the declared heads, nil-terminated — too
+  // few or too many elements rejected.
   it("z.list([A, B]) — exactly 2 heterogeneous heads, nil-terminated, no tail", () => {
     const heteroList = z.list([z.char, z.string]);
 
@@ -173,6 +184,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(() => heteroList.parse(tooMany)).toThrow();
   });
 
+  // INVARIANT: z.list([A, B], E) accepts the fixed heads plus zero-or-more E-typed tail
+  // elements, rejecting a wrongly-typed tail element.
   it("z.list([A, B], E) — 2 fixed heads then zero-or-more E, nil-terminated", () => {
     const headsAndTail = z.list([z.char, z.string], z.boolean);
 
@@ -193,6 +206,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(() => headsAndTail.parse(badTail)).toThrow();
   });
 
+  // INVARIANT: sugar z.list(E) is equivalent to explicit z.list([], E) — cross-checked by
+  // round-tripping through each other.
   it("sugar z.list(E) is z.list([], E) — cross-checked by round-tripping through each other", () => {
     const sugar = z.list(z.char);
     const explicit = z.list([], z.char);
@@ -207,6 +222,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
 });
 
 describe("scheme-zod z.symbol codec", () => {
+  // INVARIANT: decode then encode round-trips to the SAME ASymbol instance, not merely an
+  // equal one (opaque brand, no data loss).
   it("decode then encode round-trips to the SAME ASymbol instance (opaque brand, no data loss)", () => {
     const sym = new ASymbol(CONSTANT_CTX, "my-symbol");
     const jsSymbol = z.symbol.parse(sym);
@@ -216,16 +233,22 @@ describe("scheme-zod z.symbol codec", () => {
     expect(back).toBe(sym); // same instance, not just an equal one
   });
 
+  // INVARIANT: two distinct ASymbol instances decode to two distinct JS symbols (no
+  // collision).
   it("two distinct ASymbol instances decode to two distinct JS symbols (no collision)", () => {
     const a = new ASymbol(CONSTANT_CTX, "a");
     const b = new ASymbol(CONSTANT_CTX, "b");
     expect(z.symbol.parse(a)).not.toBe(z.symbol.parse(b));
   });
 
+  // INVARIANT: encoding a JS symbol the codec never minted throws rather than silently
+  // producing a wrong value.
   it("encoding a jsSymbol the codec never minted throws (not a silent wrong value)", () => {
     expect(() => z.symbol.encode(Symbol("not-from-this-codec"))).toThrow();
   });
 
+  // INVARIANT: the codec's ASymbol cache holds the ASymbol strongly as long as its JS
+  // symbol is reachable, surviving a real GC cycle (pins implementation, not behavior).
   it("encode succeeds even after the ASymbol would otherwise be GC-eligible (forces a real GC cycle)", () => {
     // The defect this guards: the draft cached the ASymbol WEAKLY (`Map<symbol,
     // WeakRef<ASymbol>>` + FinalizationRegistry) — if nothing else held the ASymbol, it
@@ -252,6 +275,8 @@ describe("scheme-zod z.symbol codec", () => {
 });
 
 describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own protocol", () => {
+  // INVARIANT: a shaped z.dict round-trips a real ADict's keyed fields to a plain JS
+  // object and back.
   it("keyed round-trip against a real ADict", () => {
     const shaped = z.dict({ name: z.string, age: z.integer });
     const nativeDict = new ADict(CONSTANT_CTX, [
@@ -268,6 +293,8 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     expect(((encoded as ADict).get("age") as AExact).num).toBe(85n);
   });
 
+  // INVARIANT: a dict-shaped AJSObject is also accepted on decode (isDictShaped
+  // structural check, not just instanceof ADict).
   it("a dict-shaped AJSObject is accepted on decode too (isDictShaped, not just instanceof ADict)", () => {
     const shaped = z.dict({ name: z.string });
     const toolResult = new AJSObject(CONSTANT_CTX, { name: "from a tool" });
@@ -291,6 +318,8 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
 });
 
 describe("scheme-zod z.box — whole-object unwrap, not decomposition", () => {
+  // INVARIANT: z.box round-trips the SAME object reference — class identity and methods
+  // survive, unlike z.dict's decomposition.
   it("round-trips identity: same reference, class/methods survive (not decomposed like dict)", () => {
     class Foo {
       constructor(readonly x: number) {}
@@ -311,6 +340,8 @@ describe("scheme-zod z.box — whole-object unwrap, not decomposition", () => {
 });
 
 describe("scheme-zod z.procedure — contract-aware marshaling", () => {
+  // INVARIANT: decode direction marshals JS call args through scheme and back to a JS
+  // result when input/output codecs are given.
   it("decode direction: marshals JS args → scheme → JS result when input/output are given", async () => {
     const doubleProc = new ANativeProcedure({
       name: "double",
@@ -322,6 +353,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
     await expect(decoded(21)).resolves.toBe(42);
   });
 
+  // INVARIANT: encode direction mirrors decode — a JS function becomes a scheme callable
+  // that marshals scheme args → JS → scheme.
   it("encode direction mirrors: JS fn → scheme callable that marshals scheme args → JS → scheme", async () => {
     const proc = z.procedure(z.integer, z.integer);
     const encoded = proc.encode((...args: unknown[]) => (args[0] as number) + 1);
@@ -332,6 +365,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
     expect((out as AExact).num).toBe(42n);
   });
 
+  // INVARIANT: with no input/output codecs, decode round-trips raw scheme values through
+  // the callable unchanged (untyped fallback).
   it("untyped fallback (no input/output): decode round-trips raw scheme values unchanged", async () => {
     const identityNative = new ANativeProcedure({
       name: "identity",
@@ -345,6 +380,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
     await expect(decoded(rawArg)).resolves.toBe(rawArg);
   });
 
+  // INVARIANT: with no input/output codecs, encode round-trips raw scheme values
+  // unchanged (untyped fallback).
   it("untyped fallback: encode round-trips raw scheme values unchanged", async () => {
     const rawEncoded = z.procedure().encode((...args: unknown[]) => args[0]);
     const raw = makeExact(9n);
@@ -354,6 +391,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
 });
 
 describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces", () => {
+  // INVARIANT: z.value accepts every concrete scheme value kind, including
+  // symbol/dict/vector/bytevector (completeness).
   it("accepts every concrete scheme value kind (the completeness fix: symbol/dict/vector/bytevector included)", () => {
     const instances: unknown[] = [
       makeBool(true),
@@ -376,6 +415,7 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
     }
   });
 
+  // INVARIANT: z.decode(z.value, x) === x — passthrough only, z.value never transforms.
   it("z.decode(value, x) === x — passthrough only, never transforms", () => {
     const sym = makeExact(7n);
     expect(z.decode(z.value, sym)).toBe(sym);
@@ -389,12 +429,15 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
 });
 
 describe("scheme-zod z.nil", () => {
+  // INVARIANT: z.nil round-trips ANil ↔ JS null.
   it("null round-trip", () => {
     const n = new ANil(CONSTANT_CTX);
     expect(z.nil.parse(n)).toBe(null);
     expect(z.nil.encode(null)).toBeInstanceOf(ANil);
   });
 
+  // INVARIANT: the empty-list role is absorbed by z.list's own decode (ANil parses to
+  // []) with no separate schema needed.
   it("the empty-list role is absorbed by z.list's own decode — no separate schema needed", () => {
     const empty = new ANil(CONSTANT_CTX);
     expect(z.list(z.char).parse(empty)).toEqual([]);
@@ -402,12 +445,15 @@ describe("scheme-zod z.nil", () => {
 });
 
 describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
+  // INVARIANT: z.undefinedResult round-trips undefined ↔ AVoid.
   it("z.undefinedResult round-trips undefined ↔ AVoid", () => {
     const v = new AVoid(CONSTANT_CTX);
     expect(z.undefinedResult.parse(v)).toBeUndefined();
     expect(z.undefinedResult.encode(undefined)).toBeInstanceOf(AVoid);
   });
 
+  // INVARIANT: z.error round-trips R7RSError ↔ Error, mapping irritants ↔ cause in both
+  // directions, defaulting to empty irritants when cause is absent.
   it("z.error round-trips R7RSError ↔ Error, irritants ↔ cause", () => {
     const withIrritants = new R7RSError("bad arg", 1, "two");
     const decoded = z.error.parse(withIrritants);
@@ -430,22 +476,28 @@ describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
 
 describe("scheme-zod number codec family — boundary cases (ported from v1's own coverage)", () => {
   describe("z.exact", () => {
+    // INVARIANT: z.exact round-trips a safe integer via both bigint and number encode
+    // inputs.
     it("round-trips a safe integer both ways (bigint and number encode inputs)", () => {
       expect(z.exact.parse(makeExact(42n))).toBe(42n);
       expect((z.exact.encode(42n) as AExact).num).toBe(42n);
       expect((z.exact.encode(42) as AExact).num).toBe(42n);
     });
 
+    // INVARIANT: z.exact doors a non-integer exact rational (denom !== 1n) on decode.
     it("doors a non-integer exact rational on decode (denom !== 1n)", () => {
       expect(() => z.exact.parse(makeExact(1n, 3n))).toThrow(/no integer form/);
     });
 
+    // INVARIANT: z.exact doors encoding a non-safe-integer JS number.
     it("doors encoding a non-safe-integer JS number", () => {
       expect(() => z.exact.encode(1.5)).toThrow(/safe integer/);
     });
   });
 
   describe("z.inexact", () => {
+    // INVARIANT: z.inexact decodes AInexact.real and accepts lossy bigint/number on
+    // encode.
     it("decodes AInexact.real; encode accepts bigint/number, lossy accepted", () => {
       expect(z.inexact.parse(makeInexact(1.5))).toBe(1.5);
       expect((z.inexact.encode(3n) as AInexact).real).toBe(3);
@@ -454,6 +506,8 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
   });
 
   describe("z.integer", () => {
+    // INVARIANT: z.integer decodes a safe AExact or AInexact integer and canonicalizes
+    // encode to AExact.
     it("decodes a safe AExact or AInexact integer; encode canonicalizes to AExact", () => {
       expect(z.integer.parse(makeExact(42n))).toBe(42);
       expect(z.integer.parse(makeInexact(42))).toBe(42);
@@ -462,26 +516,35 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
       expect((out as AExact).denom).toBe(1n);
     });
 
+    // INVARIANT: z.integer doors a non-safe-integer AInexact on decode.
     it("doors a non-safe-integer AInexact on decode", () => {
       expect(() => z.integer.parse(makeInexact(1.5))).toThrow(/safe integer/);
     });
 
+    // INVARIANT: z.integer doors an out-of-range exact integer on decode (precision-loss
+    // guard).
     it("doors an out-of-range exact integer on decode (precision loss guard)", () => {
       const huge = makeExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
       expect(() => z.integer.parse(huge)).toThrow(/safe-integer range/);
     });
 
+    // INVARIANT: z.integer doors a non-integer exact rational on decode.
     it("doors a non-integer exact rational on decode (shares number's exactToJsNumberOrDoor helper)", () => {
       expect(() => z.integer.parse(makeExact(1n, 3n))).toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.schemeNumber", () => {
+    // INVARIANT: z.schemeNumber's union decodes each branch (exact/inexact) through its
+    // own codec.
     it("union of exact|inexact: decodes each branch through its OWN codec (bigint for exact, number for inexact)", () => {
       expect(z.schemeNumber.parse(makeExact(5n))).toBe(5n);
       expect(z.schemeNumber.parse(makeInexact(5.5))).toBe(5.5);
     });
 
+    // INVARIANT: z.schemeNumber's encode always tries the exact branch first — a genuine
+    // float throws rather than falling through to inexact (pins implementation, not
+    // behavior).
     it("encode direction always tries exact FIRST (both members share a bigint|number out-schema): a bigint or safe-integer number encodes to AExact; a genuine float THROWS rather than falling through to inexact", () => {
       // Unlike z.number/z.bigint (whose two union members target disjoint OUT types, z.number()
       // XOR z.bigint()), exact's own out-schema is z.union([bigint, number]) — broad enough to
@@ -495,23 +558,29 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
   });
 
   describe("z.number", () => {
+    // INVARIANT: z.number decodes exact/inexact to a JS number and canonically encodes
+    // to AInexact.
     it("decodes exact/inexact to a JS number; encode canonically produces AInexact", () => {
       expect(z.number.parse(makeExact(21n))).toBe(21);
       expect(z.number.parse(makeInexact(1.5))).toBe(1.5);
       expect(z.number.encode(3)).toBeInstanceOf(AInexact);
     });
 
+    // INVARIANT: z.number doors an over-range exact integer (no silent precision loss).
     it("doors an over-range exact integer (no silent precision loss)", () => {
       const huge = makeExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
       expect(() => z.number.parse(huge)).toThrow(/safe-integer range/);
     });
 
+    // INVARIANT: z.number doors a non-integer exact rational.
     it("doors a non-integer exact rational", () => {
       expect(() => z.number.parse(makeExact(1n, 3n))).toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.bigint", () => {
+    // INVARIANT: z.bigint round-trips arbitrary precision beyond the safe-integer range,
+    // canonically encoding to AExact.
     it("round-trips arbitrary precision beyond the safe-integer range; encode canonically AExact", () => {
       const big = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
       expect(z.bigint.parse(makeExact(big))).toBe(big);
@@ -520,10 +589,12 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
       expect((out as AExact).num).toBe(big);
     });
 
+    // INVARIANT: z.bigint doors an exact rational with no integer bigint form.
     it("doors an exact rational with no integer bigint form", () => {
       expect(() => z.bigint.parse(makeExact(1n, 3n))).toThrow(/no integer bigint form/);
     });
 
+    // INVARIANT: z.bigint doors an inexact value with a fractional part.
     it("doors an inexact value with a fractional part", () => {
       expect(() => z.bigint.parse(makeInexact(1.5))).toThrow(/fractional part/);
     });
@@ -531,14 +602,20 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
 });
 
 describe("scheme-zod z.lookupName / named() — survives combinators, incl. the .refine() parent-walk", () => {
+  // INVARIANT: lookupName resolves the declared name of a function-constructed schema
+  // (e.g. z.list(z.char) → "list").
   it("resolves a function-constructed schema: z.list(z.char)", () => {
     expect(z.lookupName(z.list(z.char))).toBe("list");
   });
 
+  // INVARIANT: lookupName resolves through .optional() (a fresh wrapper holding the
+  // original by reference).
   it("resolves through .optional() (fresh wrapper holding the original by reference)", () => {
     expect(z.lookupName(z.vector(z.string).optional())).toBe("vector");
   });
 
+  // INVARIANT: lookupName resolves through .refine() via the _zod.parent back-link, the
+  // one combinator with no innerType to unwrap (pins implementation, not behavior).
   it("resolves through .refine() via the _zod.parent back-link (the new coverage this migration adds)", () => {
     // z.booleanTrue = z.boolean.refine(...) — .refine() clones via core.clone(inst, def,
     // {parent:true}), setting _zod.parent to the pre-refine (registered) instance. Unlike

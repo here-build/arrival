@@ -28,6 +28,7 @@ const TYPED: HarvestedPrelude = {
 const lens = createDiagnoseLens(TYPED);
 
 describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () => {
+  // INVARIANT: a TS2345 positional-mismatch diagnostic extracts the expected and actual type strings.
   it("2345 (positional mismatch): extracts expected + actual TS type strings", () => {
     const { diagnostics } = lens.diagnose('(add2 "x" 2)', [], { codes: [2345] });
     expect(diagnostics).toHaveLength(1);
@@ -38,6 +39,7 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(d.tsMessage).toContain("not assignable");
   });
 
+  // INVARIANT: a TS2554 arity diagnostic extracts the callee's full signature string.
   it("2554 (arity): extracts the callee's signature string", () => {
     const { diagnostics } = lens.diagnose("(add2 1)", [], { codes: [2554] });
     expect(diagnostics).toHaveLength(1);
@@ -45,6 +47,8 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(diagnostics[0]!.signatureText).toBe("(a: number, b: number): number");
   });
 
+  // INVARIANT: a TS2561 excess-property diagnostic extracts the offending property name and the
+  // closed candidate key set.
   it("2561 (excess property): extracts propertyName + the closed candidate key set", () => {
     const { diagnostics } = lens.diagnose('(fx_search :query "x" :max_result 5)', [], { codes: [2561] });
     const d = diagnostics.find((x) => x.code === 2561);
@@ -53,6 +57,8 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(d!.candidateProperties).toContain("max_results");
   });
 
+  // INVARIANT: a TS2551 typo'd bracket-access read extracts a bare (unquoted) property name and
+  // candidate suggestions.
   it("2551 (typo'd property READ, bracket access — lower.ts's ONLY read shape): extracts a bare (unquoted) propertyName + candidates", () => {
     const { diagnostics } = lens.diagnose('(:coun config)', [], { codes: [2551] });
     const d = diagnostics.find((x) => x.code === 2551);
@@ -62,6 +68,8 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(d!.tsMessage).toContain("Did you mean");
   });
 
+  // INVARIANT: a non-whitelisted diagnostic code is kept bare (code + span + message only, no
+  // expected/actual/property payload).
   it("whitelist gate: a non-whitelisted code is kept BARE (code + span + message, no payload)", () => {
     const { diagnostics } = lens.diagnose('(add2 "x" 2)', [], { codes: [9999] });
     expect(diagnostics).toHaveLength(1);
@@ -72,10 +80,13 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(d.tsMessage.length).toBeGreaterThan(0);
   });
 
+  // INVARIANT: a clean, well-typed program produces no diagnostics.
   it("clean program: no diagnostics", () => {
     expect(lens.diagnose("(add2 1 2)", []).diagnostics).toEqual([]);
   });
 
+  // INVARIANT: a diagnostic's span is reported in scheme source coordinates, at or after
+  // programStartOffset.
   it("span-map: a current-program diagnostic's span is in scheme coordinates, ≥ programStartOffset", () => {
     const { unit, diagnostics } = lens.diagnose('(add2 "x" 2)', [], { codes: [2345] });
     expect(unit.programStartOffset).toBe(0);
@@ -84,6 +95,8 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(diagnostics[0]!.span).toEqual([0, 12]);
   });
 
+  // INVARIANT: contextDefines shift programStartOffset forward, and context-region diagnostics
+  // are excluded from the program's own span.
   it("context recipe: contextDefines shift programStartOffset; context-region diagnostics drop", () => {
     // The context define is well-typed here; the program errors. programStartOffset = the joined
     // context scheme length (+1), and the program's span shifts past it.
@@ -96,6 +109,8 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
     expect(diagnostics[0]!.span).toEqual([unit.programStartOffset, unit.programStartOffset + 12]);
   });
 
+  // INVARIANT: diagnose never throws on unparseable scheme input — it degrades to an empty
+  // diagnostics result.
   it("advisory: diagnose never throws on unparseable scheme — it returns an empty result", () => {
     expect(() => lens.diagnose("(add2 1", [])).not.toThrow();
     expect(lens.diagnose("(add2 1", []).diagnostics).toEqual([]);

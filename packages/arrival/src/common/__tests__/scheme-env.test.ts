@@ -20,6 +20,7 @@ function recorder(): { env: SchemeEnv; log: string[] } {
 }
 
 describe("schemePacks — bootstrap + wire, in dependency order", () => {
+  // INVARIANT: a single pack evaluates its bootstrap THEN runs wire, in that order.
   it("evaluates bootstrap THEN runs wire for a single pack", async () => {
     const { env, log } = recorder();
     const evalScheme: EvalSchemeInto = (_e, src) => void log.push(`eval:${src}`);
@@ -31,6 +32,7 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     expect(log).toEqual(["eval:(define-macro …)", "rosetta:op"]);
   });
 
+  // INVARIANT: a dependency's bootstrap runs before its dependent's (C3 order).
   it("a dependency's bootstrap runs before its dependent's (C3 order)", async () => {
     const { env, log } = recorder();
     const make = schemePacks<SchemeEnv>((_e, src) => void log.push(src));
@@ -43,6 +45,7 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     expect(log).toEqual(["BASE", "DEPENDENT"]);
   });
 
+  // INVARIANT: schemePacks produces a plain kernel EnvPack that composes with pure-JS packs.
   it("produces a plain kernel EnvPack (composes with pure-JS packs)", async () => {
     const { env, log } = recorder();
     const make = schemePacks<SchemeEnv>((_e, src) => void log.push(`scm:${src}`));
@@ -54,6 +57,7 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     expect(log.sort()).toEqual(["scm:DEFS", "set:native"]);
   });
 
+  // INVARIANT: a bootstrap-less pack runs only its wire step, never evaluating anything.
   it("a bootstrap-less pack is just its wire (no eval)", async () => {
     const { env, log } = recorder();
     const make = schemePacks<SchemeEnv>(() => void log.push("EVAL-SHOULD-NOT-RUN"));

@@ -34,6 +34,8 @@ async function assemble(
 }
 
 describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)", () => {
+  // INVARIANT: a preludeOnly verb is unbound at runtime, but a later capability's prelude can
+  // call it during assembly.
   it("a preludeOnly verb is UNBOUND at runtime, but a LATER capability's prelude that calls it during assembly works", async () => {
     // Capability A contributes a preludeOnly rosetta. Capability B (deps on A) calls it from
     // its OWN prelude, recording the call as an observable side effect via a runtime-bound sink.
@@ -73,6 +75,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
     await expect(exec(`(overlay/greet "again")`, { env })).rejects.toThrow(/Unbound variable/);
   });
 
+  // INVARIANT: an ordinary prelude `define` lands in the runtime env, observable after assembly.
   it("an ordinary prelude `define` still lands in the runtime env (fact 1 — now trivially, no overlay)", async () => {
     const cap = new EnvCapability("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
@@ -84,6 +87,8 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
     expect(Number(result[0])).toBe(42);
   });
 
+  // INVARIANT: the prelude scope accumulates across a chain of dependents in C3 order — a shared
+  // Map, not rebuilt per capability.
   it("the prelude scope ACCUMULATES: A's preludeOnly verb is visible to a chain of TWO dependents via C3 order", async () => {
     const capA = new EnvCapability("test/overlay-chain-a", {
       symbols: {
@@ -132,6 +137,8 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
     expect(cSeen).toEqual([7]);
   });
 
+  // INVARIANT: a lambda defined by a prelude cannot reach a preludeOnly verb at runtime — only
+  // capturing the call's result bridges to runtime, never the verb itself.
   it("THE CONTRACT: a lambda DEFINED BY a prelude cannot reach the preludeOnly verb at runtime — capture the RESULT, not the verb", async () => {
     const cap = new EnvCapability("test/overlay-closure", {
       symbols: {

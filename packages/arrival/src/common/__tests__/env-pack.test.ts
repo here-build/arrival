@@ -37,6 +37,8 @@ afterEach(() => {
 });
 
 describe("env-pack assembly core (P0)", () => {
+  // INVARIANT: a linear dep chain a→b→c orders C3 highest-precedence-first, applies deps-first,
+  // each pack exactly once.
   it("linear chain a→b→c: order highest-first; apply deps-first; each once", async () => {
     const c = pack("c");
     const b = pack("b", [c]);
@@ -46,6 +48,8 @@ describe("env-pack assembly core (P0)", () => {
     expect(r.env.appliedOrder).toEqual(["c", "b", "a"]); // applied least-precedence first
   });
 
+  // INVARIANT: a diamond dep graph linearizes via classic C3 and applies the shared root exactly
+  // once.
   it("diamond d→{b,c}, b→a, c→a: C3 == [d,b,c,a]; a applied once", async () => {
     const a = pack("a");
     const b = pack("b", [a]);
@@ -57,6 +61,7 @@ describe("env-pack assembly core (P0)", () => {
     expect(r.env.appliedOrder).toEqual(["a", "c", "b", "d"]);
   });
 
+  // INVARIANT: a pack reachable via 3 distinct paths is applied exactly once (dedup).
   it("dedup via 3 paths to one pack: applied exactly once", async () => {
     const shared = pack("shared");
     const x = pack("x", [shared]);
@@ -65,6 +70,7 @@ describe("env-pack assembly core (P0)", () => {
     expect(r.env.appliedOrder.filter((n) => n === "shared")).toHaveLength(1);
   });
 
+  // INVARIANT: a cycle in deps throws AssembleCycleError with the path.
   it("cycle a→b→a throws AssembleCycleError with the path", async () => {
     const a: EnvPack<Stub> = { name: "a", apply: () => {} };
     const b: EnvPack<Stub> = { name: "b", deps: [a], apply: () => {} };
@@ -72,6 +78,7 @@ describe("env-pack assembly core (P0)", () => {
     await expect(assembleEnv(stub(), [a])).rejects.toBeInstanceOf(AssembleCycleError);
   });
 
+  // INVARIANT: two packs sharing a name with divergent config throw AssembleConfigConflictError.
   it("same-name divergent config throws AssembleConfigConflictError", async () => {
     const fnA = () => 1,
       fnB = () => 2;
@@ -81,6 +88,7 @@ describe("env-pack assembly core (P0)", () => {
     await expect(assembleEnv(stub(), [root])).rejects.toBeInstanceOf(AssembleConfigConflictError);
   });
 
+  // INVARIANT: two packs sharing a name with equal config dedup silently (no conflict).
   it("same-name EQUAL config dedups silently", async () => {
     const shared = () => 1;
     const mcp1 = pack("mcp", [], { config: shared });
@@ -90,6 +98,8 @@ describe("env-pack assembly core (P0)", () => {
     expect(r.env.appliedOrder.filter((n) => n === "mcp")).toHaveLength(1);
   });
 
+  // INVARIANT: an async pack apply resolves before assembleEnv returns, its bindings visible
+  // after.
   it("async apply (await import-shaped): env has the symbol after assemble resolves", async () => {
     const slow: EnvPack<Stub> = {
       name: "slow",
@@ -102,6 +112,7 @@ describe("env-pack assembly core (P0)", () => {
     expect(r.env.syms.get("slow/fn")).toBe(42);
   });
 
+  // INVARIANT: onDispose callbacks run in LIFO order (reverse of apply order).
   it("onDispose runs LIFO (reverse of apply)", async () => {
     const log: string[] = [];
     const mk = (name: string, deps: EnvPack<Stub>[] = []): EnvPack<Stub> => ({
@@ -122,6 +133,8 @@ describe("env-pack assembly core (P0)", () => {
     expect(log).toEqual(["a", "b", "c"]);
   });
 
+  // INVARIANT: a throwing pack apply rolls back — prior packs' disposers run and the whole
+  // assembly rejects with AssemblePackError.
   it("partial-assembly rollback: a throwing apply runs prior disposers and rejects", async () => {
     const disposed: string[] = [];
     const ok: EnvPack<Stub> = {
@@ -143,6 +156,8 @@ describe("env-pack assembly core (P0)", () => {
     expect(disposed).toEqual(["ok"]); // ok applied before boom, so its disposer ran on rollback
   });
 
+  // INVARIANT: an apply that never resolves trips AssemblePackTimeoutError under
+  // ASSEMBLE_PACK_TIMEOUT_MS (pins implementation, not behavior).
   it("apply timeout: a never-resolving apply trips AssemblePackTimeoutError", async () => {
     process.env.ASSEMBLE_PACK_TIMEOUT_MS = "40";
     const wedged: EnvPack<Stub> = { name: "wedged", apply: () => new Promise(() => {}) };
@@ -167,6 +182,7 @@ describe("env-pack assembly core (P0)", () => {
 
   // ── createRuntimeAssembler (P4: the `(require/extension)` live-apply path) ──
   describe("createRuntimeAssembler", () => {
+    // INVARIANT: require() applies a pack onto a live env, deps-first.
     it("applies a pack onto the live env, deps-first", async () => {
       const env = stub();
       const a = pack("a");
@@ -176,6 +192,7 @@ describe("env-pack assembly core (P0)", () => {
       expect(env.appliedOrder).toEqual(["a", "b"]);
     });
 
+    // INVARIANT: a second require() of the same pack is a no-op (applies once, idempotent).
     it("idempotent: a second require is a no-op (applies once)", async () => {
       const env = stub();
       const a = pack("a");
@@ -185,6 +202,7 @@ describe("env-pack assembly core (P0)", () => {
       expect(env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
     });
 
+    // INVARIANT: two concurrent requires of the same pack apply exactly once (single-flight).
     it("single-flight: two CONCURRENT requires of the same pack apply once", async () => {
       const env = stub();
       let applies = 0;
@@ -201,6 +219,7 @@ describe("env-pack assembly core (P0)", () => {
       expect(applies).toBe(1);
     });
 
+    // INVARIANT: a failed apply can be retried — re-require after failure applies successfully.
     it("a failed apply can be retried (FAILED → re-require applies)", async () => {
       const env = stub();
       let attempt = 0;
@@ -218,6 +237,7 @@ describe("env-pack assembly core (P0)", () => {
       expect(env.appliedOrder).toEqual(["flaky"]);
     });
 
+    // INVARIANT: dispose() runs runtime-applied disposers in LIFO order.
     it("dispose runs runtime-applied disposers LIFO", async () => {
       const env = stub();
       const log: string[] = [];
@@ -237,6 +257,8 @@ describe("env-pack assembly core (P0)", () => {
 
   // ── C3 SPEC-PARITY (G9): our linearization == Python's C3 on canonical cases ──
   describe("C3 spec-parity vs Python MRO", () => {
+    // INVARIANT: the classic K1/K2/K3/Z diamond hierarchy linearizes identically to Python's
+    // documented C3 MRO.
     it("the classic K1/K2/K3/Z hierarchy matches Python's documented MRO", async () => {
       // From the C3 paper / Python docs. Python MRO of Z (dropping object):
       //   Z, K1, K2, K3, D, A, B, C, E
@@ -253,6 +275,8 @@ describe("env-pack assembly core (P0)", () => {
       expect(r.order).toEqual(["Z", "K1", "K2", "K3", "D", "A", "B", "C", "E"]);
     });
 
+    // INVARIANT: an inconsistent hierarchy Python's C3 rejects is also rejected here, via
+    // AssembleLinearizationError.
     it("an inconsistent hierarchy Python REJECTS, we reject too (AssembleLinearizationError)", async () => {
       // a wants [x,y]; b wants [y,x]; c(a,b) — no consistent linearization. Python raises TypeError.
       const x = pack("x"),

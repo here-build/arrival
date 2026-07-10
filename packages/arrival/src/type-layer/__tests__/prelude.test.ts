@@ -47,6 +47,7 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
     ["set_timer", setTimer],
   ] as const;
 
+  // INVARIANT: emits the carrier vocabulary plus one `declare const` per harvested tool.
   it("emits the carrier vocabulary + a declare per tool", () => {
     const { prelude, members } = assembleHarvestedPrelude(entries);
     expect(prelude).toContain("interface Cons");
@@ -55,18 +56,23 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
     expect(members).toEqual(["get_route", "set_timer"]);
   });
 
+  // INVARIANT: a valid lowered program type-checks clean against the harvested prelude.
   it("a VALID lowered program type-checks against the harvested prelude", () => {
     const { prelude } = assembleHarvestedPrelude(entries);
     const program = `set_timer(600);\nget_route(list("A", "B"), "fast");\n`;
     expect(compileErrors(`${prelude}\n${program}`)).toEqual([]);
   });
 
+  // INVARIANT: a wrong lowered program (vector where list expected; string where number expected)
+  // bites under tsc.
   it("a WRONG lowered program bites (a vector where a list is expected; a string where a number is)", () => {
     const { prelude } = assembleHarvestedPrelude(entries);
     expect(compileErrors(`${prelude}\nget_route([1, 2, 3], "fast");\n`).length).toBeGreaterThan(0);
     expect(compileErrors(`${prelude}\nset_timer("ten");\n`).length).toBeGreaterThan(0);
   });
 
+  // INVARIANT: a kwargs tool's valid `:key value` call type-checks; a wrong value type, an
+  // out-of-enum value, or a missing required property each bites.
   it("a kwargs tool: a valid `:key value` call type-checks; a bad value / missing required prop bites", () => {
     // create_user takes a kwargs object: required name:string + optional mode:"fast"|"scenic".
     const createUser = symbol.rosetta`create_user: make a user`(

@@ -40,6 +40,7 @@ function recordingEnv(tag: string): { env: SchemeEnv; verbs: Record<string, unkn
 }
 
 describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx.preludeScope", () => {
+  // INVARIANT: a preludeOnly rosetta binds onto ctx.preludeScope, not onto the runtime env.
   it("a preludeOnly rosetta binds onto ctx.preludeScope, NOT onto the runtime env", async () => {
     const def = symbol.rosetta`prelude-only/verb: only visible while a prelude evaluates`(
       { input: [z.string], output: [z.string], preludeOnly: true },
@@ -57,6 +58,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     expect(bound).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape (§9 option (c)); // IS on the overlay, same bind form (a real callable)
   });
 
+  // INVARIANT: an ordinary (non-preludeOnly) rosetta binds onto the runtime env, unaffected by preludeOnly wiring.
   it("an ORDINARY (non-preludeOnly) rosetta binds onto the runtime env as before — no regression", async () => {
     const def = symbol.rosetta`ordinary/verb: a normal runtime verb`(
       { input: [z.string], output: [z.string] },
@@ -73,6 +75,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     expect(overlayVerbs["ordinary/verb"]).toBeUndefined();
   });
 
+  // INVARIANT: a preludeOnly symbol with no ctx.preludeScope present falls back to binding on env (no silent drop).
   it("a preludeOnly symbol with NO ctx.preludeScope present falls back to binding on env (no silent drop)", async () => {
     // If a capability declares preludeOnly but is applied OUTSIDE an assembly that wires an
     // overlay (e.g. a bare direct apply in a test/tool), the symbol must still land somewhere
@@ -89,6 +92,8 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     expect(runtimeVerbs["prelude-only/no-overlay"]).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape
   });
 
+  // INVARIANT: a preludeOnly native symbol also routes onto ctx.preludeScope, kind-agnostic (native and
+  // rosetta share the routing rule).
   it("a preludeOnly NATIVE symbol also routes onto ctx.preludeScope (kind-agnostic)", async () => {
     const def = symbol.native`prelude-only/native-verb: native prelude-only op`(
       { input: [z.string], output: [z.string], preludeOnly: true },

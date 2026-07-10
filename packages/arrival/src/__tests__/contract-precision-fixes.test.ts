@@ -53,6 +53,7 @@ const properList = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
 const realString = new AString(CONSTANT_CTX, "abc");
 
 describe("2026-07-05 audit — runtime Contract precision on the REAL exported ops", () => {
+  // INVARIANT: for-each's rest-argument schema requires a proper list (Pair|Nil); a non-list is rejected
   it("for-each: rest elements must now be a proper list (Pair|Nil) — a non-list used to slip through the old z.array(z.value)", () => {
     const def = contractDef(listsPack, "for-each");
     expect(def.in.safeParse([fn, properList]).success).toBe(true);
@@ -60,18 +61,21 @@ describe("2026-07-05 audit — runtime Contract precision on the REAL exported o
     expect(def.in.safeParse([fn, "not-a-list"]).success).toBe(false);
   });
 
+  // INVARIANT: string-map's rest-argument schema requires a real AString; a raw JS string is rejected
   it("string-map: rest elements must now be a real SchemeString (AString) — a raw JS string used to slip through the old z.array(z.unknown())", () => {
     const def = contractDef(stringsPack, "string-map");
     expect(def.in.safeParse([fn, realString]).success).toBe(true);
     expect(def.in.safeParse([fn, "raw-js-string"]).success).toBe(false);
   });
 
+  // INVARIANT: string-for-each's rest-argument schema requires a real AString; a raw JS string is rejected
   it("string-for-each: same rest-precision fix as string-map", () => {
     const def = contractDef(stringsPack, "string-for-each");
     expect(def.in.safeParse([fn, realString]).success).toBe(true);
     expect(def.in.safeParse([fn, "raw-js-string"]).success).toBe(false);
   });
 
+  // INVARIANT: filter's input schema is a fixed 2-tuple; a 3rd element is rejected
   it("filter: input is now a fixed 2-tuple — a 3rd element used to slip through the old z.tuple([u], u) unbounded rest", () => {
     const def = contractDef(srfi1Pack, "filter");
     expect(def.in.safeParse([fn, properList]).success).toBe(true);
@@ -102,6 +106,8 @@ describe("2026-07-05 audit — runtime Contract precision on the REAL exported o
 // imprecision, not blindness — tightened to `z.array(z.symbol)` (the SAME identity primitive
 // `symbol->string`/`string->symbol` already use two symbols down in this very file).
 describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolean=? deliberately unchanged)", () => {
+  // INVARIANT: symbol=?'s input schema requires both arguments to be real ASymbols; a mix of
+  // symbol/non-symbol or two non-symbols is rejected
   it("symbol=?: input is now z.array(z.symbol) — a non-symbol used to slip through the old z.array(z.unknown())", () => {
     const def = contractDef(equalityPack, "symbol=?");
     const a = new ASymbol(CONSTANT_CTX, "a");
@@ -121,6 +127,10 @@ describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolea
   // behavior stays load-bearing (equality.ts's unwrap()); only the zod schema's acceptance
   // domain is now honestly "boxed scheme value," matching every other slot this migration
   // touched.
+  // INVARIANT: boolean=?'s input schema is z.value (a raw JS boolean is rejected at the schema
+  // level); the impl's own unwrap() still branches on boxed ABool vs raw JS boolean and accepts
+  // both at runtime, since native ops never validate against their own schema (pins implementation, not behavior —
+  // supersedes the historical "schema deliberately stays z.unknown()" shape)
   it("boolean=?: input is z.value — a raw JS boolean is genuinely rejected by the schema (though the impl's own unwrap() still accepts both representations at runtime)", () => {
     const def = contractDef(equalityPack, "boolean=?");
     expect(def.in.safeParse([true, false]).success).toBe(false);

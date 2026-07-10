@@ -57,6 +57,7 @@ describe("Rosetta Environment", () => {
   // ~L62-78) independently confirms this arm is "load-bearing OUTSIDE it… NOT dead code."
   // Travels with the McpEnvCapability migration, not the reverse-membrane one.
   describe("Environment.defineRosetta", () => {
+    // INVARIANT: env.defineRosetta extends the environment with a callable rosetta function usable from scheme source
     it("should extend environment with Rosetta functions", async () => {
       // Define a Rosetta function in the environment
       inferenceEnv.defineRosetta("double-all", {
@@ -75,6 +76,7 @@ describe("Rosetta Environment", () => {
       expect(jsResult).toEqual([2, 4, 6, 8, 10]);
     });
 
+    // INVARIANT: multiple defined rosetta functions can be chained/composed from scheme source
     it("should handle multiple Rosetta functions", async () => {
       // Define multiple functions
       inferenceEnv.defineRosetta("sum-array", {
@@ -127,6 +129,8 @@ describe("Rosetta Environment", () => {
   // arm as the describe above (MCP CSS-filtering / stats patterns exercised here); same gate
   // (McpEnvCapability annotation-lifting, undone), not the reverse-membrane migration.
   describe("Real-world Use Cases", () => {
+    // INVARIANT: a rosetta function receiving scheme-converted JS objects can filter on a nested
+    // style property and results round-trip correctly
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
       inferenceEnv.defineRosetta("filter-by-css-property", {
@@ -164,6 +168,8 @@ describe("Rosetta Environment", () => {
       expect(jsResult[1].name).toBe("div3");
     });
 
+    // INVARIANT: a rosetta function can aggregate scheme-converted JS objects into a stats object
+    // that round-trips correctly
     it("should create CSS statistics like the MCP server needs", async () => {
       inferenceEnv.defineRosetta("css-property-stats", {
         fn: (nodes: any[]) => {

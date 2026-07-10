@@ -9,14 +9,18 @@ import type { SymbolDeclaration } from "../capability.js";
 import type { AEntity } from "../symbol.js";
 
 describe("SymbolDeclaration — the raw pre-bake authoring-time union", () => {
+  // INVARIANT: a baked AEntity is assignable to SymbolDeclaration (its own distinct type from
+  // symbol.js's AEntity, no name collision).
   test("a baked AEntity is assignable to SymbolDeclaration (the baked arm of the wider union)", () => {
     expectTypeOf<AEntity>().toExtend<SymbolDeclaration>();
   });
 
+  // INVARIANT: a bare `{ value }` binding object is assignable to SymbolDeclaration.
   test("a bare value-binding object is assignable to SymbolDeclaration", () => {
     expectTypeOf<{ value: unknown }>().toExtend<SymbolDeclaration>();
   });
 
+  // INVARIANT: a bare function is assignable to SymbolDeclaration.
   test("a bare function is assignable to SymbolDeclaration", () => {
     expectTypeOf<(...args: unknown[]) => unknown>().toExtend<SymbolDeclaration>();
   });

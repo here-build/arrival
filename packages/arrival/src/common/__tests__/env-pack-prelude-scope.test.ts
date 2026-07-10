@@ -23,6 +23,7 @@ const resolverStub = (): ResolverStub => {
 };
 
 describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
+  // INVARIANT: ctx.preludeScope is always present on every pack apply, even with no option passed.
   it("ctx.preludeScope is ALWAYS present (the kernel shim), even with no option passed", async () => {
     const seen: unknown[] = [];
     const a: EnvPack<Record<string, never>> = {
@@ -34,6 +35,9 @@ describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
     expect(typeof (seen[0] as { set?: unknown })?.set).toBe("function");
   });
 
+  // INVARIANT: a binding set by an earlier pack resolves through the base's resolver during a
+  // later pack's apply (same C3 run).
+  // INVARIANT: the phase-gated resolver goes silent (answers undefined) once assembly completes.
   it("a binding set by an EARLIER pack resolves through the base's resolver DURING a later apply, and goes silent after assembly", async () => {
     const base = resolverStub();
     const duringLater: unknown[] = [];
@@ -57,6 +61,8 @@ describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
     expect(base.resolvers[0].resolve("hidden/verb")).toBeUndefined();
   });
 
+  // INVARIANT: no resolver is registered when no preludeOnly binding is ever set during assembly
+  // (lazy, common case untouched).
   it("registers NO resolver when no preludeOnly binding is ever set (lazy — common case untouched)", async () => {
     const base = resolverStub();
     const plain: EnvPack<ResolverStub> = { name: "plain", apply: () => undefined };
@@ -64,6 +70,8 @@ describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
     expect(base.resolvers).toHaveLength(0);
   });
 
+  // INVARIANT: two separate assemblies over the same base register distinct resolver ids, each
+  // spent after its own assembly.
   it("two assemblies over the SAME base register DISTINCT resolver ids (per-assembly closures, dedup-safe)", async () => {
     const base = resolverStub();
     const binder = (name: string): EnvPack<ResolverStub> => ({
@@ -79,6 +87,8 @@ describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
     expect(base.resolvers.map((r) => r.resolve("second/verb"))).toEqual([undefined, undefined]);
   });
 
+  // INVARIANT: a non-resolver-host base is tolerated — preludeScope.set() is a quiet Map write
+  // with no consultation.
   it("a non-resolver-host base is tolerated (env-agnostic kernel): set() is a quiet Map write", async () => {
     const seen: unknown[] = [];
     const a: EnvPack<Record<string, never>> = {
@@ -89,6 +99,8 @@ describe("assembleEnv — kernel-internal phase-gated preludeScope", () => {
     expect(seen).toEqual([1]); // set returns the value; nothing consults the map
   });
 
+  // INVARIANT: the phase flips back to closed even when a pack's apply throws (no half-open
+  // prelude scope escapes).
   it("the phase flips false even when a pack apply FAILS (no half-open prelude scope escapes)", async () => {
     const base = resolverStub();
     const contributor: EnvPack<ResolverStub> = {

@@ -67,6 +67,8 @@ function recordingEnv(): { env: SchemeEnv; verbs: Record<string, (...a: unknown[
 }
 
 describe("EnvCapability", () => {
+  // INVARIANT: resources are pre-spawned lazily — wiring a method does not spawn; first touch does.
+  // INVARIANT: a resource is spawned only once across repeated touches (single-flight cache).
   it("pre-spawns resources on first symbol touch; methods read .live synchronously", async () => {
     echoSpawns = 0;
     const { env, verbs } = recordingEnv();
@@ -80,6 +82,9 @@ describe("EnvCapability", () => {
     expect(echoSpawns).toBe(1);
   });
 
+  // INVARIANT: windDown() releases live resources while keeping the verb wiring intact.
+  // INVARIANT: a touch after windDown() re-spawns the resource on demand (pause, not destroy).
+  // INVARIANT: resume() after windDown+re-touch is idempotent against an already-live resource cell.
   it("wind-down releases resources; resume re-spawns (pause, not destroy)", async () => {
     echoSpawns = 0;
     echoReleases = 0;
@@ -102,10 +107,13 @@ describe("EnvCapability", () => {
     expect(echoSpawns).toBe(2); // already live → no extra spawn
   });
 
+  // INVARIANT: lower() validates capability config through zod, throwing on an invalid enum value.
   it("validates config through zod at lower() — bad enum throws", () => {
     expect(() => net.lower({ config: { context: "deno" as never } })).toThrow();
   });
 
+  // INVARIANT: a method-less prelude-only capability requires an evalScheme function, rejecting with
+  // "no evalScheme" when absent.
   it("a method-less, prelude capability needs evalScheme", async () => {
     const cap = new EnvCapability("p", { prelude: "(define x 1)" });
     const evalScheme = vi.fn(async () => undefined);

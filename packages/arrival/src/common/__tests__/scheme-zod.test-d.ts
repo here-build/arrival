@@ -34,6 +34,8 @@ type SchemeFace<S extends z.ZodTypeAny> = z.input<S>;
 type JSFace<S extends z.ZodTypeAny> = z.output<S>;
 
 describe("scheme-zod collection faces (interpreter vs JS)", () => {
+  // INVARIANT: z.list(E)'s scheme face is AListAlike (interpreter container); its JS face
+  // is an array of the element's JS image.
   test("z.list(E) — homogeneous", () => {
     const charList = z.list(z.char);
 
@@ -50,6 +52,8 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     expectTypeOf<SpecInfer<typeof charList>>().toExtend<string[]>();
   });
 
+  // INVARIANT: z.cons(car, cdr)'s scheme face is AListAlike; its JS face is a 2-tuple of
+  // the two element JS faces.
   test("z.cons(car, cdr) — the dotted-pair form", () => {
     const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
@@ -61,6 +65,9 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     expectTypeOf<J>().toExtend<[string, null | boolean]>();
   });
 
+  // INVARIANT: z.vector(E)'s scheme face is AVector|AJSArray; its JS face is a plain array.
+  // INVARIANT: z.array(E) is a plain-array codec with its own scheme/JS face, distinct from
+  // the z.vector/z.list container union.
   test("z.vector(E) and z.array(E)", () => {
     const boolVec = z.vector(z.boolean);
     type VS = SchemeFace<typeof boolVec>;
@@ -78,6 +85,8 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     expectTypeOf<AJ>().toExtend<string[]>();
   });
 
+  // INVARIANT: nested collections (list-of-lists, a union including nil) compose their
+  // JS faces correctly.
   test("nested and complex elements", () => {
     const listOfLists = z.list(z.list(z.char));
     type J = JSFace<typeof listOfLists>;
@@ -106,6 +115,8 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     expectTypeOf<Out>().toExtend<[SchemeValue[]]>();
   });
 
+  // INVARIANT: bare z.list() (no element) still yields AListAlike scheme face /
+  // SchemeValue[] JS face.
   test("z.list() (any) is still usable as before", () => {
     const anyL = z.list();
     type S = SchemeFace<typeof anyL>;

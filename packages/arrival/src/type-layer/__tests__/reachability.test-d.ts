@@ -9,10 +9,13 @@ type Assert<T extends true> = T;
 type Eq<A, B> = (<G>() => G extends A ? 1 : 2) extends (<G>() => G extends B ? 1 : 2) ? true : false;
 
 // CouldBeList on RESOLVED return types — the gate's verdict
+// INVARIANT: CouldBeList is true for a resolved List<T> type.
 type _cbl_list = Assert<Eq<CouldBeList<List<string>>, true>>;
+// INVARIANT: CouldBeList is true for a union of List types (models an (if …) branch union).
 type _cbl_union = Assert<Eq<CouldBeList<List<string> | List<number>>, true>>; // (if …) branch union
 type _cbl_unknown = Assert<Eq<CouldBeList<unknown>, true>>; // the nuke-guard (generic / if / car)
 type _cbl_vector = Assert<Eq<CouldBeList<readonly number[]>, false>>; // vector ≠ list (disjoint) → mask
+// INVARIANT: CouldBeList is false for scalar types (number, string).
 type _cbl_number = Assert<Eq<CouldBeList<number>, false>>; // provably non-list → mask
 type _cbl_string = Assert<Eq<CouldBeList<string>, false>>;
 
@@ -25,6 +28,8 @@ declare function get_route(stops: List<string>, mode: string): void;
 declare const listOne: List<string>;
 declare const listTwo: List<string>;
 
+// INVARIANT: an (if cond a b)-shaped call, an append call, and deep nested list-returning
+// expressions all fill a list slot without error.
 get_route(ifList(true, listOne, listTwo), "fast"); // (if c lo lt) → List<string> — NOT blocked
 get_route(append(listOne, listTwo), "fast");
 get_route(ifList(true, list("a"), cdr(map((s: string) => s, listOne))), "fast"); // deep recursion (depth 3)

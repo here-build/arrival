@@ -82,6 +82,8 @@ function invoke(
 }
 
 describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
+  // INVARIANT: lower().apply() decodes scheme args, runs impl, and encodes the result back to scheme
+  // through the bound verb.
   it("decodes scheme→JS, runs impl, encodes JS→scheme through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -91,6 +93,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect((out as AInexact).real).toBe(5);
   });
 
+  // INVARIANT: an invalid arg is rejected via the input codec (errors-as-doors) before impl runs.
   it("rejects a bad arg via the input codec (errors-as-doors) through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -98,6 +101,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     await expect(invoke(verb, undefined, new AExact(CONSTANT_CTX, 3n))).rejects.toThrow();
   });
 
+  // INVARIANT: a bound rosetta verb mints provenance off ctx.currentInvocation, marking the point and
+  // stamping the output.
   it("MINTS provenance off ctx.currentInvocation — marks the point + stamps the output", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -113,6 +118,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect(invocation.isProvenancePoint).toBe(true);
   });
 
+  // INVARIANT: a rosetta returning a structured (list) output deep-stamps every reachable element with
+  // the minted origin.
   it("DEEP-STAMPS a structured (list) output — every element carries the minted origin", async () => {
     // A rosetta returning a JS array → a scheme list (Pair-chain). The mint must reach every
     // element (spec §5.3: element-only lineage), exactly like createRosettaWrapper's jsToScheme stamp.
@@ -142,6 +149,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     for (const p of seen) expect(p).toEqual([7]);
   });
 
+  // INVARIANT: without a ctx invocation, the result forwards the input's provenance rather than minting a new one.
   it("WITHOUT a ctx invocation, forwards the inputs' provenance (mint is ctx-gated, not unconditional)", async () => {
     const def = symbol.rosetta`echo: identity string`({ input: [z.string], output: [z.string] }, (s) => s);
     const verb = await wireRosetta(def);
@@ -153,6 +161,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
   });
 
+  // INVARIANT: a `function` impl (not an arrow) reads run-state (abort signal) off `this.runCtx` via the
+  // CallCtx binding (pins implementation, not behavior).
   it("invocation-`this`: a `function` impl reads run-state off `this.runCtx` (signal / aborted)", async () => {
     // A ctx-coupled verb declares a `function` impl (NOT an arrow) and reads the run's abort
     // state off the flat `CallCtx` `this`. The wrapper forwards that `this` as-is.
@@ -178,6 +188,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect(out2["arrival/toJS"]()).toBe("y:aborted");
   });
 
+  // INVARIANT: a pure arrow impl ignores `this` entirely; behavior is byte-identical with or without a
+  // ctx/runCtx (pins implementation, not behavior).
   it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
     // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(this, …)` is
     // exactly `impl(…)`. Proven both WITH a runCtx (signal present) and direct-JS (no ctx).
@@ -199,6 +211,8 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     expect(withCtx.real).toBe(5);
   });
 
+  // INVARIANT: `pure: true` forwards input provenance even with a ctx invocation — a transform never
+  // mints, only a source does.
   it("pure: true FORWARDS input provenance even WITH a ctx invocation (transform, not source — never mints)", async () => {
     // The contrast to the mint test above: SAME ctx.currentInvocation(42) + SAME tagged input {99},
     // but `pure: true` makes it a TRANSFORM — the output carries the FORWARDED input union {99},

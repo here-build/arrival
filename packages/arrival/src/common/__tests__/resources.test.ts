@@ -28,6 +28,7 @@ function countingSocket(): { resource: Resource<Socket>; opens: () => number; cl
 const armed = () => new AbortController().signal;
 
 describe("ResourceCell — the port factory", () => {
+  // INVARIANT: a ResourceCell is lazy — no acquire runs until the first get().
   it("is LAZY: no acquire until first get()", async () => {
     const { resource, opens } = countingSocket();
     const cell = new ResourceCell(resource);
@@ -42,6 +43,7 @@ describe("ResourceCell — the port factory", () => {
     expect(cell.isLive).toBe(true);
   });
 
+  // INVARIANT: N concurrent get()s share exactly one acquire (single-flight).
   it("is SINGLE-FLIGHT: N concurrent get()s share ONE acquire", async () => {
     const { resource, opens } = countingSocket();
     const cell = new ResourceCell(resource);
@@ -51,6 +53,8 @@ describe("ResourceCell — the port factory", () => {
     expect(b).toBe(c);
   });
 
+  // INVARIANT: windDown() disposes the live handle; the next get() opens a fresh handle
+  // (reconstruct).
   it("RECONSTRUCTS: wind-down disposes; next get() opens a FRESH handle", async () => {
     const { resource, opens, closes } = countingSocket();
     const cell = new ResourceCell(resource);
@@ -68,6 +72,7 @@ describe("ResourceCell — the port factory", () => {
     expect(h2).not.toBe(h1);
   });
 
+  // INVARIANT: spinUp(signal, true) eagerly pre-warms the resource.
   it("EAGER pre-warms on spinUp(signal, true)", async () => {
     const { resource, opens } = countingSocket();
     const cell = new ResourceCell(resource);
@@ -76,6 +81,7 @@ describe("ResourceCell — the port factory", () => {
     expect(cell.isLive).toBe(true);
   });
 
+  // INVARIANT: a pre-aborted signal makes get() reject and opens nothing.
   it("ABORTS: a pre-aborted window makes get() reject and opens nothing", async () => {
     const { resource, opens } = countingSocket();
     const cell = new ResourceCell(resource);
@@ -87,6 +93,7 @@ describe("ResourceCell — the port factory", () => {
     expect(cell.isLive).toBe(false);
   });
 
+  // INVARIANT: an abort mid-open disposes the just-opened handle rather than leaking it.
   it("ABORT mid-open disposes the just-opened handle (no leak)", async () => {
     const ac = new AbortController();
     let closedAfterAbort = false;
@@ -110,6 +117,7 @@ describe("ResourceCell — the port factory", () => {
     expect(cell.isLive).toBe(false);
   });
 
+  // INVARIANT: a failed acquire can be retried — the next get() opens again.
   it("retries after a FAILED acquire (next get() opens again)", async () => {
     let n = 0;
     const resource: Resource<Socket> = {
@@ -126,6 +134,7 @@ describe("ResourceCell — the port factory", () => {
     expect(h.id).toBe(2);
   });
 
+  // INVARIANT: the port() helper wires Symbol.asyncDispose to the given close callback.
   it("port() helper wires Symbol.asyncDispose to close()", async () => {
     const close = vi.fn();
     const h = port({ id: 1 }, close);
