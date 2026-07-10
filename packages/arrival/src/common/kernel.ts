@@ -11,6 +11,21 @@
 //
 // Design: docs/working-proposals/env-pack-capability-dag-2026-06-13.md
 
+// Door-set degradation's `DegradedCapability`/`DegradedNeed` types are TYPE-ONLY, from the
+// degradation-domain module (common/degradation.ts) — kernel stays env-agnostic (no runtime
+// dependency; the import erases at compile time), and the shape is defined once, not mirrored.
+import type { DegradedCapability } from "./degradation.js";
+
+// Errors (teaching, errors-as-doors) live in errors.ts (the single error home); re-exported here
+// so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
+import {
+  AssembleConfigConflictError,
+  AssembleCycleError,
+  AssembleLinearizationError,
+  AssemblePackError,
+  AssemblePackTimeoutError,
+} from "../errors.js";
+
 /** A capability contribution to an env. Identity = (name, config). `deps` are the DAG edges. */
 export interface EnvPack<E = unknown> {
   readonly name: string;
@@ -18,6 +33,14 @@ export interface EnvPack<E = unknown> {
   /** Host-injected arming for THIS pack (inferPack.config = the InferFn, mcpPack.config = the
    *  resolver). Two same-name packs with non-equal config in one assembly = AssembleConfigConflictError. */
   readonly config?: unknown;
+  /** Door-set degradation (docs/working-proposals/symbol-define-static-program-validation.md
+   *  §3.7, W2) — a capability-aware `lower()` (common/capability.ts) MAY report here, eagerly,
+   *  that it lowered degraded (an absent optional-enabling config key, under `degradation:
+   *  "doors"`). Kernel-agnostic by construction: this field is an opaque, purely structural
+   *  bag `assembleEnv` folds into `AssembledEnv.degraded` without interpreting it — a pack
+   *  that never sets it (every pure-JS pack, every capability that didn't degrade) simply
+   *  contributes nothing. Absent, not an empty array, when nothing degraded. */
+  readonly degraded?: readonly DegradedCapability[];
   /** Runs once, after all deps, in C3 order. May await import / defineRosetta / ctx.onDispose.
    *  MUST contribute symbols via the env's membrane-wrapping API, never a bare host closure (§8). */
   apply(env: E, ctx: PackContext<E>): void | Promise<void>;
@@ -65,25 +88,14 @@ export interface AssembledEnv<E = unknown> {
   readonly env: E;
   /** The C3 linearization, highest precedence (roots) first. */
   readonly order: readonly string[];
+  /** Every capability that lowered degraded (§3.7's CHOSEN "enumerable degraded list" row) —
+   *  folded from each applied pack's own `EnvPack.degraded`, in apply order. A host/discovery
+   *  reader inspects this instead of inferring degradation from a throw or probing symbols
+   *  one by one; empty when nothing degraded (including every assembly under the default
+   *  `"forbid"` mode, where no capability's `Activation.degradation.active` is ever true). */
+  readonly degraded: readonly DegradedCapability[];
   dispose(): Promise<void>;
 }
-
-// Errors (teaching, errors-as-doors) live in errors.ts (the single error home); re-exported here
-// so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
-import {
-  AssembleConfigConflictError,
-  AssembleCycleError,
-  AssembleLinearizationError,
-  AssemblePackError,
-  AssemblePackTimeoutError,
-} from "../errors.js";
-export {
-  AssembleConfigConflictError,
-  AssembleCycleError,
-  AssembleLinearizationError,
-  AssemblePackError,
-  AssemblePackTimeoutError,
-};
 
 const packTimeoutMs = (): number => Number(process.env.ASSEMBLE_PACK_TIMEOUT_MS) || 30_000;
 
@@ -331,7 +343,10 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
     if (overlayId !== undefined) overlayHost?.unregisterResolver?.(overlayId);
     preludeMap.clear();
   }
-  return { env: base, order, dispose: runDisposers };
+  // Fold each applied pack's own `.degraded` (§3.7) into the assembly-level list, apply order
+  // (highest precedence first, matching `order`) — purely structural, kernel never interprets it.
+  const degraded = order.flatMap((name) => byName.get(name)!.degraded ?? []);
+  return { env: base, order, degraded, dispose: runDisposers };
 }
 
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path. Where
@@ -386,7 +401,10 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   };
 
   return {
-    require: async (pack: EnvPack<E>, opts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E } = {}): Promise<void> => {
+    require: async (
+      pack: EnvPack<E>,
+      opts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E } = {},
+    ): Promise<void> => {
       const { order, byName } = linearize([pack]);
       // Apply least-precedence (deps) first, matching construction's last-write-wins order.
       for (const name of order.toReversed()) {
@@ -404,3 +422,12 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
     },
   };
 }
+
+export {
+  AssembleConfigConflictError,
+  AssembleCycleError,
+  AssemblePackError,
+  AssembleLinearizationError,
+  AssemblePackTimeoutError,
+} from "../errors.js";
+export { type DegradedNeed, type DegradedCapability } from "./degradation.js";

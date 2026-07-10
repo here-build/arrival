@@ -420,6 +420,63 @@ export class WireLocalityError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: DefineLocalityError — a `symbol.define` body's free variable escapes its
+// capability's own bake-time allowlist (WireLocalityError's SIBLING, one level
+// down — docs/working-proposals/symbol-define-static-program-validation.md §2.1's
+// bake FV law: `FV(B) ⊆ SPECIAL_FORMS ∪ KEYWORD_SYNTAX ∪ ownNames(K) ∪
+// exports(transitiveDeps(K)) ∪ resolver-synth family`). Thrown at BAKE (first
+// `lower()`/`apply()` that evaluates the define), never at call time — an
+// undeclared cross-capability reference is a declaration-authoring bug the
+// design converts into a bake-time door instead of assembly-order luck
+// (the srfi-235→polyglot `compose` census catch, §2.1).
+// -------------------------------------------------------------------------
+export class DefineLocalityError extends ArrivalError {
+  static [CLASS] = "define-locality-error";
+  public readonly name = "DefineLocalityError";
+
+  constructor(
+    /** The offending free variable name. */
+    public readonly variable: string,
+    /** The declaring define's OWN name (bare, as authored). */
+    public readonly define: string,
+    /** The owning capability's name. */
+    public readonly owner: string,
+  ) {
+    super(
+      `symbol.define "${define}" @ ${owner}: free variable "${variable}" is not in scope — ` +
+        `declare a \`deps\` edge on the capability exporting "${variable}", or bind it in "${owner}" itself`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: DefineForwardReferenceError — an EAGER (non-lambda) `symbol.define` RHS
+// referencing a LATER sibling define in the same capability (§2.3's decidable
+// ordering check: today's prelude enforces this only by crashing at eval time;
+// this makes it a named bake-time door instead).
+// -------------------------------------------------------------------------
+export class DefineForwardReferenceError extends ArrivalError {
+  static [CLASS] = "define-forward-reference-error";
+  public readonly name = "DefineForwardReferenceError";
+
+  constructor(
+    /** The declaring (eager) define's own name. */
+    public readonly define: string,
+    /** The later-declared sibling name it references before that sibling evaluates. */
+    public readonly reference: string,
+    /** The owning capability's name. */
+    public readonly owner: string,
+  ) {
+    super(
+      `symbol.define "${define}" @ ${owner}: its RHS is not a lambda (evaluates EAGERLY, in ` +
+        `declaration order) but references "${reference}", declared LATER in the same capability — ` +
+        `reorder "${reference}" before "${define}", or wrap "${define}"'s RHS in a lambda so the ` +
+        `reference late-binds`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: ProvenanceShadowDivergence — static fullCone vs the eager stamp disagree (a named bug).
 // -------------------------------------------------------------------------
 export class ProvenanceShadowDivergence extends Error {

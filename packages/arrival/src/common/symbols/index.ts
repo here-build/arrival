@@ -16,3 +16,4 @@ export { sequence } from "./sequence.js";
 export { notImplemented } from "./notImplemented.js";
 export { keyword } from "./keyword.js";
 export { macro } from "./macro.js";
+export { define, defineSyntax } from "./define.js";

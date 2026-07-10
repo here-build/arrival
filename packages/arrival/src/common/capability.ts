@@ -17,7 +17,8 @@ import { z } from "zod";
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
-import type { AEntity, DoorSymbolDef } from "./symbol.js";
+import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, DoorSymbolDef } from "./symbol.js";
+import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
 import { Keyword } from "../values/Keyword.js";
 import {
   ANativeProcedure,
@@ -34,6 +35,13 @@ import type { InvocationLike } from "../rosetta.js";
 import { CallCtx, makeCallCtx, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
+import {
+  buildDegradationInfo,
+  collectDegraded,
+  missingOptionalKeys,
+  type DegradationInfo,
+  type DegradationMode,
+} from "./degradation.js";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
  *  = re-spawn). The kernel uses the EnvPack face; a lifecycle owner calls these. */
@@ -53,6 +61,13 @@ type RefsOf<R extends Record<string, Resource<unknown>>> = { readonly [K in keyo
 export interface Activation<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   readonly configuration: InferCfg<C>;
   readonly resources: RefsOf<R>;
+  /** Door-set degradation (design doc §3.7, W2) — see `./degradation.js`'s `DegradationInfo`.
+   *  Present on EVERY activation (informational under `"forbid"`, the default — no capability
+   *  is affected unless it explicitly consults `.door(...)`); a builder-form `symbols` MAY
+   *  destructure it to trade a manual `if (x !== undefined)` withhold for a cause-carrying
+   *  door under `"doors"` mode (see `arrival-scheme-env-loader`'s `require`/`require/extension`
+   *  for the migrated shape). */
+  readonly degradation: DegradationInfo;
 }
 
 type Fn = (...args: any[]) => unknown;
@@ -95,7 +110,9 @@ const isBakedDef = (m: SymbolDeclaration): m is AEntity =>
     (m as { kind: unknown }).kind === "sequence" ||
     (m as { kind: unknown }).kind === "door" ||
     (m as { kind: unknown }).kind === "keyword" ||
-    (m as { kind: unknown }).kind === "macro");
+    (m as { kind: unknown }).kind === "macro" ||
+    (m as { kind: unknown }).kind === "define" ||
+    (m as { kind: unknown }).kind === "define-syntax");
 
 // ── LEGACY-form guards — see `SymbolDeclaration`'s doc for why these stay ────────────────
 const isValueDef = (m: SymbolDeclaration): m is { value: unknown } =>
@@ -175,8 +192,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   ) {}
 
   /** Lower to a kernel `EnvPack`. `evalScheme` runs the prelude (required iff a prelude
-   *  exists); `config` is validated against the `configuration` schemas. */
-  lower(opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>> } = {}): LoweredPack {
+   *  exists); `config` is validated against the `configuration` schemas.
+   *
+   *  `degradation` (design doc §3.7, W2): `"forbid"` (the default — host/provisioning
+   *  posture, byte-identical to pre-W2 behavior) or `"doors"` (program-scoped callers opt
+   *  in). Threaded to every dep's own `lower()` call, same as `evalScheme`/`config` — a
+   *  degraded dep and a degraded root see the SAME mode. Changes nothing by itself: it only
+   *  affects capabilities whose `symbols` builder explicitly consults
+   *  `Activation.degradation` (see `./degradation.js`). */
+  lower(
+    opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>>; degradation?: DegradationMode } = {},
+  ): LoweredPack {
     const { spec, name } = this;
     // A SEPARATE alias for `apply()`'s door-bind arm: the per-symbol loop below rebinds
     // `name` to each entry's OWN key (`for (const [name, def] of Object.entries(...))`),
@@ -188,6 +214,19 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     const schema = spec.configuration ? z.object(spec.configuration as ZodMap) : z.object({});
     const configuration = schema.parse(opts.config ?? {}) as InferCfg<C>;
 
+    // Door-set degradation (§3.7): computed from the RAW config bag (pre-`schema.parse`,
+    // which already ran above and would have thrown for a present-but-invalid or a
+    // genuinely-required-and-absent key — this scan only ever looks at declared-OPTIONAL
+    // keys, so it never masks either of those two throw paths). `"forbid"` (unset) makes
+    // `missingKeys` purely informational — `.active` stays false, so no capability's
+    // behavior changes unless it opted in.
+    const degradationMode: DegradationMode = opts.degradation ?? "forbid";
+    const missingKeys = missingOptionalKeys(
+      spec.configuration as Record<string, z.ZodTypeAny> | undefined,
+      opts.config as Record<string, unknown> | undefined,
+    );
+    const degradation = buildDegradationInfo(capabilityName, degradationMode, missingKeys);
+
     // Resources → ref-counted cells. A provider entry reads the parsed config.
     const cells = {} as Record<string, ResourceCell<unknown>>;
     for (const [key, def] of Object.entries(spec.resources ?? {})) {
@@ -196,7 +235,18 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
       ) as Resource<unknown>;
       cells[key] = new ResourceCell(resource);
     }
-    const activation = { configuration, resources: cells } as unknown as Activation<C, R>;
+    const activation = { configuration, resources: cells, degradation } as unknown as Activation<C, R>;
+
+    // Computed HERE (not inside apply()): the builder-form `symbols` takes ONLY `activation`
+    // (never `env`/`ctx` — the type contract), which is fully known by this point, exactly
+    // like `resources`/`configuration` already are. Computing it once, eagerly, lets
+    // `degraded` (below) inspect what this lower() actually produced instead of guessing.
+    const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
+    // Door-set degradation's OWN surfacing (§3.7's "degraded capabilities are ENUMERABLE"
+    // CHOSEN row): scan the computed record for doors this capability minted via
+    // `degradation.door(...)`, folded into the returned pack's `degraded` field —
+    // `assembleEnv` (kernel.ts) aggregates it into `AssembledEnv.degraded`, uninterpreted.
+    const degraded = collectDegraded(capabilityName, symbolsRec);
 
     // First touch of ANY of this capability's symbols spawns ALL its resources
     // (single-flight), BEFORE the method body runs — so methods read `this.resources
@@ -210,11 +260,16 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     return {
       name,
       ...(opts.config === undefined ? {} : { config: opts.config }),
+      ...(degraded === undefined ? {} : { degraded: [degraded] }),
       // Deps inherit the SAME raw `config` object (each validates its own slice via its schema; the
       // stored `config` field stays reference-equal across a capability's root + dep appearances, so
       // closure dedup matches by identity instead of tripping AssembleConfigConflictError).
       ...(spec.deps
-        ? { deps: spec.deps.map((d) => d.lower({ evalScheme: opts.evalScheme, config: opts.config })) }
+        ? {
+            deps: spec.deps.map((d) =>
+              d.lower({ evalScheme: opts.evalScheme, config: opts.config, degradation: opts.degradation }),
+            ),
+          }
         : {}),
       // Lifecycle (pause/resume) over this capability's cells. Wiring is untouched.
       windDown: async () => {
@@ -234,10 +289,25 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
-        const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
         const prefix = spec.symbolPrefix ?? "";
+        // §2.3's two-phase binding: symbol.define/symbol.defineSyntax entries are
+        // collected here (in declaration order — JS object-key insertion order) and
+        // evaluated+bound in Pass 2, AFTER every other kind — never interleaved, so a
+        // define's body may always assume its capability's own native/rosetta/door/…
+        // siblings are already bound. `ownNames` is the §2.3 "letrec* NAME
+        // VISIBILITY" set: every verb this capability's OWN symbolsRec declares
+        // (both phases), which the FV law treats as in-scope for EVERY define
+        // regardless of textual/binding order.
+        const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
+        const ownNames = new Set<string>();
         for (const [name, def] of Object.entries(symbolsRec)) {
           const verb = prefix + name;
+          ownNames.add(verb);
+
+          if (isBakedDef(def) && (def.kind === "define" || def.kind === "define-syntax")) {
+            defineEntries.push([verb, def]);
+            continue;
+          }
 
           // ── BAKED symbol.* forms — dispatch by kind (the target path). ──────────────
           if (isBakedDef(def)) {
@@ -434,7 +504,44 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           // instead, so a prelude `define` is dropped with it rather than leaking to the live env.
           await opts.evalScheme(ctx?.preludeEvalScope ?? env, spec.prelude);
         }
+
+        // Pass 2 (§2.3): symbol.define / symbol.defineSyntax — evaluated + bound
+        // SEQUENTIALLY, in declaration order, against the SAME scope a prelude
+        // evaluates against (`ctx.preludeEvalScope ?? env`), now that every
+        // non-define kind (Pass 1) + the prelude have already landed.
+        if (defineEntries.length > 0) {
+          await bindCapabilityDefines({
+            capabilityName,
+            ownNames,
+            entries: defineEntries,
+            deps: spec.deps ?? [],
+            ownResolvers: spec.resolvers ?? [],
+            env,
+            scope: ctx?.preludeEvalScope ?? env,
+            bindTarget,
+            evalScheme: opts.evalScheme,
+          });
+        }
       },
     };
+  }
+
+  private _exportsPromise?: Promise<ReadonlySet<string>>;
+
+  /** `EnvCapability.exports` (design doc §2.2) — DERIVED, memoized: every
+   *  statically-enumerable name this capability contributes to a shared env —
+   *  prefixed `spec.symbols` keys (a builder-form `symbols` is NOT statically
+   *  enumerable, §2.2 LIMIT — contributes nothing here; a pre-assembly consumer
+   *  needing full fidelity there degrades to assembled-mode, a W3 concern) ∪
+   *  macro-aware `define`/`define-macro`/`define-syntax` names parsed from
+   *  `spec.prelude` (the migration-interim arm, shrinking to nothing as W4 retires
+   *  `prelude` pack by pack). Consumed by `symbol.define`'s bake-time FV law
+   *  (`define-bake.ts`'s `bindCapabilityDefines`) to resolve what a CROSS-capability
+   *  reference needs. Async (not a real getter — parsing is inherently async) and
+   *  memoized per capability INSTANCE, not per `lower()` call: a module-singleton
+   *  capability's export set never changes across assemblies. */
+  exports(): Promise<ReadonlySet<string>> {
+    this._exportsPromise ??= computeCapabilityExports(this.spec);
+    return this._exportsPromise;
   }
 }

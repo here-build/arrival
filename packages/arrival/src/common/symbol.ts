@@ -54,6 +54,8 @@ export type {
   DoorCause,
   KeywordSymbolDef,
   MacroSymbolDef,
+  DefineSymbolDef,
+  DefineSyntaxSymbolDef,
   AEntity,
   BakeRuntimeOpts,
   CallCtx,

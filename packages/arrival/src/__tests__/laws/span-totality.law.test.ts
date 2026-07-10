@@ -22,6 +22,9 @@ import { execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { APair } from "../../values/primitives/APair.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import { parseDefineBody } from "../../common/symbols/define-bake.js";
 
 /** Walk a boxed scheme value; return every reachable APair lacking a location. */
 function spanless(value: unknown, out: APair<any, any>[] = [], seen = new Set<unknown>()): APair<any, any>[] {
@@ -90,5 +93,26 @@ describe("W0 span totality — behavioral (expanded forms are trace-visible)", (
     // located node is the law; pre-W0 the expanded form had no location and the
     // tap-firing rule filtered it entirely.
     expect(trackedHeads.some((h) => h === "+" || h === "#:+")).toBe(true);
+  });
+});
+
+describe("W1 span totality — a symbol.define body is fully located, source-labeled capability#name", () => {
+  it("every Pair in a parsed define body carries a span, sourced `«capability»#«name»`", async () => {
+    const def = symbol.define`fold-right-ish: a nested body worth walking`(
+      { input: [z.value, z.value, z.value], output: [z.value] },
+      `(lambda (kons knil lst) (if (null? lst) knil (kons (car lst) (fold-right-ish kons knil (cdr lst)))))`,
+    );
+    const form = await parseDefineBody("scheme/srfi-1", def);
+    expect(form).toBeInstanceOf(APair);
+    expect(spanless(form).length).toBe(0);
+    const loc = (form as APair<any, any>).getLocation();
+    expect(loc?.source).toBe("scheme/srfi-1#fold-right-ish");
+  });
+
+  it("the parse is MEMOIZED per def object — a second call returns the SAME (===) form", async () => {
+    const def = symbol.define`memo-check: a trivial constant`(z.value, `42`);
+    const first = await parseDefineBody("test/memo-cap", def);
+    const second = await parseDefineBody("test/memo-cap", def);
+    expect(second).toBe(first);
   });
 });

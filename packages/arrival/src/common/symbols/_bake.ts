@@ -451,6 +451,96 @@ export interface MacroSymbolDef {
   readonly macro: Macro;
 }
 
+/** A SCHEME-BODIED value/procedure declaration (docs/working-proposals/symbol-define-
+ *  static-program-validation.md §1, W1). `symbol.define` decomposes a capability's
+ *  prelude into individually-declared, contract-bearing defines — the missing link
+ *  that makes capability-owned scheme code visible to static analysis (freeVars,
+ *  Q7's provenance classifier, the future validator).
+ *
+ *  `in`/`out` are ALWAYS normalized VectorSchemas (§1.5) — for a PROCEDURE (`callable:
+ *  true`, contract authored as a `Contract<I,O,Rest>` record) they're the real arg/
+ *  return vectors; for a CONSTANT (`callable: false`, contract authored as a single
+ *  `ZodTypeAny`) they're `z.tuple([])` in / a 1-tuple wrapping the value schema out —
+ *  the 0-ary-procedure convention every OTHER vector-shaped reader already uses, so
+ *  harvest/arity code never special-cases constants structurally.
+ *
+ *  `callable` is NOT derivable from `in`/`out` shape alone (a genuine 0-ary THUNK —
+ *  `(lambda () …)` — also normalizes to an empty `in` tuple) — it is the FACTORY's own
+ *  discriminator (`contract instanceof ZodType` ⇒ constant, §1.2), carried here so
+ *  `capability.ts`'s bind arm never has to re-guess it. */
+export interface DefineSymbolDef {
+  readonly kind: "define";
+  readonly name: string;
+  readonly doc?: string;
+  readonly in: z.ZodTypeAny;
+  readonly out: z.ZodTypeAny;
+  /** See the class doc above. */
+  readonly callable: boolean;
+  /** Is the call boundary's RETURN a single value (`isSingleOutput`'s reading of the
+   *  AUTHORED, pre-normalization `output`) rather than a multi-value/variadic vector?
+   *  Always `true` for a constant. Stored explicitly (not re-derived from the
+   *  NORMALIZED `out` schema at bind time) because `out` is already a `VectorSchema`
+   *  (a `z.tuple`/array-ish instance) by the time it reaches this def — `isSingleOutput`
+   *  itself only reads the raw pre-normalization `VectorSpec` shape (`Array.isArray`),
+   *  which the normalized schema no longer structurally is. */
+  readonly singleOut: boolean;
+  /** The authored RHS EXPRESSION source (a `(lambda …)` for a procedure, a plain
+   *  expression for a constant) — NOT a whole `(define name …)` form, so the name
+   *  lives in exactly one place (§1.1). Parsed + memoized at first bake (§1.3). */
+  readonly body: string;
+  /** FNV-1a over body + contract's stable text (§1.3) — minted EAGERLY at
+   *  declaration construction (cheap string hash), not deferred to bake. */
+  readonly bodyHash: string;
+  /** DERIVED provenance role (§1.4) — a fixpoint over the capability's whole
+   *  `symbol.define` set via `classifyProgramPrelude`'s algorithm, run at bake
+   *  against the assembly's own env-derived classifier. Port-free (fixpoint-closed)
+   *  ⇒ `"pipe"`; port-reaching (direct or transitive) ⇒ `"opaque"` (the conservative
+   *  W1 collapse — the full per-body LineageNode tree is always re-derivable from
+   *  `body`/`bodyHash` for a future finer-grained consumer, §5.2's LIMIT). An
+   *  optional `provenance` on the AUTHORING contract stays legal as a drift door
+   *  (declared-vs-derived mismatch throws `ProvenanceRoleShapeError` at bake) — it
+   *  is never itself the resolved value here. */
+  readonly provenance: ProvenanceRole;
+  /** The AUTHORED `Contract.provenance`, if the author declared one (procedure
+   *  defines only — a constant's bare `ZodTypeAny` contract has no slot for it).
+   *  Carried so bake can run the §1.4 drift door (declared-vs-derived): a declared
+   *  role that CONTRADICTS the derived classification throws `ProvenanceRoleShapeError`.
+   *  Never itself the resolved `provenance` above — that field is always the
+   *  DERIVED value (or the innocuous `"pipe"` placeholder before bake runs). */
+  readonly declaredProvenance?: ProvenanceRole;
+  /** See `Contract.type`. */
+  readonly type?: string;
+  /** See `Contract.preludeOnly`. */
+  readonly preludeOnly?: boolean;
+  /** Per-call zod validation gate (§1.2's cost valve) — mirrors rosetta's
+   *  `BakeRuntimeOpts.validate`, resolved to a concrete boolean at bake (default
+   *  `true`) since the wrapper is built once the evaluated closure is available. */
+  readonly validate: boolean;
+}
+
+/** A SCHEME-BODIED macro/expander declaration (§1, W1) — `symbol.define`'s sibling
+ *  for macro forms. Contract-FREE (a macro has no call-boundary, no provenance role
+ *  — its "free variables" would name the EXPANSION env, a categorically different
+ *  static-analysis story, §1.1) — carries the ternary `macroAttribute` static
+ *  attribute instead (§3.4 of the design doc; W1 only STORES the declared value,
+ *  the walker that CONSUMES it is W3 territory). The body is a scheme LAMBDA
+ *  expression over the macro's OWN fexpr formals (e.g. `(lambda (formals expr .
+ *  body) …)` for `receive`) — evaluated once per bake, then wound into a `Macro`
+ *  fexpr transformer at bind time (capability.ts's apply arm). */
+export interface DefineSyntaxSymbolDef {
+  readonly kind: "define-syntax";
+  readonly name: string;
+  readonly doc?: string;
+  readonly body: string;
+  readonly bodyHash: string;
+  /** `"opaque"` (DEFAULT, safe under-report) | `"expression"` | `"binder"` — see the
+   *  design doc §3.4 table. W1 stores the AUTHORED value verbatim; no validation or
+   *  consumption happens here. */
+  readonly macroAttribute: "opaque" | "expression" | "binder";
+  /** See `Contract.preludeOnly` — kind-agnostic, same routing every other kind honors. */
+  readonly preludeOnly?: boolean;
+}
+
 export type AEntity =
   | NativeSymbolDef
   | RosettaSymbolDef
@@ -459,7 +549,9 @@ export type AEntity =
   | SequenceSymbolDef
   | DoorSymbolDef
   | KeywordSymbolDef
-  | MacroSymbolDef;
+  | MacroSymbolDef
+  | DefineSymbolDef
+  | DefineSyntaxSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization
