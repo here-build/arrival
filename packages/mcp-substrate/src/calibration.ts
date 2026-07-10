@@ -16,6 +16,11 @@ export interface CalibrationOptions {
   observationMaxTotalChars: number;
   /** Time budget for a type-hint lens run. */
   hintRaceBudgetMs: number;
+  /** Per-STATEMENT allocation bound (the memory analogue of `defaultEvalTimeoutMs` — catches the
+   *  native-collection-op runaway the TICK-cadence wall-clock can't preempt). Applies to each
+   *  top-level form the runner evaluates individually (arrival-promises completion plan, gap 1;
+   *  same per-form LIMIT as the other program-scoped entries — one `RunContext` per statement). */
+  heapBudgetPerForm: number;
 }
 
 /** Today's hardcoded values, unchanged — the default for every consumer until a calibration
@@ -28,4 +33,5 @@ export const DEFAULT_CALIBRATION: CalibrationOptions = {
   defaultEvalTimeoutMs: 15_000,
   observationMaxTotalChars: 20_000,
   hintRaceBudgetMs: 300,
+  heapBudgetPerForm: 100_000_000,
 };

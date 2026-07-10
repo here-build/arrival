@@ -16,12 +16,14 @@
 
 import {
   type SchemeEnv,
+  type SchemeValue,
+  APair,
   CONSTANT_CTX,
   exec,
   jsToScheme,
+  parse,
   sandboxedEnv,
   schemeToJs,
-  tokenize,
 } from "@here.build/arrival";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
@@ -42,17 +44,34 @@ import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEn
 const MCP_OUTPUT_BUDGET = 40_000;
 const perElementBudget = (count: number): number => Math.max(2_000, Math.floor(MCP_OUTPUT_BUDGET / Math.max(1, count)));
 
+interface ExecSerializedOptions {
+  /** A real, already-armed env — used directly. A plain bindings object (no `__env__` marker,
+   *  i.e. not a real `Environment`) is instead seeded into a fresh sandboxed child env. */
+  env?: SchemeEnv;
+  budgetMs?: number;
+  /** Per-run allocation bound — see {@link defaultHeapBudget}. Undefined ⇒ unbounded (the `exec`
+   *  primitive's own default; callers of this function always pass one, see `call` below). */
+  heapBudget?: number;
+  signal?: AbortSignal;
+}
+
 /**
- * Execute scheme source and serialize each top-level form's value under the MCP output budget.
- * `exec` already returns one `SchemeValue` per top-level form, and the caller's REPL split
- * (`splitTopLevel` → one form per call) means there's nothing to coalesce: serialize the
- * results directly. No `(list …)` wrap-and-unwrap — that round-trip predated the REPL split.
+ * Execute scheme source (or an already-parsed form) and serialize each top-level form's value
+ * under the MCP output budget. `exec` already returns one `SchemeValue` per top-level form, and
+ * the caller's REPL split (one already-parsed form per call) means there's nothing to coalesce:
+ * serialize the results directly. No `(list …)` wrap-and-unwrap — that round-trip predated the
+ * REPL split.
  */
-async function execSerialized(expr: string, options?: any): Promise<string[]> {
+async function execSerialized(expr: string | SchemeValue, options: ExecSerializedOptions = {}): Promise<string[]> {
+  const env =
+    options.env !== undefined && "__env__" in options.env
+      ? options.env
+      : sandboxedEnv.inherit("sandbox", options.env as never);
   const results = await exec(expr, {
-    env: options?.env?.__env__ ? options?.env : sandboxedEnv.inherit("sandbox", options?.env),
-    budgetMs: options?.budgetMs,
-    signal: options?.signal,
+    env: env as never,
+    budgetMs: options.budgetMs,
+    heapBudget: options.heapBudget,
+    signal: options.signal,
   });
   const per = perElementBudget(results.length);
   return results.map((element) => toSExprString(element, { maxTotalChars: per }));
@@ -92,36 +111,40 @@ function defineName(canonicalSrc: string): string | undefined {
   return DEFINE_NAME.exec(canonicalSrc.trim())?.[1];
 }
 
-const OPEN = new Set(["(", "[", "{"]);
-const CLOSE = new Set([")", "]", "}"]);
-const QUOTE_PREFIX = new Set(["'", "`", ",", ",@"]);
-const isSkippable = (tok: string): boolean =>
-  /^\s+$/.test(tok) || tok.startsWith(";") || tok.startsWith("#|") || tok.startsWith("#;");
+// Splitting is done by the real reader (`parse`), not a hand-rolled lexer scan — a lexer-level
+// depth counter can misalign with the actual forms (e.g. a `#;` datum comment is consumed by the
+// real parser but still shows up as a token to a scanner), which would silently corrupt both the
+// execution unit and the cache key below. `parse` is the single source of truth for boundaries;
+// each form is then executed directly as a parsed AST via `execSerialized`'s low-level `exec`
+// path (never re-stringified-and-reparsed).
 
-/** Split scheme source into top-level statements via the real lexer (so `#\(`, `#|…|#`, string
- *  literals, and quote prefixes are tokenized correctly — a hand-scanner would miscount `#\(`).
- *  Each statement's EXACT source is its structural cache key + the re-executable unit; we slice by
- *  token start-offsets, so a list stays `(a b)` (the value-printer would render it `(list a b)`). */
-function splitTopLevel(source: string): string[] {
-  const tokens = tokenize(source, true) as { token: string; offset: number }[];
-  const starts: number[] = [];
-  let depth = 0;
-  let between = true; // not currently inside a statement
-  for (const { token, offset } of tokens) {
-    if (isSkippable(token)) continue;
-    if (between) {
-      starts.push(offset);
-      between = false;
-    }
-    if (OPEN.has(token)) depth++;
-    else if (CLOSE.has(token)) {
-      if (depth > 0) depth--;
-      if (depth === 0) between = true;
-    } else if (depth === 0 && !QUOTE_PREFIX.has(token)) {
-      between = true; // a depth-0 atom/string completes its statement; a quote prefix waits for the next form
+/** The next form (from `fromIndex` onward) that carries `[LOCATION]` metadata, or `undefined` if
+ *  none of the remaining forms have one. Looking ahead past location-less forms guarantees a
+ *  form's source slice never crosses into a LATER form's own located text. */
+function nextLocatedOffset(forms: readonly SchemeValue[], fromIndex: number): number | undefined {
+  for (let i = fromIndex; i < forms.length; i++) {
+    const f = forms[i];
+    if (f instanceof APair) {
+      const loc = f.getLocation();
+      if (loc !== undefined) return loc.offset;
     }
   }
-  return starts.map((s, i) => source.slice(s, starts[i + 1] ?? source.length).trim()).filter(Boolean);
+  return undefined;
+}
+
+/** The EXACT original source for one parsed form — the structural cache key + the text stored in
+ *  session history. Prefers a location-anchored slice into the original `source` (preserving exact
+ *  formatting, so a list stays `(a b)`, never re-rendered as constructor-call `(list a b)`); falls
+ *  back to `toSExprString` for a form with no location metadata (e.g. a macro-expanded form). */
+function sourceTextFor(form: SchemeValue, index: number, forms: readonly SchemeValue[], source: string): string {
+  if (form instanceof APair) {
+    const loc = form.getLocation();
+    if (loc !== undefined) {
+      const end = nextLocatedOffset(forms, index + 1) ?? source.length;
+      return source.slice(loc.offset, end).trim();
+    }
+  }
+  return toSExprString(form);
 }
 
 /** Can this JS value (already `schemeToJs`-peeled) round-trip through JSON faithfully? True for
@@ -179,6 +202,10 @@ export interface DiscoveryToolOptions {
   /** Wall-clock eval budget (the interpreter TICK-checks it). Defaults to {@link DEFAULT_BUDGET_MS}. */
   budgetMs?: number;
 
+  /** Per-run allocation bound (the memory analogue of `budgetMs` — catches the native-collection-op
+   *  runaway the TICK-cadence wall-clock can't preempt). Defaults to {@link defaultHeapBudget}. */
+  heapBudget?: number;
+
   /**
    * Host-supplied configuration values for the capability's `configuration` schema.
    * These are merged (host wins) with values extracted from the actor-provided `args` when
@@ -207,6 +234,15 @@ type DiscoveryArgs = { expr: string; intent?: string } & Record<string, unknown>
  *  handler timeout; this is the server-side bound). */
 export const DEFAULT_BUDGET_MS = 5000;
 
+/** Per-run allocation-bound default (arrival-promises completion plan, gap 1). The
+ *  `discovery-run.ts` precedent (`ARRIVAL_HEAP_MAX ?? 100_000_000`) — a FUNCTION, not a frozen
+ *  constant, so it's read LIVE at every call and a test can flip the env var per case.
+ *  `DiscoveryToolOptions.heapBudget` / a per-call option always wins over this default. */
+export function defaultHeapBudget(): number {
+  const raw = Number(process.env.ARRIVAL_HEAP_MAX);
+  return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
+}
+
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
@@ -234,6 +270,7 @@ export class DiscoveryTool {
   async call(args: DiscoveryArgs, ctx: ToolCallCtx = {}): Promise<string[]> {
     const startTime = Date.now();
     const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
+    const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
     const { signal } = ctx;
     const env = await this.environment(args);
     const state = ctx.session?.state ?? {};
@@ -251,7 +288,7 @@ export class DiscoveryTool {
         continue;
       }
       try {
-        await execSerialized(src, { env, budgetMs, signal });
+        await execSerialized(src, { env, budgetMs, heapBudget, signal });
       } catch (error) {
         if (signal?.aborted) throw error; // cancellation, not a dead binding
       }
@@ -260,9 +297,19 @@ export class DiscoveryTool {
     // Run the new input statement-by-statement; cache each wire-safe define's value by its source.
     const out: string[] = [];
     let crashed: string | undefined;
-    for (const src of splitTopLevel(args.expr)) {
+    let forms: SchemeValue[];
+    try {
+      forms = await parse(args.expr);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      crashed = message;
+      out.push(`(error ${JSON.stringify(message)})`);
+      forms = [];
+    }
+    for (const [index, form] of forms.entries()) {
+      const src = sourceTextFor(form, index, forms, args.expr);
       try {
-        out.push(...(await execSerialized(src, { env, budgetMs, signal })));
+        out.push(...(await execSerialized(form, { env, budgetMs, heapBudget, signal })));
       } catch (error) {
         if (signal?.aborted) throw error; // cancellation propagates — not a REPL crash
         crashed = error instanceof Error ? error.message : String(error);

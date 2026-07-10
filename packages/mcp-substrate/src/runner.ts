@@ -338,6 +338,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           const running = exec(form, {
             env: input.env as unknown as ExecEnv,
             budgetMs: remaining,
+            heapBudget: calibration.heapBudgetPerForm,
             signal: controller.signal,
           });
           const raced = await Promise.race([running, parked]);
