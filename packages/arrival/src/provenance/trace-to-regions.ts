@@ -27,9 +27,9 @@ import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS }
 import type { EvalTrace, Invocation } from "./trace.js";
 import type { SchemeValue } from "../values/types.js";
 
-/** A producer crossing a region's boundary — the region-model's first-class PORT
- *  (provenance-region-model-plan-2026-06-02.md, Stage 2). Keyed by producer's STRUCTURAL
- *  scope-id, NOT per-value: a N-times body emits ONE port per structural producer. */
+/** A producer crossing a region's boundary — the region-model's first-class PORT.
+ *  Keyed by producer's STRUCTURAL scope-id, NOT per-value: a N-times body emits
+ *  ONE port per structural producer. */
 interface RegionPort {
   /** Producer's structural scope-id (`head@line:col`) crossing the boundary. */
   producer: string;
@@ -922,9 +922,9 @@ export interface FinalizeCtx {
 /**
  * The PRODUCER-side twin of `attributeFieldEdges`: stamp each data edge with `fromField` —
  * which OUTPUT field of the producer the consumer plucked (`(:verdict (car reactions))` →
- * `fromField:"verdict"`). Pin data reused verbatim from `carrierFieldEdges` (the spec-faithful,
- * byte-identical replacement for the retired field-point mint), keyed by `${producer}>${consumer}`
- * — exact point-id endpoints region edges carry, so the join is a direct `Map.get`. Pure.
+ * `fromField:"verdict"`). Pin data reused verbatim from `carrierFieldEdges`, keyed by
+ * `${producer}>${consumer}` — exact point-id endpoints region edges carry, so the join is a
+ * direct `Map.get`. Pure.
  *
  * Only DATA edges qualify (control/decision/output carry no producer-field pluck). An edge
  * with no carrier entry — whole-value flow, positional plucks (`car`/index), or the

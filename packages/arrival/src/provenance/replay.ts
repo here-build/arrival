@@ -1,43 +1,42 @@
 /**
- * provenance/replay.ts — Q16: the REPLAY DRIVERS the §7 replay laws run over
- * (docs/PROVENANCE.md §4 "Regions and replay"; docs/PROVENANCE-PLAN.md Q16). Three
- * faces, one ruling (§4 R1: "replay from frozen port payloads is stable. Replay NEVER
- * re-invokes a source; retrospective mint records are authoritative"):
+ * provenance/replay.ts — THE REPLAY DRIVERS the replay laws run over. Three faces,
+ * one ruling (R1): replay from frozen port payloads is stable. Replay NEVER
+ * re-invokes a source; retrospective mint records are authoritative.
  *
  *   1. `replayGraphEgress` — the per-wire γ COMPOSITION over a wireframe graph:
  *      every wire is `applyWireInEnv` (gamma.ts) against ingress resolved from its
  *      `paramRefs` — a designated node's replay value for `node` refs, a caller
- *      binding for `slot` refs. Loop-FREE scope by construction (§1 EXCLUDED: the
- *      Galois adjunction is claimed for loop-free wires only) — a `binder` node is a
+ *      binding for `slot` refs. Loop-FREE scope by construction (the Galois
+ *      adjunction is claimed for loop-free wires only) — a `binder` node is a
  *      teaching door here, never a silent approximation.
- *   2. `replayProgramWithPlayback` — §4's whole-program mode (the V glass ruling +
- *      the loop reconstruction step): re-run the ENTIRE program under a silent
- *      region with every membrane penetration answered from the RECORDED payload
- *      stream ("cached membrane behavior + whole-program re-run"); the live world
- *      is never consulted because the playback sources are the only ones bound.
- *   3. `replayBetweenRecords` — §4 CHOSEN for effect tracks: "pure stretches
- *      applied, recorded port events interleaved verbatim." Composes fold.ts (the
- *      region must have completed — I4's post-hoc mirror), the stream (mint records
- *      in seq order ARE the verbatim events), and gamma.ts (each pure stretch is a
- *      γ over the chained accumulator + the recorded event payload — the ONE
- *      sanctioned inter-track edge, §3: `egress(Tᵢ) → ingress(Tᵢ₊₁)`).
+ *   2. `replayProgramWithPlayback` — the whole-program mode plus the loop
+ *      reconstruction step: re-run the ENTIRE program under a silent region with
+ *      every membrane penetration answered from the RECORDED payload stream
+ *      ("cached membrane behavior + whole-program re-run"); the live world is
+ *      never consulted because the playback sources are the only ones bound.
+ *   3. `replayBetweenRecords` — for effect tracks: "pure stretches applied,
+ *      recorded port events interleaved verbatim." Composes fold.ts (the region
+ *      must have completed — its post-hoc mirror), the stream (mint records in seq
+ *      order ARE the verbatim events, ground truth, never re-derived or re-sorted),
+ *      and gamma.ts (each pure stretch is a γ over the chained accumulator + the
+ *      recorded event payload — the ONE sanctioned inter-track edge:
+ *      `egress(Tᵢ) → ingress(Tᵢ₊₁)`).
  *
- * ── Q16 DESIGN CALLS (each binds where it is implemented below) ──────────────────
- * D1 — frozen-ingress keying is PER-OP FIFO (`FrozenMints`): the spec keys records
- *      by (template-hash, ordinal-path, region epoch), but nothing at HEAD advances
- *      a per-node coordinate during a live run (the wireframe-walking driver is
+ * ── DESIGN CALLS (each binds where it is implemented below) ──────────────────────
+ * D1 — frozen-ingress keying is PER-OP FIFO (`FrozenMints`): the fuller key is
+ *      (template-hash, ordinal-path, region epoch), but nothing at HEAD advances a
+ *      per-node coordinate during a live run yet (the wireframe-walking driver is
  *      future work — eval/provenance-hooks.ts's own header says so). Demand order
  *      during a loop-free replay matches emission order PER OP, so op-keyed FIFO
  *      queues are exact for the law corpus; two same-op sources where only one fired
  *      would be ambiguous — the corpus keeps arm ops distinct, and the limitation is
  *      this note, not silent behavior.
  * D2 — an UNRECORDED node demanded at wire-binding time (a pure-mux wire's untaken
- *      arm — its params are the wire's full FV set per the m3 trade; a sink's
- *      sequencing reference — Q9's begin finding) binds a SENTINEL stamped value
- *      from a reserved id range (≥ SENTINEL_BASE). γ never lets a sentinel FLOW to
- *      an egress the recorded run produced — the laws assert
- *      `cone(egress) ∩ sentinels = ∅`, which is exactly A2's soundness surfaced as
- *      a checkable fact instead of a silent hole.
+ *      arm — its params are the wire's full FV set, a wire-locality trade-off; a
+ *      sink's sequencing reference) binds a SENTINEL stamped value from a reserved
+ *      id range (≥ SENTINEL_BASE). γ never lets a sentinel FLOW to an egress the
+ *      recorded run produced — the laws assert `cone(egress) ∩ sentinels = ∅`,
+ *      surfacing that soundness as a checkable fact instead of a silent hole.
  * D3 — port-coupled mux decisions: a caller-supplied recorded decision map takes
  *      precedence (frozen records authoritative); ABSENT one, the arm is DERIVED by
  *      γ-ing the selector wire (its cone reaches only ports whose payloads are
@@ -123,12 +122,11 @@ export class FrozenMints {
 /** Union `taintFrom`'s (deep) provenance into `value`'s own stamp set — the
  *  port-coupled-mux control-dependency: the taken arm's replayed value carries the
  *  selector's cone, mirroring the eager oracle's own `if` semantics (and the
- *  wireframe backward cone, which walks the selector wire — W1 agreement's shape).
- *  Exported (Q17 addition, flagged): `replay-walk.ts`'s step generator reimplements
- *  this file's per-node switch to get YIELD points inside it (this closure has none
- *  to offer — `nodeValue` is private to `replayGraphIn`) and must apply the IDENTICAL
- *  control-dependency union at its own mux step rather than a second, driftable
- *  copy of this law. */
+ *  wireframe backward cone, which walks the selector wire). Exported so
+ *  `replay-walk.ts`'s step generator can reimplement this file's per-node switch to
+ *  get YIELD points inside it (this closure has none to offer — `nodeValue` is
+ *  private to `replayGraphIn`) while applying the IDENTICAL control-dependency union
+ *  at its own mux step, rather than a second, driftable copy of this law. */
 export function withUnionedProvenance(value: SchemeValue, taintFrom: SchemeValue): SchemeValue {
   if (!(value instanceof AValue)) return value;
   const taint = collapseProvenance(taintFrom);
@@ -137,9 +135,9 @@ export function withUnionedProvenance(value: SchemeValue, taintFrom: SchemeValue
   return value.withProvenance(merged);
 }
 
-/** §5 D2 payload → boxed scheme value carrying its recorded stamp ids, so replayed
- *  cones (I1/I3 laws) survive the freeze/thaw round-trip. `jsToScheme` is the SAME
- *  membrane boxing a live rosetta return crosses — one boxing idiom, not a second. */
+/** A D2 payload → boxed scheme value carrying its recorded stamp ids, so replayed
+ *  cones survive the freeze/thaw round-trip. `jsToScheme` is the SAME membrane
+ *  boxing a live rosetta return crosses — one boxing idiom, not a second. */
 export function boxPayload(payload: Payload): SchemeValue {
   return jsToScheme(CONSTANT_CTX, payload.value, {}, new Set(payload.stampIds));
 }
@@ -242,9 +240,8 @@ async function replayGraphIn(
         break;
       }
       case "sink":
-        // A sink has no egress (§2) — a wire referencing one is sequencing residue
-        // (Q9's begin finding). Sentinel (D2): γ must DISCARD it, and the laws
-        // check it never flows.
+        // A sink has no egress — a wire referencing one is sequencing residue.
+        // Sentinel (D2): γ must DISCARD it, and the laws check it never flows.
         value = frozen.sentinel(`sink:${node.op}@${node.span}`);
         break;
       case "mux": {
@@ -253,8 +250,8 @@ async function replayGraphIn(
         // payloads are frozen above. The selector γ's ALWAYS: a port-coupled mux's
         // egress carries its selector's provenance (control dependency — the eager
         // oracle taints the taken arm's value with the test's stamps, and the
-        // wireframe's backward cone walks the selector wire; W1 agreement holds
-        // BECAUSE both include it), so the replayed value must too.
+        // wireframe's backward cone walks the selector wire — both include it),
+        // so the replayed value must too.
         const selBoxed = await gammaWire(wireFor(idx, "selector"));
         let arm = decisions?.get(idx);
         if (arm === undefined) {
@@ -288,21 +285,21 @@ async function replayGraphIn(
         throw new ReplayScopeError(
           "fan",
           node.span,
-          "a region replays as TRACKS (γ its template per element — the track laws' shape) or via whole-program playback (`replayProgramWithPlayback`), never as a single wire value (D4)",
+          "a region replays as TRACKS (γ its template per element — the track laws' shape) or via whole-program playback (`replayProgramWithPlayback`), never as a single wire value",
         );
       case "binder":
       case "recur":
         throw new ReplayScopeError(
           node.kind,
           node.span,
-          "loops are the half wire-γ does NOT claim (§1 EXCLUDED: widening makes loop cones non-least); exact reconstruction is one γ-step away via aggregation count + quoted body — `replayProgramWithPlayback` (D4)",
+          "loops are the half wire-γ does NOT claim (widening makes loop cones non-least); exact reconstruction is one γ-step away via aggregation count + quoted body — `replayProgramWithPlayback`",
         );
       case "transparent":
       case "opaque":
         throw new ReplayScopeError(
           node.kind,
           node.span,
-          "a crossing with no recorded payload has nothing to be stable FROM — record it (source) or declare it pure (D4)",
+          "a crossing with no recorded payload has nothing to be stable FROM — record it (source) or declare it pure",
         );
       case "port":
         throw new ReplayScopeError("port", node.span, "the out-port is the egress consumer, never a value producer");
@@ -326,14 +323,14 @@ async function replayGraphIn(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Face 2 — whole-program replay with penetration playback (§4 V glass ruling;
-// also the loop-reconstruction γ-step: aggregation count + quoted body — the
-// recorded stream carries exactly `count` payloads per op, and the quoted body is
-// the program source itself).
+// Face 2 — whole-program replay with penetration playback; also the
+// loop-reconstruction γ-step: aggregation count + quoted body — the recorded
+// stream carries exactly `count` payloads per op, and the quoted body is the
+// program source itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PlaybackReplayOptions {
-  /** The FULL program source (defines included) — §4: "re-run the ENTIRE program". */
+  /** The FULL program source (defines included) — re-run the ENTIRE program. */
   readonly source: string;
   /** Recorded penetrations per op, in stream order — the "cached membrane
    *  behavior"; every op the program crosses MUST have its queue here. */
@@ -345,10 +342,10 @@ interface PlaybackReplayOptions {
 /**
  * Re-run the whole program in a hermetic env whose ONLY membrane ops are playback
  * sources answering from the recorded payload stream, under a silent region (a
- * replay emits zero records — Q15). The live world is unreachable by construction:
- * it is simply not bound. A queue underflow is a teaching door (the replay
- * diverged from the recorded run, or the records are incomplete) — never a live
- * re-fetch (§4 R1), never a silent default.
+ * replay emits zero records). The live world is unreachable by construction: it is
+ * simply not bound. A queue underflow is a teaching door (the replay diverged from
+ * the recorded run, or the records are incomplete) — never a live re-fetch, never a
+ * silent default.
  */
 export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Promise<ReplayedValue> {
   const { source, playback, basePacks = [], config } = opts;
@@ -364,7 +361,7 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
             throw new ReplayScopeError(
               "source",
               op,
-              `playback queue for "${op}" underflowed — the replay demanded more penetrations than the record run crossed; the stream is incomplete or the program diverged (never answered live, §4 R1)`,
+              `playback queue for "${op}" underflowed — the replay demanded more penetrations than the record run crossed; the stream is incomplete or the program diverged (never answered live)`,
             );
           }
           return boxPayload(next);
@@ -381,11 +378,11 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Face 3 — effect-track replay-between-records (§4 CHOSEN; §7 sub-gate).
+// Face 3 — effect-track replay-between-records.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** One step of an effect track's replay tape — either a recorded port event
- *  reproduced VERBATIM (the record + its frozen payload, §4 R1 authoritative) or a
+ *  reproduced VERBATIM (the record + its frozen payload, authoritative) or a
  *  pure stretch's γ-applied value. The tape's order is the law's subject: it must
  *  equal the recorded stream's seq order with pure stretches interleaved between. */
 export type ReplayStep =
@@ -393,11 +390,11 @@ export type ReplayStep =
   | { readonly kind: "pure"; readonly value: unknown };
 
 /** The pure stretch between two recorded events, as a wire: `accParam` receives
- *  the chained accumulator (§3: `egress(Tᵢ) → ingress(Tᵢ₊₁)`, the ONE sanctioned
+ *  the chained accumulator (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the ONE sanctioned
  *  inter-track edge), `eventParam` receives the verbatim recorded payload of the
- *  event the stretch follows. Q16 DESIGN CALL: the stretch wire is CALLER-supplied
- *  (a law test lifts it from the recorded program's own accumulator body, or from
- *  the wireframe fan template's egress wire) — extracting it automatically from
+ *  event the stretch follows. The stretch wire is CALLER-supplied (a law test
+ *  lifts it from the recorded program's own accumulator body, or from the
+ *  wireframe fan template's egress wire) — extracting it automatically from
  *  accumulator-role fan templates is the wireframe-walking driver's future job. */
 export interface EffectStretch {
   readonly wire: EmittedWire;
@@ -418,22 +415,22 @@ interface ReplayBetweenRecordsOptions {
 }
 
 /**
- * §4 CHOSEN — "effect tracks replay in the second mode — replay-between-records
- * (pure stretches applied, recorded port events interleaved verbatim)":
+ * Effect tracks replay in this mode — replay-between-records: pure stretches
+ * applied, recorded port events interleaved verbatim.
  *
  *   1. fold.ts FIRST (composing the stream's own recovery law): the region must
- *      have COMPLETED (`pending === 0`, I4) — replaying between the records of a
+ *      have COMPLETED (`pending === 0`) — replaying between the records of a
  *      region that never closed its tracks would fabricate an interleave the run
  *      never settled; the incomplete door's post-hoc mirror.
- *   2. the region's mint records IN SEQ ORDER are the verbatim port events — §5 D4:
- *      the stream's total order is emission order; the interleave is read off it,
+ *   2. the region's mint records IN SEQ ORDER are the verbatim port events — the
+ *      stream's total order IS emission order; the interleave is read off it,
  *      never re-derived, never re-sorted by anything else.
  *   3. between consecutive events, the pure stretch is APPLIED (γ): the recorded
- *      event's payload (authoritative, §4 R1 — the live world is never consulted)
- *      and the running accumulator feed the stretch wire; its egress chains into
- *      the next stretch. Neither pure-γ-only (the events are NOT recomputed) nor
+ *      event's payload (authoritative — the live world is never consulted) and
+ *      the running accumulator feed the stretch wire; its egress chains into the
+ *      next stretch. Neither pure-γ-only (the events are NOT recomputed) nor
  *      record-playback-only (the stretches are NOT stored — purity re-derives
- *      them), exactly the CHOSEN middle.
+ *      them), exactly this CHOSEN middle.
  */
 export async function replayBetweenRecords(opts: ReplayBetweenRecordsOptions): Promise<{
   readonly steps: readonly ReplayStep[];
@@ -447,7 +444,7 @@ export async function replayBetweenRecords(opts: ReplayBetweenRecordsOptions): P
     throw new ReplayScopeError(
       "track",
       regionId,
-      `region has ${fold.pending} pending track(s) (started ${fold.started}, completed ${fold.completed}) — replay-between-records only replays COMPLETED regions (§3 I4); close the region (or accept the incomplete door) first`,
+      `region has ${fold.pending} pending track(s) (started ${fold.started}, completed ${fold.completed}) — replay-between-records only replays COMPLETED regions; close the region (or accept the incomplete door) first`,
     );
   }
   const mints = stream.filter((r): r is MintRecord => r.kind === "mint");

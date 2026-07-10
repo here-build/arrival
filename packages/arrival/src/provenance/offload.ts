@@ -1,61 +1,54 @@
 /**
- * provenance/offload.ts — Q18: THE OFFLOAD PROTOCOL (docs/PROVENANCE.md §4 CHOSEN
- * "γ is offloadable" (round 2, C5) + §4 CHOSEN "semantics-epoch pinning" (round 2, C6);
- * docs/PROVENANCE-PLAN.md Q18 "offload protocol"). §4 C5, quoted: "a wire (template
- * hash) + frozen ingress payloads are serializable by construction, so replay MAY
- * execute in a stateless Worker outside the DO — the DO serves records, workers serve
- * drill-ins... The drill-in request CARRIES the stream's semantics epoch; the worker
- * refuses a mismatch (or runs the sampled verification)." §4 C6, quoted: "Replay
- * requires a matching epoch, or a sampled wire-γ verification pass against recorded
- * egresses before answers are trusted. EXCLUDED: silent cross-version replay (a newer
- * evaluator can lie politely)."
+ * provenance/offload.ts — THE OFFLOAD PROTOCOL: γ is offloadable, and replay pins to
+ * a semantics epoch. A wire (template hash) + frozen ingress payloads are
+ * serializable by construction, so replay MAY execute in a stateless Worker outside
+ * the DO — the DO serves records, workers serve drill-ins. The drill-in request
+ * CARRIES the stream's semantics epoch; the worker refuses a mismatch, or runs a
+ * sampled verification. Replay requires a matching epoch, or a sampled wire-γ
+ * verification pass against recorded egresses before answers are trusted — silent
+ * cross-version replay is EXCLUDED (a newer evaluator can lie politely).
  *
- * INTERFACE-LEVEL, per the task brief: `DrillInExecutor` is the protocol surface (any
- * executor — same process here, a stateless Worker in prod, per C5's own framing); no
- * HTTP, no workerd. `SameProcessExecutor` is the reference implementation the law rows
- * below drive — it consumes Q16's `replay.ts` (`replayGraphEgress`/`FrozenMints`/
- * `boxPayload`/`ReplayScopeError`), Q8b's `wireframe/hash.ts` (`hashGraph`, to resolve
- * a request's `templateHash` back to the graph it addresses), and Q11a/Q10's store
- * shapes (`Payload`/`EvidenceTier`/`TemplateHash`/`RegionId`) — READ-ONLY: nothing here
- * mutates or extends those modules.
+ * INTERFACE-LEVEL: `DrillInExecutor` is the protocol surface (any executor — same
+ * process here, a stateless Worker in prod); no HTTP, no workerd. `SameProcessExecutor`
+ * is the reference implementation the law rows below drive — it consumes `replay.ts`
+ * (`replayGraphEgress`/`FrozenMints`/`boxPayload`/`ReplayScopeError`), `wireframe/hash.ts`
+ * (`hashGraph`, to resolve a request's `templateHash` back to the graph it addresses),
+ * and the store shapes (`Payload`/`EvidenceTier`/`TemplateHash`/`RegionId`) — READ-ONLY:
+ * nothing here mutates or extends those modules.
  *
- * ── C5 — request/response serialization (task item 1) ─────────────────────────────
- * `DrillInRequest` is the "self-contained request" C5 names: `templateHash` (§5 D3 —
- * per-GRAPH content hash, addressing `WireframeProgram.main`, a `DefineTemplate.graph`,
- * or a fan/binder's private interior graph — `wireframe/hash.ts`'s own GRANULARITY
- * RULING, reused verbatim; "wire" and "region" in the task brief are ONE addressing
- * scheme at this granularity, not two), `ingress` (frozen payloads — the graph's free
- * `slot` bindings AND its interior `source` nodes' recorded mint payloads, both as
- * PLAIN `Payload`s: `{ value, stampIds, retention? }`, never a boxed `SchemeValue` —
- * boxing happens executor-side, symmetrically with how `replay.ts`'s `FrozenMints`/
- * `boxPayload` already box payloads AT γ time, never before), and `streamEpoch` (the
- * demanding stream's C6 header value). `regionId` rides along too — not part of C5's
- * three-item list, but required to seed C6's SAMPLED verification deterministically
- * (task item 3) and to scope the executor's per-stream trust cache below; it is itself
- * a plain opaque string (`RegionId`), so the request stays fully JSON-able/
- * `structuredClone`-safe (workerd transport is Q19's concern; the SHAPE here is already
- * transferable, per the task brief).
+ * ── request/response serialization ──────────────────────────────────────────────
+ * `DrillInRequest` is the self-contained request: `templateHash` (a per-GRAPH content
+ * hash, addressing `WireframeProgram.main`, a `DefineTemplate.graph`, or a fan/binder's
+ * private interior graph — `wireframe/hash.ts`'s own GRANULARITY RULING, reused
+ * verbatim; "wire" and "region" are ONE addressing scheme at this granularity, not
+ * two), `ingress` (frozen payloads — the graph's free `slot` bindings AND its interior
+ * `source` nodes' recorded mint payloads, both as PLAIN `Payload`s: `{ value, stampIds,
+ * retention? }`, never a boxed `SchemeValue` — boxing happens executor-side,
+ * symmetrically with how `replay.ts`'s `FrozenMints`/`boxPayload` already box payloads
+ * AT γ time, never before), and `streamEpoch` (the demanding stream's epoch header
+ * value). `regionId` rides along too — not part of that three-item shape, but required
+ * to seed the SAMPLED verification deterministically and to scope the executor's
+ * per-stream trust cache below; it is itself a plain opaque string (`RegionId`), so the
+ * request stays fully JSON-able/`structuredClone`-safe.
  *
- * `DrillInResponse` is "value + evidence tier + the epoch it was computed under" (task
- * item 1): `value` (the γ'd egress, already peeled — `replayGraphEgress`'s own
+ * `DrillInResponse` is "value + evidence tier + the epoch it was computed under":
+ * `value` (the γ'd egress, already peeled — `replayGraphEgress`'s own
  * `ReplayedValue.value` contract), `evidenceTier` (always `"replayed"` here — offload
- * performs a LIVE γ, never a cache hit; memoization is Q17's `replay-memo.ts` layered
- * IN FRONT of an executor, not this protocol's own concern), `epoch` (the executor's
- * OWN semantics epoch the value was actually computed under), and `trust` (which C6
- * disjunct produced this answer — `"matched"` the ordinary case, `"verified"` the
- * sampled-verification case task item 3 names; extra beyond the task's three-field
- * list, but load-bearing for the gate rows below, which must assert BOTH disjuncts
- * distinctly, not just that SOME answer came back).
+ * performs a LIVE γ, never a cache hit; memoization is `replay-memo.ts`'s concern,
+ * layered IN FRONT of an executor, not this protocol's own concern), `epoch` (the
+ * executor's OWN semantics epoch the value was actually computed under), and `trust`
+ * (which disjunct below produced this answer — `"matched"` the ordinary case,
+ * `"verified"` the sampled-verification case; load-bearing for the gate rows below,
+ * which must assert BOTH disjuncts distinctly, not just that SOME answer came back).
  *
- * ── C6 first disjunct — epoch refusal (task item 2) ────────────────────────────────
- * `drillIn` compares `request.streamEpoch` to `this.semanticsEpoch`. A mismatch with no
- * `verificationPool` attached (or `allowSampledVerification: false` at construction)
- * refuses via `EpochRefusalError` — a teaching door (errors-as-doors: it names WHAT
- * mismatched, WHY refusal is the default, and WHERE the second disjunct is reachable
- * from), never a silent stale-semantics answer (§4 EXCLUDED: "a newer evaluator can lie
- * politely").
+ * ── epoch refusal ────────────────────────────────────────────────────────────────
+ * `drillIn` compares `request.streamEpoch` to `this.semanticsEpoch`. A mismatch with
+ * no `verificationPool` attached (or `allowSampledVerification: false` at
+ * construction) refuses via `EpochRefusalError` — a teaching door (errors-as-doors:
+ * it names WHAT mismatched, WHY refusal is the default, and WHERE the second
+ * disjunct is reachable from), never a silent stale-semantics answer.
  *
- * ── C6 second disjunct — sampled wire-γ verification (task item 3) ─────────────────
+ * ── sampled wire-γ verification ──────────────────────────────────────────────────
  * When a `verificationPool` (recorded `templateHash`/`ingress`/`recordedEgress`
  * triples FROM THE SAME STREAM) accompanies a mismatched request, the executor MAY
  * verify instead of refusing outright: γ a DETERMINISTIC sample of the pool under its
@@ -64,11 +57,12 @@
  * `regionId → streamEpoch`, so a later request need not re-supply/re-verify the same
  * pool) and this answer reports `trust: "verified"`. Any disagreement ⇒ refuse
  * (`EpochRefusalError`, reason `"verification-disagreed"`) — silently trusting a
- * PARTIALLY-diverged interpreter is exactly the "lie politely" C6 excludes.
+ * PARTIALLY-diverged interpreter is exactly the "lie politely" failure this protocol
+ * excludes.
  *
- * Sampling is DETERMINISTIC, seeded by `regionId` (task item 3: "no Math.random, it's
- * unavailable by design in some contexts and nondeterminism breaks the protocol's
- * auditability") — `sampledIndices` below is a small seeded xorshift32 PRNG (advanced
+ * Sampling is DETERMINISTIC, seeded by `regionId` (no `Math.random` — unavailable by
+ * design in some execution contexts, and nondeterminism breaks the protocol's
+ * auditability) — `sampledIndices` below is a small seeded xorshift32 PRNG (advanced
  * from an FNV-1a seed over the seed string), the SAME "hand-rolled small hash, on
  * purpose, rather than pull in a dependency for four lines of math" idiom
  * `store/emit.ts`'s `hashPayload` already uses for the identical reason: this leaf has
@@ -85,14 +79,14 @@ import type { EvidenceTier, Payload } from "./store/interfaces.js";
 import type { WireframeGraph, WireframeProgram } from "./wireframe/types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wire format — plain, JSON-able, structuredClone-safe (task item 1).
+// Wire format — plain, JSON-able, structuredClone-safe.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** One graph's frozen ingress, split exactly like `replay.ts`'s own two inputs to a
  *  graph γ: `slots` are the graph's FREE `slot` bindings (program ingress, or a
  *  template/track's formals — `ReplayGraphOptions.slots`), `sources` are the recorded
  *  mint payloads for the graph's INTERIOR `source` nodes, keyed by op, in EMISSION
- *  order (exactly what `FrozenMints.push` expects to replay FIFO-per-op, per D1). Both
+ *  order (exactly what `FrozenMints.push` expects to replay FIFO-per-op). Both
  *  are plain `Payload`s (`{ value, stampIds, retention? }`) — never a boxed
  *  `SchemeValue`; boxing is an EXECUTOR-side step (`boxPayload`), same as every other
  *  γ face in `replay.ts`. */
@@ -102,7 +96,7 @@ export interface OffloadIngress {
 }
 
 /** One prior recorded crossing an executor can re-γ to VERIFY its own semantics
- *  against, for C6's second disjunct: apply `templateHash`'s graph to `ingress` under
+ *  against, for the second disjunct: apply `templateHash`'s graph to `ingress` under
  *  the executor's CURRENT semantics and compare against `recordedEgress` (what the
  *  ORIGINAL semantics epoch actually produced). Drawn from the SAME stream as the
  *  demanding request — an executor has no business verifying against a foreign
@@ -113,13 +107,13 @@ export interface VerificationCandidate {
   readonly recordedEgress: unknown;
 }
 
-/** The self-contained drill-in demand (§4 C5): everything a STATELESS executor needs
+/** The self-contained drill-in demand: everything a STATELESS executor needs
  *  to γ one wire/region with ZERO shared state beyond its own static program
- *  deployment (§5 C4: "program version = wireframe hash" — an executor serves ONE
- *  program version, so resolving `templateHash` needs no per-request context beyond
+ *  deployment (an executor serves exactly ONE program version — program version =
+ *  wireframe hash — so resolving `templateHash` needs no per-request context beyond
  *  what this struct carries). `verificationPool` is OPTIONAL — a caller that has no
  *  reason to expect a stale executor omits it and gets refusal-only behavior on
- *  mismatch (C6's first disjunct); attaching one makes the second disjunct reachable. */
+ *  mismatch; attaching one makes the second disjunct reachable. */
 export interface DrillInRequest {
   readonly templateHash: TemplateHash;
   readonly ingress: OffloadIngress;
@@ -128,8 +122,8 @@ export interface DrillInRequest {
   readonly verificationPool?: readonly VerificationCandidate[];
 }
 
-/** "value + evidence tier + the epoch it was computed under" (task item 1), plus
- *  `trust` naming WHICH C6 disjunct produced this answer (see file header). */
+/** "value + evidence tier + the epoch it was computed under", plus
+ *  `trust` naming WHICH disjunct produced this answer (see file header). */
 export interface DrillInResponse {
   readonly value: unknown;
   readonly evidenceTier: EvidenceTier;
@@ -138,7 +132,7 @@ export interface DrillInResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// C6 first disjunct — the teaching door refusal carries.
+// The first disjunct — the teaching door refusal carries.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The teaching door for both refusal paths: an outright mismatch with nothing to
@@ -163,14 +157,14 @@ export class EpochRefusalError extends Error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// C6 second disjunct — deterministic, seeded sampling (task item 3).
+// The second disjunct — deterministic, seeded sampling.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Default sample size when a caller doesn't override it at construction — small on
  *  purpose (interactive drill-ins want the epoch-upgrade decision fast; a wrong
  *  interpreter is expected to disagree on nearly everything, so a handful of
- *  candidates is enough signal, per C6's own "sampled" framing, not exhaustive
- *  replay-and-compare of the whole stream). */
+ *  candidates is enough signal, not exhaustive replay-and-compare of the whole
+ *  stream). */
 export const DEFAULT_SAMPLE_SIZE = 3;
 
 /** FNV-1a seed — the SAME small hand-rolled hash idiom `store/emit.ts`'s
@@ -187,14 +181,13 @@ function fnvSeed(text: string): number {
 
 /** Deterministic (no `Math.random`), seeded partial Fisher–Yates: picks up to
  *  `sampleSize` DISTINCT indices in `[0, poolSize)`. `seed` is the stream id
- *  (`regionId`) — task item 3's "seeded by stream id" requirement, so the SAME stream
- *  always samples the SAME positions of its own verification pool, and a
- *  verification's outcome is reproducible by anyone re-running it against the
- *  identical pool. A `xorshift32` advanced from the FNV-1a seed — small, dependency-
- *  free, and deterministic across platforms (unlike `Math.random`, which the task
- *  brief names as unavailable-by-design in some execution contexts). Indices are
- *  returned SORTED ascending: sampling order carries no information here, only WHICH
- *  positions were sampled does. */
+ *  (`regionId`), so the SAME stream always samples the SAME positions of its own
+ *  verification pool, and a verification's outcome is reproducible by anyone
+ *  re-running it against the identical pool. A `xorshift32` advanced from the FNV-1a
+ *  seed — small, dependency-free, and deterministic across platforms (unlike
+ *  `Math.random`, which is unavailable by design in some execution contexts). Indices
+ *  are returned SORTED ascending: sampling order carries no information here, only
+ *  WHICH positions were sampled does. */
 export function sampledIndices(seed: string, poolSize: number, sampleSize: number): readonly number[] {
   const n = Math.max(0, Math.min(sampleSize, poolSize));
   if (n === 0) return [];
@@ -217,8 +210,8 @@ export function sampledIndices(seed: string, poolSize: number, sampleSize: numbe
   return pool.slice(0, n).sort((a, b) => a - b);
 }
 
-/** Structural agreement over plain, JSON-able values (§4 C5's own wire-format
- *  requirement already guarantees every `value`/`recordedEgress` here qualifies) —
+/** Structural agreement over plain, JSON-able values (the wire-format requirement
+ *  above already guarantees every `value`/`recordedEgress` here qualifies) —
  *  the SAME "JSON.stringify, `String()` fallback on failure" idiom `store/emit.ts`'s
  *  `hashPayload` uses for exactly the same reason (a value that doesn't stringify
  *  cleanly still needs a stable-enough comparison, never a correctness-load-bearing
@@ -233,11 +226,11 @@ function valuesAgree(a: unknown, b: unknown): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The protocol surface — interface-level (task item 4).
+// The protocol surface — interface-level.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** ANY executor — same-process here, a stateless Worker in prod (§4 C5's own framing:
- *  "replay MAY execute in a stateless Worker outside the DO"). No HTTP/workerd
+/** ANY executor — same-process here, a stateless Worker in prod (replay MAY execute
+ *  in a stateless Worker outside the DO). No HTTP/workerd
  *  machinery is assumed by this interface; a real adapter wraps `drillIn` behind
  *  whatever transport it needs, unchanged. */
 export interface DrillInExecutor {
@@ -248,7 +241,7 @@ export interface DrillInExecutor {
 }
 
 interface SameProcessExecutorOptions {
-  /** The ONE program version this executor serves (§5 C4's deploy story) — every
+  /** The ONE program version this executor serves — every
    *  `templateHash` a request addresses must resolve to a graph reachable from here
    *  (`program.main`, a `program.templates` entry, or a fan/binder's private
    *  interior, recursively — `indexProgramGraphs` below). */
@@ -256,7 +249,7 @@ interface SameProcessExecutorOptions {
   readonly semanticsEpoch: string;
   readonly basePacks?: readonly EnvCapability[];
   readonly config?: object;
-  /** Executor-side POLICY: does this deployment ever attempt C6's second disjunct at
+  /** Executor-side POLICY: does this deployment ever attempt the second disjunct at
    *  all? Default `true`. `false` collapses this executor to refusal-only, even if a
    *  request attaches a `verificationPool` — an executor operator's own choice, not a
    *  per-request one (a caller cannot force verification the deployment disallows). */
@@ -269,7 +262,7 @@ interface SameProcessExecutorOptions {
  *  node's private interior graph, transitively (mirroring `hashGraph`'s OWN recursive
  *  canonicalization of those same interiors — see `wireframe/hash.ts`'s `canonicalNode`
  *  fan/binder cases). Two structurally-identical graphs at different sites dedupe to
- *  ONE index entry (§5 D3's own dedup story), which is exactly correct here: γ needs
+ *  ONE index entry, which is exactly correct here: γ needs
  *  the STRUCTURE, and identical structure replays identically regardless of which site
  *  a request's `templateHash` happened to be minted from. */
 function indexProgramGraphs(program: WireframeProgram): ReadonlyMap<TemplateHash, WireframeGraph> {
@@ -291,7 +284,7 @@ function indexProgramGraphs(program: WireframeProgram): ReadonlyMap<TemplateHash
 /**
  * The reference `DrillInExecutor` — same process (tests drive this directly), the
  * shape a stateless Worker adapter wraps in prod. Holds no PER-REQUEST state: its only
- * mutable field (`trustedStreams`) is a C6-second-disjunct optimization cache (a
+ * mutable field (`trustedStreams`) is a second-disjunct optimization cache (a
  * verified stream need not re-verify on every subsequent request), not a correctness
  * dependency — clearing it just means the NEXT mismatched request re-verifies (or
  * refuses) instead of trusting instantly; no request's ANSWER depends on cache state.
@@ -304,9 +297,9 @@ export class SameProcessExecutor implements DrillInExecutor {
   private readonly allowSampledVerification: boolean;
   private readonly sampleSize: number;
   private readonly graphIndex: ReadonlyMap<TemplateHash, WireframeGraph>;
-  /** C6 second disjunct's epoch-upgrade memory: `regionId → streamEpoch` for every
+  /** The second disjunct's epoch-upgrade memory: `regionId → streamEpoch` for every
    *  stream this executor has already verified-trusted. Ephemeral (process lifetime),
-   *  same status as `replay.ts`'s replay-memo idea (Q17) — an optimization, never
+   *  same status as `replay-memo.ts`'s memo — an optimization, never
    *  authoritative; losing it (a fresh executor instance) only costs a re-verification,
    *  never a wrong answer. */
   private readonly trustedStreams = new Map<RegionId, string>();
@@ -333,8 +326,8 @@ export class SameProcessExecutor implements DrillInExecutor {
           this.semanticsEpoch,
           regionId,
           "verification-disabled",
-          "this executor's deployment policy disallows sampled verification (§4 C6 first disjunct only) — " +
-            "refusing outright; a request cannot opt this executor into the second disjunct",
+          "this executor's deployment policy disallows sampled verification — " +
+            "refusing outright via the first disjunct only; a request cannot opt this executor into the second disjunct",
         );
       }
       const pool = request.verificationPool;
@@ -344,7 +337,7 @@ export class SameProcessExecutor implements DrillInExecutor {
           this.semanticsEpoch,
           regionId,
           "no-verification-offered",
-          "the request carried no `verificationPool` — refusing outright (§4 C6 first disjunct); attach " +
+          "the request carried no `verificationPool` — refusing outright; attach " +
             "recorded (templateHash, ingress, recordedEgress) triples from this stream to make the second " +
             "disjunct (sampled wire-γ verification) reachable instead",
         );
@@ -362,7 +355,7 @@ export class SameProcessExecutor implements DrillInExecutor {
             `sampled wire-γ verification disagreed on template "${candidate.templateHash}" (sample index ${i} ` +
               `of ${pool.length}) — this executor's semantics ("${this.semanticsEpoch}") reproduce a DIFFERENT ` +
               `egress than the recorded run under "${streamEpoch}"; refusing rather than trusting a partially` +
-              `-diverged interpreter (§4 C6 EXCLUDED: "a newer evaluator can lie politely")`,
+              `-diverged interpreter — a newer evaluator lying politely is exactly what this protocol excludes`,
           );
         }
       }
@@ -381,9 +374,9 @@ export class SameProcessExecutor implements DrillInExecutor {
     };
   }
 
-  /** γ one `templateHash`'s graph against `ingress`, reusing Q16's `replay.ts` machinery
-   *  verbatim: thaw `ingress.sources` into a fresh `FrozenMints` (per-op FIFO, D1's own
-   *  keying), box `ingress.slots` (`boxPayload`, the same boxing idiom every other γ
+  /** γ one `templateHash`'s graph against `ingress`, reusing `replay.ts`'s machinery
+   *  verbatim: thaw `ingress.sources` into a fresh `FrozenMints` (per-op FIFO keying),
+   *  box `ingress.slots` (`boxPayload`, the same boxing idiom every other γ
    *  face uses), and hand both to `replayGraphEgress` against this executor's static
    *  program/base-packs/config. An unresolvable `templateHash` is a `ReplayScopeError`
    *  (the SAME teaching door the per-wire replay driver already uses for "nothing to
@@ -396,7 +389,7 @@ export class SameProcessExecutor implements DrillInExecutor {
         "template-ref",
         templateHash,
         `no graph in this executor's program matches template-hash "${templateHash}" — this executor serves ` +
-          "exactly ONE program version (§5 C4: program version = wireframe hash); a foreign/stale template-hash " +
+          "exactly ONE program version (program version = wireframe hash); a foreign/stale template-hash " +
           "is a caller bug or a program-version mismatch, never silently answered",
       );
     }

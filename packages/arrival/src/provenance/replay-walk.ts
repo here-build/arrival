@@ -1,8 +1,7 @@
 /**
- * provenance/replay-walk.ts — Q17: LAZY STEP-WALKS "off the generator interpreter"
- * (docs/PROVENANCE.md §4 m2: "Step-WALKS are not memoized — they stream lazily off
- * the generator-based interpreter (a single wire's walk is small and paged); the
- * 1–10s worst case was whole-segment cone computation, which the memo covers.").
+ * provenance/replay-walk.ts — LAZY STEP-WALKS: step-WALKS are not memoized, they
+ * stream lazily off the generator-based interpreter (a single wire's walk is small
+ * and paged; the LRU memo instead covers whole-segment cone computation).
  *
  * A LAZY async-generator surface over the SAME γ semantics `replay.ts`'s
  * `replayGraphEgress` computes to completion: each `yield` is ONE γ STEP — one
@@ -14,29 +13,25 @@
  * (a JS async generator only advances to its next `yield` on `.next()` — this file
  * adds no scheduling machinery beyond that language guarantee).
  *
- * SCOPE — deliberately NEVER touches `replay-memo.ts` (m2's OTHER half, the
- * egress/cone LRU): this file has ZERO import of that module, which is the
- * ARCHITECTURAL half of "a walk-misses-memo assertion pins it" (structurally
- * impossible to memo-hit from here); `__tests__/replay-walk.test.ts` adds the
- * RUNTIME half (a walk's egress/cone is cross-checked against a FRESH, unmemoized
- * `replayGraphEgress` call, never against anything a memo could have supplied).
+ * SCOPE — deliberately NEVER touches `replay-memo.ts` (the egress/cone LRU): this
+ * file has ZERO import of that module, so it is structurally impossible to
+ * memo-hit from here — a walk always streams fresh.
  *
- * DUPLICATION, FLAGGED: `replay.ts`'s per-node switch (`nodeValue`, inside
+ * DUPLICATION: `replay.ts`'s per-node switch (`nodeValue`, inside
  * `replayGraphIn`) has no seam to yield through — it is a private closure with no
  * step-observable boundary. This file re-implements the SAME node-kind coverage
- * (source / sink / mux / template-ref, with the SAME D4 refusals for fan / binder /
+ * (source / sink / mux / template-ref, with the SAME refusals for fan / binder /
  * recur / transparent / opaque / port) as a step-yielding async generator instead.
- * This is the ONE genuinely-needed additive surface Q17 adds beyond consuming
- * `replay.ts`/`gamma.ts` directly — kept honest by two seams that stop it from
- * drifting into a second, silently-diverging copy of Q16's laws:
+ * This is the ONE genuinely-needed additive surface that consuming `replay.ts`/
+ * `gamma.ts` directly can't provide — kept honest by two seams that stop it from
+ * drifting into a second, silently-diverging copy of the replay laws:
  *   1. every SHARED primitive (`FrozenMints`, `boxPayload`, `ReplayScopeError`,
  *      `withUnionedProvenance` — the last newly exported BY this node, see
  *      replay.ts's own doc on that export) is IMPORTED from `replay.ts`, never
  *      re-derived;
- *   2. `__tests__/replay-walk.test.ts` asserts the walk's FINAL egress+cone are
- *      BYTE-IDENTICAL to `replayGraphEgress`'s over the same inputs, on every
- *      corpus row this file's tests exercise — a divergence between the two node
- *      switches fails LOUD, not silently.
+ *   2. the walk's FINAL egress+cone must be BYTE-IDENTICAL to `replayGraphEgress`'s
+ *      over the same inputs — a divergence between the two node switches is a bug
+ *      in this file, never an acceptable drift.
  */
 import type { EnvironmentValue, Environment } from "../Environment.js";
 import type { SchemeValue } from "../values/types.js";
@@ -88,7 +83,7 @@ function wireFor(graph: WireframeGraph, node: number, slot: string): Wire {
 /** One designated node's value, computed lazily — mirrors `replay.ts`'s private
  *  `nodeValue` switch arm-for-arm (see this file's header on why it is a separate
  *  copy). `cache` is a PER-WALK memo (one graph traversal's own node dedup — the
- *  SAME shape `replayGraphIn`'s local `nodeMemo` is, not the Q17 LRU `replay-memo.ts`
+ *  SAME shape `replayGraphIn`'s local `nodeMemo` is, not the LRU `replay-memo.ts`
  *  owns; a fresh `cache` per recursive `template-ref`/graph descent, exactly as
  *  `replayGraphIn` builds a fresh `nodeMemo` per recursive call). */
 async function* nodeValueStep(
@@ -180,21 +175,21 @@ async function* nodeValueStep(
       throw new ReplayScopeError(
         "fan",
         node.span,
-        "a region replays as TRACKS (γ its template per element) or via whole-program playback, never as a single wire value (D4)",
+        "a region replays as TRACKS (γ its template per element) or via whole-program playback, never as a single wire value",
       );
     case "binder":
     case "recur":
       throw new ReplayScopeError(
         node.kind,
         node.span,
-        "loops are the half wire-γ does NOT claim (§1 EXCLUDED); exact reconstruction is one γ-step away via aggregation count + quoted body (D4)",
+        "loops are the half wire-γ does NOT claim; exact reconstruction is one γ-step away via aggregation count + quoted body",
       );
     case "transparent":
     case "opaque":
       throw new ReplayScopeError(
         node.kind,
         node.span,
-        "a crossing with no recorded payload has nothing to be stable FROM — record it (source) or declare it pure (D4)",
+        "a crossing with no recorded payload has nothing to be stable FROM — record it (source) or declare it pure",
       );
     case "port":
       throw new ReplayScopeError("port", node.span, "the out-port is the egress consumer, never a value producer");
@@ -283,8 +278,7 @@ async function* graphEgressStep(
  * stops pulling. The generator's RETURN value (available once fully drained, or via
  * the final `.next()` whose `done` is `true`) is the same `ReplayedValue` shape
  * `replayGraphEgress` returns — a caller that walks to completion gets an identical
- * answer to one that called the whole-graph function directly (pinned by
- * `__tests__/replay-walk.test.ts`).
+ * answer to one that called the whole-graph function directly.
  */
 export async function* walkGraphReplay(opts: ReplayWalkOptions): AsyncGenerator<ReplayWalkStep, ReplayedValue> {
   const { program, frozen, decisions, slots = {}, basePacks = [], config } = opts;

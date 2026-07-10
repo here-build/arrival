@@ -1,16 +1,13 @@
 /**
- * Q7 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §1 CHOSEN, §4 CHOSEN) — THE HERMETIC
- * ASSEMBLER RECIPE. §1: "replay = γ = `apply` of the wire lambda to recorded ingress
- * in a hermetic env (**base packs + program prelude + ingress bindings** via the
- * env-capability assembler)". A NAMED COMPOSITION of primitives already at HEAD —
- * `assembleEnv`/`EnvCapability`/`schemePacks` — not new assembly machinery
- * (PROVENANCE-PLAN.md Q7's own opportunity note).
+ * THE HERMETIC ASSEMBLER RECIPE: replay = γ = `apply` of the wire lambda to recorded
+ * ingress in a hermetic env (base packs + program prelude + ingress bindings via the
+ * env-capability assembler). A NAMED COMPOSITION of primitives already at HEAD —
+ * `assembleEnv`/`EnvCapability`/`schemePacks` — not new assembly machinery.
  *
  * SHAPE, mirroring `eval/generator-exec.ts`'s private `assembleCapabilityBase` (the
  * exact pattern `exec({ capabilities })` already builds for a per-call capability-
- * augmented base — `env-roots.ts`'s own header names this file's job directly: "The
- * provenance spec's hermetic replay envs likewise assemble fresh and never touch this
- * shared frame"):
+ * augmented base — hermetic replay envs likewise assemble fresh and never touch that
+ * shared frame):
  *
  *   1. a FRESH `user_env.inherit()` child — isolation (no cross-replay bleed), while
  *      still inheriting the standard assembled base (`user_env → global_env`) for free;
@@ -39,8 +36,7 @@
  *
  * Callers MUST partition with `prelude.ts`'s `classifyProgramPrelude` /
  * `assertPreludeEligible` first — a port-reaching define must never reach `prelude`
- * here (§1 EXCLUDED: "port-reaching defines in the prelude — name indirection would
- * smuggle sources into 'pure' wire bodies").
+ * here: name indirection would smuggle sources into "pure" wire bodies.
  */
 import invariant from "tiny-invariant";
 
@@ -64,14 +60,14 @@ const replayEvalScheme: EvalSchemeInto = (env, source) => {
 };
 
 /** Ingress bindings a replay supplies to the hermetic env — the recorded port payloads
- *  a wire's parameters resolve to (§1: "a wire is a closed arrival lambda… parameters =
- *  ingress"). Values are real `EnvironmentValue`s (already boxed scheme values) —
- *  `Environment.set`'s own honest signature (Environment.ts T0b), not a raw-JS convenience. */
+ *  a wire's parameters resolve to (a wire is a closed arrival lambda whose parameters
+ *  ARE its ingress). Values are real `EnvironmentValue`s (already boxed scheme values) —
+ *  `Environment.set`'s own honest signature, not a raw-JS convenience. */
 export type IngressBindings = Readonly<Record<string, EnvironmentValue>>;
 
 /**
- * Build the hermetic replay env: base packs + program prelude + ingress bindings
- * (§1/§4). `basePacks` are the program's own capabilities (mcp/infer/…), assembled
+ * Build the hermetic replay env: base packs + program prelude + ingress bindings.
+ * `basePacks` are the program's own capabilities (mcp/infer/…), assembled
  * atop the standard base; `prelude` is the joined SOURCE of the program's PURE
  * top-level defines (`prelude.ts`'s `buildPreludeSource` — never a port-reaching
  * define, per that module's partition); `ingress` are the recorded payloads a
@@ -92,7 +88,7 @@ export async function hermeticEnv(
     bootstrap: prelude,
   });
   await assembleEnv(base, [preludePack]);
-  // THE SEAL (ENV T2): the prelude's defines already landed in `base.__env__` above —
+  // THE SEAL: the prelude's defines already landed in `base.__env__` above —
   // sealing here just compiles the now-complete chain; no separate hash hook needed.
   sealResolutionChain(base);
   const frame = base.inherit("provenance-ingress");

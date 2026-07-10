@@ -4,8 +4,8 @@
 // — a sound, re-runnable reverse chain (Perera–Cheney `uneval`; arrival's PURITY invariant is the
 // soundness theorem). Re-running the slice reproduces the value.
 //
-// SELECTION IS BY STATIC BACKWARD REFERENCE-CLOSURE, not the provenance cone. An adversarial swarm
-// proved the cone approach unsound: the cone walks UPSTREAM from the value to its evidence reads,
+// SELECTION IS BY STATIC BACKWARD REFERENCE-CLOSURE, not the provenance cone. The cone approach is
+// unsound for this purpose: it walks UPSTREAM from the value to its evidence reads,
 // so it structurally cannot name the value's own binding form or any pure-combinator consumer
 // between the reads and the output (string-append/if/list/quasiquote bodies are not provenance
 // points, and the forward "keep defines referenced by kept forms" closure never reaches a
@@ -25,7 +25,7 @@ import type { EvalTrace, Invocation } from "./trace.js";
 
 // Datum kinds are discriminated on the authoritative `kind` tag every AValue carries — NOT on
 // structural duck-typing. (A SchemeCharacter carries `__name__` for its named form like #\space,
-// so `"__name__" in v` misclassifies chars as symbols — a real crash the swarm found.)
+// so `"__name__" in v` misclassifies chars as symbols.)
 const kindOf = (v: unknown): string | undefined =>
   v !== null && typeof v === "object" ? (v as { kind?: string }).kind : undefined;
 
@@ -56,11 +56,11 @@ export function writeForm(node: unknown): string {
   return writeDatum(node, new Set<unknown>());
 }
 
-/** `writeForm` with a SUBSTITUTION hook — the wireframe builder's serializer (Q8a). `sub` is
+/** `writeForm` with a SUBSTITUTION hook — the wireframe builder's serializer. `sub` is
  *  consulted on every node BEFORE ordinary serialization; a non-undefined return replaces that
  *  subtree verbatim (the wire emitter substitutes each cut designated subterm with its minted
  *  param name, so the emitted wire lambda references node egresses by parameter, never by
- *  re-serializing the port call — docs/PROVENANCE.md §1's closed-wire-lambda rule). */
+ *  re-serializing the port call — the closed-wire-lambda rule). */
 export function writeFormWith(node: unknown, sub: (n: unknown) => string | undefined): string {
   return writeDatum(node, new Set<unknown>(), sub);
 }

@@ -41,7 +41,7 @@
  * Scope: this is the decision engine. `localBits`/`boundaryPorts` are abstract
  * structural bit-counts; the bit-exact prefix-coded adjacency accounting (E⁺/E⁻
  * matrices) and the AST→candidate-forest extraction are the productionization
- * steps (doc §9). The cost ALGEBRA here is the formally-correct one.
+ * steps. The cost ALGEBRA here is the formally-correct one.
  */
 
 import type { BoxType, CandidateBox, Decision } from "./trace-to-forest.js";
@@ -151,7 +151,7 @@ function rawCost(forest: CandidateBox[]): number {
 
 /**
  * Run the optimizer. Children/forest are processed in id-sorted order so the
- * decision map is deterministic regardless of input array order (review nit 6).
+ * decision map is deterministic regardless of input array order.
  */
 export function collapseMDL(forest: CandidateBox[], params: CollapseParams = {}): CollapseResult {
   const sortById = (boxes: CandidateBox[]): CandidateBox[] =>

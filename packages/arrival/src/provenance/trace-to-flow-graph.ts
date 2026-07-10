@@ -10,7 +10,7 @@
  * select. That needs BOTH graphs the kernel already builds:
  *
  *   - `traceToForest` + `collapseMDL` → the containment hierarchy + which boxes
- *     start collapsed (the anti-spaghetti optimizer, design §4). String ids
+ *     start collapsed (the anti-spaghetti optimizer). String ids
  *     (`head@line:col`, stable across runs).
  *   - `traceToStatechart` → the causal DAG: Lamport layers + forward/loopback
  *     edges + the cones. Numeric ids (representative invocation id).

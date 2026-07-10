@@ -1,27 +1,18 @@
 /**
- * provenance/span-attribution.ts — Q17's RESERVATION ONLY (docs/PROVENANCE-PLAN.md
- * Q17's note, citing `docs/working-proposals/inhuman-elk-over-provenance.md` §4bis):
- * the ONE promoted render capability, `spanAttribution(wire, ingress)` — a named
- * γ-side query (static for the TEMPLATED family, γ in general) answering
- * substring-level consumption: "which span of `wire.source` did this ingress
- * value's provenance flow through."
+ * provenance/span-attribution.ts — RESERVED SURFACE for `spanAttribution(wire, ingress)`:
+ * a named γ-side query (static for the TEMPLATED family, γ in general) answering
+ * substring-level consumption — "which span of `wire.source` did this ingress value's
+ * provenance flow through." Not a record kind, not a demand-lattice amendment: it
+ * demands at the QUERY layer only, never the storage layer (no new `WireframeNode`
+ * or record kind is added here or implied).
  *
- * NOT a record kind, NOT a demand-lattice amendment — docs/PROVENANCE.md §6
- * excludes further demand grades "until a consumer demands it"; the P11 render
- * window IS that consumer, demanding at the QUERY layer (this file), never the
- * storage layer (no new `WireframeNode`/record kind is added here or implied).
- * LIMIT (stated in the plan note, repeated here so it travels with the door): an
- * opaque JS rosetta body stays UNATTRIBUTABLE even once P11 lands — it has no span
- * structure this query could ever walk.
+ * Not yet implemented. This file reserves the name and signature so a caller has a
+ * stable import to code against before the implementation lands, and reaching for
+ * substring attribution today gets a teaching door (errors-as-doors) instead of a
+ * missing export.
  *
- * SCOPE: this function is the DOOR only (errors-as-doors: name what was demanded,
- * why it is out of THIS window's scope, and where it is served instead — never a
- * bare "not implemented"). PROVENANCE-PLAN.md's P-track absorption map: "P11 |
- * unchanged — product track, out of this plan; gates on Q17 for drill-in" — P11 owns
- * the implementation, once it starts. Reserving the name/signature here means a
- * P11 caller has a stable import to code against before that work begins, and any
- * Q17-era caller reaching for substring attribution gets a teaching door instead of
- * a missing export.
+ * LIMIT: an opaque JS rosetta body has no span structure to walk, so it stays
+ * unattributable regardless of when this lands.
  */
 import type { IngressBindings } from "./hermetic-env.js";
 import type { EmittedWire } from "./wireframe/types.js";
@@ -29,22 +20,19 @@ import type { EmittedWire } from "./wireframe/types.js";
 export class SpanAttributionNotImplemented extends Error {
   constructor(readonly wire: EmittedWire) {
     super(
-      `spanAttribution: substring-level consumption for the wire at ${wire.span} is P11 product-track ` +
-        "work (docs/PROVENANCE-PLAN.md Q17 note; docs/working-proposals/inhuman-elk-over-provenance.md " +
-        "§4bis) — not implemented at Q17. This call reserves the name/signature only: a named γ-side " +
-        "query, static for the TEMPLATED family, γ in general, answering \"which span of this wire's " +
-        "source did the demanded value's provenance flow through.\" The render capability's " +
-        "IMPLEMENTATION lands with P11, gated on the replay layer that already exists as of Q16/Q17 " +
-        "(replay.ts/replay-walk.ts). Once implemented, an OPAQUE JS rosetta body will remain " +
-        "unattributable regardless (stated LIMIT) — it has no span structure to walk.",
+      `spanAttribution: substring-level consumption for the wire at ${wire.span} is not yet ` +
+        "implemented. This call reserves the name/signature only: a named γ-side query, static " +
+        "for the TEMPLATED family, γ in general, answering \"which span of this wire's source did " +
+        "the demanded value's provenance flow through.\" An opaque JS rosetta body will remain " +
+        "unattributable regardless once implemented — it has no span structure to walk.",
     );
     this.name = "SpanAttributionNotImplemented";
   }
 }
 
 /**
- * RESERVED SIGNATURE — P11 implements the body. Always throws
- * {@link SpanAttributionNotImplemented} today: this is the door, not the query.
+ * RESERVED SIGNATURE. Always throws {@link SpanAttributionNotImplemented} today: this
+ * is the door, not the query.
  */
 export function spanAttribution(wire: EmittedWire, ingress: IngressBindings): never {
   void ingress;

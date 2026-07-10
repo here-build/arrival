@@ -1,30 +1,25 @@
 /**
- * provenance/gamma.ts — Q15's SECOND landing: γ = `hermeticApply(wire, ingress)`
- * (docs/PROVENANCE.md §1 CHOSEN: "replay = γ = `apply` of the wire lambda to recorded
- * ingress in a hermetic env… executed under region discipline (§4)"; §4 CHOSEN, round 2
- * A4: "γ runs in a SILENT region: doors and discipline fully active, stream emission
- * OFF"). A NAMED COMPOSITION, not new machinery (PROVENANCE-PLAN.md Q15's own note):
+ * provenance/gamma.ts — γ = `hermeticApply(wire, ingress)`: replay = γ = `apply` of
+ * the wire lambda to recorded ingress in a hermetic env, executed under region
+ * discipline — γ runs in a SILENT region: doors and discipline fully active, stream
+ * emission OFF. A NAMED COMPOSITION, not new machinery:
  *
- *   1. Q7's `hermeticEnv` — base packs + program prelude + ingress bindings, sealed;
- *   2. `values/primitives/region-scope.ts`'s `withSilentRegion` — this wave's OTHER
- *      Q15 landing, wrapping the WHOLE apply for its entire dynamic extent;
+ *   1. `hermeticEnv` — base packs + program prelude + ingress bindings, sealed;
+ *   2. `values/primitives/region-scope.ts`'s `withSilentRegion` — wrapping the WHOLE
+ *      apply for its entire dynamic extent;
  *   3. the SAME textual-application idiom `wireframe-agreement.law.test.ts` already
  *      proved end-to-end (`` `(${w.source} 41)` `` — apply the wire's lambda source to
  *      its params BY NAME), generalized from a literal argument to `wire.params`
  *      itself, since `hermeticEnv`'s `ingress` frame already bound those same names
- *      above the sealed base (§4 CHOSEN step 5) before the application ever runs.
+ *      above the sealed base before the application ever runs.
  *
- * Wire-locality (§1, checked AT EMISSION by `unevalWire` — `uneval.ts`) already
+ * Wire-locality (checked AT EMISSION by `unevalWire` — `uneval.ts`) already
  * guarantees `FV(wire body) ⊆ params ∪ prelude-names ∪ hermetic-base-names`. This
  * function relies on that closure, it does not re-verify it: every free reference the
  * applied lambda makes resolves EITHER through the sealed prelude/base chain (by name,
  * `hermeticEnv` steps 3/4) or through one of `wire.params` (`ingress`, step 5) — nothing
- * else can be free in a wire body, by construction. That is exactly the "wire-locality
- * already guarantees closure; you land the runner" instruction this node works under.
- *
- * Q16 (replay laws) proves the ADJUNCTION laws (wire-γ, replay-nondeterminism, pure-mux
- * derivation — docs/PROVENANCE.md §7) over this function; this node lands the mechanism
- * plus a smoke row (`src/__tests__/provenance/silent-region.test.ts`), not the law suite.
+ * else can be free in a wire body, by construction. That is exactly why this module only
+ * lands the runner: wire-locality already guarantees the closure.
  */
 import invariant from "tiny-invariant";
 
@@ -53,12 +48,12 @@ export interface HermeticApplyOptions {
 }
 
 /**
- * γ = apply(wire, ingress) in Q7's hermetic env, under a SILENT region (§4 CHOSEN,
- * round 2 A4). Returns the egress — `exec`'s own contract already peels to plain JS
- * (`generator-exec.ts`'s `exec`: `state.values.map((v) => toJS(v))`), so a replayed
- * egress is directly comparable to a recorded `MintRecord`'s payload value (Q16's
- * wire-γ law: `apply(wire, recorded ingress) === recorded egress`), no second peeling
- * step needed here.
+ * γ = apply(wire, ingress) in the hermetic env, under a SILENT region. Returns the
+ * egress — `exec`'s own contract already peels to plain JS (`generator-exec.ts`'s
+ * `exec`: `state.values.map((v) => toJS(v))`), so a replayed egress is directly
+ * comparable to a recorded `MintRecord`'s payload value (the wire-γ law:
+ * `apply(wire, recorded ingress) === recorded egress`), no second peeling step
+ * needed here.
  *
  * Every free name the wire body's SOURCE could possibly reference is either a
  * `wire.params` slot (bound here, by name, into `hermeticEnv`'s ingress frame) or
@@ -86,25 +81,24 @@ export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Q16 extension — the BOXED γ face + the composition seam replay.ts drives.
+// THE BOXED γ FACE — the composition seam replay.ts drives.
 //
 // `hermeticApply` above peels (exec's `toJS` contract) because a wire-γ EGRESS
-// compares against a recorded payload VALUE. Q16's containment/separation laws
-// (docs/PROVENANCE.md §3 I1/I3 "under replay") additionally need the replayed
-// value's PROVENANCE — the stamp set the boxed egress carries — which peeling
-// destroys. `applyWireInEnv` is the same application idiom returning the boxed
-// `SchemeValue`, factored against a caller-supplied env so a graph replay
+// compares against a recorded payload VALUE. Some laws additionally need the
+// replayed value's PROVENANCE — the stamp set the boxed egress carries — which
+// peeling destroys. `applyWireInEnv` is the same application idiom returning the
+// boxed `SchemeValue`, factored against a caller-supplied env so a graph replay
 // (replay.ts) can assemble ONE hermetic base per graph and γ many wires against
 // per-wire ingress frames, instead of re-assembling+re-sealing per wire.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The teaching door `hermeticApply` always had, shared with the Q16 faces. */
+/** The teaching door `hermeticApply` always had, shared with every boxed γ face. */
 function assertIngressCovers(wire: EmittedWire, ingress: IngressBindings): void {
   for (const name of wire.params) {
     invariant(
       Object.hasOwn(ingress, name),
       `hermeticApply: wire "${wire.span}" declares param "${name}" but no ingress binding was supplied for ` +
-        "it — every name in wire.params must have a matching key in ingress (§4 CHOSEN step 5's frame), or " +
+        "it — every name in wire.params must have a matching key in ingress, or " +
         "the applied lambda hits an unbound variable deep inside exec instead of this door.",
     );
   }
@@ -118,7 +112,7 @@ function wireApplication(wire: EmittedWire): string {
 /**
  * γ against a PREBUILT hermetic base, returning the BOXED egress (provenance
  * intact). The caller owns BOTH halves `hermeticApply` bundles:
- *   - the silent region (§4 A4) — a graph replay wraps its WHOLE walk in ONE
+ *   - the silent region — a graph replay wraps its WHOLE walk in ONE
  *     `withSilentRegion`, not one per wire;
  *   - the base env — built once per graph via `hermeticEnv(basePacks, prelude)`
  *     (empty ingress); each call here binds this wire's ingress in a FRESH frame

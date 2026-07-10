@@ -51,21 +51,25 @@
  *   `trace-to-forest`) read `node` by Pair identity, `node.car`, deep `car/cdr`
  *   spine-walks AND `__location__` — all of which the live ref provides for free.
  *
- * ⇒ Contract for A2. The first piece of the projection now EXISTS: `scope`
- * (`scopeId(node)`, pre-derived above) is the clone-safe carrier of the symbol-keyed
- * `__location__` — the silent killer is defused. What the live `Pair` on `node`
- * still uniquely provides, and what the worker boundary still needs handling for:
- *   - cross-node `===` identity (loop-body keying, `a.node === b.node`) — A2 rewrites
- *     these read-sites to `a.scope === b.scope` (equal Pairs ⇒ equal scope strings);
- *   - `car`/`cdr` spine-walks (`listOf`/`asPair`) — these survive the clone as plain
- *     fields (prototype lost, but the duck-typed `"car" in v` checks still hold), so
- *     no projection needed beyond not relying on `is_pair()`/`instanceof`;
- *   - the second live-trace read inside `traceToRegions` (the `liveById`/`valueById`
- *     decision-operand substitution) reads `trace.records` AFTER the snapshot — A2
- *     must absorb those values into the snapshot rather than re-reading the live map.
- * Once A2's `traceToRegions` reads `scope` (not `scopeId(node)`) and the above are
+ * ── remaining work before `node` drops from the payload ─────────────────────
+ * The first piece of the projection now EXISTS: `scope` (`scopeId(node)`,
+ * pre-derived above) is the clone-safe carrier of the symbol-keyed `__location__`
+ * — the silent killer is defused. What the live `Pair` on `node` still uniquely
+ * provides, and what a worker-boundary migration still needs handling for:
+ *   - cross-node `===` identity (loop-body keying, `a.node === b.node`) — these
+ *     read-sites need rewriting to `a.scope === b.scope` (equal Pairs ⇒ equal
+ *     scope strings);
+ *   - `car`/`cdr` spine-walks (`listOf`/`asPair`) — these survive the clone as
+ *     plain fields (prototype lost, but the duck-typed `"car" in v` checks still
+ *     hold), so no projection is needed beyond not relying on
+ *     `is_pair()`/`instanceof`;
+ *   - the second live-trace read inside `traceToRegions` (the
+ *     `liveById`/`valueById` decision-operand substitution) reads `trace.records`
+ *     AFTER the snapshot — those values need absorbing into the snapshot rather
+ *     than re-reading the live map.
+ * Once `traceToRegions` reads `scope` (not `scopeId(node)`) and the above are
  * handled, `node` itself can be dropped from the posted payload. The read-site
- * rewrite co-designs with `trace-to-regions.ts`, so it is A2's edit, not A1's.
+ * rewrite co-designs with `trace-to-regions.ts`.
  */
 import { schemeToJs } from "../rosetta.js";
 import type { APair } from "../values/primitives/APair.js";

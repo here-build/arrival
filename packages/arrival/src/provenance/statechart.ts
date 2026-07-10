@@ -8,22 +8,19 @@
  *
  * Operates on a plain `PlainTrace` snapshot (see trace-snapshot.ts), not the live
  * trace — the snapshot decouples the O(n²) traversal below from a still-mutating
- * trace (and, historically, from MobX proxy + tracking cost, back when the trace
- * objects were observable). `traceToStatechart` keeps its `EvalTrace` signature
- * and snapshots internally, so callers are unaffected.
+ * trace. `traceToStatechart` keeps its `EvalTrace` signature and snapshots
+ * internally, so callers are unaffected.
  *
  * ── why the edge rule looks indirect ────────────────────────────────────────
  * Every `(infer …)` invocation is a provenance point, so its OWN `.provenance`
- * is the singleton `{self.id}` (the §5.1 override) — that tells you nothing
- * about what flowed IN. The inputs live one level down: an infer's argument
- * sub-expressions are its `.children`, and each child's `.provenance` already
- * encodes its whole subtree (the union rule propagates upward at every exit).
- * So the set of upstream infers feeding X is `⋃ child.provenance` over X's
- * direct children. Every id in that union is necessarily another provenance
- * point's id — non-points never put their own id into a provenance set — so the
- * union is exactly X's upstream-infer set. (Verified in statechart.test.ts
- * against a real gepa-loop trace; if the propagation model were wrong the
- * react→reflect edges wouldn't appear.)
+ * is the singleton `{self.id}` (an intentional override of the union rule below)
+ * — that tells you nothing about what flowed IN. The inputs live one level down:
+ * an infer's argument sub-expressions are its `.children`, and each child's
+ * `.provenance` already encodes its whole subtree (the union rule propagates
+ * upward at every exit). So the set of upstream infers feeding X is
+ * `⋃ child.provenance` over X's direct children. Every id in that union is
+ * necessarily another provenance point's id — non-points never put their own id
+ * into a provenance set — so the union is exactly X's upstream-infer set.
  *
  * ── why the loop falls out for free ─────────────────────────────────────────
  * Collapsing invocations by Pair identity (the same AST node entered N times)
@@ -35,8 +32,8 @@
  *
  * NOT YET MODELLED (v0): region NESTING. A ×3 persona fan-out sitting inside a
  * ×K loop collapses to one cell with count 3K — the two axes are conflated.
- * Distinguishing parallel-region-within-loop-region needs the §5.4 mark
- * hierarchy and is the v1 follow-up; this v0 is the flat collapsed causal DAG.
+ * Distinguishing parallel-region-within-loop-region needs a mark hierarchy and
+ * is a v1 follow-up; this v0 is the flat collapsed causal DAG.
  */
 import type { APair } from "../values/primitives/APair.js";
 import type { ASymbol } from "../values/primitives/ASymbol.js";

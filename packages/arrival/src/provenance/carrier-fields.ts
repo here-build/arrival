@@ -1,26 +1,18 @@
 /**
  * The dag `:fields` point-edge map, derived STATICALLY from the trace — the SOLE source
- * of the per-edge field pins now the field-point mint is retired (it was first proven a
- * byte-identical reproduction of that mint, then took over as the mint died). It reads
- * the auto-bound lineage carrier rather than walking any runtime field-point registry:
+ * of the per-edge field pins. It reads the auto-bound lineage carrier rather than walking
+ * any runtime field-point registry:
  *
  *   for each consumer source-point, classify its ARGUMENT sub-expressions (`classify` stops
  *   at the source head — lineage.ts's `isRosettaIn` cut — so the whole call would be inert; the keyword
  *   plucks live in the args), collect the `field` nodes, and resolve each auto-bound to
- *   `{ base: producer-ids, key }`. Fold to the same `Map<"producer>consumer", Set<field>>`
- *   the (now-removed) inline builder used to produce — `traceToStatechart` reads this
- *   function's output directly (step 5, `statechart.ts`).
- *
- * Proven BYTE-IDENTICAL to the old inline-built edge `:fields` over the corpus (gepa /
- * multi-field / positional-only) by `arrival-chain`'s `lineage-field-shadow-corpus.test.ts`
- * — fed the REAL consumer AST off the trace, no curated pluck list, so the
- * no-spurious-pin / no-missing-pin claim is real.
+ *   `{ base: producer-ids, key }`. Fold to `Map<"producer>consumer", Set<field>>` —
+ *   `traceToStatechart` reads this function's output directly (`statechart.ts`).
  *
  * ADDITIVE + flag-gated: returns an EMPTY map when no `AutoBindings` sidecar is attached
  * (`trace.withAutoBindings()` is the flag), so a trace built without one carries no `:fields`.
- * `traceToStatechart` already defaults to this reader unconditionally (an explicit
- * `opts.fieldEdges` override exists only for tests) — the inline builder and the field-point
- * mint it depended on are both deleted, not merely superseded.
+ * `traceToStatechart` defaults to this reader unconditionally (an explicit `opts.fieldEdges`
+ * override exists only for tests).
  *
  * SLOT SCOPING: each field node's slots resolve ONLY against auto-bindings recorded within the
  * CONSUMER point's invocation subtree (`subtreeIds`), NOT the global first-match — so two
@@ -170,9 +162,9 @@ const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
  * (`roleOf(op) === "source"`) are exactly the head-symbols of the run's provenance-point
  * invocations: post the points-by-default flip a rosetta mints iff it is a point, so the trace's
  * points ARE the sources that actually fired (http/sql/db included; new sources automatic) — this
- * is a fact READ OFF THE TRACE (what actually crossed the membrane at runtime), not the retired
- * caller-injected heuristic docs/PROVENANCE.md §2 excludes (`values/lineage-classifier-from-env.ts`
- * reads the same declaration-driven spirit off the env instead). `classify` never consults a
+ * is a fact READ OFF THE TRACE (what actually crossed the membrane at runtime), not a
+ * caller-injected heuristic (`values/lineage-classifier-from-env.ts` reads the same
+ * declaration-driven spirit off the env instead). `classify` never consults a
  * `pure` predicate, and `opaque` does not change which `field` nodes `collectFieldNodes` finds
  * (a member-read is recognized before the opaque cut, and opaque + pipe/undefined both descend
  * children) — so this classifier never needs to answer either. This is what lets the dag self-serve

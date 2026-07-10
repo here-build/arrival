@@ -25,13 +25,15 @@ import type { AListAlike, SchemeValue } from "../values/types.js";
 
 // De-MobXed hot machinery — `Invocation`/`NodeRecord` were `makeAutoObservable`. Deep TCO loop
 // mints one Invocation per recursion step (tens of thousands); MobX admin (`values_`/admin symbol)
-// is ~10× plain-field-bag memory. 46k-invocation run retained ~186MB admin + O(n²) provenance Sets,
-// GC-froze tab. Chart reads plain `snapshotTrace` — objects stay plain.
+// is ~10× plain-field-bag memory — on top of that, a long/looping run retains O(n²) provenance Sets
+// (see {@link EvalTrace.markAuthoritativeProvenance}'s header), and the combination GC-froze the tab.
+// Chart reads plain `snapshotTrace` — objects stay plain.
 //
 // Class now in `@here.build/arrival` (core, mobx-free). The one reactive signal (entries counter
 // TraceGraph subscribed via `reaction`) split into two overridable SEAMS:
 //   - `_entries` / `bumpEntries()` — plain counter + protected mutator
 //   - `entries` getter — reads `_entries`
+// `enter`/`exit`/`markProvenancePoint` stay plain mutation (core touches nothing mobx-observable).
 // `@here.build/arrival-provenance`'s `ObservableEvalTrace`: keeps mobx, overrides bumpEntries/entries
 // to wrap `observable.box`, wraps `enter` in `action(...)`. Restores reactive semantics for
 // `TraceGraph`/`arrival-chain` tests while core stays dependency-free.
@@ -55,7 +57,7 @@ function accessorField(node: APair<SchemeValue, SchemeValue>): string | null {
 }
 
 /**
- * Provenance per `docs/spec/arrival-chain.md` §5.
+ * Provenance computation:
  *   - provenance-marked call → `{ self.id }`
  *   - else distinct non-empty child sets (by reference): 0→empty, 1→forward (preserves identity), many→union
  *   - control-flow restriction enforced by rosetta wrappers — not here
@@ -68,7 +70,7 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   // Forward already-truncated lineage across a FORWARDING boundary (fn-call return, `let`, tail pass-through,
   // empty-predicate control-flow arm). AUTHORITATIVE provenance (minted by point or `(:field …)`) is COMPLETE
   // lineage; re-unioning here is the depth-accumulation that flattened O(1)-per-hop link chain → O(history)
-  // set (2026-06-08 heap dump). Field accessors EXCLUDED → reach refine branch below. Genuine combiners
+  // set. Field accessors EXCLUDED → reach refine branch below. Genuine combiners
   // (string-append, `if` w/ provenance predicate via `withProvenance`, not authoritative) fall through to union.
   if (field === null && inv.value instanceof AValue && trace.isAuthoritativeProvenance(inv.value.provenance)) {
     return inv.value.provenance;
@@ -79,7 +81,7 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   for (const child of inv.children) {
     if (child.provenance.size > 0) distinct.add(child.provenance);
   }
-  // Symbol resolutions — provenance flows through env bindings (spec §5.2).
+  // Symbol resolutions — provenance flows through env bindings.
   if (inv.symbolContributions) {
     for (const s of inv.symbolContributions) {
       if (s.size > 0) distinct.add(s);
@@ -87,13 +89,13 @@ function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<numbe
   }
   if (distinct.size === 0) return EMPTY_PROVENANCE;
 
-  // Field-projection `(:verdict x)` (§5.3): crosses structured-output membrane, FORWARDS each upstream point P
+  // Field-projection `(:verdict x)`: crosses structured-output membrane, FORWARDS each upstream point P
   // (origin/intent), lets static carrier `carrierFieldEdges` supply the dropped KEY. Marked AUTHORITATIVE
-  // (complete lineage) so forwarding parent never re-unions it. `car`/`cdr` provenance (§5.3) attributes to the
+  // (complete lineage) so forwarding parent never re-unions it. `car`/`cdr` provenance attributes to the
   // right fan-out producer — chained `(:verdict (car reactions))` carries react[0]'s point. `field` ROUTES this
   // branch (excluded from plain forward above).
   if (field !== null) {
-    // Retired: minting synthetic (P,field) id. `(:field x)` keeps P; key lives solely in static carrier.
+    // `(:field x)` keeps P; key lives solely in static carrier — no synthetic (P,field) id is minted.
     const out = new Set<number>();
     for (const s of distinct) for (const p of s) out.add(p);
     return trace.markAuthoritativeProvenance(out);
@@ -119,7 +121,7 @@ export class Invocation {
   value: SchemeValue | undefined = undefined;
   error: unknown = undefined;
   /** Dataflow provenance: ids of provenance-point invocations whose outputs flowed into this call's inputs.
-   *  Computed on exit per `docs/spec/arrival-chain.md` §5. */
+   *  Computed on exit. */
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE;
   /** Set true when rosetta wrapper / sandbox override marks this a provenance point. Read by exit-tap. */
   isProvenancePoint = false;
@@ -191,13 +193,13 @@ export class EvalTrace implements EvalTap {
   readonly symbolValues = new WeakMap<Invocation, Map<string, unknown>>();
 
   /**
-   * v02-G0 SPIKE — AUTO-BINDING leaf-stamp sidecar (provenance-static-lineage v0.2, §"v02-G0").
-   * ADDITIVE + flag-gated: undefined by default → `exit` never touches it, trace byte-identical.
-   * When attached via {@link withAutoBindings}, each `exit` records symbol resolutions (already in
-   * `symbolValues`) — per-consumer-invocation producer ids each read value carries. Auto-binds static
-   * carrier leaf slots to right per-invocation producer (replaces manual `{ infer: ids }` global map
-   * v02-G1 shadow uses), WITHOUT collapsing distinct invocations of one source name. Rides ALONGSIDE
-   * `AValue.provenance`, never replacing it.
+   * AUTO-BINDING leaf-stamp sidecar. ADDITIVE + flag-gated: undefined by default → `exit` never
+   * touches it, so the trace stays byte-identical to the flag-off baseline. When attached via
+   * {@link withAutoBindings}, each `exit` records symbol resolutions (already in `symbolValues`) —
+   * per-consumer-invocation producer ids each read value carries. Auto-binds static carrier leaf
+   * slots to the right per-invocation producer (replaces a manual `{ infer: ids }` global map),
+   * WITHOUT collapsing distinct invocations of one source name. Rides ALONGSIDE `AValue.provenance`,
+   * never replacing it.
    */
   autoBindings: AutoBindings | undefined = undefined;
 
@@ -215,9 +217,8 @@ export class EvalTrace implements EvalTap {
    * without reading every invocation. Blueprint uses it to throttle O(points²) region rebuild to once per
    * animation frame — frozen tab vs responsive on a long run.
    *
-   * Plain counter — `@here.build/arrival` core carries no mobx. SEAM: `arrival-provenance`'s
-   * `ObservableEvalTrace` overrides {@link bumpEntries}/{@link entries} to route through `observable.box`,
-   * restoring the reactive signal `TraceGraph`'s `reaction(() => trace.entries)` needs.
+   * Plain counter — see the de-MobXed note at the top of this file for the `bumpEntries`/`entries`
+   * SEAM `arrival-provenance`'s `ObservableEvalTrace` overrides.
    */
   protected _entries = 0;
   get entries(): number {
@@ -244,8 +245,8 @@ export class EvalTrace implements EvalTap {
    * (producer's own points; dropped key lives in static carrier). An authoritative set is COMPLETE lineage:
    * upstream reached by FOLLOWING the link (point → producer), never by transitive closure. `computeProvenance`
    * forwards it across a forwarding boundary (fn-call return, `let`, tail pass-through) instead of re-unioning —
-   * that re-union is the depth-accumulation that turned navigable O(1)-per-hop chain → O(history) flat set
-   * (2026-06-08 1.3 GB heap dump: loop's tagline carried every prior round's points). Keyed by Set IDENTITY
+   * that re-union is the depth-accumulation that turns a navigable O(1)-per-hop chain into an O(history) flat
+   * set (a loop's tagline would otherwise carry every prior round's points). Keyed by Set IDENTITY
    * (WeakSet) — rides the reference `withProvenance`/size-1 forward share, GC'd with it.
    */
   readonly #authoritativeProvenance = new WeakSet<ReadonlySet<number>>();
@@ -291,9 +292,8 @@ export class EvalTrace implements EvalTap {
     return this.symbolValues.get(inv)?.get(name);
   }
 
-  // `enter` mutates plain fields + bumps entries via {@link bumpEntries} seam (plain here). `arrival-provenance`'s
-  // `ObservableEvalTrace` wraps whole method in mobx `action(...)`; this core method needs no wrapper (touches
-  // nothing mobx-observable). `exit`/`markProvenancePoint` touch only plain fields.
+  // `enter`/`exit`/`markProvenancePoint` mutate plain fields — see the de-MobXed note at the top of
+  // this file for how `arrival-provenance`'s `ObservableEvalTrace` wraps `enter` in `action(...)`.
 
   /** Cap on total trace entries (one per invocation — `enter` mints only `#nextId`). Invocation retained PER
    *  reduction (value/children) — monotonic, never GC'd — so long/runaway loop grows trace unboundedly. `enter`
@@ -343,7 +343,7 @@ export class EvalTrace implements EvalTap {
     inv.provenance = computeProvenance(inv, this);
     this.#pruneChildProvenance(inv);
 
-    // v02-G0 SPIKE (flag-gated): capture symbol resolutions into auto-binding sidecar. No-op unless sink attached
+    // Flag-gated: capture symbol resolutions into auto-binding sidecar. No-op unless sink attached
     // (default undefined) → flag-OFF path byte-identical. Reads `symbolValues` already built; records producer ids
     // per invocation (no name-collapse). Runs after prune (never touches `symbolValues`).
     if (this.autoBindings) this.autoBindings.recordInvocation(inv.id, this.symbolValues.get(inv));
@@ -420,8 +420,8 @@ export class EvalTrace implements EvalTap {
       if (typeof name === "string") map.set(name, value);
 
       // Provenance contribution: read off value — producing exit-tap stamped it via `withProvenance`, so every
-      // AValue carries origin. Per spec §5.2: symbols don't carry provenance; producing invocation's provenance
-      // flows through at resolve time.
+      // AValue carries origin. Symbols don't carry provenance; producing invocation's provenance flows through
+      // at resolve time.
       if (value instanceof AValue && value.provenance.size > 0) {
         if (!invocation.symbolContributions) invocation.symbolContributions = new Set();
         invocation.symbolContributions.add(value.provenance);

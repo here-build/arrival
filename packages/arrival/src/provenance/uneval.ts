@@ -125,15 +125,16 @@ export function buildUneval(opts: {
 }
 
 // ---------------------------------------------------------------------------------
-// Q8a — the WIRE-EMISSION half of uneval (docs/PROVENANCE.md §1 CHOSEN: "a wire is a
-// closed arrival lambda. `uneval` emits it lambda-lifted: parameters = ingress,
-// FV(body) ⊆ params ∪ prelude-names (checked at emission — wire-locality law)").
+// THE WIRE-EMISSION half of uneval: a wire is a closed arrival lambda. `uneval` emits
+// it lambda-lifted — parameters = ingress, FV(body) ⊆ params ∪ prelude-names, checked
+// AT EMISSION (the wire-locality law).
 //
 // Where `buildUneval` above reverse-slices a FINISHED trace (retrospective), this
 // half materializes the PROSPECTIVE layer's edges: the wireframe builder hands over
 // a surface expression, the `let`-frames it sat under, and the designated subterms
 // it CUT to nodes; `unevalWire` closes the residue into `(lambda (p…) body)` —
-// pure data, serializable, content-addressable (Q8b hashes it), applied by γ.
+// pure data, serializable, content-addressable (hashed by the wireframe hasher),
+// applied by γ.
 // ---------------------------------------------------------------------------------
 
 /** What the wireframe builder hands `unevalWire` per wire. */
@@ -143,18 +144,18 @@ export interface WireEmission {
   /** Enclosing `let`-family frames, OUTERMOST first — re-wrapped verbatim around the
    *  body so binding structure (incl. parallel-`let` scoping) survives lambda-lifting.
    *  Verbatim wrapping is sound (purity: γ recomputes); minimal pruning is a later
-   *  refinement — granularity is §1's accepted phrasing-sensitivity LIMIT. */
+   *  refinement — granularity is the accepted phrasing-sensitivity LIMIT. */
   readonly frames: readonly WireFrame[];
   /** Designated subterms CUT out of wire space: surface pair → wireframe node id.
    *  Each occurrence in `expr`/frames becomes a minted param wired to that node. */
   readonly cuts: ReadonlyMap<unknown, number>;
-  /** PURE program-prelude define names (Q7's partition) — referenced BY NAME. */
+  /** PURE program-prelude define names (the prelude-membership partition) — referenced BY NAME. */
   readonly preludeNames: ReadonlySet<string>;
   /** Port-reaching define names — must NEVER survive into a wire body as a free
-   *  value reference (§1 EXCLUDED: name indirection would smuggle sources). */
+   *  value reference: name indirection would smuggle sources. */
   readonly materialNames: ReadonlySet<string>;
   /** Is this name resolvable in the hermetic BASE env (natives, macros, base packs)?
-   *  Base references stay by-name — the hermetic assembler provides them (§4). */
+   *  Base references stay by-name — the hermetic assembler provides them. */
   readonly isBaseName: (name: string) => boolean;
 }
 
@@ -230,15 +231,15 @@ function framedFreeVars(e: WireEmission): Set<string> {
 }
 
 /**
- * Emit ONE closed wire lambda — THE wire-locality enforcement point (§7's law row:
- * "checked AT EMISSION", never a post-hoc audit; a wire that would violate locality
- * is unrepresentable because this door refuses to mint it).
+ * Emit ONE closed wire lambda — THE wire-locality enforcement point: checked AT
+ * EMISSION, never a post-hoc audit; a wire that would violate locality is
+ * unrepresentable because this door refuses to mint it.
  *
  * - Free variables resolve, in teaching order: port-reaching define → the
  *   `WireLocalityError` door (it must be a `template-ref` NODE — as a first-class
  *   value it would smuggle its ports past γ's frozen-payload rule); pure prelude
- *   name → stays by-name (§1: "captures that resolve to prelude or native names are
- *   REFERENCES, never payloads"); hermetic-base name → by-name; anything else →
+ *   name → stays by-name (captures that resolve to prelude or native names are
+ *   REFERENCES, never payloads); hermetic-base name → by-name; anything else →
  *   an ingress SLOT param (env-supplied at run/replay).
  * - Cut designated subterms become minted `inN` params (collision-checked against
  *   every symbol in body space), each carrying its node id in `paramRefs`.
@@ -258,7 +259,7 @@ export function unevalWire(e: WireEmission): EmittedWire {
         span,
         `"${name}" is a port-reaching top-level define (wireframe material) — a wire may only ` +
           `reference it as a CALL (which cuts to a template-ref node), never capture it as a value; ` +
-          `carrying it by name would let γ re-invoke its ports on replay (§1 EXCLUDED, R1)`,
+          `carrying it by name would let γ re-invoke its ports on replay`,
       );
     }
     if (e.preludeNames.has(name)) continue; // pure prelude — reference BY NAME

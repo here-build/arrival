@@ -28,11 +28,9 @@
  *   - `localBits` is a proxy (count of a representative instance's immediate
  *     plumbing children); `distinctShapes` defaults to 1 (structural shape-class
  *     detection across instances is the next step).
- *   - Loop bodies now nest correctly (the loop box is the recursive function's
- *     BODY scope — entered ×K, including the first call — so the per-iteration
- *     work nests under one box; see the loop-detection comment below). The prior
- *     gap (loop boxed at the call-site → first iteration's map orphaned at root)
- *     is fixed.
+ *   - Loop bodies nest correctly: the loop box is the recursive function's BODY
+ *     scope — entered ×K, including the first call — so the per-iteration work
+ *     nests under one box (see the loop-detection comment below).
  *   - Accessor macros (`field`/`@`) expand to a `cond` the classifier currently
  *     sees as a dnf box (minor noise; refine by skipping macro-internal forms).
  */
@@ -65,7 +63,7 @@ export interface CandidateBox {
   localBits: number;
   /** External bindings the box connects to — encoded once in the definition AND
    *  per reference (the residual identification cost AST-licensing does NOT make
-   *  free; adversarial-review finding 2). Default 0. */
+   *  free). Default 0. */
   boundaryPorts?: number;
   /** Number of DISTINCT structural sub-DAG shapes across the n instances. 1 ⇒
    *  uniform (collapse is residual-free). k>1 ⇒ a collapsed box must encode a
@@ -73,7 +71,7 @@ export interface CandidateBox {
    *  residual, kept STRUCTURAL (topology) so the layout stays value-stable.
    *  Default 1. */
   distinctShapes?: number;
-  /** Override the MDL decision (design §4.6 / §5.4 marks-as-override). Unset ⇒
+  /** Override the MDL decision (marks-as-override). Unset ⇒
    *  the optimizer decides ("suggested"). `"collapsed"` ⇒ always a box
    *  ("forced", e.g. a promoted user-define). `"expanded"` ⇒ always flattened
    *  (force-suppress a box the MDL wanted). The human's deliberate disagreement
@@ -236,9 +234,9 @@ export function traceToForest(trace: EvalTrace, opts: ForestOptions = {}): Candi
   // A loop = a self-recursive function. We box its BODY (the lambda-body scope,
   // entered once per iteration — INCLUDING the first, top-level call), NOT the
   // recursive call-site. The body Pair telescopes all K iterations into one ×K
-  // box and the per-iteration work (map / infer / …) nests under it; the
-  // call-site fires only K−1 times and orphans the first iteration's body at root
-  // (the old behaviour — see the trace: `loop`-call ⊃ `let`-body ⊃ {work, `if` ⊃
+  // box and the per-iteration work (map / infer / …) nests under it; boxing the
+  // call-site instead would fire only K−1 times and orphan the first iteration's
+  // body at root (the trace shape: `loop`-call ⊃ `let`-body ⊃ {work, `if` ⊃
   // recursive `loop`-call ⊃ `let`-body ⊃ …}).
   //
   // Two steps:
