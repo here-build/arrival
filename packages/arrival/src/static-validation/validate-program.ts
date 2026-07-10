@@ -1,29 +1,27 @@
-// validate-program — the STATIC VALIDATION PASS (docs/working-proposals/symbol-define-
-// static-program-validation.md §3, wave W3): the compiler's front door, not a provenance
-// artifact (provenance/ modules CONSUME forms; this one JUDGES them). Composes the
-// landed machinery — the reference walk (collect-references.ts), the §3.2 graph
-// (reference-graph.ts), the assembled vocabulary (vocabulary.ts), W0's introspectable
-// doors, W2's degradation-minted causes, and the landed `suggestFromVocabulary` — into
-// ONE eslint-style pass: the COMPLETE `Diagnostic[]`, never crash-on-first. Only the
-// CALLER decides to throw (`exec` aggregates error-tier diagnostics into one
+// validate-program — the STATIC VALIDATION PASS: the compiler's front door, not a
+// provenance artifact (provenance/ modules CONSUME forms; this one JUDGES them).
+// Composes the landed machinery — the reference walk (collect-references.ts), the
+// graph (reference-graph.ts), the assembled vocabulary (vocabulary.ts), the
+// introspectable doors, the degradation-minted causes, and `suggestFromVocabulary` —
+// into ONE eslint-style pass: the COMPLETE `Diagnostic[]`, never crash-on-first. Only
+// the CALLER decides to throw (`exec` aggregates error-tier diagnostics into one
 // `StaticValidationError` at parse phase, before the first form evaluates).
 //
-// THE SOUNDNESS CONTRACT (§3.5, binding): the `error` tier advertises no spurious
+// THE SOUNDNESS CONTRACT (binding): the `error` tier advertises no spurious
 // `unbound-symbol` errors MODULO the EXCLUDED reachability strictness — a dead-branch
 // reference (`(if #f (missing) 42)`) reports BY DESIGN (dead references are drift) and
 // is not a false positive; it is the one deliberate divergence from runtime semantics,
-// opt-out documented on the exec knob. The four rev2 leaks are closed by construction:
+// opt-out documented on the exec knob. Four leak sources are closed by construction:
 // (1) SPECIAL_FORMS/keyword heads — the unconditional KEYWORD_SYNTAX baseline
 // (vocabulary.ts); (2) binder-macro formals — the ternary firewall ("binder" is
-// opaque-equivalent until a binding-aware walker exists, §3.4); (3) program-level
+// opaque-equivalent until a binding-aware walker exists); (3) program-level
 // `define-macro`/`define-syntax` names — the macro-aware first sweep below; (4)
-// internal-define sequences — the walker's body-sequence letrec* pre-pass (option (i),
-// IMPLEMENTED — no warning demotion needed). Anything the pass cannot prove degrades to
-// `warning` (the impure-resolver switch) or is not emitted (the macro firewall).
-// Suggestions are the one explicitly-heuristic channel, labeled ("did you mean") and
-// bound by the §3.3a soundness law below.
+// internal-define sequences — the walker's body-sequence letrec* pre-pass. Anything the
+// pass cannot prove degrades to `warning` (the impure-resolver switch) or is not
+// emitted (the macro firewall). Suggestions are the one explicitly-heuristic channel,
+// labeled ("did you mean") and bound by the suggestion-soundness law below.
 //
-// DISPLAY DISCIPLINE (§3.1, prior-art CHOSEN — Unison): a content hash NEVER appears in
+// DISPLAY DISCIPLINE (same posture as Unison): a content hash NEVER appears in
 // diagnostic text; every identity resolves to `name @ capability`. Enforced by these
 // assemblers — no Diagnostic field carries a hash.
 
@@ -37,27 +35,27 @@ import { collectReferences, definitionOf, type MacroWalkAttribute } from "./coll
 import { buildReferenceGraph, type DoorNode, type MissingConfigNode, type ReferenceNode } from "./reference-graph.js";
 import type { ProgramVocabulary, VocabularyEntry } from "./vocabulary.js";
 
-/** ONE reference site — where the program touched the problem (§3.1). `span` is the
- *  referencing Pair's location (Q6-total through the reader); the zero location stands
- *  in only for a form with no located enclosing Pair (a bare top-level symbol handed
- *  in synthetically). */
+/** ONE reference site — where the program touched the problem. `span` is the
+ *  referencing Pair's location (the reader guarantees every Pair carries one); the
+ *  zero location stands in only for a form with no located enclosing Pair (a bare
+ *  top-level symbol handed in synthetically). */
 export interface SiteRef {
   readonly symbol: string;
   readonly span: SourceLocation;
 }
 
-/** CASCADE FUSION (§3.1, prior-art CHOSEN — Elm/ESLint synthesis): a Diagnostic is
- *  keyed by its CAUSE and carries the COMPLETE list of sites that cause explains. One
- *  missing `fs` key disabling require + require/extension, referenced 7 times, is ONE
- *  diagnostic with 7 sites — never 7 diagnostics. The grouping key is the CURE: the
- *  config key for bucket c, the door for bucket b, the unknown NAME for bucket a. */
+/** CASCADE FUSION (same posture as Elm/ESLint): a Diagnostic is keyed by its CAUSE and
+ *  carries the COMPLETE list of sites that cause explains. One missing `fs` key
+ *  disabling require + require/extension, referenced 7 times, is ONE diagnostic with 7
+ *  sites — never 7 diagnostics. The grouping key is the CURE: the config key for
+ *  bucket c, the door for bucket b, the unknown NAME for bucket a. */
 export interface Diagnostic {
   readonly severity: "error" | "warning";
-  readonly code: // closed vocabulary, additive (§3.1)
+  readonly code: // closed vocabulary, additive
     | "unbound-symbol" // bucket a (key: the unknown name)
     | "bound-to-door" // bucket b (key: the door — a cause-less/needs-less door's own teaching reason is the cure)
     | "missing-configuration" // bucket c (key: the config key — assembled mode: a door whose need is config)
-    | "arity-mismatch"; // bucket d — DEFERRED, no producer this wave (§3.3d)
+    | "arity-mismatch"; // bucket d — DEFERRED, no producer yet
   /** Every reference this ONE cause explains, in program order — never a lone "first site". */
   readonly sites: readonly SiteRef[];
   /** Host-facing: cause first, then the site list. Identities as `name @ capability`, never a hash. */
@@ -66,12 +64,12 @@ export interface Diagnostic {
   readonly publicMessage: string;
   /** Buckets b/c — the causal chain, structured (door → owner → needs). */
   readonly cause?: DoorCause;
-  /** Bucket a — the SOUND subset only (§3.3a law): candidates that would themselves
+  /** Bucket a — the SOUND subset only: candidates that would themselves
    *  VALIDATE under the present grants; a door is NEVER offered as a typo fix. */
   readonly suggestions?: readonly string[];
 }
 
-/** The eslint discipline as an API shape (§3.1): the pass RETURNS, the caller throws.
+/** The eslint discipline as an API shape: the pass RETURNS, the caller throws.
  *  `exec` wraps error-tier diagnostics in this, one per line, at parse phase. */
 export class StaticValidationError extends Error {
   readonly diagnostics: readonly Diagnostic[];
@@ -92,9 +90,9 @@ const siteOf = (name: string, ref: ReferenceNode): SiteRef => ({ symbol: name, s
 const at = (s: SiteRef): string => `${s.span.line}:${s.span.col}`;
 const siteList = (sites: readonly SiteRef[]): string => sites.map(at).join(", ");
 
-/** The §3.2 macro-aware FIRST SWEEP: the program's own top-level definition names —
+/** The macro-aware FIRST SWEEP: the program's own top-level definition names —
  *  `define` (values) vs `define-macro`/`define-syntax` (macros; their call-site
- *  interiors keep the §3.4 firewall). Recurses through top-level `(begin …)` splices
+ *  interiors keep the firewall). Recurses through top-level `(begin …)` splices
  *  (R7RS §5.6.1). A program's forward reference between its own top-level forms is
  *  ordinary top-level semantics, never a diagnostic. */
 function collectProgramDefinitions(forms: readonly SchemeValue[]): {
@@ -121,19 +119,19 @@ function collectProgramDefinitions(forms: readonly SchemeValue[]): {
 }
 
 /**
- * THE PASS (§3.1's contract, verbatim shape): parsed program forms × a vocabulary →
- * the COMPLETE diagnostic list. NEVER throws on program content; ALWAYS returns every
- * diagnostic the graph queries yield, ordered by first reference site.
+ * THE PASS: parsed program forms × a vocabulary → the COMPLETE diagnostic list. NEVER
+ * throws on program content; ALWAYS returns every diagnostic the graph queries yield,
+ * ordered by first reference site.
  */
 export function validateProgram(
   forms: readonly SchemeValue[],
   vocabulary: ProgramVocabulary,
 ): readonly Diagnostic[] {
-  // Sweep 1 — the program's own definition names (macro-aware, §3.2).
+  // Sweep 1 — the program's own definition names (macro-aware).
   const defs = collectProgramDefinitions(forms);
 
-  // Sweep 2 — the site-collecting reference walk, per top-level form, with the §3.4
-  // ternary firewall composed from program macros (always "opaque" — unaudited) and
+  // Sweep 2 — the site-collecting reference walk, per top-level form, with the ternary
+  // firewall composed from program macros (always "opaque" — unaudited) and
   // the vocabulary's declared attributes.
   const macroPolicyOf = (name: string): MacroWalkAttribute | undefined => {
     if (defs.macros.has(name)) return "opaque";
@@ -144,7 +142,7 @@ export function validateProgram(
     collectReferences(form, { initialBound: defs.values, macroPolicyOf }),
   );
 
-  // The §3.2 graph — missing things as first-class nodes.
+  // The graph — missing things as first-class nodes.
   const resolve = (name: string): VocabularyEntry | { readonly kind: "program" } | undefined =>
     defs.values.has(name) || defs.macros.has(name) ? { kind: "program" } : vocabulary.lookupStatic(name);
   const graph = buildReferenceGraph(occurrences, resolve);
@@ -154,7 +152,7 @@ export function validateProgram(
   const diagnostics: { firstOrder: number; diagnostic: Diagnostic }[] = [];
 
   // Bucket a — `unbound-symbol`: one diagnostic per MissingSymbolNode, all sites
-  // attached. Suggestions from the SATISFIED subset only (§3.3a law): a door is never
+  // attached. Suggestions from the SATISFIED subset only: a door is never
   // offered as a typo fix — a suggestion that immediately re-errors on the next
   // round-trip destroys agent trust faster than no suggestion. Composes mechanically:
   // filter the candidate iterable before the landed `suggestFromVocabulary`.
@@ -173,7 +171,7 @@ export function validateProgram(
     const sites = node.references.map((r) => siteOf(node.name, r));
     const suggestions = suggestFromVocabulary(node.name, satisfied);
     const hint = suggestions.length === 0 ? "" : ` — did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`;
-    // §3.5's impure-resolver downgrade: honesty over strictness, per-chain, visible.
+    // The impure-resolver downgrade: honesty over strictness, per-chain, visible.
     const impure = vocabulary.hasImpureResolver;
     const message =
       `Unbound symbol \`${node.name}\`${hint} Referenced at ${siteList(sites)}` +
@@ -236,7 +234,7 @@ export function validateProgram(
   return diagnostics.toSorted((a, b) => a.firstOrder - b.firstOrder).map((d) => d.diagnostic);
 }
 
-/** The flagship message (§5.1, derived mechanically by walking the graph path —
+/** The flagship message (derived mechanically by walking the graph path —
  *  every clause is a node or edge, identities as `name @ capability`, never a hash):
  *
  *    Configuration key `fs` (a filesystem) was not provided in the exec
@@ -263,7 +261,7 @@ function missingConfigDiagnostic(cfg: MissingConfigNode, referencedDoors: readon
     `configuration key "${cfg.key}" is missing: ${referencedDoors.map((d) => d.name).join(", ")} cannot run without it. ` +
     `Add "${cfg.key}" to the exec configuration to enable ${referencedDoors.length === 1 ? "it" : "them"}.`;
   // The structured causal chain: the first referenced door's stamped cause carries
-  // owner + needs (W0's shape) — the machine-readable dual of the prose above.
+  // owner + needs — the machine-readable dual of the prose above.
   const cause = referencedDoors.map((d) => d.door.cause).find((c) => c !== undefined);
   return {
     severity: "error",

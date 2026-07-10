@@ -310,10 +310,10 @@ function returnType(output: z.ZodTypeAny): string {
  */
 export function signatureOf(def: AEntity): string {
   // door = omitted verb (not callable); keyword = special-form syntax; macro / define-syntax
-  // = a non-evaluating transformer (syntax, not a value-level callable — a `symbol.define
-  // Syntax` body's "free variables" name the EXPANSION env, a categorically different story,
-  // symbol-define-static-program-validation.md §1.1). None carries an in/out codec surface, so
-  // all print as `never` until the type-lens grows a dedicated syntax representation.
+  // = a non-evaluating transformer (syntax, not a value-level callable — a `symbol.defineSyntax`
+  // body's "free variables" name the EXPANSION env, a categorically different story from a
+  // value-level callable's argument list). None carries an in/out codec surface, so all print
+  // as `never` until the type-lens grows a dedicated syntax representation.
   if (def.kind === "door" || def.kind === "keyword" || def.kind === "macro" || def.kind === "define-syntax") {
     return "never";
   }
@@ -326,7 +326,7 @@ export function signatureOf(def: AEntity): string {
   try {
     // A `symbol.define` CONSTANT (`callable: false`) is a plain VALUE, not a call
     // boundary — harvests as its bare return type (`declare const x: T;`), never an
-    // arrow (`in`/`out` still normalize to the 0-ary-procedure convention, §1.5, so
+    // arrow (`in`/`out` still normalize to the 0-ary-procedure convention, so
     // `paramList(def.in)` would print a spurious `()` param list for it).
     if (def.kind === "define" && !def.callable) return returnType(def.out);
     const params = paramList(def.in);

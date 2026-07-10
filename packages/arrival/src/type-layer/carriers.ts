@@ -1,5 +1,4 @@
-// carriers — the type-layer's carrier vocabulary (R3, spike-proven; see
-// docs/working-proposals/arrival-type-layer-rework.md §3).
+// carriers — the type-layer's carrier vocabulary.
 //
 // "Scheme is a TS subset except lists and pairs." These are the *only* hand-written
 // generic types — the closed tagless algebra zod cannot express. The harvested tool
@@ -51,7 +50,7 @@ export declare function filter<T>(p: (x: T) => unknown, xs: readonly T[]): reado
 export declare function reduce<T, A>(f: (acc: A, x: T) => A, init: A, xs: List<T> | readonly T[]): A;
 export declare function length(xs: List<unknown> | readonly unknown[] | string): number;
 
-// ── the slot probes (the lens's narrowing queries; see §7) ────────────────────
+// ── the slot probes (the lens's narrowing queries) ────────────────────────────
 // `NonNullable<S>` strips the empty-list null AND optional null/undefined before classifying.
 
 /** 3-way slot verdict: list / vector / string / scalar. */
@@ -109,7 +108,7 @@ export declare const s: {
   case(...args: unknown[]): unknown;
 };
 
-// ── the reachability query (the list-slot gate; see §7) ───────────────────────
+// ── the reachability query (the list-slot gate) ───────────────────────────────
 // At a List slot after `(`, admit a head iff its return COULD be a list — mask only
 // PROVABLY non-list. The `[unknown] extends [R]` arm is the nuke-guard: a generic / `if`
 // / union return resolves to `unknown` and ADMITS, so we never block `(if …)`/`car`/etc.

@@ -1,35 +1,34 @@
-// collect-references — the validator's SITE-COLLECTING, scope-correct reference walk
-// (docs/working-proposals/symbol-define-static-program-validation.md §3.2/§3.3a/§3.4/§3.5,
-// wave W3). Produces one `ReferenceOccurrence` per lexically-FREE symbol occurrence, in
-// program order, each carrying the span of its innermost enclosing located Pair — the
-// `ReferenceNode` raw material the §3.2 reference graph is built from.
+// collect-references — the validator's SITE-COLLECTING, scope-correct reference walk.
+// Produces one `ReferenceOccurrence` per lexically-FREE symbol occurrence, in program
+// order, each carrying the span of its innermost enclosing located Pair — the raw
+// material a `ReferenceNode` reference graph is built from.
 //
-// WHY NOT `provenance/wireframe/free-vars.ts` (Q8a) directly: that walker answers the
+// WHY NOT `provenance/wireframe/free-vars.ts` directly: that walker answers the
 // wire-locality LAW — a *set* of names, no spans, and deliberately conservative in the
 // OVER-approximating direction (an unmodeled head walks as a plain application, so a
 // missed binder yields an extra "free" name — harmless for a locality check, poison for
 // an error-tier diagnostic). This walker shares free-vars' binder arms 1:1 (the same
 // local-copy convention prelude.ts/slice.ts/free-vars.ts each document) and extends them
-// with exactly what the §3.5 soundness contract demands and a set-shaped FV cannot carry:
+// with exactly what an error-tier soundness contract demands and a set-shaped FV cannot
+// carry:
 //
 //   • SITES — every occurrence is (name × span), not a deduplicated name;
-//   • the §3.4 MACRO FIREWALL — a call head resolving to a macro walks its interior by
-//     the ternary `macroAttribute`: "expression" ⇒ arguments are ordinary expression
-//     space; "opaque"/"binder" ⇒ the interior contributes NOTHING (under-report, never
-//     lie — a binder macro's formals are NOT expression space, and walking them as such
-//     is the exact false positive rev 2 closed);
+//   • the MACRO FIREWALL — a call head resolving to a macro walks its interior by the
+//     ternary `macroAttribute`: "expression" ⇒ arguments are ordinary expression space;
+//     "opaque"/"binder" ⇒ the interior contributes NOTHING — under-report, never lie. A
+//     binder macro's formals are NOT expression space; walking them as such would be a
+//     false positive;
 //   • `try` scope-correctness — `(try body (catch (var) handler…) (finally …))` binds
 //     the catch variable for its handlers; the clause markers `catch`/`finally` are
-//     structural literals, never references (the §3.5 "while/try heads on pure programs"
-//     no-FP row);
+//     structural literals, never references;
 //   • `define-macro`/`define-syntax` interiors are SKIPPED entirely — a macro body's
-//     "free variables" name the EXPANSION env (§1.1), categorically outside this pass;
-//   • INTERNAL-DEFINE letrec* scoping (§3.5's W3 prerequisite, option (i)) — every body
-//     SEQUENCE pre-collects its define/define-macro/define-syntax names before walking
-//     any of its forms, so `(define (a) (b)) (define (b) 1)` sibling references are
-//     bound in both directions. The pre-pass collects defines ANYWHERE in the sequence
-//     (not only R7RS §5.3.2's leading run) — over-binding relative to the spec's
-//     letter, which UNDER-reports: the safe direction for the error tier.
+//     "free variables" name the EXPANSION env, categorically outside this pass;
+//   • INTERNAL-DEFINE letrec* scoping — every body SEQUENCE pre-collects its
+//     define/define-macro/define-syntax names before walking any of its forms, so
+//     `(define (a) (b)) (define (b) 1)` sibling references are bound in both directions.
+//     The pre-pass collects defines ANYWHERE in the sequence (not only R7RS §5.3.2's
+//     leading run) — over-binding relative to the spec's letter, which UNDER-reports:
+//     the safe direction for the error tier.
 //
 // Non-variables, excluded by construction (mirrors free-vars): keyword symbols (`:foo`),
 // gensyms (raw-`symbol` names), quoted/vector datum contents. LIMIT (shared with
@@ -41,10 +40,10 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import type { SourceLocation } from "../errors.js";
 import type { SchemeValue } from "../values/types.js";
 
-/** The §3.4 ternary walk attribute (mirrors `DefineSyntaxSymbolDef["macroAttribute"]`). */
+/** The macro-firewall ternary walk attribute (mirrors `DefineSyntaxSymbolDef["macroAttribute"]`). */
 export type MacroWalkAttribute = "opaque" | "expression" | "binder";
 
-/** One lexically-free symbol occurrence — the raw material of a §3.2 `ReferenceNode`.
+/** One lexically-free symbol occurrence — the raw material of a `ReferenceNode`.
  *  `span` is the innermost enclosing located Pair's location (symbols themselves carry
  *  no `__location__`; only Pairs do — reader/Parser.ts) — `undefined` only for a form
  *  with no located enclosing Pair (a bare top-level symbol, or synthetic input). */
@@ -55,11 +54,11 @@ export interface ReferenceOccurrence {
 
 export interface CollectReferencesOptions {
   /** Names bound OUTSIDE the walked form that must not report — the program's own
-   *  top-level VALUE definition names (the §3.2 macro-aware first sweep's `define`
+   *  top-level VALUE definition names (the macro-aware first sweep's `define`
    *  arm; its macro names travel through `macroPolicyOf` instead, so their call-site
    *  interiors keep the firewall). */
   readonly initialBound?: ReadonlySet<string>;
-  /** The §3.4 ternary policy for a call head that is not lexically shadowed:
+  /** The macro-firewall ternary policy for a call head that is not lexically shadowed:
    *  `"expression"` walks arguments normally, `"opaque"`/`"binder"` firewall the
    *  interior, `undefined` means "not a macro" (ordinary application walk). */
   readonly macroPolicyOf?: (name: string) => MacroWalkAttribute | undefined;
@@ -112,7 +111,7 @@ function formalNames(formals: unknown): string[] {
 
 /** The name a top-level-shaped `define`/`define-macro`/`define-syntax` form binds —
  *  `(define (f . a) …)` / `(define f …)` / `(define-macro (m . a) …)` /
- *  `(define-syntax s …)` — with WHICH head bound it (the §3.2 first sweep needs the
+ *  `(define-syntax s …)` — with WHICH head bound it (the first sweep needs the
  *  kind split: `define` names are values, the other two are macros). Null for
  *  anything else. The same recognizer shape as define-bake.ts's private
  *  `defineHeadNameOf` (the local-copy convention — each file re-derives its tiny
@@ -151,7 +150,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
     out.push({ name, span });
   };
 
-  /** Walk a BODY SEQUENCE with the §3.5 internal-define letrec* pre-pass: the
+  /** Walk a BODY SEQUENCE with the internal-define letrec* pre-pass: the
    *  sequence's own definition names bind for EVERY form in it, both directions. */
   const walkBody = (body: unknown, bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
     const forms = chainOf(body);
@@ -298,7 +297,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
           }
           case "define-macro":
           case "define-syntax":
-            // A macro body's "free variables" name the EXPANSION env (§1.1) —
+            // A macro body's "free variables" name the EXPANSION env —
             // categorically outside this pass. The bound NAME is collected by the
             // first sweep / body pre-pass; the interior contributes nothing.
             return;
@@ -368,7 +367,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
             return;
           }
           default: {
-            // The §3.4 macro firewall. The head ITSELF is still a reference (a
+            // The macro firewall. The head ITSELF is still a reference (a
             // doored macro name must reach the graph), emitted through the ordinary
             // symbol walk below when unbound-at-this-scope... except it IS by
             // construction resolvable (the policy came from the vocabulary), so
@@ -381,7 +380,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
               }
               // "opaque" | "binder": interior contributes NOTHING (under-report,
               // never lie) — binder walks need per-macro binding metadata a
-              // one-of-three enum cannot carry (§3.4's CHOSEN row).
+              // one-of-three enum cannot carry.
               return;
             }
             break; // unknown head → application walk below

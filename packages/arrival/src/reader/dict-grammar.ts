@@ -3,10 +3,9 @@
 // mints here; the infix ban door and the evaluator's quasiquote re-instantiation are the
 // other mouths). The NODE ITSELF — its type, its detection, its dual data/code nature —
 // is ADict's own algebra: see `ADict.isDictLiteral` / `DictLiteralNode`
-// (values/primitives/ADict.ts), where the `literalForms` field lives
-// (docs/working-proposals/dict-literal-true-shape.md — the datum face of `{…}` is an
-// ADict, the same in-class pattern AVector uses for `[…]`; AJSObject exited the
-// dict-literal syntax business entirely).
+// (values/primitives/ADict.ts), where the `literalForms` field lives. The datum face of
+// `{…}` is an ADict — the same in-class pattern AVector uses for `[…]`; AJSObject plays
+// no part in the dict-literal syntax.
 //
 // The dual nature (why the node is an ADict and not a distinct AST kind):
 //   - CODE position: the evaluator lowers the node ONCE (cached) to the equivalent
@@ -20,7 +19,6 @@
 //
 // Keys are read-time-static (`:keyword` / `"string"`, both folding to the same string
 // key) or unquote forms (quasiquote-substituted keys, validated post-substitution).
-// See docs/working-proposals/arrival-curly-vector-literals.md.
 import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/ADict.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
@@ -43,7 +41,7 @@ export function staticDictKey(datum: SchemeValue): string | null {
   return null;
 }
 
-/** The SUFFIX-KEYWORD FLIP (spec: "The suffix-keyword flip"): at KEY position inside a
+/** The SUFFIX-KEYWORD FLIP: at KEY position inside a
  *  `{}` literal, a symbol token with a SINGLE trailing colon is an explicit key
  *  declaration — `{flight_number: "X"}` ≡ `{:flight_number "X"}` (the trailing colon is
  *  the commitment marker, symmetric to the `:x` prefix). Returns the flipped key name,

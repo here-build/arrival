@@ -319,8 +319,7 @@ export class Parser {
 
   /**
    * Gather the flat datum sequence between `[`…`]` / `{`…`}`, with POSITION-SCOPED
-   * comma separators (the JSON-gravity tolerance; see
-   * docs/working-proposals/arrival-curly-vector-literals.md "Commas and keys").
+   * comma separators (the JSON-gravity tolerance).
    *
    * A `,` is a SEPARATOR only where a JSON-writer would emit one: after a complete
    * element (`[1, 2]`), or for maps only after a complete key-value pair (an even
@@ -331,7 +330,8 @@ export class Parser {
    *
    * Maps also absorb at most one lone `:` token at an ODD boundary (right after a
    * complete key) — the verbatim-JSON string-key colon `{"a": 1}`. A GLUED `:1` is one
-   * keyword token and is NOT absorbed (see the spec's flip section).
+   * keyword token and is NOT absorbed (see `suffixKeyName` in dict-grammar.ts, the
+   * suffix-keyword flip).
    */
   private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
@@ -659,8 +659,7 @@ export class Parser {
       // `{…}` DICT literal (the ONLY `{}` grammar — R6: the reader's curly-infix mode
       // is deleted; there is no flag that reads `{}` any other way): `{:k v …}` ≡
       // `(dict :k v …)` in code position; data under quote. See read_literal_elements
-      // (comma rule) / make_dict_literal (key doors, including the infix-intent ban)
-      // and docs/working-proposals/arrival-curly-vector-literals.md.
+      // (comma rule) / make_dict_literal (key doors, including the infix-intent ban).
       const elements = await this.read_literal_elements("}", true, "dict literal");
       return this.make_dict_literal(elements, loc ?? undefined);
     } else if (this.is_curly_close(token)) {

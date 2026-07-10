@@ -10,12 +10,12 @@
 // It is a SEPARATE export (not a QueryLens method) so the decode gate's five methods stay
 // byte-identical — a diagnose is a whole-program probe, a different function shape.
 //
-// ADVISORY, NOT BLOCKING (V, 2026-07-04): these diagnostics are WARNINGS. The type-hint
-// surface is telemetry-first and never gates execution — `diagnose` only OBSERVES a throwaway
+// ADVISORY, NOT BLOCKING: these diagnostics are WARNINGS. The type-hint surface is
+// telemetry-first and never gates execution — `diagnose` only OBSERVES a throwaway
 // program; it never rejects, throws-on-diagnostic, or changes what runs. The consumer
 // (manifold's select/render/deliver) treats every result as "here's a possible problem".
 //
-// The context region is a RECIPE (doc §9a): `contextDefines` are the prior iterations'
+// The context region is a RECIPE: `contextDefines` are the prior iterations'
 // `(define …)` SOURCE, re-lowered each call (homoiconicity → deterministic types). Diagnostics
 // inside the context region fall outside the current-program span-map and drop as unmappable.
 
@@ -33,7 +33,7 @@ export interface RawMappedDiagnostic {
   readonly code: number;
   /** Span in lowered-unit scheme coordinates (`forms[i].span` shifted by `programStartOffset`). */
   readonly span: readonly [start: number, end: number];
-  /** The raw TS message — INTERNAL ONLY, never rendered (doc §4: TS never leaks). */
+  /** The raw TS message — INTERNAL ONLY, never rendered (TS never leaks to the surface). */
   readonly tsMessage: string;
   readonly expected?: string; // TS type string of the expected type, when applicable
   readonly actual?: string; //  TS type string of the actual type, when applicable
@@ -68,7 +68,7 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
     diagnose(programSource, contextDefines, options) {
       const codes = options?.codes;
 
-      // Context region = recipe: re-lower each prior define's SOURCE (doc §9a). Its scheme
+      // Context region = recipe: re-lower each prior define's SOURCE. Its scheme
       // length sets programStartOffset; its lowered TS sits between prelude and program in the
       // probe, and its diagnostics drop as unmappable (outside the current-program span-map).
       const contextScheme = contextDefines.join("\n");
@@ -112,7 +112,7 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
         const span = statementSpans[stmtIndex]!;
 
         const tsMessage = ts.flattenDiagnosticMessageText(d.messageText, " ");
-        // Whitelist gate (doc §9 decision 6): keep the diagnostic, but skip payload extraction
+        // Whitelist gate: keep the diagnostic, but skip payload extraction
         // for non-whitelisted codes (select.ts re-filters by whitelist downstream).
         if (codes !== undefined && !codes.includes(d.code)) {
           diagnostics.push({ code: d.code, span, tsMessage });
@@ -125,9 +125,9 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
   };
 }
 
-/** Structured payload per code (doc §3c). Every extraction is defensive: an un-locatable node
+/** Structured payload per code. Every extraction is defensive: an un-locatable node
  *  or a checker miss yields no payload (the diagnostic still carries code + span + message) —
- *  never a crash (doc §7 error path (c)). */
+ *  never a crash (payload extraction failure never propagates). */
 function extractPayload(
   checker: ts.TypeChecker,
   sourceFile: ts.SourceFile,
