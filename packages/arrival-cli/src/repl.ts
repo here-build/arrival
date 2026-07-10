@@ -17,6 +17,7 @@ import readline from "node:readline";
 import { execState, schemeToJs } from "@here.build/arrival";
 import { scan } from "@here.build/arrival/oracle";
 
+import type { ArmedCapabilities } from "./capabilities.js";
 import { budgets, loaderSession, printError, printValue } from "./session.js";
 
 const PROMPT = "arrival> ";
@@ -30,8 +31,10 @@ function closeable(src: string): boolean {
   }
 }
 
-export async function repl(): Promise<number> {
-  const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl");
+/** `armed` — the host-armed capability set (`--with` / config file), assembled into
+ *  the session ambient at start; the whole session sees one vocabulary. */
+export async function repl(armed?: ArmedCapabilities): Promise<number> {
+  const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl", armed);
   const interactive = process.stdin.isTTY === true;
   if (interactive) process.stderr.write("arrival repl — Ctrl-D exits\n");
 

@@ -24,6 +24,7 @@ import { parseArgs } from "node:util";
 
 import { exec, execState, LexicalScope, StaticValidationError } from "@here.build/arrival";
 
+import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { repl } from "./repl.js";
 import {
   budgets,
@@ -41,6 +42,13 @@ const USAGE = `usage: arrival <command>
   arrival repl              interactive session (persistent defines, Ctrl-D exits)
   arrival check <file.scm>  static diagnostics only — nothing is evaluated
 
+options:
+  --with <module>           arm a capability module (repeatable) — an npm package,
+                            package subpath, or ./relative path exporting
+                            EnvCapability instance(s)
+  --config <file>           config file (default: ./arrival.config.ts|.json) —
+                            { capabilities: [{ module, config? }…], config? }
+
 environment:
   ARRIVAL_HEAP_MAX          per-run allocation budget (default 100000000 cells)
   ARRIVAL_RUN_BUDGET_MS     wall-clock budget in ms   (default 300000)
@@ -54,7 +62,7 @@ async function readSource(file: string): Promise<string> {
   }
 }
 
-async function runFile(file: string): Promise<number> {
+async function runFile(file: string, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
   try {
     let values: unknown[];
@@ -63,7 +71,7 @@ async function runFile(file: string): Promise<number> {
       // can't see require-spilled bindings (see session.ts header) — runtime doors
       // remain the backstop, stated out loud.
       process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
-      const { ambient, scope } = await loaderSession(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`);
+      const { ambient, scope } = await loaderSession(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`, armed);
       try {
         values = await exec(source, { ambient, scope, ...budgets() });
       } finally {
@@ -71,7 +79,16 @@ async function runFile(file: string): Promise<number> {
       }
     } else {
       // THE CUT: default base, whole-program diagnostics before the first form fires.
-      values = await exec(source, { ...budgets(), staticValidation: "on" });
+      // Armed capabilities join the assembly (their declared symbols enter the
+      // validation vocabulary; `staticValidation: "on"` lowers them with
+      // `degradation: "doors"`, so a config-listed capability missing an optional
+      // enabling key reports the causal "provide X" diagnostic). Unarmed runs keep
+      // the byte-identical realm-default path.
+      values = await exec(source, {
+        ...budgets(),
+        staticValidation: "on",
+        ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
+      });
     }
     for (const v of values) printValue(v);
     return 0;
@@ -81,7 +98,7 @@ async function runFile(file: string): Promise<number> {
   }
 }
 
-async function checkFile(file: string): Promise<number> {
+async function checkFile(file: string, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
   if (usesRequire(source)) {
     // The pass would false-report every require-spilled name; it makes no claims here.
@@ -97,6 +114,9 @@ async function checkFile(file: string): Promise<number> {
       staticValidation: "on",
       scope: LexicalScope.fresh("arrival-check"),
       signal: controller.signal,
+      // Same arming as `run`'s validated path: declared symbols join the vocabulary,
+      // doors degradation reports absent optional config as its causal diagnostic.
+      ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
     });
     // Only an EMPTY program reaches here (no form ever touched the aborted signal).
     console.log(`${file}: ok`);
@@ -121,7 +141,11 @@ async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { help: { type: "boolean", short: "h" } },
+    options: {
+      help: { type: "boolean", short: "h" },
+      with: { type: "string", multiple: true },
+      config: { type: "string" },
+    },
   });
   if (values.help === true) {
     process.stdout.write(USAGE);
@@ -135,10 +159,13 @@ async function main(argv: string[]): Promise<number> {
         process.stderr.write(`arrival ${command}: missing <file.scm>\n${USAGE}`);
         return 2;
       }
-      return command === "run" ? runFile(file) : checkFile(file);
+      const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
+      return command === "run" ? runFile(file, armed) : checkFile(file, armed);
     }
-    case "repl":
-      return repl();
+    case "repl": {
+      const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
+      return repl(armed);
+    }
     case undefined:
       process.stderr.write(USAGE);
       return 2;

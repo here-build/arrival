@@ -91,6 +91,90 @@ describe("arrival repl", () => {
   });
 });
 
+describe("capability arming (--with / config file)", () => {
+  const greetCap = fixture("caps/greet.mjs");
+
+  it("run --with <path>: the module's EnvCapability exports are armed, its verb executes", () => {
+    const { code, stdout, stderr } = arrival(["run", "--with", greetCap, fixture("uses-greet.scm")]);
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(stdout).toContain("hello, world");
+  });
+
+  it("check --with <path>: armed symbols join the validation vocabulary", () => {
+    const { code, stdout } = arrival(["check", "--with", greetCap, fixture("uses-greet.scm")]);
+    expect(code).toBe(0);
+    expect(stdout).toContain("ok");
+  });
+
+  it("repl --with <path>: the session ambient carries the armed verb", () => {
+    const { code, stdout } = arrival(["repl", "--with", greetCap], "(greet)\n");
+    expect(code).toBe(0);
+    expect(stdout).toContain("hello, world");
+  });
+
+  it("unarmed: the same program fails validation with the standard unbound diagnostic", () => {
+    const { code, stdout } = arrival(["check", fixture("uses-greet.scm")]);
+    expect(code).toBe(1);
+    expect(stdout).toMatch(/unbound symbol `greet`/i);
+  });
+
+  it("non-capability module: teaching error naming what was found and what was expected", () => {
+    const { code, stderr } = arrival(["run", "--with", fixture("caps/not-a-capability.mjs"), fixture("uses-greet.scm")]);
+    expect(code).toBe(1);
+    expect(stderr).toContain("not a capability module");
+    expect(stderr).toContain("default (function)");
+    expect(stderr).toContain("helper (number)");
+    expect(stderr).toContain("EnvCapability");
+  });
+
+  it("--config <file>: config-file arming, per-capability config slice reaches the capability", () => {
+    const { code, stdout, stderr } = arrival([
+      "run",
+      "--config",
+      fixture("config-armed/arrival.config.json"),
+      fixture("uses-config-greet.scm"),
+    ]);
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(stdout).toContain("hello, from-config-file");
+  });
+
+  it("arrival.config.json auto-discovers from cwd", () => {
+    const res = spawnSync(
+      process.execPath,
+      [CLI, "run", fixture("uses-config-greet.scm")],
+      { encoding: "utf8", timeout: 90_000, cwd: fixture("config-armed") },
+    );
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("hello, from-config-file");
+  });
+
+  it("arrival.config.ts loads via native type stripping (node ≥ 22.18)", () => {
+    const res = spawnSync(
+      process.execPath,
+      [CLI, "run", fixture("uses-config-greet.scm")],
+      { encoding: "utf8", timeout: 90_000, cwd: fixture("config-ts") },
+    );
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("hello, from-ts-config");
+  });
+
+  it("config-listed capability missing its enabling key: the degradation door's causal diagnostic", () => {
+    const { code, stdout } = arrival([
+      "check",
+      "--config",
+      fixture("config-degraded/arrival.config.json"),
+      fixture("uses-config-greet.scm"),
+    ]);
+    expect(code).toBe(1);
+    // Bucket c (missing-configuration): reference → door → owner → missing key, with the cure.
+    expect(stdout).toContain("Configuration key `greeting`");
+    expect(stdout).toContain("greet/configured @ fixture/config-greet");
+    expect(stdout).toContain("Provide `greeting` to enable it");
+  });
+});
+
 describe("arrival (dispatch)", () => {
   it("no command: usage on stderr, exit 2", () => {
     const { code, stderr } = arrival([]);

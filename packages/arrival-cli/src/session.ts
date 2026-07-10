@@ -33,6 +33,8 @@ import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env"
 import { arrivalLoaderCapability } from "@here.build/arrival/loader";
 import { toSExprString } from "@here.build/arrival-serializer";
 
+import type { ArmedCapabilities } from "./capabilities.js";
+
 /** Per-run ALLOCATION cap — same default + env var as arrival-run's entry point. */
 function heapDefault(): number {
   const raw = Number(process.env.ARRIVAL_HEAP_MAX);
@@ -68,14 +70,25 @@ export interface LoaderSession {
  * per session: `scope` accumulates defines across calls (`execState(src, {
  * ambient, scope })`, the REPL continuation idiom) and the require cache lives
  * for the ambient's lifetime — dispose it when the session (run/repl) ends.
+ *
+ * `armed` — the HOST-armed capability set (`--with` / config file, see
+ * capabilities.ts): appended after the loader capability, its shared config bag
+ * spread UNDER the loader's own keys (`fs`/`dirname` stay CLI-owned — a config
+ * file must not re-root the require jail). `degradation: "doors"` is the
+ * program-scoped posture (degradation.ts's caller split): an armed capability
+ * missing an OPTIONAL enabling config key binds a cause-carrying door that
+ * teaches "provide X" at the reference, instead of silently withholding into a
+ * bare unbound throw. The loader itself is unaffected — `fs` is always supplied.
  */
-export async function loaderSession(root: string, name: string): Promise<LoaderSession> {
+export async function loaderSession(root: string, name: string, armed?: ArmedCapabilities): Promise<LoaderSession> {
   const ambient = await assembleAmbient({
-    capabilities: [arrivalLoaderCapability],
+    capabilities: [arrivalLoaderCapability, ...(armed?.capabilities ?? [])],
     config: {
+      ...armed?.config,
       fs: { readFile: (p: string) => fs.readFile(path.resolve(root, p), "utf8") },
       dirname: "",
     },
+    degradation: "doors",
   });
   const scope = LexicalScope.fresh(name);
   return { ambient, scope };
