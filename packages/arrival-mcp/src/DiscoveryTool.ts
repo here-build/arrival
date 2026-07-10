@@ -5,7 +5,8 @@
 // aggregating `McpEnvCapability` (`env`):
 //   • input schema = { expr, intent } ∪ the capability's `configuration` (the actor's typed args)
 //   • catalog      = `capability.allAnnotations()` (verbs, descriptions, dynamicDescription, aliases)
-//   • eval         = assembleEnv(base, [capability.lower({ config })]) then execSerialized
+//   • eval         = assembleAmbient({ capabilities: [capability], config }) — the exec-phases
+//                    phase-2 product (R7) — then per-form execState over `{ ambient, scope }`
 //
 // The three host concerns enter at three membrane TIMES, never co-mingled:
 //   • eval-time  → the capability's `resources` (provider reads the per-call config; verbs read
@@ -17,16 +18,16 @@
 import {
   type RunCache,
   type RunCacheEntry,
-  type SchemeEnv,
   type SchemeValue,
   APair,
+  LexicalScope,
   execState,
   is_callable_value,
   parse,
   sandboxedEnv,
 } from "@here.build/arrival";
-import type { Activation, EnvCapability } from "@here.build/arrival/capability";
-import { assembleEnv } from "@here.build/arrival/env";
+import type { EnvCapability } from "@here.build/arrival/capability";
+import { type AssembledAmbient, assembleAmbient } from "@here.build/arrival/env";
 import {
   type ExtrasState,
   type SerializedExtra,
@@ -57,7 +58,7 @@ import {
   sessionConfigDigest,
 } from "./session-run-state.js";
 
-// ── execSerialized: run scheme, serialize each top-level form's value (inlined from the
+// ── execSerializedState: run scheme, serialize each top-level form's value (inlined from the
 // former @here.build/arrival umbrella — its only consumer was this tool). ──
 
 // Total serialized-output budget for one MCP tool result (~10k tokens). Motivated by the
@@ -68,9 +69,13 @@ const MCP_OUTPUT_BUDGET = 40_000;
 const perElementBudget = (count: number): number => Math.max(2_000, Math.floor(MCP_OUTPUT_BUDGET / Math.max(1, count)));
 
 interface ExecSerializedOptions {
-  /** A real, already-armed env — used directly. A plain bindings object (no `__env__` marker,
-   *  i.e. not a real `Environment`) is instead seeded into a fresh sandboxed child env. */
-  env?: SchemeEnv;
+  /** The call's assembled ambient (exec-phases phase-2 product, R7) — CALLER-owned; exec never
+   *  disposes it. Warm-reuse and per-call disposal are both DiscoveryTool's (ownership table). */
+  ambient: AssembledAmbient;
+  /** The session's lexical accumulation (phase 3's caller-passed scope) — top-level `define`s
+   *  land HERE, never on the ambient's env, so REPL continuity is the designed
+   *  `execState({ scope })` idiom rather than glass-env mutation. */
+  scope: LexicalScope;
   budgetMs?: number;
   /** Per-run allocation bound — see {@link defaultHeapBudget}. Undefined ⇒ unbounded (the `exec`
    *  primitive's own default; callers of this function always pass one, see `call` below). */
@@ -83,13 +88,13 @@ interface ExecSerializedOptions {
    *  §2.5's parse-first budget fix (closes §1.2's SUM regression: the per-exec
    *  `perElementBudget(results.length)` default sees one form per exec in the REPL split, so
    *  every form got the near-full budget and the batch SUM was unbounded). The REPL loop
-   *  (`runForms`) always passes `perElementBudget(forms.length)`; callers outside it
-   *  (`evalScheme`, the fold — whose output is discarded) keep the per-exec default. */
+   *  (`runForms`) always passes `perElementBudget(forms.length)`; the fold — whose output is
+   *  discarded — keeps the per-exec default. */
   charBudget?: number;
   /** R6 (§2.6): the call-level attachment numbering/quota. Present ⇒ values render through
    *  `serializeWithExtras` (binary leaves extracted into `extras`, ~40-char tags in the core
-   *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (`evalScheme` and the
-   *  fold — whose output is discarded — both stay here: no extraction work is wasted on them). */
+   *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (the fold — whose
+   *  output is discarded — stays here: no extraction work is wasted on it). */
   extrasState?: ExtrasState;
 }
 
@@ -154,14 +159,11 @@ function hostFace(value: SchemeValue): unknown {
  */
 async function execSerializedState(
   expr: string | SchemeValue,
-  options: ExecSerializedOptions = {},
+  options: ExecSerializedOptions,
 ): Promise<ExecSerializedOutcome> {
-  const env =
-    options.env !== undefined && "__env__" in options.env
-      ? options.env
-      : sandboxedEnv.inherit("sandbox", options.env as never);
   const state = await execState(expr, {
-    env: env as never,
+    ambient: options.ambient,
+    scope: options.scope,
     budgetMs: options.budgetMs,
     heapBudget: options.heapBudget,
     signal: options.signal,
@@ -194,13 +196,6 @@ async function execSerializedState(
   };
 }
 
-/** The serialize-only view of {@link execSerializedState} — the shape `evalScheme` consumes
- *  (no meter read wanted there; the fold and the REPL loop use the state variant). */
-async function execSerialized(expr: string | SchemeValue, options: ExecSerializedOptions = {}): Promise<string[]> {
-  const { out } = await execSerializedState(expr, options);
-  return out;
-}
-
 /** One positional zod arg rendered as a Scheme-doc type token for the catalog. */
 function argTypeName(item: z.ZodType): string {
   const opt = (() => {
@@ -219,10 +214,11 @@ function argTypeName(item: z.ZodType): string {
   return `value${opt}${desc}`;
 }
 
-// ── REPL sessions: statement log + first-class run cache (R3, §2.2/§2.4) ───────────────────────
-// A session's durable twin is `(log, cache)`. Live, the warm `(env)` pair is memoized on the
-// call's config digest — same digest ⇒ reuse (zero fold cost); changed ⇒ dispose the old env,
-// assemble fresh, drop the cache (configDigest is part of the cache-validity identity), and FOLD:
+// ── REPL sessions: statement log + first-class run cache (R3, §2.2/§2.4; R7 warm pair) ─────────
+// A session's durable twin is `(log, cache)`. Live, the warm `(AssembledAmbient, LexicalScope)`
+// pair is memoized on the call's config digest — same digest ⇒ reuse (zero fold cost); changed ⇒
+// dispose the old ambient, assemble fresh, drop the cache (configDigest is part of the
+// cache-validity identity), and FOLD:
 // re-run the log over the cache in replay mode, where every declared `view` penetration is
 // answered from the cache instead of re-fired, every `sink` tombstone skips, and `pure`/undeclared
 // statements re-run under their stable-behavior promise. The old statement-level `__cache__`
@@ -240,8 +236,8 @@ function defineName(canonicalSrc: string): string | undefined {
 // depth counter can misalign with the actual forms (e.g. a `#;` datum comment is consumed by the
 // real parser but still shows up as a token to a scanner), which would silently corrupt both the
 // execution unit and the cache key below. `parse` is the single source of truth for boundaries;
-// each form is then executed directly as a parsed AST via `execSerialized`'s low-level `exec`
-// path (never re-stringified-and-reparsed).
+// each form is then executed directly as a parsed AST via `execSerializedState`'s low-level
+// `execState` path (never re-stringified-and-reparsed).
 
 /** The next form (from `fromIndex` onward) that carries `[LOCATION]` metadata, or `undefined` if
  *  none of the remaining forms have one. Looking ahead past location-less forms guarantees a
@@ -391,10 +387,14 @@ export function defaultAttachmentQuota(): number {
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
-  /** Warm pairs, memoized on the call's config digest (§2.4's one warm-reuse rule): same digest
-   *  ⇒ reuse the live env (zero fold cost); changed ⇒ dispose the old, assemble fresh, fold.
-   *  Keyed by session id — per-session state lives with the session, never module-level. */
-  private readonly warm = new Map<string, { digest: string; env: SchemeEnv; dispose: () => Promise<void> }>();
+  /** Warm pairs `(AssembledAmbient, LexicalScope)` (R7 — exec-phases §3.5's assembly-reuse row),
+   *  memoized on the call's config digest (§2.4's one warm-reuse rule): same digest ⇒ reuse the
+   *  live ambient + the session's lexical accumulation (zero fold cost); changed ⇒ dispose the
+   *  old ambient, assemble fresh, fold. Keyed by session id — per-session state lives with the
+   *  session, never module-level. The ambient is CALLER-owned everywhere it's passed to exec
+   *  (the §3.3 ownership rule): this map's owner disposes it — digest change, `closeSession`,
+   *  or `dispose()`. */
+  private readonly warm = new Map<string, { digest: string; ambient: AssembledAmbient; scope: LexicalScope }>();
 
   constructor(
     readonly name: string,
@@ -433,13 +433,16 @@ export class DiscoveryTool {
     const { signal, session } = ctx;
     const cfg = await this.config(args);
 
-    // ── sessionless: per-call env, disposed in `finally` (§2.8's interim dispose row) — no log,
-    // no cache, nothing durable. The exec path carries no cache: byte-identical fast path.
+    // ── sessionless: per-call ambient, disposed in `finally` (§2.8's dispose row — the R7
+    // ownership table: THIS call assembled it ⇒ THIS call disposes it, kernel disposers + the
+    // FULL lowered closure's resource wind-down) — no log, no cache, nothing durable. The exec
+    // path carries no cache: byte-identical fast path.
     if (session === undefined) {
-      const assembled = await this.assemble(cfg);
+      const ambient = await this.assemble(cfg);
       try {
         const run = await this.runForms(args.expr, {
-          env: assembled.env,
+          ambient,
+          scope: LexicalScope.fresh(`${this.name}:sessionless`),
           budgetMs,
           heapBudget,
           signal,
@@ -448,7 +451,7 @@ export class DiscoveryTool {
         this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
         return run.out;
       } finally {
-        await assembled.dispose();
+        await ambient.dispose();
       }
     }
 
@@ -462,13 +465,14 @@ export class DiscoveryTool {
     const state = await this.loadState(session, ctx.store, identity);
 
     const warm = this.warm.get(session.id);
-    const { env, entries } =
+    const { ambient, scope, entries } =
       warm !== undefined && warm.digest === identity.configDigest
-        ? { env: warm.env, entries: new Map(Object.entries(state.cache)) }
-        : await this.foldIntoFreshEnv(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
+        ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
+        : await this.foldIntoFreshAmbient(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
 
     const run = await this.runForms(args.expr, {
-      env,
+      ambient,
+      scope,
       budgetMs,
       heapBudget,
       signal,
@@ -491,20 +495,23 @@ export class DiscoveryTool {
     return run.out;
   }
 
-  /** Dispose one session's warm env (the host's session-close hook — `onsessionclosed`/DELETE;
-   *  the deployment wiring is R4's). Idempotent; a session with no warm pair is a no-op. */
+  /** Dispose one session's warm ambient (the host's session-close hook — `onsessionclosed`/
+   *  DELETE; the deployment wiring is R4's). The ambient's dispose is the R7 ownership-table
+   *  teardown: kernel pack disposers (LIFO) + EVERY lowered pack's resource wind-down across
+   *  the whole dep closure — every port the call ambient spawned is released, gateway included.
+   *  Idempotent; a session with no warm pair is a no-op. */
   async closeSession(sessionId: string): Promise<void> {
     const warm = this.warm.get(sessionId);
     if (warm === undefined) return;
     this.warm.delete(sessionId);
-    await warm.dispose();
+    await warm.ambient.dispose();
   }
 
   /** Dispose every warm pair + the describe ambient (connection teardown). */
   async dispose(): Promise<void> {
     const all = [...this.warm.values()];
     this.warm.clear();
-    for (const warm of all) await warm.dispose();
+    for (const warm of all) await warm.ambient.dispose();
     // The describe-time ambient (per-connection, memoized on this tool) dies with the tool.
     const describeCtx = this.describeCtx;
     this.describeCtx = undefined;
@@ -559,27 +566,29 @@ export class DiscoveryTool {
     session.state.__run__ = state;
   }
 
-  /** The cold path: dispose the stale warm pair (config-digest change), assemble fresh, validate
-   *  the cache identity (mismatch ⇒ drop the cache, KEEP the log, re-record — self-heal), then
-   *  FOLD: re-run the log over the cache. Fold inherits the poison rule at statement level — a
-   *  statement whose re-run crashes is DROPPED from the log (with a counter increment) rather
-   *  than allowed to poison the session; cancellation propagates instead. Returns the warm env
-   *  plus the live entry map the new input's record-mode cache shares. The assembled env's
-   *  ownership transfers to the warm map only on success — a fold crash disposes it in `finally`
-   *  (§2.8's interim bar row). */
-  private async foldIntoFreshEnv(
+  /** The cold path: dispose the stale warm ambient (config-digest change), assemble fresh,
+   *  validate the cache identity (mismatch ⇒ drop the cache, KEEP the log, re-record —
+   *  self-heal), then FOLD: re-run the log over the cache, onto a FRESH session scope (the
+   *  lexical accumulation the replayed defines land in). Fold inherits the poison rule at
+   *  statement level — a statement whose re-run crashes is DROPPED from the log (with a counter
+   *  increment) rather than allowed to poison the session; cancellation propagates instead.
+   *  Returns the warm pair plus the live entry map the new input's record-mode cache shares.
+   *  The ambient's ownership transfers to the warm map only on success — a fold crash disposes
+   *  it in `finally` (§2.8's dispose row). */
+  private async foldIntoFreshAmbient(
     sessionId: string,
     state: SessionRunState,
     identity: SessionRunIdentity,
     cfg: Record<string, unknown>,
     opts: { budgetMs: number; heapBudget: number; signal?: AbortSignal },
-  ): Promise<{ env: SchemeEnv; entries: Map<string, RunCacheEntry> }> {
+  ): Promise<{ ambient: AssembledAmbient; scope: LexicalScope; entries: Map<string, RunCacheEntry> }> {
     const prior = this.warm.get(sessionId);
     if (prior !== undefined) {
       this.warm.delete(sessionId);
-      await prior.dispose();
+      await prior.ambient.dispose();
     }
-    const assembled = await this.assemble(cfg);
+    const ambient = await this.assemble(cfg);
+    const scope = LexicalScope.fresh(`${this.name}:${sessionId}`);
     let owned = false;
     try {
       const cacheValid = cacheValidFor(state, identity);
@@ -590,7 +599,7 @@ export class DiscoveryTool {
       const kept: LogStatement[] = [];
       for (const stmt of state.log) {
         try {
-          const run = await execSerializedState(stmt.src, { env: assembled.env, ...opts, cache: foldCache });
+          const run = await execSerializedState(stmt.src, { ambient, scope, ...opts, cache: foldCache });
           state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty (§2.7)
           kept.push(stmt);
         } catch (error) {
@@ -599,11 +608,11 @@ export class DiscoveryTool {
         }
       }
       state.log = kept;
-      this.warm.set(sessionId, { digest: identity.configDigest, env: assembled.env, dispose: assembled.dispose });
+      this.warm.set(sessionId, { digest: identity.configDigest, ambient, scope });
       owned = true;
-      return { env: assembled.env, entries };
+      return { ambient, scope, entries };
     } finally {
-      if (!owned) await assembled.dispose();
+      if (!owned) await ambient.dispose();
     }
   }
 
@@ -631,7 +640,8 @@ export class DiscoveryTool {
   private async runForms(
     expr: string,
     opts: {
-      env: SchemeEnv;
+      ambient: AssembledAmbient;
+      scope: LexicalScope;
       budgetMs: number;
       heapBudget: number;
       signal?: AbortSignal;
@@ -640,7 +650,7 @@ export class DiscoveryTool {
       onEvent?: (event: ReplEvent) => void;
     },
   ): Promise<{ out: (string | Blob)[]; crashed?: string }> {
-    const { env, budgetMs, heapBudget, signal, cache, state, onEvent } = opts;
+    const { ambient, scope, budgetMs, heapBudget, signal, cache, state, onEvent } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
     const attachmentQuota = this.options.attachmentQuota ?? defaultAttachmentQuota();
     // R6: ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
@@ -721,7 +731,8 @@ export class DiscoveryTool {
       const src = sources[index] as string;
       try {
         const run = await execSerializedState(form, {
-          env,
+          ambient,
+          scope,
           budgetMs,
           heapBudget,
           signal,
@@ -765,8 +776,13 @@ export class DiscoveryTool {
           heapUsed: run.heapUsed,
           heapMax: run.heapMax,
           elapsedMs,
-          // Each form's exec carries its OWN wall-clock budget at HEAD (R7's one-ExecInstance
-          // collapse makes this per-call); this is what remained of THIS form's budget.
+          // Each form's exec carries its OWN wall-clock budget + heap meter (a per-form
+          // runCtx): the ONE-runCtx-per-call collapse (per-form deltas = two reads of one
+          // meter, per-call bounds) stays blocked on core's ledgered runProgram gap — "a
+          // cumulative multi-form bound needs a shared RunContext, which no caller can
+          // inject yet" (generator-exec.ts, execExpr). The phase products (ambient/scope)
+          // are adopted (R7); the instance seam is core's follow-up. Wire shape is already
+          // the collapsed one: per-form heapUsed reads off the form's meter.
           budgetMsRemaining: Math.max(0, budgetMs - elapsedMs),
         });
       } catch (error) {
@@ -811,31 +827,18 @@ export class DiscoveryTool {
     return [...names].toSorted((a, b) => a.localeCompare(b));
   }
 
-  // ── env assembly: config from the actor args, resources armed by the capability ──
+  // ── ambient assembly: config from the actor args, resources armed by the capability ──
 
-  private async assemble(
-    cfg: Record<string, unknown>,
-  ): Promise<{ env: SchemeEnv; activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> }> {
-    // The base is the constant safe floor (SAFE_BUILTINS) — vocabulary is added ONLY by the
-    // capability's deps (the audited grant), never by swapping the base out from under it.
-    const base = sandboxedEnv.inherit(this.name, {});
-    const pack = this.capability.lower({
-      config: cfg,
-      evalScheme: (e, src) => execSerialized(src, { env: e }),
-    });
-    const assembled = await assembleEnv(base, [pack]);
-    return {
-      env: assembled.env as SchemeEnv,
-      // The per-capability activations (kernel fold — exec-phases §2.4): the describe-time
-      // metadata read channel; `catalog()` resolves a dynamic description against these.
-      activations: assembled.activations,
-      // INTERIM ownership (R3 — §2.8's first-tranche dispose row): the kernel's pack disposers
-      // PLUS the lowered pack's resource wind-down. The full ownership table is R7's.
-      dispose: async () => {
-        await assembled.dispose();
-        await pack.windDown();
-      },
-    };
+  /** Assemble the phase-2 product for one config (R7 — exec-phases §3.1): the capability (and
+   *  its whole dep closure) lowered onto a fresh child of the standard base, sealed, returned
+   *  as an owning `AssembledAmbient` handle. Its `dispose()` IS the full ownership-table
+   *  teardown — kernel pack disposers (LIFO) + resource wind-down over the ENTIRE lowered
+   *  closure (roots + deps), replacing R3's interim root-only `pack.windDown()`, which never
+   *  reached a dep capability's cells. Vocabulary is added ONLY by the capability's deps (the
+   *  audited grant); the base chain is the same stdlib the old sandboxed inherit resolved
+   *  through. */
+  private assemble(cfg: Record<string, unknown>): Promise<AssembledAmbient> {
+    return assembleAmbient({ capabilities: [this.capability], config: cfg });
   }
 
   /** The capability's `configuration` fields. Actor values come from call args for the
@@ -948,10 +951,11 @@ export class DiscoveryTool {
     return names.filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
   }
 
-  /** The DESCRIBE ambient (exec-phases §2.7): a HOST-CONFIG-ONLY assembly, built lazily on the
-   *  first catalog read that needs one (some verb declares a `dynamicDescription`), memoized per
-   *  tool (per CONNECTION — the class doc), disposed with the tool. Its activations are the
-   *  channel a metadata-declared dynamic field resolves `this` against.
+  /** The DESCRIBE ambient (exec-phases §2.7): a HOST-CONFIG-ONLY `AssembledAmbient` (the
+   *  phase-2 product, R7), built lazily on the first catalog read that needs one (some verb
+   *  declares a `dynamicDescription`), memoized per tool (per CONNECTION — the class doc),
+   *  disposed with the tool. Its `activations` are the channel a metadata-declared dynamic
+   *  field resolves `this` against — the A2 read path riding the describe ambient product.
    *
    *  LEDGERED (V-pending decision #6, resolved per the doc's own recommendation): describe
    *  happens BEFORE any actor args exist — a dynamic description reads HOST infra and HOST
@@ -961,8 +965,8 @@ export class DiscoveryTool {
    *  thunks then run with their legacy receiver (a closure-form thunk ignores `this`; a
    *  metadata-declared field reading `this.configuration` resolves `undefined` and the static
    *  description stands, un-flagged). */
-  private describeCtx?: Promise<{ activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> } | undefined>;
-  private describeAmbient(): Promise<{ activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> } | undefined> {
+  private describeCtx?: Promise<AssembledAmbient | undefined>;
+  private describeAmbient(): Promise<AssembledAmbient | undefined> {
     return (this.describeCtx ??= (async () => {
       if (typeof this.options.hostConfig === "function") return undefined;
       try {
