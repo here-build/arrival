@@ -42,6 +42,8 @@ describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", (
 });
 
 describe("boxed vector — provenance propagation (jsToScheme)", () => {
+  // INVARIANT: jsToScheme deep-stamps provenance onto both the container and each
+  // element (pins implementation, not behavior).
   it("deep-stamps element provenance, keeps it a vector", () => {
     const v = new AVector(CONSTANT_CTX, [ex(1n), ex(2n), ex(3n)]);
     const prov = new Set<number>([42]);

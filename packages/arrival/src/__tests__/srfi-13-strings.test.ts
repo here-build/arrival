@@ -59,6 +59,7 @@ describe("string-null? — emptiness predicate", () => {
 });
 
 describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order", () => {
+  // Prefix/suffix predicates match correctly; an empty prefix/suffix always matches.
   it("(string-prefix? prefix s)", async () => {
     expect(js(await run('(string-prefix? "foo" "foobar")'))).toBe(true);
     expect(js(await run('(string-prefix? "bar" "foobar")'))).toBe(false);
@@ -161,6 +162,7 @@ describe("string-pad / string-pad-right — to EXACTLY len (SRFI-13 truncation)"
 });
 
 describe("string-reverse", () => {
+  // Reverses the string; the empty string stays empty.
   it("reversed copy", async () => {
     expect(js(await run('(string-reverse "abc")'))).toBe("cba");
     expect(js(await run('(string-reverse "")'))).toBe("");

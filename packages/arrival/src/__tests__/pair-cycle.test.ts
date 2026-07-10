@@ -50,6 +50,8 @@ describe("APair[Symbol.iterator]", () => {
     expect((items[1] as AExact).valueOf()).toBe(1);
   });
 
+  // [impl-pinning] pins the sentinel's exact internal shape (car undefined, cdr nil),
+  // not merely its externally observable emptiness.
   it("the empty-pair sentinel (undefined car, nil cdr) iterates empty", () => {
     const p = new APair(CONSTANT_CTX, undefined as never, nil);
     expect([...p]).toEqual([]);
@@ -87,6 +89,8 @@ describe("Pair.toJS — one-way array conversion", () => {
     expect(() => a["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
+  // [impl-pinning] pins that mark_cycles/have_cycles metadata does not exempt toJS
+  // from the cycle throw — the metadata machinery is toString's alone.
   it("throws on a mark_cycles-annotated cycle too (metadata does not exempt)", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,6 +123,7 @@ describe("Pair.toJS — one-way array conversion", () => {
 });
 
 describe("Pair.toString cycle handling (uses ref-marker notation — fundamentally different)", () => {
+  // [impl-pinning] pins the #0=/#0# ref-marker notation itself, not just "doesn't throw".
   it("does NOT throw on a self-cycle (renders via #0= / #0# markers)", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)

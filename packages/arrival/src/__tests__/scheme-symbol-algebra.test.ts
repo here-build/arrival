@@ -16,9 +16,12 @@ const nameArb = fc.oneof(
 
 const symbolArb = nameArb.map((n) => new ASymbol(CONSTANT_CTX, n));
 
+// INVARIANT: reflexivity/symmetry/transitivity of symbol equality (by __name__), incl.
+// distinct-heap clones (pins implementation, not behavior — compares __name__ directly).
 setoidLaws("SchemeSymbol", {
   arb: symbolArb,
   equalClone: (s) => new ASymbol(CONSTANT_CTX, s.__name__),
 });
 
+// INVARIANT: reflexivity/totality/antisymmetry/transitivity of lexicographic symbol-name ordering.
 ordLaws("SchemeSymbol", symbolArb);

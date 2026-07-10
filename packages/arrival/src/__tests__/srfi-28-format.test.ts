@@ -120,6 +120,8 @@ describe("format — ~F / ~w,dF fixed-point (SRFI-48 bounded subset)", () => {
     await expect(run('(format "~,2f" "not-a-number")')).rejects.toThrow(/~,2f directive expects a number/);
   });
 
+  // Rounding follows JS's own `toFixed` semantics (pins implementation, not behavior —
+  // a different rounding library would be an equally valid ~f).
   it("rounds via toFixed semantics", async () => {
     expect(js(await run('(format "~,0f" 2.5)'))).toBe("3");
     expect(js(await run('(format "~,2f" 1)'))).toBe("1.00");

@@ -53,6 +53,9 @@ describe("dict? predicate", () => {
     expect(await truthy("(dict? (dict))")).toBe("yes");
   });
 
+  // Pins implementation, not behavior: the reader must route `{...}` through the
+  // dict-literal node (currently `ADict`'s literalForms; was `AJSObject`/dictForms at
+  // the 2026-07-08 atlas snapshot — the internal node was renamed since).
   it("#t for a {...} reader dict-literal (quoted, the ADict literalForms node)", async () => {
     expect(await truthy("(dict? '{:a 1})")).toBe("yes");
   });

@@ -83,6 +83,7 @@ describe("Pair — Monoid (nil identity)", () => {
   // "empty" is declared on Pair/Vector/String but NOT in the canonical TaglessOp union today —
   // the `as TaglessOp` cast reaches the algebra method.
   const empty = () => (APair)[tf("empty" as TaglessOp)]() as ANil;
+  // [impl-pinning] pins that empty() is the nil SINGLETON (===), not merely nil-equal.
   it("Pair['arrival/tagless-final/empty']() is nil", () => {
     expect(empty()).toBe(nil);
   });
@@ -112,6 +113,7 @@ describe("Pair — Foldable (reduce)", () => {
     const collected = await (list)[tf("reduce")]((x: unknown, acc: number[]) => [...acc, (x as AExact).valueOf()], [] as number[]);
     expect(collected).toEqual([1, 2, 3]);
   });
+  // [impl-pinning] pins zero fn calls over the sentinel, not just the returned value.
   it("reduce on empty-pair sentinel returns the seed (no phantom element)", async () => {
     let calls = 0;
     // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
@@ -139,6 +141,7 @@ describe("Pair — Filterable (filter)", () => {
     const r = await list[tf("filter")](() => false);
     expect(r).toBe(nil);
   });
+  // [impl-pinning] pins that the predicate is never invoked over the sentinel.
   it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
@@ -156,6 +159,8 @@ describe("Pair — Filterable (filter)", () => {
 // structure is rebuilt as nested Pairs (matches the monkey-patch's of-leaf path).
 // ----------------------------------------------------------------------
 describe("Pair — Traversable (traverse)", () => {
+  // [impl-pinning] pins the exact of-call count (base case + one per element), not
+  // just "each element visited".
   it("traverse with identity-of visits each element once, terminating at nil", () => {
     const ofCalls: unknown[] = [];
     const of = (v: unknown) => {
@@ -192,6 +197,7 @@ describe("Pair — Traversable (traverse)", () => {
 // Applicative `of` — single-element list.
 // ----------------------------------------------------------------------
 describe("Pair — Applicative (static of)", () => {
+  // [impl-pinning] pins the concrete Pair(x, nil) shape, not just list membership.
   it("of(x) is a one-element list (x)", () => {
     // "of" is declared on Pair/Vector/String but NOT in the canonical TaglessOp union today —
     // the `as TaglessOp` cast reaches the algebra method.
@@ -209,6 +215,7 @@ describe("Pair — Applicative (static of)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — recursors terminate on Nil clones (provenance)", () => {
   const cloneNil = () => nil.withProvenance(new Set<number>([42]));
+  // [impl-pinning] pins fn-called-once and result.cdr's exact instanceof-Nil shape.
   it("map(Pair(1, nil-clone)) → (1), fn called once", async () => {
     // fn receives the pair's actual boxed element (map never auto-unboxes) — the identity
     // fn hands back the SAME AExact instance, so the result pair's car is that instance.

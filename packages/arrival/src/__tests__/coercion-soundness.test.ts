@@ -344,6 +344,8 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
     expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
   });
+  // INVARIANT: the vector op family works uniformly on a borrowed array via
+  // protocol dispatch (pins implementation, not behavior).
   it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
     // vector-length boxes its count now (AExact — the scheme face of z.number's output).
     expect(Number((vectorSymbols["vector-length"].impl!(mkArr()) as { valueOf(): unknown }).valueOf())).toBe(2);

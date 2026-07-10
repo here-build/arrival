@@ -20,7 +20,9 @@ const arb = fc
 
 const equalClone = (s: AString) => new AString(CONSTANT_CTX, s.valueOf());
 
+// INVARIANT: reflexivity/symmetry/transitivity of string equality, incl. distinct-heap clones.
 setoidLaws("SchemeString", { arb, equalClone });
+// INVARIANT: reflexivity/totality/antisymmetry/transitivity of lexicographic string ordering.
 ordLaws("SchemeString", arb);
 
 describe("SchemeString Setoid/Ord — totality boundaries", () => {

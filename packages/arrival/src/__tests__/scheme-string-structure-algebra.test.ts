@@ -23,9 +23,12 @@ const arb = fc
 // Semigroup (string-append) — associativity. Functor — identity + composition
 // over ASCII char transforms (uppercase/swap) to keep it code-point-clean.
 // ----------------------------------------------------------------------
+// INVARIANT: string-append concat is associative: (a⋄b)⋄c ≡ a⋄(b⋄c).
 semigroupLaws("SchemeString", arb);
 
 // Functor laws map per-character; use case-flip transforms (string→string).
+// INVARIANT: char-map identity: map(id) ≡ id.
+// INVARIANT: char-map composition: map(f∘g) ≡ map(f)∘map(g).
 functorLaws<AString, string>("SchemeString", {
   arb,
   f: (c) => c.toUpperCase(),
@@ -34,6 +37,7 @@ functorLaws<AString, string>("SchemeString", {
 
 // ----------------------------------------------------------------------
 // Monoid — "" is the identity for append.
+// INVARIANT: left identity: ""⋄a ≡ a. right identity: a⋄"" ≡ a.
 // ----------------------------------------------------------------------
 monoidLaws("SchemeString", arb, () => new AString(CONSTANT_CTX, ""));
 
@@ -42,13 +46,15 @@ describe("SchemeString — structure-algebra behavior", () => {
     const r = (new AString(CONSTANT_CTX, "foo") as FL)[tf("concat")](new AString(CONSTANT_CTX, "bar"));
     expect((r as AString).valueOf()).toBe("foobar");
   });
+  // INVARIANT: empty() produces the empty string (pins implementation, not behavior —
+  // "empty" not in canonical TaglessOp union today, cast reaches the algebra method).
   it("empty() is the empty string", () => {
-    // "empty" not in canonical TaglessOp union today — cast reaches the algebra method
     const e = (AString as FL)[tf("empty" as TaglessOp)]() as AString;
     expect(e.valueOf()).toBe("");
   });
+  // INVARIANT: of(value) stringifies into a SchemeString (pins implementation, not
+  // behavior — "of" not in canonical TaglessOp union today, cast reaches the algebra method).
   it("of(value) stringifies into a SchemeString", () => {
-    // "of" not in canonical TaglessOp union today — cast reaches the algebra method
     const s = (AString as FL)[tf("of" as TaglessOp)](42) as AString;
     expect(s).toBeInstanceOf(AString);
     expect(s.valueOf()).toBe("42");

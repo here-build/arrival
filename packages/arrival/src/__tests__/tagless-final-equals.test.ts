@@ -89,6 +89,10 @@ function representativeValues(): { name: string; value: AValue }[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // G1 — TOTALITY: every representative AValue defines arrival/tagless-final/equals.
 // ─────────────────────────────────────────────────────────────────────────────
+// INVARIANT: every representative AValue subtype exposes a callable `equals`
+// (pins implementation, not behavior — the subtype roster itself). NOTE: the
+// atlas's original roster included HalfBaked; HalfBaked is dissolved
+// (90272a0b99) and representativeValues() below no longer carries it.
 describe("G1 totality — every AValue subtype defines arrival/tagless-final/equals", () => {
   for (const { name, value } of representativeValues()) {
     it(name + " has a callable arrival/tagless-final/equals", () => {
@@ -160,6 +164,8 @@ describe("G2 Pair Setoid", () => {
     expect(pairEq(a, c)).toBe(true);
   });
 
+  // INVARIANT: an explicit `seen` map argument is honored by the Setoid call
+  // (pins implementation, not behavior).
   it("an explicit seen Map argument is honored", () => {
     const a = list(new AExact(CONSTANT_CTX, 1n)) as APair<any, any>;
     const b = list(new AExact(CONSTANT_CTX, 1n)) as APair<any, any>;
@@ -245,6 +251,8 @@ describe("G4 equal? regression — structuralEqual", () => {
     expect(structuralEqual(a, b)).toBe(true);
   });
 
+  // INVARIANT: Pair and Vector both route equality through their own Setoid
+  // method (pins implementation, not behavior).
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
     // tagless-final/equals is declared directly on AValue subtypes — no cast needed.
     expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil))[tf("equals")]).toBe("function");
@@ -290,6 +298,8 @@ describe("G6 equality-suite cleanup", () => {
   const distinctSym = (name: string): ASymbol =>
     new ASymbol(CONSTANT_CTX, name).withProvenance(new Set([1]));
 
+  // INVARIANT: eqv? over scalars matches exactness/char/bool identity, and
+  // treats distinct-instance same-name symbols and nil clones as eqv.
   describe("eqv? over scalars (canonical structural-equal)", () => {
     it("exact ≡ exact (same value) → true", () => {
       expect(eqv(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n))).toBe(true);
@@ -318,6 +328,8 @@ describe("G6 equality-suite cleanup", () => {
     });
   });
 
+  // INVARIANT: eq()/eqv()'s scalar result equals the term's own Setoid
+  // result, across all scalar kinds (pins implementation, not behavior).
   describe("eq()/eqv() scalar result == the term's own Setoid", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
       x[tf("equals")](y);
