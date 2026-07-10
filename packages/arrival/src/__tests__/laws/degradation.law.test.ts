@@ -114,7 +114,7 @@ describe("LAW 1 — required-and-absent config throws regardless of degradation 
 
 describe("LAW 4 — present-but-invalid config throws in BOTH modes (degradation only narrows ABSENCE)", () => {
   // Widened to `EnvCapability<any, any>` (the same declared-type idiom
-  // arrival-scheme-env-loader/loader-capability.ts uses) so the WRONG-SHAPED config this
+  // arrival's src/loader/loader-capability.ts uses) so the WRONG-SHAPED config this
   // test deliberately supplies type-checks without a cast — the runtime `schema.parse`
   // throw is the thing under test, not TS's own config-shape guard.
   const invalidCap = (): EnvCapability<any, any> =>

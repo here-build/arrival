@@ -280,20 +280,23 @@ interface RunOptions {
 
 // `_currentStrict` module holder is retired — strict mode is run-CONSTANT
 // (RunContext), so readers consult `ctx.runCtx.strict` directly; it was a pure
-// RunContext duplicate. `_currentRunEnv` STAYS: it is the
+// RunContext duplicate. `_currentRunResolver` STAYS: it is the
 // rosetta MEMBRANE's env back-channel (llm-plane-arrival-env/prompt.ts evaluates an
 // `s/…` schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx
 // carries no env).
 
 /**
- * Run-scoped CURRENT ENV, set to the resolver's lexical frame (`resolver.env`) at the
- * apply boundary alongside `_dynamicCallSite` (saved + restored in the
- * surrounding finally). Sole purpose: the rosetta MEMBRANE's env back-channel — a
- * rosetta impl running under a ctx-less `apply` (llm-plane-arrival-env/prompt.ts) reads
- * it to evaluate an `s/…` schema DSL and reach the infer capability. `runCtx` cannot
- * supply this — it carries run-CONSTANT data, not an env. The heap-meter that once also
- * rode this holder moved to the operand's ctx (`operand.ctx.heapMeter` — see the three
- * `to_array` copies).
+ * Run-scoped CURRENT RESOLVER, set to `ctxResolver(ctx)` at the apply boundary
+ * alongside `_dynamicCallSite` (saved + restored in the surrounding finally). Two
+ * readers: (1) the rosetta MEMBRANE's env back-channel (`currentRunEnv()` =
+ * `.env`, the resolver's lexical frame) — a rosetta impl running under a ctx-less
+ * `apply` (llm-plane-arrival-env/prompt.ts) reads it to evaluate an `s/…` schema
+ * DSL and reach the infer capability; (2) `(require …)`'s module-eval seam
+ * (`currentRunResolver()`), which needs the WHOLE composed resolver — under the
+ * cut, builtins live on the capability base, not the lexical frame's `__parent__`
+ * chain. `runCtx` cannot supply either — it carries run-CONSTANT data, not an
+ * env/resolver. The heap-meter that once also rode this holder moved to the
+ * operand's ctx (`operand.ctx.heapMeter` — see the three `to_array` copies).
  *
  * Why module-level: readers are variadic / HOF builtins (`filter`/`join`/`reverse`/
  * `apply`, and `to_array` reached through them) whose arity a trailing `ctx` would
@@ -301,11 +304,25 @@ interface RunOptions {
  * save/restore. The meter is found by walking `__parent__` from this env, so a
  * child-frame env still resolves the run's installed meter.
  */
-let _currentRunEnv: Environment | undefined = undefined;
+let _currentRunResolver: Resolver | undefined = undefined;
 
-/** The run's current env at apply time. Read by `to_array`'s heap-meter lookup
- *  (env/pack-helpers.ts) in place of the erased env-as-`this`. */
-export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
+/** The run's current env at apply time — the published resolver's lexical frame.
+ *  Read by `to_array`'s heap-meter lookup (env/pack-helpers.ts) in place of the
+ *  erased env-as-`this`. */
+export const currentRunEnv = (): Environment | undefined => _currentRunResolver?.env;
+
+/**
+ * The run's current COMPOSED resolver at apply time — the same save/restore holder
+ * as {@link currentRunEnv}, publishing the whole `Resolver` instead of only its
+ * lexical frame. Needed by `(require …)` (src/loader/): a required module's forms
+ * must evaluate through the SAME scope+capability composition as the requiring
+ * program. Under the cut the lexical frame is null-rooted and builtins live on the
+ * resolver's capability base — an env-only back-channel loses that half, so a
+ * module rebuilt from `currentRunEnv()` alone could not see the stdlib
+ * (`string-append` unbound). Glass callers see a resolver whose scope and
+ * capabilities wrap the same base-linked env — byte-identical resolution.
+ */
+export const currentRunResolver = (): Resolver | undefined => _currentRunResolver;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda VALUE passed as
@@ -3021,11 +3038,13 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     const canBounce = is_lambda(fn);
-    const __savedRunEnv = _currentRunEnv;
+    const __savedRunResolver = _currentRunResolver;
     // The rosetta membrane's env back-channel (llm-plane-arrival-env/prompt.ts reads
-    // `currentRunEnv()` under a ctx-less `apply`). The meter/strict run-state that
-    // once also rode holders here now travels on `ctx.runCtx` / the operand ctx.
-    _currentRunEnv = ctxResolver(ctx).env;
+    // `currentRunEnv()` under a ctx-less `apply`; `require` reads the full
+    // `currentRunResolver()` so module forms keep the run's capability base). The
+    // meter/strict run-state that once also rode holders here now travels on
+    // `ctx.runCtx` / the operand ctx.
+    _currentRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
@@ -3057,7 +3076,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
             ) as SchemeValue);
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);
-      _currentRunEnv = __savedRunEnv;
+      _currentRunResolver = __savedRunResolver;
     }
 
     // Bounce result — the callee was a Scheme lambda speaking the protocol

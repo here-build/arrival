@@ -209,6 +209,19 @@ export interface ExecOptions {
    * `scope.lookup ?? capabilities.lookup`). Ignored when `env` (glass) is set.
    */
   scope?: LexicalScope;
+  /**
+   * MODULE-EVAL RESOLVER PASSTHROUGH (COMPLEX tier — consumed by {@link execExpr}
+   * only; `exec`/`execState` ignore it). Evaluate through an EXISTING composed
+   * `Resolver` instead of constructing one from `env`. THE seam `(require …)`
+   * (src/loader/) uses: a required module's forms must resolve through the SAME
+   * scope+capability composition as the requiring program — cut: null-rooted
+   * lexical root + assembled capability base; glass: the live base-linked env.
+   * Reconstructing from an env alone drops the capability half under the cut
+   * (the stdlib lives on the base, so module code would see `string-append`
+   * unbound). Takes precedence over `env` in `execExpr`. Obtained via the
+   * evaluator's `currentRunResolver()` back-channel at the require apply boundary.
+   */
+  resolver?: Resolver;
   dynamic_env?: Environment;
   use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
@@ -702,7 +715,7 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, skipBootstrapWait }: ExecOptions = {},
+  { env, resolver, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
   // Same honest SchemeEnv → Environment narrow as execState's seam above.
@@ -711,12 +724,15 @@ export async function execExpr(
   // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();
 
-  // THE EXEC SEAM (see exec): glass for custom env, the cut for default (fresh
-  // null-rooted lexicalRoot + assembled base).
+  // THE EXEC SEAM (see exec): an explicit `resolver` (the module-eval passthrough —
+  // ExecOptions.resolver) is reused verbatim, so a `(require …)`d module's forms keep
+  // the requiring run's scope+capability composition; else glass for custom env, the
+  // cut for default (fresh null-rooted lexicalRoot + assembled base).
   const runResolver =
-    env !== undefined
+    resolver ??
+    (env !== undefined
       ? new Resolver(actualEnv)
-      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv));
+      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv)));
 
   // Mint per-run handle here too (mirrors exec()) — closes two gaps: a
   // required-module impl reading `this.runCtx.signal` (CallCtx) now sees the SAME

@@ -46,12 +46,17 @@
 // with no adapter — it validates its own slice (real structural zod checks, no `z.custom<T>()`
 // passthrough) and ignores the rest.
 
-import { applyCallback, type EvalTap, execGeneratorExpr as execExpr, is_callable_value, nil, theVoid } from "@here.build/arrival";
-import { EnvCapability, type SymbolDeclaration } from "@here.build/arrival/capability";
-import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "@here.build/arrival/env";
-import { port, type Resource } from "@here.build/arrival/resources";
-import { symbol } from "@here.build/arrival/symbol";
-import * as z from "@here.build/arrival/scheme-zod";
+import type { EvalTap } from "../eval/evaluator.js";
+import { execExpr } from "../eval/generator-exec.js";
+import { EnvCapability, type SymbolDeclaration } from "../common/capability.js";
+import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "../common/kernel.js";
+import { port, type Resource } from "../common/resources.js";
+import { type CallCtx, symbol } from "../common/symbol.js";
+import * as z from "../common/scheme-zod.js";
+import { applyCallback } from "../values/primitives/ACallable.js";
+import { is_callable_value } from "../values/value-guards.js";
+import { nil } from "../values/primitives/ANil.js";
+import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 
 import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
@@ -66,9 +71,9 @@ import {
   type ResolverResult,
   type RunEnv,
   runEnvOf,
+  runResolverOf,
   type SchemeVal,
 } from "./loader.js";
-import { type CallCtx } from "@here.build/arrival/symbol";
 
 
 /** Resolve a `(require/extension :name)` argument to the bare extension name. A keyword
@@ -280,7 +285,10 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // (`.json`, `.hbs`, capability-registered types like `.prompt`) are require-graph
         // leaves and cannot cycle.
         async function (this: CallCtx, ...args: unknown[]): Promise<SchemeVal> {
-          const env = runEnvOf(this, "require");
+          // The COMPOSED resolver, not just its env (the cut-path fix — see runResolverOf):
+          // module forms evaluate through it below, and the registered-resolver-verb lookup
+          // walks it too, so builtins/capability verbs resolve identically under cut and glass.
+          const resolver = runResolverOf(this, "require");
           // The single-flight cache + cycle/loading bookkeeping (the requireCache resource).
           // `.get()` single-flights: concurrent requires (the `map` fan-out) share ONE session.
           const { inflight, evaluating, loadingStack, dirStack } = await resources.requireCache.get();
@@ -310,7 +318,10 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
             // suffix is removed from `defaultResolvers`, that fallthrough naturally errors
             // (no handler), which IS the scoping guarantee (you must root the capability).
             const resolverName = lookupExtensionResolver(path);
-            const registered = resolverName === undefined ? undefined : env.get(resolverName, { throwError: false });
+            // The COMPOSED lookup (scope ?? capabilities), non-throwing: a capability-registered
+            // resolver verb lives on the capability base under the cut — an env-chain-only read
+            // (`env.get`) would miss it there, the same failure family as the module-forms bug.
+            const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
             let result: ResolverResult;
             // A bound verb is a callable VALUE now (ANativeProcedure — the callable-as-value
             // rework), not `typeof === "function"` — dispatch through the ONE invocation seam
@@ -353,7 +364,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
                 loadingStack.push(path);
               }
               try {
-                for (const form of result.forms) value = await execExpr(form, { env, tap });
+                // Evaluate through the requiring run's OWN composed resolver (ExecOptions.resolver,
+                // the module-eval passthrough): defines spill into the same lexical frame
+                // (`resolver.env`), builtins keep resolving through the same capability base.
+                // `execExpr({ env })` here would rebuild a GLASS resolver over the frame env —
+                // which under the cut is null-rooted, so module code lost the stdlib.
+                for (const form of result.forms) value = await execExpr(form, { resolver, tap });
               } finally {
                 if (isLoad) {
                   loadingStack.pop();

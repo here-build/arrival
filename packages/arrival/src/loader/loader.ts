@@ -8,21 +8,19 @@
  * by `arrivalLoaderCapability` (loader-capability.ts) as a `symbol.native`, not built here: its
  * state is scoped to one capability `.lower()` (one live env), which is exactly what that
  * declarative builder already provides, so there is no separate factory to call through.
- * `runEnvOf` below is the shared ctx-reading helper require's declaration (and
- * `require/extension`'s) both need — genuine cross-verb plumbing, kept here.
+ * `runResolverOf`/`runEnvOf` below are the shared back-channel readers require's
+ * declaration (and `require/extension`'s) both need — genuine cross-verb plumbing, kept here.
  *
  * See docs/package-specific/arrival-chain/require-import-loader.md.
  */
-import {
-  currentRunEnv,
-  execGeneratorExpr as execExpr,
-  APair,
-  CONSTANT_CTX,
-  jsToScheme,
-  nil,
-  parseGenerator as parse,
-  type SchemeEnv,
-} from "@here.build/arrival";
+import { currentRunResolver } from "../eval/evaluator.js";
+import { execExpr, parse } from "../eval/generator-exec.js";
+import type { Resolver } from "../eval/Resolver.js";
+import { jsToScheme } from "../rosetta.js";
+import { APair } from "../values/primitives/APair.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { nil } from "../values/primitives/ANil.js";
+import type { SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -39,34 +37,49 @@ export type RunEnv = SchemeEnv;
  *  declaration (loader-capability.ts) can name it — a derived name, not a new private type). */
 export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
 
-/** The run env these verbs evaluate module forms into, with a teaching error when absent —
+/** The run's COMPOSED resolver — scope + capability base — with a teaching error when absent.
  *  require IS a membrane penetration (each source read crosses the VFS boundary), so like the
- *  rosetta membrane it may read the evaluator's run-scoped env back-channel. Two sources, in
- *  order: (1) a `this: CallCtx` carrying a `.resolver.env` (the legacy nested-shape reader —
- *  see below); (2) `currentRunEnv()` — the back-channel the evaluator publishes at every apply
- *  boundary (`ctxResolver(ctx).env`, byte-identical to `ctx.resolver.env` for this call's
- *  frame). Source (2) is how the verb reaches its env as an ANativeProcedure, whose apply term
- *  threads ONLY `runCtx` (run-constant data — an env cannot ride it; see evaluator.ts's
- *  `currentRunEnv` doc).
+ *  rosetta membrane it reads the evaluator's run-scoped back-channel: `currentRunResolver()`,
+ *  published at every apply boundary (`ctxResolver(ctx)`, this call's own frame). That is how
+ *  the verb reaches its resolution context as an ANativeProcedure, whose apply term threads
+ *  ONLY `runCtx` (run-constant data — a resolver cannot ride it; see evaluator.ts's holder doc).
  *
- *  `ctx` is `unknown`, not a named ctx-shape type — deliberately: the callable-as-value rework's
- *  `this` is a flat `CallCtx` (`{ runCtx, invocation }`, no `.resolver` at all), so source (1) is
- *  dead in practice for every caller on that convention (confirmed at the rosetta-ctx-single-
- *  channel M2 audit: no live caller supplies a `.resolver`-bearing `this` here); importing that
- *  type here to reflect it would re-couple this file to arrival-core's evolving ctx shapes,
- *  exactly what this module's own header says it avoids. The `.resolver?.env` probe below is a
- *  duck-typed narrow that simply reads `undefined` off a shape lacking it, falling through to
- *  source (2) unchanged — kept as a defensive read, not because any caller exercises it today. */
-export function runEnvOf(ctx: unknown, verb: string): RunEnv {
-  const resolverEnv = (ctx as { resolver?: { env?: RunEnv } } | undefined)?.resolver?.env;
-  const env = resolverEnv ?? (currentRunEnv() as RunEnv | undefined);
+ *  WHY the resolver and not just its env (the cut-path fix): under `exec({ capabilities })`
+ *  the run resolves through `Resolver(lexicalRoot, capabilityBase)` — the lexical frame is
+ *  null-rooted and the stdlib lives on the capability base. A required module's forms
+ *  evaluated against the ENV alone (`execExpr({ env })` reconstructs a glass resolver over
+ *  it) lose that base, so module code couldn't see `string-append`. Evaluating through THIS
+ *  resolver (`execExpr({ resolver })`, loader-capability.ts) keeps cut and glass identical:
+ *  defines still spill into the same lexical frame (`resolver.env` — `define` binds there),
+ *  and builtins resolve exactly as they do for the requiring program.
+ *
+ *  `ctx` is accepted (and ignored) for the verb declarations' `this: CallCtx` convention: the
+ *  flat `CallCtx` (`{ runCtx, invocation }`) carries no resolver, and the pre-rework nested
+ *  `.resolver`-bearing `this` shape is dead (confirmed at the rosetta-ctx-single-channel M2
+ *  audit: no live caller supplies one), so the back-channel is the one real source. */
+export function runResolverOf(ctx: unknown, verb: string): Resolver {
+  void ctx;
+  const resolver = currentRunResolver();
   invariant(
-    env,
+    resolver,
     () =>
-      `${verb}: no run env reachable — the verb was called outside the evaluator ` +
-      `(direct JS calls must go through exec/execExpr so the run env is published).`,
+      `${verb}: no run resolver reachable — the verb was called outside the evaluator ` +
+      `(direct JS calls must go through exec/execExpr so the run resolver is published).`,
   );
-  return env;
+  return resolver;
+}
+
+/** The run env these verbs spill module `define`s into — the composed resolver's lexical
+ *  frame. Kept as the env-shaped face of {@link runResolverOf} for callers that only need
+ *  the frame (`require/extension`'s assembler binding, `env.inherit` for prelude scopes).
+ *  The widen is the SAME seam the pre-move `currentRunEnv() as RunEnv` read carried: the
+ *  frame is a concrete `Environment` (a glass root is a `ResolvingEnvironment` and genuinely
+ *  satisfies `SchemeEnv`; the cut's null-rooted frame lacks `registerResolver`), and every
+ *  use this face serves (`get`/`set`/`inherit`, the assembler binding) is on the shared
+ *  surface — hence the explicit through-`unknown` step where the old cross-package cast
+ *  was implicit. */
+export function runEnvOf(ctx: unknown, verb: string): RunEnv {
+  return runResolverOf(ctx, verb).env as unknown as RunEnv;
 }
 
 /** A parsed scheme form — exactly what `parse` yields and `execExpr` consumes.

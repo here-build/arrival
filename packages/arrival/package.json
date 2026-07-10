@@ -71,6 +71,10 @@
       "types": "./dist/type-layer/index.d.ts",
       "default": "./dist/type-layer/index.js"
     },
+    "./loader": {
+      "types": "./dist/loader/index.d.ts",
+      "default": "./dist/loader/index.js"
+    },
     "./srfi": {
       "types": "./dist/env/srfi/index.d.ts",
       "default": "./dist/env/srfi/index.js"

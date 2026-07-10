@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-scheme-env-loader": "workspace:^",
     "smol-toml": "1.6.1"
   },
   "devDependencies": {

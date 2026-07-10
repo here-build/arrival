@@ -37,7 +37,6 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-scheme-env-loader": "workspace:^",
     "@here.build/arrival-serializer": "workspace:^"
   },
   "devDependencies": {

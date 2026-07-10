@@ -14,7 +14,7 @@ import {
   type ContentResolver,
   type ExtensionHandler,
   type RequireTypeProvider,
-} from "@here.build/arrival-scheme-env-loader";
+} from "@here.build/arrival/loader";
 
 const RESOLVE = "ext/toml/resolve";
 

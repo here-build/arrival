@@ -16,10 +16,13 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { exec, sandboxedEnv, schemeToJs } from "@here.build/arrival";
-import { EnvCapability } from "@here.build/arrival/capability";
-import { assembleEnv } from "@here.build/arrival/env";
-import type { SchemeEnv } from "@here.build/arrival/scheme-env";
+import { exec } from "../../eval/generator-exec.js";
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { schemeToJs } from "../../rosetta.js";
+import type { SchemeValue } from "../../values/types.js";
+import { EnvCapability } from "../../common/capability.js";
+import { assembleEnv } from "../../common/kernel.js";
+import type { SchemeEnv } from "../../common/scheme-env.js";
 
 import { __resetExtensionRegistryForTest } from "../loader-extensions.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
@@ -54,6 +57,14 @@ async function assembledWithDegraded(config: object, degradation?: "forbid" | "d
   return { env: assembly.env, degraded: assembly.degraded };
 }
 
+/** Deep-unwrap an `exec` result for assertion. `exec` returns plain-JS-observable values
+ *  (containers egress as lazy proxies), typed `unknown`; `schemeToJs`'s strict parameter
+ *  (`SchemeValue | null | undefined`) is the membrane law's face. The narrow is the SAME
+ *  seam every loader consumer crosses today (chain-env's `schemeToJs(last, {})`) — the
+ *  proxy IS schemeToJs-consumable at runtime; the static story lands with the in-flight
+ *  AListAlike propagation. */
+const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
+
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
     const hit = table[path];
@@ -75,7 +86,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("an armed loader resolves a data module (raw scheme args + no return marshal)", async () => {
     const env = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) });
     const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, { env });
-    const cfg = schemeToJs(results.at(-1), {}) as Record<string, unknown>;
+    const cfg = plain(results.at(-1)) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world" });
   });
 
@@ -99,7 +110,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const env = await assembled({ loader: files({ "shout.upper": "hello" }) }, [extCap]);
     // The prelude registration took: a `.upper` require resolves through the by-name registry.
     const results = await exec(`(require "shout.upper")`, { env });
-    expect(schemeToJs(results.at(-1), {})).toBe("HELLO");
+    expect(plain(results.at(-1))).toBe("HELLO");
     // And the verb itself is assembly-time-only.
     await expect(exec(`(require/register-extension ".x" "nope")`, { env })).rejects.toThrow(/Unbound variable/);
   });
@@ -123,7 +134,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       `(require/extension :greeter) (require/extension :greeter) (greeting-of)`,
       { env },
     );
-    expect(schemeToJs(results.at(-1), {})).toBe("hi");
+    expect(plain(results.at(-1))).toBe("hi");
     expect(applies).toBe(1);
   });
 
@@ -159,7 +170,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     it("an armed loader is NOT degraded — `require` binds for real, even under \"doors\" mode", async () => {
       const env = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) }, [], "doors");
       const results = await exec(`(require "cfg.json")`, { env });
-      const cfg = schemeToJs(results.at(-1), {}) as Record<string, unknown>;
+      const cfg = plain(results.at(-1)) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
 
@@ -167,6 +178,47 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       const env = await assembled({});
       await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/Unbound variable/);
       await expect(exec(`(require "x.json")`, { env })).rejects.not.toThrow(/PurityError|is not available/);
+    });
+  });
+
+  describe("CUT mode — exec({ capabilities: [arrivalLoaderCapability] })", () => {
+    // THE REGRESSION (found by the CLI build): under the cut, the run resolves through
+    // `Resolver(lexicalRoot, capabilityBase)` — the lexical frame is null-rooted, the stdlib
+    // lives on the capability base. A required module's forms used to evaluate via
+    // `execExpr({ env: currentRunEnv() })`, which rebuilt a GLASS resolver over the bare
+    // frame — so module code couldn't see base builtins (`string-append` unbound). The fix
+    // threads the run's COMPOSED resolver (`currentRunResolver()` → `execExpr({ resolver })`),
+    // so cut and glass resolve identically.
+    it("a required .scm module sees base builtins (string-append) and spills its defines", async () => {
+      const table: Record<string, string> = {
+        "lib.scm": `(define (greet name) (string-append "hello " name))`,
+      };
+      const results = await exec(`(require "lib.scm") (greet "world")`, {
+        capabilities: [arrivalLoaderCapability],
+        config: {
+          fs: {
+            readFile: (p: string) => {
+              const hit = table[p];
+              if (hit === undefined) throw new Error(`no such file: ${p}`);
+              return hit;
+            },
+          },
+          dirname: "",
+        },
+      });
+      expect(results.at(-1)).toBe("hello world");
+    });
+
+    it("a required data module resolves under the cut too (fs IS the intent to support require)", async () => {
+      const table: Record<string, string> = { "cfg.json": `{"name":"world"}` };
+      const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
+        capabilities: [arrivalLoaderCapability],
+        config: {
+          fs: { readFile: (p: string) => table[p] ?? "" },
+          dirname: "",
+        },
+      });
+      expect(plain(results.at(-1))).toMatchObject({ name: "world" });
     });
   });
 });

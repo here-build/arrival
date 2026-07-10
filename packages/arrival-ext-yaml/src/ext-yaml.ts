@@ -1,6 +1,6 @@
 // ext/yaml — the `.yaml`/`.yml` file-type resolver as an opt-in capability.
 //
-// The dep-bearing data formats left `arrival-scheme-env-loader`'s builtin table so the
+// The dep-bearing data formats left `@here.build/arrival/loader`'s builtin table so the
 // loader sheds its external deps (per .claude/rules/env-quasi-packages.md — split to
 // isolate an external dependency): this capability OWNS the `yaml` parser and registers
 // its resolver by name at bootstrap; `require`'s by-name overlay resolves it. The value
@@ -21,7 +21,7 @@ import {
   normalizeToJson,
   type RequireTypeProvider,
   valueToTsType,
-} from "@here.build/arrival-scheme-env-loader";
+} from "@here.build/arrival/loader";
 import { parse as parseYaml } from "yaml";
 
 /** `.yaml`/`.yml` → `{ kind: "value" }` DATA (never a callable — the CALLABLE RULE's

@@ -65,7 +65,7 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
    *  Present on EVERY activation (informational under `"forbid"`, the default — no capability
    *  is affected unless it explicitly consults `.door(...)`); a builder-form `symbols` MAY
    *  destructure it to trade a manual `if (x !== undefined)` withhold for a cause-carrying
-   *  door under `"doors"` mode (see `arrival-scheme-env-loader`'s `require`/`require/extension`
+   *  door under `"doors"` mode (see `@here.build/arrival/loader`'s `require`/`require/extension`
    *  for the migrated shape). */
   readonly degradation: DegradationInfo;
 }

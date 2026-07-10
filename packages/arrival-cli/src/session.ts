@@ -10,10 +10,13 @@
  * glass-vs-cut): a require-FREE program runs the CUT (default base, static
  * validation available); a require-USING program runs GLASS (assembled env,
  * `__parent__`-chained builtins — the path the loader's production consumers
- * use, and the reason: under the cut, a required module's forms evaluate through
- * `execExpr({ env })` where builtins live on the resolver's capability base, not
- * the env chain, so the module can't see the stdlib. Glass has no seal, so no
- * static pass — the runtime doors are the backstop there, stated out loud.)
+ * use. The cut-path bug that originally FORCED this split is fixed: a required
+ * module's forms now evaluate through the requiring run's COMPOSED resolver
+ * (`execExpr({ resolver })` — arrival's src/loader/), so cut-mode `(require …)`
+ * sees the stdlib too. The split stays for the OTHER asymmetries: glass has no
+ * seal, so no static pass — the runtime doors are the backstop there, stated out
+ * loud — and the once-assembled glass env keeps defines + the require cache
+ * alive for the whole session.)
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -27,7 +30,7 @@ import {
   type Diagnostic,
   type ExecOptions,
 } from "@here.build/arrival";
-import { arrivalLoaderCapability } from "@here.build/arrival-scheme-env-loader";
+import { arrivalLoaderCapability } from "@here.build/arrival/loader";
 import { toSExprString } from "@here.build/arrival-serializer";
 
 /** Per-run ALLOCATION cap — same default + env var as arrival-run's entry point. */

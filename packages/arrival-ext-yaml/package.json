@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-scheme-env-loader": "workspace:^",
     "yaml": "2.9.0"
   },
   "devDependencies": {
