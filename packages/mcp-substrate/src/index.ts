@@ -7,6 +7,7 @@ export * from "./example-call.js";
 export * from "./futility.js";
 export * from "./render-observation.js";
 export * from "./repl-event.js";
+export * from "./repl-fold.js";
 export * from "./runner.js";
 export * from "./scope-scan.js";
 export * from "./session-history.js";

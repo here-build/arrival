@@ -1,24 +1,37 @@
 /**
- * `arrival repl` — a node:readline loop over ONE persistent session: the
- * loader-armed ambient (require works, rooted at cwd) paired with a single
- * session scope — defines land in the scope and accumulate across lines
- * (`execState(src, { ambient, scope })` reused every line, the same continuation
- * the cut idiom gives require-free callers). Each closeable buffer evaluates,
- * values print through the serializer, errors print as their teaching-door text
- * and the session SURVIVES them.
+ * `arrival repl` — TWO renderers over ONE persistent session (the loader-armed ambient
+ * paired with a single session scope — defines land in the scope and accumulate across
+ * turns, unchanged from before):
  *
- * Multi-line continuation is the oracle's own structural scanner (`scan(src).closeable`
- * — depth-0, not mid-string/comment), not a hand-rolled paren counter: the reader is
- * the one place that lexes `#\(`, strings, and `#|…|#` faithfully. A buffer the
- * scanner can't model is handed to the evaluator, whose reader error teaches.
+ *   • TTY (`replInteractive`): the awesome-REPL wave 1 experience — the gradient-
+ *     wordmark greeting (greeting.ts), provenance-tinted blocks that cascade
+ *     pending→running→done/error/skipped as `ReplEvent`s land (form-emitter.ts →
+ *     mcp-substrate's `foldReplEvent` → painter.ts), and the sugarcoat lens (`,lens`
+ *     flips scrollback rendering — lens.ts).
+ *   • non-TTY (`replPlain`): BYTE-IDENTICAL to the pre-wave-1 REPL — no painter, no
+ *     greeting, no ANSI. Piped input (the existing test suite, `arrival watch`-style
+ *     non-interactive consumers) must keep working exactly as before; the fancy
+ *     experience is strictly additive (design doc §6.2's "falls back to the current
+ *     plain readline when !isTTY").
+ *
+ * Multi-line continuation is the oracle's own structural scanner (`scan(src).closeable`),
+ * shared by both renderers — the reader is the one place that lexes `#\(`, strings, and
+ * `#|…|#` faithfully, not a hand-rolled paren counter.
  */
 import readline from "node:readline";
 
 import { execState, schemeToJs } from "@here.build/arrival";
 import { scan } from "@here.build/arrival/oracle";
+import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@here.build/mcp-substrate";
 
 import type { ArmedCapabilities } from "./capabilities.js";
-import { budgets, loaderSession, printError, printValue } from "./session.js";
+import { emitForms } from "./form-emitter.js";
+import { greetingLines, readOwnVersion } from "./greeting.js";
+import type { Lens } from "./lens.js";
+import { paintRegion, renderTurn } from "./painter.js";
+import { budgets, loaderSession, printError, printValue, type LoaderSession } from "./session.js";
+import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
+import { paint } from "./tints.js";
 
 const PROMPT = "arrival> ";
 const CONTINUE = "     ... ";
@@ -31,25 +44,75 @@ function closeable(src: string): boolean {
   }
 }
 
-/** `armed` — the host-armed capability set (`--with` / config file), assembled into
- *  the session ambient at start; the whole session sees one vocabulary. */
-export async function repl(armed?: ArmedCapabilities): Promise<number> {
-  const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl", armed);
-  const interactive = process.stdin.isTTY === true;
-  if (interactive) process.stderr.write("arrival repl — Ctrl-D exits\n");
+/** The pre-painter loop, verbatim in behavior: one value per top-level form on
+ *  stdout, errors as teaching-door text on stderr, the session survives every error. */
+async function replPlain(ambient: LoaderSession["ambient"], scope: LoaderSession["scope"]): Promise<number> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
+  let buffer = "";
+  rl.on("SIGINT", () => {
+    if (buffer === "") {
+      rl.close();
+      return;
+    }
+    buffer = "";
+  });
+  for await (const line of rl) {
+    buffer = buffer === "" ? line : `${buffer}\n${line}`;
+    if (buffer.trim() === "") {
+      buffer = "";
+      continue;
+    }
+    if (!closeable(buffer)) continue;
+    const src = buffer;
+    buffer = "";
+    try {
+      const { values } = await execState(src, { ambient, scope, ...budgets() });
+      for (const v of values) printValue(schemeToJs(v, {}));
+    } catch (e) {
+      printError(e);
+    }
+  }
+  await ambient.dispose();
+  return 0;
+}
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: interactive });
+/** The greeting + every settled turn so far, re-rendered through `lens` — `,lens`'s
+ *  flip. A full clear+replay (not a cursor-up repaint): the history can be longer than
+ *  the visible screen, so "how many lines do I own" isn't knowable; a blank slate is. */
+async function replay(history: readonly (readonly ReplBlock[])[], lens: Lens, capabilityCount: number): Promise<void> {
+  process.stdout.write(CLEAR_SCREEN + CURSOR_HOME);
+  const version = await readOwnVersion();
+  for (const line of greetingLines({ version, capabilityCount, lens })) process.stdout.write(`${line}\n`);
+  process.stdout.write("\n");
+  for (const turn of history) {
+    if (turn.length === 0) continue;
+    process.stdout.write(`${renderTurn(turn, lens).join("\n")}\n\n`);
+  }
+}
+
+/** The wave-1 TTY experience: greeting, then per-submission provenance-tint cascades,
+ *  then a frozen scrollback record — `,lens` replays the whole record in the other lens. */
+async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderSession["scope"], armed?: ArmedCapabilities): Promise<number> {
+  let lens: Lens = "sugarcoat"; // D3: sugarcoat ON by default — it's the marketing surface
+  const capabilityCount = armed?.capabilities.length ?? 0;
+  const history: ReplBlock[][] = []; // settled turns, oldest → newest
+
+  const version = await readOwnVersion();
+  for (const line of greetingLines({ version, capabilityCount, lens })) process.stdout.write(`${line}\n`);
+  process.stdout.write(`\n${paint("try:  (map (lambda (n) (* n n)) (iota 6))", "gutter")}\n\n`);
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   let buffer = "";
   const prompt = (): void => {
-    if (interactive) process.stdout.write(buffer === "" ? PROMPT : CONTINUE);
+    process.stdout.write(buffer === "" ? PROMPT : CONTINUE);
   };
   rl.on("SIGINT", () => {
     if (buffer === "") {
-      rl.close(); // Ctrl-C on an empty line = Ctrl-D
+      rl.close();
       return;
     }
-    buffer = ""; // cancel the pending multi-line input
-    if (interactive) process.stdout.write("\n" + PROMPT);
+    buffer = "";
+    process.stdout.write(`\n${PROMPT}`);
   });
 
   prompt();
@@ -60,27 +123,46 @@ export async function repl(armed?: ArmedCapabilities): Promise<number> {
       prompt();
       continue;
     }
+    if (buffer.trim() === ",lens") {
+      buffer = "";
+      lens = lens === "sugarcoat" ? "scheme" : "sugarcoat";
+      await replay(history, lens, capabilityCount);
+      prompt();
+      continue;
+    }
     if (!closeable(buffer)) {
       prompt();
       continue;
     }
     const src = buffer;
     buffer = "";
-    try {
-      // Per-line budgets (a REPL line hanging 5 minutes is already a teaching door);
-      // `scope` carries the session — defines land there and persist across lines.
-      // `execState` hands back boxed SchemeValues (the COMPLEX tier); unwrap through
-      // the membrane before printing — `printValue`'s "defines are silent" REPL norm
-      // checks JS `undefined`, which only a `schemeToJs`'d void satisfies (the boxed
-      // `AVoid` singleton itself is not `=== undefined`).
-      const { values } = await execState(src, { ambient, scope, ...budgets() });
-      for (const v of values) printValue(schemeToJs(v, {}));
-    } catch (e) {
-      printError(e); // the session survives — same scope, next prompt
-    }
+    let model: ReplFoldModel = EMPTY_REPL_MODEL;
+    let painted = 0;
+    // The provenance-tint cascade: every ReplEvent folds into `model`, and every fold
+    // step repaints THIS turn's region in place — pending → running → done/error/
+    // skipped, settling frame by frame as forms actually execute (§5's clip).
+    await emitForms(src, {
+      ambient,
+      scope,
+      ...budgets(),
+      onEvent: (event) => {
+        model = foldReplEvent(model, event);
+        painted = paintRegion(renderTurn(model.blocks, lens), painted);
+      },
+    });
+    process.stdout.write("\n");
+    history.push([...model.blocks]);
     prompt();
   }
-  if (interactive) process.stdout.write("\n");
+  process.stdout.write("\n");
   await ambient.dispose();
   return 0;
+}
+
+/** `armed` — the host-armed capability set (`--with` / config file), assembled into
+ *  the session ambient at start; the whole session sees one vocabulary. */
+export async function repl(armed?: ArmedCapabilities): Promise<number> {
+  const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl", armed);
+  const interactive = process.stdin.isTTY === true;
+  return interactive ? replInteractive(ambient, scope, armed) : replPlain(ambient, scope);
 }

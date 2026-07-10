@@ -37,7 +37,9 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-serializer": "workspace:^"
+    "@here.build/arrival-serializer": "workspace:^",
+    "@here.build/arrival-sugarcoat": "workspace:^",
+    "@here.build/mcp-substrate": "workspace:^"
   },
   "devDependencies": {
     "@here.build/tsconfig": "workspace:^",

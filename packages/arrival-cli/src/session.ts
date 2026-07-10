@@ -26,7 +26,6 @@ import {
   StaticValidationError,
   tokenize,
   type Diagnostic,
-  type ExecOptions,
   type SessionScope,
 } from "@here.build/arrival";
 import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
@@ -47,8 +46,12 @@ function wallDefault(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 300_000;
 }
 
-/** The entry-point budgets, shared by every verb and both env paths. */
-export function budgets(): Pick<ExecOptions, "budgetMs" | "heapBudget"> {
+/** The entry-point budgets, shared by every verb and both env paths. Both fields are
+ *  ALWAYS concrete numbers here (never `undefined` — unlike `ExecOptions`' own optional
+ *  `budgetMs`/`heapBudget`, which this satisfies structurally): callers that need a
+ *  guaranteed-present budget pair (the REPL's per-form emitter, form-emitter.ts) can
+ *  use this return type directly instead of re-asserting non-undefined at every call site. */
+export function budgets(): { budgetMs: number; heapBudget: number } {
   return { budgetMs: wallDefault(), heapBudget: heapDefault() };
 }
 
