@@ -12,17 +12,9 @@
  *     machinery (%raise/%current-handlers/…) — those need the scheme-layer
  *     prelude, so they ride the scheme pack phase, not this one.
  *
- * Lineage: this is the LAST survivor of `bridge.ts` — the LIPS-era JS↔interpreter
- * bridge monolith, carved down over ~93 commits (numerics → r7rs/numeric P1–P5,
- * exception forms → r7rs/exceptions, fl-interop/lips-compat dissolved). When the
- * predicates moved here, bridge.ts had nothing left and was deleted; its other
- * exports were always re-exports (`coerceNumeric` → values/op-helpers.ts,
- * `initBridge` → eval/generator-exec.ts `ensureBaseAssembled`) and index.ts now
- * points at the real homes.
- *
- * `wrappedOps` keeps its historical public name (index.ts re-export): the impl
- * table IS the API some external consumers import; each pack entry below binds
- * `wrappedOps.<verb>` so there is exactly one source of each JS body.
+ * `wrappedOps` is the API some external consumers import directly (index.ts
+ * re-export) — each pack entry below binds `wrappedOps.<verb>` so there is
+ * exactly one source of each JS body.
  */
 
 import { R7RSError, R7RSFileError, R7RSReadError } from "../../errors.js";

@@ -307,9 +307,8 @@ export default new EnvCapability("scheme/strings", {
         inputRest: z.string,
         output: [z.string],
         type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
-        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): the host is role `pipe`
-        // (string-map was never a declared fan — Q2 migrated only map/filter/vector-map's
-        // `fanout` booleans), so the fan default can't fire and shape underdetermines.
+        // callbackRoles DECLARED: the host is role `pipe` (string-map was never a
+        // declared fan), so the fan default can't fire and shape underdetermines.
         // proc's return BECOMES the output character — `element-transformer`.
         callbackRoles: ["element-transformer"],
       },
@@ -374,8 +373,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
       (string, start, end) => {
         // `string` is an AString (grafted String.prototype), the indices AExact/AInexact —
-        // unwrap to the JS string + numeric indices the slice operates on (byte-identical to
-        // the old `string.substring(start.valueOf(), end?.valueOf())`). `substring(s,
+        // unwrap to the JS string + numeric indices the slice operates on. `substring(s,
         // undefined)` means "to the end", so a missing `end` stays undefined.
         return new AString(
           CONSTANT_CTX,
@@ -407,8 +405,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
       (arg, radix) => {
         // `arg` is an AString, `radix` an AExact/AInexact (or absent → base 10) — unwrap
-        // to the JS string + number the regex tests and parse_* helpers consume (byte-identical
-        // to the old `arg = arg.valueOf(); radix = radix.valueOf()`).
+        // to the JS string + number the regex tests and parse_* helpers consume.
         const str = stringValue(arg);
         const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
         try {

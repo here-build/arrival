@@ -57,11 +57,10 @@ export default new EnvCapability("scheme/equality", {
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
         // the type-guard one line up would already have rejected the schemeTrue
         // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-        // FIX (regression from 47e1b41cf9's tf()-adoption pass, which silently dropped the raw
-        // `typeof b === "boolean"` arm while relocating this closure — never an intended logic
-        // change per that commit's own message): both representations are load-bearing here
-        // (the contract's own `z.value` input + this file's header doc both still document
-        // "booleans cross the rosetta membrane unboxed"), so a raw JS boolean must unwrap too.
+        // Both representations are load-bearing here (the contract's own `z.value`
+        // input + this file's header doc both still document "booleans cross the
+        // rosetta membrane unboxed"), so a raw JS boolean must unwrap too, not just
+        // a boxed ABool.
         const unwrap = (b: SchemeValue): boolean | undefined => {
           if (typeof b === "boolean") return b;
           if (b instanceof ABool) return b.value;
@@ -140,8 +139,7 @@ export default new EnvCapability("scheme/equality", {
 
     // R8 mint (RULINGS.md R8): a verdict derived from lineage carries it — stamped
     // operands union into the result, provenance-free operands still get `bool`'s
-    // shared flyweight (mintVerdict's allocation-free path). Was `bool(...)` direct
-    // (an always-empty-provenance flyweight, a P10 drop when operands were stamped).
+    // shared flyweight (mintVerdict's allocation-free path).
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       { input: [z.value, z.value], output: [z.boolean] },
       (a, b) => mintVerdict([a, b], structuralEqual(a, b)),

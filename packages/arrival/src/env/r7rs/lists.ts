@@ -14,22 +14,14 @@
  * types-only `z.custom` binary predicate.
  */
 //
-// MIGRATION NOTE (W4-H2, docs/working-proposals/symbol-define-static-program-
-// validation.md §4.2): verified — this pack never carried a `prelude` field (the
-// census's "23 production preludes", §4.1, does not include it; grep-verified:
-// `grep -rln "prelude:" src/env/` does not return this file). Its 23 symbols are
-// ALREADY the target shape §1.2/§4.2's Pass 2 exists to reach for a migrated pack —
-// 18 `symbol.native` + 1 `symbol.sequence` (`map`), every one contract-authored
-// per-define (never the shapeless `z.array(z.value)` default except where the op
-// is genuinely variadic-any, per §1.2's own carve-out — `list`/`append`) — plus 4
-// `symbol.notImplemented` purity doors (`set-car!`/`set-cdr!`/`append!`/
-// `list-set!`). Pass 1 (mechanical decomposition) has nothing to run over: zero
-// `symbol.define`, zero `symbol.defineSyntax`. §2.1's bake FV law is therefore
-// structurally inert here — nothing in this pack is FV-walked, so no `deps` edge
-// is ever required OF this pack (it is instead a `deps` TARGET: `scheme/srfi-235`
-// declares `deps: [… , lists]`, W4-H1 — base-packs.ts repositions `lists`/
-// `polyglot` last in `BASE_PACKS` for exactly that C3 reason; unchanged by this
-// note). Pinned by `__tests__/lists-symbol-define-migration.test.ts`.
+// This pack carries zero `symbol.define`/`symbol.defineSyntax` — every symbol is
+// `symbol.native` or `symbol.sequence` (`map`), contract-authored per-define, plus
+// the four `symbol.notImplemented` purity doors (`set-car!`/`set-cdr!`/`append!`/
+// `list-set!`). Nothing here is FV-walked, so no `deps` edge is ever required OF
+// this pack — it is instead a `deps` TARGET: `scheme/srfi-235` declares
+// `deps: […, lists]`, so `base-packs.ts` positions `lists`/`polyglot` last in
+// `BASE_PACKS` — the C3 linearization needs `lists` already resolved before
+// `srfi-235` loads onto it.
 
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
@@ -137,7 +129,7 @@ const lengthImpl = (obj: unknown): AExact | AInexact => {
     // (op-helpers.ts) no longer has a raw-scalar tolerance, and ANil's own length boxes its
     // empty-provenance zero — so every real term now returns an AExact/AInexact, never a raw
     // number. A raw number reaching here would be a P4 violation in whichever term produced
-    // it (the sibling class of the `number->string` bug, c0852b879c); fail loudly (P5) rather
+    // it (the sibling class of the `number->string` bug); fail loudly (P5) rather
     // than silently re-boxing it.
     invariant(
       result instanceof AExact || result instanceof AInexact,
@@ -322,11 +314,9 @@ export default new EnvCapability("scheme/lists", {
     "set-cdr!": symbol.notImplemented`set-cdr!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (cons / list)`,
     "append!": symbol.notImplemented`append!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (append, which builds a fresh list)`,
 
-    // R7RS 6.4 — length is the impl declared at module scope above. Output narrows to
-    // z.schemeNumber (was z.value only because a still-filling collection's Tier-2
-    // speculation could return a live AHalfBaked carrier instead of a settled number —
-    // see docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL): length now
-    // always returns a settled AExact/AInexact.
+    // R7RS 6.4 — length is the impl declared at module scope above. Output is
+    // z.schemeNumber: length always returns a settled AExact/AInexact, never a
+    // still-filling speculative carrier.
     length: symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
       { input: [z.value], output: [z.schemeNumber] },
       lengthImpl,
@@ -527,10 +517,10 @@ export default new EnvCapability("scheme/lists", {
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
         // null` list → `unknown | false`), plus the optional binary comparator.
         type: "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
-        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): pipe host with value egress —
-        // shape underdetermines. compare is `control` (boolean-returning equality selector:
-        // its verdict decides WHICH sublist egresses). Roles align with LAMBDA arms —
-        // compare is arm 0 despite input position 2.
+        // callbackRoles DECLARED: pipe host with value egress — shape underdetermines.
+        // compare is `control` (boolean-returning equality selector: its verdict decides
+        // WHICH sublist egresses). Roles align with LAMBDA arms — compare is arm 0
+        // despite input position 2.
         callbackRoles: ["control"],
       },
       (obj, list, compare = defaultCompare) => {
@@ -559,8 +549,8 @@ export default new EnvCapability("scheme/lists", {
         output: [z.union([z.value, z.booleanFalse])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
-        // Same `control` declaration as `member` above (Q4 — the alist search twin's
-        // compare is the same equality selector).
+        // Same `control` declaration as `member` above — the alist search twin's
+        // compare is the same equality selector.
         callbackRoles: ["control"],
       },
       (obj, alist, compare = defaultCompare) => {

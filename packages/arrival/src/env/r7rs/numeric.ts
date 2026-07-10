@@ -8,14 +8,13 @@
  *   2. coercion + error-naming — `coerceNumeric` each arg, naming the bad index;
  *   3. codec marshalling — per-arg decode → `fn` → `out.fromJS`.
  *
- * NCodec family DISSOLVED (uniform-vocabulary ruling): `NumSpec.in`/`inRest`/`out`
- * are now the real `z.ZodTypeAny` from scheme-zod.ts — ONE vocabulary, consumed by
- * both `marshalCall` (runtime) and `contractFromSpec` (type-inference face).
- * `marshalCall`'s doc below carries the two identity special-cases (`z.schemeNumber`,
- * `z.boolean`) this surfaced.
+ * `NumSpec.in`/`inRest`/`out` are real `z.ZodTypeAny` schemas from scheme-zod.ts —
+ * ONE vocabulary, consumed by both `marshalCall` (runtime) and `contractFromSpec`
+ * (type-inference face). `marshalCall`'s doc below carries the two identity
+ * special-cases (`z.schemeNumber`, `z.boolean`) this surfaces.
  *
- * Tier-2 HalfBaked speculative eval (comparison ops) ejected — VERDICT KILL
- * (docs/working-proposals/halfbaked-existence-review.md): superseded by R2/C3.
+ * Comparison ops resolve directly through the numeric core — no Tier-2 HalfBaked
+ * speculative evaluation branch exists for them.
  */
 
 import * as z from "../../common/scheme-zod.js";
@@ -120,14 +119,10 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[]): unknown {
 function nativeNumericOp(name: string, spec: NumSpec): (...args: unknown[]) => unknown {
   // provenance + coerce-with-naming + marshalled call.
   const applyNumeric = (callArgs: unknown[]): unknown => {
-    // Q20b sweep finding: this call bypassed `withInputProvenance` entirely (a
-    // hand-rolled `unionProvenance` duplicate predating the oracle flag), so EVERY
-    // arithmetic op (`+`/`-`/`*`/`/`/comparisons/…) kept accumulating provenance
-    // unconditionally even under Q20a's opt-out — the single highest-traffic bypass
-    // the sweep found. Gated on the SAME effective switch `withInputProvenance` uses
+    // Gated on the SAME effective switch `withInputProvenance` uses
     // (`isEagerAccumulationActive` — ambient flag OR silent-region γ, op-helpers.ts's
-    // own doc) so arithmetic honors the Q20b default AND still accumulates correctly
-    // inside a replay's hermetic re-execution.
+    // own doc), so arithmetic ops honor the eager-accumulation default AND still
+    // accumulate correctly inside a replay's hermetic re-execution.
     const provenance = isEagerAccumulationActive()
       ? unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue))
       : EMPTY_PROVENANCE;
@@ -841,7 +836,7 @@ const numberToStringFn = (z: unknown, radix?: unknown): AString => {
     // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
     s = base === 10 ? n.toString() : n.real.toString(base);
   }
-  // Q20b sweep finding — same bypass as `applyNumeric` above, gated the same way.
+  // Same eager-accumulation gate as `applyNumeric` above.
   const provenance = isEagerAccumulationActive()
     ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
     : EMPTY_PROVENANCE;
@@ -849,12 +844,11 @@ const numberToStringFn = (z: unknown, radix?: unknown): AString => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// [DISSOLVED 2026-07-09] `NumSpec.in`/`inRest`/`out` are now the real scheme-zod.ts
-// schemas — `contractFromSpec` is a trivial projection (the old `CODEC_SCHEMA` Map +
-// `codecSchema` guard are GONE). What used to be PURE TYPE-LAYER is now the SAME schema
-// `marshalCall` runs at call time — one vocabulary, not two.
+// `NumSpec.in`/`inRest`/`out` are the real scheme-zod.ts schemas — `contractFromSpec`
+// is a trivial projection, and `marshalCall` runs the SAME schema at call time: one
+// vocabulary, not two.
 //
-// Two arguments that still matter (now honored by `marshalCall`'s `decodeArg`/
+// Two arguments that still matter (honored by `marshalCall`'s `decodeArg`/
 // `encodeResult`):
 //
 //   Decode order (coerce THEN marshal). `applyNumeric` runs `coerceNumeric` on every

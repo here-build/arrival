@@ -7,63 +7,36 @@
 // soundness; this pack supplies the exception forms it keeps. Built on the host
 // try/catch/finally special forms + the `%raise`/`%current-handlers`/
 // `%set-handlers!`/`make-error-object` machinery below, all owned here —
-// `scheme/exceptions` (error-objects.ts, the last survivor of the deleted
-// bridge.ts monolith) is now just the R7RS predicate surface
+// `scheme/exceptions` (error-objects.ts) is just the R7RS predicate surface
 // (error-object?/error-object-message/etc).
 //
 // SINGLE SOURCE: this module is the sole definition site for both the machinery
 // and the derived forms — no cross-capability ordering dependency remains.
 //
-// docs/working-proposals/symbol-define-static-program-validation.md §4 (W4) —
-// `symbol.define`/`symbol.defineSyntax` decomposition of this pack's former
-// `prelude` text blob. THREE landed-machinery gaps surfaced migrating THIS pack
-// specifically — all three are FIXED now (PRE-H2 machinery fix wave), upstream in
-// `define-bake.ts`/`free-vars.ts`, not in this file:
+// HANDLER-STACK LAW: the stack lives in a `WeakMap<RunContext, stack>` (declared
+// below), never in a scheme binding or a module-level mutable slot. A
+// `RunContext` is minted once per top-level `exec()` call and threaded BY
+// REFERENCE through every nested scope/lambda/let within that call — including
+// across a `symbol.define` → `symbol.define` call boundary (`define-bake.ts`'s
+// `buildDefineProcedure` forwards the caller's real `runCtx` into
+// `call_function`, so both sides of the boundary observe the SAME `RunContext`
+// identity). That's what makes the WeakMap keying sound: the handler stack is
+// fresh per top-level `exec()`, shared across every nested frame inside it, and
+// isolated from any other concurrent `exec()` sharing the same isolate — each
+// run's stack is keyed to its own `RunContext` identity, with no shared-isolate
+// caveat needed.
 //
-//   (1) FIXED — `car`/`cdr` (and the whole `c[ad]+r` family) are NOT a
-//       capability-declared export anywhere — `env/r7rs/lists.ts`'s own header
-//       says so explicitly ("served by a resolver, not this pack") — they're
-//       synthesized by a KERNEL-level fallback (`eval/Resolver.ts`'s `cxrUnfold`,
-//       consulted only AFTER an ordinary env-lookup miss, never registered as a
-//       per-capability `ResolverSpec`). `define-bake.ts` now recognizes the same
-//       `CXR_RE` pattern directly in its bake FV allowlist (a local copy of the
-//       same regex `static-validation/vocabulary.ts` and `eval/Resolver.ts`
-//       already carry, per their documented local-copy convention) — a
-//       `symbol.define` body referencing bare `car`/`cadr`/etc. bakes clean.
-//   (2) FIXED — `free-vars.ts` now models the `try` special form (a `case "try"`
-//       arm mirroring `static-validation/collect-references.ts`'s "try" arm 1:1):
-//       the body walks in the outer scope, `catch`'s bound var scopes its handler
-//       body, and both the `catch`/`finally` clause-marker heads are recognized as
-//       structural literals — never added to the free-variable set (previously
-//       they fell through the unmodeled-head default-arm application walk and
-//       leaked in as unresolvable names).
-//   (3) FIXED — `define-bake.ts`'s `buildDefineProcedure` now threads the
-//       CALLER's `RunContext` into the scheme body it evaluates: `impl` declares
-//       its second parameter (`runCtx`, matching `ANativeProcedure["arrival/
-//       tagless-final/apply"]`'s `impl(args, runCtx)` invocation) and forwards it
-//       into `call_function(closure, args, { runCtx })`. Verified empirically (a
-//       tagged-WeakMap probe, removed before landing this file): a `symbol.define`
-//       → `symbol.define` call boundary (e.g. `with-exception-handler`'s thunk
-//       calling `raise-continuable`) used to observe TWO DIFFERENT `RunContext`-
-//       shaped objects on either side of the crossing (neither the frozen
-//       `CONSTANT_CTX` singleton). With the thread fixed, both sides see the SAME
-//       `RunContext` — restoring the precondition a `WeakMap<RunContext, …>`-keyed
-//       dynamic-extent slot needs. This affected every pack with per-run
-//       dynamic-extent state touched across a `symbol.define` boundary, not just
-//       this one.
-//
-// WORKAROUND STATUS (this pack only): gap (3)'s fix means the handler stack's
-// `RunContext` keying below is now REVERTED to the textbook-correct
-// `WeakMap<RunContext, …>` (see its declaration below) — no longer the
-// module-level mutable slot this comment used to describe. Gaps (1)/(2)'s pack-
-// authoring workaround is left AS-IS on purpose (a separate, optional cleanup, not
-// a correctness fix): every `symbol.define` body below still avoids bare
-// `car`/`cdr`/`cons`/`apply` and scheme-level `try`/`catch`/`finally`, routing
-// through this capability's OWN machinery natives (`%handler-car`, `%with-restore`,
-// etc.) instead. Now that gaps (1)/(2) are closed upstream, those bodies COULD fold
-// back into plain `car`/`cdr`/`cons`/`try`/`catch`/`finally` — noted for a future
-// pass, not done here (out of this fix wave's scope; the natives are correct and
-// tested as they stand).
+// Every `symbol.define` body below still avoids bare `car`/`cdr`/`cons` and
+// scheme-level `try`/`catch`/`finally`, routing instead through this
+// capability's own machinery natives (`%handler-car`, `%handler-cdr`,
+// `%with-restore`, etc.) — not because those forms are unsafe inside a
+// `symbol.define` body (both are bakeable: `define-bake.ts`'s FV allowlist
+// recognizes the `car`/`cdr` family as resolver-synthesized rather than
+// capability exports, and `free-vars.ts` models `try`/`catch`/`finally` as a
+// special form with `catch`'s bound var properly scoped to its handler body) —
+// but because folding these bodies back onto the plain forms is a deferred
+// cleanup, not done here; the dedicated machinery natives are correct and
+// tested as they stand.
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -78,21 +51,10 @@ import { schemeBool as bool } from "../../values/op-helpers.js";
 import { to_array } from "../pack-helpers.js";
 import invariant from "tiny-invariant";
 
-// Per-run isolation — REVERTED to the textbook-correct shape (gap (3), now fixed
-// upstream in `define-bake.ts`'s `buildDefineProcedure`): the handler stack must
-// be fresh per top-level `exec()` call but shared across every nested
-// scope/lambda/let WITHIN that call. `WeakMap<RunContext, stack>` (`RunContext`
-// minted once per `exec()`, threaded by reference through every nested frame) is
-// exactly what the PRE-migration prelude-evaluated forms used, and what this pack
-// used itself before gap (3) forced the module-level-slot workaround: with
-// `buildDefineProcedure` now threading the caller's real `runCtx` all the way
-// through `call_function`, a `symbol.define`→`symbol.define` call boundary (e.g.
-// `with-exception-handler`'s thunk calling `raise-continuable`) observes the SAME
-// `RunContext` on both sides, so the WeakMap no longer "forgets" a handler the
-// moment it crosses that boundary. This closes the LIMIT the module-level slot
-// conceded (concurrent `exec()` calls sharing one isolate could observe each
-// other's handler stack) — each run's stack is now keyed to its own `RunContext`
-// identity, isolated by construction, no shared-isolate caveat needed.
+// Per-run isolation, keyed by RunContext identity — see the file header's
+// HANDLER-STACK LAW: fresh per top-level `exec()`, shared across every nested
+// frame within it, isolated from any other concurrent `exec()` on the same
+// isolate.
 const handlersByRun = new WeakMap<RunContext, SchemeValue>();
 
 // R7RS raise/raise-continuable/error carry ARBITRARY data (§6.11: "obj may be any
@@ -101,11 +63,10 @@ const handlersByRun = new WeakMap<RunContext, SchemeValue>();
 // `instanceof AValue` (membrane.ts) — an `R7RSError` is a raw host `Error`
 // subclass, deliberately NOT an `AValue` box (`z.error`'s own codec exists
 // precisely because it isn't one), so `z.value` alone REJECTS a condition object.
-// A bare `native` contract never enforced this (native contracts are types-only,
-// design doc §1.2) — but `symbol.define`'s contract IS enforced at the call
-// boundary, so this pack's own condition objects must be an explicit member of
-// every slot that can carry a raised/returned value. Verified against the chibi
-// R7RS conformance corpus: `(guard (exn (else exn)) (error "BOOM!" 1 2 3))`
+// A bare `native` contract never enforced this (native contracts are types-only)
+// — but `symbol.define`'s contract IS enforced at the call boundary, so this
+// pack's own condition objects must be an explicit member of every slot that can
+// carry a raised/returned value: `(guard (exn (else exn)) (error "BOOM!" 1 2 3))`
 // round-trips a real R7RSError through exactly `raise`'s `obj` slot.
 const raisable = z.union([z.value, z.error]);
 
@@ -165,10 +126,10 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       },
     ),
 
-    // ── the header's WORKAROUND natives (new in this migration) ─────────────────────
-    // Handler-stack car/cdr/cons, specifically — never a general-purpose accessor.
-    // Existing solely so the `symbol.define` bodies below never reference bare
-    // `car`/`cdr`/`cons` (gap (1) above).
+    // ── Handler-stack machinery ──────────────────────────────────────────────────
+    // car/cdr/cons, specifically — never a general-purpose accessor. Existing
+    // solely so the `symbol.define` bodies below never reference bare
+    // `car`/`cdr`/`cons` directly (see the file header).
     "%handlers-empty?": symbol.native`%handlers-empty?: is the exception-handler stack empty (machinery)`(
       { input: [z.value], output: [z.boolean] },
       (stack) => bool(stack instanceof ANil),
@@ -193,9 +154,10 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
         return new APair(this.runCtx, handler as SchemeValue, stack as SchemeValue);
       },
     ),
-    // The finally-discipline, kept out of scheme-level `try`/`finally` (gap (2)
-    // above): call `thunk` (0-arg), always call `restore` (0-arg) on the way out —
-    // whether `thunk` returned normally or threw — and return/rethrow accordingly.
+    // The finally-discipline, kept out of scheme-level `try`/`finally` (see the
+    // file header): call `thunk` (0-arg), always call `restore` (0-arg) on the
+    // way out — whether `thunk` returned normally or threw — and return/rethrow
+    // accordingly.
     "%with-restore": symbol.native`%with-restore: call thunk, always calling restore afterward — even if thunk throws (machinery)`(
       { input: [z.lambda, z.lambda], output: [z.value] },
       function (thunk, restore) {
@@ -226,10 +188,11 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     ),
     // `error`'s message+irritants forwarding needs a scheme-list → variadic-args
     // splice (i.e. `apply`) — `apply` IS a genuine `scheme/lists` export (not a
-    // gap-(1) resolver-synth name), but depending on `scheme/lists` just for this
-    // one splice would reintroduce the cross-capability ordering this pack's header
-    // deliberately eliminated (bridge.ts's dissolution) — so the splice moves into
-    // this native instead, reusing `make-error-object`'s own construction logic.
+    // resolver-synthesized name like car/cdr), but depending on `scheme/lists`
+    // just for this one splice would reintroduce a cross-capability ordering
+    // dependency this pack's header states it has none of — so the splice moves
+    // into this native instead, reusing `make-error-object`'s own construction
+    // logic.
     "%error-object-from-irritants": symbol.native`%error-object-from-irritants: build an R7RS error object from a message and a scheme list of irritants (machinery)`(
       { input: [z.string, z.value], output: [z.error] },
       (message, irritantsList) => {
@@ -265,7 +228,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // returned to the call site of raise-continuable. Restore the stack on the way
     // out so the value flows back into the original dynamic environment.
     "raise-continuable": symbol.define`raise-continuable: like raise, but the handler's return value flows back to raise-continuable's own call site (R7RS §6.11)`(
-      // OUTPUT widened with `z.values` (W4-H4, the srfi-1 span/break/partition precedent):
+      // OUTPUT widened with `z.values` (the srfi-1 span/break/partition precedent):
       // the handler is arbitrary user code and may legally return via `(values …)`, whose
       // `Values` box is a non-AValue orphan `z.value`/`z.error` both reject at the decode
       // boundary (scheme-zod's `values` doc). INPUT stays `raisable` — you cannot *raise*
@@ -307,9 +270,9 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
 
     guard: symbol.defineSyntax`guard: (guard (var clause…) body…) — evaluate body, dispatching a raised condition through clause with var bound to it (R7RS §6.11 derived syntax)`(
       // `var` is a FORMALS-position binder (bound across every clause), matching
-      // receive/let-values/and-let*'s "binder" classification (§3.4) — NOT
-      // "expression" (a boolean-transparent walk would report `var` unbound in
-      // every clause referencing it).
+      // `let-values`/`let*-values`'s own "binder" classification — NOT
+      // "expression" (an expression-space walk would wrongly report `var`
+      // unbound in every clause referencing it).
       `(lambda (clause-and-body . rest)
          (let* ((var (car clause-and-body))
                 (clauses (cdr clause-and-body))
